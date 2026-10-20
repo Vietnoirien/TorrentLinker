@@ -21,6 +21,7 @@ from torrentlinker.gui.settings_dialog import INDEXER_API_KEY, QBIT_PASSWORD, Se
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
 from torrentlinker.library import build_library
+from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.qbit import QbitApi
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
 from torrentlinker.review import MatchRules
@@ -72,12 +73,13 @@ class MainWindow(QMainWindow):
         if get_secret(QBIT_PASSWORD) or settings_path.exists():
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
 
-    def qbit(self) -> QbitApi:
+    def qbit(self) -> MappedQbit:
         q = self.settings.qbit
         key = (q.host, q.username, get_secret(QBIT_PASSWORD))
         if self._qbit is None or self._qbit[0] != key:
             self._qbit = (key, QbitApi(*key))
-        return self._qbit[1]
+        mappings = [f.mapping for f in self.settings.library_folders if f.mapping]
+        return MappedQbit(self._qbit[1], PathMapper(mappings))
 
     def indexer(self) -> Indexer:
         """One Indexer instance, so every search shares the same rate limiter."""

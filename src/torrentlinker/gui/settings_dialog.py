@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
-from torrentlinker.domain import LibraryFolder
+from torrentlinker.domain import LibraryFolder, PathMapping
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
 from torrentlinker.qbit import QbitApi
@@ -112,8 +113,13 @@ class SettingsDialog(QDialog):
     def _folders_box(self) -> QGroupBox:
         box = QGroupBox(self.tr("Library Folders"))
         layout = QVBoxLayout(box)
-        self.folders = QTableWidget(0, 2)
-        self.folders.setHorizontalHeaderLabels([self.tr("Folder"), self.tr("Scan depth")])
+        self.folders = QTableWidget(0, 3)
+        self.folders.setHorizontalHeaderLabels(
+            [self.tr("Folder"), self.tr("Scan depth"), self.tr("qBittorrent sees it as")]
+        )
+        self.folders.horizontalHeaderItem(2).setToolTip(  # type: ignore[union-attr]
+            self.tr("Path Mapping: fill in only if qBittorrent runs in Docker, on a NAS…")
+        )
         self.folders.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for f in self.settings.library_folders:
             self._add_folder_row(f)
@@ -138,11 +144,15 @@ class SettingsDialog(QDialog):
     def _add_folder_row(self, folder: LibraryFolder) -> None:
         r = self.folders.rowCount()
         self.folders.insertRow(r)
-        self.folders.setItem(r, 0, QTableWidgetItem(str(folder.path)))
+        path_cell = QTableWidgetItem(str(folder.path))
+        path_cell.setFlags(path_cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.folders.setItem(r, 0, path_cell)
         depth = QSpinBox()
         depth.setRange(1, 5)
         depth.setValue(folder.depth)
         self.folders.setCellWidget(r, 1, depth)
+        mapped = folder.mapping.qbit if folder.mapping else ""
+        self.folders.setItem(r, 2, QTableWidgetItem(mapped))
 
     def _read_folders(self) -> list[LibraryFolder]:
         result = []
@@ -154,7 +164,10 @@ class SettingsDialog(QDialog):
             assert isinstance(depth, QSpinBox)
             existing = next((f for f in self.settings.library_folders if f.path == path), None)
             base = existing or LibraryFolder(path)
-            result.append(LibraryFolder(path, depth.value(), base.kind, base.mapping))
+            mapped_cell = self.folders.item(r, 2)
+            mapped = mapped_cell.text().strip() if mapped_cell else ""
+            mapping = PathMapping(str(path), mapped) if mapped else None
+            result.append(LibraryFolder(path, depth.value(), base.kind, mapping))
         return result
 
     # Matching --------------------------------------------------------------
