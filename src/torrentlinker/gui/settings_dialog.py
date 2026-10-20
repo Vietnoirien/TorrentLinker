@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -167,6 +168,15 @@ class SettingsDialog(QDialog):
         self.tolerance.setSuffix(" %")
         self.tolerance.setValue(self.settings.matching.size_tolerance * 100)
         form.addRow(self.tr("Size tolerance before fetching a .torrent"), self.tolerance)
+        self.coverage = QSpinBox()
+        self.coverage.setRange(1, 100)
+        self.coverage.setSuffix(" %")
+        self.coverage.setValue(round(self.settings.matching.min_partial_coverage * 100))
+        form.addRow(self.tr("Minimum coverage of a Partial Match"), self.coverage)
+        self.ignore = QPlainTextEdit("\n".join(self.settings.matching.ignore_patterns))
+        self.ignore.setToolTip(self.tr("One pattern per line, matched against each path segment"))
+        self.ignore.setMaximumHeight(100)
+        form.addRow(self.tr("Ignored Files"), self.ignore)
         return box
 
     def _save(self) -> None:
@@ -177,4 +187,8 @@ class SettingsDialog(QDialog):
         set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
         self.settings.library_folders = self._read_folders()
         self.settings.matching.size_tolerance = self.tolerance.value() / 100
+        self.settings.matching.min_partial_coverage = self.coverage.value() / 100
+        self.settings.matching.ignore_patterns = [
+            line.strip() for line in self.ignore.toPlainText().splitlines() if line.strip()
+        ]
         self.accept()

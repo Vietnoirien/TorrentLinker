@@ -47,6 +47,10 @@ class FakeQbit:
         files[new] = files.pop(old)
         self._set(hash, files=files)
 
+    def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None:
+        self.calls.append(f"priority {indexes} = {priority}")
+        self.priorities.setdefault(hash, {}).update({i: priority for i in indexes})
+
     def recheck(self, hash: str) -> None:
         self.calls.append("recheck")
         self.rechecked.append(hash)

@@ -135,3 +135,48 @@ def test_swapped_names_are_renamed_without_collisions(tmp_path: Path) -> None:
         files[new] = files.pop(old)
 
     assert files == {"S/b.mkv": 1, "S/a.mkv": 2}
+
+
+def partial_pack(tmp_path: Path) -> tuple[LocalItem, bytes]:
+    # torf uses 16 KiB pieces here: episode 2 starts inside piece 1.
+    src = tmp_path / "scene" / "Show"
+    src.mkdir(parents=True)
+    (src / "e1.mkv").write_bytes(b"a" * 20000)
+    (src / "e2.mkv").write_bytes(b"b" * 20000)
+    data = make_torrent(src)
+    item = LocalItem(tmp_path / "lib" / "Show", {"Show/e1.mkv": 20000})
+    return item, data
+
+
+def test_partial_match_files_missing_locally_are_never_downloaded(tmp_path: Path) -> None:
+    item, data = partial_pack(tmp_path)
+    meta = read_torrent(data)
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+
+    h = start_reseed(qbit, store, item, meta, match(item, meta.files))  # type: ignore[arg-type]
+
+    assert qbit.priorities[h] == {1: 0}
+    assert qbit.calls.index("priority [1] = 0") < qbit.calls.index("recheck")
+
+
+def test_partial_match_verifies_when_only_boundary_pieces_are_incomplete(tmp_path: Path) -> None:
+    item, data = partial_pack(tmp_path)
+    meta = read_torrent(data)
+    m = match(item, meta.files)
+    assert m is not None
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+    h = start_reseed(qbit, store, item, meta, m)
+
+    # Piece 1 spans e1 (bytes 16384..20000) and e2: those 3616 bytes of e1 cannot verify.
+    qbit.finish_check(h, 1 - 3616 / 20000)
+    assert check_verifications(qbit, store, now=lambda: 1e12)[item.path].verified
+
+
+def test_partial_match_below_the_expected_progress_fails(tmp_path: Path) -> None:
+    item, data = partial_pack(tmp_path)
+    meta = read_torrent(data)
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+    h = start_reseed(qbit, store, item, meta, match(item, meta.files))  # type: ignore[arg-type]
+
+    qbit.finish_check(h, 0.5)
+    assert not check_verifications(qbit, store, now=lambda: 1e12)[item.path].verified

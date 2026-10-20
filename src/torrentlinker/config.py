@@ -7,6 +7,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
+from torrentlinker.matching import (
+    DEFAULT_IGNORE_PATTERNS,
+    DEFAULT_MIN_PARTIAL_COVERAGE,
+    DEFAULT_SIZE_TOLERANCE,
+    IgnoreList,
+)
 
 
 @dataclass
@@ -22,7 +28,13 @@ class IndexerSettings:
 
 @dataclass
 class MatchingSettings:
-    size_tolerance: float = 0.02
+    size_tolerance: float = DEFAULT_SIZE_TOLERANCE
+    min_partial_coverage: float = DEFAULT_MIN_PARTIAL_COVERAGE
+    ignore_patterns: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
+
+    @property
+    def ignore(self) -> IgnoreList:
+        return IgnoreList(tuple(self.ignore_patterns))
 
 
 @dataclass

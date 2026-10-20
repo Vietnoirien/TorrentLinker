@@ -26,7 +26,7 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.qbit import Qbit
 from torrentlinker.queries import name_query
 from torrentlinker.reseed import start_reseed
-from torrentlinker.review import Verified, verify, verify_one
+from torrentlinker.review import MatchRules, Verified, verify, verify_one
 from torrentlinker.store import Store
 
 GREEN, ORANGE, RED = QColor("#2e7d32"), QColor("#ef6c00"), QColor("#c62828")
@@ -53,13 +53,13 @@ class ReviewPanel(QWidget):
         store: Store,
         indexer: Callable[[], Indexer],
         qbit: Callable[[], Qbit],
-        tolerance: Callable[[], float],
+        rules: Callable[[], MatchRules],
     ) -> None:
         super().__init__()
         self.store = store
         self.indexer = indexer
         self.qbit = qbit
-        self.tolerance = tolerance
+        self.rules = rules
         self.entry: LibraryEntry | None = None
         self.results: list[Verified] = []
 
@@ -87,7 +87,12 @@ class ReviewPanel(QWidget):
 
         actions = QHBoxLayout()
         self.check_button = QPushButton(self.tr("Check files"))
-        self.check_button.setToolTip(self.tr("Download this Candidate's .torrent and compare"))
+        self.check_button.setToolTip(
+            self.tr(
+                "Download this Candidate's .torrent and compare. Needed for Candidates "
+                "outside the size tolerance, e.g. a season pack you only partly have."
+            )
+        )
         self.check_button.clicked.connect(self._check_selected)
         actions.addWidget(self.check_button)
         actions.addStretch()
@@ -142,9 +147,9 @@ class ReviewPanel(QWidget):
         if q != name_query(entry.item):
             self.store.set_item_query(entry.item.path, q)
         self.search_button.setEnabled(False)
-        indexer, tolerance = self.indexer(), self.tolerance()
+        indexer, rules = self.indexer(), self.rules()
         run_in_background(
-            lambda: verify(indexer, entry.item, indexer.search(SearchQuery(q=q)), tolerance),
+            lambda: verify(indexer, entry.item, indexer.search(SearchQuery(q=q)), rules),
             lambda results: self._show(entry, results),
             self._failed,
         )
@@ -178,8 +183,10 @@ class ReviewPanel(QWidget):
     def _match_label(self, v: Verified) -> tuple[str, QColor | None]:
         if not v.checked:
             return self.tr("Not checked"), None
-        if v.match is not None:
+        if v.match is not None and v.match.is_full:
             return self.tr("Full match"), GREEN
+        if v.match is not None:
+            return self.tr("Partial match ({0})").format(f"{v.match.coverage:.0%}"), ORANGE
         return self.tr("No match"), RED
 
     def _failed(self, error: Exception) -> None:
@@ -196,13 +203,16 @@ class ReviewPanel(QWidget):
         if v is None or v.comparison is None:
             return
         cmp = v.comparison
-        rows = [(t, local) for t, local in cmp.pairs.items()] + [(t, None) for t in cmp.missing]
+        rows: list[tuple[str, str | None]] = list(cmp.pairs.items())
+        rows += [(t, None) for t in cmp.unwanted]
         self.files.setRowCount(len(rows))
         for r, (t_path, local) in enumerate(sorted(rows)):
             self.files.setItem(r, 0, QTableWidgetItem(t_path))
             self.files.setItem(r, 1, QTableWidgetItem(local or ""))
-            if local is None:
-                status, color = self.tr("✗ missing"), RED
+            if local is None and t_path in cmp.skipped:
+                status, color = self.tr("– ignored, not downloaded"), ORANGE
+            elif local is None:
+                status, color = self.tr("✗ missing, not downloaded"), RED
             elif local != t_path:
                 status, color = self.tr("✓ renamed"), ORANGE
             else:
@@ -221,9 +231,9 @@ class ReviewPanel(QWidget):
         if v is None or entry is None:
             return
         self.check_button.setEnabled(False)
-        indexer = self.indexer()
+        indexer, rules = self.indexer(), self.rules()
         run_in_background(
-            lambda: verify_one(indexer, entry.item, v.candidate),
+            lambda: verify_one(indexer, entry.item, v.candidate, rules),
             lambda checked: self._replace(entry, v, checked),
             self._failed,
         )
@@ -241,6 +251,8 @@ class ReviewPanel(QWidget):
         if v is None or entry is None or v.meta is None or v.match is None:
             return
         meta, m = v.meta, v.match
+        if not m.is_full and not self._confirm_partial(len(m.missing), m.coverage):
+            return
         if m.renames and not self._confirm_renames(m.renames):
             return
         self.reseed_button.setEnabled(False)
@@ -250,6 +262,17 @@ class ReviewPanel(QWidget):
             lambda _hash: self.reseed_started.emit(entry.item.path),
             self._reseed_failed,
         )
+
+    def _confirm_partial(self, missing: int, coverage: float) -> bool:
+        answer = QMessageBox.question(
+            self,
+            self.tr("Partial Match"),
+            self.tr(
+                "You have {0} of this torrent. The {1} missing files will not be downloaded; "
+                "only a few pieces shared with your files may be fetched again. Reseed?"
+            ).format(f"{coverage:.0%}", missing),
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def _confirm_renames(self, renames: dict[str, str]) -> bool:
         shown = sorted(renames.items())[:15]

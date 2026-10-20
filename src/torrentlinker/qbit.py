@@ -27,6 +27,7 @@ class Qbit(Protocol):
         """Rename a file inside the torrent (paths relative to the save path)."""
         ...
 
+    def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None: ...
     def recheck(self, hash: str) -> None: ...
     def start(self, hash: str) -> None: ...
     def remove(self, hash: str) -> None:
@@ -93,6 +94,9 @@ class QbitApi:
 
     def rename_file(self, hash: str, old: str, new: str) -> None:
         self._client.torrents_rename_file(torrent_hash=hash, old_path=old, new_path=new)
+
+    def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None:
+        self._client.torrents_file_priority(torrent_hash=hash, file_ids=indexes, priority=priority)
 
     def recheck(self, hash: str) -> None:
         self._client.torrents_recheck(torrent_hashes=hash)

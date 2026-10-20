@@ -33,10 +33,32 @@ def test_files_of_equal_size_are_paired_by_name() -> None:
     assert m.pairs == {"Show.S01/e01.mkv": "MyShow/E01.mkv", "Show.S01/e02.mkv": "MyShow/E02.mkv"}
 
 
-def test_torrent_file_without_local_counterpart_is_no_full_match() -> None:
-    item = LocalItem(Path("/lib/Show"), {"Show/e01.mkv": 100})
+def test_torrent_file_without_local_counterpart_makes_a_partial_match() -> None:
+    item = LocalItem(Path("/lib/Show"), {"Show/e01.mkv": 800})
 
-    assert match(item, {"Show/e01.mkv": 100, "Show/e02.mkv": 200}) is None
+    m = match(item, {"Show/e01.mkv": 800, "Show/e02.mkv": 200})
+
+    assert m is not None and not m.is_full
+    assert m.missing == ("Show/e02.mkv",)
+    assert m.coverage == 0.8
+
+
+def test_partial_match_below_minimum_coverage_is_no_match() -> None:
+    item = LocalItem(Path("/lib/Show"), {"Show/e01.srt": 10})
+
+    assert match(item, {"Show/e01.srt": 10, "Show/e01.mkv": 990}) is None
+
+
+def test_ignored_torrent_file_missing_locally_still_gives_a_full_match() -> None:
+    from torrentlinker.matching import IgnoreList
+
+    item = LocalItem(Path("/lib/Movie"), {"Movie/movie.mkv": 100})
+    files = {"Movie/movie.mkv": 100, "Movie/movie.nfo": 2, "Movie/Sample/s.mkv": 5}
+
+    m = match(item, files, IgnoreList.default())
+
+    assert m is not None and m.is_full
+    assert set(m.skipped) == {"Movie/movie.nfo", "Movie/Sample/s.mkv"}
 
 
 def test_extra_local_files_do_not_prevent_a_full_match() -> None:

@@ -15,9 +15,10 @@ import pytest
 
 from torrentlinker.domain import LibraryFolder
 from torrentlinker.indexer import Indexer, SearchQuery
+from torrentlinker.matching import IgnoreList
 from torrentlinker.queries import name_query
 from torrentlinker.reseed import check_verifications, start_reseed
-from torrentlinker.review import verify
+from torrentlinker.review import MatchRules, verify
 from torrentlinker.scan import scan
 from torrentlinker.store import Store
 
@@ -25,6 +26,7 @@ pytestmark = pytest.mark.skipif(not os.environ.get("TL_LIVE"), reason="set TL_LI
 
 LIBRARY = Path(os.environ.get("TL_LIVE_LIBRARY", "/windocs/E-Book"))
 ITEM_NAME = os.environ.get("TL_LIVE_ITEM", "Le joueur d'echecs - Stefan Zweig.epub")
+RULES = MatchRules(0.02, 0.5, IgnoreList.default())
 URL = os.environ.get("TL_INDEXER_URL", "https://c411.org/api/torznab")
 
 
@@ -33,7 +35,7 @@ def test_ebook_is_found_and_matches_with_a_rename(tmp_path: Path) -> None:
     indexer = Indexer(URL, os.environ["TL_INDEXER_KEY"], cache=store)
     item = next(i for i in scan(LibraryFolder(LIBRARY)) if i.path.name == ITEM_NAME)
 
-    results = verify(indexer, item, indexer.search(SearchQuery(q=name_query(item))), 0.02)
+    results = verify(indexer, item, indexer.search(SearchQuery(q=name_query(item))), RULES)
     matches = [v for v in results if v.match]
     for v in results:
         print(v.candidate.title, v.candidate.size, "MATCH" if v.match else "")

@@ -23,6 +23,7 @@ from torrentlinker.indexer import Indexer
 from torrentlinker.library import build_library
 from torrentlinker.qbit import QbitApi
 from torrentlinker.reseed import Outcome, check_verifications
+from torrentlinker.review import MatchRules
 from torrentlinker.store import Store
 
 
@@ -55,9 +56,7 @@ class MainWindow(QMainWindow):
         self.library_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
-        self.review = ReviewPanel(
-            store, self.indexer, self.qbit, lambda: self.settings.matching.size_tolerance
-        )
+        self.review = ReviewPanel(store, self.indexer, self.qbit, self.match_rules)
         self.review.reseed_started.connect(self._reseed_started)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.library_view)
@@ -86,6 +85,10 @@ class MainWindow(QMainWindow):
             self._indexer = Indexer(url, key, cache=self.store)
         return self._indexer
 
+    def match_rules(self) -> MatchRules:
+        m = self.settings.matching
+        return MatchRules(m.size_tolerance, m.min_partial_coverage, m.ignore)
+
     def open_settings(self) -> None:
         if SettingsDialog(self.settings, self).exec():
             self.settings.save(self.settings_path)
@@ -102,9 +105,9 @@ class MainWindow(QMainWindow):
         self.scan_action.setEnabled(False)
         self.statusBar().showMessage(self.tr("Scanning…"))
         folders = list(self.settings.library_folders)
-        qbit = self.qbit()
+        qbit, ignore = self.qbit(), self.settings.matching.ignore
         run_in_background(
-            lambda: build_library(folders, qbit.torrents()),
+            lambda: build_library(folders, qbit.torrents(), ignore),
             self._scan_done,
             self._scan_failed,
         )

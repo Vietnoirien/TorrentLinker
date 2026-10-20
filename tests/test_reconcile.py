@@ -30,3 +30,14 @@ def test_files_of_one_item_spread_over_several_torrents_count_as_seeded() -> Non
     ]
 
     assert classify([show], torrents) == {show.path: ItemState.SEEDED}
+
+
+def test_local_ignored_files_do_not_make_an_item_partially_seeded() -> None:
+    from torrentlinker.matching import IgnoreList
+
+    movie_dir = LocalItem(LIB / "Movie", {"Movie/movie.mkv": 10, "Movie/Thumbs.db": 1})
+    torrents = [Torrent("h1", "Movie", LIB, {"Movie/movie.mkv": 10})]
+
+    states = classify([movie_dir], torrents, IgnoreList.default())
+
+    assert states == {movie_dir.path: ItemState.SEEDED}

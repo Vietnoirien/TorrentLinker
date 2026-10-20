@@ -16,7 +16,7 @@ from torrentlinker.domain import LocalItem
 from torrentlinker.matching import Match
 from torrentlinker.qbit import Qbit
 from torrentlinker.store import Store
-from torrentlinker.torrent_meta import TorrentMeta
+from torrentlinker.torrent_meta import TorrentMeta, expected_progress
 
 TAG = "torrentlinker"
 VERIFYING = "torrentlinker:verifying"
@@ -42,7 +42,12 @@ def start_reseed(qbit: Qbit, store: Store, item: LocalItem, meta: TorrentMeta, m
     h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
     for old, new in rename_plan(match, set(meta.files)):
         qbit.rename_file(h, old, new)
-    store.start_verification(h, item.path, meta.infohash)
+    unwanted = set(match.unwanted)
+    if unwanted:
+        indexes = [i for i, path in enumerate(meta.files) if path in unwanted]
+        qbit.set_file_priority(h, indexes, 0)
+    required = expected_progress(meta, unwanted)
+    store.start_verification(h, item.path, meta.infohash, required)
     qbit.recheck(h)
     return h
 
@@ -69,15 +74,16 @@ def check_verifications(
             store.start_verification(t.hash, t.save_path / t.name, t.hash)
             qbit.recheck(t.hash)
             continue
-        item_path, candidate_key, rechecked_at = record
+        item_path, candidate_key = record.item_path, record.candidate_key
         if t.state in CHECKING_STATES:
             continue
-        if t.progress >= 1.0:
+        # qBittorrent reports progress with limited precision.
+        if t.progress >= record.required_progress - 1e-4:
             qbit.start(t.hash)
             qbit.remove_tags(t.hash, [VERIFYING])
             store.end_verification(t.hash)
             outcomes[item_path] = Outcome(t.hash, verified=True, progress=t.progress)
-        elif now() - rechecked_at >= RECHECK_GRACE:
+        elif now() - record.rechecked_at >= RECHECK_GRACE:
             qbit.remove(t.hash)
             store.end_verification(t.hash)
             store.reject(item_path, candidate_key, f"Verification failed at {t.progress:.1%}")
