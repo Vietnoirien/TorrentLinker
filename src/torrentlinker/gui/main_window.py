@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelection, QSortFilterProxyModel, Qt
+from PySide6.QtCore import QItemSelection, QSortFilterProxyModel, Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -22,6 +22,7 @@ from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
 from torrentlinker.library import build_library
 from torrentlinker.qbit import QbitApi
+from torrentlinker.reseed import Outcome, check_verifications
 from torrentlinker.store import Store
 
 
@@ -32,6 +33,7 @@ class MainWindow(QMainWindow):
         self.settings_path = settings_path
         self.store = store
         self._indexer: Indexer | None = None
+        self._qbit: tuple[tuple[str, str, str], QbitApi] | None = None
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
 
@@ -54,8 +56,9 @@ class MainWindow(QMainWindow):
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
         self.review = ReviewPanel(
-            store, self.indexer, lambda: self.settings.matching.size_tolerance
+            store, self.indexer, self.qbit, lambda: self.settings.matching.size_tolerance
         )
+        self.review.reseed_started.connect(self._reseed_started)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.library_view)
         splitter.addWidget(self.review)
@@ -63,9 +66,18 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
         self.statusBar().showMessage(self.tr("Ready"))
 
+        self.verifying: set[Path] = set()
+        self._checking = False
+        self.verify_timer = QTimer(self)
+        self.verify_timer.setInterval(3000)
+        self.verify_timer.timeout.connect(self.check_verifications)
+
     def qbit(self) -> QbitApi:
         q = self.settings.qbit
-        return QbitApi(q.host, q.username, get_secret(QBIT_PASSWORD))
+        key = (q.host, q.username, get_secret(QBIT_PASSWORD))
+        if self._qbit is None or self._qbit[0] != key:
+            self._qbit = (key, QbitApi(*key))
+        return self._qbit[1]
 
     def indexer(self) -> Indexer:
         """One Indexer instance, so every search shares the same rate limiter."""
@@ -106,3 +118,35 @@ class MainWindow(QMainWindow):
         self.scan_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("Scan failed"))
         QMessageBox.warning(self, self.tr("Scan failed"), str(error))
+
+    # Verification ----------------------------------------------------------
+
+    def _reseed_started(self, path: Path) -> None:
+        self.verifying.add(path)
+        self.library_model.set_status(path, self.tr("Verifying…"))
+        self.verify_timer.start()
+
+    def check_verifications(self) -> None:
+        if self._checking:
+            return
+        self._checking = True
+        qbit, store = self.qbit(), self.store
+        run_in_background(
+            lambda: check_verifications(qbit, store), self._verified, self._verify_error
+        )
+
+    def _verified(self, outcomes: dict[Path, Outcome]) -> None:
+        self._checking = False
+        for path, outcome in outcomes.items():
+            self.verifying.discard(path)
+            if outcome.verified:
+                text = self.tr("Reseeded")
+            else:
+                text = self.tr("Verification failed at {0}").format(f"{outcome.progress:.1%}")
+            self.library_model.set_status(path, text)
+        if not self.verifying:
+            self.verify_timer.stop()
+
+    def _verify_error(self, error: Exception) -> None:
+        self._checking = False
+        self.statusBar().showMessage(self.tr("Could not check Verifications: {0}").format(error))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import (
@@ -40,11 +41,23 @@ class LibraryModel(QAbstractTableModel):
     def __init__(self) -> None:
         super().__init__()
         self.entries: list[LibraryEntry] = []
+        self.status: dict[Path, str] = {}
 
     def set_entries(self, entries: list[LibraryEntry]) -> None:
         self.beginResetModel()
         self.entries = entries
         self.endResetModel()
+
+    def set_status(self, path: Path, text: str | None) -> None:
+        """Overlay a transient status (Verifying, Reseeded, Failed…) on a Local Item."""
+        if text is None:
+            self.status.pop(path, None)
+        else:
+            self.status[path] = text
+        for row, e in enumerate(self.entries):
+            if e.item.path == path:
+                i = self.index(row, 1)
+                self.dataChanged.emit(i, i)
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self.entries)
@@ -64,7 +77,7 @@ class LibraryModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return (
                 e.item.path.name,
-                state_label(e.state),
+                self.status.get(e.item.path) or state_label(e.state),
                 human_size(e.item.size),
                 str(e.folder.path),
             )[index.column()]

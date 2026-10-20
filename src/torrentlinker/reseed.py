@@ -1,0 +1,74 @@
+"""Reseed: add a Match to qBittorrent against the existing data, then verify it.
+
+The user's files are never written: the torrent is added stopped, checked, and only
+started once Verification reaches 100%. A failed Verification removes the torrent
+(never its data) and records a Rejection. See ADR-0002.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+from torrentlinker.domain import LocalItem
+from torrentlinker.matching import Match
+from torrentlinker.qbit import Qbit
+from torrentlinker.store import Store
+from torrentlinker.torrent_meta import TorrentMeta
+
+TAG = "torrentlinker"
+VERIFYING = "torrentlinker:verifying"
+CHECKING_STATES = {"checkingUP", "checkingDL", "checkingResumeData", "queuedForChecking", "moving"}
+# A stopped torrent below 100% right after a recheck request may not have started checking yet.
+RECHECK_GRACE = 10.0
+
+
+class AlreadyInClient(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Outcome:
+    hash: str
+    verified: bool
+    progress: float
+
+
+def start_reseed(qbit: Qbit, store: Store, item: LocalItem, meta: TorrentMeta, match: Match) -> str:
+    if qbit.torrent(meta.infohash) is not None:
+        raise AlreadyInClient(meta.name)
+    h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
+    store.start_verification(h, item.path, meta.infohash)
+    qbit.recheck(h)
+    return h
+
+
+def check_verifications(
+    qbit: Qbit, store: Store, now: Callable[[], float] = time.time
+) -> dict[Path, Outcome]:
+    """Settle every finished Verification; return outcomes by Local Item path."""
+    outcomes: dict[Path, Outcome] = {}
+    for t in qbit.torrents():
+        if VERIFYING not in t.tags:
+            continue
+        record = store.verification(t.hash)
+        if record is None:  # interrupted before the check was requested
+            store.start_verification(t.hash, t.save_path / t.name, t.hash)
+            qbit.recheck(t.hash)
+            continue
+        item_path, candidate_key, rechecked_at = record
+        if t.state in CHECKING_STATES:
+            continue
+        if t.progress >= 1.0:
+            qbit.start(t.hash)
+            qbit.remove_tags(t.hash, [VERIFYING])
+            store.end_verification(t.hash)
+            outcomes[item_path] = Outcome(t.hash, verified=True, progress=t.progress)
+        elif now() - rechecked_at >= RECHECK_GRACE:
+            qbit.remove(t.hash)
+            store.end_verification(t.hash)
+            store.reject(item_path, candidate_key, f"Verification failed at {t.progress:.1%}")
+            outcomes[item_path] = Outcome(t.hash, verified=False, progress=t.progress)
+    return outcomes

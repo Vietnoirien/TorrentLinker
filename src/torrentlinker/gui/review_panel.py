@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,7 +23,9 @@ from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer, SearchQuery
 from torrentlinker.library import LibraryEntry
+from torrentlinker.qbit import Qbit
 from torrentlinker.queries import name_query
+from torrentlinker.reseed import start_reseed
 from torrentlinker.review import Verified, verify, verify_one
 from torrentlinker.store import Store
 
@@ -44,12 +46,19 @@ def _readonly_table(headers: list[str]) -> QTableWidget:
 class ReviewPanel(QWidget):
     """Candidates for the selected Orphan, and how a Candidate's files line up locally."""
 
+    reseed_started = Signal(object)  # Path of the Local Item
+
     def __init__(
-        self, store: Store, indexer: Callable[[], Indexer], tolerance: Callable[[], float]
+        self,
+        store: Store,
+        indexer: Callable[[], Indexer],
+        qbit: Callable[[], Qbit],
+        tolerance: Callable[[], float],
     ) -> None:
         super().__init__()
         self.store = store
         self.indexer = indexer
+        self.qbit = qbit
         self.tolerance = tolerance
         self.entry: LibraryEntry | None = None
         self.results: list[Verified] = []
@@ -82,6 +91,12 @@ class ReviewPanel(QWidget):
         self.check_button.clicked.connect(self._check_selected)
         actions.addWidget(self.check_button)
         actions.addStretch()
+        self.reseed_button = QPushButton(self.tr("Reseed"))
+        self.reseed_button.setToolTip(
+            self.tr("Add to qBittorrent against your files, verify, then seed")
+        )
+        self.reseed_button.clicked.connect(self._reseed_selected)
+        actions.addWidget(self.reseed_button)
         self.action_row = actions
 
         lower = QWidget()
@@ -199,6 +214,7 @@ class ReviewPanel(QWidget):
     def _update_actions(self) -> None:
         v = self.selected()
         self.check_button.setEnabled(v is not None and not v.checked)
+        self.reseed_button.setEnabled(v is not None and v.match is not None)
 
     def _check_selected(self) -> None:
         v, entry = self.selected(), self.entry
@@ -219,3 +235,20 @@ class ReviewPanel(QWidget):
         self.results[i] = new
         self._fill_candidates()
         self.candidates.selectRow(i)
+
+    def _reseed_selected(self) -> None:
+        v, entry = self.selected(), self.entry
+        if v is None or entry is None or v.meta is None or v.match is None:
+            return
+        meta, m = v.meta, v.match
+        self.reseed_button.setEnabled(False)
+        qbit, store = self.qbit(), self.store
+        run_in_background(
+            lambda: start_reseed(qbit, store, entry.item, meta, m),
+            lambda _hash: self.reseed_started.emit(entry.item.path),
+            self._reseed_failed,
+        )
+
+    def _reseed_failed(self, error: Exception) -> None:
+        self._update_actions()
+        QMessageBox.warning(self, self.tr("Reseed failed"), str(error) or type(error).__name__)
