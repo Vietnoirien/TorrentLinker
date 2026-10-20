@@ -42,6 +42,12 @@ class Settings:
     qbit: QbitSettings = field(default_factory=QbitSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
+    # Torznab categories searched for each Content Kind (by kind value); empty = all.
+    kind_categories: dict[str, list[int]] = field(default_factory=dict)
+
+    def categories(self, kind: ContentKind) -> tuple[int, ...]:
+        return tuple(self.kind_categories.get(kind.value, []))
+
     library_folders: list[LibraryFolder] = field(default_factory=list)
 
     def save(self, path: Path) -> None:
@@ -50,6 +56,7 @@ class Settings:
             "qbit": asdict(self.qbit),
             "indexer": asdict(self.indexer),
             "matching": asdict(self.matching),
+            "kind_categories": self.kind_categories,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -63,6 +70,9 @@ class Settings:
             qbit=QbitSettings(**data.get("qbit", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
             matching=MatchingSettings(**data.get("matching", {})),
+            kind_categories={
+                k: [int(c) for c in v] for k, v in data.get("kind_categories", {}).items()
+            },
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
         )
 

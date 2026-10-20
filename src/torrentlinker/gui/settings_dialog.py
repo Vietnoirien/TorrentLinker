@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -25,34 +27,58 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
-from torrentlinker.domain import LibraryFolder, PathMapping
+from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.indexer import Indexer
+from torrentlinker.indexer import Caps, Indexer
 from torrentlinker.qbit import QbitApi
+from torrentlinker.queries import default_categories
 
 QBIT_PASSWORD = "qbit-password"
 INDEXER_API_KEY = "indexer-api-key"
+TMDB_API_KEY = "tmdb-api-key"
+
+COL_PATH, COL_KIND, COL_DEPTH, COL_MAPPING = range(4)
+
+
+def kind_label(kind: ContentKind) -> str:
+    labels = {
+        ContentKind.MOVIE: "Movies",
+        ContentKind.SERIES: "Series",
+        ContentKind.MUSIC: "Music",
+        ContentKind.EBOOK: "Ebooks",
+        ContentKind.GAME: "Games",
+        ContentKind.MODEL_3D: "3D models",
+        ContentKind.OTHER: "Other",
+    }
+    return QCoreApplication.translate("ContentKind", labels[kind])
 
 
 class SettingsDialog(QDialog):
     def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Settings"))
-        self.resize(720, 480)
+        self.resize(820, 720)
         self.settings = settings
 
-        layout = QVBoxLayout(self)
+        body = QWidget()
+        layout = QVBoxLayout(body)
         layout.addWidget(self._qbit_box())
         layout.addWidget(self._indexer_box())
         layout.addWidget(self._folders_box())
+        layout.addWidget(self._search_box())
         layout.addWidget(self._matching_box())
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(body)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        outer = QVBoxLayout(self)
+        outer.addWidget(scroll)
+        outer.addWidget(buttons)
 
     # qBittorrent -----------------------------------------------------------
 
@@ -96,10 +122,12 @@ class SettingsDialog(QDialog):
         form.addRow("", test)
         return box
 
+    def _form_indexer(self) -> Indexer:
+        return Indexer(self.indexer_url.text().strip(), self.indexer_key.text().strip())
+
     def _test_indexer(self) -> None:
-        indexer = Indexer(self.indexer_url.text().strip(), self.indexer_key.text().strip())
         run_in_background(
-            indexer.caps,
+            self._form_indexer().caps,
             lambda caps: QMessageBox.information(
                 self,
                 self.tr("Indexer"),
@@ -113,14 +141,23 @@ class SettingsDialog(QDialog):
     def _folders_box(self) -> QGroupBox:
         box = QGroupBox(self.tr("Library Folders"))
         layout = QVBoxLayout(box)
-        self.folders = QTableWidget(0, 3)
+        self.folders = QTableWidget(0, 4)
         self.folders.setHorizontalHeaderLabels(
-            [self.tr("Folder"), self.tr("Scan depth"), self.tr("qBittorrent sees it as")]
+            [
+                self.tr("Folder"),
+                self.tr("Content Kind"),
+                self.tr("Scan depth"),
+                self.tr("qBittorrent sees it as"),
+            ]
         )
-        self.folders.horizontalHeaderItem(2).setToolTip(  # type: ignore[union-attr]
-            self.tr("Path Mapping: fill in only if qBittorrent runs in Docker, on a NAS…")
+        header = self.folders.horizontalHeaderItem(COL_MAPPING)
+        if header:
+            header.setToolTip(
+                self.tr("Path Mapping: fill in only if qBittorrent runs in Docker, on a NAS…")
+            )
+        self.folders.horizontalHeader().setSectionResizeMode(
+            COL_PATH, QHeaderView.ResizeMode.Stretch
         )
-        self.folders.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for f in self.settings.library_folders:
             self._add_folder_row(f)
         layout.addWidget(self.folders)
@@ -146,28 +183,77 @@ class SettingsDialog(QDialog):
         self.folders.insertRow(r)
         path_cell = QTableWidgetItem(str(folder.path))
         path_cell.setFlags(path_cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.folders.setItem(r, 0, path_cell)
+        self.folders.setItem(r, COL_PATH, path_cell)
+        kind = QComboBox()
+        for k in ContentKind:
+            kind.addItem(kind_label(k), k)
+        kind.setCurrentIndex(list(ContentKind).index(folder.kind))
+        self.folders.setCellWidget(r, COL_KIND, kind)
         depth = QSpinBox()
         depth.setRange(1, 5)
         depth.setValue(folder.depth)
-        self.folders.setCellWidget(r, 1, depth)
+        self.folders.setCellWidget(r, COL_DEPTH, depth)
         mapped = folder.mapping.qbit if folder.mapping else ""
-        self.folders.setItem(r, 2, QTableWidgetItem(mapped))
+        self.folders.setItem(r, COL_MAPPING, QTableWidgetItem(mapped))
 
     def _read_folders(self) -> list[LibraryFolder]:
         result = []
         for r in range(self.folders.rowCount()):
-            cell = self.folders.item(r, 0)
-            assert cell is not None
+            cell = self.folders.item(r, COL_PATH)
+            kind, depth = (
+                self.folders.cellWidget(r, COL_KIND),
+                self.folders.cellWidget(r, COL_DEPTH),
+            )
+            assert cell is not None and isinstance(kind, QComboBox) and isinstance(depth, QSpinBox)
             path = Path(cell.text())
-            depth = self.folders.cellWidget(r, 1)
-            assert isinstance(depth, QSpinBox)
-            existing = next((f for f in self.settings.library_folders if f.path == path), None)
-            base = existing or LibraryFolder(path)
-            mapped_cell = self.folders.item(r, 2)
+            mapped_cell = self.folders.item(r, COL_MAPPING)
             mapped = mapped_cell.text().strip() if mapped_cell else ""
             mapping = PathMapping(str(path), mapped) if mapped else None
-            result.append(LibraryFolder(path, depth.value(), base.kind, mapping))
+            result.append(LibraryFolder(path, depth.value(), kind.currentData(), mapping))
+        return result
+
+    # Search ----------------------------------------------------------------
+
+    def _search_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Search"))
+        form = QFormLayout(box)
+        self.tmdb_key = QLineEdit(get_secret(TMDB_API_KEY))
+        self.tmdb_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.tmdb_key.setPlaceholderText(self.tr("Optional: finds IDs for movies and series"))
+        form.addRow(self.tr("TMDb API key"), self.tmdb_key)
+        self.category_fields: dict[ContentKind, QLineEdit] = {}
+        for kind in ContentKind:
+            field = QLineEdit(", ".join(str(c) for c in self.settings.categories(kind)))
+            field.setPlaceholderText(self.tr("All categories"))
+            self.category_fields[kind] = field
+            form.addRow(self.tr("Categories: {0}").format(kind_label(kind)), field)
+        fill = QPushButton(self.tr("Fill categories from the Indexer"))
+        fill.clicked.connect(self._fill_categories)
+        form.addRow("", fill)
+        return box
+
+    def _fill_categories(self) -> None:
+        run_in_background(
+            self._form_indexer().caps,
+            self._apply_caps,
+            lambda e: QMessageBox.warning(self, self.tr("Indexer"), str(e)),
+        )
+
+    def _apply_caps(self, caps: Caps) -> None:
+        names = "\n".join(f"{i}  {n}" for i, n in sorted(caps.categories.items()))
+        for kind, cats in default_categories(caps.categories).items():
+            field = self.category_fields[kind]
+            field.setText(", ".join(str(c) for c in cats))
+            field.setToolTip(names)
+
+    def _read_categories(self) -> dict[str, list[int]]:
+        result = {}
+        for kind, field in self.category_fields.items():
+            cats = [
+                int(c) for c in field.text().replace(";", ",").split(",") if c.strip().isdigit()
+            ]
+            if cats:
+                result[kind.value] = cats
         return result
 
     # Matching --------------------------------------------------------------
@@ -192,16 +278,21 @@ class SettingsDialog(QDialog):
         form.addRow(self.tr("Ignored Files"), self.ignore)
         return box
 
+    # Save ------------------------------------------------------------------
+
     def _save(self) -> None:
-        self.settings.qbit.host = self.qbit_host.text().strip()
-        self.settings.qbit.username = self.qbit_user.text().strip()
+        s = self.settings
+        s.qbit.host = self.qbit_host.text().strip()
+        s.qbit.username = self.qbit_user.text().strip()
         set_secret(QBIT_PASSWORD, self.qbit_password.text())
-        self.settings.indexer.url = self.indexer_url.text().strip()
+        s.indexer.url = self.indexer_url.text().strip()
         set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
-        self.settings.library_folders = self._read_folders()
-        self.settings.matching.size_tolerance = self.tolerance.value() / 100
-        self.settings.matching.min_partial_coverage = self.coverage.value() / 100
-        self.settings.matching.ignore_patterns = [
+        set_secret(TMDB_API_KEY, self.tmdb_key.text().strip())
+        s.library_folders = self._read_folders()
+        s.kind_categories = self._read_categories()
+        s.matching.size_tolerance = self.tolerance.value() / 100
+        s.matching.min_partial_coverage = self.coverage.value() / 100
+        s.matching.ignore_patterns = [
             line.strip() for line in self.ignore.toPlainText().splitlines() if line.strip()
         ]
         self.accept()

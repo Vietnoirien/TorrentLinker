@@ -17,15 +17,22 @@ from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.gui.library_model import LibraryModel
 from torrentlinker.gui.review_panel import ReviewPanel
-from torrentlinker.gui.settings_dialog import INDEXER_API_KEY, QBIT_PASSWORD, SettingsDialog
+from torrentlinker.gui.settings_dialog import (
+    INDEXER_API_KEY,
+    QBIT_PASSWORD,
+    TMDB_API_KEY,
+    SettingsDialog,
+)
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.indexer import Indexer
-from torrentlinker.library import build_library
+from torrentlinker.indexer import Candidate, Indexer
+from torrentlinker.library import LibraryEntry, build_library
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.qbit import QbitApi
+from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
-from torrentlinker.review import MatchRules
+from torrentlinker.review import MatchRules, search_candidates
 from torrentlinker.store import Store
+from torrentlinker.tmdb import Tmdb
 
 
 class MainWindow(QMainWindow):
@@ -35,6 +42,7 @@ class MainWindow(QMainWindow):
         self.settings_path = settings_path
         self.store = store
         self._indexer: Indexer | None = None
+        self._caps_modes: dict[str, set[str]] | None = None
         self._qbit: tuple[tuple[str, str, str], QbitApi] | None = None
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
@@ -57,7 +65,9 @@ class MainWindow(QMainWindow):
         self.library_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
-        self.review = ReviewPanel(store, self.indexer, self.qbit, self.match_rules)
+        self.review = ReviewPanel(
+            store, self.indexer, self.qbit, self.match_rules, self.search, self.default_query
+        )
         self.review.reseed_started.connect(self._reseed_started)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.library_view)
@@ -86,7 +96,35 @@ class MainWindow(QMainWindow):
         url, key = self.settings.indexer.url, get_secret(INDEXER_API_KEY)
         if self._indexer is None or (self._indexer.url, self._indexer.api_key) != (url, key):
             self._indexer = Indexer(url, key, cache=self.store)
+            self._caps_modes = None
         return self._indexer
+
+    def caps_modes(self) -> dict[str, set[str]] | None:
+        """The Indexer's supported search modes, fetched once; None if unknown."""
+        if self._caps_modes is None:
+            try:
+                self._caps_modes = self.indexer().caps().modes
+            except Exception:  # noqa: BLE001 - fall back to assuming every mode works
+                return None
+        return self._caps_modes
+
+    def default_query(self, entry: LibraryEntry) -> str:
+        kind = entry.folder.kind
+        last = build_queries(entry.item, kind, (), find_ids(entry.item), None)[-1]
+        return last.q
+
+    def search(self, entry: LibraryEntry, override: str | None) -> list[Candidate]:
+        """Runs off the GUI thread."""
+        tmdb_key = get_secret(TMDB_API_KEY)
+        return search_candidates(
+            self.indexer(),
+            entry.item,
+            entry.folder.kind,
+            self.settings.categories(entry.folder.kind),
+            self.caps_modes(),
+            Tmdb(tmdb_key) if tmdb_key else None,
+            override,
+        )
 
     def match_rules(self) -> MatchRules:
         m = self.settings.matching

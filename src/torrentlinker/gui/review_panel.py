@@ -21,10 +21,9 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.indexer import Indexer, SearchQuery
+from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
 from torrentlinker.qbit import Qbit
-from torrentlinker.queries import name_query
 from torrentlinker.reseed import start_reseed
 from torrentlinker.review import MatchRules, Verified, candidate_key, verify, verify_one
 from torrentlinker.store import Store
@@ -54,12 +53,16 @@ class ReviewPanel(QWidget):
         indexer: Callable[[], Indexer],
         qbit: Callable[[], Qbit],
         rules: Callable[[], MatchRules],
+        searcher: Callable[[LibraryEntry, str | None], list[Candidate]],
+        default_query: Callable[[LibraryEntry], str],
     ) -> None:
         super().__init__()
         self.store = store
         self.indexer = indexer
         self.qbit = qbit
         self.rules = rules
+        self.searcher = searcher
+        self.default_query = default_query
         self.entry: LibraryEntry | None = None
         self.results: list[Verified] = []
 
@@ -136,7 +139,7 @@ class ReviewPanel(QWidget):
             self.query.clear()
             return
         self.title.setText(f"<b>{entry.item.path.name}</b> — {human_size(entry.item.size)}")
-        self.query.setText(self.store.item_query(entry.item.path) or name_query(entry.item))
+        self.query.setText(self.store.item_query(entry.item.path) or self.default_query(entry))
 
     def selected(self) -> Verified | None:
         """The Candidate whose files are shown: the current one among the selection."""
@@ -157,15 +160,14 @@ class ReviewPanel(QWidget):
             return
         entry = self.entry
         q = self.query.text().strip()
-        if q != name_query(entry.item):
-            self.store.set_item_query(entry.item.path, q)
+        override = q if q and q != self.default_query(entry) else None
+        if override:
+            self.store.set_item_query(entry.item.path, override)
         self.search_button.setEnabled(False)
         indexer, rules = self.indexer(), self.rules()
         rejections = self.store.rejections(entry.item.path)
         run_in_background(
-            lambda: verify(
-                indexer, entry.item, indexer.search(SearchQuery(q=q)), rules, rejections
-            ),
+            lambda: verify(indexer, entry.item, self.searcher(entry, override), rules, rejections),
             lambda results: self._show(entry, results),
             self._failed,
         )
