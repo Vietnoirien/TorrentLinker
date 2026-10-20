@@ -23,6 +23,10 @@ class Qbit(Protocol):
         """Add stopped, with automatic management off and the original layout; return hash."""
         ...
 
+    def rename_file(self, hash: str, old: str, new: str) -> None:
+        """Rename a file inside the torrent (paths relative to the save path)."""
+        ...
+
     def recheck(self, hash: str) -> None: ...
     def start(self, hash: str) -> None: ...
     def remove(self, hash: str) -> None:
@@ -86,6 +90,9 @@ class QbitApi:
                 return h
             time.sleep(0.2)
         raise RuntimeError("Torrent did not appear in qBittorrent")
+
+    def rename_file(self, hash: str, old: str, new: str) -> None:
+        self._client.torrents_rename_file(torrent_hash=hash, old_path=old, new_path=new)
 
     def recheck(self, hash: str) -> None:
         self._client.torrents_recheck(torrent_hashes=hash)

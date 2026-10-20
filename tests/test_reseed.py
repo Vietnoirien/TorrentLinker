@@ -92,3 +92,46 @@ def test_reseeding_a_torrent_already_in_qbittorrent_is_refused(tmp_path: Path) -
 
     with pytest.raises(AlreadyInClient):
         start_reseed(qbit, store, item, meta, match(item, meta.files))  # type: ignore[arg-type]
+
+
+def test_torrent_files_are_renamed_to_the_local_names_before_verification(
+    tmp_path: Path,
+) -> None:
+    item, _ = ebook(tmp_path)
+    scene = tmp_path / "scene" / "Le.Joueur.D'echecs.Stefan.Zweig.2013.FR.[EPUB]-NOTAG.epub"
+    scene.parent.mkdir()
+    scene.write_bytes(b"z" * 67163)
+    meta = read_torrent(make_torrent(scene))
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+
+    h = start_reseed(qbit, store, item, meta, match(item, meta.files))  # type: ignore[arg-type]
+
+    assert qbit.by_hash[h].files == {item.path.name: 67163}
+    assert qbit.calls == [f"rename {scene.name} -> {item.path.name}", "recheck"]
+
+
+def test_root_folder_and_layout_differences_are_renamed_file_by_file(tmp_path: Path) -> None:
+    src = tmp_path / "scene" / "Show.S01"
+    (src / "Subs").mkdir(parents=True)
+    (src / "Show.S01E01.mkv").write_bytes(b"a" * 1000)
+    (src / "Subs" / "Show.S01E01.srt").write_bytes(b"b" * 10)
+    meta = read_torrent(make_torrent(src))
+    item = LocalItem(tmp_path / "lib" / "My Show", {"My Show/E01.mkv": 1000, "My Show/E01.srt": 10})
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+
+    h = start_reseed(qbit, store, item, meta, match(item, meta.files))  # type: ignore[arg-type]
+
+    assert qbit.by_hash[h].files == {"My Show/E01.mkv": 1000, "My Show/E01.srt": 10}
+
+
+def test_swapped_names_are_renamed_without_collisions(tmp_path: Path) -> None:
+    from torrentlinker.matching import Match
+    from torrentlinker.reseed import rename_plan
+
+    m = Match({"S/a.mkv": "S/b.mkv", "S/b.mkv": "S/a.mkv"})
+    files = {"S/a.mkv": 1, "S/b.mkv": 2}
+    for old, new in rename_plan(m, set(files)):
+        assert new not in files, f"{new} would overwrite another file"
+        files[new] = files.pop(old)
+
+    assert files == {"S/b.mkv": 1, "S/a.mkv": 2}

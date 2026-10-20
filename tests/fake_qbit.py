@@ -18,6 +18,7 @@ class FakeQbit:
     removed: list[tuple[str, bool]] = field(default_factory=list)
     started: list[str] = field(default_factory=list)
     rechecked: list[str] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list)
 
     # Qbit port ---------------------------------------------------------------
 
@@ -40,7 +41,14 @@ class FakeQbit:
         )
         return meta.infohash
 
+    def rename_file(self, hash: str, old: str, new: str) -> None:
+        self.calls.append(f"rename {old} -> {new}")
+        files = dict(self.by_hash[hash].files)
+        files[new] = files.pop(old)
+        self._set(hash, files=files)
+
     def recheck(self, hash: str) -> None:
+        self.calls.append("recheck")
         self.rechecked.append(hash)
         self._set(hash, state=CHECKING)
 

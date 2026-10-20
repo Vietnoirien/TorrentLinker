@@ -40,9 +40,20 @@ def start_reseed(qbit: Qbit, store: Store, item: LocalItem, meta: TorrentMeta, m
     if qbit.torrent(meta.infohash) is not None:
         raise AlreadyInClient(meta.name)
     h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
+    for old, new in rename_plan(match, set(meta.files)):
+        qbit.rename_file(h, old, new)
     store.start_verification(h, item.path, meta.infohash)
     qbit.recheck(h)
     return h
+
+
+def rename_plan(match: Match, torrent_paths: set[str]) -> list[tuple[str, str]]:
+    """Renames that make the torrent's paths equal the local ones, safe against swaps."""
+    renames = match.renames
+    if not set(renames.values()) & torrent_paths:
+        return list(renames.items())
+    staged = {old: f"{old}.torrentlinker-tmp" for old in renames}
+    return list(staged.items()) + [(staged[old], new) for old, new in renames.items()]
 
 
 def check_verifications(

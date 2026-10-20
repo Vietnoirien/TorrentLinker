@@ -241,6 +241,8 @@ class ReviewPanel(QWidget):
         if v is None or entry is None or v.meta is None or v.match is None:
             return
         meta, m = v.meta, v.match
+        if m.renames and not self._confirm_renames(m.renames):
+            return
         self.reseed_button.setEnabled(False)
         qbit, store = self.qbit(), self.store
         run_in_background(
@@ -248,6 +250,23 @@ class ReviewPanel(QWidget):
             lambda _hash: self.reseed_started.emit(entry.item.path),
             self._reseed_failed,
         )
+
+    def _confirm_renames(self, renames: dict[str, str]) -> bool:
+        shown = sorted(renames.items())[:15]
+        lines = "\n".join(f"{old}\n    → {new}" for old, new in shown)
+        if len(renames) > len(shown):
+            lines += "\n" + self.tr("…and {0} more").format(len(renames) - len(shown))
+        answer = QMessageBox.question(
+            self,
+            self.tr("Rename inside the torrent"),
+            self.tr(
+                "These files will be renamed inside qBittorrent to match yours "
+                "(your files are not touched):"
+            )
+            + "\n\n"
+            + lines,
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def _reseed_failed(self, error: Exception) -> None:
         self._update_actions()
