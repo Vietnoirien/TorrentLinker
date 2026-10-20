@@ -1,0 +1,3 @@
+# Build our own reconciler instead of a GUI over cross-seed
+
+cross-seed's data-based mode already scans folders, searches Torznab indexers and matches local files to torrents by size, so wrapping it in a GUI was the obvious path. We build our own instead, because the workflow we want differs in three ways cross-seed doesn't support well: searching by IMDb/TMDb id rather than parsed name, interactive review of every Match before anything is added to qBittorrent, and Reseeding by renaming inside the torrent rather than hardlinking (see ADR-0002). We deliberately reuse cross-seed's matching rules — total-size pre-filter, size-only file-tree comparison, partial matching by covered pieces — so that logic is borrowed, not reinvented.
