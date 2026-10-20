@@ -87,7 +87,11 @@ class MainWindow(QMainWindow):
         self.library_view.setSortingEnabled(True)
         self.library_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.library_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.library_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header = self.library_view.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(3, 160)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
         filters = QHBoxLayout()

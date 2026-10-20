@@ -13,3 +13,13 @@ python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
 
 qBittorrent's Web UI must be enabled (Tools → Options → Web UI).
+
+## Translations
+
+UI strings are English in the code; French lives in `src/torrentlinker/i18n/`. After changing UI text:
+
+```bash
+.venv/bin/pyside6-lupdate $(find src/torrentlinker -name "*.py") -ts src/torrentlinker/i18n/torrentlinker_fr.ts -no-obsolete
+.venv/bin/pyside6-linguist src/torrentlinker/i18n/torrentlinker_fr.ts
+.venv/bin/pyside6-lrelease src/torrentlinker/i18n/torrentlinker_fr.ts -qm src/torrentlinker/i18n/torrentlinker_fr.qm
+```

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import (
+    QT_TRANSLATE_NOOP,
     QAbstractTableModel,
     QCoreApplication,
     QModelIndex,
@@ -16,17 +17,15 @@ from PySide6.QtGui import QColor
 from torrentlinker.domain import ItemState
 from torrentlinker.library import LibraryEntry
 
-
-def tr(text: str) -> str:
-    return QCoreApplication.translate("LibraryModel", text)
+STATE_LABELS = {
+    ItemState.SEEDED: QT_TRANSLATE_NOOP("LibraryModel", "Seeded"),
+    ItemState.PARTIALLY_SEEDED: QT_TRANSLATE_NOOP("LibraryModel", "Partially seeded"),
+    ItemState.ORPHAN: QT_TRANSLATE_NOOP("LibraryModel", "Orphan"),
+}
 
 
 def state_label(state: ItemState) -> str:
-    return {
-        ItemState.SEEDED: tr("Seeded"),
-        ItemState.PARTIALLY_SEEDED: tr("Partially seeded"),
-        ItemState.ORPHAN: tr("Orphan"),
-    }[state]
+    return QCoreApplication.translate("LibraryModel", str(STATE_LABELS[state]))
 
 
 def human_size(n: float) -> str:
@@ -44,7 +43,12 @@ STATE_COLORS = {
 
 
 class LibraryModel(QAbstractTableModel):
-    COLUMNS = ("Name", "State", "Size", "Library Folder")
+    COLUMNS = (
+        QT_TRANSLATE_NOOP("LibraryModel", "Name"),
+        QT_TRANSLATE_NOOP("LibraryModel", "State"),
+        QT_TRANSLATE_NOOP("LibraryModel", "Size"),
+        QT_TRANSLATE_NOOP("LibraryModel", "Library Folder"),
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -75,7 +79,7 @@ class LibraryModel(QAbstractTableModel):
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = 0) -> Any:
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
-            return tr(self.COLUMNS[section])
+            return QCoreApplication.translate("LibraryModel", str(self.COLUMNS[section]))
         return None
 
     def data(self, index: QModelIndex | QPersistentModelIndex, role: int = 0) -> Any:

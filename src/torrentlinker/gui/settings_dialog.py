@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -40,17 +40,19 @@ TMDB_API_KEY = "tmdb-api-key"
 COL_PATH, COL_KIND, COL_DEPTH, COL_MAPPING = range(4)
 
 
+KIND_LABELS = {
+    ContentKind.MOVIE: QT_TRANSLATE_NOOP("ContentKind", "Movies"),
+    ContentKind.SERIES: QT_TRANSLATE_NOOP("ContentKind", "Series"),
+    ContentKind.MUSIC: QT_TRANSLATE_NOOP("ContentKind", "Music"),
+    ContentKind.EBOOK: QT_TRANSLATE_NOOP("ContentKind", "Ebooks"),
+    ContentKind.GAME: QT_TRANSLATE_NOOP("ContentKind", "Games"),
+    ContentKind.MODEL_3D: QT_TRANSLATE_NOOP("ContentKind", "3D models"),
+    ContentKind.OTHER: QT_TRANSLATE_NOOP("ContentKind", "Other"),
+}
+
+
 def kind_label(kind: ContentKind) -> str:
-    labels = {
-        ContentKind.MOVIE: "Movies",
-        ContentKind.SERIES: "Series",
-        ContentKind.MUSIC: "Music",
-        ContentKind.EBOOK: "Ebooks",
-        ContentKind.GAME: "Games",
-        ContentKind.MODEL_3D: "3D models",
-        ContentKind.OTHER: "Other",
-    }
-    return QCoreApplication.translate("ContentKind", labels[kind])
+    return QCoreApplication.translate("ContentKind", str(KIND_LABELS[kind]))
 
 
 class SettingsDialog(QDialog):
@@ -62,6 +64,7 @@ class SettingsDialog(QDialog):
 
         body = QWidget()
         layout = QVBoxLayout(body)
+        layout.addWidget(self._general_box())
         layout.addWidget(self._qbit_box())
         layout.addWidget(self._indexer_box())
         layout.addWidget(self._folders_box())
@@ -79,6 +82,20 @@ class SettingsDialog(QDialog):
         outer = QVBoxLayout(self)
         outer.addWidget(scroll)
         outer.addWidget(buttons)
+
+    # General ---------------------------------------------------------------
+
+    def _general_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("General"))
+        form = QFormLayout(box)
+        self.language = QComboBox()
+        self.language.addItem(self.tr("Automatic (system language)"), "auto")
+        self.language.addItem("English", "en")
+        self.language.addItem("Français", "fr")
+        self.language.setCurrentIndex(max(self.language.findData(self.settings.language), 0))
+        self.language.setToolTip(self.tr("Takes effect after restarting the app"))
+        form.addRow(self.tr("Language"), self.language)
+        return box
 
     # qBittorrent -----------------------------------------------------------
 
@@ -282,6 +299,7 @@ class SettingsDialog(QDialog):
 
     def _save(self) -> None:
         s = self.settings
+        s.language = self.language.currentData()
         s.qbit.host = self.qbit_host.text().strip()
         s.qbit.username = self.qbit_user.text().strip()
         set_secret(QBIT_PASSWORD, self.qbit_password.text())

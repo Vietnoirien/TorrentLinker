@@ -44,6 +44,7 @@ class Settings:
     matching: MatchingSettings = field(default_factory=MatchingSettings)
     # Torznab categories searched for each Content Kind (by kind value); empty = all.
     kind_categories: dict[str, list[int]] = field(default_factory=dict)
+    language: str = "auto"  # auto | en | fr
 
     def categories(self, kind: ContentKind) -> tuple[int, ...]:
         return tuple(self.kind_categories.get(kind.value, []))
@@ -57,6 +58,7 @@ class Settings:
             "indexer": asdict(self.indexer),
             "matching": asdict(self.matching),
             "kind_categories": self.kind_categories,
+            "language": self.language,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -70,6 +72,7 @@ class Settings:
             qbit=QbitSettings(**data.get("qbit", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
             matching=MatchingSettings(**data.get("matching", {})),
+            language=str(data.get("language", "auto")),
             kind_categories={
                 k: [int(c) for c in v] for k, v in data.get("kind_categories", {}).items()
             },
