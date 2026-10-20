@@ -12,8 +12,12 @@ if TYPE_CHECKING:
     from torrentlinker.store import Store
 
 
-def scan(folder: LibraryFolder, cache: Store | None = None) -> list[LocalItem]:
-    return [_local_item(p, cache) for p in _entries_at_depth(folder.path, folder.depth)]
+def scan(
+    folder: LibraryFolder, cache: Store | None = None, refresh: bool = False
+) -> list[LocalItem]:
+    """List the Local Items; `refresh` walks every file again and updates the cache."""
+    entries = _entries_at_depth(folder.path, folder.depth)
+    return [_local_item(p, cache, refresh) for p in entries]
 
 
 def _entries_at_depth(root: Path, depth: int) -> list[Path]:
@@ -32,15 +36,15 @@ def _entries_at_depth(root: Path, depth: int) -> list[Path]:
     return found
 
 
-def _local_item(path: Path, cache: Store | None) -> LocalItem:
+def _local_item(path: Path, cache: Store | None, refresh: bool) -> LocalItem:
     base = path.parent
     if path.is_file():
         return LocalItem(path, {path.name: path.stat().st_size})
     # A folder whose directories all keep their mtime has the same entries, so its file
     # list is reused without stat-ing every file. A file rewritten in place under the
-    # same name is not noticed; that is rare in a media library.
+    # same name is only noticed by a refresh (Rescan everything).
     signature = _signature(path) if cache else ""
-    if cache and (files := cache.cached_scan(path, signature)) is not None:
+    if cache and not refresh and (files := cache.cached_scan(path, signature)) is not None:
         return LocalItem(path, files)
     walked: dict[str, int] = {}
     for dirpath, _dirs, names in os.walk(path):

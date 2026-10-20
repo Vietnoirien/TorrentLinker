@@ -39,7 +39,7 @@ def test_torrent_file_without_local_counterpart_makes_a_partial_match() -> None:
     m = match(item, {"Show/e01.mkv": 800, "Show/e02.mkv": 200})
 
     assert m is not None and not m.is_full
-    assert m.missing == ("Show/e02.mkv",)
+    assert m.absent == ("Show/e02.mkv",)
     assert m.coverage == 0.8
 
 
@@ -49,13 +49,13 @@ def test_partial_match_below_minimum_coverage_is_no_match() -> None:
     assert match(item, {"Show/e01.srt": 10, "Show/e01.mkv": 990}) is None
 
 
-def test_ignored_torrent_file_missing_locally_still_gives_a_full_match() -> None:
-    from torrentlinker.matching import IgnoreList
+def test_ignored_torrent_file_absent_locally_still_gives_a_full_match() -> None:
+    from torrentlinker.matching import IgnoreList, MatchRules
 
     item = LocalItem(Path("/lib/Movie"), {"Movie/movie.mkv": 100})
     files = {"Movie/movie.mkv": 100, "Movie/movie.nfo": 2, "Movie/Sample/s.mkv": 5}
 
-    m = match(item, files, IgnoreList.default())
+    m = match(item, files, MatchRules(ignore=IgnoreList.default()))
 
     assert m is not None and m.is_full
     assert set(m.skipped) == {"Movie/movie.nfo", "Movie/Sample/s.mkv"}

@@ -16,6 +16,11 @@ class ContentKind(StrEnum):
     MODEL_3D = "3d-model"
     OTHER = "other"
 
+    @property
+    def has_external_ids(self) -> bool:
+        """Whether items of this kind can be identified by IMDb/TMDb ids."""
+        return self in (ContentKind.MOVIE, ContentKind.SERIES)
+
 
 @dataclass(frozen=True)
 class PathMapping:

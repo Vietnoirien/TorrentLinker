@@ -263,14 +263,14 @@ class SettingsDialog(QDialog):
             field.setText(", ".join(str(c) for c in cats))
             field.setToolTip(names)
 
-    def _read_categories(self) -> dict[str, list[int]]:
+    def _read_categories(self) -> dict[ContentKind, list[int]]:
         result = {}
         for kind, field in self.category_fields.items():
             cats = [
                 int(c) for c in field.text().replace(";", ",").split(",") if c.strip().isdigit()
             ]
             if cats:
-                result[kind.value] = cats
+                result[kind] = cats
         return result
 
     # Matching --------------------------------------------------------------

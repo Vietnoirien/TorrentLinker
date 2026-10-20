@@ -86,6 +86,9 @@ class MappedQbit:
     def recheck(self, hash: str) -> None:
         self._inner.recheck(hash)
 
+    def piece_states(self, hash: str) -> list[int]:
+        return self._inner.piece_states(hash)
+
     def start(self, hash: str) -> None:
         self._inner.start(hash)
 

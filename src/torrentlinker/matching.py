@@ -44,62 +44,71 @@ class IgnoreList:
 
 
 @dataclass(frozen=True)
-class Match:
-    """How a torrent's files map onto a Local Item's files.
+class MatchRules:
+    size_tolerance: float = DEFAULT_SIZE_TOLERANCE
+    min_partial_coverage: float = DEFAULT_MIN_PARTIAL_COVERAGE
+    ignore: IgnoreList = IgnoreList()
+
+
+@dataclass(frozen=True)
+class FileComparison:
+    """How a torrent's files map onto a Local Item's files, by size.
 
     `pairs` maps each torrent file path to the local file path holding its data.
-    `missing` lists torrent files with no local counterpart; `skipped` lists Ignored
+    `absent` lists torrent files with no local counterpart; `skipped` lists Ignored
     Files of the torrent with no local counterpart. Neither will ever be downloaded.
     """
 
     pairs: dict[str, str]
-    missing: tuple[str, ...] = field(default=())
+    absent: tuple[str, ...] = field(default=())
     skipped: tuple[str, ...] = field(default=())
     coverage: float = 1.0
 
     @property
     def is_full(self) -> bool:
-        return not self.missing
+        return not self.absent
 
     @property
     def unwanted(self) -> tuple[str, ...]:
-        return self.missing + self.skipped
+        return self.absent + self.skipped
 
     @property
     def renames(self) -> dict[str, str]:
         return {t: local for t, local in self.pairs.items() if t != local}
 
 
+@dataclass(frozen=True)
+class Match(FileComparison):
+    """A FileComparison accepted as Full, or as Partial above the minimum coverage."""
+
+
 def match(
-    item: LocalItem,
-    torrent_files: dict[str, int],
-    ignore: IgnoreList = IgnoreList(),
-    min_coverage: float = DEFAULT_MIN_PARTIAL_COVERAGE,
+    item: LocalItem, torrent_files: dict[str, int], rules: MatchRules = MatchRules()
 ) -> Match | None:
     """A Full or Partial Match, or None when too little of the torrent is present locally."""
-    result = compare(item, torrent_files, ignore)
-    if result.is_full or (result.pairs and result.coverage >= min_coverage):
-        return result
+    result = compare(item, torrent_files, rules.ignore)
+    if result.is_full or (result.pairs and result.coverage >= rules.min_partial_coverage):
+        return Match(result.pairs, result.absent, result.skipped, result.coverage)
     return None
 
 
 def compare(
     item: LocalItem, torrent_files: dict[str, int], ignore: IgnoreList = IgnoreList()
-) -> Match:
+) -> FileComparison:
     """Pair torrent files with local files of identical size; names only break ties."""
     by_size: dict[int, list[str]] = defaultdict(list)
     for path, size in item.files.items():
         by_size[size].append(path)
 
     pairs: dict[str, str] = {}
-    missing: list[str] = []
+    absent: list[str] = []
     skipped: list[str] = []
     # Pair real content first so an Ignored File never steals a same-size local file.
     ordered = sorted(torrent_files.items(), key=lambda kv: ignore.matches(kv[0]))
     for t_path, size in ordered:
         options = by_size.get(size)
         if not options:
-            (skipped if ignore.matches(t_path) else missing).append(t_path)
+            (skipped if ignore.matches(t_path) else absent).append(t_path)
             continue
         local = max(options, key=lambda candidate: _name_similarity(t_path, candidate))
         options.remove(local)
@@ -108,7 +117,7 @@ def compare(
     wanted = sum(s for p, s in torrent_files.items() if not ignore.matches(p))
     present = sum(torrent_files[p] for p in pairs if not ignore.matches(p))
     coverage = present / wanted if wanted else 1.0
-    return Match(pairs, tuple(missing), tuple(skipped), coverage)
+    return FileComparison(pairs, tuple(absent), tuple(skipped), coverage)
 
 
 def is_plausible(candidate_size: int, item: LocalItem, tolerance: float) -> bool:

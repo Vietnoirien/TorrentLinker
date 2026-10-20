@@ -19,6 +19,7 @@ class FakeQbit:
     started: list[str] = field(default_factory=list)
     rechecked: list[str] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
+    pieces: dict[str, list[int]] = field(default_factory=dict)
 
     # Qbit port ---------------------------------------------------------------
 
@@ -74,7 +75,12 @@ class FakeQbit:
 
     # Test controls -----------------------------------------------------------
 
-    def finish_check(self, hash: str, progress: float) -> None:
+    def piece_states(self, hash: str) -> list[int]:
+        return self.pieces.get(hash, [])
+
+    def finish_check(self, hash: str, progress: float, pieces: list[int] | None = None) -> None:
+        if pieces is not None:
+            self.pieces[hash] = pieces
         self._set(hash, progress=progress, state="stoppedUP" if progress == 1 else "stoppedDL")
 
     def _set(self, hash: str, **changes: object) -> None:

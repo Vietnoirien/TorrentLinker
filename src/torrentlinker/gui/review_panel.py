@@ -25,10 +25,19 @@ from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
+from torrentlinker.matching import MatchRules
 from torrentlinker.qbit import Qbit
 from torrentlinker.reseed import start_reseed
-from torrentlinker.review import MatchRules, Verified, candidate_key, verify, verify_one
+from torrentlinker.review import (
+    CheckedCandidate,
+    candidate_key,
+    check_candidate,
+    check_candidates,
+)
 from torrentlinker.store import Store
+
+Searcher = Callable[[LibraryEntry, str | None], list[Candidate]]
+"""Searches an Indexer for a Local Item, optionally with a user-edited query."""
 
 GREEN, ORANGE, RED = QColor("#2e7d32"), QColor("#ef6c00"), QColor("#c62828")
 
@@ -56,7 +65,7 @@ class ReviewPanel(QWidget):
         indexer: Callable[[], Indexer],
         qbit: Callable[[], Qbit],
         rules: Callable[[], MatchRules],
-        searcher: Callable[[LibraryEntry, str | None], list[Candidate]],
+        searcher: Callable[[], Searcher],
         default_query: Callable[[LibraryEntry], str],
     ) -> None:
         super().__init__()
@@ -67,8 +76,10 @@ class ReviewPanel(QWidget):
         self.searcher = searcher
         self.default_query = default_query
         self.entry: LibraryEntry | None = None
-        self.results: list[Verified] = []
-        self.cache: dict[Path, list[Verified]] = {}  # last results per Local Item
+        self.checked: list[CheckedCandidate] = []
+        self.cache: dict[
+            Path, list[CheckedCandidate]
+        ] = {}  # last Candidates checked per Local Item
 
         layout = QVBoxLayout(self)
         self.title = QLabel()
@@ -132,7 +143,7 @@ class ReviewPanel(QWidget):
 
     def set_entry(self, entry: LibraryEntry | None) -> None:
         self.entry = entry
-        self.results = []
+        self.checked = []
         self.candidates.setRowCount(0)
         self.files.setRowCount(0)
         searchable = entry is not None and entry.state is not ItemState.SEEDED
@@ -157,17 +168,17 @@ class ReviewPanel(QWidget):
         if entry.item.path in self.cache:
             self._show(entry, self.cache[entry.item.path])
 
-    def selected(self) -> Verified | None:
+    def selected(self) -> CheckedCandidate | None:
         """The Candidate whose files are shown: the current one among the selection."""
         rows = self.selected_all()
         current = self.candidates.currentRow()
-        if 0 <= current < len(self.results) and self.results[current] in rows:
-            return self.results[current]
+        if 0 <= current < len(self.checked) and self.checked[current] in rows:
+            return self.checked[current]
         return rows[0] if rows else None
 
-    def selected_all(self) -> list[Verified]:
+    def selected_all(self) -> list[CheckedCandidate]:
         rows = sorted(i.row() for i in self.candidates.selectionModel().selectedRows())
-        return [self.results[r] for r in rows]
+        return [self.checked[r] for r in rows]
 
     # Search ----------------------------------------------------------------
 
@@ -180,37 +191,39 @@ class ReviewPanel(QWidget):
         if override:
             self.store.set_item_query(entry.item.path, override)
         self.search_button.setEnabled(False)
-        indexer, rules = self.indexer(), self.rules()
+        indexer, rules, searcher = self.indexer(), self.rules(), self.searcher()
         rejections = self.store.rejections(entry.item.path)
         run_in_background(
-            lambda: verify(indexer, entry.item, self.searcher(entry, override), rules, rejections),
-            lambda results: self._show(entry, results),
+            lambda: check_candidates(
+                indexer, entry.item, searcher(entry, override), rules, rejections
+            ),
+            lambda checked: self._show(entry, checked),
             self._failed,
         )
 
-    def remember(self, entry: LibraryEntry, results: list[Verified]) -> None:
-        """Keep results found elsewhere (batch search) for when the item is selected."""
-        self.cache[entry.item.path] = results
+    def remember(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
+        """Keep Candidates checked elsewhere (batch search) for when the item is selected."""
+        self.cache[entry.item.path] = checked
         if self.entry is not None and self.entry.item.path == entry.item.path:
-            self._show(self.entry, results)
+            self._show(self.entry, checked)
 
-    def _show(self, entry: LibraryEntry, results: list[Verified]) -> None:
+    def _show(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
         self.search_button.setEnabled(self.entry is not None)
-        self.cache[entry.item.path] = results
+        self.cache[entry.item.path] = checked
         if entry is not self.entry:
             return
-        self.results = sorted(
-            results, key=lambda v: (v.match is None, not v.checked, -v.candidate.seeders)
+        self.checked = sorted(
+            checked, key=lambda v: (v.match is None, not v.compared, -v.candidate.seeders)
         )
         self._fill_candidates()
-        if not results:
+        if not checked:
             self.title.setText(self.title.text() + "<br>" + self.tr("No Candidates found"))
-        elif self.results[0].match is not None:
+        elif self.checked[0].match is not None:
             self.candidates.selectRow(0)
 
     def _fill_candidates(self) -> None:
-        self.candidates.setRowCount(len(self.results))
-        for r, v in enumerate(self.results):
+        self.candidates.setRowCount(len(self.checked))
+        for r, v in enumerate(self.checked):
             c = v.candidate
             self.candidates.setItem(r, 0, QTableWidgetItem(c.title))
             self.candidates.setItem(r, 1, QTableWidgetItem(human_size(c.size)))
@@ -221,8 +234,8 @@ class ReviewPanel(QWidget):
                 cell.setForeground(color)
             self.candidates.setItem(r, 3, cell)
 
-    def _match_label(self, v: Verified) -> tuple[str, QColor | None]:
-        if not v.checked:
+    def _match_label(self, v: CheckedCandidate) -> tuple[str, QColor | None]:
+        if not v.compared:
             return self.tr("Not checked"), None
         if v.match is not None and v.match.is_full:
             return self.tr("Full match"), GREEN
@@ -253,7 +266,7 @@ class ReviewPanel(QWidget):
             if local is None and t_path in cmp.skipped:
                 status, color = self.tr("– ignored, not downloaded"), ORANGE
             elif local is None:
-                status, color = self.tr("✗ missing, not downloaded"), RED
+                status, color = self.tr("✗ absent, not downloaded"), RED
             elif local != t_path:
                 status, color = self.tr("✓ renamed"), ORANGE
             else:
@@ -264,7 +277,7 @@ class ReviewPanel(QWidget):
 
     def _update_actions(self) -> None:
         v, chosen = self.selected(), self.selected_all()
-        self.check_button.setEnabled(v is not None and not v.checked)
+        self.check_button.setEnabled(v is not None and not v.compared)
         self.reject_button.setEnabled(bool(chosen))
         self.reseed_button.setEnabled(bool(chosen) and all(c.match for c in chosen))
         self.reseed_button.setText(
@@ -278,8 +291,8 @@ class ReviewPanel(QWidget):
             return
         for v in self.selected_all():
             self.store.reject(self.entry.item.path, candidate_key(v.candidate), "Rejected by user")
-            self.results.remove(v)
-        self.cache[self.entry.item.path] = list(self.results)
+            self.checked.remove(v)
+        self.cache[self.entry.item.path] = list(self.checked)
         self.candidates.clearSelection()
         self._fill_candidates()
 
@@ -290,16 +303,16 @@ class ReviewPanel(QWidget):
         self.check_button.setEnabled(False)
         indexer, rules = self.indexer(), self.rules()
         run_in_background(
-            lambda: verify_one(indexer, entry.item, v.candidate, rules),
+            lambda: check_candidate(indexer, entry.item, v.candidate, rules),
             lambda checked: self._replace(entry, v, checked),
             self._failed,
         )
 
-    def _replace(self, entry: LibraryEntry, old: Verified, new: Verified) -> None:
-        if entry is not self.entry or old not in self.results:
+    def _replace(self, entry: LibraryEntry, old: CheckedCandidate, new: CheckedCandidate) -> None:
+        if entry is not self.entry or old not in self.checked:
             return
-        i = self.results.index(old)
-        self.results[i] = new
+        i = self.checked.index(old)
+        self.checked[i] = new
         self._fill_candidates()
         self.candidates.selectRow(i)
 
@@ -311,7 +324,7 @@ class ReviewPanel(QWidget):
         for v in chosen:
             assert v.match is not None
             if not v.match.is_full and not self._confirm_partial(
-                len(v.match.missing), v.match.coverage
+                len(v.match.absent), v.match.coverage
             ):
                 return
         renames = {k: n for v in chosen if v.match for k, n in v.match.renames.items()}
@@ -320,25 +333,34 @@ class ReviewPanel(QWidget):
         self.reseed_button.setEnabled(False)
         qbit, store = self.qbit(), self.store
 
-        def work() -> list[str]:
-            hashes = []
+        def work() -> tuple[list[str], list[str]]:
+            """Reseed each Match; one failing must not hide the ones already added."""
+            hashes, errors = [], []
             for v in chosen:
                 assert v.meta is not None and v.match is not None
                 key = candidate_key(v.candidate)
-                hashes.append(start_reseed(qbit, store, entry.item, v.meta, v.match, key))
-            return hashes
+                try:
+                    hashes.append(start_reseed(qbit, store, entry.item, v.meta, v.match, key))
+                except Exception as e:  # noqa: BLE001 - reported to the user below
+                    errors.append(f"{v.candidate.title}: {e or type(e).__name__}")
+            return hashes, errors
 
-        run_in_background(
-            work, lambda _hashes: self.reseed_started.emit(entry.item.path), self._reseed_failed
-        )
+        run_in_background(work, lambda done: self._reseeded(entry, *done), self._reseed_failed)
+
+    def _reseeded(self, entry: LibraryEntry, hashes: list[str], errors: list[str]) -> None:
+        if hashes:
+            self.reseed_started.emit(entry.item.path)
+        if errors:
+            self._reseed_failed(RuntimeError("\n".join(errors)))
 
     def _confirm_partial(self, missing: int, coverage: float) -> bool:
         answer = QMessageBox.question(
             self,
             self.tr("Partial Match"),
             self.tr(
-                "You have {0} of this torrent. The {1} missing files will not be downloaded; "
-                "only a few pieces shared with your files may be fetched again. Reseed?"
+                "You have {0} of this torrent. The {1} absent files will not be downloaded. "
+                "After Verification the torrent is left stopped: starting it in qBittorrent "
+                "would fetch the few pieces it shares with your files. Reseed?"
             ).format(f"{coverage:.0%}", missing),
         )
         return answer == QMessageBox.StandardButton.Yes

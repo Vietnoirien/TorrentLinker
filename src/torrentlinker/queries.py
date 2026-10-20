@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from guessit import guessit
 
 from torrentlinker.domain import ContentKind, LocalItem
-from torrentlinker.indexer import SearchQuery
+from torrentlinker.indexer import SearchMode, SearchQuery
 
 MODE_BY_KIND = {
-    ContentKind.MOVIE: "movie",
-    ContentKind.SERIES: "tvsearch",
-    ContentKind.MUSIC: "music",
-    ContentKind.EBOOK: "book",
+    ContentKind.MOVIE: SearchMode.MOVIE,
+    ContentKind.SERIES: SearchMode.TV,
+    ContentKind.MUSIC: SearchMode.MUSIC,
+    ContentKind.EBOOK: SearchMode.BOOK,
 }
 IMDB_RE = re.compile(r"\b(tt\d{7,9})\b")
 TMDB_RE = re.compile(r"tmdb(?:id)?[-=: ]?(\d+)", re.IGNORECASE)
@@ -23,7 +24,7 @@ NFO_MAX_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True)
-class MediaIds:
+class ExternalIds:
     imdb: str | None = None  # with its "tt" prefix
     tmdb: str | None = None
 
@@ -39,7 +40,7 @@ def name_query(item: LocalItem) -> str:
     return name.strip()
 
 
-def find_ids(item: LocalItem) -> MediaIds:
+def find_ids(item: LocalItem) -> ExternalIds:
     """IMDb/TMDb ids from the item's name (e.g. `{imdb-tt0211915}`) or its .nfo files."""
     texts = [item.path.name]
     for rel in item.files:
@@ -54,37 +55,41 @@ def find_ids(item: LocalItem) -> MediaIds:
             imdb = m.group(1)
         if tmdb is None and (m := TMDB_RE.search(text)):
             tmdb = m.group(1)
-    return MediaIds(imdb, tmdb)
+    return ExternalIds(imdb, tmdb)
 
 
-def parse_release(item: LocalItem) -> dict[str, Any]:
-    name = item.path.name
+def parse_name(item: LocalItem) -> dict[str, Any]:
+    """Title, year, season, episode… guessed from the Local Item's name."""
+    return dict(_guess(item.path.name))
+
+
+@lru_cache(maxsize=4096)
+def _guess(name: str) -> tuple[tuple[str, Any], ...]:
     name = re.sub(r"\{[^}]*\}", " ", name)  # Radarr/Sonarr id tags confuse guessit
-    return dict(guessit(name))
+    return tuple(dict(guessit(name)).items())
 
 
 def build_queries(
     item: LocalItem,
     kind: ContentKind,
     categories: tuple[int, ...],
-    ids: MediaIds,
-    caps_modes: dict[str, set[str]] | None,
+    ids: ExternalIds,
+    caps_modes: dict[SearchMode, set[str]] | None,
     override: str | None = None,
 ) -> list[SearchQuery]:
     """Searches to try in order: by ID first when possible, then by name."""
-    mode = MODE_BY_KIND.get(kind, "search")
-    supported = caps_modes if caps_modes is not None else None
+    mode = MODE_BY_KIND.get(kind, SearchMode.SEARCH)
 
-    def allows(m: str, param: str) -> bool:
-        return supported is None or param in supported.get(m, set())
+    def allows(m: SearchMode, param: str) -> bool:
+        return caps_modes is None or param in caps_modes.get(m, set())
 
-    if supported is not None and mode not in supported:
-        mode = "search"
+    if caps_modes is not None and mode not in caps_modes:
+        mode = SearchMode.SEARCH
 
     season = episode = None
     title = name_query(item)
-    if kind in (ContentKind.MOVIE, ContentKind.SERIES):
-        info = parse_release(item)
+    if kind.has_external_ids:
+        info = parse_name(item)
         title = str(info.get("title") or title)
         if kind is ContentKind.MOVIE and info.get("year"):
             title = f"{title} {info['year']}"
@@ -97,7 +102,7 @@ def build_queries(
     queries: list[SearchQuery] = []
     s_param = season if allows(mode, "season") else None
     e_param = episode if allows(mode, "ep") else None
-    if not override and mode in ("movie", "tvsearch"):
+    if not override and mode in (SearchMode.MOVIE, SearchMode.TV):
         by_id = None
         if ids.imdb and allows(mode, "imdbid"):
             by_id = {"imdbid": ids.imdb.removeprefix("tt")}  # Torznab wants it without "tt"
@@ -107,7 +112,7 @@ def build_queries(
             queries.append(
                 SearchQuery(mode=mode, categories=categories, season=s_param, ep=e_param, **by_id)
             )
-    if mode == "search":
+    if mode is SearchMode.SEARCH:
         s_param = e_param = None
     queries.append(
         SearchQuery(q=title, mode=mode, categories=categories, season=s_param, ep=e_param)

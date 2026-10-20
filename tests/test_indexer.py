@@ -164,3 +164,18 @@ def test_indexer_tells_how_long_until_its_next_request_is_allowed() -> None:
     clock.now += 1.0
 
     assert indexer.next_request_in() == pytest.approx(3.1)
+
+
+def test_supported_modes_are_fetched_once_and_unknown_when_caps_fail() -> None:
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, text=CAPS_XML)
+
+    indexer = make_indexer(handler)
+    assert indexer.supported_modes() == indexer.supported_modes()
+    assert len(calls) == 1
+
+    broken = make_indexer(lambda r: httpx.Response(500))
+    assert broken.supported_modes() is None

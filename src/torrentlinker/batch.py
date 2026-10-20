@@ -13,7 +13,7 @@ R = TypeVar("R")
 def run_batch(
     entries: Iterable[LibraryEntry],
     search: Callable[[LibraryEntry], list[R]],
-    on_result: Callable[[int, int, LibraryEntry, list[R]], None],
+    on_searched: Callable[[int, int, LibraryEntry, list[R]], None],
     cancelled: Callable[[], bool],
     on_error: Callable[[LibraryEntry, Exception], None] = lambda e, err: None,
 ) -> int:
@@ -24,10 +24,10 @@ def run_batch(
         if cancelled():
             break
         try:
-            results = search(entry)
+            found = search(entry)
         except Exception as err:  # noqa: BLE001 - one bad item must not stop the batch
             on_error(entry, err)
         else:
-            on_result(i, len(queue), entry, results)
+            on_searched(i, len(queue), entry, found)
         done += 1
     return done

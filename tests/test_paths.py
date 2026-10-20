@@ -73,6 +73,13 @@ def test_reseed_behind_a_mapping_gives_qbittorrent_its_own_path(tmp_path) -> Non
     qbit = MappedQbit(fake, PathMapper([PathMapping(str(lib), "/data/films")]))
     item = LocalItem(f, {"Movie.mkv": 100})
 
-    h = start_reseed(qbit, Store(tmp_path / "s.db"), item, meta, match(item, meta.files))  # type: ignore[arg-type]
+    h = start_reseed(
+        qbit,
+        Store(tmp_path / "s.db"),
+        item,
+        meta,
+        match(item, meta.files),
+        meta.infohash,  # type: ignore[arg-type]
+    )
 
     assert str(fake.by_hash[h].save_path) == "/data/films"

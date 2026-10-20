@@ -9,7 +9,7 @@ def test_settings_survive_a_save_and_load(tmp_path: Path) -> None:
     s.library_folders = [
         LibraryFolder(Path("/lib/films"), 2, ContentKind.MOVIE, PathMapping("/lib/films", "/data"))
     ]
-    s.kind_categories = {"movie": [2000, 2030]}
+    s.kind_categories = {ContentKind.MOVIE: [2000, 2030]}
     s.matching.ignore_patterns = ["*.nfo"]
     s.save(tmp_path / "settings.json")
 

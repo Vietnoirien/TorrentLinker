@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS verification (
     item_path TEXT NOT NULL,
     candidate_key TEXT NOT NULL,
     rechecked_at REAL,
-    required_progress REAL NOT NULL DEFAULT 1.0
+    required_progress REAL NOT NULL DEFAULT 1.0,
+    required_pieces TEXT
 );
 CREATE TABLE IF NOT EXISTS rejection (
     item_path TEXT NOT NULL,
@@ -45,7 +46,8 @@ class Verification:
     item_path: Path
     candidate_key: str
     rechecked_at: float | None
-    required_progress: float
+    # Piece ranges Verification checks when some files are absent; None means all of them.
+    required_pieces: list[tuple[int, int]] | None
 
 
 class Store:
@@ -64,6 +66,8 @@ class Store:
             self._db.execute(
                 "ALTER TABLE verification ADD COLUMN required_progress REAL NOT NULL DEFAULT 1.0"
             )
+        if "required_pieces" not in columns:
+            self._db.execute("ALTER TABLE verification ADD COLUMN required_pieces TEXT")
 
     def cached_search(self, key: str, max_age: float) -> str | None:
         with self._lock:
@@ -104,12 +108,19 @@ class Store:
     # Verifications in flight ------------------------------------------------
 
     def start_verification(
-        self, hash: str, item_path: Path, candidate_key: str, required_progress: float = 1.0
+        self,
+        hash: str,
+        item_path: Path,
+        candidate_key: str,
+        required_pieces: list[tuple[int, int]] | None = None,
     ) -> None:
+        pieces = json.dumps(required_pieces) if required_pieces is not None else None
         with self._lock, self._db:
             self._db.execute(
-                "INSERT OR REPLACE INTO verification VALUES (?, ?, ?, NULL, ?)",
-                (hash, str(item_path), candidate_key, required_progress),
+                "INSERT OR REPLACE INTO verification"
+                " (hash, item_path, candidate_key, rechecked_at, required_pieces)"
+                " VALUES (?, ?, ?, NULL, ?)",
+                (hash, str(item_path), candidate_key, pieces),
             )
 
     def mark_rechecked(self, hash: str) -> None:
@@ -121,13 +132,15 @@ class Store:
     def verification(self, hash: str) -> Verification | None:
         with self._lock:
             row = self._db.execute(
-                "SELECT item_path, candidate_key, rechecked_at, required_progress"
+                "SELECT item_path, candidate_key, rechecked_at, required_pieces"
                 " FROM verification WHERE hash = ?",
                 (hash,),
             ).fetchone()
-        return (
-            Verification(Path(row[0]), str(row[1]), float(row[2]), float(row[3])) if row else None
-        )
+        if not row:
+            return None
+        rechecked = float(row[2]) if row[2] is not None else None
+        pieces = [tuple(r) for r in json.loads(row[3])] if row[3] is not None else None
+        return Verification(Path(row[0]), str(row[1]), rechecked, pieces)  # type: ignore[arg-type]
 
     def end_verification(self, hash: str) -> None:
         with self._lock, self._db:

@@ -1,8 +1,8 @@
 # Reseed by renaming inside qBittorrent, not by hardlinking
 
-When a Match's paths differ from the local files, we add the torrent pointed at the existing data and use qBittorrent's per-torrent rename (save path, root folder, individual files) so the torrent fits the library as it is. The user's files are never moved, renamed or linked on disk. The alternative used by cross-seed — hardlinking the data into a separate folder laid out the way the torrent expects — keeps the torrent pristine but requires the link folder to share a filesystem with the data, doubles the directory trees to maintain, and isn't what the user asked for ("change the folders and the torrent names").
+When a Match's paths differ from the local files, we add the torrent pointed at the existing data and rename each of its files inside qBittorrent to the local path holding that file's data, so the torrent fits the library as it is. The user's files are never moved, renamed or linked on disk. The alternative used by cross-seed — hardlinking the data into a separate folder laid out the way the torrent expects — keeps the torrent pristine but requires the link folder to share a filesystem with the data, doubles the directory trees to maintain, and isn't what the user asked for ("change the folders and the torrent names").
 
 ## Consequences
 
-- A Reseed is only started after Verification passes at 100%; unmatched torrent files get priority 0, so qBittorrent never writes into the library.
-- Restructured layouts (flattened folders, removed subfolders) are out of scope; hardlinking may be added later as a second Reseed strategy for those.
+- qBittorrent's file rename takes a full path relative to the save path, so per-file renames also cover a different root folder and restructured layouts (flattened or reorganised subfolders). Hardlinking is no longer needed for those.
+- A Reseed is only started once Verification shows every piece is already on disk. A Match with absent files (Partial Match, or Ignored Files missing locally) gets priority 0 on those files and is left stopped after Verification, because starting it would fetch the pieces it shares with local files and write them into the library. The user decides whether to start it.

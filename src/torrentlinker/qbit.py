@@ -29,6 +29,10 @@ class Qbit(Protocol):
 
     def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None: ...
     def recheck(self, hash: str) -> None: ...
+    def piece_states(self, hash: str) -> list[int]:
+        """Per piece: 0 missing, 1 downloading, 2 verified."""
+        ...
+
     def start(self, hash: str) -> None: ...
     def remove(self, hash: str) -> None:
         """Remove the torrent from qBittorrent. Never deletes its files."""
@@ -100,6 +104,9 @@ class QbitApi:
 
     def recheck(self, hash: str) -> None:
         self._client.torrents_recheck(torrent_hashes=hash)
+
+    def piece_states(self, hash: str) -> list[int]:
+        return [int(s) for s in self._client.torrents_piece_states(torrent_hash=hash)]
 
     def start(self, hash: str) -> None:
         self._client.torrents_start(torrent_hashes=hash)

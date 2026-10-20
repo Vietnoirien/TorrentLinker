@@ -18,7 +18,7 @@ def test_batch_searches_each_orphan_and_reports_progress() -> None:
     done = run_batch(
         entries,
         search=lambda e: [e.item.path.name.upper()],
-        on_result=lambda i, n, e, r: progress.append((i, n, r[0])),
+        on_searched=lambda i, n, e, r: progress.append((i, n, r[0])),
         cancelled=lambda: False,
     )
 
@@ -33,7 +33,7 @@ def test_cancelling_stops_before_the_next_item() -> None:
     done = run_batch(
         entries,
         search=lambda e: searched.append(e.item.path.name) or [],
-        on_result=lambda *_: None,
+        on_searched=lambda *_: None,
         cancelled=lambda: len(searched) >= 1,
     )
 
@@ -52,7 +52,7 @@ def test_a_failing_item_is_reported_and_the_batch_goes_on() -> None:
     done = run_batch(
         [entry("a"), entry("b")],
         search=search,
-        on_result=lambda *_: None,
+        on_searched=lambda *_: None,
         cancelled=lambda: False,
         on_error=lambda e, err: errors.append(f"{e.item.path.name}: {err}"),
     )

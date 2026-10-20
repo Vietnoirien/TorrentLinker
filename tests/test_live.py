@@ -15,9 +15,9 @@ import pytest
 
 from torrentlinker.domain import ContentKind, LibraryFolder
 from torrentlinker.indexer import Indexer
-from torrentlinker.matching import IgnoreList
+from torrentlinker.matching import IgnoreList, MatchRules
 from torrentlinker.reseed import check_verifications, start_reseed
-from torrentlinker.review import MatchRules, search_candidates, verify
+from torrentlinker.review import check_candidates, search_candidates
 from torrentlinker.scan import scan
 from torrentlinker.store import Store
 
@@ -36,7 +36,7 @@ def test_ebook_is_found_and_matches_with_a_rename(tmp_path: Path) -> None:
 
     caps = indexer.caps()
     found = search_candidates(indexer, item, ContentKind.EBOOK, (), caps.modes)
-    results = verify(indexer, item, found, RULES)
+    results = check_candidates(indexer, item, found, RULES)
     matches = [v for v in results if v.match]
     for v in results:
         print(v.candidate.title, v.candidate.size, "MATCH" if v.match else "")
@@ -52,7 +52,7 @@ def test_ebook_is_found_and_matches_with_a_rename(tmp_path: Path) -> None:
         qbit = QbitApi(
             os.environ["TL_QBIT_HOST"], os.environ["TL_QBIT_USER"], os.environ["TL_QBIT_PASS"]
         )
-        start_reseed(qbit, store, item, best.meta, best.match)
+        start_reseed(qbit, store, item, best.meta, best.match, best.meta.infohash)
         for _ in range(60):
             if outcomes := check_verifications(qbit, store):
                 assert outcomes[item.path].verified

@@ -29,30 +29,27 @@ def read_torrent(data: bytes) -> TorrentMeta:
     )
 
 
-def expected_progress(meta: TorrentMeta, unwanted: set[str]) -> float:
-    """Best Verification progress reachable when `unwanted` files are absent.
+def pieces_inside(meta: TorrentMeta, absent: set[str]) -> list[tuple[int, int]]:
+    """Ranges [start, end) of pieces made only of files present locally.
 
-    A piece shared by a wanted and an unwanted file cannot verify, so the wanted
-    bytes inside such boundary pieces are lost to the check.
+    When some files are absent, these are the pieces Verification can and must check:
+    a piece shared with an absent file can never verify.
     """
-    if not unwanted or meta.piece_length <= 0:
-        return 1.0
+    if meta.piece_length <= 0:
+        return []
     spans = []
     offset = 0
     for path, size in meta.files.items():
-        spans.append((offset, offset + size, path not in unwanted))
+        if size:
+            spans.append((offset, offset + size, path not in absent))
         offset += size
-    wanted_total = sum(e - s for s, e, w in spans if w)
-    if not wanted_total:
-        return 1.0
-    lost = 0
-    for piece_start in range(0, offset, meta.piece_length):
+    ranges: list[tuple[int, int]] = []
+    for index, piece_start in enumerate(range(0, offset, meta.piece_length)):
         piece_end = min(piece_start + meta.piece_length, offset)
-        overlaps = [
-            (max(s, piece_start), min(e, piece_end), w)
-            for s, e, w in spans
-            if s < piece_end and e > piece_start
-        ]
-        if any(w for *_, w in overlaps) and not all(w for *_, w in overlaps):
-            lost += sum(e - s for s, e, w in overlaps if w)
-    return 1 - lost / wanted_total
+        present = [p for s, e, p in spans if s < piece_end and e > piece_start]
+        if present and all(present):
+            if ranges and ranges[-1][1] == index:
+                ranges[-1] = (ranges[-1][0], index + 1)
+            else:
+                ranges.append((index, index + 1))
+    return ranges

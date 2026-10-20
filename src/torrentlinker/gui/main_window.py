@@ -20,10 +20,10 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
-from torrentlinker.domain import ItemState
+from torrentlinker.domain import ContentKind, ItemState
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
-from torrentlinker.gui.review_panel import ReviewPanel
+from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.settings_dialog import (
     INDEXER_API_KEY,
     QBIT_PASSWORD,
@@ -33,11 +33,12 @@ from torrentlinker.gui.settings_dialog import (
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry, auto_searchable, build_library
+from torrentlinker.matching import MatchRules
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
-from torrentlinker.review import MatchRules, Verified, search_candidates, verify
+from torrentlinker.review import CheckedCandidate, check_candidates, search_candidates
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
 
@@ -49,14 +50,18 @@ class MainWindow(QMainWindow):
         self.settings_path = settings_path
         self.store = store
         self._indexer: Indexer | None = None
-        self._caps_modes: dict[str, set[str]] | None = None
         self._qbit: tuple[tuple[str, str, str], QbitApi] | None = None
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
 
         toolbar = self.addToolBar(self.tr("Main"))
         self.scan_action = QAction(self.tr("Scan"), self)
-        self.scan_action.triggered.connect(self.scan)
+        self.scan_action.triggered.connect(lambda: self.scan())
+        self.rescan_action = QAction(self.tr("Rescan everything"), self)
+        self.rescan_action.setToolTip(
+            self.tr("Walk every file again, ignoring the scan cache (slower)")
+        )
+        self.rescan_action.triggered.connect(lambda: self.scan(refresh=True))
         settings_action = QAction(self.tr("Settings"), self)
         settings_action.triggered.connect(self.open_settings)
         self.batch_selected_action = QAction(self.tr("Search selected"), self)
@@ -67,6 +72,7 @@ class MainWindow(QMainWindow):
         self.cancel_action.triggered.connect(self.cancel_batch)
         self.cancel_action.setEnabled(False)
         toolbar.addAction(self.scan_action)
+        toolbar.addAction(self.rescan_action)
         toolbar.addSeparator()
         toolbar.addAction(self.batch_selected_action)
         toolbar.addAction(self.batch_all_action)
@@ -113,7 +119,7 @@ class MainWindow(QMainWindow):
         self._fill_folder_filter()
 
         self.review = ReviewPanel(
-            store, self.indexer, self.qbit, self.match_rules, self.search, self.default_query
+            store, self.indexer, self.qbit, self.match_rules, self.searcher, self.default_query
         )
         self.review.reseed_started.connect(self._reseed_started)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -139,43 +145,43 @@ class MainWindow(QMainWindow):
         return MappedQbit(self._qbit[1], PathMapper(mappings))
 
     def indexer(self) -> Indexer:
-        """One Indexer instance, so every search shares the same rate limiter."""
+        """One Indexer instance, so every search shares the same rate limiter.
+
+        Only call on the GUI thread; workers get the instance passed in.
+        """
         url, key = self.settings.indexer.url, get_secret(INDEXER_API_KEY)
         if self._indexer is None or (self._indexer.url, self._indexer.api_key) != (url, key):
             self._indexer = Indexer(url, key, cache=self.store)
-            self._caps_modes = None
         return self._indexer
-
-    def caps_modes(self) -> dict[str, set[str]] | None:
-        """The Indexer's supported search modes, fetched once; None if unknown."""
-        if self._caps_modes is None:
-            try:
-                self._caps_modes = self.indexer().caps().modes
-            except Exception:  # noqa: BLE001 - fall back to assuming every mode works
-                return None
-        return self._caps_modes
 
     def default_query(self, entry: LibraryEntry) -> str:
         kind = entry.folder.kind
         last = build_queries(entry.item, kind, (), find_ids(entry.item), None)[-1]
         return last.q
 
-    def search(self, entry: LibraryEntry, override: str | None) -> list[Candidate]:
-        """Runs off the GUI thread."""
+    def searcher(self) -> Searcher:
+        """Build on the GUI thread a search function that workers can call safely."""
+        indexer = self.indexer()
         tmdb_key = get_secret(TMDB_API_KEY)
-        return search_candidates(
-            self.indexer(),
-            entry.item,
-            entry.folder.kind,
-            self.settings.categories(entry.folder.kind),
-            self.caps_modes(),
-            Tmdb(tmdb_key) if tmdb_key else None,
-            override,
-        )
+        tmdb = Tmdb(tmdb_key) if tmdb_key else None
+        categories = {k: self.settings.categories(k) for k in ContentKind}
+
+        def search(entry: LibraryEntry, override: str | None) -> list[Candidate]:
+            kind = entry.folder.kind
+            return search_candidates(
+                indexer,
+                entry.item,
+                kind,
+                categories[kind],
+                indexer.supported_modes(),
+                tmdb,
+                override,
+            )
+
+        return search
 
     def match_rules(self) -> MatchRules:
-        m = self.settings.matching
-        return MatchRules(m.size_tolerance, m.min_partial_coverage, m.ignore)
+        return self.settings.matching.rules()
 
     def open_settings(self) -> None:
         if SettingsDialog(self.settings, self).exec():
@@ -226,15 +232,20 @@ class MainWindow(QMainWindow):
         if not entries:
             self.statusBar().showMessage(self.tr("No Orphans to search"))
             return
-        rules = self.match_rules()
+        rules, indexer, searcher, store = (
+            self.match_rules(),
+            self.indexer(),
+            self.searcher(),
+            self.store,
+        )
 
-        def search(entry: LibraryEntry) -> list[Verified]:
-            found = self.search(entry, self.store.item_query(entry.item.path))
-            rejections = self.store.rejections(entry.item.path)
-            return verify(self.indexer(), entry.item, found, rules, rejections)
+        def search(entry: LibraryEntry) -> list[CheckedCandidate]:
+            found = searcher(entry, store.item_query(entry.item.path))
+            rejections = store.rejections(entry.item.path)
+            return check_candidates(indexer, entry.item, found, rules, rejections)
 
         self.batch = BatchRunner(entries, search)
-        self.batch.signals.result.connect(self._batch_result)
+        self.batch.signals.searched.connect(self._batch_result)
         self.batch.signals.error.connect(self._batch_error)
         self.batch.signals.finished.connect(self._batch_finished)
         self._set_batch_running(True)
@@ -261,20 +272,20 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(self.batch_text + suffix)
 
     def _batch_result(
-        self, index: int, total: int, entry: LibraryEntry, results: list[Verified]
+        self, index: int, total: int, entry: LibraryEntry, checked: list[CheckedCandidate]
     ) -> None:
         self.batch_text = self.tr("Searched {0}/{1}: {2}").format(
             index, total, entry.item.path.name
         )
-        self.review.remember(entry, results)
-        self.library_model.set_status(entry.item.path, self._summary(results))
+        self.review.remember(entry, checked)
+        self.library_model.set_status(entry.item.path, self._summary(checked))
 
-    def _summary(self, results: list[Verified]) -> str:
-        if any(v.match and v.match.is_full for v in results):
+    def _summary(self, checked: list[CheckedCandidate]) -> str:
+        if any(v.match and v.match.is_full for v in checked):
             return self.tr("Full match found")
-        if any(v.match for v in results):
+        if any(v.match for v in checked):
             return self.tr("Partial match found")
-        if results:
+        if checked:
             return self.tr("No match")
         return self.tr("No Candidates")
 
@@ -286,16 +297,17 @@ class MainWindow(QMainWindow):
         self._set_batch_running(False)
         self.statusBar().showMessage(self.tr("Batch search finished: {0} searched").format(done))
 
-    def scan(self) -> None:
+    def scan(self, refresh: bool = False) -> None:
         if not self.settings.library_folders:
             self.open_settings()
             return
         self.scan_action.setEnabled(False)
+        self.rescan_action.setEnabled(False)
         self.statusBar().showMessage(self.tr("Scanning…"))
         folders = list(self.settings.library_folders)
         qbit, ignore, store = self.qbit(), self.settings.matching.ignore, self.store
         run_in_background(
-            lambda: build_library(folders, qbit.torrents(), ignore, store),
+            lambda: build_library(folders, qbit.torrents(), ignore, store, refresh),
             self._scan_done,
             self._scan_failed,
         )
@@ -303,10 +315,12 @@ class MainWindow(QMainWindow):
     def _scan_done(self, entries: list) -> None:  # type: ignore[type-arg]
         self.library_model.set_entries(entries)
         self.scan_action.setEnabled(True)
+        self.rescan_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("{0} Local Items").format(len(entries)))
 
     def _scan_failed(self, error: Exception) -> None:
         self.scan_action.setEnabled(True)
+        self.rescan_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("Scan failed"))
         QMessageBox.warning(self, self.tr("Scan failed"), str(error))
 
@@ -322,20 +336,22 @@ class MainWindow(QMainWindow):
         self._checking = True
         qbit, store = self.qbit(), self.store
 
-        def work() -> tuple[dict[Path, Outcome], list[Path]]:
+        def work() -> tuple[list[Outcome], list[Path]]:
             return check_verifications(qbit, store), pending_verifications(qbit, store)
 
         run_in_background(work, self._verified, self._verify_error)
 
-    def _verified(self, result: tuple[dict[Path, Outcome], list[Path]]) -> None:
+    def _verified(self, result: tuple[list[Outcome], list[Path]]) -> None:
         self._checking = False
         outcomes, pending = result
-        for path, outcome in outcomes.items():
-            if outcome.verified:
+        for outcome in outcomes:
+            if outcome.verified and outcome.started:
                 text = self.tr("Reseeded")
+            elif outcome.verified:
+                text = self.tr("Verified, left stopped: some files are absent")
             else:
                 text = self.tr("Verification failed at {0}").format(f"{outcome.progress:.1%}")
-            self.library_model.set_status(path, text)
+            self.library_model.set_status(outcome.item_path, text)
         for path in pending:
             self.library_model.set_status(path, self.tr("Verifying…"))
         if pending:
@@ -344,6 +360,5 @@ class MainWindow(QMainWindow):
             self.verify_timer.stop()
 
     def _verify_error(self, error: Exception) -> None:
-        self._checking = False
-        self.verify_timer.stop()
+        self._checking = False  # the timer keeps running: the next poll retries
         self.statusBar().showMessage(self.tr("Could not check Verifications: {0}").format(error))

@@ -20,9 +20,9 @@ def data_dir() -> Path:
 def smoke_checks() -> None:
     """Exercise what a broken bundle would miss: guessit data, translations, assets."""
     from torrentlinker.domain import LocalItem
-    from torrentlinker.queries import parse_release
+    from torrentlinker.queries import parse_name
 
-    info = parse_release(LocalItem(Path("Amelie.2001.1080p.mkv"), {"Amelie.2001.1080p.mkv": 1}))
+    info = parse_name(LocalItem(Path("Amelie.2001.1080p.mkv"), {"Amelie.2001.1080p.mkv": 1}))
     assert info.get("title") == "Amelie" and info.get("year") == 2001, info
     assert (Path(i18n.__file__).parent / "torrentlinker_fr.qm").exists()
     assert (Path(__file__).parent / "assets" / "icon.png").exists()

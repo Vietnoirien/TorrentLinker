@@ -2,8 +2,8 @@ from pathlib import Path
 
 from torrentlinker.domain import LocalItem
 from torrentlinker.indexer import Candidate
-from torrentlinker.matching import IgnoreList
-from torrentlinker.review import MatchRules, candidate_key, verify
+from torrentlinker.matching import IgnoreList, MatchRules
+from torrentlinker.review import candidate_key, check_candidates
 from torrentlinker.store import Store
 
 RULES = MatchRules(0.02, 0.5, IgnoreList.default())
@@ -22,7 +22,7 @@ def test_rejected_candidates_are_dropped_before_anything_is_fetched(tmp_path: Pa
     rejected = Candidate("bad", 100, "https://t/dl/1?apikey=K", infohash="aa" * 20)
     store.reject(ITEM.path, candidate_key(rejected), "Rejected by user")
 
-    results = verify(NoFetch(), ITEM, [rejected], RULES, store.rejections(ITEM.path))  # type: ignore[arg-type]
+    results = check_candidates(NoFetch(), ITEM, [rejected], RULES, store.rejections(ITEM.path))  # type: ignore[arg-type]
 
     assert results == []
 

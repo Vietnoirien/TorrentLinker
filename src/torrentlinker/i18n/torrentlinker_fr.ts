@@ -41,37 +41,37 @@
 <context>
     <name>LibraryModel</name>
     <message>
-        <location filename="../gui/library_model.py" line="22" />
+        <location filename="../gui/library_model.py" line="21" />
         <source>Seeded</source>
         <translation>Partagé</translation>
     </message>
     <message>
-        <location filename="../gui/library_model.py" line="23" />
+        <location filename="../gui/library_model.py" line="22" />
         <source>Partially seeded</source>
         <translation>Partiellement partagé</translation>
     </message>
     <message>
-        <location filename="../gui/library_model.py" line="24" />
+        <location filename="../gui/library_model.py" line="23" />
         <source>Orphan</source>
         <translation>Orphelin</translation>
     </message>
     <message>
-        <location filename="../gui/library_model.py" line="48" />
+        <location filename="../gui/library_model.py" line="47" />
         <source>Name</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location filename="../gui/library_model.py" line="49" />
+        <location filename="../gui/library_model.py" line="48" />
         <source>State</source>
         <translation>État</translation>
     </message>
     <message>
-        <location filename="../gui/library_model.py" line="50" />
+        <location filename="../gui/library_model.py" line="49" />
         <source>Size</source>
         <translation>Taille</translation>
     </message>
     <message>
-        <location filename="../gui/library_model.py" line="51" />
+        <location filename="../gui/library_model.py" line="50" />
         <source>Library Folder</source>
         <translation>Dossier de bibliothèque</translation>
     </message>
@@ -90,133 +90,148 @@
     </message>
     <message>
         <location filename="../gui/main_window.py" line="60" />
+        <source>Rescan everything</source>
+        <translation>Tout réanalyser</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="62" />
+        <source>Walk every file again, ignoring the scan cache (slower)</source>
+        <translation>Relire chaque fichier sans le cache d’analyse (plus lent)</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="65" />
         <source>Settings</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="62" />
+        <location filename="../gui/main_window.py" line="67" />
         <source>Search selected</source>
         <translation>Rechercher la sélection</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="64" />
+        <location filename="../gui/main_window.py" line="69" />
         <source>Search all Orphans</source>
         <translation>Rechercher tous les orphelins</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="66" />
+        <location filename="../gui/main_window.py" line="71" />
         <source>Cancel search</source>
         <translation>Annuler la recherche</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="95" />
+        <location filename="../gui/main_window.py" line="105" />
         <source>All states</source>
         <translation>Tous les états</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="101" />
+        <location filename="../gui/main_window.py" line="111" />
         <source>Show</source>
         <translation>Afficher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="120" />
+        <location filename="../gui/main_window.py" line="130" />
         <source>Ready</source>
         <translation>Prêt</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="185" />
+        <location filename="../gui/main_window.py" line="195" />
         <source>All Library Folders</source>
         <translation>Tous les dossiers de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="223" />
+        <location filename="../gui/main_window.py" line="233" />
         <source>No Orphans to search</source>
         <translation>Aucun orphelin à rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="237" />
+        <location filename="../gui/main_window.py" line="252" />
         <source>Searching {0} Orphans…</source>
         <translation>Recherche de {0} orphelins…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="243" />
+        <location filename="../gui/main_window.py" line="258" />
         <source>Cancelling after the current item…</source>
         <translation>Annulation après l’élément en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="256" />
+        <location filename="../gui/main_window.py" line="271" />
         <source> · next request in {0} s</source>
         <translation> · prochaine requête dans {0} s</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="262" />
+        <location filename="../gui/main_window.py" line="277" />
         <source>Searched {0}/{1}: {2}</source>
         <translation>Recherché {0}/{1} : {2}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="270" />
+        <location filename="../gui/main_window.py" line="285" />
         <source>Full match found</source>
         <translation>Correspondance complète trouvée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="272" />
+        <location filename="../gui/main_window.py" line="287" />
         <source>Partial match found</source>
         <translation>Correspondance partielle trouvée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="274" />
+        <location filename="../gui/main_window.py" line="289" />
         <source>No match</source>
         <translation>Aucune correspondance</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="275" />
+        <location filename="../gui/main_window.py" line="290" />
         <source>No Candidates</source>
         <translation>Aucun candidat</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="278" />
+        <location filename="../gui/main_window.py" line="293" />
         <source>Search failed: {0}</source>
         <translation>Échec de la recherche : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="283" />
+        <location filename="../gui/main_window.py" line="298" />
         <source>Batch search finished: {0} searched</source>
         <translation>Recherche groupée terminée : {0} recherchés</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="290" />
+        <location filename="../gui/main_window.py" line="306" />
         <source>Scanning…</source>
         <translation>Analyse…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="302" />
+        <location filename="../gui/main_window.py" line="319" />
         <source>{0} Local Items</source>
         <translation>{0} éléments locaux</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="306" />
-        <location filename="../gui/main_window.py" line="307" />
+        <location filename="../gui/main_window.py" line="324" />
+        <location filename="../gui/main_window.py" line="325" />
         <source>Scan failed</source>
         <translation>Échec de l’analyse</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="312" />
-        <location filename="../gui/main_window.py" line="336" />
+        <location filename="../gui/main_window.py" line="330" />
+        <location filename="../gui/main_window.py" line="356" />
         <source>Verifying…</source>
         <translation>Vérification…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="331" />
+        <location filename="../gui/main_window.py" line="349" />
         <source>Reseeded</source>
         <translation>Repartagé</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="333" />
+        <location filename="../gui/main_window.py" line="351" />
+        <source>Verified, left stopped: some files are absent</source>
+        <translation>Vérifié, laissé à l’arrêt : certains fichiers sont absents</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="353" />
         <source>Verification failed at {0}</source>
         <translation>Vérification échouée à {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="345" />
+        <location filename="../gui/main_window.py" line="364" />
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
     </message>
@@ -224,179 +239,179 @@
 <context>
     <name>ReviewPanel</name>
     <message>
-        <location filename="../gui/review_panel.py" line="79" />
+        <location filename="../gui/review_panel.py" line="91" />
         <source>Search query</source>
         <translation>Requête de recherche</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="81" />
-        <location filename="../gui/review_panel.py" line="141" />
+        <location filename="../gui/review_panel.py" line="93" />
+        <location filename="../gui/review_panel.py" line="153" />
         <source>Search</source>
         <translation>Rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="88" />
+        <location filename="../gui/review_panel.py" line="100" />
         <source>Candidate</source>
         <translation>Candidat</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="88" />
+        <location filename="../gui/review_panel.py" line="100" />
         <source>Size</source>
         <translation>Taille</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="88" />
+        <location filename="../gui/review_panel.py" line="100" />
         <source>Seeders</source>
         <translation>Sources</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="88" />
+        <location filename="../gui/review_panel.py" line="100" />
         <source>Match</source>
         <translation>Correspondance</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="92" />
+        <location filename="../gui/review_panel.py" line="104" />
         <source>Torrent file</source>
         <translation>Fichier du torrent</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="92" />
+        <location filename="../gui/review_panel.py" line="104" />
         <source>Local file</source>
         <translation>Fichier local</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="96" />
+        <location filename="../gui/review_panel.py" line="108" />
         <source>Check files</source>
         <translation>Comparer les fichiers</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="99" />
+        <location filename="../gui/review_panel.py" line="111" />
         <source>Download this Candidate's .torrent and compare. Needed for Candidates outside the size tolerance, e.g. a season pack you only partly have.</source>
         <translation>Télécharger le .torrent de ce candidat et comparer. Nécessaire pour les candidats hors de la tolérance de taille, par exemple une saison que vous n’avez qu’en partie.</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="105" />
+        <location filename="../gui/review_panel.py" line="117" />
         <source>Reject</source>
         <translation>Rejeter</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="106" />
+        <location filename="../gui/review_panel.py" line="118" />
         <source>Not this Local Item: never propose it again</source>
         <translation>Pas cet élément : ne plus jamais le proposer</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="110" />
-        <location filename="../gui/review_panel.py" line="272" />
+        <location filename="../gui/review_panel.py" line="122" />
+        <location filename="../gui/review_panel.py" line="286" />
         <source>Reseed</source>
         <translation>Repartager</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="112" />
+        <location filename="../gui/review_panel.py" line="124" />
         <source>Add to qBittorrent against your files, verify, then seed</source>
         <translation>Ajouter à qBittorrent sur vos fichiers, vérifier, puis partager</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="141" />
+        <location filename="../gui/review_panel.py" line="153" />
         <source>Force search</source>
         <translation>Forcer la recherche</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="144" />
+        <location filename="../gui/review_panel.py" line="156" />
         <source>Select a Local Item</source>
         <translation>Sélectionnez un élément local</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="149" />
+        <location filename="../gui/review_panel.py" line="161" />
         <source>Already seeded by qBittorrent.</source>
         <translation>Déjà partagé par qBittorrent.</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="152" />
+        <location filename="../gui/review_panel.py" line="164" />
         <source>Some of these files are already seeded: a Match would overlap that torrent.</source>
         <translation>Certains de ces fichiers sont déjà partagés : une correspondance chevaucherait ce torrent.</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="206" />
+        <location filename="../gui/review_panel.py" line="220" />
         <source>No Candidates found</source>
         <translation>Aucun candidat trouvé</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="225" />
+        <location filename="../gui/review_panel.py" line="239" />
         <source>Not checked</source>
         <translation>Non comparé</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="227" />
+        <location filename="../gui/review_panel.py" line="241" />
         <source>Full match</source>
         <translation>Correspondance complète</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="229" />
+        <location filename="../gui/review_panel.py" line="243" />
         <source>Partial match ({0})</source>
         <translation>Correspondance partielle ({0})</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="230" />
+        <location filename="../gui/review_panel.py" line="244" />
         <source>No match</source>
         <translation>Aucune correspondance</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="235" />
+        <location filename="../gui/review_panel.py" line="249" />
         <source>Search failed</source>
         <translation>Échec de la recherche</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="253" />
+        <location filename="../gui/review_panel.py" line="267" />
         <source>– ignored, not downloaded</source>
         <translation>– ignoré, non téléchargé</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="255" />
-        <source>✗ missing, not downloaded</source>
+        <location filename="../gui/review_panel.py" line="269" />
+        <source>✗ absent, not downloaded</source>
         <translation>✗ absent, non téléchargé</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="257" />
+        <location filename="../gui/review_panel.py" line="361" />
+        <source>You have {0} of this torrent. The {1} absent files will not be downloaded. After Verification the torrent is left stopped: starting it in qBittorrent would fetch the few pieces it shares with your files. Reseed?</source>
+        <translation>Vous avez {0} de ce torrent. Les {1} fichiers absents ne seront pas téléchargés. Après la vérification, le torrent reste à l’arrêt : le démarrer dans qBittorrent récupérerait les quelques pièces qu’il partage avec vos fichiers. Repartager ?</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="271" />
         <source>✓ renamed</source>
         <translation>✓ renommé</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="259" />
+        <location filename="../gui/review_panel.py" line="273" />
         <source>✓</source>
         <translation>✓</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="270" />
+        <location filename="../gui/review_panel.py" line="284" />
         <source>Reseed {0} Matches</source>
         <translation>Repartager {0} correspondances</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="337" />
+        <location filename="../gui/review_panel.py" line="359" />
         <source>Partial Match</source>
         <translation>Correspondance partielle</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="339" />
-        <source>You have {0} of this torrent. The {1} missing files will not be downloaded; only a few pieces shared with your files may be fetched again. Reseed?</source>
-        <translation>Vous avez {0} de ce torrent. Les {1} fichiers absents ne seront pas téléchargés ; seules quelques pièces partagées avec vos fichiers pourront être récupérées à nouveau. Repartager ?</translation>
-    </message>
-    <message>
-        <location filename="../gui/review_panel.py" line="349" />
+        <location filename="../gui/review_panel.py" line="372" />
         <source>…and {0} more</source>
         <translation>…et {0} de plus</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="352" />
+        <location filename="../gui/review_panel.py" line="375" />
         <source>Rename inside the torrent</source>
         <translation>Renommer dans le torrent</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="354" />
+        <location filename="../gui/review_panel.py" line="377" />
         <source>These files will be renamed inside qBittorrent to match yours (your files are not touched):</source>
         <translation>Ces fichiers seront renommés dans qBittorrent pour correspondre aux vôtres (vos fichiers ne sont pas modifiés) :</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="364" />
+        <location filename="../gui/review_panel.py" line="387" />
         <source>Reseed failed</source>
         <translation>Échec du repartage</translation>
     </message>

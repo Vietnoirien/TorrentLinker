@@ -24,10 +24,11 @@ def build_library(
     torrents: list[Torrent],
     ignore: IgnoreList = IgnoreList(),
     cache: Store | None = None,
+    refresh: bool = False,
 ) -> list[LibraryEntry]:
     entries: list[LibraryEntry] = []
     for folder in folders:
-        items = scan(folder, cache)
+        items = scan(folder, cache, refresh)
         states = classify(items, torrents, ignore)
         entries.extend(LibraryEntry(folder, i, states[i.path]) for i in items)
     return entries

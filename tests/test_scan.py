@@ -80,3 +80,22 @@ def test_a_cached_item_that_disappeared_is_not_reported(tmp_path: Path) -> None:
     shutil.rmtree(lib / "Show")
 
     assert scan(LibraryFolder(lib), store) == []
+
+
+def test_a_full_rescan_catches_a_file_rewritten_in_place_and_refreshes_the_cache(
+    tmp_path: Path,
+) -> None:
+    import os
+
+    lib = tmp_path / "lib"
+    write(lib / "Show" / "e01.mkv", 5)
+    store = Store(tmp_path / "s.db")
+    scan(LibraryFolder(lib), store)
+    show = lib / "Show"
+    dir_mtime = show.stat().st_mtime_ns
+    (show / "e01.mkv").write_bytes(b"y" * 9)  # same name: the folder's mtime may not move
+    os.utime(show, ns=(dir_mtime, dir_mtime))
+
+    assert scan(LibraryFolder(lib), store)[0].files == {"Show/e01.mkv": 5}  # cached
+    assert scan(LibraryFolder(lib), store, refresh=True)[0].files == {"Show/e01.mkv": 9}
+    assert scan(LibraryFolder(lib), store)[0].files == {"Show/e01.mkv": 9}

@@ -8,6 +8,7 @@ import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 import httpx
 
@@ -20,10 +21,20 @@ SEARCH_CACHE_MAX_AGE = 24 * 3600
 API_KEY_PLACEHOLDER = "{{TORRENTLINKER_APIKEY}}"
 
 
+class SearchMode(StrEnum):
+    """Torznab search functions (`t=`)."""
+
+    SEARCH = "search"
+    MOVIE = "movie"
+    TV = "tvsearch"
+    MUSIC = "music"
+    BOOK = "book"
+
+
 @dataclass(frozen=True)
 class SearchQuery:
     q: str = ""
-    mode: str = "search"  # search | movie | tvsearch | music | book
+    mode: SearchMode = SearchMode.SEARCH
     categories: tuple[int, ...] = ()
     imdbid: str | None = None
     tmdbid: str | None = None
@@ -31,7 +42,7 @@ class SearchQuery:
     ep: int | None = None
 
     def params(self) -> dict[str, str]:
-        p = {"t": self.mode}
+        p = {"t": self.mode.value}
         if self.q:
             p["q"] = self.q
         if self.categories:
@@ -59,19 +70,19 @@ class Candidate:
 
 
 _CAPS_MODES = {
-    "search": "search",
-    "tv-search": "tvsearch",
-    "movie-search": "movie",
-    "music-search": "music",
-    "audio-search": "music",
-    "book-search": "book",
+    "search": SearchMode.SEARCH,
+    "tv-search": SearchMode.TV,
+    "movie-search": SearchMode.MOVIE,
+    "music-search": SearchMode.MUSIC,
+    "audio-search": SearchMode.MUSIC,
+    "book-search": SearchMode.BOOK,
 }
 
 
 @dataclass(frozen=True)
 class Caps:
     categories: dict[int, str]
-    modes: dict[str, set[str]]
+    modes: dict[SearchMode, set[str]]
 
 
 class Indexer:
@@ -91,11 +102,13 @@ class Indexer:
         self._sleep = sleep
         self._cache = cache
         self._lock = threading.Lock()
+        self._caps_lock = threading.Lock()
+        self._modes: dict[SearchMode, set[str]] | None = None
         self._last_request: float | None = None
 
     def caps(self) -> Caps:
         root = ET.fromstring(self._get({"t": "caps"}))
-        modes: dict[str, set[str]] = {}
+        modes: dict[SearchMode, set[str]] = {}
         for el in root.iterfind("searching/*"):
             mode = _CAPS_MODES.get(el.tag)
             if mode and el.get("available") == "yes":
@@ -105,6 +118,16 @@ class Indexer:
             if el.tag in ("category", "subcat") and (el.get("id") or "").isdigit():
                 categories[int(el.get("id", "0"))] = el.get("name", "")
         return Caps(categories, modes)
+
+    def supported_modes(self) -> dict[SearchMode, set[str]] | None:
+        """Search modes and their parameters from caps, fetched once; None if unknown."""
+        with self._caps_lock:
+            if self._modes is None:
+                try:
+                    self._modes = self.caps().modes
+                except (httpx.HTTPError, ET.ParseError):
+                    return None
+            return self._modes
 
     def search(self, query: SearchQuery) -> list[Candidate]:
         params = query.params()

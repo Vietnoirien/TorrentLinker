@@ -1,4 +1,4 @@
-"""Persisted settings. Secrets never go here — see secrets.py."""
+"""Persisted settings. Secrets never go here — see credentials.py."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from torrentlinker.matching import (
     DEFAULT_MIN_PARTIAL_COVERAGE,
     DEFAULT_SIZE_TOLERANCE,
     IgnoreList,
+    MatchRules,
 )
 
 
@@ -36,18 +37,21 @@ class MatchingSettings:
     def ignore(self) -> IgnoreList:
         return IgnoreList(tuple(self.ignore_patterns))
 
+    def rules(self) -> MatchRules:
+        return MatchRules(self.size_tolerance, self.min_partial_coverage, self.ignore)
+
 
 @dataclass
 class Settings:
     qbit: QbitSettings = field(default_factory=QbitSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
-    # Torznab categories searched for each Content Kind (by kind value); empty = all.
-    kind_categories: dict[str, list[int]] = field(default_factory=dict)
+    # Torznab categories searched for each Content Kind; none listed = all categories.
+    kind_categories: dict[ContentKind, list[int]] = field(default_factory=dict)
     language: str = "auto"  # auto | en | fr
 
     def categories(self, kind: ContentKind) -> tuple[int, ...]:
-        return tuple(self.kind_categories.get(kind.value, []))
+        return tuple(self.kind_categories.get(kind, []))
 
     library_folders: list[LibraryFolder] = field(default_factory=list)
 
@@ -57,7 +61,7 @@ class Settings:
             "qbit": asdict(self.qbit),
             "indexer": asdict(self.indexer),
             "matching": asdict(self.matching),
-            "kind_categories": self.kind_categories,
+            "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
         }
@@ -74,7 +78,8 @@ class Settings:
             matching=MatchingSettings(**data.get("matching", {})),
             language=str(data.get("language", "auto")),
             kind_categories={
-                k: [int(c) for c in v] for k, v in data.get("kind_categories", {}).items()
+                ContentKind(k): [int(c) for c in v]
+                for k, v in data.get("kind_categories", {}).items()
             },
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
         )
