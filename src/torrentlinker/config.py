@@ -16,14 +16,21 @@ class QbitSettings:
 
 
 @dataclass
+class IndexerSettings:
+    url: str = "https://c411.org/api/torznab"
+
+
+@dataclass
 class Settings:
     qbit: QbitSettings = field(default_factory=QbitSettings)
+    indexer: IndexerSettings = field(default_factory=IndexerSettings)
     library_folders: list[LibraryFolder] = field(default_factory=list)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "qbit": asdict(self.qbit),
+            "indexer": asdict(self.indexer),
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -35,6 +42,7 @@ class Settings:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cls(
             qbit=QbitSettings(**data.get("qbit", {})),
+            indexer=IndexerSettings(**data.get("indexer", {})),
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
         )
 

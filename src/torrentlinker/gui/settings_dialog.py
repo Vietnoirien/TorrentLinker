@@ -24,9 +24,11 @@ from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
 from torrentlinker.domain import LibraryFolder
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.indexer import Indexer
 from torrentlinker.qbit import QbitApi
 
 QBIT_PASSWORD = "qbit-password"
+INDEXER_API_KEY = "indexer-api-key"
 
 
 class SettingsDialog(QDialog):
@@ -38,6 +40,7 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._qbit_box())
+        layout.addWidget(self._indexer_box())
         layout.addWidget(self._folders_box())
 
         buttons = QDialogButtonBox(
@@ -72,6 +75,33 @@ class SettingsDialog(QDialog):
                 self, self.tr("qBittorrent"), self.tr("Connected to qBittorrent {0}").format(v)
             ),
             lambda e: QMessageBox.warning(self, self.tr("qBittorrent"), str(e)),
+        )
+
+    # Indexer ---------------------------------------------------------------
+
+    def _indexer_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Indexer (Torznab)"))
+        form = QFormLayout(box)
+        self.indexer_url = QLineEdit(self.settings.indexer.url)
+        self.indexer_key = QLineEdit(get_secret(INDEXER_API_KEY))
+        self.indexer_key.setEchoMode(QLineEdit.EchoMode.Password)
+        test = QPushButton(self.tr("Test Indexer"))
+        test.clicked.connect(self._test_indexer)
+        form.addRow(self.tr("Torznab URL"), self.indexer_url)
+        form.addRow(self.tr("API key"), self.indexer_key)
+        form.addRow("", test)
+        return box
+
+    def _test_indexer(self) -> None:
+        indexer = Indexer(self.indexer_url.text().strip(), self.indexer_key.text().strip())
+        run_in_background(
+            indexer.caps,
+            lambda caps: QMessageBox.information(
+                self,
+                self.tr("Indexer"),
+                self.tr("Indexer OK: {0} categories").format(len(caps.categories)),
+            ),
+            lambda e: QMessageBox.warning(self, self.tr("Indexer"), str(e)),
         )
 
     # Library Folders -------------------------------------------------------
@@ -128,5 +158,7 @@ class SettingsDialog(QDialog):
         self.settings.qbit.host = self.qbit_host.text().strip()
         self.settings.qbit.username = self.qbit_user.text().strip()
         set_secret(QBIT_PASSWORD, self.qbit_password.text())
+        self.settings.indexer.url = self.indexer_url.text().strip()
+        set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
         self.settings.library_folders = self._read_folders()
         self.accept()

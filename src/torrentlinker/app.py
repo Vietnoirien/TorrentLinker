@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from torrentlinker.config import Settings
 from torrentlinker.gui.main_window import MainWindow
+from torrentlinker.store import Store
 
 
 def data_dir() -> Path:
@@ -19,7 +20,8 @@ def main() -> int:
     app.setApplicationName("TorrentLinker")
     app.setOrganizationName("TorrentLinker")
     settings_path = data_dir() / "settings.json"
-    window = MainWindow(Settings.load(settings_path), settings_path)
+    store = Store(data_dir() / "state.db")
+    window = MainWindow(Settings.load(settings_path), settings_path, store)
     window.show()
     return app.exec()
 
