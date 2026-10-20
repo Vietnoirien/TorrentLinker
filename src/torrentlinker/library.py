@@ -27,3 +27,8 @@ def build_library(
         states = classify(items, torrents, ignore)
         entries.extend(LibraryEntry(folder, i, states[i.path]) for i in items)
     return entries
+
+
+def auto_searchable(entries: Iterable[LibraryEntry]) -> list[LibraryEntry]:
+    """Entries a batch search may pick up: Orphans only, never (Partially) Seeded Items."""
+    return [e for e in entries if e.state is ItemState.ORPHAN]

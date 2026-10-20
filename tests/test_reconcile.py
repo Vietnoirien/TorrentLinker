@@ -41,3 +41,17 @@ def test_local_ignored_files_do_not_make_an_item_partially_seeded() -> None:
     states = classify([movie_dir], torrents, IgnoreList.default())
 
     assert states == {movie_dir.path: ItemState.SEEDED}
+
+
+def test_only_orphans_are_searched_automatically() -> None:
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.library import LibraryEntry, auto_searchable
+
+    folder = LibraryFolder(LIB)
+    entries = [
+        LibraryEntry(folder, movie, ItemState.SEEDED),
+        LibraryEntry(folder, show, ItemState.PARTIALLY_SEEDED),
+        LibraryEntry(folder, LocalItem(LIB / "x"), ItemState.ORPHAN),
+    ]
+
+    assert [e.item.path.name for e in auto_searchable(entries)] == ["x"]

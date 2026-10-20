@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.domain import ItemState
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Candidate, Indexer
@@ -131,14 +132,24 @@ class ReviewPanel(QWidget):
         self.results = []
         self.candidates.setRowCount(0)
         self.files.setRowCount(0)
-        self.query.setEnabled(entry is not None)
-        self.search_button.setEnabled(entry is not None)
+        searchable = entry is not None and entry.state is not ItemState.SEEDED
+        self.query.setEnabled(searchable)
+        self.search_button.setEnabled(searchable)
+        partial = entry is not None and entry.state is ItemState.PARTIALLY_SEEDED
+        self.search_button.setText(self.tr("Force search") if partial else self.tr("Search"))
         self._update_actions()
         if entry is None:
             self.title.setText(self.tr("Select a Local Item"))
             self.query.clear()
             return
-        self.title.setText(f"<b>{entry.item.path.name}</b> — {human_size(entry.item.size)}")
+        title = f"<b>{entry.item.path.name}</b> — {human_size(entry.item.size)}"
+        if entry.state is ItemState.SEEDED:
+            title += "<br>" + self.tr("Already seeded by qBittorrent.")
+        elif partial:
+            title += "<br>" + self.tr(
+                "Some of these files are already seeded: a Match would overlap that torrent."
+            )
+        self.title.setText(title)
         self.query.setText(self.store.item_query(entry.item.path) or self.default_query(entry))
 
     def selected(self) -> Verified | None:
@@ -173,7 +184,7 @@ class ReviewPanel(QWidget):
         )
 
     def _show(self, entry: LibraryEntry, results: list[Verified]) -> None:
-        self.search_button.setEnabled(True)
+        self.search_button.setEnabled(self.entry is not None)
         if entry is not self.entry:
             return
         self.results = sorted(

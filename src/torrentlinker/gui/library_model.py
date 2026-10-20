@@ -10,6 +10,7 @@ from PySide6.QtCore import (
     QPersistentModelIndex,
     Qt,
 )
+from PySide6.QtGui import QColor
 
 from torrentlinker.domain import ItemState
 from torrentlinker.library import LibraryEntry
@@ -33,6 +34,12 @@ def human_size(n: float) -> str:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} TiB"
+
+
+STATE_COLORS = {
+    ItemState.SEEDED: QColor("#2e7d32"),
+    ItemState.PARTIALLY_SEEDED: QColor("#ef6c00"),
+}
 
 
 class LibraryModel(QAbstractTableModel):
@@ -81,6 +88,8 @@ class LibraryModel(QAbstractTableModel):
                 human_size(e.item.size),
                 str(e.folder.path),
             )[index.column()]
+        if role == Qt.ItemDataRole.ForegroundRole and index.column() == 1:
+            return STATE_COLORS.get(e.state)
         if role == Qt.ItemDataRole.UserRole:
             return e
         return None
