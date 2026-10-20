@@ -36,12 +36,20 @@ class Outcome:
     progress: float
 
 
-def start_reseed(qbit: Qbit, store: Store, item: LocalItem, meta: TorrentMeta, match: Match) -> str:
+def start_reseed(
+    qbit: Qbit,
+    store: Store,
+    item: LocalItem,
+    meta: TorrentMeta,
+    match: Match,
+    candidate_key: str | None = None,
+) -> str:
     if qbit.torrent(meta.infohash) is not None:
         raise AlreadyInClient(meta.name)
     h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
     unwanted = set(match.unwanted)
-    store.start_verification(h, item.path, meta.infohash, expected_progress(meta, unwanted))
+    key = candidate_key or meta.infohash
+    store.start_verification(h, item.path, key, expected_progress(meta, unwanted))
     for old, new in rename_plan(match, set(meta.files)):
         qbit.rename_file(h, old, new)
     if unwanted:

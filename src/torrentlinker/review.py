@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from torrentlinker.domain import LocalItem
@@ -30,12 +30,23 @@ class MatchRules:
     ignore: IgnoreList
 
 
+def candidate_key(candidate: Candidate) -> str:
+    """Stable identity of a Candidate, used for Rejections. Never contains the API key."""
+    return candidate.infohash or candidate.details_url or candidate.download_url.split("?")[0]
+
+
 def verify(
-    indexer: Indexer, item: LocalItem, candidates: Iterable[Candidate], rules: MatchRules
+    indexer: Indexer,
+    item: LocalItem,
+    candidates: Iterable[Candidate],
+    rules: MatchRules,
+    rejections: Mapping[str, str] = {},
 ) -> list[Verified]:
-    """Fetch the .torrent of every size-plausible Candidate and compare its files."""
+    """Fetch the .torrent of every size-plausible, non-rejected Candidate and compare files."""
     result = []
     for c in candidates:
+        if candidate_key(c) in rejections:
+            continue
         if not is_plausible(c.size, item, rules.size_tolerance):
             result.append(Verified(c))
             continue

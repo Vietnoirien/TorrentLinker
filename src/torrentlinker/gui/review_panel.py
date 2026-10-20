@@ -26,7 +26,7 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.qbit import Qbit
 from torrentlinker.queries import name_query
 from torrentlinker.reseed import start_reseed
-from torrentlinker.review import MatchRules, Verified, verify, verify_one
+from torrentlinker.review import MatchRules, Verified, candidate_key, verify, verify_one
 from torrentlinker.store import Store
 
 GREEN, ORANGE, RED = QColor("#2e7d32"), QColor("#ef6c00"), QColor("#c62828")
@@ -81,6 +81,7 @@ class ReviewPanel(QWidget):
         self.candidates = _readonly_table(
             [self.tr("Candidate"), self.tr("Size"), self.tr("Seeders"), self.tr("Match")]
         )
+        self.candidates.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.candidates.itemSelectionChanged.connect(self._candidate_selected)
         self.files = _readonly_table([self.tr("Torrent file"), self.tr("Local file"), ""])
         self.files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -95,6 +96,10 @@ class ReviewPanel(QWidget):
         )
         self.check_button.clicked.connect(self._check_selected)
         actions.addWidget(self.check_button)
+        self.reject_button = QPushButton(self.tr("Reject"))
+        self.reject_button.setToolTip(self.tr("Not this Local Item: never propose it again"))
+        self.reject_button.clicked.connect(self._reject_selected)
+        actions.addWidget(self.reject_button)
         actions.addStretch()
         self.reseed_button = QPushButton(self.tr("Reseed"))
         self.reseed_button.setToolTip(
@@ -134,8 +139,16 @@ class ReviewPanel(QWidget):
         self.query.setText(self.store.item_query(entry.item.path) or name_query(entry.item))
 
     def selected(self) -> Verified | None:
-        rows = self.candidates.selectionModel().selectedRows()
-        return self.results[rows[0].row()] if rows else None
+        """The Candidate whose files are shown: the current one among the selection."""
+        rows = self.selected_all()
+        current = self.candidates.currentRow()
+        if 0 <= current < len(self.results) and self.results[current] in rows:
+            return self.results[current]
+        return rows[0] if rows else None
+
+    def selected_all(self) -> list[Verified]:
+        rows = sorted(i.row() for i in self.candidates.selectionModel().selectedRows())
+        return [self.results[r] for r in rows]
 
     # Search ----------------------------------------------------------------
 
@@ -148,8 +161,11 @@ class ReviewPanel(QWidget):
             self.store.set_item_query(entry.item.path, q)
         self.search_button.setEnabled(False)
         indexer, rules = self.indexer(), self.rules()
+        rejections = self.store.rejections(entry.item.path)
         run_in_background(
-            lambda: verify(indexer, entry.item, indexer.search(SearchQuery(q=q)), rules),
+            lambda: verify(
+                indexer, entry.item, indexer.search(SearchQuery(q=q)), rules, rejections
+            ),
             lambda results: self._show(entry, results),
             self._failed,
         )
@@ -222,9 +238,24 @@ class ReviewPanel(QWidget):
             self.files.setItem(r, 2, cell)
 
     def _update_actions(self) -> None:
-        v = self.selected()
+        v, chosen = self.selected(), self.selected_all()
         self.check_button.setEnabled(v is not None and not v.checked)
-        self.reseed_button.setEnabled(v is not None and v.match is not None)
+        self.reject_button.setEnabled(bool(chosen))
+        self.reseed_button.setEnabled(bool(chosen) and all(c.match for c in chosen))
+        self.reseed_button.setText(
+            self.tr("Reseed {0} Matches").format(len(chosen))
+            if len(chosen) > 1
+            else self.tr("Reseed")
+        )
+
+    def _reject_selected(self) -> None:
+        if self.entry is None:
+            return
+        for v in self.selected_all():
+            self.store.reject(self.entry.item.path, candidate_key(v.candidate), "Rejected by user")
+            self.results.remove(v)
+        self.candidates.clearSelection()
+        self._fill_candidates()
 
     def _check_selected(self) -> None:
         v, entry = self.selected(), self.entry
@@ -247,20 +278,32 @@ class ReviewPanel(QWidget):
         self.candidates.selectRow(i)
 
     def _reseed_selected(self) -> None:
-        v, entry = self.selected(), self.entry
-        if v is None or entry is None or v.meta is None or v.match is None:
+        entry = self.entry
+        chosen = [v for v in self.selected_all() if v.meta is not None and v.match is not None]
+        if entry is None or not chosen:
             return
-        meta, m = v.meta, v.match
-        if not m.is_full and not self._confirm_partial(len(m.missing), m.coverage):
-            return
-        if m.renames and not self._confirm_renames(m.renames):
+        for v in chosen:
+            assert v.match is not None
+            if not v.match.is_full and not self._confirm_partial(
+                len(v.match.missing), v.match.coverage
+            ):
+                return
+        renames = {k: n for v in chosen if v.match for k, n in v.match.renames.items()}
+        if renames and not self._confirm_renames(renames):
             return
         self.reseed_button.setEnabled(False)
         qbit, store = self.qbit(), self.store
+
+        def work() -> list[str]:
+            hashes = []
+            for v in chosen:
+                assert v.meta is not None and v.match is not None
+                key = candidate_key(v.candidate)
+                hashes.append(start_reseed(qbit, store, entry.item, v.meta, v.match, key))
+            return hashes
+
         run_in_background(
-            lambda: start_reseed(qbit, store, entry.item, meta, m),
-            lambda _hash: self.reseed_started.emit(entry.item.path),
-            self._reseed_failed,
+            work, lambda _hashes: self.reseed_started.emit(entry.item.path), self._reseed_failed
         )
 
     def _confirm_partial(self, missing: int, coverage: float) -> bool:
