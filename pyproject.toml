@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-qt>=4.4", "ruff>=0.5", "mypy>=1.10"]
+package = ["pyinstaller>=6.10", "pillow>=10"]  # pillow converts the icon on Windows
 
 [project.gui-scripts]
 torrentlinker = "torrentlinker.app:main"
@@ -26,7 +27,7 @@ torrentlinker = "torrentlinker.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-torrentlinker = ["i18n/*.qm"]
+torrentlinker = ["i18n/*.qm", "assets/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

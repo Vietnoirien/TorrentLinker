@@ -1,0 +1,42 @@
+# PyInstaller spec: one-file .exe on Windows, one-dir build on Linux (wrapped into an AppImage).
+import sys
+
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+windows = sys.platform == "win32"
+
+datas = (
+    collect_data_files("torrentlinker")
+    + collect_data_files("guessit")
+    + collect_data_files("babelfish")
+)
+hiddenimports = (
+    collect_submodules("keyring.backends")
+    + collect_submodules("guessit")
+    + collect_submodules("babelfish")
+    + collect_submodules("rebulk")
+)
+excludes = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtPdf", "tkinter"]
+
+a = Analysis(
+    ["launcher.py"],
+    pathex=["../src"],
+    datas=datas,
+    hiddenimports=hiddenimports,
+    excludes=excludes,
+)
+pyz = PYZ(a.pure)
+
+if windows:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        name="TorrentLinker",
+        console=False,
+        icon="../src/torrentlinker/assets/icon.png",
+    )
+else:
+    exe = EXE(pyz, a.scripts, exclude_binaries=True, name="torrentlinker", console=False)
+    coll = COLLECT(exe, a.binaries, a.datas, name="torrentlinker")

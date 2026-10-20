@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Qt runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libxcb-cursor0
+      - run: pip install '.[package]'
+      - run: pyinstaller --noconfirm --distpath ../dist --workpath ../build torrentlinker.spec
+        working-directory: packaging
+      - run: packaging/build_appimage.sh
+      - name: Smoke test
+        run: APPIMAGE_EXTRACT_AND_RUN=1 timeout 120 dist/TorrentLinker-x86_64.AppImage --smoke-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/TorrentLinker-x86_64.AppImage
+
+  windows:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install '.[package]'
+      - run: pyinstaller --noconfirm --distpath ../dist --workpath ../build torrentlinker.spec
+        working-directory: packaging
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\TorrentLinker.exe -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "smoke test failed with exit code $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/TorrentLinker.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/linux/TorrentLinker-x86_64.AppImage
+            artifacts/windows/TorrentLinker.exe
+          generate_release_notes: true
