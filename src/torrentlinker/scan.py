@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from torrentlinker.domain import LibraryFolder, LocalItem
 
+if TYPE_CHECKING:
+    from torrentlinker.store import Store
 
-def scan(folder: LibraryFolder) -> list[LocalItem]:
-    return [_local_item(p) for p in _entries_at_depth(folder.path, folder.depth)]
+
+def scan(folder: LibraryFolder, cache: Store | None = None) -> list[LocalItem]:
+    return [_local_item(p, cache) for p in _entries_at_depth(folder.path, folder.depth)]
 
 
 def _entries_at_depth(root: Path, depth: int) -> list[Path]:
@@ -28,13 +32,30 @@ def _entries_at_depth(root: Path, depth: int) -> list[Path]:
     return found
 
 
-def _local_item(path: Path) -> LocalItem:
+def _local_item(path: Path, cache: Store | None) -> LocalItem:
     base = path.parent
     if path.is_file():
         return LocalItem(path, {path.name: path.stat().st_size})
-    files: dict[str, int] = {}
+    # A folder whose directories all keep their mtime has the same entries, so its file
+    # list is reused without stat-ing every file. A file rewritten in place under the
+    # same name is not noticed; that is rare in a media library.
+    signature = _signature(path) if cache else ""
+    if cache and (files := cache.cached_scan(path, signature)) is not None:
+        return LocalItem(path, files)
+    walked: dict[str, int] = {}
     for dirpath, _dirs, names in os.walk(path):
         for name in names:
             f = Path(dirpath) / name
-            files[f.relative_to(base).as_posix()] = f.stat().st_size
-    return LocalItem(path, dict(sorted(files.items())))
+            walked[f.relative_to(base).as_posix()] = f.stat().st_size
+    files = dict(sorted(walked.items()))
+    if cache:
+        cache.cache_scan(path, signature, files)
+    return LocalItem(path, files)
+
+
+def _signature(path: Path) -> str:
+    parts = []
+    for dirpath, dirs, _names in os.walk(path):
+        dirs.sort()
+        parts.append(f"{dirpath}:{os.stat(dirpath).st_mtime_ns}")
+    return "|".join(parts)

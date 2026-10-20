@@ -9,6 +9,7 @@ from torrentlinker.domain import ItemState, LibraryFolder, LocalItem, Torrent
 from torrentlinker.matching import IgnoreList
 from torrentlinker.reconcile import classify
 from torrentlinker.scan import scan
+from torrentlinker.store import Store
 
 
 @dataclass(frozen=True)
@@ -19,11 +20,14 @@ class LibraryEntry:
 
 
 def build_library(
-    folders: Iterable[LibraryFolder], torrents: list[Torrent], ignore: IgnoreList = IgnoreList()
+    folders: Iterable[LibraryFolder],
+    torrents: list[Torrent],
+    ignore: IgnoreList = IgnoreList(),
+    cache: Store | None = None,
 ) -> list[LibraryEntry]:
     entries: list[LibraryEntry] = []
     for folder in folders:
-        items = scan(folder)
+        items = scan(folder, cache)
         states = classify(items, torrents, ignore)
         entries.extend(LibraryEntry(folder, i, states[i.path]) for i in items)
     return entries

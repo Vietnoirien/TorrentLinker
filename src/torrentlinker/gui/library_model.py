@@ -8,6 +8,7 @@ from PySide6.QtCore import (
     QCoreApplication,
     QModelIndex,
     QPersistentModelIndex,
+    QSortFilterProxyModel,
     Qt,
 )
 from PySide6.QtGui import QColor
@@ -93,3 +94,42 @@ class LibraryModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.UserRole:
             return e
         return None
+
+
+class LibraryFilter(QSortFilterProxyModel):
+    """Filter the Library by state and by Library Folder; sorts sizes numerically."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.state: ItemState | None = None
+        self.folder: Path | None = None
+
+    def set_filters(self, state: ItemState | None, folder: Path | None) -> None:
+        if hasattr(self, "beginFilterChange"):  # Qt >= 6.9
+            self.beginFilterChange()
+            self.state, self.folder = state, folder
+            self.endFilterChange()
+        else:
+            self.state, self.folder = state, folder
+            self.invalidateFilter()
+
+    def filterAcceptsRow(
+        self, source_row: int, source_parent: QModelIndex | QPersistentModelIndex
+    ) -> bool:
+        model = self.sourceModel()
+        assert isinstance(model, LibraryModel)
+        e = model.entries[source_row]
+        return (self.state is None or e.state is self.state) and (
+            self.folder is None or e.folder.path == self.folder
+        )
+
+    def lessThan(
+        self,
+        left: QModelIndex | QPersistentModelIndex,
+        right: QModelIndex | QPersistentModelIndex,
+    ) -> bool:
+        model = self.sourceModel()
+        assert isinstance(model, LibraryModel)
+        if left.column() == 2:
+            return model.entries[left.row()].item.size < model.entries[right.row()].item.size
+        return super().lessThan(left, right)

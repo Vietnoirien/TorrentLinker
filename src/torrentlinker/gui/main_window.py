@@ -2,21 +2,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelection, QSortFilterProxyModel, Qt, QTimer
+from PySide6.QtCore import QItemSelection, Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
+    QHBoxLayout,
     QHeaderView,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QSplitter,
     QTableView,
+    QVBoxLayout,
+    QWidget,
 )
 
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
+from torrentlinker.domain import ItemState
 from torrentlinker.gui.batch_runner import BatchRunner
-from torrentlinker.gui.library_model import LibraryModel
+from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
 from torrentlinker.gui.review_panel import ReviewPanel
 from torrentlinker.gui.settings_dialog import (
     INDEXER_API_KEY,
@@ -74,7 +80,7 @@ class MainWindow(QMainWindow):
         self.countdown.timeout.connect(self._show_batch_progress)
 
         self.library_model = LibraryModel()
-        self.library_proxy = QSortFilterProxyModel()
+        self.library_proxy = LibraryFilter()
         self.library_proxy.setSourceModel(self.library_model)
         self.library_view = QTableView()
         self.library_view.setModel(self.library_proxy)
@@ -84,12 +90,30 @@ class MainWindow(QMainWindow):
         self.library_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
+        filters = QHBoxLayout()
+        self.state_filter = QComboBox()
+        self.state_filter.addItem(self.tr("All states"), None)
+        for state in ItemState:
+            self.state_filter.addItem(state_label(state), state)
+        self.folder_filter = QComboBox()
+        self.state_filter.currentIndexChanged.connect(self._apply_filters)
+        self.folder_filter.currentIndexChanged.connect(self._apply_filters)
+        filters.addWidget(QLabel(self.tr("Show")))
+        filters.addWidget(self.state_filter)
+        filters.addWidget(self.folder_filter, 1)
+        library_pane = QWidget()
+        library_layout = QVBoxLayout(library_pane)
+        library_layout.setContentsMargins(0, 0, 0, 0)
+        library_layout.addLayout(filters)
+        library_layout.addWidget(self.library_view)
+        self._fill_folder_filter()
+
         self.review = ReviewPanel(
             store, self.indexer, self.qbit, self.match_rules, self.search, self.default_query
         )
         self.review.reseed_started.connect(self._reseed_started)
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.library_view)
+        splitter.addWidget(library_pane)
         splitter.addWidget(self.review)
         splitter.setSizes([600, 600])
         self.setCentralWidget(splitter)
@@ -152,6 +176,24 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         if SettingsDialog(self.settings, self).exec():
             self.settings.save(self.settings_path)
+            self._fill_folder_filter()
+
+    def _fill_folder_filter(self) -> None:
+        current = self.folder_filter.currentData()
+        self.folder_filter.blockSignals(True)
+        self.folder_filter.clear()
+        self.folder_filter.addItem(self.tr("All Library Folders"), None)
+        for f in self.settings.library_folders:
+            self.folder_filter.addItem(str(f.path), f.path)
+        index = self.folder_filter.findData(current)
+        self.folder_filter.setCurrentIndex(max(index, 0))
+        self.folder_filter.blockSignals(False)
+        self._apply_filters()
+
+    def _apply_filters(self) -> None:
+        self.library_proxy.set_filters(
+            self.state_filter.currentData(), self.folder_filter.currentData()
+        )
 
     def selected_entries(self) -> list[LibraryEntry]:
         rows = self.library_view.selectionModel().selectedRows()
@@ -247,9 +289,9 @@ class MainWindow(QMainWindow):
         self.scan_action.setEnabled(False)
         self.statusBar().showMessage(self.tr("Scanning…"))
         folders = list(self.settings.library_folders)
-        qbit, ignore = self.qbit(), self.settings.matching.ignore
+        qbit, ignore, store = self.qbit(), self.settings.matching.ignore, self.store
         run_in_background(
-            lambda: build_library(folders, qbit.torrents(), ignore),
+            lambda: build_library(folders, qbit.torrents(), ignore, store),
             self._scan_done,
             self._scan_failed,
         )

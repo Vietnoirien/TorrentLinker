@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -26,6 +27,11 @@ CREATE TABLE IF NOT EXISTS rejection (
     candidate_key TEXT NOT NULL,
     reason TEXT NOT NULL,
     PRIMARY KEY (item_path, candidate_key)
+);
+CREATE TABLE IF NOT EXISTS scan_cache (
+    item_path TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
+    files TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS item_query (
     item_path TEXT PRIMARY KEY,
@@ -143,3 +149,20 @@ class Store:
                 (str(item_path),),
             ).fetchall()
         return {str(k): str(r) for k, r in rows}
+
+    # Scan cache -------------------------------------------------------------
+
+    def cached_scan(self, item_path: Path, signature: str) -> dict[str, int] | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT files FROM scan_cache WHERE item_path = ? AND signature = ?",
+                (str(item_path), signature),
+            ).fetchone()
+        return {str(k): int(v) for k, v in json.loads(row[0]).items()} if row else None
+
+    def cache_scan(self, item_path: Path, signature: str, files: dict[str, int]) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO scan_cache VALUES (?, ?, ?)",
+                (str(item_path), signature, json.dumps(files)),
+            )

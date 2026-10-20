@@ -37,3 +37,46 @@ def test_depth_two_lists_entries_inside_each_subfolder(tmp_path: Path) -> None:
     ]
     season1 = next(i for i in items if i.path.name == "Season 1")
     assert season1.files == {"Season 1/e01.mkv": 5}
+
+
+# Scan cache ------------------------------------------------------------------
+
+from torrentlinker.store import Store  # noqa: E402
+
+
+def test_rescan_with_a_cache_gives_the_same_items(tmp_path: Path) -> None:
+    lib = tmp_path / "lib"
+    write(lib / "Show" / "e01.mkv", 5)
+    write(lib / "Movie.mkv", 7)
+    store = Store(tmp_path / "s.db")
+
+    first = scan(LibraryFolder(lib), store)
+    again = scan(LibraryFolder(lib), store)
+
+    assert again == first
+
+
+def test_files_added_or_removed_inside_an_item_are_picked_up(tmp_path: Path) -> None:
+    lib = tmp_path / "lib"
+    write(lib / "Show" / "Season 1" / "e01.mkv", 5)
+    store = Store(tmp_path / "s.db")
+    scan(LibraryFolder(lib), store)
+
+    write(lib / "Show" / "Season 1" / "e02.mkv", 6)
+    (lib / "Show" / "Season 1" / "e01.mkv").unlink()
+    items = scan(LibraryFolder(lib), store)
+
+    assert items[0].files == {"Show/Season 1/e02.mkv": 6}
+
+
+def test_a_cached_item_that_disappeared_is_not_reported(tmp_path: Path) -> None:
+    import shutil
+
+    lib = tmp_path / "lib"
+    write(lib / "Show" / "e01.mkv", 5)
+    store = Store(tmp_path / "s.db")
+    scan(LibraryFolder(lib), store)
+
+    shutil.rmtree(lib / "Show")
+
+    assert scan(LibraryFolder(lib), store) == []
