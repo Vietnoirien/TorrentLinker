@@ -13,10 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from torrentlinker.domain import LibraryFolder
-from torrentlinker.indexer import Indexer, SearchQuery
+from torrentlinker.domain import ContentKind, LibraryFolder
+from torrentlinker.indexer import Indexer
 from torrentlinker.matching import IgnoreList
-from torrentlinker.queries import name_query
 from torrentlinker.reseed import check_verifications, start_reseed
 from torrentlinker.review import MatchRules, search_candidates, verify
 from torrentlinker.scan import scan
