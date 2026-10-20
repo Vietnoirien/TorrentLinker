@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
@@ -66,6 +67,7 @@ class ReviewPanel(QWidget):
         self.default_query = default_query
         self.entry: LibraryEntry | None = None
         self.results: list[Verified] = []
+        self.cache: dict[Path, list[Verified]] = {}  # last results per Local Item
 
         layout = QVBoxLayout(self)
         self.title = QLabel()
@@ -151,6 +153,8 @@ class ReviewPanel(QWidget):
             )
         self.title.setText(title)
         self.query.setText(self.store.item_query(entry.item.path) or self.default_query(entry))
+        if entry.item.path in self.cache:
+            self._show(entry, self.cache[entry.item.path])
 
     def selected(self) -> Verified | None:
         """The Candidate whose files are shown: the current one among the selection."""
@@ -183,8 +187,15 @@ class ReviewPanel(QWidget):
             self._failed,
         )
 
+    def remember(self, entry: LibraryEntry, results: list[Verified]) -> None:
+        """Keep results found elsewhere (batch search) for when the item is selected."""
+        self.cache[entry.item.path] = results
+        if self.entry is not None and self.entry.item.path == entry.item.path:
+            self._show(self.entry, results)
+
     def _show(self, entry: LibraryEntry, results: list[Verified]) -> None:
         self.search_button.setEnabled(self.entry is not None)
+        self.cache[entry.item.path] = results
         if entry is not self.entry:
             return
         self.results = sorted(
@@ -267,6 +278,7 @@ class ReviewPanel(QWidget):
         for v in self.selected_all():
             self.store.reject(self.entry.item.path, candidate_key(v.candidate), "Rejected by user")
             self.results.remove(v)
+        self.cache[self.entry.item.path] = list(self.results)
         self.candidates.clearSelection()
         self._fill_candidates()
 

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
+from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.library_model import LibraryModel
 from torrentlinker.gui.review_panel import ReviewPanel
 from torrentlinker.gui.settings_dialog import (
@@ -25,12 +26,12 @@ from torrentlinker.gui.settings_dialog import (
 )
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Candidate, Indexer
-from torrentlinker.library import LibraryEntry, build_library
+from torrentlinker.library import LibraryEntry, auto_searchable, build_library
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
-from torrentlinker.review import MatchRules, search_candidates
+from torrentlinker.review import MatchRules, Verified, search_candidates, verify
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
 
@@ -52,8 +53,25 @@ class MainWindow(QMainWindow):
         self.scan_action.triggered.connect(self.scan)
         settings_action = QAction(self.tr("Settings"), self)
         settings_action.triggered.connect(self.open_settings)
+        self.batch_selected_action = QAction(self.tr("Search selected"), self)
+        self.batch_selected_action.triggered.connect(lambda: self.start_batch(selected_only=True))
+        self.batch_all_action = QAction(self.tr("Search all Orphans"), self)
+        self.batch_all_action.triggered.connect(lambda: self.start_batch(selected_only=False))
+        self.cancel_action = QAction(self.tr("Cancel search"), self)
+        self.cancel_action.triggered.connect(self.cancel_batch)
+        self.cancel_action.setEnabled(False)
         toolbar.addAction(self.scan_action)
+        toolbar.addSeparator()
+        toolbar.addAction(self.batch_selected_action)
+        toolbar.addAction(self.batch_all_action)
+        toolbar.addAction(self.cancel_action)
+        toolbar.addSeparator()
         toolbar.addAction(settings_action)
+        self.batch: BatchRunner | None = None
+        self.batch_text = ""
+        self.countdown = QTimer(self)
+        self.countdown.setInterval(250)
+        self.countdown.timeout.connect(self._show_batch_progress)
 
         self.library_model = LibraryModel()
         self.library_proxy = QSortFilterProxyModel()
@@ -62,6 +80,7 @@ class MainWindow(QMainWindow):
         self.library_view.setModel(self.library_proxy)
         self.library_view.setSortingEnabled(True)
         self.library_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.library_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.library_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
@@ -134,10 +153,92 @@ class MainWindow(QMainWindow):
         if SettingsDialog(self.settings, self).exec():
             self.settings.save(self.settings_path)
 
-    def _selection_changed(self, selected: QItemSelection, _deselected: QItemSelection) -> None:
+    def selected_entries(self) -> list[LibraryEntry]:
         rows = self.library_view.selectionModel().selectedRows()
-        entry = self.library_proxy.data(rows[0], Qt.ItemDataRole.UserRole) if rows else None
-        self.review.set_entry(entry)
+        return [self.library_proxy.data(r, Qt.ItemDataRole.UserRole) for r in rows]
+
+    def _selection_changed(self, selected: QItemSelection, _deselected: QItemSelection) -> None:
+        current = self.library_view.currentIndex()
+        chosen = self.selected_entries()
+        entry = None
+        if current.isValid() and self.library_view.selectionModel().isRowSelected(
+            current.row(), current.parent()
+        ):
+            entry = self.library_proxy.data(current.siblingAtColumn(0), Qt.ItemDataRole.UserRole)
+        elif chosen:
+            entry = chosen[0]
+        if self.review.entry is not entry:
+            self.review.set_entry(entry)
+
+    # Batch search ----------------------------------------------------------
+
+    def start_batch(self, selected_only: bool) -> None:
+        if self.batch is not None:
+            return
+        pool = self.selected_entries() if selected_only else self.library_model.entries
+        entries = auto_searchable(pool)
+        if not entries:
+            self.statusBar().showMessage(self.tr("No Orphans to search"))
+            return
+        rules = self.match_rules()
+
+        def search(entry: LibraryEntry) -> list[Verified]:
+            found = self.search(entry, self.store.item_query(entry.item.path))
+            rejections = self.store.rejections(entry.item.path)
+            return verify(self.indexer(), entry.item, found, rules, rejections)
+
+        self.batch = BatchRunner(entries, search)
+        self.batch.signals.result.connect(self._batch_result)
+        self.batch.signals.error.connect(self._batch_error)
+        self.batch.signals.finished.connect(self._batch_finished)
+        self._set_batch_running(True)
+        self.batch_text = self.tr("Searching {0} Orphans…").format(len(entries))
+        self.batch.start()
+
+    def cancel_batch(self) -> None:
+        if self.batch is not None:
+            self.batch.cancel()
+            self.batch_text = self.tr("Cancelling after the current item…")
+
+    def _set_batch_running(self, running: bool) -> None:
+        self.batch_selected_action.setEnabled(not running)
+        self.batch_all_action.setEnabled(not running)
+        self.cancel_action.setEnabled(running)
+        if running:
+            self.countdown.start()
+        else:
+            self.countdown.stop()
+
+    def _show_batch_progress(self) -> None:
+        wait = self._indexer.next_request_in() if self._indexer else 0
+        suffix = self.tr(" · next request in {0} s").format(f"{wait:.1f}") if wait > 0.05 else ""
+        self.statusBar().showMessage(self.batch_text + suffix)
+
+    def _batch_result(
+        self, index: int, total: int, entry: LibraryEntry, results: list[Verified]
+    ) -> None:
+        self.batch_text = self.tr("Searched {0}/{1}: {2}").format(
+            index, total, entry.item.path.name
+        )
+        self.review.remember(entry, results)
+        self.library_model.set_status(entry.item.path, self._summary(results))
+
+    def _summary(self, results: list[Verified]) -> str:
+        if any(v.match and v.match.is_full for v in results):
+            return self.tr("Full match found")
+        if any(v.match for v in results):
+            return self.tr("Partial match found")
+        if results:
+            return self.tr("No match")
+        return self.tr("No Candidates")
+
+    def _batch_error(self, entry: LibraryEntry, error: Exception) -> None:
+        self.library_model.set_status(entry.item.path, self.tr("Search failed: {0}").format(error))
+
+    def _batch_finished(self, done: int) -> None:
+        self.batch = None
+        self._set_batch_running(False)
+        self.statusBar().showMessage(self.tr("Batch search finished: {0} searched").format(done))
 
     def scan(self) -> None:
         if not self.settings.library_folders:

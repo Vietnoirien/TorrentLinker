@@ -153,3 +153,14 @@ def test_torrent_file_is_downloaded_once_then_served_from_disk(tmp_path) -> None
 
     assert first == second == b"d8:announce0:e"
     assert len(calls) == 1
+
+
+def test_indexer_tells_how_long_until_its_next_request_is_allowed() -> None:
+    clock = FakeClock()
+    indexer = make_indexer(lambda r: httpx.Response(200, text=SEARCH_XML), clock)
+    assert indexer.next_request_in() == 0
+
+    indexer.search(SearchQuery(q="a"))
+    clock.now += 1.0
+
+    assert indexer.next_request_in() == pytest.approx(3.1)

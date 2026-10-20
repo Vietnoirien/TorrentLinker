@@ -148,6 +148,12 @@ class Indexer:
         response.raise_for_status()
         return response
 
+    def next_request_in(self) -> float:
+        """Seconds before the rate limiter lets the next request through."""
+        if self._last_request is None:
+            return 0.0
+        return max(0.0, self._last_request + MIN_INTERVAL - self._clock())
+
     def _wait_turn(self) -> None:
         if self._last_request is not None:
             wait = self._last_request + MIN_INTERVAL - self._clock()
