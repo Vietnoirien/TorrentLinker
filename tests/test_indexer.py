@@ -134,3 +134,22 @@ def test_api_key_is_never_written_to_the_cache(tmp_path) -> None:  # type: ignor
 
     assert b"S3CRET-KEY" not in (tmp_path / "state.db").read_bytes()
     assert cached[0].download_url.endswith("apikey=S3CRET-KEY")
+
+
+def test_torrent_file_is_downloaded_once_then_served_from_disk(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.store import Store
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, content=b"d8:announce0:e")
+
+    store = Store(tmp_path / "state.db")
+    candidate = Candidate("t", 1, "https://c411.example/api/download/42?apikey=K")
+    first = make_indexer(handler, cache=store).fetch_torrent(candidate)
+    second = make_indexer(handler, cache=store).fetch_torrent(candidate)
+
+    assert first == second == b"d8:announce0:e"
+    assert len(calls) == 1

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS item_query (
 class Store:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.torrent_dir = path.parent / "torrents"
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.Lock()
         with self._lock, self._db:
@@ -55,3 +56,11 @@ class Store:
             self._db.execute(
                 "INSERT OR REPLACE INTO item_query VALUES (?, ?)", (str(item_path), query)
             )
+
+    def cached_torrent(self, key: str) -> bytes | None:
+        f = self.torrent_dir / f"{key}.torrent"
+        return f.read_bytes() if f.exists() else None
+
+    def cache_torrent(self, key: str, data: bytes) -> None:
+        self.torrent_dir.mkdir(parents=True, exist_ok=True)
+        (self.torrent_dir / f"{key}.torrent").write_bytes(data)

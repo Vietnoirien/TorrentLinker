@@ -53,7 +53,9 @@ class MainWindow(QMainWindow):
         self.library_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
-        self.review = ReviewPanel(store, self.indexer)
+        self.review = ReviewPanel(
+            store, self.indexer, lambda: self.settings.matching.size_tolerance
+        )
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.library_view)
         splitter.addWidget(self.review)

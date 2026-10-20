@@ -21,9 +21,15 @@ class IndexerSettings:
 
 
 @dataclass
+class MatchingSettings:
+    size_tolerance: float = 0.02
+
+
+@dataclass
 class Settings:
     qbit: QbitSettings = field(default_factory=QbitSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
+    matching: MatchingSettings = field(default_factory=MatchingSettings)
     library_folders: list[LibraryFolder] = field(default_factory=list)
 
     def save(self, path: Path) -> None:
@@ -31,6 +37,7 @@ class Settings:
         data = {
             "qbit": asdict(self.qbit),
             "indexer": asdict(self.indexer),
+            "matching": asdict(self.matching),
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -43,6 +50,7 @@ class Settings:
         return cls(
             qbit=QbitSettings(**data.get("qbit", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
+            matching=MatchingSettings(**data.get("matching", {})),
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
         )
 

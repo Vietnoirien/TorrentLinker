@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -117,21 +118,35 @@ class Indexer:
             body = body.replace(API_KEY_PLACEHOLDER, self.api_key)
         return _parse_items(body)
 
+    def fetch_torrent(self, candidate: Candidate) -> bytes:
+        """The Candidate's .torrent; downloaded at most once (it may count as a grab)."""
+        key = hashlib.sha1(self._redact(candidate.download_url).encode()).hexdigest()
+        if self._cache and (data := self._cache.cached_torrent(key)) is not None:
+            return data
+        data = self._request(candidate.download_url).content
+        if self._cache:
+            self._cache.cache_torrent(key, data)
+        return data
+
     def _redact(self, body: str) -> str:
         return body.replace(self.api_key, API_KEY_PLACEHOLDER) if self.api_key else body
 
     def _get(self, params: dict[str, str]) -> str:
+        return self._request(self.url, {**params, "apikey": self.api_key}).text
+
+    def _request(self, url: str, params: dict[str, str] | None = None) -> httpx.Response:
         with self._lock:
-            for _attempt in range(MAX_RETRIES + 1):
+            for _attempt in range(MAX_RETRIES):
                 self._wait_turn()
-                response = self._http.get(self.url, params={**params, "apikey": self.api_key})
-                if response.status_code == 429:
-                    self._sleep(_retry_after(response))
-                    continue
-                response.raise_for_status()
-                return response.text
-            response.raise_for_status()
-            return response.text
+                response = self._http.get(url, params=params)
+                if response.status_code != 429:
+                    break
+                self._sleep(_retry_after(response))
+            else:
+                self._wait_turn()
+                response = self._http.get(url, params=params)
+        response.raise_for_status()
+        return response
 
     def _wait_turn(self) -> None:
         if self._last_request is not None:

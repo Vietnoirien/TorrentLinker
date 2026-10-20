@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -42,6 +43,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._qbit_box())
         layout.addWidget(self._indexer_box())
         layout.addWidget(self._folders_box())
+        layout.addWidget(self._matching_box())
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -154,6 +156,19 @@ class SettingsDialog(QDialog):
             result.append(LibraryFolder(path, depth.value(), base.kind, base.mapping))
         return result
 
+    # Matching --------------------------------------------------------------
+
+    def _matching_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Matching"))
+        form = QFormLayout(box)
+        self.tolerance = QDoubleSpinBox()
+        self.tolerance.setRange(0, 20)
+        self.tolerance.setDecimals(1)
+        self.tolerance.setSuffix(" %")
+        self.tolerance.setValue(self.settings.matching.size_tolerance * 100)
+        form.addRow(self.tr("Size tolerance before fetching a .torrent"), self.tolerance)
+        return box
+
     def _save(self) -> None:
         self.settings.qbit.host = self.qbit_host.text().strip()
         self.settings.qbit.username = self.qbit_user.text().strip()
@@ -161,4 +176,5 @@ class SettingsDialog(QDialog):
         self.settings.indexer.url = self.indexer_url.text().strip()
         set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
         self.settings.library_folders = self._read_folders()
+        self.settings.matching.size_tolerance = self.tolerance.value() / 100
         self.accept()
