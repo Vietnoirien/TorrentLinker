@@ -17,7 +17,7 @@ from torrentlinker.torrent_meta import read_torrent
 
 
 class Qbit(Protocol):
-    def torrents(self) -> list[Torrent]: ...
+    def torrents(self, tag: str | None = None) -> list[Torrent]: ...
     def torrent(self, hash: str) -> Torrent | None: ...
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         """Add stopped, with automatic management off and the original layout; return hash."""
@@ -55,8 +55,8 @@ class QbitApi:
         self._client.auth_log_in()
         return str(self._client.app_version())
 
-    def torrents(self) -> list[Torrent]:
-        return [self._torrent(t) for t in self._client.torrents_info()]
+    def torrents(self, tag: str | None = None) -> list[Torrent]:
+        return [self._torrent(t) for t in self._client.torrents_info(tag=tag)]
 
     def torrent(self, hash: str) -> Torrent | None:
         found = self._client.torrents_info(torrent_hashes=hash)

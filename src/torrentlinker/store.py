@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS verification (
     hash TEXT PRIMARY KEY,
     item_path TEXT NOT NULL,
     candidate_key TEXT NOT NULL,
-    rechecked_at REAL NOT NULL,
+    rechecked_at REAL,
     required_progress REAL NOT NULL DEFAULT 1.0
 );
 CREATE TABLE IF NOT EXISTS rejection (
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS item_query (
 class Verification:
     item_path: Path
     candidate_key: str
-    rechecked_at: float
+    rechecked_at: float | None
     required_progress: float
 
 
@@ -102,8 +102,14 @@ class Store:
     ) -> None:
         with self._lock, self._db:
             self._db.execute(
-                "INSERT OR REPLACE INTO verification VALUES (?, ?, ?, ?, ?)",
-                (hash, str(item_path), candidate_key, time.time(), required_progress),
+                "INSERT OR REPLACE INTO verification VALUES (?, ?, ?, NULL, ?)",
+                (hash, str(item_path), candidate_key, required_progress),
+            )
+
+    def mark_rechecked(self, hash: str) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE verification SET rechecked_at = ? WHERE hash = ?", (time.time(), hash)
             )
 
     def verification(self, hash: str) -> Verification | None:

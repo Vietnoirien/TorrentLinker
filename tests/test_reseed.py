@@ -180,3 +180,30 @@ def test_partial_match_below_the_expected_progress_fails(tmp_path: Path) -> None
 
     qbit.finish_check(h, 0.5)
     assert not check_verifications(qbit, store, now=lambda: 1e12)[item.path].verified
+
+
+def test_verification_started_before_a_restart_is_settled_after_it(tmp_path: Path) -> None:
+    item, data = ebook(tmp_path)
+    meta = read_torrent(data)
+    qbit = FakeQbit()
+    h = start_reseed(qbit, Store(tmp_path / "s.db"), item, meta, match(item, meta.files))  # type: ignore[arg-type]
+    qbit.finish_check(h, 1.0)
+
+    outcomes = check_verifications(qbit, Store(tmp_path / "s.db"))  # app relaunched
+
+    assert outcomes[item.path].verified
+    assert qbit.started == [h]
+
+
+def test_reseed_interrupted_before_its_check_is_undone_without_a_rejection(
+    tmp_path: Path,
+) -> None:
+    item, data = ebook(tmp_path)
+    qbit = FakeQbit()
+    h = qbit.add(data, str(item.save_path), [TAG, VERIFYING])  # crashed right after the add
+    store = Store(tmp_path / "s.db")
+
+    assert check_verifications(qbit, store) == {}
+    assert qbit.removed == [(h, False)]
+    assert item.path.exists()
+    assert store.rejections(item.path) == {}

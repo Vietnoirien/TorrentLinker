@@ -40,15 +40,15 @@ def start_reseed(qbit: Qbit, store: Store, item: LocalItem, meta: TorrentMeta, m
     if qbit.torrent(meta.infohash) is not None:
         raise AlreadyInClient(meta.name)
     h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
+    unwanted = set(match.unwanted)
+    store.start_verification(h, item.path, meta.infohash, expected_progress(meta, unwanted))
     for old, new in rename_plan(match, set(meta.files)):
         qbit.rename_file(h, old, new)
-    unwanted = set(match.unwanted)
     if unwanted:
         indexes = [i for i, path in enumerate(meta.files) if path in unwanted]
         qbit.set_file_priority(h, indexes, 0)
-    required = expected_progress(meta, unwanted)
-    store.start_verification(h, item.path, meta.infohash, required)
     qbit.recheck(h)
+    store.mark_rechecked(h)
     return h
 
 
@@ -66,13 +66,12 @@ def check_verifications(
 ) -> dict[Path, Outcome]:
     """Settle every finished Verification; return outcomes by Local Item path."""
     outcomes: dict[Path, Outcome] = {}
-    for t in qbit.torrents():
-        if VERIFYING not in t.tags:
-            continue
+    for t in qbit.torrents(tag=VERIFYING):
         record = store.verification(t.hash)
-        if record is None:  # interrupted before the check was requested
-            store.start_verification(t.hash, t.save_path / t.name, t.hash)
-            qbit.recheck(t.hash)
+        if record is None or record.rechecked_at is None:
+            # Reseed interrupted before its check was requested: undo it, the user can retry.
+            qbit.remove(t.hash)
+            store.end_verification(t.hash)
             continue
         item_path, candidate_key = record.item_path, record.candidate_key
         if t.state in CHECKING_STATES:
@@ -89,3 +88,9 @@ def check_verifications(
             store.reject(item_path, candidate_key, f"Verification failed at {t.progress:.1%}")
             outcomes[item_path] = Outcome(t.hash, verified=False, progress=t.progress)
     return outcomes
+
+
+def pending_verifications(qbit: Qbit, store: Store) -> list[Path]:
+    """Local Items whose Reseed is still being verified."""
+    records = (store.verification(t.hash) for t in qbit.torrents(tag=VERIFYING))
+    return [r.item_path for r in records if r is not None]

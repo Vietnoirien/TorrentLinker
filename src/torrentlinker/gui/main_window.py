@@ -22,7 +22,7 @@ from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
 from torrentlinker.library import build_library
 from torrentlinker.qbit import QbitApi
-from torrentlinker.reseed import Outcome, check_verifications
+from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
 from torrentlinker.review import MatchRules
 from torrentlinker.store import Store
 
@@ -65,11 +65,12 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
         self.statusBar().showMessage(self.tr("Ready"))
 
-        self.verifying: set[Path] = set()
         self._checking = False
         self.verify_timer = QTimer(self)
         self.verify_timer.setInterval(3000)
         self.verify_timer.timeout.connect(self.check_verifications)
+        if get_secret(QBIT_PASSWORD) or settings_path.exists():
+            QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
 
     def qbit(self) -> QbitApi:
         q = self.settings.qbit
@@ -125,7 +126,6 @@ class MainWindow(QMainWindow):
     # Verification ----------------------------------------------------------
 
     def _reseed_started(self, path: Path) -> None:
-        self.verifying.add(path)
         self.library_model.set_status(path, self.tr("Verifying…"))
         self.verify_timer.start()
 
@@ -134,22 +134,29 @@ class MainWindow(QMainWindow):
             return
         self._checking = True
         qbit, store = self.qbit(), self.store
-        run_in_background(
-            lambda: check_verifications(qbit, store), self._verified, self._verify_error
-        )
 
-    def _verified(self, outcomes: dict[Path, Outcome]) -> None:
+        def work() -> tuple[dict[Path, Outcome], list[Path]]:
+            return check_verifications(qbit, store), pending_verifications(qbit, store)
+
+        run_in_background(work, self._verified, self._verify_error)
+
+    def _verified(self, result: tuple[dict[Path, Outcome], list[Path]]) -> None:
         self._checking = False
+        outcomes, pending = result
         for path, outcome in outcomes.items():
-            self.verifying.discard(path)
             if outcome.verified:
                 text = self.tr("Reseeded")
             else:
                 text = self.tr("Verification failed at {0}").format(f"{outcome.progress:.1%}")
             self.library_model.set_status(path, text)
-        if not self.verifying:
+        for path in pending:
+            self.library_model.set_status(path, self.tr("Verifying…"))
+        if pending:
+            self.verify_timer.start()
+        else:
             self.verify_timer.stop()
 
     def _verify_error(self, error: Exception) -> None:
         self._checking = False
+        self.verify_timer.stop()
         self.statusBar().showMessage(self.tr("Could not check Verifications: {0}").format(error))
