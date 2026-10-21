@@ -6,6 +6,7 @@ view happens in the caller through Path Mappings.
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 from typing import Protocol
@@ -45,22 +46,42 @@ class Qbit(Protocol):
     def remove_tags(self, hash: str, tags: list[str]) -> None: ...
 
 
-class QbitApi:
-    """Adapter over qBittorrent's WebUI API (4.5+ and 5.x)."""
+API_KEY_PATTERN = re.compile(r"^qbt_[A-Za-z0-9]{28}$")
 
-    def __init__(self, host: str, username: str, password: str) -> None:
+
+def is_api_key(text: str) -> bool:
+    """Whether `text` looks like a qBittorrent WebUI API key (qBittorrent 5.2+)."""
+    return bool(API_KEY_PATTERN.match(text))
+
+
+class QbitApi:
+    """Adapter over qBittorrent's WebUI API (4.5+ and 5.x).
+
+    With an API key (qBittorrent 5.2+) every request carries `Authorization: Bearer`
+    and there is no login; otherwise the username and password open a session.
+    """
+
+    def __init__(self, host: str, username: str, password: str, api_key: str = "") -> None:
         self._client = qbittorrentapi.Client(
             host=host,
-            username=username,
-            password=password,
+            username=None if api_key else username,
+            password=None if api_key else password,
+            api_key=api_key or None,
             VERIFY_WEBUI_CERTIFICATE=False,
             REQUESTS_ARGS={"timeout": (5, 30)},
         )
 
     def check(self) -> str:
-        """Log in and return the qBittorrent version; raises on failure."""
+        """Log in (or validate the API key) and return the qBittorrent version."""
         self._client.auth_log_in()
         return str(self._client.app_version())
+
+    def rotate_api_key(self) -> str:
+        """Ask qBittorrent (5.2+) for a new API key, replacing any previous one."""
+        return str(self._client.app_rotate_api_key()["apiKey"])
+
+    def delete_api_key(self) -> None:
+        self._client.app_delete_api_key()
 
     def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
         return [self._torrent(t, with_files) for t in self._client.torrents_info(tag=tag)]

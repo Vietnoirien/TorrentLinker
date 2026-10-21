@@ -40,13 +40,14 @@ from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import class_label
 from torrentlinker.indexer import Caps, Indexer
-from torrentlinker.qbit import QbitApi
+from torrentlinker.qbit import QbitApi, is_api_key
 from torrentlinker.queries import default_categories
 from torrentlinker.zen import ZenClass, ZenProfile
 
 log = logging.getLogger(__name__)
 
 QBIT_PASSWORD = "qbit-password"
+QBIT_API_KEY = "qbit-api-key"
 INDEXER_API_KEY = "indexer-api-key"
 TMDB_API_KEY = "tmdb-api-key"
 
@@ -209,16 +210,33 @@ class SettingsDialog(QDialog):
         self.qbit_host = QLineEdit(self.settings.qbit.host)
         self.qbit_user = QLineEdit(self.settings.qbit.username)
         self.qbit_password = self._secret_field(QBIT_PASSWORD)
+        self.qbit_api_key = self._secret_field(QBIT_API_KEY)
+        self.qbit_api_key.setPlaceholderText(self.tr("qbt_… (qBittorrent 5.2 or later)"))
+        self.qbit_api_key.setToolTip(
+            self.tr(
+                "Generate it in qBittorrent: Options → WebUI → API key. When filled, it is "
+                "used instead of the username and password; leave it empty on older versions."
+            )
+        )
         test = QPushButton(self.tr("Test connection"))
         test.clicked.connect(self._test_qbit)
         form.addRow(self.tr("WebUI address"), self.qbit_host)
         form.addRow(self.tr("Username"), self.qbit_user)
         form.addRow(self.tr("Password"), self.qbit_password)
+        form.addRow(self.tr("API key"), self.qbit_api_key)
         form.addRow("", test)
         return box
 
     def _test_qbit(self) -> None:
-        api = QbitApi(self.qbit_host.text(), self.qbit_user.text(), self.qbit_password.text())
+        key = self.qbit_api_key.text().strip()
+        if key and not is_api_key(key):
+            QMessageBox.warning(
+                self,
+                self.tr("qBittorrent"),
+                self.tr("An API key looks like qbt_ followed by 28 letters and digits."),
+            )
+            return
+        api = QbitApi(self.qbit_host.text(), self.qbit_user.text(), self.qbit_password.text(), key)
         run_in_background(
             api.check,
             lambda v: QMessageBox.information(
@@ -582,6 +600,7 @@ class SettingsDialog(QDialog):
         """Write the keys that changed; a keyring problem must not lose the other settings."""
         fields = {
             QBIT_PASSWORD: self.qbit_password.text(),
+            QBIT_API_KEY: self.qbit_api_key.text().strip(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
         }

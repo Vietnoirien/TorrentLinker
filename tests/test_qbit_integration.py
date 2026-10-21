@@ -147,3 +147,23 @@ def test_same_size_but_different_data_fails_and_keeps_the_file(
     assert qbit.torrent(h) is None
     assert digest(item.path) == before
     assert store.rejections(item.path)
+
+
+def test_an_api_key_authenticates_and_a_wrong_one_is_refused(qbit: QbitApi) -> None:
+    import qbittorrentapi
+
+    from torrentlinker.qbit import is_api_key
+
+    version = tuple(int(x) for x in qbit.check().lstrip("v").split(".")[:2])
+    if version < (5, 2):
+        pytest.skip("API keys need qBittorrent 5.2+")
+    key = qbit.rotate_api_key()
+    try:
+        assert is_api_key(key)
+        assert QbitApi(HOST, "", "", api_key=key).check() == qbit.check()
+        # The sandbox lets localhost in without login, but a key that is sent is checked.
+        wrong = "qbt_" + ("A" if key[4] != "A" else "B") * 28
+        with pytest.raises(qbittorrentapi.exceptions.APIError):
+            QbitApi(HOST, "", "", api_key=wrong).check()
+    finally:
+        qbit.delete_api_key()

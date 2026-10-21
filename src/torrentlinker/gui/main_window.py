@@ -29,6 +29,7 @@ from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_l
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.settings_dialog import (
     INDEXER_API_KEY,
+    QBIT_API_KEY,
     QBIT_PASSWORD,
     TMDB_API_KEY,
     SettingsDialog,
@@ -57,7 +58,7 @@ class MainWindow(QMainWindow):
         self.settings_path = settings_path
         self.store = store
         self._indexer: Indexer | None = None
-        self._qbit: tuple[tuple[str, str, str], QbitApi] | None = None
+        self._qbit: tuple[tuple[str, str, str, str], QbitApi] | None = None
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
 
@@ -150,7 +151,7 @@ class MainWindow(QMainWindow):
 
     def qbit(self) -> MappedQbit:
         q = self.settings.qbit
-        key = (q.host, q.username, get_secret(QBIT_PASSWORD))
+        key = (q.host, q.username, get_secret(QBIT_PASSWORD), get_secret(QBIT_API_KEY))
         if self._qbit is None or self._qbit[0] != key:
             self._qbit = (key, QbitApi(*key))
         mappings = [f.mapping for f in self.settings.library_folders if f.mapping]

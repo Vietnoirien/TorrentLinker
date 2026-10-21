@@ -42,3 +42,11 @@ def test_download_folders_and_indexer_categories_survive_a_save_and_load(tmp_pat
 
     assert loaded.indexer_categories == s.indexer_categories
     assert loaded.download_folders == s.download_folders
+
+
+def test_qbittorrent_api_keys_are_recognised() -> None:
+    from torrentlinker.qbit import is_api_key
+
+    assert is_api_key("qbt_" + "aB3" * 9 + "x")
+    assert not is_api_key("qbt_short")
+    assert not is_api_key("password")
