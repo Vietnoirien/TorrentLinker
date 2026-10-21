@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 from keyring.errors import KeyringError
@@ -250,18 +251,37 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.folders)
 
         row = QHBoxLayout()
+        self.typed_folder = QLineEdit()
+        self.typed_folder.setPlaceholderText(self.tr("…or type a folder path and press Enter"))
+        self.typed_folder.returnPressed.connect(self._add_typed_folder)
         add = QPushButton(self.tr("Add folder…"))
         add.clicked.connect(self._pick_folder)
         remove = QPushButton(self.tr("Remove"))
         remove.clicked.connect(lambda: self.folders.removeRow(self.folders.currentRow()))
         row.addWidget(add)
+        row.addWidget(self.typed_folder, 1)
         row.addWidget(remove)
-        row.addStretch()
         layout.addLayout(row)
         return box
 
+    def _add_typed_folder(self) -> None:
+        path = Path(self.typed_folder.text().strip()).expanduser()
+        if not path.is_dir():
+            QMessageBox.warning(
+                self, self.tr("Library Folders"), self.tr("Not a folder: {0}").format(path)
+            )
+            return
+        self._add_folder_row(LibraryFolder(path))
+        self.typed_folder.clear()
+
     def _pick_folder(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, self.tr("Choose a Library Folder"))
+        options = QFileDialog.Option.ShowDirsOnly
+        if sys.platform.startswith("linux"):
+            # The desktop-portal picker can hand back an empty path under Wayland.
+            options |= QFileDialog.Option.DontUseNativeDialog
+        path = QFileDialog.getExistingDirectory(
+            self, self.tr("Choose a Library Folder"), str(Path.home()), options
+        )
         log.info("folder picked: %r", path)
         if path:
             self._add_folder_row(LibraryFolder(Path(path)))

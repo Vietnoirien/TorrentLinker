@@ -56,3 +56,14 @@ def test_library_state_filter_keeps_only_the_chosen_state(qtbot, tmp_path: Path)
     window.state_filter.setCurrentIndex(window.state_filter.findText("Orphan"))
 
     assert window.library_proxy.rowCount() == 1
+
+
+def test_a_typed_folder_path_is_added_to_the_library_folders(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.gui.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(Settings())
+    qtbot.addWidget(dialog)
+    dialog.typed_folder.setText(str(tmp_path))
+    dialog._add_typed_folder()
+
+    assert [f.path for f in dialog._read_folders()] == [tmp_path]
