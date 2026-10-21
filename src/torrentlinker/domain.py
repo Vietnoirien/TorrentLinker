@@ -78,3 +78,18 @@ class Torrent:
     tags: frozenset[str] = frozenset()
     progress: float = 1.0
     state: str = ""
+    tracker: str = ""  # the current tracker's URL
+    swarm_seeders: int = 0  # seeders the tracker reports, the user included
+    seeding_time: float = 0.0  # seconds this client has seeded it
+    size: int = 0  # total size, also known when files were not fetched
+
+    @property
+    def total_size(self) -> int:
+        return self.size or sum(self.files.values())
+
+    @property
+    def is_seeding(self) -> bool:
+        return self.progress >= 1.0 and self.state in SEEDING_STATES
+
+
+SEEDING_STATES = {"uploading", "stalledUP", "forcedUP", "queuedUP", "checkingUP"}

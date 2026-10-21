@@ -67,8 +67,8 @@ class MappedQbit:
     def _local(self, t: Torrent) -> Torrent:
         return replace(t, save_path=Path(self._mapper.to_local(str(t.save_path))))
 
-    def torrents(self, tag: str | None = None) -> list[Torrent]:
-        return [self._local(t) for t in self._inner.torrents(tag=tag)]
+    def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
+        return [self._local(t) for t in self._inner.torrents(tag=tag, with_files=with_files)]
 
     def torrent(self, hash: str) -> Torrent | None:
         t = self._inner.torrent(hash)

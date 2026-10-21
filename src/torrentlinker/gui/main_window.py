@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelection, Qt, QTimer
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSplitter,
     QTableView,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +34,7 @@ from torrentlinker.gui.settings_dialog import (
     SettingsDialog,
 )
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.gui.zen_view import ZenTab
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry, auto_searchable, build_library
 from torrentlinker.matching import MatchRules
@@ -40,6 +43,7 @@ from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
 from torrentlinker.review import CheckedCandidate, check_candidates, search_candidates
+from torrentlinker.seeding import Seeding, seeding
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
 
@@ -129,7 +133,11 @@ class MainWindow(QMainWindow):
         splitter.addWidget(library_pane)
         splitter.addWidget(self.review)
         splitter.setSizes([600, 600])
-        self.setCentralWidget(splitter)
+        self.zen_tab = ZenTab(self.seeding_loader)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.zen_tab, self.tr("Zen"))
+        self.tabs.addTab(splitter, self.tr("Library"))
+        self.setCentralWidget(self.tabs)
         self.statusBar().showMessage(self.tr("Ready"))
 
         self._checking = False
@@ -138,6 +146,7 @@ class MainWindow(QMainWindow):
         self.verify_timer.timeout.connect(self.check_verifications)
         if settings_path.exists():
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
+            QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
 
     def qbit(self) -> MappedQbit:
         q = self.settings.qbit
@@ -156,6 +165,11 @@ class MainWindow(QMainWindow):
         if self._indexer is None or (self._indexer.url, self._indexer.api_key) != (url, key):
             self._indexer = Indexer(url, key, cache=self.store)
         return self._indexer
+
+    def seeding_loader(self) -> Callable[[], Seeding]:
+        """Build on the GUI thread the work that reads the Seeding view from qBittorrent."""
+        qbit, profile, url = self.qbit(), self.settings.zen, self.settings.indexer.url
+        return lambda: seeding(profile, qbit.torrents(with_files=False), url)
 
     def default_query(self, entry: LibraryEntry) -> str:
         kind = entry.folder.kind
@@ -191,6 +205,7 @@ class MainWindow(QMainWindow):
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
             self._fill_folder_filter()
+            self.zen_tab.seeding_view.refresh()
         else:
             log.info("settings dialog cancelled")
 

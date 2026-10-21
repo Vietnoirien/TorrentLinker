@@ -14,6 +14,7 @@ from torrentlinker.matching import (
     IgnoreList,
     MatchRules,
 )
+from torrentlinker.zen import ZenClass, ZenProfile
 
 
 @dataclass
@@ -54,6 +55,7 @@ class Settings:
         return tuple(self.kind_categories.get(kind, []))
 
     library_folders: list[LibraryFolder] = field(default_factory=list)
+    zen: ZenProfile = field(default_factory=ZenProfile)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +66,7 @@ class Settings:
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
+            "zen": asdict(self.zen),
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -82,6 +85,7 @@ class Settings:
                 for k, v in data.get("kind_categories", {}).items()
             },
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
+            zen=_zen_from_json(data.get("zen", {})),
         )
 
 
@@ -100,4 +104,13 @@ def _folder_from_json(d: dict) -> LibraryFolder:  # type: ignore[type-arg]
         depth=int(d.get("depth", 1)),
         kind=ContentKind(d.get("kind", ContentKind.OTHER.value)),
         mapping=PathMapping(**d["mapping"]) if d.get("mapping") else None,
+    )
+
+
+def _zen_from_json(d: dict) -> ZenProfile:  # type: ignore[type-arg]
+    return ZenProfile(
+        zen_class=ZenClass(d.get("zen_class", ZenClass.TANKER.value)),
+        tree_bonus=float(d.get("tree_bonus", 0.0)),
+        seed_hours=float(d.get("seed_hours", 24.0)),
+        torrent_cap=int(d.get("torrent_cap", 0)),
     )

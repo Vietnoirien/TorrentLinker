@@ -23,7 +23,7 @@ class FakeQbit:
 
     # Qbit port ---------------------------------------------------------------
 
-    def torrents(self, tag: str | None = None) -> list[Torrent]:
+    def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
         return [t for t in self.by_hash.values() if tag is None or tag in t.tags]
 
     def torrent(self, hash: str) -> Torrent | None:

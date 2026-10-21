@@ -36,9 +36,11 @@ from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.gui.zen_view import class_label
 from torrentlinker.indexer import Caps, Indexer
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import default_categories
+from torrentlinker.zen import ZenClass, ZenProfile
 
 log = logging.getLogger(__name__)
 
@@ -83,6 +85,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(
             self._page(self._search_box(), self._matching_box()), self.tr("Search && Matching")
         )
+        self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
 
         buttons = QDialogButtonBox(
@@ -147,6 +150,51 @@ class SettingsDialog(QDialog):
         self.language.setToolTip(self.tr("Takes effect after restarting the app"))
         form.addRow(self.tr("Language"), self.language)
         return box
+
+    # Zen -------------------------------------------------------------------
+
+    def _zen_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Zen Profile"))
+        form = QFormLayout(box)
+        z = self.settings.zen
+        self.zen_class = QComboBox()
+        for c in ZenClass:
+            self.zen_class.addItem(class_label(c), c)
+        self.zen_class.setCurrentIndex(list(ZenClass).index(z.zen_class))
+        form.addRow(self.tr("Class"), self.zen_class)
+        self.tree_bonus = QDoubleSpinBox()
+        self.tree_bonus.setRange(0, 5)
+        self.tree_bonus.setDecimals(1)
+        self.tree_bonus.setSuffix(" %")
+        self.tree_bonus.setValue(z.tree_bonus * 100)
+        self.tree_bonus.setToolTip(
+            self.tr("Bonus of the progression tree already unlocked on c411")
+        )
+        form.addRow(self.tr("Tree bonus unlocked"), self.tree_bonus)
+        self.seed_hours = QDoubleSpinBox()
+        self.seed_hours.setRange(0, 24)
+        self.seed_hours.setDecimals(1)
+        self.seed_hours.setSuffix(self.tr(" h"))
+        self.seed_hours.setValue(z.seed_hours)
+        self.seed_hours.setToolTip(
+            self.tr("Hours a day qBittorrent runs; under 30 minutes earns nothing")
+        )
+        form.addRow(self.tr("Seed hours per day"), self.seed_hours)
+        self.torrent_cap = QSpinBox()
+        self.torrent_cap.setRange(0, 100_000)
+        self.torrent_cap.setSpecialValueText(self.tr("No cap"))
+        self.torrent_cap.setValue(z.torrent_cap)
+        self.torrent_cap.setToolTip(self.tr("Most torrents you want to seed at once"))
+        form.addRow(self.tr("Torrent cap"), self.torrent_cap)
+        return box
+
+    def _read_zen(self) -> ZenProfile:
+        return ZenProfile(
+            zen_class=ZenClass(self.zen_class.currentData()),  # Qt hands enum data back as str
+            tree_bonus=self.tree_bonus.value() / 100,
+            seed_hours=self.seed_hours.value(),
+            torrent_cap=self.torrent_cap.value(),
+        )
 
     # qBittorrent -----------------------------------------------------------
 
@@ -414,6 +462,7 @@ class SettingsDialog(QDialog):
         s.indexer.url = self.indexer_url.text().strip()
         s.library_folders = self._read_folders()
         s.kind_categories = self._read_categories()
+        s.zen = self._read_zen()
         s.matching.size_tolerance = self.tolerance.value() / 100
         s.matching.min_partial_coverage = self.coverage.value() / 100
         s.matching.ignore_patterns = [

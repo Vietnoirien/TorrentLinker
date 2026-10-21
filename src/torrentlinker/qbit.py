@@ -17,7 +17,10 @@ from torrentlinker.torrent_meta import read_torrent
 
 
 class Qbit(Protocol):
-    def torrents(self, tag: str | None = None) -> list[Torrent]: ...
+    def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
+        """Torrents, optionally without their file lists (much faster)."""
+        ...
+
     def torrent(self, hash: str) -> Torrent | None: ...
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         """Add stopped, with automatic management off and the original layout; return hash."""
@@ -59,15 +62,17 @@ class QbitApi:
         self._client.auth_log_in()
         return str(self._client.app_version())
 
-    def torrents(self, tag: str | None = None) -> list[Torrent]:
-        return [self._torrent(t) for t in self._client.torrents_info(tag=tag)]
+    def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
+        return [self._torrent(t, with_files) for t in self._client.torrents_info(tag=tag)]
 
     def torrent(self, hash: str) -> Torrent | None:
         found = self._client.torrents_info(torrent_hashes=hash)
         return self._torrent(found[0]) if found else None
 
-    def _torrent(self, t: qbittorrentapi.TorrentDictionary) -> Torrent:
-        files = {f.name: int(f.size) for f in self._client.torrents_files(t.hash)}
+    def _torrent(self, t: qbittorrentapi.TorrentDictionary, with_files: bool = True) -> Torrent:
+        files = (
+            {f.name: int(f.size) for f in self._client.torrents_files(t.hash)} if with_files else {}
+        )
         return Torrent(
             hash=t.hash,
             name=t.name,
@@ -76,6 +81,10 @@ class QbitApi:
             tags=frozenset(x.strip() for x in t.tags.split(",") if x.strip()),
             progress=float(t.progress),
             state=str(t.state),
+            tracker=str(t.get("tracker", "")),
+            swarm_seeders=max(int(str(t.get("num_complete", 0))), 0),
+            seeding_time=float(str(t.get("seeding_time", 0))),
+            size=int(str(t.get("total_size", 0) or t.get("size", 0))),
         )
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:

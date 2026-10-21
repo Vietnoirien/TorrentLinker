@@ -18,3 +18,13 @@ def test_settings_survive_a_save_and_load(tmp_path: Path) -> None:
     assert loaded.library_folders == s.library_folders
     assert loaded.categories(ContentKind.MOVIE) == (2000, 2030)
     assert loaded.matching.ignore_patterns == ["*.nfo"]
+
+
+def test_zen_profile_survives_a_save_and_load(tmp_path: Path) -> None:
+    from torrentlinker.zen import ZenClass, ZenProfile
+
+    s = Settings()
+    s.zen = ZenProfile(ZenClass.SWARM_KEEPER, tree_bonus=0.03, seed_hours=18, torrent_cap=400)
+    s.save(tmp_path / "settings.json")
+
+    assert Settings.load(tmp_path / "settings.json").zen == s.zen
