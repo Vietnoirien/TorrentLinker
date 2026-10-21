@@ -273,11 +273,18 @@ def test_whole_catalogue_fetch_can_be_paused_and_offers_to_resume(qtbot, tmp_pat
     store = Store(tmp_path / "s.db")
     window = MainWindow(s, tmp_path / "settings.json", store)
     qtbot.addWidget(window)
+    serve = fake.handler
+
+    def pause_after_first_page(request):  # type: ignore[no-untyped-def]
+        assert window.catalogue_runner is not None
+        window.catalogue_runner.stop()  # what the Pause button does; only sets a flag
+        return serve(request)
+
+    fake.handler = pause_after_first_page  # type: ignore[method-assign]
     window._indexer = Indexer(
         s.indexer.url, "K", http=fake.client(), clock=clock.time, sleep=clock.sleep
     )
     box = window.zen_tab.catalogue
-    window._catalogue_progress = lambda p: window.pause_catalogue()  # type: ignore[method-assign]
 
     with qtbot.waitSignal(
         window.band.catalogue_changed, timeout=5000, check_params_cb=lambda t: "old" in t

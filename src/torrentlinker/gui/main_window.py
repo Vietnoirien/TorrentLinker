@@ -190,7 +190,7 @@ class MainWindow(QMainWindow):
 
         self._checking = False
         self.catalogue_runner: CatalogueRunner | None = None
-        self._crawl_position = (0, 0)
+        self._crawl_position = [0, 0]  # category being crawled, of how many (worker writes)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
         self._after_catalogue: Callable[[], None] | None = None
@@ -416,6 +416,7 @@ class MainWindow(QMainWindow):
             return
         indexer, store = self.indexer(), self.store
         known = dict(self.settings.indexer_categories)
+        position = self._crawl_position
 
         def work(stop: Callable[[], bool], progress: Progress) -> None:
             categories = known or {
@@ -427,7 +428,7 @@ class MainWindow(QMainWindow):
             for i, category in enumerate(wanted, 1):
                 if stop():
                     return
-                self._crawl_position = (i, len(wanted))
+                position[:] = [i, len(wanted)]
                 update_categories(
                     indexer,
                     store,
@@ -438,7 +439,7 @@ class MainWindow(QMainWindow):
                     categories=categories,
                 )
 
-        self._crawl_position = (0, 0)
+        self._crawl_position[:] = [0, 0]
         self.zen_tab.catalogue.set_state(True, False)
         self._run_catalogue(work)
 
