@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import os
 import shutil
-from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -181,14 +181,18 @@ def catalogue_candidates(
     categories: Mapping[int, IndexerCategory],
     in_client: set[str],
     disk_of: Callable[[Path], Hashable],
+    only: Collection[int] | None = None,
 ) -> list[PlanCandidate]:
-    """Catalogue torrents a Plan may download: not in qBittorrent, alive, and in a
-    category that has a Download Folder."""
+    """Catalogue torrents a Plan may download: not in qBittorrent, alive, in a category
+    that has a Download Folder and, if `only` is given, in one of those categories (a
+    category includes its subcategories)."""
     resolved: dict[int | None, Path | None] = {}
     disks: dict[Path, Hashable] = {}
     result = []
     for r in rows:
         if r.infohash.lower() in in_client or r.seeders < 1 or r.category is None:
+            continue
+        if only is not None and not _within(r.category, only, categories):
             continue
         if r.category not in resolved:
             resolved[r.category] = folders.resolve(r.category, categories)
@@ -210,6 +214,20 @@ def catalogue_candidates(
             )
         )
     return result
+
+
+def _within(
+    category: int, chosen: Collection[int], categories: Mapping[int, IndexerCategory]
+) -> bool:
+    seen: set[int] = set()
+    current: int | None = category
+    while current is not None and current not in seen:
+        if current in chosen:
+            return True
+        seen.add(current)
+        known = categories.get(current)
+        current = known.parent if known else None
+    return False
 
 
 # Disks ------------------------------------------------------------------------

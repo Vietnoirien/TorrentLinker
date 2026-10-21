@@ -13,12 +13,14 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -253,6 +255,7 @@ class PlanView(QGroupBox):
 
     make_requested = Signal()
     send_requested = Signal()
+    categories_changed = Signal(object)  # set[int] | None
 
     def __init__(self) -> None:
         super().__init__(self.tr("Plan"))
@@ -267,6 +270,15 @@ class PlanView(QGroupBox):
         )
         self.summary.setWordWrap(True)
         top.addWidget(self.summary, 1)
+        self.categories_button = QToolButton()
+        self.categories_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.categories_button.setToolTip(self.tr("Categories this Plan draws from"))
+        self.categories_menu = QMenu(self.categories_button)
+        self.categories_button.setMenu(self.categories_menu)
+        self.category_options: list[tuple[int, str, bool]] = []
+        self.chosen_categories: set[int] | None = None
+        top.addWidget(self.categories_button)
+        self._refresh_categories_label()
         self.make_button = QPushButton(self.tr("Make a Plan"))
         self.make_button.clicked.connect(self.make_requested)
         top.addWidget(self.make_button)
@@ -296,6 +308,49 @@ class PlanView(QGroupBox):
         self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
+
+    # Categories ------------------------------------------------------------
+
+    def set_category_options(
+        self, options: list[tuple[int, str, bool]], chosen: set[int] | None
+    ) -> None:
+        """Offer these (id, name, is_subcategory) categories; `chosen` None means all."""
+        self.category_options = options
+        self.chosen_categories = chosen
+        self.categories_menu.clear()
+        everything = self.categories_menu.addAction(self.tr("All categories"))
+        everything.setCheckable(True)
+        everything.setChecked(chosen is None)
+        everything.triggered.connect(lambda: self._choose(None))
+        self.categories_menu.addSeparator()
+        for cid, name, sub in options:
+            action = self.categories_menu.addAction(("    " if sub else "") + name)
+            action.setCheckable(True)
+            action.setChecked(chosen is not None and cid in chosen)
+            action.toggled.connect(lambda on, cid=cid: self._toggle(cid, on))
+        self._refresh_categories_label()
+
+    def _toggle(self, cid: int, on: bool) -> None:
+        chosen = set(self.chosen_categories or ())
+        chosen.add(cid) if on else chosen.discard(cid)
+        self._choose(chosen or None)
+
+    def _choose(self, chosen: set[int] | None) -> None:
+        self.set_category_options(self.category_options, chosen)
+        self.categories_changed.emit(chosen)
+
+    def _refresh_categories_label(self) -> None:
+        chosen = self.chosen_categories
+        if chosen is None:
+            text = self.tr("All categories")
+        else:
+            names = [name for cid, name, _sub in self.category_options if cid in chosen]
+            text = (
+                ", ".join(names)
+                if len(names) <= 2
+                else self.tr("{0} categories").format(len(names))
+            )
+        self.categories_button.setText(text + " ▾")
 
     def busy(self, busy: bool, text: str | None = None) -> None:
         self.make_button.setEnabled(not busy)

@@ -89,6 +89,30 @@ def test_catalogue_torrents_in_qbittorrent_or_without_download_folder_are_skippe
     assert found[0].folder == Path("/dl/films") and found[0].disk == "disk"
 
 
+def test_a_plan_can_be_limited_to_chosen_categories_parents_including_their_subcategories() -> None:
+    categories = {
+        2000: IndexerCategory("Films"),
+        2030: IndexerCategory("Films étrangers", parent=2000),
+        5000: IndexerCategory("Séries"),
+        7000: IndexerCategory("Ebook"),
+    }
+    rows = [
+        CatalogueRow("aa" * 20, "film", GB, 5, 2000, "u", "d", 0),
+        CatalogueRow("bb" * 20, "foreign film", GB, 5, 2030, "u", "d", 0),
+        CatalogueRow("cc" * 20, "series", GB, 5, 5000, "u", "d", 0),
+        CatalogueRow("dd" * 20, "ebook", GB, 5, 7000, "u", "d", 0),
+    ]
+    folders = DownloadFolders(default="/dl")
+
+    def titles(only: set[int] | None) -> list[str]:
+        found = catalogue_candidates(rows, folders, categories, set(), lambda p: "d", only)
+        return [c.title for c in found]
+
+    assert titles(None) == ["film", "foreign film", "series", "ebook"]
+    assert titles({2000, 7000}) == ["film", "foreign film", "ebook"]
+    assert titles({2030}) == ["foreign film"]
+
+
 def test_disk_budget_is_free_space_minus_a_margin_of_the_disk_shared_by_its_folders(
     tmp_path: Path,
 ) -> None:

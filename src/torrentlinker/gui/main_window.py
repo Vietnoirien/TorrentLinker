@@ -195,6 +195,8 @@ class MainWindow(QMainWindow):
         self.catalogue_runner: CatalogueRunner | None = None
         self._crawl_position = [0, 0]  # category being crawled, of how many (worker writes)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
+        self.zen_tab.plan_view.categories_changed.connect(self._plan_categories_changed)
+        self.offer_plan_categories()
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
         self._after_catalogue: Callable[[], None] | None = None
         self.zen_tab.catalogue.start_requested.connect(self.crawl_catalogue)
@@ -267,6 +269,25 @@ class MainWindow(QMainWindow):
 
         run_in_background(self.plan_maker(), done, self.zen_tab.plan_view.failed)
 
+    def offer_plan_categories(self) -> None:
+        """Let the Plan pick among the categories that have a Download Folder."""
+        s = self.settings
+        options = []
+        for cid, cat in sorted(s.indexer_categories.items()):
+            if cat.parent is None and s.download_folders.resolve(cid, s.indexer_categories):
+                options.append((cid, cat.name, False))
+                options += [
+                    (sid, sub.name, True)
+                    for sid, sub in sorted(s.indexer_categories.items())
+                    if sub.parent == cid and s.download_folders.resolve(sid, s.indexer_categories)
+                ]
+        chosen = set(s.plan_categories) if s.plan_categories is not None else None
+        self.zen_tab.plan_view.set_category_options(options, chosen)
+
+    def _plan_categories_changed(self, chosen: set[int] | None) -> None:
+        self.settings.plan_categories = sorted(chosen) if chosen is not None else None
+        self.settings.save(self.settings_path)
+
     def plan_maker(self) -> Callable[[], Plan]:
         """Build on the GUI thread the work that makes a Plan (no Indexer request)."""
         s = self.settings
@@ -276,6 +297,7 @@ class MainWindow(QMainWindow):
             dict(s.indexer_categories),
             s.free_space_margin,
         )
+        only = set(s.plan_categories) if s.plan_categories is not None else None
         # Orphans whose Matches searches found, for Reseed rows (read on the GUI thread)
         found = [
             (e, list(self.review.cache[e.item.path]))
@@ -289,7 +311,7 @@ class MainWindow(QMainWindow):
             in_client = {t.hash.lower() for t in torrents}
             candidates = reseed_candidates(profile, found, in_client, view.active)
             candidates += catalogue_candidates(
-                store.catalogue(), folders, categories, in_client, disk_of
+                store.catalogue(), folders, categories, in_client, disk_of, only
             )
             budgets = disk_budgets({c.folder for c in candidates if c.folder}, margin)
             slots = max(0, profile.torrent_cap - view.count) if profile.torrent_cap else None
@@ -557,6 +579,7 @@ class MainWindow(QMainWindow):
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
             self._fill_folder_filter()
+            self.offer_plan_categories()
             self.zen_tab.seeding_view.refresh()
         else:
             log.info("settings dialog cancelled")

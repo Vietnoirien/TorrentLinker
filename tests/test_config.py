@@ -50,3 +50,12 @@ def test_qbittorrent_api_keys_are_recognised() -> None:
     assert is_api_key("qbt_" + "aB3" * 9 + "x")
     assert not is_api_key("qbt_short")
     assert not is_api_key("password")
+
+
+def test_the_categories_chosen_for_plans_survive_a_save_and_load(tmp_path: Path) -> None:
+    s = Settings()
+    assert s.plan_categories is None  # every category by default
+    s.plan_categories = [2000, 7000]
+    s.save(tmp_path / "settings.json")
+
+    assert Settings.load(tmp_path / "settings.json").plan_categories == [2000, 7000]

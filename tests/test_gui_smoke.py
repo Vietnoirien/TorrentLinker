@@ -436,3 +436,27 @@ def test_plan_lists_reseeds_first_and_sends_them_through_verification(
     [t] = qbit.torrents()
     assert VERIFYING in t.tags and t.save_path == lib
     assert qbit.rechecked == [t.hash]
+
+
+def test_the_plan_offers_categories_with_a_download_folder_and_remembers_the_choice(
+    qtbot,
+    tmp_path: Path,  # type: ignore[no-untyped-def]
+) -> None:
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+
+    s = Settings()
+    s.indexer_categories = {
+        2000: IndexerCategory("Films"),
+        2030: IndexerCategory("Films étrangers", parent=2000),
+        7000: IndexerCategory("Ebook"),
+    }
+    s.download_folders = DownloadFolders({2000: str(tmp_path / "films")})
+    window = MainWindow(s, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    view = window.zen_tab.plan_view
+
+    assert [cid for cid, _name, _sub in view.category_options] == [2000, 2030]
+
+    view._toggle(2030, True)
+
+    assert Settings.load(tmp_path / "settings.json").plan_categories == [2030]
