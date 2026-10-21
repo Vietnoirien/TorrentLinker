@@ -291,7 +291,9 @@ class SettingsDialog(QDialog):
             mapped_cell = self.folders.item(r, COL_MAPPING)
             mapped = mapped_cell.text().strip() if mapped_cell else ""
             mapping = PathMapping(str(path), mapped) if mapped else None
-            result.append(LibraryFolder(path, depth.value(), kind.currentData(), mapping))
+            result.append(
+                LibraryFolder(path, depth.value(), ContentKind(kind.currentData()), mapping)
+            )
         return result
 
     # Search ----------------------------------------------------------------

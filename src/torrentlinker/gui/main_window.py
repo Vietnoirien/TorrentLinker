@@ -201,8 +201,9 @@ class MainWindow(QMainWindow):
         self._apply_filters()
 
     def _apply_filters(self) -> None:
+        state = self.state_filter.currentData()  # Qt hands enum data back as plain str
         self.library_proxy.set_filters(
-            self.state_filter.currentData(), self.folder_filter.currentData()
+            ItemState(state) if state else None, self.folder_filter.currentData()
         )
 
     def selected_entries(self) -> list[LibraryEntry]:

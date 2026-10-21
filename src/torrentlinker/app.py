@@ -29,10 +29,28 @@ def smoke_checks() -> None:
     print("smoke test OK")
 
 
+def show_unexpected_errors() -> None:
+    """Errors raised inside Qt callbacks would otherwise only reach the terminal."""
+    import traceback
+    from types import TracebackType
+
+    from PySide6.QtWidgets import QMessageBox
+
+    def hook(kind: type[BaseException], error: BaseException, tb: TracebackType | None) -> None:
+        details = "".join(traceback.format_exception(kind, error, tb))
+        print(details, file=sys.stderr)
+        box = QMessageBox(QMessageBox.Icon.Critical, "TorrentLinker", f"{kind.__name__}: {error}")
+        box.setDetailedText(details)
+        box.exec()
+
+    sys.excepthook = hook
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("TorrentLinker")
     app.setOrganizationName("TorrentLinker")
+    show_unexpected_errors()
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "assets" / "icon.png")))
     settings_path = data_dir() / "settings.json"
     settings = Settings.load(settings_path)
