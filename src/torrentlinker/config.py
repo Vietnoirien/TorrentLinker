@@ -61,6 +61,7 @@ class Settings:
     indexer_categories: dict[int, IndexerCategory] = field(default_factory=dict)
     download_folders: DownloadFolders = field(default_factory=DownloadFolders)
     uploads: int = 0  # the user's uploads, for the rough Reuploader estimate
+    free_space_margin: float = 0.10  # share of each disk a Plan leaves free
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,6 +74,7 @@ class Settings:
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
             "zen": asdict(self.zen),
             "uploads": self.uploads,
+            "free_space_margin": self.free_space_margin,
             "indexer_categories": {str(k): asdict(v) for k, v in self.indexer_categories.items()},
             "download_folders": {
                 "by_category": {str(k): v for k, v in self.download_folders.by_category.items()},
@@ -98,6 +100,7 @@ class Settings:
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
             zen=_zen_from_json(data.get("zen", {})),
             uploads=int(data.get("uploads", 0)),
+            free_space_margin=float(data.get("free_space_margin", 0.10)),
             indexer_categories={
                 int(k): IndexerCategory(str(v.get("name", "")), v.get("parent"))
                 for k, v in data.get("indexer_categories", {}).items()

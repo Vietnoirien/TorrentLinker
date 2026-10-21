@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.plan import Plan
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
 from torrentlinker.zen import ZenClass, ZenProfile, compare_classes
@@ -246,6 +248,86 @@ class CatalogueBox(QGroupBox):
         self.status.setText(text)
 
 
+class PlanView(QGroupBox):
+    """The Plan: what to download and seed next for the most Zen."""
+
+    make_requested = Signal()
+
+    def __init__(self) -> None:
+        super().__init__(self.tr("Plan"))
+        self.plan: Plan | None = None
+        layout = QVBoxLayout(self)
+        top = QHBoxLayout()
+        self.summary = QLabel(
+            self.tr(
+                "A Plan picks Catalogue torrents that earn the most Zen within the free "
+                "space of your Download Folders' disks and your torrent cap."
+            )
+        )
+        self.summary.setWordWrap(True)
+        top.addWidget(self.summary, 1)
+        self.make_button = QPushButton(self.tr("Make a Plan"))
+        self.make_button.clicked.connect(self.make_requested)
+        top.addWidget(self.make_button)
+        self.action_row = top
+        layout.addLayout(top)
+        self.table = readonly_table(
+            [
+                self.tr("Torrent"),
+                self.tr("Size"),
+                self.tr("Seeders"),
+                self.tr("≈ Zen/day"),
+                self.tr("Download Folder"),
+            ]
+        )
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSortIndicator(3, Qt.SortOrder.DescendingOrder)
+        self.table.setSortingEnabled(True)
+        layout.addWidget(self.table)
+
+    def busy(self, busy: bool) -> None:
+        self.make_button.setEnabled(not busy)
+        if busy:
+            self.summary.setText(self.tr("Making a Plan…"))
+
+    def show_plan(self, plan: Plan) -> None:
+        self.busy(False)
+        self.plan = plan
+        self.table.setSortingEnabled(False)
+        self.table.setRowCount(len(plan.items))
+        for r, item in enumerate(plan.items):
+            c = item.candidate
+            size_text = self.tr("Reseed (0 Go)") if c.reseed else human_size(c.size)
+            self.table.setItem(r, 0, QTableWidgetItem(c.title))
+            self.table.setItem(r, 1, NumberItem(size_text, c.download_size))
+            self.table.setItem(r, 2, NumberItem(str(c.seeders), c.seeders))
+            self.table.setItem(r, 3, NumberItem(zen_text(item.zen), item.zen))
+            self.table.setItem(r, 4, QTableWidgetItem(str(c.folder) if c.folder else ""))
+        self.table.setSortingEnabled(True)
+        if not plan.items:
+            self.summary.setText(
+                self.tr(
+                    "Nothing to add: fetch the Catalogue, set Download Folders, or free some space."
+                )
+            )
+            return
+        payback = plan.payback_days
+        self.summary.setText(
+            self.tr(
+                "{0} torrents · ≈ +{1} Zen/day · {2} Go to download · paid back in ≈ {3} days"
+            ).format(
+                len(plan.items),
+                f"{plan.zen_added:.2f}",
+                f"{plan.download_size / 1e9:.1f}",
+                f"{payback:.0f}" if payback is not None else "–",
+            )
+        )
+
+    def failed(self, error: Exception) -> None:
+        self.busy(False)
+        self.summary.setText(self.tr("Could not make a Plan: {0}").format(error))
+
+
 class ZenTab(QWidget):
     """Everything about Zen: what the user's seeding earns, and what to seed next."""
 
@@ -261,7 +343,11 @@ class ZenTab(QWidget):
         self.comparison = ClassComparison(profile, uploads)
         self.seeding_view.updated.connect(self.comparison.show_seeding)
         self.catalogue = CatalogueBox()
-        layout.addWidget(self.seeding_view, 1)
+        self.plan_view = PlanView()
+        split = QSplitter(Qt.Orientation.Vertical)
+        split.addWidget(self.seeding_view)
+        split.addWidget(self.plan_view)
+        layout.addWidget(split, 1)
         layout.addWidget(self.comparison)
         layout.addWidget(self.catalogue)
 

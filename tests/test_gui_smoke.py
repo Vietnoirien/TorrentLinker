@@ -287,3 +287,45 @@ def test_whole_catalogue_fetch_can_be_paused_and_offers_to_resume(qtbot, tmp_pat
     assert 0 < store.catalogue_size() < 1000
     assert store.crawl_paused()
     assert "Resume" in box.fetch_button.text()
+
+
+def test_plan_view_shows_zen_added_size_and_payback_and_the_band_follows(
+    qtbot, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.plan import Plan, PlanCandidate, PlanItem
+    from torrentlinker.zen import GB
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    c = PlanCandidate("aa" * 20, "Film", 8 * GB, 4, 2000, tmp_path, 1)
+    window._plan_made(Plan([PlanItem(c, 0.4)], 0.4))
+
+    summary = window.zen_tab.plan_view.summary.text()
+    assert "≈ +0.40 Zen/day" in summary and "8.0 Go" in summary and "20 days" in summary
+    assert "+0.40" in window.band.plan.text()
+    assert window.zen_tab.plan_view.table.rowCount() == 1
+
+
+def test_plan_maker_plans_catalogue_torrents_into_download_folders(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.store import CatalogueRow
+
+    s = Settings()
+    s.indexer_categories = {2000: IndexerCategory("Films"), 7000: IndexerCategory("Ebook")}
+    s.download_folders = DownloadFolders({2000: str(tmp_path / "films")})
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(
+        [
+            CatalogueRow("aa" * 20, "Film", 1_000_000, 5, 2000, "u", "d", 0),
+            CatalogueRow("bb" * 20, "Book", 1_000_000, 5, 7000, "u", "d", 0),
+        ]
+    )
+    window = MainWindow(s, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
+
+    plan = window.plan_maker()()
+
+    assert [i.candidate.title for i in plan.items] == ["Film"]
+    assert plan.items[0].candidate.folder == tmp_path / "films"

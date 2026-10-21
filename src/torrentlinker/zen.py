@@ -221,6 +221,28 @@ def estimate(profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int =
     return ZenDay(per_torrent, notes, multiplier, upload_zen, total + upload_zen, paid)
 
 
+def added_values(
+    profile: ZenProfile, torrents: Sequence[ZenTorrent], alongside: Sequence[ZenTorrent] = ()
+) -> list[float]:
+    """Zen Estimate of each of `torrents` if one of them were added to `alongside`.
+
+    Fast: the Class and tree multipliers are those of `alongside` plus one torrent, so
+    thousands of Catalogue torrents can be ranked at once.
+    """
+    if not profile.zen_class.paid_on_seeding or not torrents:
+        return [0.0] * len(torrents)
+    cls = profile.zen_class
+    base = estimate(profile, alongside) if alongside else None
+    count = len(alongside) + 1
+    average = 1.0
+    if base is not None:
+        weights = [weight(t.size) for t in alongside]
+        average = sum(n * w for n, w in zip(base.notes, weights, strict=True)) / sum(weights)
+    tree = max(tree_bonus(cls, count, average), profile.tree_bonus)
+    scale = (1 + class_bonus(cls, count) + tree) / DIVISOR * day_share(profile.seed_hours)
+    return [note(cls, t) * weight(t.size) * category_factor(t.category) * scale for t in torrents]
+
+
 def torrent_zen(
     profile: ZenProfile, torrent: ZenTorrent, alongside: Sequence[ZenTorrent] = ()
 ) -> float:

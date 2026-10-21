@@ -192,6 +192,14 @@ class SettingsDialog(QDialog):
         self.torrent_cap.setValue(z.torrent_cap)
         self.torrent_cap.setToolTip(self.tr("Most torrents you want to seed at once"))
         form.addRow(self.tr("Torrent cap"), self.torrent_cap)
+        self.margin = QSpinBox()
+        self.margin.setRange(0, 90)
+        self.margin.setSuffix(" %")
+        self.margin.setValue(round(self.settings.free_space_margin * 100))
+        self.margin.setToolTip(
+            self.tr("Share of each disk holding Download Folders that a Plan leaves free")
+        )
+        form.addRow(self.tr("Free space kept on each disk"), self.margin)
         return box
 
     def _read_zen(self) -> ZenProfile:
@@ -626,6 +634,7 @@ class SettingsDialog(QDialog):
         s.library_folders = self._read_folders()
         s.kind_categories = self._read_categories()
         s.zen = self._read_zen()
+        s.free_space_margin = self.margin.value() / 100
         s.indexer_categories = dict(self._categories)
         s.download_folders = self._read_download_folders()
         s.matching.size_tolerance = self.tolerance.value() / 100

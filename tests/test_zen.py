@@ -128,3 +128,14 @@ def test_class_comparison_estimates_the_same_seeding_in_every_class() -> None:
     assert days[ZenClass.SWARM_KEEPER].total > days[ZenClass.TANKER].total
     assert days[ZenClass.SWARM_KEEPER].multiplier == 1 + class_bonus(ZenClass.SWARM_KEEPER, 20)
     assert days[ZenClass.REUPLOADER].total == pytest.approx(3 * 0.43)
+
+
+def test_added_values_match_the_estimate_of_one_more_torrent() -> None:
+    from torrentlinker.zen import added_values, torrent_zen
+
+    seeding = [film(100, 90) for _ in range(14)]
+    new = [film(60, 0), film(5, 0, 30 * GB)]
+
+    values = added_values(TANKER, new, seeding)
+
+    assert values == pytest.approx([torrent_zen(TANKER, t, seeding) for t in new])

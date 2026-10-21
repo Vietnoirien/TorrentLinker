@@ -52,6 +52,7 @@ from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry, auto_searchable, build_library
 from torrentlinker.matching import MatchRules
 from torrentlinker.paths import MappedQbit, PathMapper
+from torrentlinker.plan import Plan, catalogue_candidates, disk_budgets, disk_of, make_plan
 from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
@@ -173,6 +174,7 @@ class MainWindow(QMainWindow):
         self._checking = False
         self.catalogue_runner: CatalogueRunner | None = None
         self._crawl_position = (0, 0)
+        self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.catalogue.start_requested.connect(self.crawl_catalogue)
         self.zen_tab.catalogue.pause_requested.connect(self.pause_catalogue)
         self._show_catalogue_age()
@@ -227,6 +229,40 @@ class MainWindow(QMainWindow):
     def _profile_failed(self, error: Exception) -> None:
         log.info("c411 profile not read: %s", error)
         self.band.show_profile_error(error)
+
+    # Plan ------------------------------------------------------------------
+
+    def make_plan(self) -> None:
+        self.zen_tab.plan_view.busy(True)
+        self.band.set_plan(None)
+        run_in_background(self.plan_maker(), self._plan_made, self.zen_tab.plan_view.failed)
+
+    def plan_maker(self) -> Callable[[], Plan]:
+        """Build on the GUI thread the work that makes a Plan (no Indexer request)."""
+        s = self.settings
+        qbit, store, profile, url = self.qbit(), self.store, s.zen, s.indexer.url
+        folders, categories, margin = (
+            s.download_folders,
+            dict(s.indexer_categories),
+            s.free_space_margin,
+        )
+
+        def work() -> Plan:
+            torrents = qbit.torrents(with_files=False)
+            view = seeding(profile, torrents, url)
+            in_client = {t.hash.lower() for t in torrents}
+            candidates = catalogue_candidates(
+                store.catalogue(), folders, categories, in_client, disk_of
+            )
+            budgets = disk_budgets({c.folder for c in candidates if c.folder}, margin)
+            slots = max(0, profile.torrent_cap - view.count) if profile.torrent_cap else None
+            return make_plan(profile, candidates, budgets, view.active, slots)
+
+        return work
+
+    def _plan_made(self, plan: Plan) -> None:
+        self.zen_tab.plan_view.show_plan(plan)
+        self.band.set_plan(plan.zen_added if plan.items else None)
 
     # Catalogue -------------------------------------------------------------
 
