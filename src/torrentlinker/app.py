@@ -29,8 +29,21 @@ def smoke_checks() -> None:
     print("smoke test OK")
 
 
+def setup_logging(path: Path) -> None:
+    import logging
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=[logging.FileHandler(path, encoding="utf-8"), logging.StreamHandler()],
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def show_unexpected_errors() -> None:
     """Errors raised inside Qt callbacks would otherwise only reach the terminal."""
+    import logging
     import traceback
     from types import TracebackType
 
@@ -38,7 +51,7 @@ def show_unexpected_errors() -> None:
 
     def hook(kind: type[BaseException], error: BaseException, tb: TracebackType | None) -> None:
         details = "".join(traceback.format_exception(kind, error, tb))
-        print(details, file=sys.stderr)
+        logging.getLogger("torrentlinker").error("unexpected error\n%s", details)
         box = QMessageBox(QMessageBox.Icon.Critical, "TorrentLinker", f"{kind.__name__}: {error}")
         box.setDetailedText(details)
         box.exec()
@@ -52,6 +65,7 @@ def main() -> int:
     app.setOrganizationName("TorrentLinker")
     show_unexpected_errors()
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "assets" / "icon.png")))
+    setup_logging(data_dir() / "torrentlinker.log")
     settings_path = data_dir() / "settings.json"
     settings = Settings.load(settings_path)
     translators = i18n.install(app, i18n.pick_language(settings.language))  # noqa: F841

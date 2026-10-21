@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from keyring.errors import KeyringError
@@ -38,6 +39,8 @@ from torrentlinker.indexer import Caps, Indexer
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import default_categories
 
+log = logging.getLogger(__name__)
+
 QBIT_PASSWORD = "qbit-password"
 INDEXER_API_KEY = "indexer-api-key"
 TMDB_API_KEY = "tmdb-api-key"
@@ -66,6 +69,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(self.tr("Settings"))
         self.resize(820, 720)
         self.settings = settings
+        self._loaded_secrets: dict[str, str] = {}
 
         self.tabs = QTabWidget()
         self.tabs.addTab(
@@ -113,7 +117,8 @@ class SettingsDialog(QDialog):
         return note
 
     def _secret_field(self, name: str) -> QLineEdit:
-        field = QLineEdit(get_secret(name))
+        self._loaded_secrets[name] = get_secret(name)
+        field = QLineEdit(self._loaded_secrets[name])
         field.setEchoMode(QLineEdit.EchoMode.Password)
         reveal = field.addAction(
             self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView),
@@ -257,6 +262,7 @@ class SettingsDialog(QDialog):
 
     def _pick_folder(self) -> None:
         path = QFileDialog.getExistingDirectory(self, self.tr("Choose a Library Folder"))
+        log.info("folder picked: %r", path)
         if path:
             self._add_folder_row(LibraryFolder(Path(path)))
 
@@ -360,19 +366,27 @@ class SettingsDialog(QDialog):
 
     # Save ------------------------------------------------------------------
 
-    def _save(self) -> None:
+    def _save_secrets(self) -> None:
+        """Write the keys that changed; a keyring problem must not lose the other settings."""
+        fields = {
+            QBIT_PASSWORD: self.qbit_password.text(),
+            INDEXER_API_KEY: self.indexer_key.text().strip(),
+            TMDB_API_KEY: self.tmdb_key.text().strip(),
+        }
         try:
-            set_secret(QBIT_PASSWORD, self.qbit_password.text())
-            set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
-            set_secret(TMDB_API_KEY, self.tmdb_key.text().strip())
+            for name, value in fields.items():
+                if value != self._loaded_secrets.get(name):
+                    set_secret(name, value)
         except KeyringError as e:
-            self.tabs.setCurrentIndex(0)
+            log.warning("keyring write failed: %s", e)
             QMessageBox.warning(
                 self,
                 self.tr("Keyring unavailable"),
                 self.tr("Your keys could not be saved in the system keyring: {0}").format(e),
             )
-            return
+
+    def _save(self) -> None:
+        self._save_secrets()
         s = self.settings
         s.language = self.language.currentData()
         s.qbit.host = self.qbit_host.text().strip()
@@ -385,4 +399,5 @@ class SettingsDialog(QDialog):
         s.matching.ignore_patterns = [
             line.strip() for line in self.ignore.toPlainText().splitlines() if line.strip()
         ]
+        log.info("settings saved: %d Library Folders", len(s.library_folders))
         self.accept()

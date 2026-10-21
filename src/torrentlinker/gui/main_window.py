@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelection, Qt, QTimer
@@ -41,6 +42,8 @@ from torrentlinker.reseed import Outcome, check_verifications, pending_verificat
 from torrentlinker.review import CheckedCandidate, check_candidates, search_candidates
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
+
+log = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -186,7 +189,10 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         if SettingsDialog(self.settings, self).exec():
             self.settings.save(self.settings_path)
+            log.info("settings written to %s", self.settings_path)
             self._fill_folder_filter()
+        else:
+            log.info("settings dialog cancelled")
 
     def _fill_folder_filter(self) -> None:
         current = self.folder_filter.currentData()
