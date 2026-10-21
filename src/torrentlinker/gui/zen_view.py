@@ -252,6 +252,7 @@ class PlanView(QGroupBox):
     """The Plan: what to download and seed next for the most Zen."""
 
     make_requested = Signal()
+    send_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__(self.tr("Plan"))
@@ -269,6 +270,16 @@ class PlanView(QGroupBox):
         self.make_button = QPushButton(self.tr("Make a Plan"))
         self.make_button.clicked.connect(self.make_requested)
         top.addWidget(self.make_button)
+        self.send_button = QPushButton(self.tr("Send to qBittorrent…"))
+        self.send_button.setToolTip(
+            self.tr(
+                "Download each .torrent directly from c411 and add it to its Download "
+                "Folder. A torrent whose files already exist there is refused."
+            )
+        )
+        self.send_button.setEnabled(False)
+        self.send_button.clicked.connect(self.send_requested)
+        top.addWidget(self.send_button)
         self.action_row = top
         layout.addLayout(top)
         self.table = readonly_table(
@@ -285,14 +296,15 @@ class PlanView(QGroupBox):
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
 
-    def busy(self, busy: bool) -> None:
+    def busy(self, busy: bool, text: str | None = None) -> None:
         self.make_button.setEnabled(not busy)
+        self.send_button.setEnabled(not busy and bool(self.plan and self.plan.items))
         if busy:
-            self.summary.setText(self.tr("Making a Plan…"))
+            self.summary.setText(text or self.tr("Making a Plan…"))
 
     def show_plan(self, plan: Plan) -> None:
-        self.busy(False)
         self.plan = plan
+        self.busy(False)
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(plan.items))
         for r, item in enumerate(plan.items):

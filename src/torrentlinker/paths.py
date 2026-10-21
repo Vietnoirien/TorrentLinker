@@ -77,6 +77,9 @@ class MappedQbit:
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         return self._inner.add(data, self._mapper.to_qbit(save_path), tags)
 
+    def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        return self._inner.download(data, self._mapper.to_qbit(save_path), tags)
+
     def rename_file(self, hash: str, old: str, new: str) -> None:
         self._inner.rename_file(hash, old, new)
 

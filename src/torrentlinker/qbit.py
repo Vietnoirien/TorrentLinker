@@ -31,6 +31,11 @@ class Qbit(Protocol):
         """Rename a file inside the torrent (paths relative to the save path)."""
         ...
 
+    def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        """Add started, to download into `save_path` with the original layout and
+        automatic management off; return hash."""
+        ...
+
     def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None: ...
     def recheck(self, hash: str) -> None: ...
     def piece_states(self, hash: str) -> list[int]:
@@ -109,11 +114,17 @@ class QbitApi:
         )
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        return self._add(data, save_path, tags, stopped=True)
+
+    def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        return self._add(data, save_path, tags, stopped=False)
+
+    def _add(self, data: bytes, save_path: str, tags: list[str], stopped: bool) -> str:
         h = read_torrent(data).infohash
         result = self._client.torrents_add(
             torrent_files=data,
             save_path=save_path,
-            is_stopped=True,
+            is_stopped=stopped,
             use_auto_torrent_management=False,
             content_layout="Original",
             tags=tags,

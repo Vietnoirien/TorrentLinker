@@ -167,3 +167,38 @@ def test_an_api_key_authenticates_and_a_wrong_one_is_refused(qbit: QbitApi) -> N
             QbitApi(HOST, "", "", api_key=wrong).check()
     finally:
         qbit.delete_api_key()
+
+
+def test_a_plan_torrent_downloads_into_its_download_folder_tagged_zen(
+    tmp_path: Path, qbit: QbitApi
+) -> None:
+    from torrentlinker.plan import PlanCandidate
+    from torrentlinker.send import ZEN_TAG, Refused, send_one
+
+    src = tmp_path / "elsewhere" / "Zen.Release"
+    src.mkdir(parents=True)
+    (src / "a.bin").write_bytes(os.urandom(40000))
+    data = make_torrent(src)
+    meta = read_torrent(data)
+    folder = tmp_path / "dl"
+
+    h = send_one(qbit, PlanCandidate(meta.infohash, meta.name, 40000, 1, 1, folder, 1), data)
+
+    t = qbit.torrent(h)
+    assert t is not None
+    assert t.save_path == folder
+    assert ZEN_TAG in t.tags
+    assert not t.state.startswith(("stopped", "paused"))  # started, downloading
+
+    other = tmp_path / "dl2"
+    (other / "Zen.Release").mkdir(parents=True)
+    (other / "Zen.Release" / "a.bin").write_bytes(b"mine")
+    qbit.remove(h)
+    for _ in range(50):  # removal is asynchronous too
+        if qbit.torrent(h) is None:
+            break
+        time.sleep(0.1)
+    with pytest.raises(Refused, match="overwrite"):
+        send_one(qbit, PlanCandidate(meta.infohash, meta.name, 40000, 1, 1, other, 1), data)
+    assert qbit.torrent(h) is None  # never added
+    assert (other / "Zen.Release" / "a.bin").read_bytes() == b"mine"

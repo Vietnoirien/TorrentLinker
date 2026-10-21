@@ -20,6 +20,7 @@ class FakeQbit:
     rechecked: list[str] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     pieces: dict[str, list[int]] = field(default_factory=dict)
+    downloads: list[str] = field(default_factory=list)
 
     # Qbit port ---------------------------------------------------------------
 
@@ -41,6 +42,12 @@ class FakeQbit:
             "stoppedDL",
         )
         return meta.infohash
+
+    def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        h = self.add(data, save_path, tags)
+        self._set(h, state="downloading")
+        self.downloads.append(h)
+        return h
 
     def rename_file(self, hash: str, old: str, new: str) -> None:
         self.calls.append(f"rename {old} -> {new}")

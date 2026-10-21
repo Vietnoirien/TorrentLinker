@@ -27,6 +27,7 @@ from torrentlinker.catalogue import (
     CrawlProgress,
     Progress,
     age,
+    candidate,
     crawl_categories,
     startup_categories,
     update_categories,
@@ -52,7 +53,14 @@ from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry, auto_searchable, build_library
 from torrentlinker.matching import MatchRules
 from torrentlinker.paths import MappedQbit, PathMapper
-from torrentlinker.plan import Plan, catalogue_candidates, disk_budgets, disk_of, make_plan
+from torrentlinker.plan import (
+    Plan,
+    PlanCandidate,
+    catalogue_candidates,
+    disk_budgets,
+    disk_of,
+    make_plan,
+)
 from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
@@ -64,7 +72,8 @@ from torrentlinker.review import (
     search_candidates,
 )
 from torrentlinker.seeding import Seeding, indexer_torrents, seeding
-from torrentlinker.store import Store
+from torrentlinker.send import SendReport, send_plan
+from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.tmdb import Tmdb
 
 log = logging.getLogger(__name__)
@@ -175,6 +184,8 @@ class MainWindow(QMainWindow):
         self.catalogue_runner: CatalogueRunner | None = None
         self._crawl_position = (0, 0)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
+        self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
+        self._after_catalogue: Callable[[], None] | None = None
         self.zen_tab.catalogue.start_requested.connect(self.crawl_catalogue)
         self.zen_tab.catalogue.pause_requested.connect(self.pause_catalogue)
         self._show_catalogue_age()
@@ -232,10 +243,16 @@ class MainWindow(QMainWindow):
 
     # Plan ------------------------------------------------------------------
 
-    def make_plan(self) -> None:
+    def make_plan(self, then: Callable[[], None] | None = None) -> None:
         self.zen_tab.plan_view.busy(True)
         self.band.set_plan(None)
-        run_in_background(self.plan_maker(), self._plan_made, self.zen_tab.plan_view.failed)
+
+        def done(plan: Plan) -> None:
+            self._plan_made(plan)
+            if then is not None and plan.items:
+                then()
+
+        run_in_background(self.plan_maker(), done, self.zen_tab.plan_view.failed)
 
     def plan_maker(self) -> Callable[[], Plan]:
         """Build on the GUI thread the work that makes a Plan (no Indexer request)."""
@@ -264,12 +281,78 @@ class MainWindow(QMainWindow):
         self.zen_tab.plan_view.show_plan(plan)
         self.band.set_plan(plan.zen_added if plan.items else None)
 
+    def confirm_send(self) -> None:
+        """Summary before sending, with the choice to refresh the Catalogue first."""
+        plan = self.zen_tab.plan_view.plan
+        if plan is None or not plan.items:
+            return
+        payback = plan.payback_days
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(self.tr("Send the Plan to qBittorrent"))
+        box.setText(
+            self.tr(
+                "{0} torrents · {1} Go to download · ≈ +{2} Zen/day · paid back in ≈ {3} "
+                "days.\nCatalogue: {4}.\n\nEach .torrent is downloaded directly from c411 "
+                "with your key and added to its Download Folder. A torrent whose files "
+                "already exist there is refused."
+            ).format(
+                len(plan.items),
+                f"{plan.download_size / 1e9:.1f}",
+                f"{plan.zen_added:.2f}",
+                f"{payback:.0f}" if payback is not None else "–",
+                self.catalogue_age(),
+            )
+        )
+        send = box.addButton(self.tr("Send"), QMessageBox.ButtonRole.AcceptRole)
+        refresh = box.addButton(self.tr("Refresh first"), QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        if box.clickedButton() is send:
+            self.send_plan(plan)
+        elif box.clickedButton() is refresh:
+            self.zen_tab.plan_view.busy(True, self.tr("Refreshing the Catalogue…"))
+            if not self.update_catalogue(then=lambda: self.make_plan(then=self.confirm_send)):
+                self.make_plan(then=self.confirm_send)
+
+    def send_plan(self, plan: Plan) -> None:
+        qbit, indexer, reseeder = self.qbit(), self.indexer(), self.plan_reseeder()
+
+        def fetch(c: PlanCandidate) -> bytes:
+            assert isinstance(c.source, CatalogueRow)
+            return indexer.fetch_torrent(candidate(indexer, c.source))
+
+        self.zen_tab.plan_view.busy(True, self.tr("Sending the Plan…"))
+        run_in_background(
+            lambda: send_plan(plan, qbit, fetch, reseeder),
+            self._plan_sent,
+            self.zen_tab.plan_view.failed,
+        )
+
+    def plan_reseeder(self) -> Callable[[PlanCandidate], None] | None:
+        return None
+
+    def _plan_sent(self, report: SendReport) -> None:
+        self.zen_tab.plan_view.show_plan(Plan())
+        self.band.set_plan(None)
+        lines = [self.tr("{0} torrents added to qBittorrent.").format(len(report.added))]
+        if report.reseeded:
+            lines.append(self.tr("{0} Reseeds started.").format(len(report.reseeded)))
+        lines += [self.tr("Refused: {0} ({1})").format(t, why) for t, why in report.refused]
+        lines += [self.tr("Failed: {0} ({1})").format(t, why) for t, why in report.failed]
+        QMessageBox.information(self, self.tr("Plan sent"), "\n".join(lines))
+        self.zen_tab.seeding_view.refresh()
+        if report.reseeded:
+            self.verify_timer.start()
+
     # Catalogue -------------------------------------------------------------
 
-    def update_catalogue(self) -> None:
-        """Fetch the newest torrents of the user's categories (at startup)."""
+    def update_catalogue(self, then: Callable[[], None] | None = None) -> bool:
+        """Fetch the newest torrents of the user's categories (at startup, or before
+        sending a Plan); `then` runs once it is done. False if it could not start."""
         if self.catalogue_runner is not None or not get_secret(INDEXER_API_KEY):
-            return
+            return False
+        self._after_catalogue = then
         indexer, store, qbit = self.indexer(), self.store, self.qbit()
         url, folders = self.settings.indexer.url, self.settings.download_folders
         categories = dict(self.settings.indexer_categories)
@@ -293,6 +376,7 @@ class MainWindow(QMainWindow):
             )
 
         self._run_catalogue(work)
+        return True
 
     def crawl_catalogue(self) -> None:
         """Fetch every category of the Indexer, resuming a paused crawl (user action)."""
@@ -368,6 +452,9 @@ class MainWindow(QMainWindow):
     def _catalogue_finished(self, stopped: bool) -> None:
         self.catalogue_runner = None
         self._show_catalogue_age()
+        then, self._after_catalogue = self._after_catalogue, None
+        if then is not None and not stopped:
+            then()
 
     def _show_catalogue_age(self) -> None:
         self.band.set_catalogue(self.catalogue_age())

@@ -329,3 +329,61 @@ def test_plan_maker_plans_catalogue_torrents_into_download_folders(qtbot, tmp_pa
 
     assert [i.candidate.title for i in plan.items] == ["Film"]
     assert plan.items[0].candidate.folder == tmp_path / "films"
+
+
+def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from PySide6.QtWidgets import QMessageBox
+
+    from tests.fake_qbit import FakeQbit
+    from tests.torrents import make_torrent
+    from torrentlinker.plan import Plan, PlanCandidate, PlanItem
+    from torrentlinker.send import ZEN_TAG
+    from torrentlinker.store import CatalogueRow
+    from torrentlinker.torrent_meta import read_torrent
+
+    src = tmp_path / "src" / "Film"
+    src.mkdir(parents=True)
+    (src / "f.mkv").write_bytes(b"x" * 1000)
+    data = make_torrent(src)
+    meta = read_torrent(data)
+    row = CatalogueRow(meta.infohash, "Film", 1000, 3, 2000, "https://c411.example/dl/1", "", 0)
+    plan = Plan(
+        [
+            PlanItem(
+                PlanCandidate(meta.infohash, "Film", 1000, 3, 2000, tmp_path / "dl", 1, source=row),
+                0.1,
+            )
+        ],
+        0.1,
+    )
+
+    class StubIndexer:
+        url, api_key = Settings().indexer.url, ""
+        fetched: list[str] = []
+
+        def fetch_torrent(self, c):  # type: ignore[no-untyped-def]
+            self.fetched.append(c.download_url)
+            return data
+
+        def next_request_in(self) -> float:
+            return 0
+
+        def unredact(self, text: str) -> str:
+            return text
+
+    qbit, stub = FakeQbit(), StubIndexer()
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window.qbit = lambda: qbit  # type: ignore[assignment,method-assign,return-value]
+    window._indexer = stub  # type: ignore[assignment]
+    window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
+    shown: list[str] = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: shown.append(a[2]))
+
+    window.send_plan(plan)
+    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+
+    assert stub.fetched == ["https://c411.example/dl/1"], shown
+    [t] = qbit.torrents()
+    assert ZEN_TAG in t.tags and t.save_path == tmp_path / "dl"
+    assert "1 torrents added" in shown[0]
