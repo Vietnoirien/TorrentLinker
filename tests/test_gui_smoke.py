@@ -460,3 +460,21 @@ def test_the_plan_offers_categories_with_a_download_folder_and_remembers_the_cho
     view._toggle(2030, True)
 
     assert Settings.load(tmp_path / "settings.json").plan_categories == [2030]
+
+
+def test_a_catalogue_update_shows_its_progress_and_its_result(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.catalogue import CrawlProgress
+    from torrentlinker.downloads import IndexerCategory
+
+    s = Settings()
+    s.indexer_categories = {2030: IndexerCategory("Film", 2000)}
+    window = MainWindow(s, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window._catalogue_added = {}
+
+    window._catalogue_progress(CrawlProgress(2030, pages=3, added=250, offset=300))
+    assert "Film" in window.statusBar().currentMessage()
+    assert "Film" in window.zen_tab.catalogue.status.text()
+
+    window._catalogue_finished(stopped=False)
+    assert "+250" in window.statusBar().currentMessage()

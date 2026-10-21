@@ -505,6 +505,7 @@ class MainWindow(QMainWindow):
 
     def _run_catalogue(self, work: Callable[[Callable[[], bool], Progress], None]) -> None:
         runner = CatalogueRunner(work)
+        self._catalogue_added: dict[int, int] = {}
         runner.signals.progress.connect(self._catalogue_progress)
         runner.signals.failed.connect(self._catalogue_failed)
         runner.signals.finished.connect(self._catalogue_finished)
@@ -517,15 +518,21 @@ class MainWindow(QMainWindow):
             name.name if name else p.category, p.pages, p.added
         )
         self.band.set_catalogue(text)
+        self._catalogue_added[p.category] = p.added
+        wait = self._indexer.next_request_in() if self._indexer else 0
+        suffix = self.tr(" · next request in {0} s").format(f"{wait:.0f}") if wait > 1 else ""
+        size = self.store.catalogue_size()
         if self.zen_tab.catalogue.running:
             done, total = self._crawl_position
-            wait = self._indexer.next_request_in() if self._indexer else 0
-            self.zen_tab.catalogue.set_status(
-                self.tr("Category {0}/{1}: {2} · {3} torrents in the Catalogue").format(
-                    done, total, text, self.store.catalogue_size()
-                )
-                + (self.tr(" · next request in {0} s").format(f"{wait:.0f}") if wait > 1 else "")
+            status = self.tr("Category {0}/{1}: {2} · {3} torrents in the Catalogue").format(
+                done, total, text, size
             )
+        else:  # the update of the user's categories (at startup or before a Plan)
+            status = self.tr(
+                "Updating your categories: {0} · {1} torrents in the Catalogue"
+            ).format(text, size)
+        self.zen_tab.catalogue.set_status(status + suffix)
+        self.statusBar().showMessage(self.tr("Catalogue: {0}").format(status) + suffix)
 
     def _catalogue_failed(self, error: Exception) -> None:
         log.warning("Catalogue update failed: %s", error)
@@ -534,6 +541,19 @@ class MainWindow(QMainWindow):
     def _catalogue_finished(self, stopped: bool) -> None:
         self.catalogue_runner = None
         self._show_catalogue_age()
+        added, size = sum(self._catalogue_added.values()), self.store.catalogue_size()
+        log.info(
+            "Catalogue %s: +%d torrents, %d in total",
+            "paused" if stopped else "updated",
+            added,
+            size,
+        )
+        message = (
+            self.tr("Catalogue paused: +{0} torrents · {1} in total")
+            if stopped
+            else self.tr("Catalogue updated: +{0} torrents · {1} in total")
+        )
+        self.statusBar().showMessage(message.format(added, size), 15000)
         then, self._after_catalogue = self._after_catalogue, None
         if then is not None and not stopped:
             then()
