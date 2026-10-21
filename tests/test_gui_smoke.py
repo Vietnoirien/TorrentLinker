@@ -478,3 +478,35 @@ def test_a_catalogue_update_shows_its_progress_and_its_result(qtbot, tmp_path: P
 
     window._catalogue_finished(stopped=False)
     assert "+250" in window.statusBar().currentMessage()
+
+
+def test_making_a_plan_first_fetches_its_categories_in_full(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from tests.fake_torznab import FakeTorznab
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.indexer import Indexer
+    from torrentlinker.paths import MappedQbit, PathMapper
+
+    films = tmp_path / "films"
+    films.mkdir()
+    s = Settings()
+    s.indexer_categories = {2030: IndexerCategory("Film")}
+    s.download_folders = DownloadFolders({2030: str(films)})
+    store = Store(tmp_path / "s.db")
+    window = MainWindow(s, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    set_secret(INDEXER_API_KEY, "K")
+    torznab = FakeTorznab()
+    torznab.add(2030, 350)  # 4 pages, far beyond the 10 newest pages a startup update reads
+    window._indexer = Indexer(
+        s.indexer.url, "K", http=torznab.client(), cache=store, sleep=lambda _s: None
+    )
+    window.qbit = lambda: MappedQbit(FakeQbit(), PathMapper([]))  # type: ignore[method-assign]
+
+    window.make_plan()
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.plan is not None, timeout=10_000)
+
+    assert store.catalogue_size() == 350
+    assert window.zen_tab.plan_view.plan.items

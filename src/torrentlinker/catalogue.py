@@ -9,7 +9,7 @@ category and can be paused and resumed, even after a restart.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
@@ -119,6 +119,19 @@ def startup_categories(
     category is fetched anyway (Torznab includes subcategories)."""
     wanted = set(folders.by_category) | store.catalogue_categories(seeded_hashes)
     return sorted(c for c in wanted if _parent(c, categories) not in wanted)
+
+
+def plan_categories(
+    chosen: Collection[int] | None,
+    folders: DownloadFolders,
+    categories: Mapping[int, IndexerCategory],
+) -> list[int]:
+    """Categories to fetch in full before a Plan: the ones chosen for it (else those
+    given a Download Folder) that can be planned at all, i.e. resolve to a folder. A
+    subcategory is skipped when its category is fetched anyway."""
+    wanted = set(chosen) if chosen is not None else set(folders.by_category)
+    plannable = {c for c in wanted if folders.resolve(c, categories) is not None}
+    return sorted(c for c in plannable if _parent(c, categories) not in plannable)
 
 
 def crawl_categories(categories: Mapping[int, IndexerCategory]) -> list[int]:

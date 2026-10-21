@@ -256,6 +256,7 @@ class PlanView(QGroupBox):
     make_requested = Signal()
     send_requested = Signal()
     categories_changed = Signal(object)  # set[int] | None
+    stop_fetch_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__(self.tr("Plan"))
@@ -282,6 +283,13 @@ class PlanView(QGroupBox):
         self.make_button = QPushButton(self.tr("Make a Plan"))
         self.make_button.clicked.connect(self.make_requested)
         top.addWidget(self.make_button)
+        self.stop_fetch_button = QPushButton(self.tr("Stop fetching and plan now"))
+        self.stop_fetch_button.setToolTip(
+            self.tr("Make the Plan from the Catalogue fetched so far; the fetch resumes next time")
+        )
+        self.stop_fetch_button.clicked.connect(self.stop_fetch_requested)
+        self.stop_fetch_button.hide()
+        top.addWidget(self.stop_fetch_button)
         self.send_button = QPushButton(self.tr("Send to qBittorrent…"))
         self.send_button.setToolTip(
             self.tr(
@@ -351,6 +359,11 @@ class PlanView(QGroupBox):
                 else self.tr("{0} categories").format(len(names))
             )
         self.categories_button.setText(text + " ▾")
+
+    def fetching(self, fetching: bool) -> None:
+        """While the Plan's categories are fetched, offer to stop and plan right away."""
+        self.stop_fetch_button.setVisible(fetching)
+        self.stop_fetch_button.setEnabled(fetching)
 
     def busy(self, busy: bool, text: str | None = None) -> None:
         self.make_button.setEnabled(not busy)

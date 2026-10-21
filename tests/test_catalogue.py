@@ -211,3 +211,25 @@ def test_whole_catalogue_crawl_covers_every_category_once(tmp_path: Path) -> Non
     from torrentlinker.catalogue import crawl_categories
 
     assert crawl_categories(CATEGORIES) == [2000, 7000]
+
+
+def test_a_plan_fetches_its_chosen_categories_or_else_those_with_a_download_folder() -> None:
+    from torrentlinker.catalogue import plan_categories
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+
+    cats = {
+        2000: IndexerCategory("Films & Vidéos"),
+        2030: IndexerCategory("Film", 2000),
+        5000: IndexerCategory("Série TV", 2000),
+        7000: IndexerCategory("Ebook"),
+        7020: IndexerCategory("Livres", 7000),
+        8010: IndexerCategory("Imprimante 3D"),
+    }
+    folders = DownloadFolders({2030: "/f", 5000: "/s", 7000: "/e", 8010: "/3d"})
+
+    assert plan_categories(None, folders, cats) == [2030, 5000, 7000, 8010]
+    assert plan_categories({8010, 2030}, folders, cats) == [2030, 8010]
+    # a chosen category is fetched whole (its subcategories come with it)
+    assert plan_categories({7000, 7020}, folders, cats) == [7000]
+    # a chosen category without any Download Folder is not planned, so not fetched
+    assert plan_categories({9999}, folders, cats) == []

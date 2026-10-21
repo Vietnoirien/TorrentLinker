@@ -29,6 +29,7 @@ from torrentlinker.catalogue import (
     age,
     candidate,
     crawl_categories,
+    plan_categories,
     startup_categories,
     update_categories,
 )
@@ -196,9 +197,12 @@ class MainWindow(QMainWindow):
         self._crawl_position = [0, 0]  # category being crawled, of how many (worker writes)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.plan_view.categories_changed.connect(self._plan_categories_changed)
+        self.zen_tab.plan_view.stop_fetch_requested.connect(self._stop_plan_fetch)
         self.offer_plan_categories()
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
         self._after_catalogue: Callable[[], None] | None = None
+        self._after_catalogue_always: Callable[[], None] | None = None
+        self._planning = False
         self.zen_tab.catalogue.start_requested.connect(self.crawl_catalogue)
         self.zen_tab.catalogue.pause_requested.connect(self.pause_catalogue)
         self._show_catalogue_age()
@@ -259,8 +263,44 @@ class MainWindow(QMainWindow):
     # Plan ------------------------------------------------------------------
 
     def make_plan(self, then: Callable[[], None] | None = None) -> None:
+        """Fetch the full Catalogue of the Plan's categories, then make the Plan."""
         self.zen_tab.plan_view.busy(True)
         self.band.set_plan(None)
+        s = self.settings
+        chosen = set(s.plan_categories) if s.plan_categories is not None else None
+        targets = plan_categories(chosen, s.download_folders, s.indexer_categories)
+        if not targets or self.catalogue_runner is not None or not get_secret(INDEXER_API_KEY):
+            self._build_plan(then)
+            return
+        indexer, store, categories = self.indexer(), self.store, dict(s.indexer_categories)
+
+        def work(stop: Callable[[], bool], progress: Progress) -> None:
+            log.info("Catalogue fetched in full for the Plan: %s", targets)
+            update_categories(
+                indexer,
+                store,
+                targets,
+                full=True,  # resumes an unfinished category, updates a finished one
+                stop=stop,
+                progress=progress,
+                categories=categories,
+            )
+
+        self._planning = True
+        self.zen_tab.plan_view.busy(True, self.tr("Fetching the Catalogue for the Plan…"))
+        self.zen_tab.plan_view.fetching(True)
+        self._after_catalogue_always = lambda: self._build_plan(then)
+        self._run_catalogue(work)
+
+    def _stop_plan_fetch(self) -> None:
+        if self.catalogue_runner is not None:
+            self.catalogue_runner.stop()
+        self.zen_tab.plan_view.fetching(False)
+
+    def _build_plan(self, then: Callable[[], None] | None = None) -> None:
+        self._planning = False
+        self.zen_tab.plan_view.fetching(False)
+        self.zen_tab.plan_view.busy(True)
 
         def done(plan: Plan) -> None:
             self._plan_made(plan)
@@ -353,9 +393,7 @@ class MainWindow(QMainWindow):
         if box.clickedButton() is send:
             self.send_plan(plan)
         elif box.clickedButton() is refresh:
-            self.zen_tab.plan_view.busy(True, self.tr("Refreshing the Catalogue…"))
-            if not self.update_catalogue(then=lambda: self.make_plan(then=self.confirm_send)):
-                self.make_plan(then=self.confirm_send)
+            self.make_plan(then=self.confirm_send)  # fetches the Plan's categories first
 
     def send_plan(self, plan: Plan) -> None:
         qbit, indexer, reseeder = self.qbit(), self.indexer(), self.plan_reseeder()
@@ -533,6 +571,10 @@ class MainWindow(QMainWindow):
             ).format(text, size)
         self.zen_tab.catalogue.set_status(status + suffix)
         self.statusBar().showMessage(self.tr("Catalogue: {0}").format(status) + suffix)
+        if self._planning:
+            self.zen_tab.plan_view.busy(
+                True, self.tr("Fetching the Catalogue for the Plan: {0}").format(status + suffix)
+            )
 
     def _catalogue_failed(self, error: Exception) -> None:
         log.warning("Catalogue update failed: %s", error)
@@ -557,6 +599,9 @@ class MainWindow(QMainWindow):
         then, self._after_catalogue = self._after_catalogue, None
         if then is not None and not stopped:
             then()
+        always, self._after_catalogue_always = self._after_catalogue_always, None
+        if always is not None:
+            always()  # e.g. a Plan: paused, it is made from the Catalogue fetched so far
 
     def _show_catalogue_age(self) -> None:
         self.band.set_catalogue(self.catalogue_age())
