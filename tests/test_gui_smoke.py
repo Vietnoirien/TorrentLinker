@@ -107,3 +107,19 @@ def test_main_window_opens_on_the_zen_tab_and_shows_the_seeding_view(qtbot, tmp_
     assert window.tabs.tabText(1) == "Library"
     assert window.zen_tab.seeding_view.table.rowCount() == 1
     assert "≈" in window.zen_tab.seeding_view.table.item(0, 4).text()  # type: ignore[union-attr]
+
+
+def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.downloads import DownloadFolders
+    from torrentlinker.gui.settings_dialog import COL_FOLDER, COL_RESOLVED, SettingsDialog
+    from torrentlinker.indexer import Caps
+
+    dialog = SettingsDialog(Settings())
+    qtbot.addWidget(dialog)
+    dialog._set_categories(Caps({2000: "Films", 2030: "VO", 7000: "Ebook"}, {}, {2030: 2000}))
+    dialog.download_table.item(0, COL_FOLDER).setText("/dl/films")  # type: ignore[union-attr]
+
+    assert dialog._read_download_folders() == DownloadFolders({2000: "/dl/films"})
+    used = [dialog.download_table.item(r, COL_RESOLVED).text() for r in range(3)]  # type: ignore[union-attr]
+    assert used[:2] == ["/dl/films", "/dl/films"]
+    assert "excluded" in used[2]

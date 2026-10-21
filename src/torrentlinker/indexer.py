@@ -83,6 +83,7 @@ _CAPS_MODES = {
 class Caps:
     categories: dict[int, str]
     modes: dict[SearchMode, set[str]]
+    parents: dict[int, int] = field(default_factory=dict)  # subcategory -> category
 
 
 class Indexer:
@@ -114,10 +115,17 @@ class Indexer:
             if mode and el.get("available") == "yes":
                 modes[mode] = {p for p in el.get("supportedParams", "q").split(",") if p}
         categories: dict[int, str] = {}
-        for el in root.iter():
-            if el.tag in ("category", "subcat") and (el.get("id") or "").isdigit():
-                categories[int(el.get("id", "0"))] = el.get("name", "")
-        return Caps(categories, modes)
+        parents: dict[int, int] = {}
+        for el in root.iter("category"):
+            if not (el.get("id") or "").isdigit():
+                continue
+            parent = int(el.get("id", "0"))
+            categories[parent] = el.get("name", "")
+            for sub in el.iter("subcat"):
+                if (sub.get("id") or "").isdigit():
+                    categories[int(sub.get("id", "0"))] = sub.get("name", "")
+                    parents[int(sub.get("id", "0"))] = parent
+        return Caps(categories, modes, parents)
 
     def supported_modes(self) -> dict[SearchMode, set[str]] | None:
         """Search modes and their parameters from caps, fetched once; None if unknown."""

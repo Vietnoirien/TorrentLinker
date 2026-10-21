@@ -28,3 +28,17 @@ def test_zen_profile_survives_a_save_and_load(tmp_path: Path) -> None:
     s.save(tmp_path / "settings.json")
 
     assert Settings.load(tmp_path / "settings.json").zen == s.zen
+
+
+def test_download_folders_and_indexer_categories_survive_a_save_and_load(tmp_path: Path) -> None:
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+
+    s = Settings()
+    s.indexer_categories = {2000: IndexerCategory("Films"), 2030: IndexerCategory("VO", 2000)}
+    s.download_folders = DownloadFolders({2030: "/dl/vo"}, "/dl")
+    s.save(tmp_path / "settings.json")
+
+    loaded = Settings.load(tmp_path / "settings.json")
+
+    assert loaded.indexer_categories == s.indexer_categories
+    assert loaded.download_folders == s.download_folders

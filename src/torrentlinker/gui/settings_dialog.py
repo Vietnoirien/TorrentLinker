@@ -6,6 +6,7 @@ from pathlib import Path
 
 from keyring.errors import KeyringError
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
+from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import class_label
 from torrentlinker.indexer import Caps, Indexer
@@ -49,6 +51,8 @@ INDEXER_API_KEY = "indexer-api-key"
 TMDB_API_KEY = "tmdb-api-key"
 
 COL_PATH, COL_KIND, COL_DEPTH, COL_MAPPING = range(4)
+COL_CATEGORY, COL_FOLDER, COL_RESOLVED = range(3)
+RED = QColor("#c62828")
 
 
 KIND_LABELS = {
@@ -85,6 +89,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(
             self._page(self._search_box(), self._matching_box()), self.tr("Search && Matching")
         )
+        self.tabs.addTab(self._page(self._downloads_box()), self.tr("Download Folders"))
         self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
 
@@ -322,16 +327,17 @@ class SettingsDialog(QDialog):
         self._add_folder_row(LibraryFolder(path))
         self.typed_folder.clear()
 
-    def _pick_folder(self) -> None:
+    def _choose_dir(self, title: str, start: str = "") -> str:
         options = QFileDialog.Option.ShowDirsOnly
         if sys.platform.startswith("linux"):
             # The desktop-portal picker can hand back an empty path under Wayland.
             options |= QFileDialog.Option.DontUseNativeDialog
-        path = QFileDialog.getExistingDirectory(
-            self, self.tr("Choose a Library Folder"), str(Path.home()), options
-        )
+        path = QFileDialog.getExistingDirectory(self, title, start or str(Path.home()), options)
         log.info("folder picked: %r", path)
-        if path:
+        return path
+
+    def _pick_folder(self) -> None:
+        if path := self._choose_dir(self.tr("Choose a Library Folder")):
             self._add_folder_row(LibraryFolder(Path(path)))
 
     def _add_folder_row(self, folder: LibraryFolder) -> None:
@@ -370,6 +376,129 @@ class SettingsDialog(QDialog):
             )
         return result
 
+    # Download Folders ------------------------------------------------------
+
+    def _downloads_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Download Folders"))
+        layout = QVBoxLayout(box)
+        note = QLabel(
+            self.tr(
+                "Where Plan torrents are downloaded. A subcategory uses its own folder, else "
+                "its category's, else the default. A category left without any is excluded "
+                "from Plans. A Download Folder may lie inside a Library Folder: downloads "
+                "only ever create their own files."
+            )
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        default_row = QHBoxLayout()
+        self.default_download = QLineEdit(self.settings.download_folders.default)
+        self.default_download.setPlaceholderText(
+            self.tr("No default: unset categories are excluded")
+        )
+        self.default_download.textChanged.connect(self._update_resolved)
+        browse = QPushButton(self.tr("Choose…"))
+        browse.clicked.connect(self._choose_default_download)
+        default_row.addWidget(QLabel(self.tr("Default")))
+        default_row.addWidget(self.default_download, 1)
+        default_row.addWidget(browse)
+        layout.addLayout(default_row)
+
+        self._categories: dict[int, IndexerCategory] = dict(self.settings.indexer_categories)
+        self.download_table = QTableWidget(0, 3)
+        self.download_table.setHorizontalHeaderLabels(
+            [self.tr("Category"), self.tr("Download Folder"), self.tr("Used")]
+        )
+        header = self.download_table.horizontalHeader()
+        header.setSectionResizeMode(COL_CATEGORY, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_FOLDER, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_RESOLVED, QHeaderView.ResizeMode.Stretch)
+        self.download_table.verticalHeader().setVisible(False)
+        self.download_table.setMinimumHeight(300)
+        self.download_table.itemChanged.connect(lambda _item: self._update_resolved())
+        layout.addWidget(self.download_table)
+        self._fill_download_table(self.settings.download_folders.by_category)
+
+        row = QHBoxLayout()
+        load = QPushButton(self.tr("Load categories from the Indexer"))
+        load.clicked.connect(self._load_download_categories)
+        choose = QPushButton(self.tr("Choose folder for the selected category…"))
+        choose.clicked.connect(self._choose_category_download)
+        row.addWidget(load)
+        row.addStretch()
+        row.addWidget(choose)
+        layout.addLayout(row)
+        return box
+
+    def _ordered_categories(self) -> list[int]:
+        """Categories, each followed by its subcategories."""
+        tops = sorted(c for c, v in self._categories.items() if v.parent not in self._categories)
+        ordered = []
+        for top in tops:
+            ordered.append(top)
+            ordered += sorted(c for c, v in self._categories.items() if v.parent == top)
+        return ordered
+
+    def _fill_download_table(self, folders: dict[int, str]) -> None:
+        table = self.download_table
+        table.blockSignals(True)
+        table.setRowCount(0)
+        for cat in self._ordered_categories():
+            r = table.rowCount()
+            table.insertRow(r)
+            info = self._categories[cat]
+            indent = "    " if info.parent in self._categories else ""
+            name = QTableWidgetItem(f"{indent}{info.name} ({cat})")
+            name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            name.setData(Qt.ItemDataRole.UserRole, cat)
+            table.setItem(r, COL_CATEGORY, name)
+            table.setItem(r, COL_FOLDER, QTableWidgetItem(folders.get(cat, "")))
+            used = QTableWidgetItem()
+            used.setFlags(used.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            table.setItem(r, COL_RESOLVED, used)
+        table.blockSignals(False)
+        self._update_resolved()
+
+    def _read_download_folders(self) -> DownloadFolders:
+        by_category = {}
+        for r in range(self.download_table.rowCount()):
+            cat_cell = self.download_table.item(r, COL_CATEGORY)
+            folder_cell = self.download_table.item(r, COL_FOLDER)
+            if cat_cell and folder_cell and folder_cell.text().strip():
+                by_category[int(cat_cell.data(Qt.ItemDataRole.UserRole))] = (
+                    folder_cell.text().strip()
+                )
+        return DownloadFolders(by_category, self.default_download.text().strip())
+
+    def _update_resolved(self) -> None:
+        folders = self._read_download_folders()
+        table = self.download_table
+        table.blockSignals(True)
+        for r in range(table.rowCount()):
+            cat_cell, used = table.item(r, COL_CATEGORY), table.item(r, COL_RESOLVED)
+            if cat_cell is None or used is None:
+                continue
+            path = folders.resolve(int(cat_cell.data(Qt.ItemDataRole.UserRole)), self._categories)
+            if path is None:
+                used.setText(self.tr("No Download Folder: excluded from Plans"))
+                used.setForeground(RED)
+            else:
+                used.setText(str(path))
+                used.setForeground(self.palette().text().color())
+        table.blockSignals(False)
+
+    def _choose_default_download(self) -> None:
+        if path := self._choose_dir(
+            self.tr("Default Download Folder"), self.default_download.text()
+        ):
+            self.default_download.setText(path)
+
+    def _choose_category_download(self) -> None:
+        r = self.download_table.currentRow()
+        cell = self.download_table.item(r, COL_FOLDER) if r >= 0 else None
+        if cell is not None and (path := self._choose_dir(self.tr("Download Folder"), cell.text())):
+            cell.setText(path)
+
     # Search ----------------------------------------------------------------
 
     def _search_box(self) -> QGroupBox:
@@ -393,7 +522,22 @@ class SettingsDialog(QDialog):
             lambda e: QMessageBox.warning(self, self.tr("Indexer"), str(e)),
         )
 
+    def _set_categories(self, caps: Caps) -> None:
+        folders = self._read_download_folders().by_category
+        self._categories = {
+            c: IndexerCategory(name, caps.parents.get(c)) for c, name in caps.categories.items()
+        }
+        self._fill_download_table(folders)
+
+    def _load_download_categories(self) -> None:
+        run_in_background(
+            self._form_indexer().caps,
+            self._set_categories,
+            lambda e: QMessageBox.warning(self, self.tr("Indexer"), str(e)),
+        )
+
     def _apply_caps(self, caps: Caps) -> None:
+        self._set_categories(caps)
         names = "\n".join(f"{i}  {n}" for i, n in sorted(caps.categories.items()))
         for kind, cats in default_categories(caps.categories).items():
             field = self.category_fields[kind]
@@ -463,6 +607,8 @@ class SettingsDialog(QDialog):
         s.library_folders = self._read_folders()
         s.kind_categories = self._read_categories()
         s.zen = self._read_zen()
+        s.indexer_categories = dict(self._categories)
+        s.download_folders = self._read_download_folders()
         s.matching.size_tolerance = self.tolerance.value() / 100
         s.matching.min_partial_coverage = self.coverage.value() / 100
         s.matching.ignore_patterns = [

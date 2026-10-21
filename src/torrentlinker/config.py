@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
+from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.matching import (
     DEFAULT_IGNORE_PATTERNS,
     DEFAULT_MIN_PARTIAL_COVERAGE,
@@ -56,6 +57,9 @@ class Settings:
 
     library_folders: list[LibraryFolder] = field(default_factory=list)
     zen: ZenProfile = field(default_factory=ZenProfile)
+    # The Indexer's categories as its caps last listed them.
+    indexer_categories: dict[int, IndexerCategory] = field(default_factory=dict)
+    download_folders: DownloadFolders = field(default_factory=DownloadFolders)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,6 +71,11 @@ class Settings:
             "language": self.language,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
             "zen": asdict(self.zen),
+            "indexer_categories": {str(k): asdict(v) for k, v in self.indexer_categories.items()},
+            "download_folders": {
+                "by_category": {str(k): v for k, v in self.download_folders.by_category.items()},
+                "default": self.download_folders.default,
+            },
         }
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -86,6 +95,17 @@ class Settings:
             },
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
             zen=_zen_from_json(data.get("zen", {})),
+            indexer_categories={
+                int(k): IndexerCategory(str(v.get("name", "")), v.get("parent"))
+                for k, v in data.get("indexer_categories", {}).items()
+            },
+            download_folders=DownloadFolders(
+                {
+                    int(k): str(v)
+                    for k, v in data.get("download_folders", {}).get("by_category", {}).items()
+                },
+                str(data.get("download_folders", {}).get("default", "")),
+            ),
         )
 
 

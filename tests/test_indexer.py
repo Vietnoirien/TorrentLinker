@@ -86,6 +86,7 @@ def test_caps_lists_categories_and_supported_search_modes() -> None:
     caps = make_indexer(lambda r: httpx.Response(200, text=CAPS_XML)).caps()
 
     assert caps.categories[2030] == "Films étrangers"
+    assert caps.parents == {2030: 2000}
     assert caps.categories[7000] == "Ebook"
     assert caps.modes["movie"] == {"q", "imdbid", "tmdbid"}
     assert "music" not in caps.modes
