@@ -35,11 +35,12 @@ from torrentlinker.gui.settings_dialog import (
     SettingsDialog,
 )
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.gui.zen_view import ZenTab
+from torrentlinker.gui.zen_view import ZenBand, ZenTab
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry, auto_searchable, build_library
 from torrentlinker.matching import MatchRules
 from torrentlinker.paths import MappedQbit, PathMapper
+from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
         self.settings_path = settings_path
         self.store = store
         self._indexer: Indexer | None = None
+        self._profile: tuple[tuple[str, str], ProfileClient] | None = None
         self._qbit: tuple[tuple[str, str, str, str], QbitApi] | None = None
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
@@ -138,7 +140,15 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
         self.tabs.addTab(splitter, self.tr("Library"))
-        self.setCentralWidget(self.tabs)
+        self.band = ZenBand()
+        self.band.refresh_requested.connect(self.refresh_profile)
+        self.zen_tab.seeding_view.updated.connect(self.band.set_seeding)
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.addWidget(self.band)
+        central_layout.addWidget(self.tabs)
+        self.setCentralWidget(central)
         self.statusBar().showMessage(self.tr("Ready"))
 
         self._checking = False
@@ -148,6 +158,7 @@ class MainWindow(QMainWindow):
         if settings_path.exists():
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
+            QTimer.singleShot(0, self.refresh_profile)
 
     def qbit(self) -> MappedQbit:
         q = self.settings.qbit
@@ -166,6 +177,31 @@ class MainWindow(QMainWindow):
         if self._indexer is None or (self._indexer.url, self._indexer.api_key) != (url, key):
             self._indexer = Indexer(url, key, cache=self.store)
         return self._indexer
+
+    def profile_client(self) -> ProfileClient:
+        """One client, so its 30-second freshness window holds across refreshes."""
+        wanted = (self.settings.indexer.url, get_secret(INDEXER_API_KEY))
+        if self._profile is None or self._profile[0] != wanted:
+            self._profile = (wanted, ProfileClient(*wanted))
+        return self._profile[1]
+
+    def refresh_profile(self) -> None:
+        """Read the c411 profile; only at startup and when the user asks."""
+        self.band.busy(True)
+        run_in_background(self.profile_client().fetch, self._profile_read, self._profile_failed)
+
+    def _profile_read(self, profile: UserProfile) -> None:
+        self.band.show_profile(profile)
+        filled = profile.apply(self.settings.zen)
+        if filled != self.settings.zen:
+            self.settings.zen = filled
+            self.settings.save(self.settings_path)
+            log.info("Zen Profile filled from c411: %s", filled)
+            self.zen_tab.seeding_view.refresh()
+
+    def _profile_failed(self, error: Exception) -> None:
+        log.info("c411 profile not read: %s", error)
+        self.band.show_profile_error(error)
 
     def seeding_loader(self) -> Callable[[], Seeding]:
         """Build on the GUI thread the work that reads the Seeding view from qBittorrent."""

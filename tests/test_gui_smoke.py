@@ -123,3 +123,38 @@ def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot) -> N
     used = [dialog.download_table.item(r, COL_RESOLVED).text() for r in range(3)]  # type: ignore[union-attr]
     assert used[:2] == ["/dl/films", "/dl/films"]
     assert "excluded" in used[2]
+
+
+def test_zen_band_shows_the_balance_and_explains_a_key_without_profile_scope(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.gui.zen_view import ZenBand
+    from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
+    from torrentlinker.zen import ZenClass
+
+    band = ZenBand()
+    qtbot.addWidget(band)
+    band.show_profile(
+        UserProfile("v", "tanker", ZenClass.TANKER, 0.02, 12.5, False, "insufficient_balance")
+    )
+    assert "12.5" in band.balance.text()
+    assert "not enough Zen" in band.message.text()
+
+    band.show_profile_error(ProfileError(ProfileProblem.MISSING_SCOPE))
+    assert "Profil (lecture)" in band.message.text()
+
+
+def test_profile_read_at_startup_fills_the_zen_profile(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.profile import UserProfile
+    from torrentlinker.zen import ZenClass
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    refreshed = []
+    window.zen_tab.seeding_view.refresh = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    window._profile_read(
+        UserProfile("v", "swarm-keeper", ZenClass.SWARM_KEEPER, 0.04, 3, True, None)
+    )
+
+    assert window.settings.zen.zen_class is ZenClass.SWARM_KEEPER
+    assert window.settings.zen.tree_bonus == 0.04
+    assert Settings.load(tmp_path / "settings.json").zen == window.settings.zen
+    assert refreshed  # the Seeding view is estimated again with the new Class

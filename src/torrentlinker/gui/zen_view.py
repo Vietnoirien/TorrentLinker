@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -20,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
 from torrentlinker.zen import ZenClass
 
@@ -159,3 +162,109 @@ class ZenTab(QWidget):
         layout = QVBoxLayout(self)
         self.seeding_view = SeedingView(load_seeding)
         layout.addWidget(self.seeding_view)
+
+
+KEYS_URL = "https://c411.org/user/integrations"
+WARNING = QColor("#c62828")
+
+
+class ZenBand(QFrame):
+    """Across the top of every tab: Zen Balance, what seeding earns, Plan and Catalogue."""
+
+    refresh_requested = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 4, 8, 4)
+        row = QHBoxLayout()
+        self.balance = QLabel()
+        self.seeding = QLabel()
+        self.plan = QLabel()
+        self.catalogue = QLabel()
+        for label in (self.balance, self.seeding, self.plan, self.catalogue):
+            row.addWidget(label)
+            row.addSpacing(16)
+        row.addStretch()
+        self.refresh_button = QPushButton(self.tr("Refresh profile"))
+        self.refresh_button.setToolTip(self.tr("Read your Zen Balance and Class from c411"))
+        self.refresh_button.clicked.connect(self.refresh_requested)
+        row.addWidget(self.refresh_button)
+        outer.addLayout(row)
+        self.message = QLabel()
+        self.message.setWordWrap(True)
+        self.message.setOpenExternalLinks(True)
+        self.message.setStyleSheet(f"color: {WARNING.name()}")
+        self.message.hide()
+        outer.addWidget(self.message)
+        self.set_balance(None)
+        self.set_seeding(None)
+        self.set_plan(None)
+        self.set_catalogue(None)
+
+    def set_balance(self, balance: float | None) -> None:
+        value = f"{balance:.1f}" if balance is not None else "–"
+        self.balance.setText(self.tr("Zen Balance: <b>{0}</b>").format(value))
+
+    def set_seeding(self, view: Seeding | None) -> None:
+        value = zen_text(view.day.total) if view is not None else "–"
+        self.seeding.setText(self.tr("Seeding: <b>{0}</b> Zen/day").format(value))
+
+    def set_plan(self, added: float | None) -> None:
+        value = f"+{added:.2f}" if added is not None else "–"
+        self.plan.setText(self.tr("with Plan: {0}").format(value))
+
+    def set_catalogue(self, text: str | None) -> None:
+        self.catalogue.setText(self.tr("Catalogue: {0}").format(text or "–"))
+
+    def busy(self, busy: bool) -> None:
+        self.refresh_button.setEnabled(not busy)
+
+    def show_profile(self, profile: UserProfile) -> None:
+        self.busy(False)
+        self.set_balance(profile.balance)
+        notes = []
+        if not profile.download_allowed:
+            if profile.blocked_reason == "insufficient_balance":
+                notes.append(self.tr("Downloads are blocked on c411: not enough Zen."))
+            else:
+                notes.append(
+                    self.tr("Downloads are blocked on c411 ({0}).").format(
+                        profile.blocked_reason or "?"
+                    )
+                )
+        if profile.zen_class is None:
+            notes.append(
+                self.tr(
+                    "c411 Class “{0}” is not known here: enter your Zen Profile in Settings → Zen."
+                ).format(profile.class_slug or self.tr("none"))
+            )
+        self._message(" ".join(notes))
+
+    def show_profile_error(self, error: Exception) -> None:
+        self.busy(False)
+        problem = error.problem if isinstance(error, ProfileError) else ProfileProblem.FAILED
+        texts = {
+            ProfileProblem.NO_KEY: self.tr(
+                "Enter your c411 key in Settings → Connections to see your Zen Balance."
+            ),
+            ProfileProblem.UNAUTHORIZED: self.tr(
+                "c411 refused the key: check it in Settings → Connections."
+            ),
+            ProfileProblem.MISSING_SCOPE: self.tr(
+                'Your c411 key cannot read your profile: create one with the "Profil '
+                '(lecture)" scope at <a href="{0}">{0}</a>. Until then, enter your Zen '
+                "Profile in Settings → Zen."
+            ).format(KEYS_URL),
+            ProfileProblem.RATE_LIMITED: self.tr(
+                "c411 is limiting requests: refresh your profile in a minute."
+            ),
+        }
+        self._message(
+            texts.get(problem) or self.tr("Could not read your c411 profile: {0}").format(error)
+        )
+
+    def _message(self, text: str) -> None:
+        self.message.setText(text)
+        self.message.setVisible(bool(text))
