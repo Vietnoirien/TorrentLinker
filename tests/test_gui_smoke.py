@@ -158,3 +158,16 @@ def test_profile_read_at_startup_fills_the_zen_profile(qtbot, tmp_path: Path) ->
     assert window.settings.zen.tree_bonus == 0.04
     assert Settings.load(tmp_path / "settings.json").zen == window.settings.zen
     assert refreshed  # the Seeding view is estimated again with the new Class
+
+
+def test_class_comparison_highlights_the_current_class_and_labels_reuploader_rough(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.gui.zen_view import ClassComparison
+    from torrentlinker.zen import ZenClass, ZenProfile
+
+    widget = ClassComparison(lambda: ZenProfile(ZenClass.SWARM_KEEPER), uploads=10)
+    qtbot.addWidget(widget)
+
+    assert "<b>" in widget.labels[ZenClass.SWARM_KEEPER].text()
+    assert "<b>" not in widget.labels[ZenClass.TANKER].text()
+    assert "rough" in widget.labels[ZenClass.REUPLOADER].text()
+    assert "4.30" in widget.labels[ZenClass.REUPLOADER].text()

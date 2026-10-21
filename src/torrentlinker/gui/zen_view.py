@@ -9,11 +9,13 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -24,7 +26,7 @@ from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
-from torrentlinker.zen import ZenClass
+from torrentlinker.zen import ZenClass, ZenProfile, compare_classes
 
 CLASS_LABELS = {
     ZenClass.TANKER: QT_TRANSLATE_NOOP("ZenClass", "Tanker"),
@@ -154,14 +156,71 @@ class SeedingView(QWidget):
         QMessageBox.warning(self, self.tr("qBittorrent"), str(error) or type(error).__name__)
 
 
+class ClassComparison(QGroupBox):
+    """Current seeding estimated in every Class, to help choose during c411's window."""
+
+    uploads_changed = Signal(int)
+
+    def __init__(self, profile: Callable[[], ZenProfile], uploads: int) -> None:
+        super().__init__(self.tr("Class comparison"))
+        self.profile = profile
+        self.seeding: Seeding | None = None
+        layout = QHBoxLayout(self)
+        self.labels: dict[ZenClass, QLabel] = {}
+        for c in ZenClass:
+            label = QLabel()
+            label.setTextFormat(Qt.TextFormat.RichText)
+            self.labels[c] = label
+            layout.addWidget(label)
+            layout.addSpacing(24)
+        self.labels[ZenClass.REUPLOADER].setToolTip(
+            self.tr(
+                "Rough: a Reuploader is paid per upload, counted here at the guide's "
+                "upper figure of about 0.43 Zen per upload a day."
+            )
+        )
+        layout.addStretch()
+        layout.addWidget(QLabel(self.tr("Your uploads")))
+        self.uploads = QSpinBox()
+        self.uploads.setRange(0, 100_000)
+        self.uploads.setValue(uploads)
+        self.uploads.valueChanged.connect(self._uploads_edited)
+        layout.addWidget(self.uploads)
+        self.show_seeding(None)
+
+    def _uploads_edited(self, value: int) -> None:
+        self.uploads_changed.emit(value)
+        self.show_seeding(self.seeding)
+
+    def show_seeding(self, view: Seeding | None) -> None:
+        self.seeding = view
+        profile = self.profile()
+        days = compare_classes(profile, view.active if view else [], self.uploads.value())
+        for c, label in self.labels.items():
+            text = self.tr("{0}: {1} Zen/day").format(class_label(c), zen_text(days[c].total))
+            if c is ZenClass.REUPLOADER:
+                text += " " + self.tr("(rough)")
+            if c is profile.zen_class:
+                text = "<b>" + text + "</b> " + self.tr("← your Class")
+            label.setText(text)
+
+
 class ZenTab(QWidget):
     """Everything about Zen: what the user's seeding earns, and what to seed next."""
 
-    def __init__(self, load_seeding: Callable[[], Callable[[], Seeding]]) -> None:
+    def __init__(
+        self,
+        load_seeding: Callable[[], Callable[[], Seeding]],
+        profile: Callable[[], ZenProfile],
+        uploads: int = 0,
+    ) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
         self.seeding_view = SeedingView(load_seeding)
-        layout.addWidget(self.seeding_view)
+        self.comparison = ClassComparison(profile, uploads)
+        self.seeding_view.updated.connect(self.comparison.show_seeding)
+        layout.addWidget(self.seeding_view, 1)
+        layout.addWidget(self.comparison)
 
 
 KEYS_URL = "https://c411.org/user/integrations"

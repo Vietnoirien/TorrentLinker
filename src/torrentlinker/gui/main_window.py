@@ -136,7 +136,8 @@ class MainWindow(QMainWindow):
         splitter.addWidget(library_pane)
         splitter.addWidget(self.review)
         splitter.setSizes([600, 600])
-        self.zen_tab = ZenTab(self.seeding_loader)
+        self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
+        self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
         self.tabs.addTab(splitter, self.tr("Library"))
@@ -206,7 +207,13 @@ class MainWindow(QMainWindow):
     def seeding_loader(self) -> Callable[[], Seeding]:
         """Build on the GUI thread the work that reads the Seeding view from qBittorrent."""
         qbit, profile, url = self.qbit(), self.settings.zen, self.settings.indexer.url
-        return lambda: seeding(profile, qbit.torrents(with_files=False), url)
+        uploads = self.settings.uploads
+        return lambda: seeding(profile, qbit.torrents(with_files=False), url, uploads)
+
+    def _uploads_changed(self, uploads: int) -> None:
+        self.settings.uploads = uploads
+        if self.settings_path.exists():
+            self.settings.save(self.settings_path)
 
     def default_query(self, entry: LibraryEntry) -> str:
         kind = entry.folder.kind

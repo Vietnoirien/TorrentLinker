@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from urllib.parse import urlsplit
 
@@ -219,6 +219,27 @@ def estimate(profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int =
     paid = sum(round(g) for g in groups.values())
     total = sum(per_torrent)
     return ZenDay(per_torrent, notes, multiplier, upload_zen, total + upload_zen, paid)
+
+
+def compare_classes(
+    profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int = 0
+) -> dict[ZenClass, ZenDay]:
+    """What the same seeding would earn in each Class.
+
+    The tree bonus already unlocked belongs to the current Class; the others only get
+    what their tree would give for these torrents. The Reuploader figure is rough: it
+    counts `uploads` at the guide's upper figure per upload.
+    """
+    return {
+        c: estimate(
+            replace(
+                profile, zen_class=c, tree_bonus=profile.tree_bonus if c is profile.zen_class else 0
+            ),
+            torrents,
+            uploads,
+        )
+        for c in ZenClass
+    }
 
 
 def is_indexer_torrent(tracker: str, indexer_url: str) -> bool:

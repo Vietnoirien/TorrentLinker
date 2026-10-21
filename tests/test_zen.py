@@ -6,6 +6,7 @@ from torrentlinker.zen import (
     ZenProfile,
     ZenTorrent,
     class_bonus,
+    compare_classes,
     duration_bonus,
     estimate,
     is_indexer_torrent,
@@ -115,3 +116,15 @@ def test_c411_torrents_are_recognised_by_their_tracker_host() -> None:
     assert is_indexer_torrent("c411.org", url)
     assert not is_indexer_torrent("udp://tracker.opentrackr.org:1337/announce", url)
     assert not is_indexer_torrent("", url)
+
+
+def test_class_comparison_estimates_the_same_seeding_in_every_class() -> None:
+    torrents = [film(5, 200, 8 * GB) for _ in range(20)]  # few seeders: Swarm Keeper land
+    profile = ZenProfile(ZenClass.TANKER, tree_bonus=0.05)
+
+    days = compare_classes(profile, torrents, uploads=3)
+
+    assert days[ZenClass.TANKER].total == estimate(profile, torrents).total
+    assert days[ZenClass.SWARM_KEEPER].total > days[ZenClass.TANKER].total
+    assert days[ZenClass.SWARM_KEEPER].multiplier == 1 + class_bonus(ZenClass.SWARM_KEEPER, 20)
+    assert days[ZenClass.REUPLOADER].total == pytest.approx(3 * 0.43)

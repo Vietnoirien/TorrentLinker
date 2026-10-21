@@ -30,6 +30,7 @@ class SeedingRow:
 class Seeding:
     rows: list[SeedingRow]
     day: ZenDay
+    active: list[ZenTorrent]  # the seeding torrents, as the Zen rules see them
 
     @property
     def count(self) -> int:
@@ -50,6 +51,7 @@ def seeding(
     """Every Indexer torrent in qBittorrent, with a Zen Estimate for those seeding."""
     mine = indexer_torrents(torrents, indexer_url)
     active = [t for t in mine if t.is_seeding]
-    day = estimate(profile, [zen_torrent(t) for t in active], uploads)
+    as_zen = [zen_torrent(t) for t in active]
+    day = estimate(profile, as_zen, uploads)
     zen = dict(zip((t.hash for t in active), day.per_torrent, strict=True))
-    return Seeding([SeedingRow(t, zen.get(t.hash)) for t in mine], day)
+    return Seeding([SeedingRow(t, zen.get(t.hash)) for t in mine], day, as_zen)
