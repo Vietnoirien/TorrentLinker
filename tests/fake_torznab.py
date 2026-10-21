@@ -22,6 +22,8 @@ class FakeTorznab:
     by_category: dict[int, list[FakeTorrent]] = field(default_factory=dict)
     requests: list[httpx.Request] = field(default_factory=list)
     subcats: dict[int, int] = field(default_factory=dict)  # subcategory -> category
+    # c411 serves at most this many results per query: deeper offsets get the last page
+    window: int | None = None
 
     def add(self, category: int, count: int, start: int = 0, size: int = 4_000_000_000) -> None:
         """Add `count` torrents, newer than those already there."""
@@ -44,6 +46,9 @@ class FakeTorznab:
             for t in ts
         ]
         offset, limit = int(p.get("offset", "0")), int(p.get("limit", "25"))
+        if self.window is not None:
+            items = items[: self.window]
+            offset = min(offset, max(0, len(items) - limit))
         return httpx.Response(200, text=_feed(items[offset : offset + limit]))
 
     def client(self) -> httpx.Client:

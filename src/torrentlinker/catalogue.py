@@ -54,6 +54,7 @@ def update_category(
     resuming = full and not state.complete
     offset = state.next_offset if resuming else 0
     pages = added = 0
+    previous: list[str] | None = None
     while not stop() and (max_pages is None or pages < max_pages):
         query = SearchQuery(
             mode=SearchMode.SEARCH,
@@ -71,7 +72,10 @@ def update_category(
         pages += 1
         added += len(set(hashes) - known)
         offset += PAGE
-        end = len(page) < PAGE
+        # The end of the category, or the end of what the Indexer will page through:
+        # c411 serves at most ~600 results per query, then repeats its last page.
+        end = len(page) < PAGE or hashes == previous
+        previous = hashes
         if resuming:
             state = replace(state, next_offset=0 if end else offset, complete=end)
         state = replace(state, updated_at=now)
@@ -127,11 +131,17 @@ def plan_categories(
     categories: Mapping[int, IndexerCategory],
 ) -> list[int]:
     """Categories to fetch in full before a Plan: the ones chosen for it (else those
-    given a Download Folder) that can be planned at all, i.e. resolve to a folder. A
-    subcategory is skipped when its category is fetched anyway."""
+    given a Download Folder) that can be planned at all, i.e. resolve to a folder, each
+    with every subcategory on its own: an Indexer pages through a limited number of
+    results per query (~600 on c411), so each subcategory reaches deeper."""
     wanted = set(chosen) if chosen is not None else set(folders.by_category)
     plannable = {c for c in wanted if folders.resolve(c, categories) is not None}
-    return sorted(c for c in plannable if _parent(c, categories) not in plannable)
+    expanded = set(plannable)
+    for cid in categories:
+        ancestor = _parent(cid, categories)
+        if ancestor in plannable:
+            expanded.add(cid)
+    return sorted(expanded)
 
 
 def crawl_categories(categories: Mapping[int, IndexerCategory]) -> list[int]:

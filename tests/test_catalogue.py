@@ -227,9 +227,39 @@ def test_a_plan_fetches_its_chosen_categories_or_else_those_with_a_download_fold
     }
     folders = DownloadFolders({2030: "/f", 5000: "/s", 7000: "/e", 8010: "/3d"})
 
-    assert plan_categories(None, folders, cats) == [2030, 5000, 7000, 8010]
+    assert plan_categories(None, folders, cats) == [2030, 5000, 7000, 7020, 8010]
     assert plan_categories({8010, 2030}, folders, cats) == [2030, 8010]
-    # a chosen category is fetched whole (its subcategories come with it)
-    assert plan_categories({7000, 7020}, folders, cats) == [7000]
+    # a chosen category comes with each of its subcategories
+    assert plan_categories({7000}, folders, cats) == [7000, 7020]
     # a chosen category without any Download Folder is not planned, so not fetched
     assert plan_categories({9999}, folders, cats) == []
+
+
+def test_a_full_crawl_ends_where_the_indexer_stops_paging(tmp_path: Path) -> None:
+    """c411 serves at most ~600 results per query; deeper offsets repeat the last page."""
+    fake, store = FakeTorznab(window=600), Store(tmp_path / "s.db")
+    fake.add(7020, 2000)
+
+    state = update_category(indexer(fake), store, 7020, full=True)
+
+    assert len(fake.requests) <= 8  # not an endless crawl of repeated pages
+    assert state.complete and state.next_offset == 0
+    assert store.catalogue_size() == 600
+
+
+def test_a_plan_fetches_each_subcategory_on_its_own_to_get_past_the_paging_limit() -> None:
+    from torrentlinker.catalogue import plan_categories
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+
+    cats = {
+        7000: IndexerCategory("Ebook"),
+        7010: IndexerCategory("Presse", 7000),
+        7020: IndexerCategory("Livres", 7000),
+        2000: IndexerCategory("Films & Vidéos"),
+        2030: IndexerCategory("Film", 2000),
+        8010: IndexerCategory("Imprimante 3D"),
+    }
+    folders = DownloadFolders({7000: "/e", 2030: "/f", 8010: "/3d"})
+
+    assert plan_categories({7000}, folders, cats) == [7000, 7010, 7020]
+    assert plan_categories(None, folders, cats) == [2030, 7000, 7010, 7020, 8010]

@@ -202,6 +202,10 @@ class MainWindow(QMainWindow):
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
         self._after_catalogue: Callable[[], None] | None = None
         self._after_catalogue_always: Callable[[], None] | None = None
+        self._last_crawl_progress: CrawlProgress | None = None
+        self.crawl_ticker = QTimer(self)
+        self.crawl_ticker.setInterval(500)
+        self.crawl_ticker.timeout.connect(self._show_crawl_progress)
         self._planning = False
         self.zen_tab.catalogue.start_requested.connect(self.crawl_catalogue)
         self.zen_tab.catalogue.pause_requested.connect(self.pause_catalogue)
@@ -544,6 +548,8 @@ class MainWindow(QMainWindow):
     def _run_catalogue(self, work: Callable[[Callable[[], bool], Progress], None]) -> None:
         runner = CatalogueRunner(work)
         self._catalogue_added: dict[int, int] = {}
+        self._last_crawl_progress = None
+        self.crawl_ticker.start()
         runner.signals.progress.connect(self._catalogue_progress)
         runner.signals.failed.connect(self._catalogue_failed)
         runner.signals.finished.connect(self._catalogue_finished)
@@ -551,14 +557,22 @@ class MainWindow(QMainWindow):
         runner.start()
 
     def _catalogue_progress(self, p: CrawlProgress) -> None:
+        self._catalogue_added[p.category] = p.added
+        self._last_crawl_progress = p
+        self._show_crawl_progress()
+
+    def _show_crawl_progress(self) -> None:
+        """Also redrawn twice a second while fetching, for the countdown and the total."""
+        p = self._last_crawl_progress
+        if p is None:
+            return
         name = self.settings.indexer_categories.get(p.category)
         text = self.tr("updating {0}, page {1} (+{2})").format(
             name.name if name else p.category, p.pages, p.added
         )
         self.band.set_catalogue(text)
-        self._catalogue_added[p.category] = p.added
         wait = self._indexer.next_request_in() if self._indexer else 0
-        suffix = self.tr(" · next request in {0} s").format(f"{wait:.0f}") if wait > 1 else ""
+        suffix = self.tr(" · next request in {0} s").format(f"{wait:.0f}") if wait > 0.5 else ""
         size = self.store.catalogue_size()
         if self.zen_tab.catalogue.running:
             done, total = self._crawl_position
@@ -582,6 +596,7 @@ class MainWindow(QMainWindow):
 
     def _catalogue_finished(self, stopped: bool) -> None:
         self.catalogue_runner = None
+        self.crawl_ticker.stop()
         self._show_catalogue_age()
         added, size = sum(self._catalogue_added.values()), self.store.catalogue_size()
         log.info(
