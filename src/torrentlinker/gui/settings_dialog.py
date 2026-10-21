@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from keyring.errors import KeyringError
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -10,17 +11,21 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -62,17 +67,18 @@ class SettingsDialog(QDialog):
         self.resize(820, 720)
         self.settings = settings
 
-        body = QWidget()
-        layout = QVBoxLayout(body)
-        layout.addWidget(self._general_box())
-        layout.addWidget(self._qbit_box())
-        layout.addWidget(self._indexer_box())
-        layout.addWidget(self._folders_box())
-        layout.addWidget(self._search_box())
-        layout.addWidget(self._matching_box())
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(body)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(
+            self._page(
+                self._keyring_note(), self._qbit_box(), self._indexer_box(), self._tmdb_box()
+            ),
+            self.tr("Connections"),
+        )
+        self.tabs.addTab(self._page(self._folders_box()), self.tr("Library Folders"))
+        self.tabs.addTab(
+            self._page(self._search_box(), self._matching_box()), self.tr("Search && Matching")
+        )
+        self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -80,8 +86,47 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         outer = QVBoxLayout(self)
-        outer.addWidget(scroll)
+        outer.addWidget(self.tabs)
         outer.addWidget(buttons)
+
+    @staticmethod
+    def _page(*boxes: QWidget) -> QScrollArea:
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        for box in boxes:
+            layout.addWidget(box)
+        layout.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(body)
+        return scroll
+
+    def _keyring_note(self) -> QLabel:
+        note = QLabel(
+            self.tr(
+                "Passwords and API keys are stored in your system keyring, "
+                "never in TorrentLinker's settings file."
+            )
+        )
+        note.setWordWrap(True)
+        return note
+
+    def _secret_field(self, name: str) -> QLineEdit:
+        field = QLineEdit(get_secret(name))
+        field.setEchoMode(QLineEdit.EchoMode.Password)
+        reveal = field.addAction(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView),
+            QLineEdit.ActionPosition.TrailingPosition,
+        )
+        reveal.setCheckable(True)
+        reveal.setToolTip(self.tr("Show / hide"))
+        reveal.toggled.connect(
+            lambda shown: field.setEchoMode(
+                QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password
+            )
+        )
+        return field
 
     # General ---------------------------------------------------------------
 
@@ -104,8 +149,7 @@ class SettingsDialog(QDialog):
         form = QFormLayout(box)
         self.qbit_host = QLineEdit(self.settings.qbit.host)
         self.qbit_user = QLineEdit(self.settings.qbit.username)
-        self.qbit_password = QLineEdit(get_secret(QBIT_PASSWORD))
-        self.qbit_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.qbit_password = self._secret_field(QBIT_PASSWORD)
         test = QPushButton(self.tr("Test connection"))
         test.clicked.connect(self._test_qbit)
         form.addRow(self.tr("WebUI address"), self.qbit_host)
@@ -130,13 +174,34 @@ class SettingsDialog(QDialog):
         box = QGroupBox(self.tr("Indexer (Torznab)"))
         form = QFormLayout(box)
         self.indexer_url = QLineEdit(self.settings.indexer.url)
-        self.indexer_key = QLineEdit(get_secret(INDEXER_API_KEY))
-        self.indexer_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.indexer_key = self._secret_field(INDEXER_API_KEY)
         test = QPushButton(self.tr("Test Indexer"))
         test.clicked.connect(self._test_indexer)
+        hint = QLabel(
+            self.tr('On c411, generate your key at <a href="{0}">{0}</a>').format(
+                "https://c411.org/user/integrations"
+            )
+        )
+        hint.setOpenExternalLinks(True)
         form.addRow(self.tr("Torznab URL"), self.indexer_url)
         form.addRow(self.tr("API key"), self.indexer_key)
+        form.addRow("", hint)
         form.addRow("", test)
+        return box
+
+    def _tmdb_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("TMDb (optional)"))
+        form = QFormLayout(box)
+        self.tmdb_key = self._secret_field(TMDB_API_KEY)
+        self.tmdb_key.setPlaceholderText(self.tr("Optional: finds IDs for movies and series"))
+        hint = QLabel(
+            self.tr('Free key at <a href="{0}">{0}</a>').format(
+                "https://www.themoviedb.org/settings/api"
+            )
+        )
+        hint.setOpenExternalLinks(True)
+        form.addRow(self.tr("TMDb API key"), self.tmdb_key)
+        form.addRow("", hint)
         return box
 
     def _form_indexer(self) -> Indexer:
@@ -234,10 +299,6 @@ class SettingsDialog(QDialog):
     def _search_box(self) -> QGroupBox:
         box = QGroupBox(self.tr("Search"))
         form = QFormLayout(box)
-        self.tmdb_key = QLineEdit(get_secret(TMDB_API_KEY))
-        self.tmdb_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.tmdb_key.setPlaceholderText(self.tr("Optional: finds IDs for movies and series"))
-        form.addRow(self.tr("TMDb API key"), self.tmdb_key)
         self.category_fields: dict[ContentKind, QLineEdit] = {}
         for kind in ContentKind:
             field = QLineEdit(", ".join(str(c) for c in self.settings.categories(kind)))
@@ -298,14 +359,23 @@ class SettingsDialog(QDialog):
     # Save ------------------------------------------------------------------
 
     def _save(self) -> None:
+        try:
+            set_secret(QBIT_PASSWORD, self.qbit_password.text())
+            set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
+            set_secret(TMDB_API_KEY, self.tmdb_key.text().strip())
+        except KeyringError as e:
+            self.tabs.setCurrentIndex(0)
+            QMessageBox.warning(
+                self,
+                self.tr("Keyring unavailable"),
+                self.tr("Your keys could not be saved in the system keyring: {0}").format(e),
+            )
+            return
         s = self.settings
         s.language = self.language.currentData()
         s.qbit.host = self.qbit_host.text().strip()
         s.qbit.username = self.qbit_user.text().strip()
-        set_secret(QBIT_PASSWORD, self.qbit_password.text())
         s.indexer.url = self.indexer_url.text().strip()
-        set_secret(INDEXER_API_KEY, self.indexer_key.text().strip())
-        set_secret(TMDB_API_KEY, self.tmdb_key.text().strip())
         s.library_folders = self._read_folders()
         s.kind_categories = self._read_categories()
         s.matching.size_tolerance = self.tolerance.value() / 100

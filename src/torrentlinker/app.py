@@ -39,10 +39,13 @@ def main() -> int:
     translators = i18n.install(app, i18n.pick_language(settings.language))  # noqa: F841
     store = Store(data_dir() / "state.db")
     window = MainWindow(settings, settings_path, store)
+    first_launch = not settings_path.exists()
     window.show()
     if "--smoke-test" in sys.argv:  # used by CI on packaged builds
         smoke_checks()
         QTimer.singleShot(500, app.quit)
+    elif first_launch:
+        QTimer.singleShot(0, window.open_settings)  # enter connections and keys first
     return app.exec()
 
 

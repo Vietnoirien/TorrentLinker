@@ -133,7 +133,7 @@ class MainWindow(QMainWindow):
         self.verify_timer = QTimer(self)
         self.verify_timer.setInterval(3000)
         self.verify_timer.timeout.connect(self.check_verifications)
-        if get_secret(QBIT_PASSWORD) or settings_path.exists():
+        if settings_path.exists():
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
 
     def qbit(self) -> MappedQbit:
