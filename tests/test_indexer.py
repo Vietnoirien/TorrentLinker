@@ -180,3 +180,24 @@ def test_supported_modes_are_fetched_once_and_unknown_when_caps_fail() -> None:
 
     broken = make_indexer(lambda r: httpx.Response(500))
     assert broken.supported_modes() is None
+
+
+def test_c411_caps_give_one_entry_per_category_id_in_c411s_own_tree() -> None:
+    """c411 reuses Newznab ids across its categories: results only carry the id, so the
+    tree has each id once, labelled with every c411 meaning it covers."""
+    from pathlib import Path
+
+    xml = (Path(__file__).parent / "fixtures" / "c411_caps.xml").read_text(encoding="utf-8")
+    caps = make_indexer(lambda r: httpx.Response(200, text=xml)).caps()
+
+    assert caps.categories[2000] == "Films & Vidéos / Série Documentaire"
+    assert 2000 not in caps.parents
+    assert (caps.categories[2030], caps.parents[2030]) == ("Film", 2000)
+    assert (caps.categories[5000], caps.parents[5000]) == ("Série TV", 2000)
+    assert caps.categories[8010] == "Imprimante 3D / Objets / Personnages / Pack"
+    assert 8010 not in caps.parents
+    assert caps.categories[1000] == "Jeux Vidéo / Emulation / VR"
+    assert caps.categories[7020] == "Livres / Partitions & Tablatures / Revues & Manuels techniques"
+    assert caps.parents[7020] == 7000
+    assert all(child != parent for child, parent in caps.parents.items())
+    assert all(parent not in caps.parents for parent in caps.parents.values())

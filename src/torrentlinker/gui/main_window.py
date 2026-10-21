@@ -209,7 +209,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
             QTimer.singleShot(0, self.refresh_profile)
-            QTimer.singleShot(0, self.update_catalogue)
+            QTimer.singleShot(0, lambda: self.refresh_categories(then=self.update_catalogue))
             if settings.library_folders:
                 QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
 
@@ -399,6 +399,34 @@ class MainWindow(QMainWindow):
             self.check_verifications()  # shows them as Verifying… and keeps polling
 
     # Catalogue -------------------------------------------------------------
+
+    def refresh_categories(self, then: Callable[[], object] | None = None) -> None:
+        """Read the Indexer's category tree (caps) and keep it in the settings if it changed."""
+        if not get_secret(INDEXER_API_KEY):
+            if then is not None:
+                then()
+            return
+        indexer = self.indexer()
+
+        def work() -> dict[int, IndexerCategory]:
+            caps = indexer.caps()
+            return {c: IndexerCategory(n, caps.parents.get(c)) for c, n in caps.categories.items()}
+
+        def done(categories: dict[int, IndexerCategory]) -> None:
+            if categories and categories != self.settings.indexer_categories:
+                log.info("Indexer categories updated: %d", len(categories))
+                self.settings.indexer_categories = categories
+                self.settings.save(self.settings_path)
+                self.offer_plan_categories()
+            if then is not None:
+                then()
+
+        def failed(error: Exception) -> None:
+            log.info("Indexer categories not refreshed: %s", error)
+            if then is not None:
+                then()
+
+        run_in_background(work, done, failed)
 
     def update_catalogue(self, then: Callable[[], None] | None = None) -> bool:
         """Fetch the newest torrents of the user's categories (at startup, or before

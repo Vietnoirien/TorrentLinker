@@ -90,7 +90,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(
             self._page(self._search_box(), self._matching_box()), self.tr("Search && Matching")
         )
-        self.tabs.addTab(self._page(self._downloads_box()), self.tr("Download Folders"))
+        self.tabs.addTab(self._page(self._downloads_box(), fill=True), self.tr("Download Folders"))
         self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
 
@@ -104,12 +104,14 @@ class SettingsDialog(QDialog):
         outer.addWidget(buttons)
 
     @staticmethod
-    def _page(*boxes: QWidget) -> QScrollArea:
+    def _page(*boxes: QWidget, fill: bool = False) -> QScrollArea:
+        """A scrollable tab; with `fill` its boxes grow with the window (long tables)."""
         body = QWidget()
         layout = QVBoxLayout(body)
         for box in boxes:
-            layout.addWidget(box)
-        layout.addStretch()
+            layout.addWidget(box, 1 if fill else 0)
+        if not fill:
+            layout.addStretch()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -436,9 +438,14 @@ class SettingsDialog(QDialog):
             [self.tr("Category"), self.tr("Download Folder"), self.tr("Used")]
         )
         header = self.download_table.horizontalHeader()
-        header.setSectionResizeMode(COL_CATEGORY, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(COL_FOLDER, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(COL_RESOLVED, QHeaderView.ResizeMode.Stretch)
+        # Long merged labels (one id covering several c411 categories) are elided, with
+        # the full label as tooltip, so the folder columns stay visible.
+        header.setSectionResizeMode(COL_CATEGORY, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_FOLDER, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(COL_FOLDER, 240)
+        header.setSectionResizeMode(COL_RESOLVED, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(COL_RESOLVED, 220)
+        self.download_table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.download_table.verticalHeader().setVisible(False)
         self.download_table.setMinimumHeight(300)
         self.download_table.itemChanged.connect(lambda _item: self._update_resolved())
@@ -475,6 +482,7 @@ class SettingsDialog(QDialog):
             info = self._categories[cat]
             indent = "    " if info.parent in self._categories else ""
             name = QTableWidgetItem(f"{indent}{info.name} ({cat})")
+            name.setToolTip(f"{info.name} ({cat})")
             name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable)
             name.setData(Qt.ItemDataRole.UserRole, cat)
             table.setItem(r, COL_CATEGORY, name)

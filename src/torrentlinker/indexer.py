@@ -95,6 +95,42 @@ class Caps:
     parents: dict[int, int] = field(default_factory=dict)  # subcategory -> category
 
 
+def _category_tree(root: ET.Element) -> tuple[dict[int, str], dict[int, int]]:
+    """Labels and parents of the Indexer's category ids, one entry per id.
+
+    An Indexer may reuse a Newznab id for several of its own categories (c411 files
+    "Série TV" as 5000 under "Films & Vidéos", and 4050 under five categories). Results
+    only carry the id, so each id gets every meaning it covers in its label, sits under
+    the first category that lists it, and is top-level if it is a category itself.
+    """
+
+    def label(el: ET.Element) -> str:
+        return el.get("description") or el.get("name") or ""
+
+    tops = [el for el in root.iter("category") if (el.get("id") or "").isdigit()]
+    top_ids = {int(el.get("id", "0")) for el in tops}
+    meanings: dict[int, list[str]] = {}
+    parents: dict[int, int] = {}
+
+    def add(cid: int, text: str) -> None:
+        known = meanings.setdefault(cid, [])
+        if text and text not in known:
+            known.append(text)
+
+    for el in tops:
+        add(int(el.get("id", "0")), label(el))
+    for el in tops:
+        parent = int(el.get("id", "0"))
+        for sub in el.iter("subcat"):
+            if not (sub.get("id") or "").isdigit():
+                continue
+            cid = int(sub.get("id", "0"))
+            add(cid, label(sub))
+            if cid not in top_ids and cid not in parents:
+                parents[cid] = parent
+    return {cid: " / ".join(texts) for cid, texts in meanings.items()}, parents
+
+
 class Indexer:
     def __init__(
         self,
@@ -123,17 +159,7 @@ class Indexer:
             mode = _CAPS_MODES.get(el.tag)
             if mode and el.get("available") == "yes":
                 modes[mode] = {p for p in el.get("supportedParams", "q").split(",") if p}
-        categories: dict[int, str] = {}
-        parents: dict[int, int] = {}
-        for el in root.iter("category"):
-            if not (el.get("id") or "").isdigit():
-                continue
-            parent = int(el.get("id", "0"))
-            categories[parent] = el.get("name", "")
-            for sub in el.iter("subcat"):
-                if (sub.get("id") or "").isdigit():
-                    categories[int(sub.get("id", "0"))] = sub.get("name", "")
-                    parents[int(sub.get("id", "0"))] = parent
+        categories, parents = _category_tree(root)
         return Caps(categories, modes, parents)
 
     def supported_modes(self) -> dict[SearchMode, set[str]] | None:
