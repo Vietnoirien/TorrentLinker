@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS scan_cache (
     signature TEXT NOT NULL,
     files TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS remembered_candidates (
+    item_path TEXT PRIMARY KEY,
+    candidates TEXT NOT NULL,
+    searched_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS item_query (
     item_path TEXT PRIMARY KEY,
     query TEXT NOT NULL
@@ -121,6 +126,22 @@ class Store:
             self._db.execute(
                 "INSERT OR REPLACE INTO search_cache VALUES (?, ?, ?)", (key, body, time.time())
             )
+
+    def remember_candidates(self, item_path: Path, candidates_json: str) -> None:
+        """Keep the last search's Candidates of a Local Item (already free of the API key)."""
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO remembered_candidates VALUES (?, ?, ?)",
+                (str(item_path), candidates_json, time.time()),
+            )
+
+    def remembered_candidates(self, item_path: Path) -> str | None:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT candidates FROM remembered_candidates WHERE item_path = ?",
+                (str(item_path),),
+            ).fetchone()
+        return str(row[0]) if row else None
 
     def item_query(self, item_path: Path) -> str | None:
         with self._lock:

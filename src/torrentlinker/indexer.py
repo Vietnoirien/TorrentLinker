@@ -163,13 +163,19 @@ class Indexer:
 
     def fetch_torrent(self, candidate: Candidate) -> bytes:
         """The Candidate's .torrent; downloaded at most once (it may count as a grab)."""
-        key = hashlib.sha1(self._redact(candidate.download_url).encode()).hexdigest()
-        if self._cache and (data := self._cache.cached_torrent(key)) is not None:
+        if (data := self.cached_torrent(candidate)) is not None:
             return data
         data = self._request(candidate.download_url).content
         if self._cache:
-            self._cache.cache_torrent(key, data)
+            self._cache.cache_torrent(self._torrent_key(candidate), data)
         return data
+
+    def cached_torrent(self, candidate: Candidate) -> bytes | None:
+        """The Candidate's .torrent if it was fetched before; never uses the network."""
+        return self._cache.cached_torrent(self._torrent_key(candidate)) if self._cache else None
+
+    def _torrent_key(self, candidate: Candidate) -> str:
+        return hashlib.sha1(self._redact(candidate.download_url).encode()).hexdigest()
 
     def _redact(self, body: str) -> str:
         return body.replace(self.api_key, API_KEY_PLACEHOLDER) if self.api_key else body

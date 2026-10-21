@@ -77,6 +77,9 @@ from torrentlinker.review import (
     candidate_key,
     check_candidates,
     match_zen,
+    remember_candidates,
+    remembered_candidates,
+    restore_checked,
     search_candidates,
 )
 from torrentlinker.seeding import Seeding, indexer_torrents, seeding
@@ -205,6 +208,8 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
             QTimer.singleShot(0, self.refresh_profile)
             QTimer.singleShot(0, self.update_catalogue)
+            if settings.library_folders:
+                QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
 
     def qbit(self) -> MappedQbit:
         q = self.settings.qbit
@@ -610,6 +615,7 @@ class MainWindow(QMainWindow):
 
         def search(entry: LibraryEntry) -> list[CheckedCandidate]:
             found = searcher(entry, store.item_query(entry.item.path))
+            remember_candidates(store, indexer, entry.item.path, found)
             rejections = store.rejections(entry.item.path)
             return check_candidates(indexer, entry.item, found, rules, rejections)
 
@@ -693,6 +699,37 @@ class MainWindow(QMainWindow):
         self.scan_action.setEnabled(True)
         self.rescan_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("{0} Local Items").format(len(entries)))
+        self.restore_searches(entries)
+
+    def restore_searches(self, entries: list[LibraryEntry]) -> None:
+        """Show each Local Item's last search again, from cached .torrent files only."""
+        indexer, rules, store = self.indexer(), self.match_rules(), self.store
+        searched = [e for e in entries if e.state is not ItemState.SEEDED]
+
+        def work() -> list[tuple[LibraryEntry, list[CheckedCandidate]]]:
+            restored = []
+            for entry in searched:
+                found = remembered_candidates(store, indexer, entry.item.path)
+                if found is None:
+                    continue
+                rejections = store.rejections(entry.item.path)
+                restored.append(
+                    (entry, restore_checked(indexer, entry.item, found, rules, rejections))
+                )
+            return restored
+
+        run_in_background(work, self._searches_restored, self._restore_failed)
+
+    def _searches_restored(
+        self, restored: list[tuple[LibraryEntry, list[CheckedCandidate]]]
+    ) -> None:
+        for entry, checked in restored:
+            if entry in self.library_model.entries:
+                self.review.remember(entry, checked)
+                self.library_model.set_status(entry.item.path, self._summary(checked))
+
+    def _restore_failed(self, error: Exception) -> None:
+        log.warning("could not restore previous searches: %s", error)
 
     def _scan_failed(self, error: Exception) -> None:
         self.scan_action.setEnabled(True)

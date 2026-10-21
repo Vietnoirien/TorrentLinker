@@ -33,6 +33,7 @@ from torrentlinker.review import (
     candidate_key,
     check_candidate,
     check_candidates,
+    remember_candidates,
 )
 from torrentlinker.store import Store
 
@@ -193,14 +194,15 @@ class ReviewPanel(QWidget):
             self.store.set_item_query(entry.item.path, override)
         self.search_button.setEnabled(False)
         indexer, rules, searcher = self.indexer(), self.rules(), self.searcher()
-        rejections = self.store.rejections(entry.item.path)
-        run_in_background(
-            lambda: check_candidates(
-                indexer, entry.item, searcher(entry, override), rules, rejections
-            ),
-            lambda checked: self._show(entry, checked),
-            self._failed,
-        )
+        store = self.store
+        rejections = store.rejections(entry.item.path)
+
+        def work() -> list[CheckedCandidate]:
+            found = searcher(entry, override)
+            remember_candidates(store, indexer, entry.item.path, found)
+            return check_candidates(indexer, entry.item, found, rules, rejections)
+
+        run_in_background(work, lambda checked: self._show(entry, checked), self._failed)
 
     def remember(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
         """Keep Candidates checked elsewhere (batch search) for when the item is selected."""

@@ -1,14 +1,17 @@
-"""Turn an Orphan's Candidates into verified Matches."""
+"""Turn an Orphan's Candidates into Matches, and remember them between launches."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, Indexer, SearchMode
 from torrentlinker.matching import FileComparison, Match, MatchRules, compare, is_plausible, match
 from torrentlinker.queries import ExternalIds, build_queries, find_ids, parse_name
+from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
 from torrentlinker.torrent_meta import TorrentMeta, read_torrent
 from torrentlinker.zen import ZenProfile, ZenTorrent, torrent_zen
@@ -74,10 +77,58 @@ def check_candidates(
     return result
 
 
+def remember_candidates(
+    store: Store, indexer: Indexer, item_path: Path, candidates: Iterable[Candidate]
+) -> None:
+    """Keep the last search's Candidates, so the Library shows them at the next launch."""
+    rows = [{**asdict(c), "download_url": indexer.redact(c.download_url)} for c in candidates]
+    store.remember_candidates(item_path, json.dumps(rows))
+
+
+def remembered_candidates(
+    store: Store, indexer: Indexer, item_path: Path
+) -> list[Candidate] | None:
+    """The Candidates of the Local Item's last search, or None if it was never searched."""
+    text = store.remembered_candidates(item_path)
+    if text is None:
+        return None
+    candidates = []
+    for row in json.loads(text):
+        row["download_url"] = indexer.unredact(row["download_url"])
+        row["categories"] = tuple(row.get("categories", ()))
+        candidates.append(Candidate(**row))
+    return candidates
+
+
+def restore_checked(
+    indexer: Indexer,
+    item: LocalItem,
+    candidates: Iterable[Candidate],
+    rules: MatchRules,
+    rejections: Mapping[str, str] = {},
+) -> list[CheckedCandidate]:
+    """Compare remembered Candidates again using only cached .torrent files (no network)."""
+    result = []
+    for c in candidates:
+        if candidate_key(c) in rejections:
+            continue
+        data = indexer.cached_torrent(c)
+        if data is None:
+            result.append(CheckedCandidate(c))
+            continue
+        result.append(_compared(item, c, read_torrent(data), rules))
+    return result
+
+
 def check_candidate(
     indexer: Indexer, item: LocalItem, candidate: Candidate, rules: MatchRules
 ) -> CheckedCandidate:
-    meta = read_torrent(indexer.fetch_torrent(candidate))
+    return _compared(item, candidate, read_torrent(indexer.fetch_torrent(candidate)), rules)
+
+
+def _compared(
+    item: LocalItem, candidate: Candidate, meta: TorrentMeta, rules: MatchRules
+) -> CheckedCandidate:
     return CheckedCandidate(
         candidate,
         meta,
