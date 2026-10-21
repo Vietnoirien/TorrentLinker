@@ -150,3 +150,64 @@ def test_catalogue_age_reads_briefly() -> None:
     assert age(0, 120) == (2, "min")
     assert age(0, 3 * 3600) == (3, "h")
     assert age(0, 4 * 86400) == (4, "d")
+
+
+def test_full_crawl_pauses_and_resumes_where_it_stopped_even_after_a_restart(
+    tmp_path: Path,
+) -> None:
+    fake = FakeTorznab()
+    fake.add(2000, 450)
+    pages = []
+
+    def pause_after_two() -> bool:
+        return len(pages) >= 2
+
+    update_category(
+        indexer(fake),
+        Store(tmp_path / "s.db"),
+        2000,
+        full=True,
+        stop=pause_after_two,
+        progress=pages.append,
+    )
+    assert Store(tmp_path / "s.db").crawl_state(2000).next_offset == 200
+    assert Store(tmp_path / "s.db").crawl_paused()
+    fake.requests.clear()
+
+    state = update_category(indexer(fake), Store(tmp_path / "s.db"), 2000, full=True)
+
+    assert [r.url.params["offset"] for r in fake.requests] == ["200", "300", "400"]
+    assert state.complete and state.next_offset == 0
+    assert not Store(tmp_path / "s.db").crawl_paused()
+    assert Store(tmp_path / "s.db").catalogue_size() == 450
+
+
+def test_after_a_full_crawl_later_runs_are_incremental(tmp_path: Path) -> None:
+    fake, store = FakeTorznab(), Store(tmp_path / "s.db")
+    fake.add(2000, 450)
+    update_category(indexer(fake), store, 2000, full=True)
+    fake.add(2000, 10, start=450)
+    fake.requests.clear()
+
+    update_category(indexer(fake), store, 2000, full=True)
+
+    assert [r.url.params["offset"] for r in fake.requests] == ["0", "100"]
+    assert store.catalogue_size() == 460
+
+
+def test_a_full_crawl_goes_on_past_known_torrents(tmp_path: Path) -> None:
+    fake, store = FakeTorznab(), Store(tmp_path / "s.db")
+    fake.add(2000, 300)
+    update_category(indexer(fake), store, 2000, max_pages=1)  # the startup update
+    fake.requests.clear()
+
+    update_category(indexer(fake), store, 2000, full=True)
+
+    assert [r.url.params["offset"] for r in fake.requests] == ["0", "100", "200", "300"]
+    assert store.catalogue_size() == 300
+
+
+def test_whole_catalogue_crawl_covers_every_category_once(tmp_path: Path) -> None:
+    from torrentlinker.catalogue import crawl_categories
+
+    assert crawl_categories(CATEGORIES) == [2000, 7000]

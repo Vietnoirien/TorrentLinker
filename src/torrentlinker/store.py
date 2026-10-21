@@ -300,3 +300,11 @@ class Store:
         with self._lock:
             row = self._db.execute("SELECT MAX(updated_at) FROM catalogue_crawl").fetchone()
         return float(row[0]) if row and row[0] is not None else None
+
+    def crawl_paused(self) -> bool:
+        """Whether a full crawl stopped before the end of some category."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT 1 FROM catalogue_crawl WHERE next_offset > 0 AND complete = 0 LIMIT 1"
+            ).fetchone()
+        return row is not None

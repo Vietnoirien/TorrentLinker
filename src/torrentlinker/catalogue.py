@@ -121,6 +121,12 @@ def startup_categories(
     return sorted(c for c in wanted if _parent(c, categories) not in wanted)
 
 
+def crawl_categories(categories: Mapping[int, IndexerCategory]) -> list[int]:
+    """Categories a whole-Catalogue crawl reads: every top category, which includes its
+    subcategories."""
+    return sorted(c for c in categories if _parent(c, categories) not in categories)
+
+
 def _parent(category: int, categories: Mapping[int, IndexerCategory]) -> int | None:
     known = categories.get(category)
     return known.parent if known else None

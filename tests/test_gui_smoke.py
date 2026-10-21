@@ -254,3 +254,36 @@ def test_catalogue_update_runs_off_the_gui_thread_and_reports_progress(
         )
 
     assert store.catalogue_size() == 150
+
+
+def test_whole_catalogue_fetch_can_be_paused_and_offers_to_resume(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_torznab import FakeTorznab
+    from tests.test_indexer import FakeClock
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.indexer import Indexer
+
+    fake, clock = FakeTorznab(), FakeClock()
+    fake.add(2000, 1000)
+    s = Settings()
+    s.indexer.url = "https://c411.example/api/torznab"
+    s.indexer_categories = {2000: IndexerCategory("Films")}
+    set_secret(INDEXER_API_KEY, "K")
+    store = Store(tmp_path / "s.db")
+    window = MainWindow(s, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window._indexer = Indexer(
+        s.indexer.url, "K", http=fake.client(), clock=clock.time, sleep=clock.sleep
+    )
+    box = window.zen_tab.catalogue
+    window._catalogue_progress = lambda p: window.pause_catalogue()  # type: ignore[method-assign]
+
+    with qtbot.waitSignal(
+        window.band.catalogue_changed, timeout=5000, check_params_cb=lambda t: "old" in t
+    ):
+        box.fetch_button.click()
+
+    assert 0 < store.catalogue_size() < 1000
+    assert store.crawl_paused()
+    assert "Resume" in box.fetch_button.text()

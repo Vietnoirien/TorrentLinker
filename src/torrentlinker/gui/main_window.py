@@ -27,12 +27,14 @@ from torrentlinker.catalogue import (
     CrawlProgress,
     Progress,
     age,
+    crawl_categories,
     startup_categories,
     update_categories,
 )
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.domain import ContentKind, ItemState
+from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
@@ -170,6 +172,9 @@ class MainWindow(QMainWindow):
 
         self._checking = False
         self.catalogue_runner: CatalogueRunner | None = None
+        self._crawl_position = (0, 0)
+        self.zen_tab.catalogue.start_requested.connect(self.crawl_catalogue)
+        self.zen_tab.catalogue.pause_requested.connect(self.pause_catalogue)
         self._show_catalogue_age()
         self.verify_timer = QTimer(self)
         self.verify_timer.setInterval(3000)
@@ -253,6 +258,49 @@ class MainWindow(QMainWindow):
 
         self._run_catalogue(work)
 
+    def crawl_catalogue(self) -> None:
+        """Fetch every category of the Indexer, resuming a paused crawl (user action)."""
+        if self.catalogue_runner is not None:
+            self.statusBar().showMessage(self.tr("The Catalogue is already being updated"))
+            return
+        if not get_secret(INDEXER_API_KEY):
+            QMessageBox.information(
+                self, self.tr("Catalogue"), self.tr("Enter your Indexer API key in Settings first.")
+            )
+            return
+        indexer, store = self.indexer(), self.store
+        known = dict(self.settings.indexer_categories)
+
+        def work(stop: Callable[[], bool], progress: Progress) -> None:
+            categories = known or {
+                c: IndexerCategory(name, caps.parents.get(c))
+                for caps in [indexer.caps()]
+                for c, name in caps.categories.items()
+            }
+            wanted = crawl_categories(categories)
+            for i, category in enumerate(wanted, 1):
+                if stop():
+                    return
+                self._crawl_position = (i, len(wanted))
+                update_categories(
+                    indexer,
+                    store,
+                    [category],
+                    full=True,
+                    stop=stop,
+                    progress=progress,
+                    categories=categories,
+                )
+
+        self._crawl_position = (0, 0)
+        self.zen_tab.catalogue.set_state(True, False)
+        self._run_catalogue(work)
+
+    def pause_catalogue(self) -> None:
+        if self.catalogue_runner is not None:
+            self.catalogue_runner.stop()
+            self.zen_tab.catalogue.set_status(self.tr("Pausing after the current page…"))
+
     def _run_catalogue(self, work: Callable[[Callable[[], bool], Progress], None]) -> None:
         runner = CatalogueRunner(work)
         runner.signals.progress.connect(self._catalogue_progress)
@@ -263,11 +311,19 @@ class MainWindow(QMainWindow):
 
     def _catalogue_progress(self, p: CrawlProgress) -> None:
         name = self.settings.indexer_categories.get(p.category)
-        self.band.set_catalogue(
-            self.tr("updating {0}, page {1} (+{2})").format(
-                name.name if name else p.category, p.pages, p.added
-            )
+        text = self.tr("updating {0}, page {1} (+{2})").format(
+            name.name if name else p.category, p.pages, p.added
         )
+        self.band.set_catalogue(text)
+        if self.zen_tab.catalogue.running:
+            done, total = self._crawl_position
+            wait = self._indexer.next_request_in() if self._indexer else 0
+            self.zen_tab.catalogue.set_status(
+                self.tr("Category {0}/{1}: {2} · {3} torrents in the Catalogue").format(
+                    done, total, text, self.store.catalogue_size()
+                )
+                + (self.tr(" · next request in {0} s").format(f"{wait:.0f}") if wait > 1 else "")
+            )
 
     def _catalogue_failed(self, error: Exception) -> None:
         log.warning("Catalogue update failed: %s", error)
@@ -279,6 +335,12 @@ class MainWindow(QMainWindow):
 
     def _show_catalogue_age(self) -> None:
         self.band.set_catalogue(self.catalogue_age())
+        paused = self.store.crawl_paused()
+        self.zen_tab.catalogue.set_state(False, paused)
+        self.zen_tab.catalogue.set_status(
+            self.catalogue_age()
+            + (" · " + self.tr("whole-catalogue fetch paused") if paused else "")
+        )
 
     def catalogue_age(self) -> str:
         how_old = age(self.store.catalogue_updated_at(), time.time())

@@ -205,6 +205,47 @@ class ClassComparison(QGroupBox):
             label.setText(text)
 
 
+class CatalogueBox(QGroupBox):
+    """Fetch the whole Catalogue on demand, with progress, pause and resume."""
+
+    start_requested = Signal()
+    pause_requested = Signal()
+
+    def __init__(self) -> None:
+        super().__init__(self.tr("Catalogue"))
+        layout = QHBoxLayout(self)
+        self.status = QLabel()
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status, 1)
+        self.fetch_button = QPushButton()
+        self.fetch_button.setToolTip(
+            self.tr(
+                "Read every category of the Indexer, 100 torrents per request at the polite "
+                "rate limit: the first time takes hours. You can pause and resume later, "
+                "even after closing the app; later runs only fetch what is new."
+            )
+        )
+        self.fetch_button.clicked.connect(self._clicked)
+        layout.addWidget(self.fetch_button)
+        self.running = False
+        self.set_state(False, False)
+
+    def _clicked(self) -> None:
+        (self.pause_requested if self.running else self.start_requested).emit()
+
+    def set_state(self, running: bool, paused: bool) -> None:
+        self.running = running
+        if running:
+            self.fetch_button.setText(self.tr("Pause"))
+        elif paused:
+            self.fetch_button.setText(self.tr("Resume fetching the whole catalogue"))
+        else:
+            self.fetch_button.setText(self.tr("Fetch the whole catalogue"))
+
+    def set_status(self, text: str) -> None:
+        self.status.setText(text)
+
+
 class ZenTab(QWidget):
     """Everything about Zen: what the user's seeding earns, and what to seed next."""
 
@@ -219,8 +260,10 @@ class ZenTab(QWidget):
         self.seeding_view = SeedingView(load_seeding)
         self.comparison = ClassComparison(profile, uploads)
         self.seeding_view.updated.connect(self.comparison.show_seeding)
+        self.catalogue = CatalogueBox()
         layout.addWidget(self.seeding_view, 1)
         layout.addWidget(self.comparison)
+        layout.addWidget(self.catalogue)
 
 
 KEYS_URL = "https://c411.org/user/integrations"
