@@ -221,6 +221,13 @@ def estimate(profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int =
     return ZenDay(per_torrent, notes, multiplier, upload_zen, total + upload_zen, paid)
 
 
+def torrent_zen(
+    profile: ZenProfile, torrent: ZenTorrent, alongside: Sequence[ZenTorrent] = ()
+) -> float:
+    """Zen Estimate of one torrent seeded alongside the user's current torrents."""
+    return estimate(profile, [*alongside, torrent]).per_torrent[-1]
+
+
 def compare_classes(
     profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int = 0
 ) -> dict[ZenClass, ZenDay]:

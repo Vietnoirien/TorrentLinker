@@ -58,6 +58,7 @@ class ReviewPanel(QWidget):
     """Candidates for the selected Orphan, and how a Candidate's files line up locally."""
 
     reseed_started = Signal(object)  # Path of the Local Item
+    candidates_checked = Signal(object, object)  # LibraryEntry, list[CheckedCandidate]
 
     def __init__(
         self,
@@ -204,12 +205,14 @@ class ReviewPanel(QWidget):
     def remember(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
         """Keep Candidates checked elsewhere (batch search) for when the item is selected."""
         self.cache[entry.item.path] = checked
+        self.candidates_checked.emit(entry, checked)
         if self.entry is not None and self.entry.item.path == entry.item.path:
             self._show(self.entry, checked)
 
     def _show(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
         self.search_button.setEnabled(self.entry is not None)
         self.cache[entry.item.path] = checked
+        self.candidates_checked.emit(entry, checked)
         if entry is not self.entry:
             return
         self.checked = sorted(
@@ -293,6 +296,7 @@ class ReviewPanel(QWidget):
             self.store.reject(self.entry.item.path, candidate_key(v.candidate), "Rejected by user")
             self.checked.remove(v)
         self.cache[self.entry.item.path] = list(self.checked)
+        self.candidates_checked.emit(self.entry, self.checked)
         self.candidates.clearSelection()
         self._fill_candidates()
 
@@ -313,6 +317,8 @@ class ReviewPanel(QWidget):
             return
         i = self.checked.index(old)
         self.checked[i] = new
+        self.cache[entry.item.path] = list(self.checked)
+        self.candidates_checked.emit(entry, self.checked)
         self._fill_candidates()
         self.candidates.selectRow(i)
 

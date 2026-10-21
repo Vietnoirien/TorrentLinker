@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from torrentlinker.domain import ContentKind, LocalItem
@@ -11,6 +11,7 @@ from torrentlinker.matching import FileComparison, Match, MatchRules, compare, i
 from torrentlinker.queries import ExternalIds, build_queries, find_ids, parse_name
 from torrentlinker.tmdb import Tmdb
 from torrentlinker.torrent_meta import TorrentMeta, read_torrent
+from torrentlinker.zen import ZenProfile, ZenTorrent, torrent_zen
 
 
 @dataclass(frozen=True)
@@ -83,3 +84,20 @@ def check_candidate(
         compare(item, meta.files, rules.ignore),
         match(item, meta.files, rules),
     )
+
+
+def match_zen(
+    profile: ZenProfile,
+    checked: Iterable[CheckedCandidate],
+    alongside: Sequence[ZenTorrent] = (),
+) -> float | None:
+    """Zen Estimate of the best Match once reseeded, or None without a Match.
+
+    The user joins the Candidate's seeders, with a seed age of 0.
+    """
+    values = [
+        torrent_zen(profile, ZenTorrent(v.candidate.size, v.candidate.seeders + 1), alongside)
+        for v in checked
+        if v.match is not None
+    ]
+    return max(values) if values else None

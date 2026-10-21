@@ -57,3 +57,23 @@ def test_search_falls_back_to_the_name_when_the_id_search_finds_nothing() -> Non
 
     assert found == [hit]
     assert [q.imdbid for q in indexer.queries] == ["0211915", None]
+
+
+def test_zen_of_a_match_counts_the_user_among_its_seeders_at_seed_age_zero() -> None:
+    import pytest
+
+    from torrentlinker.matching import Match
+    from torrentlinker.review import CheckedCandidate, match_zen
+    from torrentlinker.zen import GB, ZenClass, ZenProfile, ZenTorrent, estimate
+
+    profile = ZenProfile(ZenClass.TANKER)
+    matched = CheckedCandidate(
+        Candidate("film", 4 * GB, "u", seeders=99), match=Match({"a": "a"}, [], [], 1.0)
+    )
+    unmatched = CheckedCandidate(Candidate("other", 40 * GB, "u", seeders=99))
+
+    zen = match_zen(profile, [matched, unmatched])
+
+    assert zen == pytest.approx(estimate(profile, [ZenTorrent(4 * GB, 100, 0)]).total)
+    assert zen == pytest.approx(1.35 / 7)  # rarity .35 needs 41+ seeders, the user included
+    assert match_zen(profile, [unmatched]) is None

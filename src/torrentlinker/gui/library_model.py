@@ -48,12 +48,15 @@ class LibraryModel(QAbstractTableModel):
         QT_TRANSLATE_NOOP("LibraryModel", "State"),
         QT_TRANSLATE_NOOP("LibraryModel", "Size"),
         QT_TRANSLATE_NOOP("LibraryModel", "Library Folder"),
+        QT_TRANSLATE_NOOP("LibraryModel", "≈ Zen/day"),
     )
+    ZEN_COLUMN = 4
 
     def __init__(self) -> None:
         super().__init__()
         self.entries: list[LibraryEntry] = []
         self.status: dict[Path, str] = {}
+        self.zen: dict[Path, float] = {}  # Zen Estimate of an Orphan's best Match
 
     def set_entries(self, entries: list[LibraryEntry]) -> None:
         self.beginResetModel()
@@ -70,6 +73,20 @@ class LibraryModel(QAbstractTableModel):
             if e.item.path == path:
                 i = self.index(row, 1)
                 self.dataChanged.emit(i, i)
+
+    def set_zen(self, path: Path, value: float | None) -> None:
+        if value is None:
+            self.zen.pop(path, None)
+        else:
+            self.zen[path] = value
+        for row, e in enumerate(self.entries):
+            if e.item.path == path:
+                i = self.index(row, self.ZEN_COLUMN)
+                self.dataChanged.emit(i, i)
+
+    def zen_of(self, entry: LibraryEntry) -> float | None:
+        """Only Orphans show a Zen Estimate: a Seeded Item already earns its Zen."""
+        return self.zen.get(entry.item.path) if entry.state is ItemState.ORPHAN else None
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self.entries)
@@ -92,7 +109,10 @@ class LibraryModel(QAbstractTableModel):
                 self.status.get(e.item.path) or state_label(e.state),
                 human_size(e.item.size),
                 str(e.folder.path),
+                f"≈ {zen:.2f}" if (zen := self.zen_of(e)) is not None else "",
             )[index.column()]
+        if role == Qt.ItemDataRole.TextAlignmentRole and index.column() == self.ZEN_COLUMN:
+            return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         if role == Qt.ItemDataRole.ForegroundRole and index.column() == 1:
             return STATE_COLORS.get(e.state)
         if role == Qt.ItemDataRole.UserRole:
@@ -136,4 +156,8 @@ class LibraryFilter(QSortFilterProxyModel):
         assert isinstance(model, LibraryModel)
         if left.column() == 2:
             return model.entries[left.row()].item.size < model.entries[right.row()].item.size
+        if left.column() == LibraryModel.ZEN_COLUMN:
+            a = model.zen_of(model.entries[left.row()])
+            b = model.zen_of(model.entries[right.row()])
+            return (-1.0 if a is None else a) < (-1.0 if b is None else b)
         return super().lessThan(left, right)

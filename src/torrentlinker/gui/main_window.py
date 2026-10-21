@@ -44,7 +44,12 @@ from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
-from torrentlinker.review import CheckedCandidate, check_candidates, search_candidates
+from torrentlinker.review import (
+    CheckedCandidate,
+    check_candidates,
+    match_zen,
+    search_candidates,
+)
 from torrentlinker.seeding import Seeding, seeding
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
@@ -132,6 +137,7 @@ class MainWindow(QMainWindow):
             store, self.indexer, self.qbit, self.match_rules, self.searcher, self.default_query
         )
         self.review.reseed_started.connect(self._reseed_started)
+        self.review.candidates_checked.connect(self._show_match_zen)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(library_pane)
         splitter.addWidget(self.review)
@@ -345,6 +351,13 @@ class MainWindow(QMainWindow):
         )
         self.review.remember(entry, checked)
         self.library_model.set_status(entry.item.path, self._summary(checked))
+
+    def _show_match_zen(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
+        seeding = self.zen_tab.seeding_view.seeding
+        alongside = seeding.active if seeding else []
+        self.library_model.set_zen(
+            entry.item.path, match_zen(self.settings.zen, checked, alongside)
+        )
 
     def _summary(self, checked: list[CheckedCandidate]) -> str:
         if any(v.match and v.match.is_full for v in checked):

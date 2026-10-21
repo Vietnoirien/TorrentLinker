@@ -171,3 +171,38 @@ def test_class_comparison_highlights_the_current_class_and_labels_reuploader_rou
     assert "<b>" not in widget.labels[ZenClass.TANKER].text()
     assert "rough" in widget.labels[ZenClass.REUPLOADER].text()
     assert "4.30" in widget.labels[ZenClass.REUPLOADER].text()
+
+
+def test_library_shows_zen_per_day_for_orphans_with_a_match_and_sorts_it(
+    qtbot, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    from PySide6.QtCore import Qt
+
+    from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
+    from torrentlinker.gui.library_model import LibraryModel
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import Match
+    from torrentlinker.review import CheckedCandidate
+    from torrentlinker.zen import GB
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    folder = LibraryFolder(tmp_path)
+    entries = [
+        LibraryEntry(folder, LocalItem(tmp_path / n), ItemState.ORPHAN) for n in ("a", "b", "c")
+    ]
+    window.library_model.set_entries(entries)
+    full = Match({"x": "x"}, [], [], 1.0)
+    window.review.remember(entries[0], [CheckedCandidate(Candidate("s", GB, "u", 3), match=full)])
+    window.review.remember(
+        entries[1], [CheckedCandidate(Candidate("b", 40 * GB, "u", 3), match=full)]
+    )
+    window.review.remember(entries[2], [CheckedCandidate(Candidate("n", GB, "u", 3))])
+
+    col = LibraryModel.ZEN_COLUMN
+    texts = [window.library_model.index(r, col).data() for r in range(3)]
+    assert texts[0].startswith("≈") and texts[1].startswith("≈") and texts[2] == ""
+    window.library_proxy.sort(col, Qt.SortOrder.DescendingOrder)
+    top = window.library_proxy.index(0, 0).data(Qt.ItemDataRole.UserRole)
+    assert top is entries[1]
