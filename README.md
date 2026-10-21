@@ -2,6 +2,8 @@
 
 Desktop app that finds which of your files are no longer seeded in qBittorrent, looks them up on a Torznab tracker (c411 first), and reseeds the matching torrents against the data you already have — without moving or renaming your files.
 
+Its Zen tab estimates the Zen your c411 seeding earns, keeps a local Catalogue of the tracker's torrents and proposes a Plan of torrents to download and seed for the most Zen within your free space, Reseeds first.
+
 See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the key decisions.
 
 ## Development

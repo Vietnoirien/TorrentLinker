@@ -128,6 +128,8 @@ def test_partial_match_is_verified_on_local_pieces_and_left_stopped(
     assert t is not None and PARTIAL in t.tags
     assert t.state.startswith(("stopped", "paused"))  # 5.x and 4.x names
     assert not (lib / "Zweig" / "b.epub").exists()
+    listing = sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*"))
+    assert (lib / "Zweig" / "a.epub").exists(), (listing, t)
     assert digest(lib / "Zweig" / "a.epub") == before
 
 
