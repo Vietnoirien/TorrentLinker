@@ -38,7 +38,45 @@ CREATE TABLE IF NOT EXISTS item_query (
     item_path TEXT PRIMARY KEY,
     query TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS catalogue (
+    infohash TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    seeders INTEGER NOT NULL,
+    category INTEGER,
+    download_url TEXT NOT NULL,
+    details_url TEXT NOT NULL,
+    seen_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS catalogue_crawl (
+    category INTEGER PRIMARY KEY,
+    next_offset INTEGER NOT NULL DEFAULT 0,
+    complete INTEGER NOT NULL DEFAULT 0,
+    updated_at REAL
+);
 """
+
+
+@dataclass(frozen=True)
+class CatalogueRow:
+    """A torrent of the Catalogue. `download_url` never holds the API key."""
+
+    infohash: str
+    title: str
+    size: int
+    seeders: int
+    category: int | None
+    download_url: str
+    details_url: str
+    seen_at: float
+
+
+@dataclass(frozen=True)
+class CrawlState:
+    category: int
+    next_offset: int = 0  # where a paused full crawl resumes
+    complete: bool = False  # a full crawl reached the end once
+    updated_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -179,3 +217,86 @@ class Store:
                 "INSERT OR REPLACE INTO scan_cache VALUES (?, ?, ?)",
                 (str(item_path), signature, json.dumps(files)),
             )
+
+    # Catalogue --------------------------------------------------------------
+
+    def save_catalogue(self, rows: list[CatalogueRow]) -> None:
+        with self._lock, self._db:
+            self._db.executemany(
+                "INSERT OR REPLACE INTO catalogue VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        r.infohash,
+                        r.title,
+                        r.size,
+                        r.seeders,
+                        r.category,
+                        r.download_url,
+                        r.details_url,
+                        r.seen_at,
+                    )
+                    for r in rows
+                ],
+            )
+
+    def known_hashes(self, hashes: list[str]) -> set[str]:
+        with self._lock:
+            found = set()
+            for i in range(0, len(hashes), 500):
+                chunk = hashes[i : i + 500]
+                marks = ",".join("?" * len(chunk))
+                found |= {
+                    str(r[0])
+                    for r in self._db.execute(
+                        f"SELECT infohash FROM catalogue WHERE infohash IN ({marks})", chunk
+                    )
+                }
+            return found
+
+    def catalogue(self) -> list[CatalogueRow]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM catalogue").fetchall()
+        return [CatalogueRow(*r) for r in rows]
+
+    def catalogue_size(self) -> int:
+        with self._lock:
+            return int(self._db.execute("SELECT COUNT(*) FROM catalogue").fetchone()[0])
+
+    def catalogue_categories(self, hashes: list[str]) -> set[int]:
+        """Categories of the given torrents, as far as the Catalogue knows them."""
+        with self._lock:
+            found: set[int] = set()
+            for i in range(0, len(hashes), 500):
+                chunk = hashes[i : i + 500]
+                marks = ",".join("?" * len(chunk))
+                found |= {
+                    int(r[0])
+                    for r in self._db.execute(
+                        f"SELECT DISTINCT category FROM catalogue WHERE infohash IN ({marks})"
+                        " AND category IS NOT NULL",
+                        chunk,
+                    )
+                }
+            return found
+
+    def crawl_state(self, category: int) -> CrawlState:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT next_offset, complete, updated_at FROM catalogue_crawl WHERE category = ?",
+                (category,),
+            ).fetchone()
+        if not row:
+            return CrawlState(category)
+        return CrawlState(category, int(row[0]), bool(row[1]), row[2])
+
+    def save_crawl_state(self, state: CrawlState) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO catalogue_crawl VALUES (?, ?, ?, ?)",
+                (state.category, state.next_offset, int(state.complete), state.updated_at),
+            )
+
+    def catalogue_updated_at(self) -> float | None:
+        with self._lock:
+            row = self._db.execute("SELECT MAX(updated_at) FROM catalogue_crawl").fetchone()
+        return float(row[0]) if row and row[0] is not None else None

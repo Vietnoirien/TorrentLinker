@@ -118,169 +118,204 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../gui/main_window.py" line="72"/>
+        <location filename="../gui/main_window.py" line="82"/>
         <source>Main</source>
         <translation>Principal</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="73"/>
+        <location filename="../gui/main_window.py" line="83"/>
         <source>Scan</source>
         <translation>Analyser</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="75"/>
+        <location filename="../gui/main_window.py" line="85"/>
         <source>Rescan everything</source>
         <translation>Tout réanalyser</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="77"/>
+        <location filename="../gui/main_window.py" line="87"/>
         <source>Walk every file again, ignoring the scan cache (slower)</source>
         <translation>Relire chaque fichier sans le cache d’analyse (plus lent)</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="80"/>
+        <location filename="../gui/main_window.py" line="90"/>
         <source>Settings</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="82"/>
+        <location filename="../gui/main_window.py" line="92"/>
         <source>Search selected</source>
         <translation>Rechercher la sélection</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="84"/>
+        <location filename="../gui/main_window.py" line="94"/>
         <source>Search all Orphans</source>
         <translation>Rechercher tous les orphelins</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="86"/>
+        <location filename="../gui/main_window.py" line="96"/>
         <source>Cancel search</source>
         <translation>Annuler la recherche</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="120"/>
+        <location filename="../gui/main_window.py" line="130"/>
         <source>All states</source>
         <translation>Tous les états</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="126"/>
+        <location filename="../gui/main_window.py" line="136"/>
         <source>Show</source>
         <translation>Afficher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="148"/>
+        <location filename="../gui/main_window.py" line="158"/>
         <source>Zen</source>
         <translation>Zen</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="149"/>
+        <location filename="../gui/main_window.py" line="159"/>
         <source>Library</source>
         <translation>Bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="159"/>
+        <location filename="../gui/main_window.py" line="169"/>
         <source>Ready</source>
         <translation>Prêt</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="266"/>
+        <location filename="../gui/main_window.py" line="267"/>
+        <source>updating {0}, page {1} (+{2})</source>
+        <translation>mise à jour de {0}, page {1} (+{2})</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="274"/>
+        <source>Catalogue update failed: {0}</source>
+        <translation>Échec de la mise à jour du Catalogue : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="286"/>
+        <source>not fetched yet</source>
+        <translation>pas encore récupéré</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="288"/>
+        <source>{0} min</source>
+        <translation>{0} min</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="288"/>
+        <source>{0} h</source>
+        <translation>{0} h</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="288"/>
+        <source>{0} d</source>
+        <translation>{0} j</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="289"/>
+        <source>{0} torrents, {1} old</source>
+        <translation>{0} torrents, vieux de {1}</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="351"/>
         <source>All Library Folders</source>
         <translation>Tous les dossiers de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="305"/>
+        <location filename="../gui/main_window.py" line="390"/>
         <source>No Orphans to search</source>
         <translation>Aucun orphelin à rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="324"/>
+        <location filename="../gui/main_window.py" line="409"/>
         <source>Searching {0} Orphans…</source>
         <translation>Recherche de {0} orphelins…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="330"/>
+        <location filename="../gui/main_window.py" line="415"/>
         <source>Cancelling after the current item…</source>
         <translation>Annulation après l’élément en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="343"/>
+        <location filename="../gui/main_window.py" line="428"/>
         <source> · next request in {0} s</source>
         <translation> · prochaine requête dans {0} s</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="349"/>
+        <location filename="../gui/main_window.py" line="434"/>
         <source>Searched {0}/{1}: {2}</source>
         <translation>Recherché {0}/{1} : {2}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="364"/>
+        <location filename="../gui/main_window.py" line="449"/>
         <source>Full match found</source>
         <translation>Correspondance complète trouvée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="366"/>
+        <location filename="../gui/main_window.py" line="451"/>
         <source>Partial match found</source>
         <translation>Correspondance partielle trouvée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="368"/>
+        <location filename="../gui/main_window.py" line="453"/>
         <source>No match</source>
         <translation>Aucune correspondance</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="369"/>
+        <location filename="../gui/main_window.py" line="454"/>
         <source>No Candidates</source>
         <translation>Aucun candidat</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="372"/>
+        <location filename="../gui/main_window.py" line="457"/>
         <source>Search failed: {0}</source>
         <translation>Échec de la recherche : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="377"/>
+        <location filename="../gui/main_window.py" line="462"/>
         <source>Batch search finished: {0} searched</source>
         <translation>Recherche groupée terminée : {0} recherchés</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="385"/>
+        <location filename="../gui/main_window.py" line="470"/>
         <source>Scanning…</source>
         <translation>Analyse…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="398"/>
+        <location filename="../gui/main_window.py" line="483"/>
         <source>{0} Local Items</source>
         <translation>{0} éléments locaux</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="403"/>
-        <location filename="../gui/main_window.py" line="404"/>
+        <location filename="../gui/main_window.py" line="488"/>
+        <location filename="../gui/main_window.py" line="489"/>
         <source>Scan failed</source>
         <translation>Échec de l’analyse</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="409"/>
-        <location filename="../gui/main_window.py" line="435"/>
+        <location filename="../gui/main_window.py" line="494"/>
+        <location filename="../gui/main_window.py" line="520"/>
         <source>Verifying…</source>
         <translation>Vérification…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="428"/>
+        <location filename="../gui/main_window.py" line="513"/>
         <source>Reseeded</source>
         <translation>Repartagé</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="430"/>
+        <location filename="../gui/main_window.py" line="515"/>
         <source>Verified, left stopped: some files are absent</source>
         <translation>Vérifié, laissé à l’arrêt : certains fichiers sont absents</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="432"/>
+        <location filename="../gui/main_window.py" line="517"/>
         <source>Verification failed at {0}</source>
         <translation>Vérification échouée à {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="443"/>
+        <location filename="../gui/main_window.py" line="528"/>
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
     </message>
@@ -926,77 +961,77 @@
 <context>
     <name>ZenBand</name>
     <message>
-        <location filename="../gui/zen_view.py" line="249"/>
+        <location filename="../gui/zen_view.py" line="250"/>
         <source>Refresh profile</source>
         <translation>Actualiser le profil</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="250"/>
+        <location filename="../gui/zen_view.py" line="251"/>
         <source>Read your Zen Balance and Class from c411</source>
         <translation>Lire votre Solde Zen et votre Classe sur c411</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="267"/>
+        <location filename="../gui/zen_view.py" line="268"/>
         <source>Zen Balance: &lt;b&gt;{0}&lt;/b&gt;</source>
         <translation>Solde Zen : &lt;b&gt;{0}&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="271"/>
+        <location filename="../gui/zen_view.py" line="272"/>
         <source>Seeding: &lt;b&gt;{0}&lt;/b&gt; Zen/day</source>
         <translation>En partage : &lt;b&gt;{0}&lt;/b&gt; Zen/jour</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="275"/>
+        <location filename="../gui/zen_view.py" line="276"/>
         <source>with Plan: {0}</source>
         <translation>avec le Plan : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="278"/>
+        <location filename="../gui/zen_view.py" line="279"/>
         <source>Catalogue: {0}</source>
         <translation>Catalogue : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="289"/>
+        <location filename="../gui/zen_view.py" line="291"/>
         <source>Downloads are blocked on c411: not enough Zen.</source>
         <translation>Les téléchargements sont bloqués sur c411 : Zen insuffisant.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="292"/>
+        <location filename="../gui/zen_view.py" line="294"/>
         <source>Downloads are blocked on c411 ({0}).</source>
         <translation>Les téléchargements sont bloqués sur c411 ({0}).</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="299"/>
+        <location filename="../gui/zen_view.py" line="301"/>
         <source>c411 Class “{0}” is not known here: enter your Zen Profile in Settings → Zen.</source>
         <translation>La Classe c411 « {0} » est inconnue ici : saisissez votre Profil Zen dans Paramètres → Zen.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="300"/>
+        <location filename="../gui/zen_view.py" line="302"/>
         <source>none</source>
         <translation>aucune</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="309"/>
+        <location filename="../gui/zen_view.py" line="311"/>
         <source>Enter your c411 key in Settings → Connections to see your Zen Balance.</source>
         <translation>Saisissez votre clé c411 dans Paramètres → Connexions pour voir votre Solde Zen.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="312"/>
+        <location filename="../gui/zen_view.py" line="314"/>
         <source>c411 refused the key: check it in Settings → Connections.</source>
         <translation>c411 a refusé la clé : vérifiez-la dans Paramètres → Connexions.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="315"/>
+        <location filename="../gui/zen_view.py" line="317"/>
         <source>Your c411 key cannot read your profile: create one with the &quot;Profil (lecture)&quot; scope at &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;. Until then, enter your Zen Profile in Settings → Zen.</source>
         <translation>Votre clé c411 ne peut pas lire votre profil : créez-en une avec la portée « Profil (lecture) » sur &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;. En attendant, saisissez votre Profil Zen dans Paramètres → Zen.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="320"/>
+        <location filename="../gui/zen_view.py" line="322"/>
         <source>c411 is limiting requests: refresh your profile in a minute.</source>
         <translation>c411 limite les requêtes : actualisez votre profil dans une minute.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="324"/>
+        <location filename="../gui/zen_view.py" line="326"/>
         <source>Could not read your c411 profile: {0}</source>
         <translation>Impossible de lire votre profil c411 : {0}</translation>
     </message>

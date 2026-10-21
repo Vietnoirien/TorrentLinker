@@ -206,3 +206,51 @@ def test_library_shows_zen_per_day_for_orphans_with_a_match_and_sorts_it(
     window.library_proxy.sort(col, Qt.SortOrder.DescendingOrder)
     top = window.library_proxy.index(0, 0).data(Qt.ItemDataRole.UserRole)
     assert top is entries[1]
+
+
+def test_band_shows_the_catalogue_age(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import time
+
+    from torrentlinker.store import CatalogueRow, CrawlState
+
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue([CatalogueRow("aa" * 20, "Book", 1, 1, 7000, "u", "d", 0)])
+    store.save_crawl_state(CrawlState(7000, updated_at=time.time() - 7200))
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+
+    assert "1 torrents, 2 h old" in window.band.catalogue.text()
+
+
+def test_catalogue_update_runs_off_the_gui_thread_and_reports_progress(
+    qtbot, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_torznab import FakeTorznab
+    from tests.test_indexer import FakeClock
+    from torrentlinker.catalogue import update_categories
+    from torrentlinker.indexer import Indexer
+
+    fake, clock = FakeTorznab(), FakeClock()
+    fake.add(7000, 150)
+    indexer = Indexer(
+        "https://c411.example/api/torznab",
+        "K",
+        http=fake.client(),
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+    store = Store(tmp_path / "s.db")
+    window = MainWindow(Settings(), tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+
+    with qtbot.waitSignal(
+        window.band.catalogue_changed, timeout=5000, check_params_cb=lambda t: "old" in t
+    ):
+        window._run_catalogue(
+            lambda stop, progress: update_categories(
+                indexer, store, [7000], stop=stop, progress=progress
+            )
+        )
+
+    assert store.catalogue_size() == 150

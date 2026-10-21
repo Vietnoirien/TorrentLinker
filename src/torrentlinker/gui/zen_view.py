@@ -231,6 +231,7 @@ class ZenBand(QFrame):
     """Across the top of every tab: Zen Balance, what seeding earns, Plan and Catalogue."""
 
     refresh_requested = Signal()
+    catalogue_changed = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -276,6 +277,7 @@ class ZenBand(QFrame):
 
     def set_catalogue(self, text: str | None) -> None:
         self.catalogue.setText(self.tr("Catalogue: {0}").format(text or "–"))
+        self.catalogue_changed.emit(self.catalogue.text())
 
     def busy(self, busy: bool) -> None:
         self.refresh_button.setEnabled(not busy)

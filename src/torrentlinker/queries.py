@@ -103,14 +103,18 @@ def build_queries(
     s_param = season if allows(mode, "season") else None
     e_param = episode if allows(mode, "ep") else None
     if not override and mode in (SearchMode.MOVIE, SearchMode.TV):
-        by_id = None
-        if ids.imdb and allows(mode, "imdbid"):
-            by_id = {"imdbid": ids.imdb.removeprefix("tt")}  # Torznab wants it without "tt"
-        elif ids.tmdb and allows(mode, "tmdbid"):
-            by_id = {"tmdbid": ids.tmdb}
-        if by_id:
+        imdb = ids.imdb.removeprefix("tt") if ids.imdb and allows(mode, "imdbid") else None
+        tmdb = ids.tmdb if not imdb and ids.tmdb and allows(mode, "tmdbid") else None
+        if imdb or tmdb:  # Torznab wants the IMDb id without "tt"
             queries.append(
-                SearchQuery(mode=mode, categories=categories, season=s_param, ep=e_param, **by_id)
+                SearchQuery(
+                    mode=mode,
+                    categories=categories,
+                    season=s_param,
+                    ep=e_param,
+                    imdbid=imdb,
+                    tmdbid=tmdb,
+                )
             )
     if mode is SearchMode.SEARCH:
         s_param = e_param = None

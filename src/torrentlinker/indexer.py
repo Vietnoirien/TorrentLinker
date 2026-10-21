@@ -40,9 +40,18 @@ class SearchQuery:
     tmdbid: str | None = None
     season: int | None = None
     ep: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+    extended: bool = False
 
     def params(self) -> dict[str, str]:
         p = {"t": self.mode.value}
+        if self.limit is not None:
+            p["limit"] = str(self.limit)
+        if self.offset is not None:
+            p["offset"] = str(self.offset)
+        if self.extended:
+            p["extended"] = "1"
         if self.q:
             p["q"] = self.q
         if self.categories:
@@ -137,8 +146,11 @@ class Indexer:
                     return None
             return self._modes
 
-    def search(self, query: SearchQuery) -> list[Candidate]:
+    def search(self, query: SearchQuery, cached: bool = True) -> list[Candidate]:
+        """Run a Torznab search; `cached=False` always asks the Indexer and keeps nothing."""
         params = query.params()
+        if not cached:
+            return _parse_items(self._get(params))
         key = self.url + "?" + "&".join(f"{k}={v}" for k, v in sorted(params.items()))
         body = self._cache.cached_search(key, SEARCH_CACHE_MAX_AGE) if self._cache else None
         if body is None:
@@ -146,7 +158,7 @@ class Indexer:
             if self._cache:
                 self._cache.cache_search(key, self._redact(body))
         else:
-            body = body.replace(API_KEY_PLACEHOLDER, self.api_key)
+            body = self.unredact(body)
         return _parse_items(body)
 
     def fetch_torrent(self, candidate: Candidate) -> bytes:
@@ -161,6 +173,13 @@ class Indexer:
 
     def _redact(self, body: str) -> str:
         return body.replace(self.api_key, API_KEY_PLACEHOLDER) if self.api_key else body
+
+    def redact(self, text: str) -> str:
+        """`text` with the API key replaced by a placeholder, safe to store."""
+        return self._redact(text)
+
+    def unredact(self, text: str) -> str:
+        return text.replace(API_KEY_PLACEHOLDER, self.api_key)
 
     def _get(self, params: dict[str, str]) -> str:
         return self._request(self.url, {**params, "apikey": self.api_key}).text

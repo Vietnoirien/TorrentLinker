@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelection, Qt, QTimer
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -21,10 +22,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.catalogue import (
+    STARTUP_PAGES,
+    CrawlProgress,
+    Progress,
+    age,
+    startup_categories,
+    update_categories,
+)
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.domain import ContentKind, ItemState
 from torrentlinker.gui.batch_runner import BatchRunner
+from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.settings_dialog import (
@@ -50,7 +60,7 @@ from torrentlinker.review import (
     match_zen,
     search_candidates,
 )
-from torrentlinker.seeding import Seeding, seeding
+from torrentlinker.seeding import Seeding, indexer_torrents, seeding
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
 
@@ -159,6 +169,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(self.tr("Ready"))
 
         self._checking = False
+        self.catalogue_runner: CatalogueRunner | None = None
+        self._show_catalogue_age()
         self.verify_timer = QTimer(self)
         self.verify_timer.setInterval(3000)
         self.verify_timer.timeout.connect(self.check_verifications)
@@ -166,6 +178,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
             QTimer.singleShot(0, self.refresh_profile)
+            QTimer.singleShot(0, self.update_catalogue)
 
     def qbit(self) -> MappedQbit:
         q = self.settings.qbit
@@ -209,6 +222,78 @@ class MainWindow(QMainWindow):
     def _profile_failed(self, error: Exception) -> None:
         log.info("c411 profile not read: %s", error)
         self.band.show_profile_error(error)
+
+    # Catalogue -------------------------------------------------------------
+
+    def update_catalogue(self) -> None:
+        """Fetch the newest torrents of the user's categories (at startup)."""
+        if self.catalogue_runner is not None or not get_secret(INDEXER_API_KEY):
+            return
+        indexer, store, qbit = self.indexer(), self.store, self.qbit()
+        url, folders = self.settings.indexer.url, self.settings.download_folders
+        categories = dict(self.settings.indexer_categories)
+
+        def work(stop: Callable[[], bool], progress: Progress) -> None:
+            try:
+                seeded = [t.hash for t in indexer_torrents(qbit.torrents(with_files=False), url)]
+            except Exception as e:  # noqa: BLE001 - qBittorrent may be down; folders still count
+                log.info("Catalogue update without qBittorrent: %s", e)
+                seeded = []
+            wanted = startup_categories(folders, categories, seeded, store)
+            log.info("Catalogue update of categories %s", wanted)
+            update_categories(
+                indexer,
+                store,
+                wanted,
+                max_pages=STARTUP_PAGES,
+                stop=stop,
+                progress=progress,
+                categories=categories,
+            )
+
+        self._run_catalogue(work)
+
+    def _run_catalogue(self, work: Callable[[Callable[[], bool], Progress], None]) -> None:
+        runner = CatalogueRunner(work)
+        runner.signals.progress.connect(self._catalogue_progress)
+        runner.signals.failed.connect(self._catalogue_failed)
+        runner.signals.finished.connect(self._catalogue_finished)
+        self.catalogue_runner = runner
+        runner.start()
+
+    def _catalogue_progress(self, p: CrawlProgress) -> None:
+        name = self.settings.indexer_categories.get(p.category)
+        self.band.set_catalogue(
+            self.tr("updating {0}, page {1} (+{2})").format(
+                name.name if name else p.category, p.pages, p.added
+            )
+        )
+
+    def _catalogue_failed(self, error: Exception) -> None:
+        log.warning("Catalogue update failed: %s", error)
+        self.statusBar().showMessage(self.tr("Catalogue update failed: {0}").format(error))
+
+    def _catalogue_finished(self, stopped: bool) -> None:
+        self.catalogue_runner = None
+        self._show_catalogue_age()
+
+    def _show_catalogue_age(self) -> None:
+        self.band.set_catalogue(self.catalogue_age())
+
+    def catalogue_age(self) -> str:
+        how_old = age(self.store.catalogue_updated_at(), time.time())
+        if how_old is None:
+            return self.tr("not fetched yet")
+        amount, unit = how_old
+        units = {"min": self.tr("{0} min"), "h": self.tr("{0} h"), "d": self.tr("{0} d")}
+        return self.tr("{0} torrents, {1} old").format(
+            self.store.catalogue_size(), units[unit].format(amount)
+        )
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self.catalogue_runner is not None:
+            self.catalogue_runner.stop()
+        super().closeEvent(event)
 
     def seeding_loader(self) -> Callable[[], Seeding]:
         """Build on the GUI thread the work that reads the Seeding view from qBittorrent."""
