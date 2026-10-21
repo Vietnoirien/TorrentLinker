@@ -7,9 +7,10 @@ view happens in the caller through Path Mappings.
 from __future__ import annotations
 
 import re
+import threading
 import time
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import qbittorrentapi
 
@@ -59,15 +60,53 @@ def is_api_key(text: str) -> bool:
     return bool(API_KEY_PATTERN.match(text))
 
 
+class _SharedLogin:
+    """qbittorrent-api calls that share one login, safe when several threads start at once.
+
+    Left alone, every thread that finds no session logs in by itself, the logins replace
+    each other's session cookie and requests in between are refused with 403.
+    """
+
+    def __init__(self, client: qbittorrentapi.Client) -> None:
+        self._client = client
+        self._lock = threading.Lock()
+        self._logged_in = False
+
+    def log_in(self) -> None:
+        with self._lock:
+            self._client.auth_log_in()
+            self._logged_in = True
+
+    def __getattr__(self, name: str) -> Any:
+        attribute = getattr(self._client, name)
+        if not callable(attribute) or name.startswith("auth_"):
+            return attribute
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            if not self._logged_in:
+                with self._lock:
+                    if not self._logged_in:
+                        self._client.auth_log_in()
+                        self._logged_in = True
+            try:
+                return attribute(*args, **kwargs)
+            except qbittorrentapi.Forbidden403Error:
+                self.log_in()  # the session expired or was replaced: once more
+                return attribute(*args, **kwargs)
+
+        return call
+
+
 class QbitApi:
     """Adapter over qBittorrent's WebUI API (4.5+ and 5.x).
 
     With an API key (qBittorrent 5.2+) every request carries `Authorization: Bearer`
-    and there is no login; otherwise the username and password open a session.
+    and there is no login; otherwise the username and password open one session that
+    every thread shares.
     """
 
     def __init__(self, host: str, username: str, password: str, api_key: str = "") -> None:
-        self._client = qbittorrentapi.Client(
+        client = qbittorrentapi.Client(
             host=host,
             username=None if api_key else username,
             password=None if api_key else password,
@@ -75,6 +114,7 @@ class QbitApi:
             VERIFY_WEBUI_CERTIFICATE=False,
             REQUESTS_ARGS={"timeout": (5, 30)},
         )
+        self._client: Any = client if api_key else _SharedLogin(client)
 
     def check(self) -> str:
         """Log in (or validate the API key) and return the qBittorrent version."""

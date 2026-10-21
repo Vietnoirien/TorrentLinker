@@ -205,3 +205,34 @@ def test_a_plan_torrent_downloads_into_its_download_folder_tagged_zen(
         send_one(qbit, PlanCandidate(meta.infohash, meta.name, 40000, 1, 1, other, 1), data)
     assert qbit.torrent(h) is None  # never added
     assert (other / "Zen.Release" / "a.bin").read_bytes() == b"mine"
+
+
+AUTH_HOST = os.environ.get("TL_QBIT_SANDBOX_AUTH", "")
+AUTH_PASSWORD_FILE = os.environ.get("TL_QBIT_SANDBOX_AUTH_PASSWORD_FILE", "")
+
+
+@pytest.mark.skipif(
+    not (AUTH_HOST and AUTH_PASSWORD_FILE),
+    reason="set TL_QBIT_SANDBOX_AUTH and TL_QBIT_SANDBOX_AUTH_PASSWORD_FILE",
+)
+def test_tasks_starting_together_share_one_login() -> None:
+    import threading
+
+    password = Path(AUTH_PASSWORD_FILE).read_text().strip()
+    for _ in range(5):
+        api = QbitApi(AUTH_HOST, "sandbox", password)  # a fresh app start: no session yet
+        errors: list[str] = []
+
+        def first_call(api: QbitApi = api, errors: list[str] = errors) -> None:
+            try:
+                api.torrents(with_files=False)
+            except Exception as e:  # noqa: BLE001 - collected for the assertion
+                errors.append(f"{type(e).__name__}: {e}")
+
+        threads = [threading.Thread(target=first_call) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []

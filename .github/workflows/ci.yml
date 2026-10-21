@@ -61,8 +61,14 @@ jobs:
           "$QBT" --profile="$RUNNER_TEMP/qbt" > "$RUNNER_TEMP/qbt.log" 2>&1 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/api/v2/app/version && break; sleep 1; done
           echo; curl -sf http://127.0.0.1:18080/api/v2/app/webapiVersion
+          # A second instance where localhost must log in, for the shared-login test
+          python scripts/qbit_sandbox.py "$RUNNER_TEMP/qbt-auth" 18081 --auth
+          "$QBT" --profile="$RUNNER_TEMP/qbt-auth" > "$RUNNER_TEMP/qbt-auth.log" 2>&1 &
+          for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18081/api/v2/app/version)" = 403 ] && break; sleep 1; done
       - run: pytest -q tests/test_qbit_integration.py -rs
         env:
           TL_QBIT_SANDBOX: http://127.0.0.1:18080
+          TL_QBIT_SANDBOX_AUTH: http://127.0.0.1:18081
+          TL_QBIT_SANDBOX_AUTH_PASSWORD_FILE: ${{ runner.temp }}/qbt-auth/password
       - if: failure()
         run: cat "$RUNNER_TEMP/qbt.log"
