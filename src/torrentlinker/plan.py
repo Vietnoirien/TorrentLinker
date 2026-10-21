@@ -14,7 +14,10 @@ from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from torrentlinker.domain import ItemState
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
+from torrentlinker.library import LibraryEntry
+from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import CatalogueRow
 from torrentlinker.zen import GB, ZenProfile, ZenTorrent, added_values, estimate
 
@@ -82,7 +85,8 @@ def make_plan(
     values = added_values(profile, [c.as_zen() for c in candidates], seeding)
     valued = [(c, v) for c, v in zip(candidates, values, strict=True) if v > 0]
     reseeds = sorted((cv for cv in valued if cv[0].reseed), key=lambda cv: -cv[1])
-    downloads = [cv for cv in valued if not cv[0].reseed]
+    reseeded = {c.infohash for c, _ in reseeds}
+    downloads = [cv for cv in valued if not cv[0].reseed and cv[0].infohash not in reseeded]
     room = slots if slots is not None else len(candidates)
     first = reseeds[:room]
     base = estimate(profile, seeding).total
@@ -115,6 +119,60 @@ def _fill(
             budgets[c.disk] -= c.size
             chosen.append((c, v))
     return chosen
+
+
+@dataclass(frozen=True)
+class ReseedSource:
+    """What a Reseed row needs to run the Reseed flow (ADR-0002)."""
+
+    entry: LibraryEntry
+    checked: CheckedCandidate
+
+
+def reseed_candidates(
+    profile: ZenProfile,
+    found: Iterable[tuple[LibraryEntry, Sequence[CheckedCandidate]]],
+    in_client: set[str],
+    seeding: Sequence[ZenTorrent] = (),
+) -> list[PlanCandidate]:
+    """One Reseed row per Orphan with a Full Match: its best-earning Match.
+
+    Partial Matches are left out: after Verification they stay stopped and earn nothing.
+    """
+    result = []
+    for entry, checked in found:
+        if entry.state is not ItemState.ORPHAN:
+            continue
+        full = [
+            v
+            for v in checked
+            if v.match is not None
+            and v.match.is_full
+            and v.meta is not None
+            and v.meta.infohash.lower() not in in_client
+        ]
+        if not full:
+            continue
+        rows = [_reseed_row(entry, v) for v in full]
+        values = added_values(profile, [r.as_zen() for r in rows], seeding)
+        result.append(max(zip(values, rows, strict=True), key=lambda vr: vr[0])[1])
+    return result
+
+
+def _reseed_row(entry: LibraryEntry, v: CheckedCandidate) -> PlanCandidate:
+    assert v.meta is not None
+    c = v.candidate
+    return PlanCandidate(
+        v.meta.infohash.lower(),
+        c.title,
+        c.size,
+        c.seeders,
+        c.categories[0] if c.categories else None,
+        None,
+        None,
+        reseed=True,
+        source=ReseedSource(entry, v),
+    )
 
 
 def catalogue_candidates(

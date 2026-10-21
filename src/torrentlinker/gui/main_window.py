@@ -56,17 +56,25 @@ from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.plan import (
     Plan,
     PlanCandidate,
+    ReseedSource,
     catalogue_candidates,
     disk_budgets,
     disk_of,
     make_plan,
+    reseed_candidates,
 )
 from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import QbitApi
 from torrentlinker.queries import build_queries, find_ids
-from torrentlinker.reseed import Outcome, check_verifications, pending_verifications
+from torrentlinker.reseed import (
+    Outcome,
+    check_verifications,
+    pending_verifications,
+    start_reseed,
+)
 from torrentlinker.review import (
     CheckedCandidate,
+    candidate_key,
     check_candidates,
     match_zen,
     search_candidates,
@@ -263,12 +271,19 @@ class MainWindow(QMainWindow):
             dict(s.indexer_categories),
             s.free_space_margin,
         )
+        # Orphans whose Matches searches found, for Reseed rows (read on the GUI thread)
+        found = [
+            (e, list(self.review.cache[e.item.path]))
+            for e in self.library_model.entries
+            if e.state is ItemState.ORPHAN and e.item.path in self.review.cache
+        ]
 
         def work() -> Plan:
             torrents = qbit.torrents(with_files=False)
             view = seeding(profile, torrents, url)
             in_client = {t.hash.lower() for t in torrents}
-            candidates = catalogue_candidates(
+            candidates = reseed_candidates(profile, found, in_client, view.active)
+            candidates += catalogue_candidates(
                 store.catalogue(), folders, categories, in_client, disk_of
             )
             budgets = disk_budgets({c.folder for c in candidates if c.folder}, margin)
@@ -329,8 +344,19 @@ class MainWindow(QMainWindow):
             self.zen_tab.plan_view.failed,
         )
 
-    def plan_reseeder(self) -> Callable[[PlanCandidate], None] | None:
-        return None
+    def plan_reseeder(self) -> Callable[[PlanCandidate], None]:
+        """Reseed rows run the normal Reseed flow, with Verification (ADR-0002)."""
+        qbit, store = self.qbit(), self.store
+
+        def reseed(c: PlanCandidate) -> None:
+            assert isinstance(c.source, ReseedSource)
+            v = c.source.checked
+            assert v.meta is not None and v.match is not None
+            start_reseed(
+                qbit, store, c.source.entry.item, v.meta, v.match, candidate_key(v.candidate)
+            )
+
+        return reseed
 
     def _plan_sent(self, report: SendReport) -> None:
         self.zen_tab.plan_view.show_plan(Plan())
@@ -343,7 +369,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, self.tr("Plan sent"), "\n".join(lines))
         self.zen_tab.seeding_view.refresh()
         if report.reseeded:
-            self.verify_timer.start()
+            self.check_verifications()  # shows them as Verifying… and keeps polling
 
     # Catalogue -------------------------------------------------------------
 

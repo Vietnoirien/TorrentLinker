@@ -292,7 +292,8 @@ class PlanView(QGroupBox):
             ]
         )
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSortIndicator(3, Qt.SortOrder.DescendingOrder)
+        # Plan order first: Reseeds, then downloads; a header click sorts.
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
 
@@ -306,6 +307,7 @@ class PlanView(QGroupBox):
         self.plan = plan
         self.busy(False)
         self.table.setSortingEnabled(False)
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.table.setRowCount(len(plan.items))
         for r, item in enumerate(plan.items):
             c = item.candidate

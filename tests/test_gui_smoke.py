@@ -387,3 +387,45 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
     [t] = qbit.torrents()
     assert ZEN_TAG in t.tags and t.save_path == tmp_path / "dl"
     assert "1 torrents added" in shown[0]
+
+
+def test_plan_lists_reseeds_first_and_sends_them_through_verification(
+    qtbot, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from tests.torrents import make_torrent
+    from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import match
+    from torrentlinker.reseed import VERIFYING
+    from torrentlinker.review import CheckedCandidate
+    from torrentlinker.torrent_meta import read_torrent
+
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    f = lib / "book.epub"
+    f.write_bytes(b"b" * 3000)
+    item = LocalItem(f, {f.name: 3000})
+    meta = read_torrent(make_torrent(f))
+    m = match(item, meta.files)
+    entry = LibraryEntry(LibraryFolder(lib), item, ItemState.ORPHAN)
+    qbit = FakeQbit()
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window.qbit = lambda: qbit  # type: ignore[assignment,method-assign,return-value]
+    window.library_model.set_entries([entry])
+    window.review.remember(
+        entry, [CheckedCandidate(Candidate("Book", 3000, "u", 4, meta.infohash), meta, m, m)]
+    )
+
+    plan = window.plan_maker()()
+    window.zen_tab.plan_view.show_plan(plan)
+
+    [row] = plan.items
+    assert row.candidate.reseed and plan.download_size == 0 and plan.zen_added > 0
+    assert window.zen_tab.plan_view.table.item(0, 1).text() == "Reseed (0 Go)"  # type: ignore[union-attr]
+    window.plan_reseeder()(row.candidate)
+    [t] = qbit.torrents()
+    assert VERIFYING in t.tags and t.save_path == lib
+    assert qbit.rechecked == [t.hash]

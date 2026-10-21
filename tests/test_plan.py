@@ -110,3 +110,44 @@ def test_disk_budget_is_free_space_minus_a_margin_of_the_disk_shared_by_its_fold
 def test_a_full_disk_gives_no_budget(tmp_path: Path) -> None:
     assert disk_budgets([tmp_path], 0.10, usage=lambda p: (1000, 950, 50)) != {}
     assert set(disk_budgets([tmp_path], 0.10, usage=lambda p: (1000, 950, 50)).values()) == {0}
+
+
+def test_orphans_with_a_full_match_become_reseed_rows_listed_first(tmp_path: Path) -> None:
+    from tests.torrents import make_torrent
+    from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import Match
+    from torrentlinker.plan import reseed_candidates
+    from torrentlinker.review import CheckedCandidate
+    from torrentlinker.torrent_meta import read_torrent
+
+    f = tmp_path / "book.epub"
+    f.write_bytes(b"b" * 3000)
+    meta = read_torrent(make_torrent(f))
+    folder = LibraryFolder(tmp_path)
+    full = Match({"book.epub": "book.epub"}, [], [], 1.0)
+    partial = Match({"book.epub": "book.epub"}, ["x"], [], 0.6)
+    orphan = LibraryEntry(folder, LocalItem(f, {f.name: 3000}), ItemState.ORPHAN)
+    other = LibraryEntry(folder, LocalItem(tmp_path / "o"), ItemState.ORPHAN)
+    seeded = LibraryEntry(folder, LocalItem(tmp_path / "s"), ItemState.SEEDED)
+    checked = CheckedCandidate(Candidate("Book", 3000, "u", 4, meta.infohash), meta, full, full)
+    found = [
+        (orphan, [checked]),
+        (other, [CheckedCandidate(Candidate("P", 3000, "u", 4), meta, partial, partial)]),
+        (seeded, [checked]),
+    ]
+
+    rows = reseed_candidates(KEEPER, found, in_client=set())
+    downloads = [
+        cand("dl", 4, 3),
+        PlanCandidate(meta.infohash, "Book in catalogue", 3000, 4, 7000, Path("/dl"), "A"),
+    ]
+    plan = make_plan(KEEPER, rows + downloads, {"A": 10 * GB})
+
+    assert [r.title for r in rows] == ["Book"]
+    assert plan.items[0].candidate.reseed
+    assert plan.items[0].zen > 0
+    assert [i.candidate.title for i in plan.items] == ["Book", "dl"]  # not downloaded twice
+    assert plan.download_size == 4 * GB
+    assert reseed_candidates(KEEPER, found, in_client={meta.infohash}) == []
