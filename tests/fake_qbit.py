@@ -92,3 +92,58 @@ class FakeQbit:
 
     def _set(self, hash: str, **changes: object) -> None:
         self.by_hash[hash] = replace(self.by_hash[hash], **changes)  # type: ignore[arg-type]
+
+
+@dataclass
+class RacyQbit(FakeQbit):
+    """A FakeQbit with the race seen on real qBittorrent (5.2.3 and 5.2.4).
+
+    Right after an add the torrent settles for a few polls, and qBittorrent only learns
+    of a rename one poll later. If the torrent settles, or a recheck starts, while
+    qBittorrent still holds a stale path, it renames the file on disk back to that
+    path, moving the user's file.
+    """
+
+    settle_polls: int = 2
+    polls: dict[str, int] = field(default_factory=dict)
+    known: dict[str, dict[str, str]] = field(default_factory=dict)  # current → qBit's path
+
+    def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        h = super().add(data, save_path, tags)
+        self._set(h, state="checkingResumeData")
+        self.polls[h] = 0
+        self.known[h] = {p: p for p in self.by_hash[h].files}
+        return h
+
+    def torrent(self, hash: str) -> Torrent | None:
+        t = self.by_hash.get(hash)
+        if t is None:
+            return None
+        self.polls[hash] += 1
+        if t.state == "checkingResumeData" and self.polls[hash] > self.settle_polls:
+            self._reapply_stale_paths(hash)
+            self._set(hash, state="stoppedDL")
+        else:
+            self.known[hash] = {p: p for p in self.by_hash[hash].files}  # renames sink in
+        t = self.by_hash[hash]
+        return replace(t, files={self.known[hash].get(p, p): s for p, s in t.files.items()})
+
+    def rename_file(self, hash: str, old: str, new: str) -> None:
+        super().rename_file(hash, old, new)
+        self.known[hash][new] = self.known[hash].pop(old)
+
+    def recheck(self, hash: str) -> None:
+        self._reapply_stale_paths(hash)
+        super().recheck(hash)
+
+    def _reapply_stale_paths(self, hash: str) -> None:
+        t = self.by_hash[hash]
+        files = {}
+        for current, size in t.files.items():
+            stale = self.known[hash].get(current, current)
+            if stale != current and (t.save_path / current).exists():
+                (t.save_path / stale).parent.mkdir(parents=True, exist_ok=True)
+                (t.save_path / current).rename(t.save_path / stale)
+            files[stale] = size
+        self._set(hash, files=files)
+        self.known[hash] = {p: p for p in files}

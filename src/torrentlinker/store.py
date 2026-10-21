@@ -6,7 +6,7 @@ import json
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 SCHEMA = """
@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS verification (
     candidate_key TEXT NOT NULL,
     rechecked_at REAL,
     required_progress REAL NOT NULL DEFAULT 1.0,
-    required_pieces TEXT
+    required_pieces TEXT,
+    local_files TEXT
 );
 CREATE TABLE IF NOT EXISTS rejection (
     item_path TEXT NOT NULL,
@@ -91,6 +92,8 @@ class Verification:
     rechecked_at: float | None
     # Piece ranges Verification checks when some files are absent; None means all of them.
     required_pieces: list[tuple[int, int]] | None
+    # Local files the torrent must find in place, relative to its save path.
+    local_files: list[str] = field(default_factory=list)
 
 
 class Store:
@@ -111,6 +114,8 @@ class Store:
             )
         if "required_pieces" not in columns:
             self._db.execute("ALTER TABLE verification ADD COLUMN required_pieces TEXT")
+        if "local_files" not in columns:
+            self._db.execute("ALTER TABLE verification ADD COLUMN local_files TEXT")
 
     def cached_search(self, key: str, max_age: float) -> str | None:
         with self._lock:
@@ -172,14 +177,16 @@ class Store:
         item_path: Path,
         candidate_key: str,
         required_pieces: list[tuple[int, int]] | None = None,
+        local_files: list[str] | None = None,
     ) -> None:
         pieces = json.dumps(required_pieces) if required_pieces is not None else None
+        files = json.dumps(local_files or [])
         with self._lock, self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO verification"
-                " (hash, item_path, candidate_key, rechecked_at, required_pieces)"
-                " VALUES (?, ?, ?, NULL, ?)",
-                (hash, str(item_path), candidate_key, pieces),
+                " (hash, item_path, candidate_key, rechecked_at, required_pieces, local_files)"
+                " VALUES (?, ?, ?, NULL, ?, ?)",
+                (hash, str(item_path), candidate_key, pieces, files),
             )
 
     def mark_rechecked(self, hash: str) -> None:
@@ -191,7 +198,7 @@ class Store:
     def verification(self, hash: str) -> Verification | None:
         with self._lock:
             row = self._db.execute(
-                "SELECT item_path, candidate_key, rechecked_at, required_pieces"
+                "SELECT item_path, candidate_key, rechecked_at, required_pieces, local_files"
                 " FROM verification WHERE hash = ?",
                 (hash,),
             ).fetchone()
@@ -199,7 +206,8 @@ class Store:
             return None
         rechecked = float(row[2]) if row[2] is not None else None
         pieces = [tuple(r) for r in json.loads(row[3])] if row[3] is not None else None
-        return Verification(Path(row[0]), str(row[1]), rechecked, pieces)  # type: ignore[arg-type]
+        files = [str(f) for f in json.loads(row[4])] if row[4] else []
+        return Verification(Path(row[0]), str(row[1]), rechecked, pieces, files)  # type: ignore[arg-type]
 
     def end_verification(self, hash: str) -> None:
         with self._lock, self._db:

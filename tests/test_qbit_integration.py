@@ -55,8 +55,9 @@ def digest(path: Path) -> str:
 def settle(qbit: QbitApi, store: Store, timeout: float = 60) -> list[Outcome]:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        # A recheck right after the add is quick; RECHECK_GRACE only matters for failures.
-        outcomes = check_verifications(qbit, store, now=lambda: time.time() + 60)
+        # Real clock: qBittorrent may sit at 0% for a second or more before a requested
+        # check starts, and that must not count as a failed Verification.
+        outcomes = check_verifications(qbit, store)
         if outcomes:
             return outcomes
         time.sleep(0.5)

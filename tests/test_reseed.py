@@ -123,7 +123,11 @@ def test_root_folder_and_layout_differences_are_renamed_file_by_file(tmp_path: P
     (src / "Show.S01E01.mkv").write_bytes(b"a" * 1000)
     (src / "Subs" / "Show.S01E01.srt").write_bytes(b"b" * 10)
     meta = read_torrent(make_torrent(src))
-    item = LocalItem(tmp_path / "lib" / "My Show", {"My Show/E01.mkv": 1000, "My Show/E01.srt": 10})
+    show = tmp_path / "lib" / "My Show"
+    show.mkdir(parents=True)
+    (show / "E01.mkv").write_bytes(b"a" * 1000)
+    (show / "E01.srt").write_bytes(b"b" * 10)
+    item = LocalItem(show, {"My Show/E01.mkv": 1000, "My Show/E01.srt": 10})
     qbit, store = FakeQbit(), Store(tmp_path / "s.db")
 
     h = start_reseed(qbit, store, item, meta, match(item, meta.files), meta.infohash)  # type: ignore[arg-type]
@@ -151,7 +155,10 @@ def partial_pack(tmp_path: Path) -> tuple[LocalItem, bytes]:
     (src / "e1.mkv").write_bytes(b"a" * 20000)
     (src / "e2.mkv").write_bytes(b"b" * 20000)
     data = make_torrent(src)
-    item = LocalItem(tmp_path / "lib" / "Show", {"Show/e1.mkv": 20000})
+    local = tmp_path / "lib" / "Show" / "e1.mkv"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b"a" * 20000)
+    item = LocalItem(local.parent, {"Show/e1.mkv": 20000})
     return item, data
 
 
@@ -262,3 +269,47 @@ def test_polling_while_a_reseed_is_being_set_up_leaves_it_alone(tmp_path: Path) 
     h = start_reseed(qbit, store, item, meta, match(item, meta.files), meta.infohash)  # type: ignore[arg-type]
 
     assert h in qbit.by_hash and qbit.removed == []
+
+
+def test_a_reseed_never_moves_the_local_files_even_when_qbittorrent_lags(
+    tmp_path: Path,
+) -> None:
+    from tests.fake_qbit import RacyQbit
+
+    src = tmp_path / "scene" / "Zweig.Pack"
+    src.mkdir(parents=True)
+    (src / "a.epub").write_bytes(b"a" * 20000)
+    (src / "b.epub").write_bytes(b"b" * 20000)
+    meta = read_torrent(make_torrent(src))
+    local = tmp_path / "lib" / "Zweig" / "a.epub"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b"a" * 20000)
+    item = LocalItem(local.parent, {"Zweig/a.epub": 20000})
+    m = match(item, meta.files)
+    assert m is not None
+
+    start_reseed(
+        RacyQbit(), Store(tmp_path / "s.db"), item, meta, m, meta.infohash, sleep=lambda s: None
+    )
+
+    assert local.read_bytes() == b"a" * 20000
+    assert not (tmp_path / "lib" / "Zweig.Pack").exists()
+
+
+def test_a_verification_is_not_accepted_if_a_local_file_was_moved_meanwhile(
+    tmp_path: Path,
+) -> None:
+    item, data = ebook(tmp_path)
+    meta = read_torrent(data)
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+    h = start_reseed(qbit, store, item, meta, match(item, meta.files), meta.infohash)  # type: ignore[arg-type]
+    moved = item.path.with_name("elsewhere.epub")
+    item.path.rename(moved)  # whoever did it, the torrent must not seed from a wrong place
+    qbit.finish_check(h, 1.0)
+
+    [outcome] = check_verifications(qbit, store, now=lambda: 1e12)
+
+    assert not outcome.verified and outcome.problem
+    assert qbit.started == [] and qbit.removed == [(h, False)]
+    assert moved.exists()
+    assert store.rejections(item.path) == {}

@@ -762,6 +762,8 @@ class MainWindow(QMainWindow):
                 text = self.tr("Reseeded")
             elif outcome.verified:
                 text = self.tr("Verified, left stopped: some files are absent")
+            elif outcome.problem:
+                text = self.tr("Reseed undone: {0}").format(outcome.problem)
             else:
                 text = self.tr("Verification failed at {0}").format(f"{outcome.progress:.1%}")
             self.library_model.set_status(outcome.item_path, text)
