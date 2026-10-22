@@ -78,6 +78,7 @@ class AudioProfile:
     category: int = CATEGORY_AUDIO
     renders_models = False
     media_extensions: tuple[str, ...] = ()
+    dotted_names = True
     subcategories: tuple[Subcategory, ...] = (
         Subcategory(SubcategoryAudio.KARAOKE, "Karaoke"),
         Subcategory(SubcategoryAudio.MUSIC, "Music"),

@@ -445,6 +445,7 @@ class FilmProfile:
     subcategories = (Subcategory(6, "Film"),)
     renders_models = False
     media_extensions = ()
+    dotted_names = True
 
     def draft_fields(self, item, ignore, files):  # type: ignore[no-untyped-def]
         return {}
@@ -684,3 +685,22 @@ def test_an_identified_film_is_looked_up_on_c411_by_tmdb_id_once_inspected(  # t
     assert view.name.text() == "Le.Film.Francais.2020.VFF.1080p.BluRay.AC3.5.1.x264-TFA"
     assert "Le Film Français" in view.warnings.text()
     assert view.files[0].torrent_path.endswith(f"{view.name.text()}.mkv")
+
+
+def test_a_games_name_may_keep_its_spaces_and_accents(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, _, _ = tab(qtbot, tmp_path)
+    folder = LibraryFolder(tmp_path / "Roms", 1, ContentKind.GAME)
+    folder.path.mkdir()
+    (folder.path / "Zelda (Europe) (Fr,En).sfc").write_bytes(b"r" * 100)
+    entry = LibraryEntry(
+        folder, scan_item(folder.path / "Zelda (Europe) (Fr,En).sfc"), ItemState.ORPHAN
+    )
+    view._picked[entry.item.path] = 6  # Emulation: names are exempt from the dot rule
+    view.set_entries([entry])
+    view.remember(entry, [])
+    view.items.selectRow(0)
+
+    assert view.name.text() == "[SNES]Zelda [EU - MULTI] SFC"
+    assert "dots between words" not in view.problems.text()
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
+    assert view.files[0].torrent_path == "[SNES]Zelda [EU - MULTI] SFC.sfc"

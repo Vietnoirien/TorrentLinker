@@ -107,6 +107,11 @@ SUBCATEGORY_LABELS = {
     9: QT_TRANSLATE_NOOP("Subcategory", "Sport"),
     10: QT_TRANSLATE_NOOP("Subcategory", "Music videos"),
     54: QT_TRANSLATE_NOOP("Subcategory", "Collection"),
+    39: QT_TRANSLATE_NOOP("Subcategory", "Applications"),
+    40: QT_TRANSLATE_NOOP("Subcategory", "Maps"),
+    41: QT_TRANSLATE_NOOP("Subcategory", "Miscellaneous"),
+    37: QT_TRANSLATE_NOOP("Subcategory", "Emulators"),
+    38: QT_TRANSLATE_NOOP("Subcategory", "ROMs / ISOs"),
     17: QT_TRANSLATE_NOOP("Subcategory", "Karaoke"),
     18: QT_TRANSLATE_NOOP("Subcategory", "Music"),
     19: QT_TRANSLATE_NOOP("Subcategory", "Podcasts & radio"),
@@ -171,6 +176,20 @@ def refusal_text(r: Refusal) -> str:
             "Upload",
             "The files of a pack must share their specs and their team; they differ in: {0}",
         ).format(r.detail)
+    if r.problem is Problem.DOWNLOADER:
+        return QCoreApplication.translate(
+            "Upload", "Downloader executables are forbidden: {0}"
+        ).format(r.detail)
+    if r.problem is Problem.BIN_NO_CUE:
+        return QCoreApplication.translate("Upload", "A .bin image needs its .cue sheet")
+    if r.problem is Problem.CLONECD_INCOMPLETE:
+        return QCoreApplication.translate("Upload", "A CloneCD image is missing: {0}").format(
+            r.detail
+        )
+    if r.problem is Problem.PASSWORD_ARCHIVE:
+        return QCoreApplication.translate("Upload", "Password-protected archives: {0}").format(
+            r.detail
+        )
     return QCoreApplication.translate("Upload", "No file to upload")
 
 
@@ -220,6 +239,20 @@ def warning_text(w: UploadWarning) -> str:
             "Upload",
             "c411 keeps 28 slots per release: check the existing releases for a free one",
         )
+    if w.judgement is Judgement.VERSION_ACTIVATION:
+        return QCoreApplication.translate(
+            "Upload", "State the version and how it is activated (NFO and description)"
+        )
+    if w.judgement is Judgement.NO_ALPHA:
+        return QCoreApplication.translate("Upload", "No alpha or early-access versions")
+    if w.judgement is Judgement.RETRO_ONLY:
+        return QCoreApplication.translate(
+            "Upload", "Only retro cartridge and floppy platforms, and arcade"
+        )
+    if w.judgement is Judgement.NO_MIXED_MACHINES:
+        return QCoreApplication.translate(
+            "Upload", "Do not mix machines in one pack (except MAME): {0}"
+        ).format(w.detail)
     if w.judgement is Judgement.NO_TRANSCODE:
         return QCoreApplication.translate(
             "Upload", "No transcodes (MP3 to FLAC, 128 to 320 kbps, stereo to 5.1)"
@@ -1004,7 +1037,7 @@ class UploadTab(QWidget):
         if profile is not None and item is not None and title:
             if found := profile.refusals(item, self.ignore(), self.subcategory.currentData()):
                 problems += [refusal_text(r) for r in found]
-            if " " in title or not title.isascii():
+            if profile.dotted_names and (" " in title or not title.isascii()):
                 problems.append(
                     self.tr("A release name has dots between words, no spaces and no accents.")
                 )
@@ -1130,7 +1163,7 @@ class UploadTab(QWidget):
     # Making the Upload -----------------------------------------------------
 
     def _update_actions(self) -> None:
-        entry = self.entry
+        entry, profile = self.entry, self.profile()
         archive = entry is not None and self.needs_unpacking(entry)
         self.create_button.setText(self.tr("Unpack…") if archive else self.tr("Create Draft"))
         self.create_button.setToolTip(
@@ -1146,8 +1179,11 @@ class UploadTab(QWidget):
             entry is not None
             and self.why_not(entry) is None
             and bool(self.files)
-            and " " not in title
-            and title.isascii()
+            and (
+                profile is None
+                or not profile.dotted_names
+                or (" " not in title and title.isascii())
+            )
             and bool(self.nfo.toPlainText().strip())
             and bool(self.announce())
             and not self._options_state

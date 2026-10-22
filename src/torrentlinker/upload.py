@@ -39,6 +39,10 @@ CATEGORY_3D = 10
 CATEGORY_VIDEO = 1
 CATEGORY_EBOOK = 2
 CATEGORY_AUDIO = 3
+CATEGORY_APPS = 4
+CATEGORY_GAMES = 5
+CATEGORY_EMULATION = 6
+CATEGORY_GPS = 7
 AUDIOBOOK_KBPS = 64  # an audiobook's minimum bitrate
 
 # c411's categories (GET /api/categories); Nulled and Adult get no profile.
@@ -130,6 +134,17 @@ class SubcategoryAudio(IntEnum):
     SAMPLES = 20
 
 
+class SubcategoryGps(IntEnum):
+    APPLICATIONS = 39
+    MAPS = 40
+    MISC = 41
+
+
+class SubcategoryEmulation(IntEnum):
+    EMULATORS = 37
+    ROMS = 38
+
+
 class UploadStopped(Exception):
     """The user stopped the Upload while its torrent was being made."""
 
@@ -162,6 +177,10 @@ class Problem(StrEnum):
     BANNED_TEAM = "banned-team"  # detail: the tag
     NO_FRENCH = "no-french"  # no French audio and no full French subtitles; detail: file
     MIXED_PACK = "mixed-pack"  # detail: what differs
+    DOWNLOADER = "downloader"  # detail: the downloader executables found
+    BIN_NO_CUE = "bin-no-cue"  # a .bin without a .cue next to it
+    CLONECD_INCOMPLETE = "clonecd-incomplete"  # detail: the CloneCD files missing
+    PASSWORD_ARCHIVE = "password-archive"  # detail: the protected archives
 
 
 @dataclass(frozen=True)
@@ -193,6 +212,10 @@ class Judgement(StrEnum):
     WEB_PLATFORM = "web-platform"
     MICKEY_TAG = "mickey-tag"
     SLOTS = "slots"
+    VERSION_ACTIVATION = "version-activation"
+    NO_ALPHA = "no-alpha"
+    RETRO_ONLY = "retro-only"
+    NO_MIXED_MACHINES = "no-mixed-machines"  # detail: the machines found
 
 
 @dataclass(frozen=True)
@@ -226,6 +249,7 @@ class UploadProfile(Protocol):
     subcategories: tuple[Subcategory, ...]
     renders_models: bool  # the Upload tab shows its models and captures the description's image
     media_extensions: tuple[str, ...]  # a lone file of these in a folder is named the release
+    dotted_names: bool  # words are dotted, no spaces or accents; games and applications are exempt
 
     # `inspect` reads what the files say about themselves (tags, MediaInfo): slow, so the
     # GUI runs it off its thread before it asks the other methods, which never touch the
@@ -267,6 +291,7 @@ class Model3DProfile:
     )
     renders_models = True
     media_extensions: tuple[str, ...] = ()
+    dotted_names = True
 
     def draft_fields(
         self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
@@ -341,6 +366,7 @@ class EbookProfile:
     category: int = CATEGORY_EBOOK
     renders_models = False  # no model to render; the image is made by hand
     media_extensions: tuple[str, ...] = ()
+    dotted_names = True
     subcategories: tuple[Subcategory, ...] = (
         Subcategory(SubcategoryEbook.AUDIO, "Audiobooks"),
         Subcategory(SubcategoryEbook.BD, "Comic strips (BD)"),
@@ -908,6 +934,7 @@ def _volume_range(files: dict[str, int]) -> str:
 
 # Profiles that need this module's types come last (see upload_audio's docstring).
 from torrentlinker.upload_audio import AudioProfile  # noqa: E402
+from torrentlinker.upload_software import EmulationProfile, GpsProfile  # noqa: E402
 from torrentlinker.upload_video import VideoProfile  # noqa: E402
 
 PROFILES.update(
@@ -915,6 +942,8 @@ PROFILES.update(
         CATEGORY_VIDEO: VideoProfile(),
         CATEGORY_EBOOK: EbookProfile(),
         CATEGORY_AUDIO: AudioProfile(),
+        CATEGORY_EMULATION: EmulationProfile(),
+        CATEGORY_GPS: GpsProfile(),
         CATEGORY_3D: Model3DProfile(),
     }
 )

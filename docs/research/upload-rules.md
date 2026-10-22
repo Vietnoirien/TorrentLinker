@@ -151,6 +151,8 @@ The app's reading of these rules (issue #36): formats are checked by extension (
 - Emulation: retro cartridge/floppy platforms and arcade, plus emulators and emulation OSes. Archives allowed only in packs of more than 50 files, with no password and an NFO listing every file. `.bin` needs a `.cue`; CloneCD needs `.ccd` and `.sub`. No mixing machines (except MAME).
 - GPS: software, maps, packs, POI; version and activation stated; the application bans apply.
 
+The app's reading of the GPS and Emulation rules (issue #38): a downloader executable is an `.exe` or `.msi` whose name says downloader, web setup, online installer or stub installer; a CloneCD image is any folder with a `.ccd` or `.sub`, which then needs all of `.ccd`, `.img` and `.sub`; a `.bin` needs a `.cue` in its folder; archives count as files in the 50-file pack rule; a password is detected in zip archives only; the console of a ROM comes from a table of retro ROM extensions, and the region and languages from the `(Europe) (Fr,En)` tags of the name. GPS and emulation names are not dotted.
+
 ### 3D printing
 
 - STL, OBJ, 3MF, STEP/STP, GCODE (with target printer and filament, STL source if possible); sources BLEND, F3D/F3Z, SLDPRT, FCStd. Packs must have one coherent theme, with every model listed in the NFO. No files stolen from independent creators who live off them. (Both are judgement rules: the app shows them as Warnings, not Refusals.)

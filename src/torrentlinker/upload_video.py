@@ -136,6 +136,7 @@ class VideoProfile:
     category: int = CATEGORY_VIDEO
     renders_models = False
     media_extensions: tuple[str, ...] = CONTAINERS
+    dotted_names = True
     subcategories: tuple[Subcategory, ...] = (
         Subcategory(SubcategoryVideo.ANIMATION, "Animation"),
         Subcategory(SubcategoryVideo.ANIMATION_SERIES, "Animated series"),
