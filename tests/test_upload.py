@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -9,14 +10,16 @@ from tests.fake_qbit import FakeQbit
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.matching import IgnoreList
-from torrentlinker.options import OptionType, OptionValue
+from torrentlinker.options import OptionType, OptionValue, options_body, parse_options
 from torrentlinker.reseed import TAG, VERIFYING, start_reseed
 from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
 from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.upload import (
     CATEGORY_3D,
+    CATEGORY_EBOOK,
     PROFILES,
+    EbookProfile,
     ExistingQuery,
     Judgement,
     MiB,
@@ -24,6 +27,7 @@ from torrentlinker.upload import (
     Problem,
     Refusal,
     Subcategory3D,
+    SubcategoryEbook,
     UploadRequest,
     UploadStopped,
     UploadWarning,
@@ -41,9 +45,14 @@ from torrentlinker.upload import (
     upload_files,
 )
 
+FIXTURES = Path(__file__).parent / "fixtures"  # recorded from c411, never fetched by tests
 IGNORE = IgnoreList.default()
 PROFILE = Model3DProfile()
 ANNOUNCE = "https://c411.org/announce/secret"
+
+
+def recorded_options(sub: int) -> dict[str, object]:
+    return json.loads((FIXTURES / f"c411_options_{sub}.json").read_text(encoding="utf-8"))
 
 
 def vise(tmp_path: Path) -> LocalItem:
@@ -379,3 +388,177 @@ def test_an_upload_sends_its_options_in_the_draft(tmp_path: Path) -> None:
     create_upload(request, ANNOUNCE, tmp_path / "uploads", save_draft, Store(tmp_path / "s.db"))
 
     assert sent[0]["options"] == {"9": 3}
+
+
+# eBook profile ---------------------------------------------------------------------
+
+EBOOK = EbookProfile()
+BOOKS, BD, AUDIO, PRESS = (
+    SubcategoryEbook.BOOKS,
+    SubcategoryEbook.BD,
+    SubcategoryEbook.AUDIO,
+    SubcategoryEbook.PRESS,
+)
+
+
+def folder(tmp_path: Path, name: str, *files: str) -> LocalItem:
+    """A Local Item folder `name` holding small files called `files` (`/` nests them)."""
+    root = tmp_path / name
+    for rel in files:
+        f = root / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"x" * 100)
+    return scan_item(root)
+
+
+def book(tmp_path: Path, name: str) -> LocalItem:
+    f = tmp_path / name
+    f.write_bytes(b"x" * 100)
+    return scan_item(f)
+
+
+def test_the_ebook_profile_is_category_2_with_its_eight_subcategories() -> None:
+    assert CATEGORY_EBOOK == EBOOK.category == 2
+    assert isinstance(PROFILES[CATEGORY_EBOOK], EbookProfile)
+    assert isinstance(profile_for(ContentKind.EBOOK), EbookProfile)
+    assert [s.id for s in EBOOK.subcategories] == [11, 12, 13, 14, 15, 16, 59, 60]
+
+
+def test_comics_and_image_folders_default_to_bds_audio_to_audio_the_rest_to_livres(
+    tmp_path: Path,
+) -> None:
+    def sub(item: LocalItem) -> int:
+        return EBOOK.default_subcategory(item, IGNORE)
+
+    assert sub(book(tmp_path, "Asterix.cbz")) == BD
+    assert sub(folder(tmp_path, "A", "t1.cbr", "t2.cbr")) == BD
+    assert sub(folder(tmp_path, "B", "01.jpg", "02.png")) == BD
+    assert sub(folder(tmp_path, "C", "c1.mp3", "c2.mp3")) == AUDIO
+    assert sub(book(tmp_path, "Dune.m4b")) == AUDIO
+    assert sub(book(tmp_path, "Dune.epub")) == BOOKS
+    assert sub(folder(tmp_path, "D", "Dune.pdf", "cover.jpg")) == BOOKS
+
+
+def test_ebook_refusals_are_no_file_archives_and_no_accepted_format(tmp_path: Path) -> None:
+    def refusals(item: LocalItem) -> list[Refusal]:
+        return EBOOK.refusals(item, IGNORE)
+
+    assert refusals(folder(tmp_path, "Vide")) == [Refusal(Problem.NO_FILE)]
+    assert refusals(book(tmp_path, "Dune.epub")) == []
+    assert refusals(folder(tmp_path, "Comics", "t1.cbz", "t2.cbr")) == []
+    assert refusals(book(tmp_path, "Dune.rar")) == [
+        Refusal(Problem.ARCHIVE, "rar"),
+        Refusal(Problem.NO_EBOOK_FORMAT),
+    ]
+    assert refusals(folder(tmp_path, "Mix", "Dune.epub", "bonus.zip")) == [
+        Refusal(Problem.ARCHIVE, "zip")
+    ]
+    assert refusals(book(tmp_path, "Dune.docx")) == [Refusal(Problem.NO_EBOOK_FORMAT)]
+    for ext in ("pdf", "epub", "mobi", "djvu", "cbr", "cbz", "mp3", "m4a", "m4b", "flac"):
+        assert refusals(book(tmp_path, f"Livre.{ext}")) == []
+
+
+def test_ebook_judgement_rules_are_warnings_never_refusals(tmp_path: Path) -> None:
+    french, dupes = UploadWarning(Judgement.FRENCH_ONLY), UploadWarning(Judgement.NO_DUPLICATE)
+    formats = UploadWarning(Judgement.FEW_FORMATS)
+    volumes = UploadWarning(Judgement.WHOLE_VOLUMES)
+    every = UploadWarning(Judgement.EVERY_VOLUME)
+    single = book(tmp_path, "Dune.epub")
+    triple = folder(tmp_path, "Dune", "Dune.epub", "Dune.pdf", "Dune.mobi")
+    pack = folder(tmp_path, "Asterix", "T01.cbz", "T02.cbz")
+
+    assert EBOOK.warnings(single, IGNORE, BOOKS) == [french, dupes]
+    assert EBOOK.warnings(triple, IGNORE, BOOKS) == [french, dupes, formats]
+    assert EBOOK.warnings(pack, IGNORE, BD) == [french, dupes, volumes, every]
+    assert EBOOK.warnings(pack, IGNORE, SubcategoryEbook.MANGA) == [french, dupes, volumes]
+    assert EBOOK.warnings(book(tmp_path, "T01.cbz"), IGNORE, BD) == [french, dupes]
+    assert EBOOK.refusals(pack, IGNORE) == [] and EBOOK.refusals(triple, IGNORE) == []
+
+
+def test_a_book_is_named_title_author_language_format_and_tag(tmp_path: Path) -> None:
+    item = book(tmp_path, "Frank Herbert - Dune (Édition 2021).epub")
+
+    assert (
+        EBOOK.suggested_name(item, IGNORE, "", BOOKS) == "Dune.Frank.Herbert.FRENCH.EPUB-NOTAG"
+    )  # the parenthesis is dropped
+    assert EBOOK.suggested_name(item, IGNORE, "Mon Équipe", BOOKS).endswith(".EPUB-MonEquipe")
+    no_author = book(tmp_path, "Dune.pdf")
+    assert EBOOK.suggested_name(no_author, IGNORE, "", BOOKS) == "Dune.FRENCH.PDF-NOTAG"
+    two = folder(tmp_path, "Frank Herbert - Dune", "Dune.pdf", "Dune.epub")
+    assert (
+        EBOOK.suggested_name(two, IGNORE, "", BOOKS) == "Dune.Frank.Herbert.FRENCH.EPUB-PDF-NOTAG"
+    )
+
+
+def test_a_pack_of_volumes_names_its_range(tmp_path: Path) -> None:
+    pack = folder(tmp_path, "Asterix", *(f"Asterix T0{n}.cbz" for n in range(1, 8)))
+
+    assert EBOOK.suggested_name(pack, IGNORE, "", BD) == "Asterix.[T01.a.T07].FRENCH.CBZ-NOTAG"
+    one = folder(tmp_path, "Tintin", "Tintin T03.cbz")
+    assert EBOOK.suggested_name(one, IGNORE, "", BD) == "Tintin.FRENCH.CBZ-NOTAG"
+
+
+def test_press_is_named_title_date_language_format_and_tag(tmp_path: Path) -> None:
+    item = book(tmp_path, "Le Monde - 2024-03-15.pdf")
+
+    assert EBOOK.suggested_name(item, IGNORE, "", PRESS) == "Le.Monde.2024.03.15.FRENCH.PDF-NOTAG"
+    assert EBOOK.suggested_name(book(tmp_path, "Elle.pdf"), IGNORE, "", PRESS) == (
+        "Elle.FRENCH.PDF-NOTAG"
+    )
+
+
+def test_the_nfo_lists_title_author_formats_language_count_size_and_every_file(
+    tmp_path: Path,
+) -> None:
+    item = folder(tmp_path, "Frank Herbert - Dune", "Dune.epub", "Dune.pdf")
+    name = "Dune.Frank.Herbert.FRENCH.EPUB-PDF-NOTAG"
+
+    nfo = EBOOK.nfo(name, upload_files(item, name, IGNORE))
+
+    assert "Titre .......... : Dune" in nfo and "Auteur ......... : Frank Herbert" in nfo
+    assert "Format ......... : EPUB, PDF" in nfo and "Langue ......... : Français" in nfo
+    assert "Fichiers ....... : 2" in nfo and "Taille totale .. : 200 o" in nfo
+    assert "Dune.epub" in nfo and "Dune.pdf" in nfo
+
+
+def test_the_ebook_description_has_the_image_the_facts_and_a_presentation(tmp_path: Path) -> None:
+    item = book(tmp_path, "Frank Herbert - Dune.epub")
+    name = "Dune.Frank.Herbert.FRENCH.EPUB-NOTAG"
+
+    text = EBOOK.description(name, upload_files(item, name, IGNORE), "", "https://i.example/d.png")
+
+    assert text.startswith("[center][img]https://i.example/d.png[/img][/center]")
+    assert "[h3]Présentation[/h3]" in text
+    assert "[b]Titre :[/b] Dune" in text and "[b]Auteur :[/b] Frank Herbert" in text
+    assert "[b]Format :[/b] EPUB" in text and "[b]Langue :[/b] Français" in text
+    assert "[b]Fichiers :[/b] 1" in text and "[b]Taille totale :[/b] 100 o" in text
+    assert "[img]" not in EBOOK.description(name, upload_files(item, name, IGNORE), "", "")
+
+
+def test_the_options_are_pre_filled_with_the_format_found_and_french(tmp_path: Path) -> None:
+    types = parse_options(recorded_options(14))
+
+    epub = EBOOK.suggested_options(book(tmp_path, "Dune.epub"), IGNORE, types)
+    assert epub == {12: [190], 13: [197]}  # EPUB, Français
+    comics = folder(tmp_path, "BD", "T1.cbz", "T2.cbz")
+    assert EBOOK.suggested_options(comics, IGNORE, types) == {12: [187], 13: [197]}
+    both = folder(tmp_path, "Both", "Dune.pdf", "Dune.epub")
+    assert EBOOK.suggested_options(both, IGNORE, types)[12] == [190]  # one choice: EPUB first
+    assert EBOOK.suggested_options(book(tmp_path, "x.flac"), IGNORE, types) == {13: [197]}
+    assert EBOOK.suggested_options(book(tmp_path, "y.epub"), IGNORE, []) == {}
+
+
+def test_the_ebook_draft_carries_category_2_and_the_chosen_options() -> None:
+    types = parse_options(recorded_options(14))
+
+    options = options_body(types, {12: [190], 13: [197]})
+    body = draft_body("T", "D", 2, 14, b"d4:infoe", "nfo", options)
+
+    assert body["categoryId"] == 2 and body["subcategoryId"] == 14
+    assert body["options"] == {"12": 190, "13": 197}
+
+
+def test_existing_ebook_releases_are_looked_up_by_title_words(tmp_path: Path) -> None:
+    query = EBOOK.existing_query(book(tmp_path, "Frank Herbert - Dune.epub"), IGNORE)
+
+    assert query == ExistingQuery("Frank Herbert Dune")

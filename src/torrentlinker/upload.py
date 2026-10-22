@@ -35,6 +35,7 @@ GB = 1_000_000_000
 NOTAG = "NOTAG"
 IMAGE_PLACEHOLDER = "…"  # in [img][/img] until the image is uploaded on c411
 CATEGORY_3D = 10
+CATEGORY_EBOOK = 2
 
 # c411's categories (GET /api/categories); Nulled and Adult get no profile.
 CATEGORIES = {
@@ -61,6 +62,28 @@ DEFAULT_CATEGORIES = {
 # c411's 3D formats, in the order a release name lists them.
 FORMATS_3D = ("stl", "3mf", "obj", "step", "stp", "gcode", "blend", "f3d", "f3z", "sldprt", "fcstd")
 ARCHIVES = ("rar", "zip", "7z")
+# c411's eBook formats, in the order a release name lists them (and a single choice takes
+# the first found): documents, comics, page images, audiobooks.
+FORMATS_EBOOK = (
+    "epub",
+    "pdf",
+    "mobi",
+    "djvu",
+    "cbz",
+    "cbr",
+    "jpg",
+    "png",
+    "mp3",
+    "m4b",
+    "m4a",
+    "flac",
+)
+DOCUMENT_FORMATS = ("epub", "pdf", "mobi", "djvu")
+COMIC_FORMATS = ("cbz", "cbr")
+IMAGE_FORMATS = ("jpg", "png")
+AUDIO_FORMATS = ("mp3", "m4a", "m4b", "flac")
+FORMAT_ALIASES = {"jpeg": "jpg"}  # extensions c411 spells another way
+BOOK_LANGUAGE = "FRENCH"
 READ_CHUNK = 4 * MiB
 
 
@@ -68,6 +91,17 @@ class Subcategory3D(IntEnum):
     OBJECTS = 51
     CHARACTERS = 52
     PACK = 53
+
+
+class SubcategoryEbook(IntEnum):
+    AUDIO = 11
+    BD = 12
+    COMICS = 13
+    BOOKS = 14
+    MANGA = 15
+    PRESS = 16
+    SHEET_MUSIC = 59
+    MANUALS = 60
 
 
 class UploadStopped(Exception):
@@ -87,6 +121,7 @@ class Problem(StrEnum):
     NO_FILE = "no-file"
     ARCHIVE = "archive"  # detail: the archive formats found
     NO_3D_FILE = "no-3d-file"
+    NO_EBOOK_FORMAT = "no-ebook-format"
     OPTION_MISSING = "option-missing"  # detail: the option's name
 
 
@@ -103,6 +138,11 @@ class Judgement(StrEnum):
 
     PAID_CREATORS = "paid-creators"
     PACK_THEME = "pack-theme"
+    FRENCH_ONLY = "french-only"
+    NO_DUPLICATE = "no-duplicate"
+    FEW_FORMATS = "few-formats"
+    WHOLE_VOLUMES = "whole-volumes"
+    EVERY_VOLUME = "every-volume"
 
 
 @dataclass(frozen=True)
@@ -221,7 +261,109 @@ class Model3DProfile:
         return ExistingQuery(name_query(item))
 
 
-PROFILES: dict[int, UploadProfile] = {CATEGORY_3D: Model3DProfile()}
+class EbookProfile:
+    """c411's Ebook category (docs/research/upload-rules.md). The audiobook bitrate rule
+    (64 kbps or more) needs a tag reader and is not checked yet."""
+
+    category: int = CATEGORY_EBOOK
+    renders_models = False  # no model to render; the image is made by hand
+    subcategories: tuple[Subcategory, ...] = (
+        Subcategory(SubcategoryEbook.AUDIO, "Audiobooks"),
+        Subcategory(SubcategoryEbook.BD, "Comic strips (BD)"),
+        Subcategory(SubcategoryEbook.COMICS, "Comics"),
+        Subcategory(SubcategoryEbook.BOOKS, "Books"),
+        Subcategory(SubcategoryEbook.MANGA, "Manga"),
+        Subcategory(SubcategoryEbook.PRESS, "Press"),
+        Subcategory(SubcategoryEbook.SHEET_MUSIC, "Sheet music & tablature"),
+        Subcategory(SubcategoryEbook.MANUALS, "Journals & technical manuals"),
+    )
+
+    def image_is_sheet(self, subcategory: int) -> bool:
+        return False
+
+    def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]:
+        files = _content(item, ignore)
+        if not files:
+            return [Refusal(Problem.NO_FILE)]
+        found = []
+        archives = sorted({e for p in files if (e := _ext(p)) in ARCHIVES})
+        if archives:
+            found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
+        if not _formats_ebook(files):
+            found.append(Refusal(Problem.NO_EBOOK_FORMAT))
+        return found
+
+    def warnings(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int
+    ) -> list[UploadWarning]:
+        files = _content(item, ignore)
+        found = [UploadWarning(Judgement.FRENCH_ONLY), UploadWarning(Judgement.NO_DUPLICATE)]
+        if len(_formats_ebook(files)) > 2:
+            found.append(UploadWarning(Judgement.FEW_FORMATS))
+        volumes = (SubcategoryEbook.BD, SubcategoryEbook.COMICS, SubcategoryEbook.MANGA)
+        if len(files) > 1 and not item.path.is_file() and subcategory in volumes:
+            found.append(UploadWarning(Judgement.WHOLE_VOLUMES))
+            if subcategory == SubcategoryEbook.BD:
+                found.append(UploadWarning(Judgement.EVERY_VOLUME))
+        return found
+
+    def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int:
+        found = set(_formats_ebook(_content(item, ignore)))
+        pages_only = found & set(IMAGE_FORMATS) and not found & set(DOCUMENT_FORMATS)
+        if found & set(COMIC_FORMATS) or pages_only:
+            return SubcategoryEbook.BD
+        if found & set(AUDIO_FORMATS):
+            return SubcategoryEbook.AUDIO
+        return SubcategoryEbook.BOOKS
+
+    def suggested_name(
+        self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
+    ) -> str:
+        """`Titre.Auteur.FRENCH.EPUB-Team`, a pack adding `[T01.a.T07]` after the title;
+        press is `Titre.Date.FRENCH.PDF-Team`. `source` is the team tag, NOTAG when empty."""
+        files = _content(item, ignore)
+        press = subcategory == SubcategoryEbook.PRESS
+        title, author, date = _guess_book(_first_segment(item), press)
+        parts = [_words(title)]
+        if not item.path.is_file() and (volumes := _volume_range(files)):
+            parts.append(volumes)
+        parts.append(_words(date) if press else _words(author))
+        parts += [BOOK_LANGUAGE, "-".join(f.upper() for f in _formats_ebook(files))]
+        tag = re.sub(r"[^A-Za-z0-9]+", "", _ascii(source)) or NOTAG
+        return ".".join(p for p in parts if p) + f"-{tag}"
+
+    def suggested_options(
+        self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
+    ) -> Chosen:
+        """The format found (the first by priority for a single choice) and French."""
+        found = _formats_ebook(_content(item, ignore))
+        chosen: Chosen = {}
+        for t in types:
+            name = t.name.casefold()
+            if name.startswith("format"):
+                ids = [v.id for f in found for v in t.values if v.label.casefold() == f]
+                if ids:
+                    chosen[t.id] = ids if t.multiple else ids[:1]
+            elif name.startswith("langue"):
+                ids = [v.id for v in t.values if v.label.casefold().startswith("français")]
+                if ids:
+                    chosen[t.id] = ids[:1]
+        return chosen
+
+    def nfo(self, title: str, files: list[UploadFile]) -> str:
+        return nfo_ebook(title, files)
+
+    def description(self, title: str, files: list[UploadFile], source: str, image_url: str) -> str:
+        return description_ebook(title, files, source, image_url)
+
+    def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery:
+        return ExistingQuery(name_query(item))
+
+
+PROFILES: dict[int, UploadProfile] = {
+    CATEGORY_EBOOK: EbookProfile(),
+    CATEGORY_3D: Model3DProfile(),
+}
 
 
 def category_name(category: int) -> str:
@@ -270,6 +412,12 @@ def missing_options(types: list[OptionType], chosen: Chosen) -> list[Refusal]:
 def _formats_3d(paths: Iterable[str]) -> list[str]:
     present = {_ext(p) for p in paths}
     return [f.upper() for f in FORMATS_3D if f in present]
+
+
+def _formats_ebook(paths: Iterable[str]) -> list[str]:
+    """The accepted formats present, in release-name order; `jpeg` counts as `jpg`."""
+    present = {FORMAT_ALIASES.get(e, e) for p in paths if (e := _ext(p))}
+    return [f for f in FORMATS_EBOOK if f in present]
 
 
 def upload_files(item: LocalItem, title: str, ignore: IgnoreList) -> list[UploadFile]:
@@ -392,6 +540,61 @@ def description_3d(title: str, files: list[UploadFile], source: str, image_url: 
         "[h3]Informations[/h3]",
         f"[b]Source :[/b] {source or 'Inconnue'}",
         f"[b]Formats :[/b] {', '.join(_formats_3d(names))}",
+        f"[b]Fichiers :[/b] {len(files)}",
+        f"[b]Taille totale :[/b] {human_size(sum(f.size for f in files))}",
+    ]
+    if len(files) > 1:
+        lines += ["", "[spoiler=Contenu][list]", *(f"[*]{n}" for n in names), "[/list][/spoiler]"]
+    return "\n".join(lines) + "\n"
+
+
+def nfo_ebook(title: str, files: list[UploadFile]) -> str:
+    """c411's books NFO: title, author, format, language, file count, total size, then
+    every file with its size. Title and author are guessed from the Local Item's name."""
+    book, author, _ = _guess_book(files[0].local_path.split("/")[0], press=False)
+    names = [f.torrent_path.split("/", 1)[-1] for f in files]
+    width = max(len(n) for n in names)
+    lines = [
+        title,
+        "",
+        f"Titre .......... : {book}",
+        f"Auteur ......... : {author or '-'}",
+        f"Format ......... : {', '.join(f.upper() for f in _formats_ebook(names)) or '-'}",
+        "Langue ......... : Français",
+        f"Fichiers ....... : {len(files)}",
+        f"Taille totale .. : {human_size(sum(f.size for f in files))}",
+        "",
+        "Contenu :",
+        *(
+            f"  {n.ljust(width)}  {human_size(f.size):>10}"
+            for n, f in zip(names, files, strict=True)
+        ),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def description_ebook(title: str, files: list[UploadFile], source: str, image_url: str) -> str:
+    """c411's description: an image, a presentation the user writes, then the facts of
+    the NFO; several files are listed in a spoiler."""
+    book, author, _ = _guess_book(files[0].local_path.split("/")[0], press=False)
+    names = [f.torrent_path.split("/", 1)[-1] for f in files]
+    lines = []
+    if image_url:
+        lines += [f"[center][img]{image_url}[/img][/center]", ""]
+    lines += [
+        f"[center][h2]{book}[/h2][/center]",
+        "",
+        "[h3]Présentation[/h3]",
+        "",
+        "",
+        "[h3]Informations[/h3]",
+        f"[b]Titre :[/b] {book}",
+    ]
+    if author:
+        lines.append(f"[b]Auteur :[/b] {author}")
+    lines += [
+        f"[b]Format :[/b] {', '.join(f.upper() for f in _formats_ebook(names))}",
+        "[b]Langue :[/b] Français",
         f"[b]Fichiers :[/b] {len(files)}",
         f"[b]Taille totale :[/b] {human_size(sum(f.size for f in files))}",
     ]
@@ -555,3 +758,40 @@ def _clean_segment(name: str) -> str:
     """A file or folder name without accents or spaces; its extension kept."""
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", ".", _ascii(name)).strip(".")
     return re.sub(r"\.{2,}", ".", cleaned) or "_"
+
+
+DATE_RE = re.compile(
+    r"\b((?:19|20)\d\d)(?:[-._ ](0[1-9]|1[0-2]))?(?:[-._ ](0[1-9]|[12]\d|3[01]))?\b"
+)
+VOLUME_RE = re.compile(r"(?:\b|_)(?:t|tome|vol|volume)[ ._-]*0*(\d{1,3})\b", re.IGNORECASE)
+
+
+def _first_segment(item: LocalItem) -> str:
+    """The name the release is guessed from: a file's stem, a folder's name."""
+    return item.path.stem if item.path.is_file() else item.path.name
+
+
+def _guess_book(name: str, press: bool) -> tuple[str, str, str]:
+    """(title, author, date) from a file or folder name: `Auteur - Titre` is common; press
+    has a date instead of an author. Bracketed notes are dropped; any part may be empty."""
+    name = name.rsplit(".", 1)[0] if _ext(name) in FORMATS_EBOOK else name
+    name = re.sub(r"\[[^\]]*\]|\([^)]*\)|\{[^}]*\}", " ", name)
+    date = ""
+    if press and (m := DATE_RE.search(name)):
+        date = ".".join(g for g in m.groups() if g)
+        name = name[: m.start()] + name[m.end() :]
+    name = VOLUME_RE.sub(" ", name)
+    parts = [p.strip(" ._-") for p in re.split(r"\s+-\s+", name.strip()) if p.strip(" ._-")]
+    if press or len(parts) < 2:
+        return " ".join(parts), "", date
+    return " ".join(parts[1:]), parts[0], date
+
+
+def _volume_range(files: dict[str, int]) -> str:
+    """`[T01.a.T07]` when the files number several volumes, else nothing."""
+    numbers = sorted(
+        {int(m.group(1)) for p in files if (m := VOLUME_RE.search(p.rsplit("/", 1)[-1]))}
+    )
+    if len(numbers) < 2:
+        return ""
+    return f"[T{numbers[0]:02d}.a.T{numbers[-1]:02d}]"
