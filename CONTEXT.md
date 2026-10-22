@@ -67,6 +67,19 @@ _Avoid_: Inject, cross-seed, relink
 **Verification**:
 The Torrent Client's hash check a Reseed must pass at 100% before the torrent is started; a failed Verification removes the torrent (never the data) and becomes a Rejection.
 
+### Uploading
+
+**Upload**:
+A new torrent the app creates from an Orphan that no Candidate matches, named and described by the Indexer's rules, with its NFO, to be published on the Indexer and seeded from the existing data.
+_Avoid_: Reupload (c411's term for one kind of Upload), release, post
+
+**Draft**:
+An Upload saved on c411 but not yet published; the user reviews and publishes it there.
+
+**Announce URL**:
+The user's private tracker address, holding their passkey, that every Upload's torrent carries.
+_Avoid_: Passkey (alone), tracker URL
+
 ### Zen
 
 **Zen**:

@@ -64,6 +64,7 @@ TRANSMISSION_PASSWORD = "transmission-password"
 INDEXER_API_KEY = "indexer-api-key"
 # Up to 4 more keys of the same c411 account, each within its own limits (ADR-0008).
 EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
+ANNOUNCE_URL = "announce-url"  # holds the passkey: a secret like the keys (ADR-0011)
 TMDB_API_KEY = "tmdb-api-key"
 
 COL_PATH, COL_KIND, COL_DEPTH = range(3)
@@ -416,6 +417,11 @@ class SettingsDialog(QDialog):
         note.setWordWrap(True)
         extra.addWidget(note)
         form.addRow(self.tr("More API keys"), extra)
+        self.announce_url = self._secret_field(ANNOUNCE_URL)
+        self.announce_url.setPlaceholderText(
+            self.tr("Optional: your private announce URL, for Uploads")
+        )
+        form.addRow(self.tr("Announce URL"), self.announce_url)
         form.addRow("", hint)
         form.addRow("", test)
         return box
@@ -997,6 +1003,7 @@ class SettingsDialog(QDialog):
             TRANSMISSION_PASSWORD: self.transmission_password.text(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
+            ANNOUNCE_URL: self.announce_url.text().strip(),
             **{
                 name: field.text().strip()
                 for name, field in zip(EXTRA_INDEXER_KEYS, self.extra_keys, strict=True)
