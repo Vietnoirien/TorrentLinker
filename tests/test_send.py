@@ -5,7 +5,7 @@ import pytest
 
 from tests.fake_qbit import FakeQbit
 from tests.torrents import make_torrent
-from torrentlinker.indexer import RateLimited
+from torrentlinker.indexer import KeyRefused, RateLimited
 from torrentlinker.plan import Plan, PlanCandidate, PlanItem
 from torrentlinker.send import ZEN_TAG, Refused, SendProgress, send_one, send_plan
 from torrentlinker.torrent_meta import read_torrent
@@ -162,3 +162,18 @@ def test_stopping_ends_sending_before_the_next_torrent(tmp_path: Path) -> None:
 
     assert report.added == ["A"]
     assert report.stopped
+
+
+def test_a_refused_key_stops_sending_instead_of_failing_every_torrent(tmp_path: Path) -> None:
+    plan, _data = two_releases(tmp_path)
+    fetched: list[str] = []
+
+    def fetch(c: PlanCandidate) -> bytes:
+        fetched.append(c.title)
+        raise KeyRefused(401)
+
+    report = send_plan(plan, FakeQbit(), fetch)
+
+    assert fetched == ["A"]
+    assert report.stopped
+    assert [t for t, _ in report.failed] == ["A"]

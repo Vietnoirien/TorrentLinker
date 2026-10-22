@@ -31,6 +31,17 @@ class RateLimited(Exception):
         self.retry_after = retry_after
 
 
+class KeyRefused(Exception):
+    """The Indexer refused the API key (401 or 403): wrong, revoked or missing a scope."""
+
+    def __init__(self, status: int) -> None:
+        super().__init__(
+            f"the Indexer refused the API key (HTTP {status}): check it in Settings → "
+            "Connections; on c411 it needs the torznab:read scope"
+        )
+        self.status = status
+
+
 class SearchMode(StrEnum):
     """Torznab search functions (`t=`)."""
 
@@ -178,7 +189,7 @@ class Indexer:
             if self._modes is None:
                 try:
                     self._modes = self.caps().modes
-                except (httpx.HTTPError, ET.ParseError):
+                except (httpx.HTTPError, KeyRefused, ET.ParseError):
                     return None
             return self._modes
 
@@ -270,8 +281,7 @@ class Indexer:
                 response = self._http.get(url, params=params, headers=headers)
                 if response.status_code == 429:
                     raise RateLimited(_retry_after(response))
-                response.raise_for_status()
-                return response
+                return self._checked(response)
             for _attempt in range(MAX_RETRIES):
                 self._wait_turn()
                 response = self._http.get(url, params=params, headers=headers)
@@ -281,8 +291,18 @@ class Indexer:
             else:
                 self._wait_turn()
                 response = self._http.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        return response
+        return self._checked(response)
+
+    def _checked(self, response: httpx.Response) -> httpx.Response:
+        """The response if it succeeded; errors never carry the key, which URLs hold."""
+        if response.status_code in (401, 403):
+            raise KeyRefused(response.status_code)
+        try:
+            return response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPStatusError(
+                self._redact(str(e)), request=e.request, response=e.response
+            ) from None
 
     def next_request_in(self) -> float:
         """Seconds before the rate limiter lets the next request through."""

@@ -40,6 +40,7 @@ from torrentlinker.domain import ContentKind, ItemState
 from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
+from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.send_runner import SendRunner
@@ -793,7 +794,9 @@ class MainWindow(QMainWindow):
     def _catalogue_failed(self, error: Exception) -> None:
         self._catalogue_error = error
         log.warning("Catalogue update failed: %s", error)
-        self.statusBar().showMessage(self.tr("Catalogue update failed: {0}").format(error))
+        self.statusBar().showMessage(
+            self.tr("Catalogue update failed: {0}").format(error_text(error))
+        )
 
     def _catalogue_finished(self, stopped: bool) -> None:
         self.catalogue_runner = None
@@ -814,7 +817,7 @@ class MainWindow(QMainWindow):
         result = message.format(added, size)
         error = getattr(self, "_catalogue_error", None)
         if error is not None:
-            result = self.tr("Catalogue update failed: {0}").format(error)
+            result = self.tr("Catalogue update failed: {0}").format(error_text(error))
         if self.store.limited_categories():
             result += " · " + self.tr("Catalogue incomplete: the Indexer stopped paging.")
         self.statusBar().showMessage(result, 15000)
@@ -1037,7 +1040,9 @@ class MainWindow(QMainWindow):
         return self.tr("No Candidates")
 
     def _batch_error(self, entry: LibraryEntry, error: Exception) -> None:
-        self.library_model.set_status(entry.item.path, self.tr("Search failed: {0}").format(error))
+        self.library_model.set_status(
+            entry.item.path, self.tr("Search failed: {0}").format(error_text(error))
+        )
 
     def _batch_finished(self, done: int) -> None:
         self.batch = None

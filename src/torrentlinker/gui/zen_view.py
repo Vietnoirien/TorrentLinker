@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import MIN_INTERVAL
@@ -651,7 +652,7 @@ class PlanView(QGroupBox):
 
     def failed(self, error: Exception) -> None:
         self.busy(False)
-        self.summary.setText(self.tr("Could not make a Plan: {0}").format(error))
+        self.summary.setText(self.tr("Could not make a Plan: {0}").format(error_text(error)))
 
     # Estimated times -------------------------------------------------------
 

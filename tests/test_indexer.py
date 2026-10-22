@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from tests.torznab_fixtures import CAPS_XML, SEARCH_XML
-from torrentlinker.indexer import Candidate, Indexer, RateLimited, SearchQuery
+from torrentlinker.indexer import Candidate, Indexer, KeyRefused, RateLimited, SearchQuery
 
 
 class FakeClock:
@@ -93,6 +93,27 @@ def test_a_torrent_download_can_hand_a_429_back_instead_of_sleeping() -> None:
     assert 900 not in clock.sleeps
 
 
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_refused_key_says_so_without_showing_the_key(status: int) -> None:
+    indexer = make_indexer(lambda r: httpx.Response(status))
+
+    with pytest.raises(KeyRefused) as refused:
+        indexer.search(SearchQuery(q="a"))
+
+    assert refused.value.status == status
+    assert "apikey" not in str(refused.value)
+
+
+def test_other_http_errors_never_show_the_key_from_the_url() -> None:
+    indexer = make_indexer(lambda r: httpx.Response(500))
+
+    with pytest.raises(httpx.HTTPStatusError) as failed:
+        indexer.search(SearchQuery(q="a"))
+
+    assert "apikey=K" not in str(failed.value)
+    assert "500" in str(failed.value)
+
+
 def test_caps_lists_categories_and_supported_search_modes() -> None:
     caps = make_indexer(lambda r: httpx.Response(200, text=CAPS_XML)).caps()
 
@@ -104,7 +125,7 @@ def test_caps_lists_categories_and_supported_search_modes() -> None:
 
 
 def test_bad_api_key_is_reported_as_an_error() -> None:
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(KeyRefused):
         make_indexer(lambda r: httpx.Response(401)).caps()
 
 

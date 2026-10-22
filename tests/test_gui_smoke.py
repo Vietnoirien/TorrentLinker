@@ -895,3 +895,16 @@ def test_plan_view_shows_notes_and_unused_disk_space_including_the_reserve(qtbot
     assert "average note 1.35" in view.summary.text()
     assert view.space_table.rowCount() == 1
     assert view.space_table.item(0, 4).data(256) == 6 * GB
+
+
+def test_a_refused_key_tells_the_user_where_to_fix_it(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.indexer import KeyRefused
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+
+    window.zen_tab.plan_view.failed(KeyRefused(401))
+
+    text = window.zen_tab.plan_view.summary.text()
+    assert "refused your API key (HTTP 401)" in text
+    assert "Settings → Connections" in text and "torznab:read" in text

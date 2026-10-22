@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.domain import ItemState
+from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Candidate, Indexer
@@ -251,7 +252,7 @@ class ReviewPanel(QWidget):
     def _failed(self, error: Exception) -> None:
         self.search_button.setEnabled(True)
         self.check_button.setEnabled(True)
-        QMessageBox.warning(self, self.tr("Search failed"), str(error))
+        QMessageBox.warning(self, self.tr("Search failed"), error_text(error))
 
     # Candidate details -----------------------------------------------------
 

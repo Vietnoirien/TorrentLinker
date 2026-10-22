@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from torrentlinker.indexer import RateLimited
+from torrentlinker.indexer import KeyRefused, RateLimited
 from torrentlinker.plan import Plan, PlanCandidate
 from torrentlinker.qbit import Qbit
 from torrentlinker.torrent_meta import TorrentMeta, read_torrent
@@ -154,6 +154,10 @@ def send_plan(
             break
         except Refused as e:
             report.refused.append((c.title, str(e)))
+        except KeyRefused as e:  # every torrent left would fail the same way
+            report.failed.append((c.title, str(e)))
+            report.stopped = True
+            break
         except Exception as e:  # noqa: BLE001 - reported to the user
             report.failed.append((c.title, str(e) or type(e).__name__))
     progress("")
