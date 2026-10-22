@@ -83,10 +83,11 @@ The c411 role a user picks, which decides how Zen is paid; Tanker and Swarm Keep
 
 **Catalogue**:
 The locally stored list of torrents available on an Indexer, with size, seeders and category, that a Plan chooses from.
+For c411, a public Zen Lab metadata snapshot supplies older entries, and direct c411 metadata takes precedence. A snapshot or paging limit does not establish complete tracker coverage.
 _Avoid_: Database, index
 
 **Plan**:
-A recommended set of Catalogue torrents to download and seed that maximises Zen within the user's free space and torrent cap.
+A recommended set of Catalogue torrents to download and seed, chosen for estimated Zen or highest torrent notes within the user's free space, maximum download size and torrent limits.
 _Avoid_: Portfolio, selection
 
 **Download Folder**:

@@ -79,7 +79,7 @@ class Torrent:
     progress: float = 1.0
     state: str = ""
     tracker: str = ""  # the current tracker's URL
-    swarm_seeders: int = 0  # seeders the tracker reports, the user included
+    swarm_seeders: int = -1  # tracker-reported seeders, user included; -1 = not yet known
     seeding_time: float = 0.0  # seconds this client has seeded it
     size: int = 0  # total size, also known when files were not fetched
 

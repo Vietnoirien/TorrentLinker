@@ -10,6 +10,7 @@ from torrentlinker.zen import (
     duration_bonus,
     estimate,
     is_indexer_torrent,
+    note,
     rarity_bonus,
     tree_bonus,
     weight,
@@ -57,6 +58,23 @@ def test_rarity_depends_on_class_size_and_seeders() -> None:
     assert rarity_bonus(ZenClass.SWARM_KEEPER, 4 * GB, 5) == 0.35
     assert rarity_bonus(ZenClass.SWARM_KEEPER, 0.5 * GB, 30) == 0
     assert rarity_bonus(ZenClass.SWARM_KEEPER, 20 * GB, 8) == 0.5
+
+
+@pytest.mark.parametrize("category", [6000, 6010, 6050, 6070])
+def test_keeper_xxx_category_base_is_added_before_age_and_rarity(category: int) -> None:
+    torrent = ZenTorrent(4 * GB, 5, 180, category)
+
+    assert note(ZenClass.SWARM_KEEPER, torrent) == pytest.approx(0.5 + 0.5 + 0.35)
+
+
+def test_keeper_category_base_does_not_scale_the_age_and_rarity_bonuses() -> None:
+    normal = ZenTorrent(4 * GB, 5, 180, 7000)
+    adult = ZenTorrent(4 * GB, 5, 180, 6010)
+
+    assert note(ZenClass.SWARM_KEEPER, normal) == pytest.approx(1 + 0.5 + 0.35)
+    assert estimate(KEEPER, [adult]).total / estimate(KEEPER, [normal]).total == pytest.approx(
+        1.35 / 1.85
+    )
 
 
 def test_class_bonus_grows_with_the_number_of_torrents() -> None:

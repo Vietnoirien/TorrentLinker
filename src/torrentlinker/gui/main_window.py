@@ -31,8 +31,8 @@ from torrentlinker.catalogue import (
     crawl_categories,
     plan_categories,
     startup_categories,
-    update_categories,
 )
+from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.domain import ContentKind, ItemState
@@ -57,10 +57,11 @@ from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.plan import (
     Plan,
     PlanCandidate,
+    PlanOptions,
     ReseedSource,
     catalogue_candidates,
-    disk_budgets,
     disk_of,
+    disk_space,
     make_plan,
     reseed_candidates,
 )
@@ -83,7 +84,7 @@ from torrentlinker.review import (
     restore_checked,
     search_candidates,
 )
-from torrentlinker.seeding import Seeding, indexer_torrents, seeding
+from torrentlinker.seeding import Seeding, indexer_torrents, observe_swarm, seeding
 from torrentlinker.send import SendReport, send_plan
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.tmdb import Tmdb
@@ -197,11 +198,14 @@ class MainWindow(QMainWindow):
         self._crawl_position = [0, 0]  # category being crawled, of how many (worker writes)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.plan_view.categories_changed.connect(self._plan_categories_changed)
+        self.zen_tab.plan_view.set_options(self.settings.plan_options)
+        self.zen_tab.plan_view.options_changed.connect(self._plan_options_changed)
         self.zen_tab.plan_view.stop_fetch_requested.connect(self._stop_plan_fetch)
         self.offer_plan_categories()
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
         self._after_catalogue: Callable[[], None] | None = None
         self._after_catalogue_always: Callable[[], None] | None = None
+        self._pending_plan: Callable[[], None] | None = None
         self._last_crawl_progress: CrawlProgress | None = None
         self.crawl_ticker = QTimer(self)
         self.crawl_ticker.setInterval(500)
@@ -213,6 +217,10 @@ class MainWindow(QMainWindow):
         self.verify_timer = QTimer(self)
         self.verify_timer.setInterval(3000)
         self.verify_timer.timeout.connect(self.check_verifications)
+        self.seeding_timer = QTimer(self)
+        self.seeding_timer.setInterval(30_000)
+        self.seeding_timer.timeout.connect(lambda: self.zen_tab.seeding_view.refresh(quiet=True))
+        self.seeding_timer.start()
         if settings_path.exists():
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
@@ -267,24 +275,41 @@ class MainWindow(QMainWindow):
     # Plan ------------------------------------------------------------------
 
     def make_plan(self, then: Callable[[], None] | None = None) -> None:
-        """Fetch the full Catalogue of the Plan's categories, then make the Plan."""
-        self.zen_tab.plan_view.busy(True)
+        """Refresh new torrents in the Plan's categories, then make the Plan."""
+        self._use_cached_plan = False
+        self.zen_tab.plan_view.begin()
         self.band.set_plan(None)
+        if self.catalogue_runner is not None:
+
+            def resume() -> None:
+                if self._use_cached_plan:
+                    self._build_plan(then)
+                else:
+                    self.make_plan(then)
+
+            self._pending_plan = resume
+            self._planning = True
+            self.zen_tab.plan_view.busy(
+                True, self.tr("Waiting for the Catalogue refresh to finish…")
+            )
+            self.zen_tab.plan_view.fetching(True)
+            return
         s = self.settings
         chosen = set(s.plan_categories) if s.plan_categories is not None else None
         targets = plan_categories(chosen, s.download_folders, s.indexer_categories)
-        if not targets or self.catalogue_runner is not None or not get_secret(INDEXER_API_KEY):
+        if not targets or not get_secret(INDEXER_API_KEY):
             self._build_plan(then)
             return
         indexer, store, categories = self.indexer(), self.store, dict(s.indexer_categories)
 
         def work(stop: Callable[[], bool], progress: Progress) -> None:
-            log.info("Catalogue fetched in full for the Plan: %s", targets)
-            update_categories(
+            log.info("Fetching Catalogue categories for the Plan: %s", targets)
+            sync_catalogue(
                 indexer,
                 store,
                 targets,
-                full=True,  # resumes an unfinished category, updates a finished one
+                full=False,
+                bootstrap=True,
                 stop=stop,
                 progress=progress,
                 categories=categories,
@@ -293,10 +318,20 @@ class MainWindow(QMainWindow):
         self._planning = True
         self.zen_tab.plan_view.busy(True, self.tr("Fetching the Catalogue for the Plan…"))
         self.zen_tab.plan_view.fetching(True)
-        self._after_catalogue_always = lambda: self._build_plan(then)
+
+        def after_fetch() -> None:
+            if self._catalogue_error is not None and not self._use_cached_plan:
+                self._planning = False
+                self.zen_tab.plan_view.fetching(False)
+                self.zen_tab.plan_view.failed(self._catalogue_error)
+            else:
+                self._build_plan(then)
+
+        self._after_catalogue_always = after_fetch
         self._run_catalogue(work)
 
     def _stop_plan_fetch(self) -> None:
+        self._use_cached_plan = True
         if self.catalogue_runner is not None:
             self.catalogue_runner.stop()
         self.zen_tab.plan_view.fetching(False)
@@ -307,6 +342,8 @@ class MainWindow(QMainWindow):
         self.zen_tab.plan_view.busy(True)
 
         def done(plan: Plan) -> None:
+            self._planning = False
+            self.zen_tab.plan_view.fetching(False)
             self._plan_made(plan)
             if then is not None and plan.items:
                 then()
@@ -332,6 +369,12 @@ class MainWindow(QMainWindow):
         self.settings.plan_categories = sorted(chosen) if chosen is not None else None
         self.settings.save(self.settings_path)
 
+    def _plan_options_changed(self, options: PlanOptions) -> None:
+        self.settings.plan_options = options
+        self.settings.save(self.settings_path)
+        self.zen_tab.plan_view.invalidate()
+        self.band.set_plan(None)
+
     def plan_maker(self) -> Callable[[], Plan]:
         """Build on the GUI thread the work that makes a Plan (no Indexer request)."""
         s = self.settings
@@ -342,6 +385,14 @@ class MainWindow(QMainWindow):
             s.free_space_margin,
         )
         only = set(s.plan_categories) if s.plan_categories is not None else None
+        options = s.plan_options
+        planned_folders = {
+            folder
+            for c in plan_categories(only, folders, categories)
+            if (folder := folders.resolve(c, categories)) is not None
+        }
+        if only is None and folders.default.strip():
+            planned_folders.add(Path(folders.default))
         # Orphans whose Matches searches found, for Reseed rows (read on the GUI thread)
         found = [
             (e, list(self.review.cache[e.item.path]))
@@ -351,20 +402,64 @@ class MainWindow(QMainWindow):
 
         def work() -> Plan:
             torrents = qbit.torrents(with_files=False)
-            view = seeding(profile, torrents, url)
+            cached = observe_swarm(store, torrents, url)
+            view = seeding(profile, torrents, url, catalogue=cached)
             in_client = {t.hash.lower() for t in torrents}
-            candidates = reseed_candidates(profile, found, in_client, view.active)
-            candidates += catalogue_candidates(
-                store.catalogue(), folders, categories, in_client, disk_of, only
+            candidates = reseed_candidates(
+                profile,
+                found,
+                in_client,
+                view.active,
+                goal=options.goal,
+                max_seeders=options.max_seeders,
             )
-            budgets = disk_budgets({c.folder for c in candidates if c.folder}, margin)
+            candidates += catalogue_candidates(
+                store.catalogue(),
+                folders,
+                categories,
+                in_client,
+                disk_of,
+                only,
+            )
+            spaces = disk_space(
+                sorted(planned_folders | {c.folder for c in candidates if c.folder}, key=str),
+                margin,
+            )
+            budgets = {space.disk: space.available for space in spaces}
             slots = max(0, profile.torrent_cap - view.count) if profile.torrent_cap else None
-            return make_plan(profile, candidates, budgets, view.active, slots)
+            return make_plan(
+                profile,
+                candidates,
+                budgets,
+                view.active,
+                slots,
+                options=options,
+                disk_spaces=spaces,
+            )
 
         return work
 
     def _plan_made(self, plan: Plan) -> None:
         self.zen_tab.plan_view.show_plan(plan)
+        s = self.settings
+        targets = plan_categories(s.plan_categories, s.download_folders, s.indexer_categories)
+        if self.store.limited_categories().intersection(targets):
+            summary = self.zen_tab.plan_view.summary
+            summary.setText(
+                summary.text()
+                + "\n"
+                + self.tr("Based on an incomplete Catalogue; older torrents may be missing.")
+            )
+        if plan.items:
+            summary = self.zen_tab.plan_view.summary
+            summary.setText(
+                summary.text()
+                + "\n"
+                + self.tr(
+                    "Provisional estimates from cached metadata. Seeder counts update from "
+                    "qBittorrent after tracker responses."
+                )
+            )
         self.band.set_plan(plan.zen_added if plan.items else None)
 
     def confirm_send(self) -> None:
@@ -488,7 +583,7 @@ class MainWindow(QMainWindow):
                 seeded = []
             wanted = startup_categories(folders, categories, seeded, store)
             log.info("Catalogue update of categories %s", wanted)
-            update_categories(
+            sync_catalogue(
                 indexer,
                 store,
                 wanted,
@@ -526,7 +621,7 @@ class MainWindow(QMainWindow):
                 if stop():
                     return
                 position[:] = [i, len(wanted)]
-                update_categories(
+                sync_catalogue(
                     indexer,
                     store,
                     [category],
@@ -549,6 +644,7 @@ class MainWindow(QMainWindow):
         runner = CatalogueRunner(work)
         self._catalogue_added: dict[int, int] = {}
         self._last_crawl_progress = None
+        self._catalogue_error: Exception | None = None
         self.crawl_ticker.start()
         runner.signals.progress.connect(self._catalogue_progress)
         runner.signals.failed.connect(self._catalogue_failed)
@@ -566,10 +662,23 @@ class MainWindow(QMainWindow):
         p = self._last_crawl_progress
         if p is None:
             return
+        if p.source == SNAPSHOT_NAME:
+            text = self.tr("Importing Zen Lab metadata: {0} torrents (+{1})").format(
+                p.offset, p.added
+            )
+            self.band.set_catalogue(text)
+            self.zen_tab.catalogue.set_status(text)
+            self.statusBar().showMessage(text)
+            if self._planning:
+                self.zen_tab.plan_view.busy(True, text)
+            return
         name = self.settings.indexer_categories.get(p.category)
-        text = self.tr("updating {0}, page {1} (+{2})").format(
-            name.name if name else p.category, p.pages, p.added
-        )
+        label = name.name if name else str(p.category)
+        if name is not None and name.parent is not None:
+            parent = self.settings.indexer_categories.get(name.parent)
+            if parent is not None:
+                label = f"{parent.name} / {label}"
+        text = self.tr("updating {0}, page {1} (+{2})").format(label, p.pages, p.added)
         self.band.set_catalogue(text)
         wait = self._indexer.next_request_in() if self._indexer else 0
         suffix = self.tr(" · next request in {0} s").format(f"{wait:.0f}") if wait > 0.5 else ""
@@ -579,18 +688,29 @@ class MainWindow(QMainWindow):
             status = self.tr("Category {0}/{1}: {2} · {3} torrents in the Catalogue").format(
                 done, total, text, size
             )
-        else:  # the update of the user's categories (at startup or before a Plan)
+        elif self._planning and self._pending_plan is None:
+            status = self.tr(
+                "Updating selected categories: {0} · {1} torrents in the Catalogue"
+            ).format(text, size)
+        else:  # a startup update may cover more categories than a queued Plan
             status = self.tr(
                 "Updating your categories: {0} · {1} torrents in the Catalogue"
             ).format(text, size)
         self.zen_tab.catalogue.set_status(status + suffix)
         self.statusBar().showMessage(self.tr("Catalogue: {0}").format(status) + suffix)
         if self._planning:
+            if self._pending_plan is not None:
+                self.zen_tab.plan_view.busy(
+                    True,
+                    self.tr("Waiting for the Catalogue refresh to finish…") + " " + status + suffix,
+                )
+                return
             self.zen_tab.plan_view.busy(
                 True, self.tr("Fetching the Catalogue for the Plan: {0}").format(status + suffix)
             )
 
     def _catalogue_failed(self, error: Exception) -> None:
+        self._catalogue_error = error
         log.warning("Catalogue update failed: %s", error)
         self.statusBar().showMessage(self.tr("Catalogue update failed: {0}").format(error))
 
@@ -610,13 +730,25 @@ class MainWindow(QMainWindow):
             if stopped
             else self.tr("Catalogue updated: +{0} torrents · {1} in total")
         )
-        self.statusBar().showMessage(message.format(added, size), 15000)
+        result = message.format(added, size)
+        error = getattr(self, "_catalogue_error", None)
+        if error is not None:
+            result = self.tr("Catalogue update failed: {0}").format(error)
+        if self.store.limited_categories():
+            result += " · " + self.tr("Catalogue incomplete: the Indexer stopped paging.")
+        self.statusBar().showMessage(result, 15000)
         then, self._after_catalogue = self._after_catalogue, None
-        if then is not None and not stopped:
-            then()
         always, self._after_catalogue_always = self._after_catalogue_always, None
+        pending, self._pending_plan = self._pending_plan, None
+        if then is not None and not stopped and error is None:
+            then()
         if always is not None:
             always()  # e.g. a Plan: paused, it is made from the Catalogue fetched so far
+        if pending is not None:
+            if self.catalogue_runner is None:
+                pending()
+            else:
+                self._pending_plan = pending
 
     def _show_catalogue_age(self) -> None:
         self.band.set_catalogue(self.catalogue_age())
@@ -625,6 +757,16 @@ class MainWindow(QMainWindow):
         self.zen_tab.catalogue.set_status(
             self.catalogue_age()
             + (" · " + self.tr("whole-catalogue fetch paused") if paused else "")
+            + (
+                " · " + self.tr("Catalogue incomplete: the Indexer stopped paging.")
+                if self.store.limited_categories()
+                else ""
+            )
+            + (
+                " · " + self.tr("Zen Lab snapshot imported; c411 data takes priority")
+                if self.store.feed_state(SNAPSHOT_NAME).updated_at is not None
+                else ""
+            )
         )
 
     def catalogue_age(self) -> str:
@@ -638,6 +780,8 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self.seeding_timer.stop()
+        self._pending_plan = None
         if self.catalogue_runner is not None:
             self.catalogue_runner.stop()
         super().closeEvent(event)
@@ -646,7 +790,14 @@ class MainWindow(QMainWindow):
         """Build on the GUI thread the work that reads the Seeding view from qBittorrent."""
         qbit, profile, url = self.qbit(), self.settings.zen, self.settings.indexer.url
         uploads = self.settings.uploads
-        return lambda: seeding(profile, qbit.torrents(with_files=False), url, uploads)
+        store = self.store
+
+        def work() -> Seeding:
+            torrents = qbit.torrents(with_files=False)
+            cached = observe_swarm(store, torrents, url)
+            return seeding(profile, torrents, url, uploads, catalogue=cached)
+
+        return work
 
     def _uploads_changed(self, uploads: int) -> None:
         self.settings.uploads = uploads

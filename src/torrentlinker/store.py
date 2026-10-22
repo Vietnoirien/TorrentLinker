@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS catalogue_crawl (
     complete INTEGER NOT NULL DEFAULT 0,
     updated_at REAL
 );
+CREATE TABLE IF NOT EXISTS catalogue_feed (
+    name TEXT PRIMARY KEY,
+    next_page INTEGER NOT NULL DEFAULT 1,
+    updated_at REAL,
+    count INTEGER NOT NULL DEFAULT 0,
+    limited INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -75,6 +82,18 @@ class CatalogueRow:
     download_url: str
     details_url: str
     seen_at: float
+    source: str = "indexer"
+
+
+@dataclass(frozen=True)
+class FeedState:
+    name: str
+    next_page: int = 1
+    updated_at: float | None = None
+    count: int = 0
+    limited: bool = False
+    head_hashes: tuple[str, ...] = ()  # newest page of the last successful sync
+    started_at: float | None = None  # baseline for an interrupted first latest-only update
 
 
 @dataclass(frozen=True)
@@ -83,6 +102,7 @@ class CrawlState:
     next_offset: int = 0  # where a paused full crawl resumes
     complete: bool = False  # a full crawl reached the end once
     updated_at: float | None = None
+    limited: bool = False  # the Indexer stopped paging before coverage was established
 
 
 @dataclass(frozen=True)
@@ -107,6 +127,28 @@ class Store:
             self._migrate()
 
     def _migrate(self) -> None:
+        feed_columns = {r[1] for r in self._db.execute("PRAGMA table_info(catalogue_feed)")}
+        if "head_hashes" not in feed_columns:
+            self._db.execute(
+                "ALTER TABLE catalogue_feed ADD COLUMN head_hashes TEXT NOT NULL DEFAULT '[]'"
+            )
+        if "started_at" not in feed_columns:
+            self._db.execute("ALTER TABLE catalogue_feed ADD COLUMN started_at REAL")
+        catalogue_columns = {r[1] for r in self._db.execute("PRAGMA table_info(catalogue)")}
+        if "source" not in catalogue_columns:
+            self._db.execute(
+                "ALTER TABLE catalogue ADD COLUMN source TEXT NOT NULL DEFAULT 'indexer'"
+            )
+        crawl_columns = {r[1] for r in self._db.execute("PRAGMA table_info(catalogue_crawl)")}
+        if "limited" not in crawl_columns:
+            self._db.execute(
+                "ALTER TABLE catalogue_crawl ADD COLUMN limited INTEGER NOT NULL DEFAULT 0"
+            )
+            # Older versions called a repeated final page a completed crawl. Recheck
+            # these categories once; their stored torrents remain available to Plans.
+            self._db.execute(
+                "UPDATE catalogue_crawl SET complete = 0, next_offset = 0 WHERE complete = 1"
+            )
         columns = {r[1] for r in self._db.execute("PRAGMA table_info(verification)")}
         if "required_progress" not in columns:
             self._db.execute(
@@ -252,7 +294,13 @@ class Store:
     def save_catalogue(self, rows: list[CatalogueRow]) -> None:
         with self._lock, self._db:
             self._db.executemany(
-                "INSERT OR REPLACE INTO catalogue VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO catalogue VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT(infohash) DO UPDATE SET"
+                " title=excluded.title, size=excluded.size, seeders=excluded.seeders,"
+                " category=excluded.category, download_url=excluded.download_url,"
+                " details_url=excluded.details_url, seen_at=excluded.seen_at,"
+                " source=excluded.source"
+                " WHERE excluded.source != 'zen-lab' OR catalogue.source = 'zen-lab'",
                 [
                     (
                         r.infohash,
@@ -263,12 +311,13 @@ class Store:
                         r.download_url,
                         r.details_url,
                         r.seen_at,
+                        r.source,
                     )
                     for r in rows
                 ],
             )
 
-    def known_hashes(self, hashes: list[str]) -> set[str]:
+    def known_hashes(self, hashes: list[str], *, seen_before: float | None = None) -> set[str]:
         with self._lock:
             found = set()
             for i in range(0, len(hashes), 500):
@@ -277,15 +326,36 @@ class Store:
                 found |= {
                     str(r[0])
                     for r in self._db.execute(
-                        f"SELECT infohash FROM catalogue WHERE infohash IN ({marks})", chunk
+                        f"SELECT infohash FROM catalogue WHERE infohash IN ({marks})"
+                        + (" AND seen_at < ?" if seen_before is not None else ""),
+                        [*chunk, seen_before] if seen_before is not None else chunk,
                     )
                 }
             return found
 
-    def catalogue(self) -> list[CatalogueRow]:
+    def catalogue(self, hashes: list[str] | None = None) -> list[CatalogueRow]:
         with self._lock:
-            rows = self._db.execute("SELECT * FROM catalogue").fetchall()
+            if hashes is None:
+                rows = self._db.execute("SELECT * FROM catalogue").fetchall()
+            else:
+                rows = []
+                for i in range(0, len(hashes), 500):
+                    chunk = hashes[i : i + 500]
+                    marks = ",".join("?" * len(chunk))
+                    rows.extend(
+                        self._db.execute(
+                            f"SELECT * FROM catalogue WHERE infohash IN ({marks})", chunk
+                        ).fetchall()
+                    )
         return [CatalogueRow(*r) for r in rows]
+
+    def update_catalogue_seeders(self, counts: dict[str, int]) -> None:
+        """Apply swarm observations without claiming size/category metadata was refreshed."""
+        with self._lock, self._db:
+            self._db.executemany(
+                "UPDATE catalogue SET seeders = ? WHERE infohash = ?",
+                [(count, h.lower()) for h, count in counts.items() if count >= 0],
+            )
 
     def catalogue_size(self) -> int:
         with self._lock:
@@ -311,18 +381,66 @@ class Store:
     def crawl_state(self, category: int) -> CrawlState:
         with self._lock:
             row = self._db.execute(
-                "SELECT next_offset, complete, updated_at FROM catalogue_crawl WHERE category = ?",
+                "SELECT next_offset, complete, updated_at, limited"
+                " FROM catalogue_crawl WHERE category = ?",
                 (category,),
             ).fetchone()
         if not row:
             return CrawlState(category)
-        return CrawlState(category, int(row[0]), bool(row[1]), row[2])
+        return CrawlState(category, int(row[0]), bool(row[1]), row[2], bool(row[3]))
 
     def save_crawl_state(self, state: CrawlState) -> None:
         with self._lock, self._db:
             self._db.execute(
-                "INSERT OR REPLACE INTO catalogue_crawl VALUES (?, ?, ?, ?)",
-                (state.category, state.next_offset, int(state.complete), state.updated_at),
+                "INSERT OR REPLACE INTO catalogue_crawl"
+                " (category, next_offset, complete, updated_at, limited) VALUES (?, ?, ?, ?, ?)",
+                (
+                    state.category,
+                    state.next_offset,
+                    int(state.complete),
+                    state.updated_at,
+                    int(state.limited),
+                ),
+            )
+
+    def limited_categories(self) -> set[int]:
+        """Categories where the Indexer's paging limit prevented a complete crawl."""
+        with self._lock:
+            return {
+                int(row[0])
+                for row in self._db.execute(
+                    "SELECT category FROM catalogue_crawl WHERE limited = 1"
+                )
+            }
+
+    def feed_state(self, name: str) -> FeedState:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT next_page, updated_at, count, limited, head_hashes, started_at"
+                " FROM catalogue_feed WHERE name = ?",
+                (name,),
+            ).fetchone()
+        return (
+            FeedState(name, row[0], row[1], row[2], bool(row[3]), tuple(json.loads(row[4])), row[5])
+            if row
+            else FeedState(name)
+        )
+
+    def save_feed_state(self, state: FeedState) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO catalogue_feed"
+                " (name, next_page, updated_at, count, limited, head_hashes, started_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    state.name,
+                    state.next_page,
+                    state.updated_at,
+                    state.count,
+                    int(state.limited),
+                    json.dumps(state.head_hashes),
+                    state.started_at,
+                ),
             )
 
     def catalogue_updated_at(self) -> float | None:
@@ -336,4 +454,8 @@ class Store:
             row = self._db.execute(
                 "SELECT 1 FROM catalogue_crawl WHERE next_offset > 0 AND complete = 0 LIMIT 1"
             ).fetchone()
-        return row is not None
+            feed = self._db.execute(
+                "SELECT 1 FROM catalogue_feed WHERE next_page > 1"
+                " AND name NOT LIKE 'c411-latest:%' LIMIT 1"
+            ).fetchone()
+        return row is not None or feed is not None

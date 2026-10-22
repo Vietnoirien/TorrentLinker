@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from torrentlinker.config import Settings
 from torrentlinker.gui.main_window import MainWindow
 from torrentlinker.store import Store
@@ -107,6 +109,51 @@ def test_main_window_opens_on_the_zen_tab_and_shows_the_seeding_view(qtbot, tmp_
     assert window.tabs.tabText(1) == "Library"
     assert window.zen_tab.seeding_view.table.rowCount() == 1
     assert "≈" in window.zen_tab.seeding_view.table.item(0, 4).text()  # type: ignore[union-attr]
+
+
+def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
+    qtbot, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import Torrent
+    from torrentlinker.plan import Plan
+    from torrentlinker.store import CatalogueRow
+    from torrentlinker.zen import GB, ZenClass, ZenProfile
+
+    settings = Settings(zen=ZenProfile(ZenClass.SWARM_KEEPER))
+    store = Store(tmp_path / "s.db")
+    row = CatalogueRow("a" * 40, "Book", 4 * GB, 100, 7000, "u", "d", 123, "zen-lab")
+    store.save_catalogue([row])
+    t = Torrent(
+        row.infohash,
+        "Book",
+        tmp_path,
+        state="uploading",
+        tracker="https://tracker.c411.org/announce",
+        swarm_seeders=-1,
+        size=4 * GB,
+    )
+    qbit = FakeQbit({row.infohash: t})
+    window = MainWindow(settings, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window.qbit = lambda: qbit  # type: ignore[assignment,method-assign,return-value]
+    view = window.zen_tab.seeding_view
+    view.show_seeding(window.seeding_loader()())
+    before = view.seeding.day.total
+    assert view.table.item(0, 2).text() == "–"
+    assert store.catalogue()[0].seeders == 100
+
+    window.zen_tab.plan_view.show_plan(Plan())
+    qbit._set(row.infohash, swarm_seeders=5)
+    with qtbot.waitSignal(view.updated, timeout=5000):
+        window.seeding_timer.timeout.emit()
+
+    assert view.table.item(0, 2).text() == "5"
+    assert view.seeding.day.total > before
+    cached = store.catalogue()[0]
+    assert cached.seeders == 4  # the current user is already one of the five seeders
+    assert cached.source == "zen-lab" and cached.seen_at == 123
+    assert window.seeding_timer.interval() == 30_000
 
 
 def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot) -> None:  # type: ignore[no-untyped-def]
@@ -480,7 +527,10 @@ def test_a_catalogue_update_shows_its_progress_and_its_result(qtbot, tmp_path: P
     assert "+250" in window.statusBar().currentMessage()
 
 
-def test_making_a_plan_first_fetches_its_categories_in_full(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize("count,paging_window", [(350, None), (1000, 600)])
+def test_making_a_plan_fetches_its_categories_and_discloses_limits(
+    qtbot, tmp_path: Path, count: int, paging_window: int | None
+) -> None:  # type: ignore[no-untyped-def]
     from tests.fake_qbit import FakeQbit
     from tests.fake_torznab import FakeTorznab
     from torrentlinker.credentials import set_secret
@@ -493,13 +543,14 @@ def test_making_a_plan_first_fetches_its_categories_in_full(qtbot, tmp_path: Pat
     films.mkdir()
     s = Settings()
     s.indexer_categories = {2030: IndexerCategory("Film")}
+    s.indexer.url = "https://c411.example/api/torznab"
     s.download_folders = DownloadFolders({2030: str(films)})
     store = Store(tmp_path / "s.db")
     window = MainWindow(s, tmp_path / "settings.json", store)
     qtbot.addWidget(window)
     set_secret(INDEXER_API_KEY, "K")
-    torznab = FakeTorznab()
-    torznab.add(2030, 350)  # 4 pages, far beyond the 10 newest pages a startup update reads
+    torznab = FakeTorznab(window=paging_window)
+    torznab.add(2030, count)
     window._indexer = Indexer(
         s.indexer.url, "K", http=torznab.client(), cache=store, sleep=lambda _s: None
     )
@@ -508,5 +559,222 @@ def test_making_a_plan_first_fetches_its_categories_in_full(qtbot, tmp_path: Pat
     window.make_plan()
     qtbot.waitUntil(lambda: window.zen_tab.plan_view.plan is not None, timeout=10_000)
 
-    assert store.catalogue_size() == 350
+    assert store.catalogue_size() == min(count, paging_window or count)
     assert window.zen_tab.plan_view.plan.items
+    if paging_window is not None:
+        assert "incomplete Catalogue" in window.zen_tab.plan_view.summary.text()
+        assert "Catalogue incomplete" in window.zen_tab.catalogue.status.text()
+    else:
+        assert "incomplete Catalogue" not in window.zen_tab.plan_view.summary.text()
+
+
+@pytest.mark.parametrize("stop_early", [False, True])
+def test_a_plan_waits_for_an_active_refresh_then_refreshes_its_own_categories(
+    qtbot, tmp_path: Path, monkeypatch, stop_early: bool
+) -> None:  # type: ignore[no-untyped-def]
+    import threading
+
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.plan import Plan
+
+    settings = Settings()
+    settings.indexer.url = "https://c411.example/api/torznab"
+    settings.indexer_categories = {7000: IndexerCategory("Ebook")}
+    settings.download_folders = DownloadFolders({7000: str(tmp_path)})
+    window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    set_secret(INDEXER_API_KEY, "K")
+    started, release, planned = threading.Event(), threading.Event(), threading.Event()
+    order: list[str] = []
+
+    def active_refresh(stop, progress) -> None:  # type: ignore[no-untyped-def]
+        started.set()
+        release.wait(timeout=5)
+        order.append("active refresh finished")
+
+    def plan_refresh(indexer, store, targets, **kw) -> None:  # type: ignore[no-untyped-def]
+        assert targets == [7000] and not kw["full"] and kw["bootstrap"]
+        order.append("Plan categories refreshed")
+
+    def build() -> Plan:
+        order.append("Plan built")
+        planned.set()
+        return Plan()
+
+    monkeypatch.setattr("torrentlinker.gui.main_window.sync_catalogue", plan_refresh)
+    window.plan_maker = lambda **kw: build  # type: ignore[method-assign]
+    window.zen_tab.plan_view.show_plan(Plan())  # a result from a previous request
+    window._after_catalogue = lambda: order.append("active refresh callback")
+    window._run_catalogue(active_refresh)
+    assert started.wait(timeout=1)
+    try:
+        window.make_plan()
+        assert window.zen_tab.plan_view.plan is None
+        assert not window.zen_tab.plan_view.make_button.isEnabled()
+        assert not planned.wait(timeout=0.2), (
+            "Plan was built while the Catalogue was still refreshing"
+        )
+        if stop_early:
+            window._stop_plan_fetch()
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: window.catalogue_runner is None, timeout=5000)
+
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.plan is not None, timeout=5000)
+    expected = ["active refresh finished", "active refresh callback"]
+    # Stopping explicitly allows planning from what was fetched so far.
+    if not stop_early:
+        expected += ["Plan categories refreshed"]
+    # A stopped refresh does not run its success-only callback.
+    else:
+        expected.remove("active refresh callback")
+    assert order == [*expected, "Plan built"]
+
+
+def test_a_failed_plan_refresh_does_not_build_from_the_old_catalogue(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.plan import Plan
+
+    settings = Settings()
+    settings.indexer.url = "https://c411.example/api/torznab"
+    settings.indexer_categories = {7000: IndexerCategory("Ebook")}
+    settings.download_folders = DownloadFolders({7000: str(tmp_path)})
+    window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    set_secret(INDEXER_API_KEY, "K")
+    builds = []
+
+    def failed(*args, **kw) -> None:  # type: ignore[no-untyped-def]
+        raise ValueError("Catalogue refresh failed")
+
+    def build() -> Plan:
+        builds.append(True)
+        return Plan()
+
+    monkeypatch.setattr("torrentlinker.gui.main_window.sync_catalogue", failed)
+    window.plan_maker = lambda **kw: build  # type: ignore[method-assign]
+    window.make_plan()
+    qtbot.waitUntil(lambda: window.catalogue_runner is None, timeout=5000)
+
+    assert not builds
+    assert window.zen_tab.plan_view.plan is None
+    assert "Could not make a Plan" in window.zen_tab.plan_view.summary.text()
+    assert window.zen_tab.plan_view.make_button.isEnabled()
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_plan_progress_identifies_ebook_audio_and_its_selected_scope(
+    qtbot, tmp_path: Path, pending: bool
+) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.catalogue import CrawlProgress
+    from torrentlinker.downloads import IndexerCategory
+
+    settings = Settings()
+    settings.indexer_categories = {
+        7000: IndexerCategory("Ebook"),
+        3030: IndexerCategory("Audio", 7000),
+        3000: IndexerCategory("Audio"),
+    }
+    settings.plan_categories = [7000]
+    window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window._planning = True
+    window._catalogue_added = {}
+    window._pending_plan = (lambda: None) if pending else None
+
+    window._catalogue_progress(CrawlProgress(3000 if pending else 3030, 6, 0, 600, "c411-json"))
+
+    text = window.zen_tab.plan_view.summary.text()
+    if pending:
+        assert text.startswith("Waiting for the Catalogue refresh to finish")
+        assert "Fetching the Catalogue for the Plan" not in text
+    else:
+        assert "Ebook / Audio" in text
+        assert "selected categories" in text
+
+
+def test_plan_controls_save_both_limits_and_change_the_actual_plan(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.plan import PlanGoal, PlanOptions
+    from torrentlinker.store import CatalogueRow
+    from torrentlinker.zen import GB
+
+    settings = Settings()
+    settings.indexer_categories = {7000: IndexerCategory("Ebook")}
+    settings.download_folders = DownloadFolders({7000: str(tmp_path)})
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(
+        [CatalogueRow(f"{i:040x}", f"Book {i}", GB, 5, 7000, "u", "d", 0) for i in range(4)]
+    )
+    path = tmp_path / "settings.json"
+    window = MainWindow(settings, path, store)
+    qtbot.addWidget(window)
+    window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
+    view = window.zen_tab.plan_view
+    view.goal.setCurrentIndex(view.goal.findData("note"))
+    view.download_limit.setValue(2)
+
+    assert not view.torrent_limit.isEnabled()
+    assert settings.plan_options == PlanOptions(PlanGoal.NOTE, 2 * GB)
+    assert len(window.plan_maker()().items) == 2
+
+    view.limit_torrents.setChecked(True)
+    view.torrent_limit.setValue(1)
+    assert view.torrent_limit.isEnabled()
+    assert Settings.load(path).plan_options == PlanOptions(PlanGoal.NOTE, 2 * GB, 1)
+    assert len(window.plan_maker()().items) == 1
+
+    # Changing an option invalidates a previous result instead of sending an old Plan.
+    window._plan_made(window.plan_maker()())
+    assert view.send_button.isEnabled()
+    view.download_limit.setValue(3)
+    assert view.plan is None and not view.send_button.isEnabled()
+    assert not view.seeder_limit.isEnabled()
+    view.low_seeders.setChecked(True)
+    assert view.seeder_limit.isEnabled()
+    assert settings.plan_options.max_seeders == 10
+    view.seeder_limit.setValue(4)
+    assert Settings.load(path).plan_options.max_seeders == 4
+    assert not window.plan_maker()().items  # every test torrent has five seeders
+    view.seeder_limit.setValue(5)
+    assert len(window.plan_maker()().items) == 1
+    restored = type(view)()
+    qtbot.addWidget(restored)
+    restored.set_options(Settings.load(path).plan_options)
+    assert restored.low_seeders.isChecked() and restored.seeder_limit.value() == 5
+    view.low_seeders.setChecked(False)
+    assert not view.seeder_limit.isEnabled() and settings.plan_options.max_seeders is None
+    assert len(window.plan_maker()().items) == 1
+    view.busy(True)
+    assert not view.goal.isEnabled() and not view.download_limit.isEnabled()
+    assert not view.limit_torrents.isEnabled() and not view.torrent_limit.isEnabled()
+    assert not view.low_seeders.isEnabled() and not view.seeder_limit.isEnabled()
+
+
+def test_plan_view_shows_notes_and_unused_disk_space_including_the_reserve(qtbot) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.gui.zen_view import PlanView
+    from torrentlinker.plan import DiskSpace, Plan, PlanCandidate, PlanItem
+    from torrentlinker.zen import GB
+
+    view = PlanView()
+    qtbot.addWidget(view)
+    c = PlanCandidate("a" * 40, "Book", 4 * GB, 5, 7000, Path("/books"), "disk")
+    plan = Plan(
+        [PlanItem(c, 0.5, 1.35)],
+        0.5,
+        disk_spaces=(DiskSpace("disk", Path("/books"), 10 * GB, 2 * GB, 4 * GB),),
+    )
+
+    view.show_plan(plan)
+
+    assert view.table.item(0, 3).text() == "1.35"
+    assert "average note 1.35" in view.summary.text()
+    assert view.space_table.rowCount() == 1
+    assert view.space_table.item(0, 4).data(256) == 6 * GB

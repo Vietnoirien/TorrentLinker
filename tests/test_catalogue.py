@@ -235,7 +235,7 @@ def test_a_plan_fetches_its_chosen_categories_or_else_those_with_a_download_fold
     assert plan_categories({9999}, folders, cats) == []
 
 
-def test_a_full_crawl_ends_where_the_indexer_stops_paging(tmp_path: Path) -> None:
+def test_a_full_crawl_is_incomplete_when_the_indexer_stops_paging(tmp_path: Path) -> None:
     """c411 serves at most ~600 results per query; deeper offsets repeat the last page."""
     fake, store = FakeTorznab(window=600), Store(tmp_path / "s.db")
     fake.add(7020, 2000)
@@ -243,8 +243,40 @@ def test_a_full_crawl_ends_where_the_indexer_stops_paging(tmp_path: Path) -> Non
     state = update_category(indexer(fake), store, 7020, full=True)
 
     assert len(fake.requests) <= 8  # not an endless crawl of repeated pages
-    assert state.complete and state.next_offset == 0
+    assert not state.complete
+    assert state.limited and state.next_offset == 0
     assert store.catalogue_size() == 600
+    assert Store(tmp_path / "s.db").limited_categories() == {7020}
+    assert not store.crawl_paused()  # a server limit is different from a user pause
+
+    # A later Plan retries from the beginning instead of updating a falsely complete
+    # category. If the server removes its limit, all older torrents can be reached.
+    fake.window = None
+    fake.requests.clear()
+    state = update_category(indexer(fake), store, 7020, full=True)
+
+    assert fake.requests[0].url.params["offset"] == "0"
+    assert state.complete and not state.limited
+    assert store.catalogue_size() == 2000
+    assert not store.limited_categories()
+
+
+def test_reordered_repeated_pages_do_not_certify_a_complete_catalogue(tmp_path: Path) -> None:
+    fake, store = FakeTorznab(window=100), Store(tmp_path / "s.db")
+    fake.add(7020, 2000)
+    original = fake.handler
+
+    def reordered(request: httpx.Request) -> httpx.Response:
+        # Some Indexers do not preserve ordering between requests.
+        if len(fake.requests) % 2:
+            fake.by_category[7020][:100] = reversed(fake.by_category[7020][:100])
+        return original(request)
+
+    fake.handler = reordered  # type: ignore[method-assign]
+    state = update_category(indexer(fake), store, 7020, full=True, max_pages=4)
+
+    assert state.limited and not state.complete
+    assert len(fake.requests) == 2
 
 
 def test_a_plan_fetches_each_subcategory_on_its_own_to_get_past_the_paging_limit() -> None:

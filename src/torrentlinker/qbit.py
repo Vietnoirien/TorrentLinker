@@ -148,7 +148,7 @@ class QbitApi:
             progress=float(t.progress),
             state=str(t.state),
             tracker=str(t.get("tracker", "")),
-            swarm_seeders=max(int(str(t.get("num_complete", 0))), 0),
+            swarm_seeders=max(int(str(t.get("num_complete", -1))), -1),
             seeding_time=float(str(t.get("seeding_time", 0))),
             size=int(str(t.get("total_size", 0) or t.get("size", 0))),
         )

@@ -6,10 +6,11 @@ reaches the Indexer.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from torrentlinker.domain import Torrent
+from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.zen import (
     ZenDay,
     ZenProfile,
@@ -37,8 +38,31 @@ class Seeding:
         return sum(1 for r in self.rows if r.zen is not None)
 
 
-def zen_torrent(t: Torrent) -> ZenTorrent:
-    return ZenTorrent(t.total_size, max(t.swarm_seeders, 1), seed_days(t.seeding_time))
+def zen_torrent(t: Torrent, cached: CatalogueRow | None = None) -> ZenTorrent:
+    seeds = t.swarm_seeders
+    if seeds < 0:
+        seeds = cached.seeders + 1 if cached else 1
+    return ZenTorrent(
+        t.total_size,
+        max(seeds, 1),
+        seed_days(t.seeding_time),
+        cached.category if cached else None,
+    )
+
+
+def observe_swarm(
+    store: Store, torrents: Iterable[Torrent], indexer_url: str
+) -> dict[str, CatalogueRow]:
+    """Use qBittorrent's tracker counts for the next Plan, with no Indexer request."""
+    mine = indexer_torrents(torrents, indexer_url)
+    store.update_catalogue_seeders(
+        {
+            t.hash.lower(): max(0, t.swarm_seeders - int(t.is_seeding))
+            for t in mine
+            if t.swarm_seeders >= 0
+        }
+    )
+    return {r.infohash: r for r in store.catalogue([t.hash.lower() for t in mine])}
 
 
 def indexer_torrents(torrents: Iterable[Torrent], indexer_url: str) -> list[Torrent]:
@@ -46,12 +70,17 @@ def indexer_torrents(torrents: Iterable[Torrent], indexer_url: str) -> list[Torr
 
 
 def seeding(
-    profile: ZenProfile, torrents: Iterable[Torrent], indexer_url: str, uploads: int = 0
+    profile: ZenProfile,
+    torrents: Iterable[Torrent],
+    indexer_url: str,
+    uploads: int = 0,
+    *,
+    catalogue: Mapping[str, CatalogueRow] = {},
 ) -> Seeding:
     """Every Indexer torrent in qBittorrent, with a Zen Estimate for those seeding."""
     mine = indexer_torrents(torrents, indexer_url)
     active = [t for t in mine if t.is_seeding]
-    as_zen = [zen_torrent(t) for t in active]
+    as_zen = [zen_torrent(t, catalogue.get(t.hash.lower())) for t in active]
     day = estimate(profile, as_zen, uploads)
     zen = dict(zip((t.hash for t in active), day.per_torrent, strict=True))
     return Seeding([SeedingRow(t, zen.get(t.hash)) for t in mine], day, as_zen)

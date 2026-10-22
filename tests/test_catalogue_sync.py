@@ -1,0 +1,648 @@
+import time
+from dataclasses import replace
+from pathlib import Path
+
+import httpx
+import pytest
+
+from tests.test_indexer import FakeClock
+from torrentlinker.catalogue import candidate
+from torrentlinker.catalogue_sync import (
+    SNAPSHOT_NAME,
+    SNAPSHOT_URL,
+    bootstrap_snapshot,
+    snapshot_rows,
+    sync_catalogue,
+)
+from torrentlinker.downloads import DownloadFolders, IndexerCategory
+from torrentlinker.indexer import Indexer
+from torrentlinker.store import FeedState, Store
+from torrentlinker.zen import GB
+
+
+def snapshot(count=3):  # type: ignore[no-untyped-def]
+    return {
+        "stored": count,
+        "hash": [f"{i:040x}" for i in range(count)],
+        "title": [f"Book {i}" for i in range(count)],
+        "sizeBytes": [GB] * count,
+        "seeders": [10] * count,
+        "category": [7000] * count,
+    }
+
+
+def live_item(i: int, seeds: int = 77):  # type: ignore[no-untyped-def]
+    return {
+        "infoHash": f"{i:040x}",
+        "name": f"Book {i}",
+        "size": GB,
+        "seeders": seeds,
+        "category": {"id": 2},
+        "subcategory": {"id": 14},
+    }
+
+
+def native_indexer(handler):  # type: ignore[no-untyped-def]
+    clock = FakeClock()
+    return Indexer(
+        "https://c411.org/api/torznab",
+        "SECRET",
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+
+
+def test_snapshot_is_anonymous_and_live_rows_override_its_counts_and_category(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "s.db")
+    anonymous: list[httpx.Request] = []
+    direct: list[httpx.Request] = []
+
+    def public(request: httpx.Request) -> httpx.Response:
+        anonymous.append(request)
+        return httpx.Response(200, json=snapshot())
+
+    def live(request: httpx.Request) -> httpx.Response:
+        direct.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "data": [live_item(0), live_item(3)],
+                "meta": {"page": 1, "perPage": 100, "total": 2, "totalPages": 1},
+            },
+        )
+
+    ix = native_indexer(live)
+    public_http = httpx.Client(transport=httpx.MockTransport(public))
+    sync_catalogue(ix, store, [7000], full=True, snapshot_http=public_http)
+    rows = {r.infohash: r for r in store.catalogue()}
+
+    assert len(rows) == 4
+    assert rows[f"{0:040x}"].seeders == 77
+    assert rows[f"{0:040x}"].category == 7020
+    assert rows[f"{0:040x}"].source == "indexer"
+    assert rows[f"{1:040x}"].source == SNAPSHOT_NAME
+    assert store.crawl_state(7000).complete
+    assert str(anonymous[0].url) == SNAPSHOT_URL
+    assert "authorization" not in anonymous[0].headers and "cookie" not in anonymous[0].headers
+    assert direct[0].headers["Authorization"] == "Bearer SECRET"
+    assert direct[0].url.host == "c411.org" and "apikey" not in direct[0].url.params
+    download = candidate(ix, rows[f"{1:040x}"])
+    url = httpx.URL(download.download_url)
+    assert url.host == "c411.org" and url.params["apikey"] == "SECRET"
+    assert url.params["id"] == f"{1:040x}" and url.params["t"] == "get"
+
+    # Reimporting an older snapshot cannot undo a live category/seeder correction.
+    bootstrap_snapshot(store, http=public_http, clock=lambda: time.time() + 86401)
+    assert next(r for r in store.catalogue() if r.infohash == f"{0:040x}").seeders == 77
+    requests = len(anonymous)
+    bootstrap_snapshot(store, http=public_http, clock=lambda: time.time() + 86402)
+    assert len(anonymous) == requests  # cached across restarts, too
+    assert Store(tmp_path / "s.db").feed_state(SNAPSHOT_NAME).count == 3
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("stored", 100),
+        ("hash", ["bad"] * 3),
+        ("sizeBytes", [-1, 1, 1]),
+        ("category", [True, 7000, 7000]),
+        ("seeders", [1.5, 1, 1]),
+        ("hash", ["a" * 40, "a" * 40, "b" * 40]),
+    ],
+)
+def test_invalid_snapshots_are_rejected_before_any_rows_are_written(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    store = Store(tmp_path / "s.db")
+    data = {**snapshot(), field: value}
+    http = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=data)))
+
+    with pytest.raises(ValueError):
+        bootstrap_snapshot(store, http=http)
+
+    assert store.catalogue_size() == 0
+    assert store.feed_state(SNAPSHOT_NAME).updated_at is None
+
+
+def test_cancelled_snapshot_import_is_retryable_without_duplicates(tmp_path: Path) -> None:
+    store = Store(tmp_path / "s.db")
+    http = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json=snapshot(2000)))
+    )
+    progress = []
+    bootstrap_snapshot(
+        store,
+        http=http,
+        progress=progress.append,
+        stop=lambda: bool(progress and progress[-1].offset >= 1000),
+    )
+
+    assert store.catalogue_size() == 1000
+    assert store.feed_state(SNAPSHOT_NAME).updated_at is None
+
+    bootstrap_snapshot(Store(tmp_path / "s.db"), http=http)
+    assert store.catalogue_size() == 2000
+    assert store.feed_state(SNAPSHOT_NAME).count == 2000
+
+
+def test_live_json_crawl_resumes_and_does_not_call_a_capped_feed_complete(tmp_path: Path) -> None:
+    store = Store(tmp_path / "s.db")
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    requested: list[int] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        requested.append(page)
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {**live_item(i), "category": {"id": 1}, "subcategory": {"id": 6}}
+                    for i in range((page - 1) * 100, page * 100)
+                ],
+                "meta": {"page": page, "perPage": 100, "total": 300, "totalPages": 2},
+            },
+        )
+
+    ix = native_indexer(live)
+    sync_catalogue(ix, store, [2030], full=True, stop=lambda: bool(requested))
+    assert requested == [1] and store.crawl_paused()
+    assert not store.limited_categories()
+
+    sync_catalogue(ix, Store(tmp_path / "s.db"), [2030], full=True)
+    assert requested == [1, 2]
+    assert not store.crawl_state(2030).complete
+    assert store.limited_categories() == {2030}
+    assert store.catalogue_size() == 200
+
+
+def test_capped_categories_are_split_using_the_native_subcategory_ids(tmp_path: Path) -> None:
+    store = Store(tmp_path / "s.db")
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    requests: list[tuple[str, int]] = []
+    new = 0
+
+    def live(request: httpx.Request) -> httpx.Response:
+        p = request.url.params
+        sub, page = p.get("subcat", ""), int(p["page"])
+        requests.append((sub, page))
+        start, count = (150, 150) if sub == "16" else (0, 150 if sub else 300)
+        ids = list(range(start, start + count))
+        if not sub:
+            ids = [*range(300, 300 + new), *ids]
+        count = len(ids)
+        items = [live_item(i) for i in ids[(page - 1) * 100 : page * 100]]
+        for item in items:
+            item["subcategory"] = {"id": 16 if sub == "16" else 14}
+        return httpx.Response(
+            200,
+            json={
+                "data": items,
+                "meta": {
+                    "page": page,
+                    "perPage": 100,
+                    "total": count,
+                    "totalPages": 2,
+                    "subcategories": [{"id": 14, "count": 150}, {"id": 16, "count": 150}],
+                },
+            },
+        )
+
+    sync_catalogue(native_indexer(live), store, [7000], full=True)
+
+    assert requests == [("", 1), ("14", 1), ("14", 2), ("16", 1), ("16", 2)]
+    assert store.catalogue_size() == 300
+    assert store.crawl_state(7000).complete
+    assert {r.category for r in store.catalogue()} == {7010, 7020}
+
+    # Once the history is fetched, a capped parent needs only its newest page.
+    requests.clear()
+    sync_catalogue(native_indexer(live), Store(tmp_path / "s.db"), [7000], full=True)
+    assert requests == [("", 1)]
+    assert store.crawl_state(7000).complete
+
+    new = 150
+    requests.clear()
+    sync_catalogue(native_indexer(live), Store(tmp_path / "s.db"), [7000], full=True)
+    assert requests == [("", 1), ("", 2)]
+    assert store.catalogue_size() == 450
+    assert store.crawl_state(7000).complete
+
+
+def test_incremental_sync_reaches_its_checkpoint_even_when_new_rows_are_in_the_snapshot(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "s.db"
+    store = Store(path)
+    # A later sync must not download the whole public snapshot again, even after a day.
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time() - 2 * 86400))
+    total = 150
+    requested: list[int] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        requested.append(page)
+        ids = list(range(total - 1, -1, -1))[(page - 1) * 100 : page * 100]
+        return httpx.Response(
+            200,
+            json={
+                "data": [live_item(i, seeds=total) for i in ids],
+                "meta": {
+                    "page": page,
+                    "perPage": 100,
+                    "total": total,
+                    "totalPages": (total + 99) // 100,
+                },
+            },
+        )
+
+    def public(request: httpx.Request) -> httpx.Response:
+        pytest.fail("A completed bootstrap should not be downloaded again")
+
+    ix = native_indexer(live)
+    public_http = httpx.Client(transport=httpx.MockTransport(public))
+    sync_catalogue(ix, store, [7000], full=True, snapshot_http=public_http)
+    assert requested == [1, 2]
+
+    # Snapshot-known rows are not a checkpoint for this filter's live sync.
+    store.save_catalogue(snapshot_rows(snapshot(370), time.time()))
+    total = 370
+    requested.clear()
+    sync_catalogue(ix, Store(path), [7000], full=True, snapshot_http=public_http)
+
+    assert requested == [1, 2, 3]
+    rows = {r.infohash: r for r in store.catalogue()}
+    assert all(rows[f"{i:040x}"].seeders == 370 for i in range(150, 370))
+    assert rows[f"{0:040x}"].seeders == 150  # older history was not fetched again
+
+    requested.clear()
+    sync_catalogue(ix, Store(path), [7000], full=True, snapshot_http=public_http)
+    assert requested == [1]
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_interrupted_incremental_sync_keeps_the_last_successful_checkpoint(
+    tmp_path: Path, failure: bool
+) -> None:
+    path = tmp_path / "s.db"
+    store = Store(path)
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    total = 150
+    interrupt = False
+    requested: list[int] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        requested.append(page)
+        if failure and interrupt and page == 2:
+            raise httpx.ConnectError("Disconnected", request=request)
+        ids = list(range(total - 1, -1, -1))[(page - 1) * 100 : page * 100]
+        return httpx.Response(
+            200,
+            json={
+                "data": [live_item(i) for i in ids],
+                "meta": {
+                    "page": page,
+                    "perPage": 100,
+                    "total": total,
+                    "totalPages": (total + 99) // 100,
+                },
+            },
+        )
+
+    ix = native_indexer(live)
+    sync_catalogue(ix, store, [7000], full=True)
+    old_state = _ebook_feed_state(store)
+    total = 370
+    interrupt = True
+    requested.clear()
+    if failure:
+        with pytest.raises(httpx.ConnectError):
+            sync_catalogue(ix, store, [7000], full=True)
+    else:
+        sync_catalogue(ix, store, [7000], full=True, stop=lambda: bool(requested))
+    state = store.feed_state(old_state.name)
+    assert state.updated_at == old_state.updated_at
+    assert state.head_hashes == old_state.head_hashes
+
+    total = 371  # another arrival while the app is paused or closed
+    interrupt = False
+    requested.clear()
+    sync_catalogue(ix, Store(path), [7000], full=True)
+
+    assert requested == [1, 2, 3]
+    assert store.catalogue_size() == total
+    assert store.feed_state(old_state.name).head_hashes[0] == f"{370:040x}"
+
+
+def _ebook_feed_state(store: Store) -> FeedState:
+    from urllib.parse import urlencode
+
+    params = {
+        "category": "2",
+        "viewMode": "flat",
+        "perPage": "100",
+        "sortBy": "createdAt",
+        "sortOrder": "desc",
+        "palliative": "include",
+    }
+    return store.feed_state("c411-json:" + urlencode(params))
+
+
+def test_ebook_selection_with_real_caps_only_fetches_native_ebook_categories(
+    tmp_path: Path,
+) -> None:
+    from torrentlinker.catalogue import plan_categories
+
+    xml = (Path(__file__).parent / "fixtures/c411_caps.xml").read_text()
+    caps = Indexer(
+        "https://c411.example/api/torznab",
+        "K",
+        http=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=xml))),
+    ).caps()
+    categories = {
+        cid: IndexerCategory(name, caps.parents.get(cid)) for cid, name in caps.categories.items()
+    }
+    folders = DownloadFolders({7000: "/ebooks", 3000: "/music", 2030: "/films"})
+    targets = plan_categories({7000}, folders, categories)
+    store = Store(tmp_path / "s.db")
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    requests: list[httpx.Request] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        page, sub = int(request.url.params["page"]), request.url.params.get("subcat")
+        count = 300 if sub is None else 150
+        start = 150 if sub == "14" else 0
+        items = [
+            live_item(i)
+            for i in range(start + (page - 1) * 100, min(start + page * 100, start + count))
+        ]
+        for item in items:
+            item["subcategory"] = {"id": int(sub) if sub else 11}
+        return httpx.Response(
+            200,
+            json={
+                "data": items,
+                "meta": {
+                    "page": page,
+                    "perPage": 100,
+                    "total": count,
+                    "totalPages": 2,
+                    "subcategories": [{"id": 11, "count": 150}, {"id": 14, "count": 150}],
+                },
+            },
+        )
+
+    progress = []
+    sync_catalogue(
+        native_indexer(live),
+        store,
+        targets,
+        full=True,
+        categories=categories,
+        progress=progress.append,
+    )
+
+    assert requests and all(r.url.params["category"] == "2" for r in requests)
+    assert {r.url.params.get("subcat") for r in requests} == {None, "11", "14"}
+    assert {p.category for p in progress} == {7000, 3030, 7020}
+    assert 3000 not in {p.category for p in progress}  # the separate Audio/music category
+
+
+def test_zen_outage_still_allows_live_c411_to_refresh(tmp_path: Path) -> None:
+    store = Store(tmp_path / "s.db")
+    public = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    ix = native_indexer(
+        lambda r: httpx.Response(
+            200,
+            json={
+                "data": [live_item(9)],
+                "meta": {"page": 1, "perPage": 100, "total": 1, "totalPages": 1},
+            },
+        )
+    )
+
+    with pytest.raises(ValueError, match="available c411 pages were refreshed"):
+        sync_catalogue(ix, store, [7000], full=True, snapshot_http=public)
+
+    assert store.catalogue_size() == 1
+
+
+def test_gui_plan_uses_cached_categories_without_individual_metadata_checks(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker import catalogue_sync
+    from torrentlinker.config import Settings
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.paths import MappedQbit, PathMapper
+
+    http = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json=snapshot()))
+    )
+    bootstrap = catalogue_sync.bootstrap_snapshot
+    monkeypatch.setattr(
+        catalogue_sync,
+        "bootstrap_snapshot",
+        lambda store, **kw: bootstrap(store, **{**kw, "http": http}),
+    )
+    checked: list[str] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/torrents":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [live_item(0), live_item(9)],
+                    "meta": {"page": 1, "perPage": 100, "total": 2, "totalPages": 1},
+                },
+            )
+        h = request.url.path.rsplit("/", 1)[-1]
+        checked.append(h)
+        return httpx.Response(200, json=live_item(int(h, 16), seeds=5))
+
+    settings = Settings()
+    settings.indexer_categories = {
+        7000: IndexerCategory("Ebook"),
+        7020: IndexerCategory("Livres", 7000),
+    }
+    settings.download_folders = DownloadFolders({7000: str(tmp_path)})
+    settings.plan_categories = [7020]  # broad snapshot entries stay out of a narrow selection
+    store = Store(tmp_path / "s.db")
+    window = MainWindow(settings, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    set_secret(INDEXER_API_KEY, "SECRET")
+    window._indexer = native_indexer(live)
+    window.qbit = lambda: MappedQbit(FakeQbit(), PathMapper([]))  # type: ignore[method-assign]
+
+    window.make_plan()
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.plan is not None, timeout=10_000)
+
+    plan = window.zen_tab.plan_view.plan
+    assert len(plan.items) == 2
+    assert checked == []
+    assert all(item.candidate.source.source == "indexer" for item in plan.items)
+    assert all(item.candidate.category == 7020 for item in plan.items)
+    assert window.zen_tab.plan_view.make_button.isEnabled()
+    assert not window.zen_tab.plan_view.stop_fetch_button.isVisible()
+
+
+def test_large_cached_plan_makes_no_per_torrent_metadata_requests(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.config import Settings
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.paths import MappedQbit, PathMapper
+
+    store = Store(tmp_path / "s.db")
+    data = snapshot(14_000)
+    data["sizeBytes"] = [1000] * data["stored"]
+    store.save_catalogue(snapshot_rows(data, 0))
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time(), count=14_000))
+    requested: list[str] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        assert request.url.path == "/api/torrents", "Planning must not verify individual torrents"
+        return httpx.Response(
+            200,
+            json={
+                "data": [],
+                "meta": {"page": 1, "perPage": 100, "total": 0, "totalPages": 0},
+            },
+        )
+
+    settings = Settings()
+    settings.indexer_categories = {7000: IndexerCategory("Ebook")}
+    settings.download_folders = DownloadFolders({7000: str(tmp_path)})
+    settings.plan_categories = [7000]
+    window = MainWindow(settings, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    set_secret(INDEXER_API_KEY, "SECRET")
+    window._indexer = native_indexer(live)
+    window.qbit = lambda: MappedQbit(FakeQbit(), PathMapper([]))  # type: ignore[method-assign]
+
+    window.make_plan()
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.plan is not None, timeout=5000)
+
+    assert len(window.zen_tab.plan_view.plan.items) == 14_000
+    assert requested == ["/api/torrents"]
+    assert "Provisional estimates" in window.zen_tab.plan_view.summary.text()
+
+
+@pytest.mark.parametrize("paused_history", [False, True])
+def test_gui_plan_does_not_start_or_resume_historical_scans(
+    qtbot, tmp_path: Path, paused_history: bool
+) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.config import Settings
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.paths import MappedQbit, PathMapper
+    from torrentlinker.plan import PlanOptions
+
+    settings = Settings()
+    settings.indexer_categories = {
+        7000: IndexerCategory("Ebook"),
+        7030: IndexerCategory("Autres", 7000),
+    }
+    settings.download_folders = DownloadFolders({7000: str(tmp_path)})
+    settings.plan_categories = [7000]
+    settings.plan_options = PlanOptions(max_torrents=1)
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(snapshot_rows(snapshot(100), time.time()))
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time(), count=100))
+    child = replace(
+        _ebook_feed_state(store),
+        name=_ebook_feed_state(store).name + "&subcat=15",
+        next_page=28,
+        head_hashes=tuple(f"{i:040x}" for i in range(100)),
+    )
+    if paused_history:
+        store.save_feed_state(child)
+    requested: list[tuple[str | None, int]] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        sub, page = request.url.params.get("subcat"), int(request.url.params["page"])
+        requested.append((sub, page))
+        return httpx.Response(
+            200,
+            json={
+                "data": [{**live_item(i), "subcategory": {"id": 15}} for i in range(100)],
+                "meta": {
+                    "page": page,
+                    "perPage": 100,
+                    "total": 2800 if sub else 20000,
+                    "totalPages": 28 if sub else 100,
+                    "subcategories": [{"id": 15, "count": 20000}],
+                },
+            },
+        )
+
+    window = MainWindow(settings, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    set_secret(INDEXER_API_KEY, "SECRET")
+    window._indexer = native_indexer(live)
+    window.qbit = lambda: MappedQbit(FakeQbit(), PathMapper([]))  # type: ignore[method-assign]
+
+    window.make_plan()
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.plan is not None, timeout=5000)
+
+    assert requested == [(None, 1)]
+    if paused_history:
+        assert store.feed_state(child.name) == child  # the full-fetch cursor remains available
+        requested.clear()
+        sync_catalogue(window._indexer, store, [7000], full=True)
+        assert requested == [(None, 1), ("15", 28)]
+
+
+def test_first_latest_update_does_not_stop_at_its_own_partially_fetched_pages(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "s.db"
+    store = Store(path)
+    store.save_catalogue(snapshot_rows(snapshot(150), time.time()))
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    total = 400
+    requested: list[int] = []
+
+    def live(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        requested.append(page)
+        ids = list(range(total - 1, -1, -1))[(page - 1) * 100 : page * 100]
+        return httpx.Response(
+            200,
+            json={
+                "data": [live_item(i) for i in ids],
+                "meta": {
+                    "page": page,
+                    "perPage": 100,
+                    "total": total,
+                    "totalPages": (total + 99) // 100,
+                },
+            },
+        )
+
+    ix = native_indexer(live)
+    sync_catalogue(ix, store, [7000], stop=lambda: bool(requested))
+    assert requested == [1]
+    assert not store.crawl_paused()  # latest updates do not pretend a history crawl was paused
+
+    total = 401
+    requested.clear()
+    sync_catalogue(ix, Store(path), [7000])
+    assert requested == [1, 2, 3, 4]
+    assert store.catalogue_size() == 401
+
+    requested.clear()
+    sync_catalogue(ix, Store(path), [7000])
+    assert requested == [1]

@@ -1,10 +1,69 @@
 # TorrentLinker
 
-Desktop app that finds which of your files are no longer seeded in qBittorrent, looks them up on a Torznab tracker (c411 first), and reseeds the matching torrents against the data you already have — without moving or renaming your files.
+TorrentLinker finds files that are no longer seeded in qBittorrent, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings and plans which new torrents to download and seed. The interface is available in English and French.
 
-Its Zen tab estimates the Zen your c411 seeding earns, keeps a local Catalogue of the tracker's torrents and proposes a Plan of torrents to download and seed for the most Zen within your free space, Reseeds first.
+## Download 0.2.0
 
-See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the key decisions.
+| Platform | Download |
+| --- | --- |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.2.0/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.2.0/TorrentLinker-x86_64.AppImage) |
+
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.2.0) for changes and assets.
+
+## Set up
+
+1. Enable qBittorrent's Web UI in **Tools → Options → Web UI**.
+2. Open TorrentLinker's **Settings** and enter the qBittorrent connection and Indexer URL/API key. qBittorrent connections support a username/password or a Web UI API key where available.
+3. Register Library Folders to find files you can Reseed. Add Path Mappings if qBittorrent sees those folders under different paths.
+4. Set Download Folders for the categories you want to plan, or choose a default folder. Categories without a resolved folder are excluded.
+
+## Reseed existing files
+
+Scan the Library, then search the Orphans that qBittorrent does not already cover. TorrentLinker compares each Candidate's file tree with the local files. Full Matches can be Reseeded without downloading their data. Partial Matches skip missing files and stay stopped after Verification.
+
+Reseeds rename paths inside qBittorrent, leaving local filenames and contents untouched. A hash check must pass before seeding starts. Verification failures remove the torrent from qBittorrent without deleting local files. Previous searches and rejections are remembered across restarts.
+
+## Zen integration
+
+The Zen tab brings together c411's reported balance and TorrentLinker's earnings estimates:
+
+- Read your Zen Balance, Class, unlocked progression-tree bonus, and download eligibility from your c411 profile. The Indexer API key needs the `profile:read` scope for this, in addition to catalog/download access.
+- Estimate Zen/day for each torrent currently seeding in qBittorrent and for Matches found in the Library, using size, seeders, seed age, category, Class bonuses, and the configured seed hours per day.
+- Compare Tanker, Swarm Keeper, and Reuploader. Reuploader estimates use the upload count entered in the Zen tab and are approximate.
+- Set Class, unlocked tree bonus, seed hours per day, and an overall torrent cap in **Settings → Zen**. Values supplied by c411 fill the Class and tree bonus automatically when profile access is available.
+
+Without profile permission, you can enter the Zen Profile by hand and use estimates and planning. The displayed balance comes from c411; projected earnings and payback are local estimates. qBittorrent's seed age is a lower bound when a torrent has been removed and added again.
+
+## Make a Zen Plan
+
+Choose categories, then configure the Plan:
+
+| Control | Effect |
+| --- | --- |
+| Optimize for **Zen/day** | Tries several greedy orderings and keeps the Plan with the largest estimated Zen gain. |
+| Optimize for **Note** | Selects the highest-note torrents first for your Class. |
+| Download limit | Maximum total download size in decimal GB. Zero means no additional size limit. |
+| Limit torrents | Optional maximum number of torrents added by this Plan. |
+| Low seeders only | Optional maximum current seeder count, initially 10, before you join the swarm. |
+
+Reseeds come first. They count toward the torrent limit and consume no download budget. The overall torrent cap and disk-space reserve also apply. The results show each torrent's note, the size-weighted average note, estimated Zen gain and payback, and free disk space before and after the Plan. Download Folders sharing a physical disk are counted once. Plan options are saved across restarts.
+
+Sending a Plan downloads each `.torrent` directly from c411 and adds it to its Download Folder. TorrentLinker refuses downloads that would overwrite existing files. Normal Reseeds still go through hash Verification.
+
+### Catalog updates and provisional estimates
+
+The first Plan imports Zen Lab's public metadata snapshot anonymously. Your c411 API key and all `.torrent` requests go directly to c411.
+
+Planning and startup refresh c411 newest-first, stopping at the previous successful update's checkpoint, or an already known page on the first update. Historical scans and their saved page positions are reserved for the explicit Catalogue fetch action. Interrupted updates retain their checkpoint and check for new arrivals when resumed.
+
+Plans use cached metadata and show provisional estimates. There are no per-torrent c411 metadata checks before planning or sending. qBittorrent is refreshed every 30 seconds to update Seeding estimates as tracker responses arrive. Its known swarm counts also update the local Catalogue for future Plans; unknown counts retain the cached estimate.
+
+If another Catalogue refresh is running, the Plan waits for it and then refreshes its selected categories. A failed refresh stops Plan creation. You can stop fetching and make a Plan from the data already available.
+
+The snapshot has coarse categories and unknown upstream age. Broad entries are excluded from narrower subcategory selections until the local Catalogue has a specific category from c411. Selecting the parent category allows the broader set. Seeder updates from qBittorrent preserve that category uncertainty. c411's paging limits and the snapshot do not establish complete tracker coverage, and the app reports known limits. Zen values remain estimates.
+
+See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the design decisions.
 
 ## Development
 
@@ -14,7 +73,14 @@ python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest
 ```
 
-qBittorrent's Web UI must be enabled (Tools → Options → Web UI).
+Requires Python 3.11 or newer. Run the local checks with:
+
+```bash
+.venv/bin/ruff check src tests
+.venv/bin/ruff format --check src tests
+.venv/bin/mypy
+QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q
+```
 
 ## Translations
 

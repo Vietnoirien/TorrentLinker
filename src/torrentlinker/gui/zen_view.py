@@ -8,6 +8,9 @@ from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QGroupBox,
     QHBoxLayout,
@@ -27,10 +30,10 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.plan import Plan
+from torrentlinker.plan import Plan, PlanGoal, PlanOptions
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
-from torrentlinker.zen import ZenClass, ZenProfile, compare_classes
+from torrentlinker.zen import GB, ZenClass, ZenProfile, compare_classes
 
 CLASS_LABELS = {
     ZenClass.TANKER: QT_TRANSLATE_NOOP("ZenClass", "Tanker"),
@@ -82,6 +85,7 @@ class SeedingView(QWidget):
         super().__init__()
         self.load = load
         self.seeding: Seeding | None = None
+        self._quiet = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
@@ -117,9 +121,13 @@ class SeedingView(QWidget):
         layout.addWidget(self.total)
         self._show_total()
 
-    def refresh(self) -> None:
+    def refresh(self, *, quiet: bool = False) -> None:
+        if not self.refresh_button.isEnabled():
+            return
+        self._quiet = quiet
         self.refresh_button.setEnabled(False)
-        self.total.setText(self.tr("Reading qBittorrent…"))
+        if not quiet:
+            self.total.setText(self.tr("Reading qBittorrent…"))
         run_in_background(self.load(), self.show_seeding, self._failed)
 
     def show_seeding(self, view: Seeding) -> None:
@@ -132,7 +140,11 @@ class SeedingView(QWidget):
             days = t.seeding_time / 86400
             self.table.setItem(r, 0, QTableWidgetItem(t.name))
             self.table.setItem(r, 1, NumberItem(human_size(t.total_size), t.total_size))
-            self.table.setItem(r, 2, NumberItem(str(t.swarm_seeders), t.swarm_seeders))
+            self.table.setItem(
+                r,
+                2,
+                NumberItem(str(t.swarm_seeders) if t.swarm_seeders >= 0 else "–", t.swarm_seeders),
+            )
             self.table.setItem(r, 3, NumberItem(f"{days:.0f}", days))
             zen = row.zen
             cell = NumberItem(zen_text(zen) if zen is not None else "–", zen or -1.0)
@@ -157,7 +169,8 @@ class SeedingView(QWidget):
     def _failed(self, error: Exception) -> None:
         self.refresh_button.setEnabled(True)
         self._show_total()
-        QMessageBox.warning(self, self.tr("qBittorrent"), str(error) or type(error).__name__)
+        if not self._quiet:
+            QMessageBox.warning(self, self.tr("qBittorrent"), str(error) or type(error).__name__)
 
 
 class ClassComparison(QGroupBox):
@@ -224,9 +237,8 @@ class CatalogueBox(QGroupBox):
         self.fetch_button = QPushButton()
         self.fetch_button.setToolTip(
             self.tr(
-                "Read every category of the Indexer, 100 torrents per request at the polite "
-                "rate limit: the first time takes hours. You can pause and resume later, "
-                "even after closing the app; later runs only fetch what is new."
+                "Fetch the available torrents in every category. You can pause and resume "
+                "after closing the app. The Indexer may limit how far the Catalogue can be read."
             )
         )
         self.fetch_button.clicked.connect(self._clicked)
@@ -242,9 +254,9 @@ class CatalogueBox(QGroupBox):
         if running:
             self.fetch_button.setText(self.tr("Pause"))
         elif paused:
-            self.fetch_button.setText(self.tr("Resume fetching the whole catalogue"))
+            self.fetch_button.setText(self.tr("Resume fetching all categories"))
         else:
-            self.fetch_button.setText(self.tr("Fetch the whole catalogue"))
+            self.fetch_button.setText(self.tr("Fetch all categories"))
 
     def set_status(self, text: str) -> None:
         self.status.setText(text)
@@ -257,20 +269,84 @@ class PlanView(QGroupBox):
     send_requested = Signal()
     categories_changed = Signal(object)  # set[int] | None
     stop_fetch_requested = Signal()
+    options_changed = Signal(object)  # PlanOptions
 
     def __init__(self) -> None:
         super().__init__(self.tr("Plan"))
         self.plan: Plan | None = None
         layout = QVBoxLayout(self)
-        top = QHBoxLayout()
+        self._busy = False
         self.summary = QLabel(
             self.tr(
-                "A Plan picks Catalogue torrents that earn the most Zen within the free "
-                "space of your Download Folders' disks and your torrent cap."
+                "Choose whether to prioritize Zen/day or torrent notes, within your "
+                "download limit and available disk space."
             )
         )
         self.summary.setWordWrap(True)
-        top.addWidget(self.summary, 1)
+        layout.addWidget(self.summary)
+        options = QHBoxLayout()
+        self.goal = QComboBox()
+        self.goal.addItem(self.tr("Zen/day"), PlanGoal.ZEN.value)
+        self.goal.addItem(self.tr("Note"), PlanGoal.NOTE.value)
+        self.goal.setToolTip(
+            self.tr(
+                "Zen/day maximizes estimated earnings. "
+                "Note prefers the highest-note torrents first."
+            )
+        )
+        label = QLabel(self.tr("Optimize for"))
+        label.setBuddy(self.goal)
+        options.addWidget(label)
+        options.addWidget(self.goal)
+        self.download_limit = QDoubleSpinBox()
+        self.download_limit.setRange(0, 1_000_000)
+        self.download_limit.setDecimals(2)
+        self.download_limit.setSuffix(self.tr(" GB"))
+        self.download_limit.setSpecialValueText(self.tr("No limit"))
+        self.download_limit.setToolTip(
+            self.tr(
+                "Maximum total download size for this Plan. 1 GB = 1,000,000,000 bytes. "
+                "Reseeds use no download budget."
+            )
+        )
+        label = QLabel(self.tr("Download limit"))
+        label.setBuddy(self.download_limit)
+        options.addWidget(label)
+        options.addWidget(self.download_limit)
+        options.addStretch()
+        layout.addLayout(options)
+        limits = QHBoxLayout()
+        self.limit_torrents = QCheckBox(self.tr("Limit torrents"))
+        self.torrent_limit = QSpinBox()
+        self.torrent_limit.setRange(1, 1_000_000)
+        self.torrent_limit.setValue(100)
+        self.torrent_limit.setToolTip(
+            self.tr(
+                "Maximum torrents added by this Plan, including Reseeds. "
+                "Your overall torrent cap still applies."
+            )
+        )
+        self.torrent_limit.setEnabled(False)
+        limits.addWidget(self.limit_torrents)
+        limits.addWidget(self.torrent_limit)
+        limits.addSpacing(16)
+        self.low_seeders = QCheckBox(self.tr("Low seeders only"))
+        self.seeder_limit = QSpinBox()
+        self.seeder_limit.setRange(1, 1_000_000)
+        self.seeder_limit.setValue(10)
+        self.seeder_limit.setSuffix(self.tr(" seeders max."))
+        tooltip = self.tr(
+            "Only include torrents with at most this many current seeders, before you join. "
+            "Applies to downloads and Reseeds, in both Note and Zen/day modes."
+        )
+        self.low_seeders.setToolTip(tooltip)
+        self.seeder_limit.setToolTip(tooltip)
+        self.seeder_limit.setEnabled(False)
+        limits.addWidget(self.low_seeders)
+        limits.addWidget(self.seeder_limit)
+        limits.addStretch()
+        layout.addLayout(limits)
+        top = QHBoxLayout()
         self.categories_button = QToolButton()
         self.categories_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.categories_button.setToolTip(self.tr("Categories this Plan draws from"))
@@ -301,21 +377,88 @@ class PlanView(QGroupBox):
         self.send_button.clicked.connect(self.send_requested)
         top.addWidget(self.send_button)
         self.action_row = top
+        top.addStretch()
         layout.addLayout(top)
+        self.space_table = readonly_table(
+            [
+                self.tr("Disk / Download Folder"),
+                self.tr("Free now"),
+                self.tr("Reserved"),
+                self.tr("Plan downloads"),
+                self.tr("Free after Plan"),
+            ]
+        )
+        self.space_table.setToolTip(
+            self.tr(
+                "Free after Plan includes the reserved disk-space margin. "
+                "Download Folders on the same disk are counted once."
+            )
+        )
+        self.space_table.setMaximumHeight(150)
+        self.space_table.hide()
+        layout.addWidget(self.space_table)
         self.table = readonly_table(
             [
                 self.tr("Torrent"),
                 self.tr("Size"),
                 self.tr("Seeders"),
+                self.tr("Note"),
                 self.tr("≈ Zen/day"),
                 self.tr("Download Folder"),
             ]
         )
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
         # Plan order first: Reseeds, then downloads; a header click sorts.
         self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
+        self.goal.currentIndexChanged.connect(self._options_changed)
+        self.download_limit.valueChanged.connect(self._options_changed)
+        self.limit_torrents.toggled.connect(self._options_changed)
+        self.torrent_limit.valueChanged.connect(self._options_changed)
+        self.low_seeders.toggled.connect(self._options_changed)
+        self.seeder_limit.valueChanged.connect(self._options_changed)
+
+    def set_options(self, value: PlanOptions) -> None:
+        controls = [
+            self.goal,
+            self.download_limit,
+            self.limit_torrents,
+            self.torrent_limit,
+            self.low_seeders,
+            self.seeder_limit,
+        ]
+        for control in controls:
+            control.blockSignals(True)
+        try:
+            self.goal.setCurrentIndex(self.goal.findData(value.goal.value))
+            self.download_limit.setValue(value.max_download_bytes / GB)
+            self.limit_torrents.setChecked(value.max_torrents is not None)
+            self.torrent_limit.setValue(value.max_torrents or 100)
+            self.torrent_limit.setEnabled(not self._busy and value.max_torrents is not None)
+            self.low_seeders.setChecked(value.max_seeders is not None)
+            self.seeder_limit.setValue(value.max_seeders if value.max_seeders is not None else 10)
+            self.seeder_limit.setEnabled(not self._busy and value.max_seeders is not None)
+        finally:
+            for control in controls:
+                control.blockSignals(False)
+
+    def _options_changed(self) -> None:
+        self.torrent_limit.setEnabled(not self._busy and self.limit_torrents.isChecked())
+        self.seeder_limit.setEnabled(not self._busy and self.low_seeders.isChecked())
+        self.options_changed.emit(
+            PlanOptions(
+                PlanGoal(self.goal.currentData()),
+                round(self.download_limit.value() * GB),
+                self.torrent_limit.value() if self.limit_torrents.isChecked() else None,
+                self.seeder_limit.value() if self.low_seeders.isChecked() else None,
+            )
+        )
+
+    def invalidate(self) -> None:
+        self.begin()
+        self.busy(False)
+        self.summary.setText(self.tr("Plan options changed. Make a new Plan to apply them."))
 
     # Categories ------------------------------------------------------------
 
@@ -365,8 +508,24 @@ class PlanView(QGroupBox):
         self.stop_fetch_button.setVisible(fetching)
         self.stop_fetch_button.setEnabled(fetching)
 
+    def begin(self) -> None:
+        """Clear the previous result while a new Plan is being prepared."""
+        self.plan = None
+        self.table.setRowCount(0)
+        self.space_table.setRowCount(0)
+        self.space_table.hide()
+        self.busy(True)
+
     def busy(self, busy: bool, text: str | None = None) -> None:
+        self._busy = busy
         self.make_button.setEnabled(not busy)
+        self.goal.setEnabled(not busy)
+        self.download_limit.setEnabled(not busy)
+        self.limit_torrents.setEnabled(not busy)
+        self.torrent_limit.setEnabled(not busy and self.limit_torrents.isChecked())
+        self.low_seeders.setEnabled(not busy)
+        self.seeder_limit.setEnabled(not busy and self.low_seeders.isChecked())
+        self.categories_button.setEnabled(not busy)
         self.send_button.setEnabled(not busy and bool(self.plan and self.plan.items))
         if busy:
             self.summary.setText(text or self.tr("Making a Plan…"))
@@ -383,9 +542,30 @@ class PlanView(QGroupBox):
             self.table.setItem(r, 0, QTableWidgetItem(c.title))
             self.table.setItem(r, 1, NumberItem(size_text, c.download_size))
             self.table.setItem(r, 2, NumberItem(str(c.seeders), c.seeders))
-            self.table.setItem(r, 3, NumberItem(zen_text(item.zen), item.zen))
-            self.table.setItem(r, 4, QTableWidgetItem(str(c.folder) if c.folder else ""))
+            self.table.setItem(
+                r,
+                3,
+                NumberItem(f"{item.note:.2f}" if item.note is not None else "–", item.note or 0),
+            )
+            self.table.setItem(r, 4, NumberItem(zen_text(item.zen), item.zen))
+            self.table.setItem(r, 5, QTableWidgetItem(str(c.folder) if c.folder else ""))
         self.table.setSortingEnabled(True)
+        self.space_table.setRowCount(len(plan.disk_spaces))
+        for row, space in enumerate(plan.disk_spaces):
+            self.space_table.setItem(row, 0, QTableWidgetItem(str(space.folder)))
+            for col, amount in enumerate(
+                (space.free, space.reserved, space.download, space.after_plan), 1
+            ):
+                self.space_table.setItem(row, col, NumberItem(human_size(amount), amount))
+        self.space_table.setVisible(bool(plan.disk_spaces))
+        self.space_table.setFixedHeight(
+            min(
+                150,
+                self.space_table.horizontalHeader().height()
+                + sum(self.space_table.rowHeight(i) for i in range(len(plan.disk_spaces)))
+                + 2,
+            )
+        )
         if not plan.items:
             self.summary.setText(
                 self.tr(
@@ -402,6 +582,11 @@ class PlanView(QGroupBox):
                 f"{plan.zen_added:.2f}",
                 f"{plan.download_size / 1e9:.1f}",
                 f"{payback:.0f}" if payback is not None else "–",
+            )
+            + (
+                self.tr(" · average note {0}").format(f"{plan.average_note:.2f}")
+                if plan.average_note is not None
+                else ""
             )
         )
 

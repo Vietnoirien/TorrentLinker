@@ -1,9 +1,11 @@
 """The Catalogue: torrents of the Indexer stored locally, for Plans to choose from.
 
-Built by paging through Torznab searches per category (newest first, 100 per page) at
-the Indexer's rate limit, never through a third party (ADR-0005). An update stops at
+For generic Indexers, page through Torznab searches per category (newest first,
+100 per page) at the Indexer's rate limit. c411's bootstrap and JSON updates live
+in catalogue_sync (ADR-0005). A Torznab update stops at
 the first page holding only known torrents; a full crawl goes to the end of every
-category and can be paused and resumed, even after a restart.
+category and can be paused and resumed, even after a restart. A repeated page is
+a paging limit, not proof that the category was fetched in full.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ class CrawlProgress:
     pages: int  # pages read in this run for this category
     added: int  # torrents new to the Catalogue in this run for this category
     offset: int  # next offset in the category
+    source: str = "indexer"
 
 
 Progress = Callable[[CrawlProgress], None]
@@ -54,7 +57,7 @@ def update_category(
     resuming = full and not state.complete
     offset = state.next_offset if resuming else 0
     pages = added = 0
-    previous: list[str] | None = None
+    seen_pages: set[frozenset[str]] = set()
     while not stop() and (max_pages is None or pages < max_pages):
         query = SearchQuery(
             mode=SearchMode.SEARCH,
@@ -72,16 +75,18 @@ def update_category(
         pages += 1
         added += len(set(hashes) - known)
         offset += PAGE
-        # The end of the category, or the end of what the Indexer will page through:
-        # c411 serves at most ~600 results per query, then repeats its last page.
-        end = len(page) < PAGE or hashes == previous
-        previous = hashes
-        if resuming:
-            state = replace(state, next_offset=0 if end else offset, complete=end)
+        fingerprint = frozenset(hashes)
+        limited = bool(page) and (fingerprint in seen_pages or len(found) != len(page))
+        seen_pages.add(fingerprint)
+        end = len(page) < PAGE
+        if limited:
+            state = replace(state, next_offset=0, complete=False, limited=True)
+        elif resuming:
+            state = replace(state, next_offset=0 if end else offset, complete=end, limited=False)
         state = replace(state, updated_at=now)
         store.save_crawl_state(state)
         progress(CrawlProgress(category, pages, added, offset))
-        if end or (not resuming and set(hashes) <= known):
+        if end or limited or (not resuming and set(hashes) <= known):
             break
     return state
 
@@ -130,7 +135,7 @@ def plan_categories(
     folders: DownloadFolders,
     categories: Mapping[int, IndexerCategory],
 ) -> list[int]:
-    """Categories to fetch in full before a Plan: the ones chosen for it (else those
+    """Categories to refresh before a Plan: the ones chosen for it (else those
     given a Download Folder) that can be planned at all, i.e. resolve to a folder, each
     with every subcategory on its own: an Indexer pages through a limited number of
     results per query (~600 on c411), so each subcategory reaches deeper."""

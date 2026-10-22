@@ -15,6 +15,7 @@ from torrentlinker.matching import (
     IgnoreList,
     MatchRules,
 )
+from torrentlinker.plan import PlanGoal, PlanOptions
 from torrentlinker.zen import ZenClass, ZenProfile
 
 
@@ -63,6 +64,7 @@ class Settings:
     uploads: int = 0  # the user's uploads, for the rough Reuploader estimate
     free_space_margin: float = 0.10  # share of each disk a Plan leaves free
     plan_categories: list[int] | None = None  # categories a Plan draws from; None = all
+    plan_options: PlanOptions = field(default_factory=PlanOptions)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +79,7 @@ class Settings:
             "uploads": self.uploads,
             "free_space_margin": self.free_space_margin,
             "plan_categories": self.plan_categories,
+            "plan_options": asdict(self.plan_options),
             "indexer_categories": {str(k): asdict(v) for k, v in self.indexer_categories.items()},
             "download_folders": {
                 "by_category": {str(k): v for k, v in self.download_folders.by_category.items()},
@@ -108,6 +111,7 @@ class Settings:
                 if data.get("plan_categories") is not None
                 else None
             ),
+            plan_options=_plan_options_from_json(data.get("plan_options", {})),
             indexer_categories={
                 int(k): IndexerCategory(str(v.get("name", "")), v.get("parent"))
                 for k, v in data.get("indexer_categories", {}).items()
@@ -146,4 +150,15 @@ def _zen_from_json(d: dict) -> ZenProfile:  # type: ignore[type-arg]
         tree_bonus=float(d.get("tree_bonus", 0.0)),
         seed_hours=float(d.get("seed_hours", 24.0)),
         torrent_cap=int(d.get("torrent_cap", 0)),
+    )
+
+
+def _plan_options_from_json(d: dict) -> PlanOptions:  # type: ignore[type-arg]
+    return PlanOptions(
+        goal=PlanGoal(d.get("goal", "zen")),
+        max_download_bytes=max(0, int(d.get("max_download_bytes", 0))),
+        max_torrents=(
+            max(1, int(d["max_torrents"])) if d.get("max_torrents") is not None else None
+        ),
+        max_seeders=max(1, int(d["max_seeders"])) if d.get("max_seeders") is not None else None,
     )

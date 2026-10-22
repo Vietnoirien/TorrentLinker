@@ -1,9 +1,11 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from torrentlinker.domain import Torrent
-from torrentlinker.seeding import seeding
+from torrentlinker.seeding import observe_swarm, seeding
+from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.zen import GB, ZenClass, ZenProfile
 
 URL = "https://c411.org/api/torznab"
@@ -36,3 +38,64 @@ def test_only_indexer_torrents_are_listed_and_only_seeding_ones_earn() -> None:
     assert view.rows[1].zen is None
     assert view.count == 1
     assert view.day.total == pytest.approx(1.7 / 7)
+
+
+@pytest.mark.parametrize(
+    "state,seeds,expected",
+    [("uploading", 5, 4), ("downloading", 5, 5), ("uploading", -1, 100), ("downloading", 0, 0)],
+)
+def test_tracker_counts_update_only_swarm_data_in_the_catalogue(
+    tmp_path: Path, state: str, seeds: int, expected: int
+) -> None:
+    store = Store(tmp_path / "s.db")
+    row = CatalogueRow("a" * 40, "Book", 4 * GB, 100, 7000, "u", "d", 123, "zen-lab")
+    other = replace(row, infohash="b" * 40)
+    store.save_catalogue([row, other])
+    t = replace(
+        torrent(row.infohash, "https://tracker.c411.org/announce"), state=state, swarm_seeders=seeds
+    )
+    unrelated = replace(t, hash=other.infohash, tracker="udp://tracker.example/announce")
+
+    cached = observe_swarm(store, [t, unrelated], URL)
+
+    assert cached[row.infohash] == replace(row, seeders=expected)
+    assert store.catalogue([other.infohash]) == [other]
+
+
+def test_estimates_use_cached_counts_until_the_tracker_responds_and_keep_the_category() -> None:
+    row = CatalogueRow("a" * 40, "Torrent", 4 * GB, 100, 6000, "u", "d", 0, "zen-lab")
+    t = replace(torrent(row.infohash, "https://tracker.c411.org/announce"), swarm_seeders=-1)
+    profile = ZenProfile(ZenClass.SWARM_KEEPER)
+    cache = {row.infohash: row}
+
+    provisional = seeding(profile, [t], URL, catalogue=cache)
+    fresh = seeding(profile, [replace(t, swarm_seeders=5)], URL, catalogue=cache)
+
+    assert provisional.active[0].seeders == 101
+    assert provisional.active[0].category == 6000
+    assert fresh.active[0].seeders == 5
+    assert fresh.day.total > provisional.day.total
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [({}, -1), ({"num_complete": -1}, -1), ({"num_complete": 0}, 0), ({"num_complete": 5}, 5)],
+)
+def test_qbit_adapter_keeps_unknown_counts_distinct_from_a_reported_zero(
+    raw: dict[str, int], expected: int
+) -> None:
+    from types import SimpleNamespace
+
+    from torrentlinker.qbit import QbitApi
+
+    data = SimpleNamespace(
+        hash="a" * 40,
+        name="Book",
+        save_path="/data",
+        tags="",
+        progress=0,
+        state="downloading",
+        get=raw.get,
+    )
+    qbit = QbitApi.__new__(QbitApi)
+    assert qbit._torrent(data, with_files=False).swarm_seeders == expected  # type: ignore[arg-type]

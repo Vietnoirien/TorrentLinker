@@ -59,3 +59,23 @@ def test_the_categories_chosen_for_plans_survive_a_save_and_load(tmp_path: Path)
     s.save(tmp_path / "settings.json")
 
     assert Settings.load(tmp_path / "settings.json").plan_categories == [2000, 7000]
+
+
+def test_plan_goal_and_both_limits_survive_a_save_and_load(tmp_path: Path) -> None:
+    from torrentlinker.plan import PlanGoal, PlanOptions
+    from torrentlinker.zen import GB
+
+    settings = Settings()
+    settings.plan_options = PlanOptions(PlanGoal.NOTE, 25 * GB, 100, max_seeders=10)
+    settings.save(tmp_path / "settings.json")
+
+    assert Settings.load(tmp_path / "settings.json").plan_options == settings.plan_options
+
+
+def test_old_settings_default_to_zen_and_unlimited_plan_limits(tmp_path: Path) -> None:
+    from torrentlinker.plan import PlanOptions
+
+    path = tmp_path / "settings.json"
+    path.write_text("{}")
+
+    assert Settings.load(path).plan_options == PlanOptions()

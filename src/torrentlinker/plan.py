@@ -1,7 +1,7 @@
-"""Plan: which Catalogue torrents to download and seed for the most Zen.
+"""Plan: which Catalogue torrents to download and seed for Zen or their note.
 
 A greedy fill under each disk's free space and the torrent cap, tried over several
-orderings, keeping the best total (as Zen Lab does). Not optimal, but close and fast.
+orderings for Zen, or highest-note first for Note. It is a heuristic.
 Reseeds come first: they cost no download (ADR-0004).
 """
 
@@ -12,6 +12,7 @@ import os
 import shutil
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 from torrentlinker.domain import ItemState
@@ -19,9 +20,39 @@ from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.library import LibraryEntry
 from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import CatalogueRow
-from torrentlinker.zen import GB, ZenProfile, ZenTorrent, added_values, estimate
+from torrentlinker.zen import GB, ZenProfile, ZenTorrent, added_values, estimate, note, weight
 
 DEFAULT_MARGIN = 0.10  # share of each disk kept free
+
+
+class PlanGoal(StrEnum):
+    ZEN = "zen"
+    NOTE = "note"
+
+
+@dataclass(frozen=True)
+class PlanOptions:
+    goal: PlanGoal = PlanGoal.ZEN
+    max_download_bytes: int = 0  # 0 = no additional limit
+    max_torrents: int | None = None  # additional torrents in this Plan, including Reseeds
+    max_seeders: int | None = None  # current swarm, before the user joins
+
+
+@dataclass(frozen=True)
+class DiskSpace:
+    disk: Hashable
+    folder: Path  # one Download Folder representing the disk
+    free: int
+    reserved: int
+    download: int = 0
+
+    @property
+    def available(self) -> int:
+        return max(0, self.free - self.reserved)
+
+    @property
+    def after_plan(self) -> int:
+        return self.free - self.download
 
 
 @dataclass(frozen=True)
@@ -48,12 +79,20 @@ class PlanCandidate:
 class PlanItem:
     candidate: PlanCandidate
     zen: float  # ≈ Zen/day it adds
+    note: float | None = None
 
 
 @dataclass(frozen=True)
 class Plan:
     items: list[PlanItem] = field(default_factory=list)
     zen_added: float = 0.0  # ≈ Zen/day the whole Plan adds to current seeding
+    goal: PlanGoal = PlanGoal.ZEN
+    disk_spaces: tuple[DiskSpace, ...] = ()
+
+    @property
+    def average_note(self) -> float | None:
+        values = [(i.note, weight(i.candidate.size)) for i in self.items if i.note is not None]
+        return sum(n * w for n, w in values) / sum(w for _, w in values) if values else None
 
     @property
     def download_size(self) -> int:
@@ -80,43 +119,88 @@ def make_plan(
     budgets: Mapping[Hashable, int],
     seeding: Sequence[ZenTorrent] = (),
     slots: int | None = None,
+    *,
+    options: PlanOptions = PlanOptions(),
+    disk_spaces: Sequence[DiskSpace] = (),
 ) -> Plan:
     """Choose candidates within each disk's budget (bytes) and `slots` more torrents."""
+    candidates = [
+        c for c in candidates if options.max_seeders is None or c.seeders <= options.max_seeders
+    ]
     values = added_values(profile, [c.as_zen() for c in candidates], seeding)
-    valued = [(c, v) for c, v in zip(candidates, values, strict=True) if v > 0]
-    reseeds = sorted((cv for cv in valued if cv[0].reseed), key=lambda cv: -cv[1])
+    notes = {
+        c.infohash: note(profile.zen_class, c.as_zen())
+        if profile.zen_class.paid_on_seeding
+        else 0.0
+        for c in candidates
+    }
+    valued = [
+        (c, v)
+        for c, v in zip(candidates, values, strict=True)
+        if (v if options.goal is PlanGoal.ZEN else notes[c.infohash]) > 0
+    ]
+    reseeds = sorted(
+        (cv for cv in valued if cv[0].reseed),
+        key=lambda cv: -(notes[cv[0].infohash] if options.goal is PlanGoal.NOTE else cv[1]),
+    )
     reseeded = {c.infohash for c, _ in reseeds}
     downloads = [cv for cv in valued if not cv[0].reseed and cv[0].infohash not in reseeded]
     room = slots if slots is not None else len(candidates)
+    room = max(0, room)
+    if options.max_torrents is not None:
+        room = min(room, max(0, options.max_torrents))
     first = reseeds[:room]
     base = estimate(profile, seeding).total
-    best = Plan()
-    for rank in ORDERINGS.values():
+    best = Plan(goal=options.goal, disk_spaces=tuple(disk_spaces))
+    rankings = list(ORDERINGS.values())
+    if options.goal is PlanGoal.NOTE:
+        rankings = [lambda c, v: notes[c.infohash]]
+        first.sort(key=lambda cv: -notes[cv[0].infohash])
+    for rank in rankings:
         ordered = sorted(downloads, key=lambda cv, r=rank: -r(cv[0], cv[1]))  # type: ignore[misc]
-        chosen = first + _fill(ordered, dict(budgets), room - len(first))
+        chosen = first + _fill(
+            ordered, dict(budgets), room - len(first), options.max_download_bytes
+        )
         torrents = [*seeding, *(c.as_zen() for c, _ in chosen)]
         day = estimate(profile, torrents)
         plan = Plan(
             [
-                PlanItem(c, z)
+                PlanItem(c, z, notes[c.infohash])
                 for (c, _), z in zip(chosen, day.per_torrent[len(seeding) :], strict=True)
             ],
             day.total - base,
+            options.goal,
+            tuple(
+                DiskSpace(
+                    s.disk,
+                    s.folder,
+                    s.free,
+                    s.reserved,
+                    sum(c.download_size for c, _ in chosen if c.disk == s.disk),
+                )
+                for s in disk_spaces
+            ),
         )
-        if plan.zen_added > best.zen_added:
+        if options.goal is PlanGoal.NOTE or plan.zen_added > best.zen_added:
             best = plan
     return best
 
 
 def _fill(
-    ordered: list[tuple[PlanCandidate, float]], budgets: dict[Hashable, int], room: int
+    ordered: list[tuple[PlanCandidate, float]],
+    budgets: dict[Hashable, int],
+    room: int,
+    max_download_bytes: int = 0,
 ) -> list[tuple[PlanCandidate, float]]:
     chosen: list[tuple[PlanCandidate, float]] = []
+    remaining = max_download_bytes if max_download_bytes > 0 else None
     for c, v in ordered:
         if len(chosen) >= room:
             break
-        if budgets.get(c.disk, 0) >= c.size:
+        if budgets.get(c.disk, 0) >= c.size and (remaining is None or c.download_size <= remaining):
             budgets[c.disk] -= c.size
+            if remaining is not None:
+                remaining -= c.download_size
             chosen.append((c, v))
     return chosen
 
@@ -134,8 +218,11 @@ def reseed_candidates(
     found: Iterable[tuple[LibraryEntry, Sequence[CheckedCandidate]]],
     in_client: set[str],
     seeding: Sequence[ZenTorrent] = (),
+    *,
+    goal: PlanGoal = PlanGoal.ZEN,
+    max_seeders: int | None = None,
 ) -> list[PlanCandidate]:
-    """One Reseed row per Orphan with a Full Match: its best-earning Match.
+    """One Reseed row per Orphan with a Full Match, chosen for the Plan's goal.
 
     Partial Matches are left out: after Verification they stay stopped and earn nothing.
     """
@@ -150,11 +237,16 @@ def reseed_candidates(
             and v.match.is_full
             and v.meta is not None
             and v.meta.infohash.lower() not in in_client
+            and (max_seeders is None or v.candidate.seeders <= max_seeders)
         ]
         if not full:
             continue
         rows = [_reseed_row(entry, v) for v in full]
-        values = added_values(profile, [r.as_zen() for r in rows], seeding)
+        values = (
+            added_values(profile, [r.as_zen() for r in rows], seeding)
+            if goal is PlanGoal.ZEN
+            else [note(profile.zen_class, r.as_zen()) for r in rows]
+        )
         result.append(max(zip(values, rows, strict=True), key=lambda vr: vr[0])[1])
     return result
 
@@ -192,11 +284,12 @@ def catalogue_candidates(
     for r in rows:
         if r.infohash.lower() in in_client or r.seeders < 1 or r.category is None:
             continue
-        if only is not None and not _within(r.category, only, categories):
+        category = r.category
+        if only is not None and not _within(category, only, categories):
             continue
-        if r.category not in resolved:
-            resolved[r.category] = folders.resolve(r.category, categories)
-        folder = resolved[r.category]
+        if category not in resolved:
+            resolved[category] = folders.resolve(category, categories)
+        folder = resolved[category]
         if folder is None:
             continue
         if folder not in disks:
@@ -207,7 +300,7 @@ def catalogue_candidates(
                 r.title,
                 r.size,
                 r.seeders,
-                r.category,
+                category,
                 folder,
                 disks[folder],
                 source=r,
@@ -253,11 +346,21 @@ def disk_budgets(
 ) -> dict[Hashable, int]:
     """Bytes a Plan may use on each disk holding Download Folders: free space minus a
     margin of the disk's size kept free."""
-    budgets: dict[Hashable, int] = {}
+    return {s.disk: s.available for s in disk_space(folders, margin, usage=usage, disk=disk)}
+
+
+def disk_space(
+    folders: Iterable[Path],
+    margin: float = DEFAULT_MARGIN,
+    usage: Callable[[Path], tuple[int, int, int]] = shutil.disk_usage,
+    disk: Callable[[Path], Hashable] = disk_of,
+) -> list[DiskSpace]:
+    """One physical-space reading per disk, including disks without eligible torrents."""
+    spaces: dict[Hashable, DiskSpace] = {}
     for folder in folders:
         d = disk(folder)
-        if d in budgets:
+        if d in spaces:
             continue
         total, _used, free = usage(existing_ancestor(folder))
-        budgets[d] = max(0, int(free - margin * total))
-    return budgets
+        spaces[d] = DiskSpace(d, folder, free, int(margin * total))
+    return list(spaces.values())

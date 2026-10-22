@@ -9,6 +9,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -216,17 +218,50 @@ class Indexer:
     def _get(self, params: dict[str, str]) -> str:
         return self._request(self.url, {**params, "apikey": self.api_key}).text
 
-    def _request(self, url: str, params: dict[str, str] | None = None) -> httpx.Response:
+    @property
+    def is_c411(self) -> bool:
+        return urlsplit(self.url).hostname == "c411.org"
+
+    def catalogue_json(self, params: dict[str, str]) -> dict[str, Any]:
+        """c411's live catalogue, sharing the Torznab rate limiter and key."""
+        if not self.is_c411:
+            raise ValueError("The JSON catalogue is only available on c411.org")
+        return self._request(
+            "https://c411.org/api/torrents",
+            params,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        ).json()
+
+    def torrent_json(self, infohash: str) -> dict[str, Any]:
+        """Read live metadata only; this does not grab a .torrent."""
+        if (
+            not self.is_c411
+            or len(infohash) != 40
+            or any(c not in "0123456789abcdef" for c in infohash)
+        ):
+            raise ValueError("Invalid c411 torrent hash")
+        return self._request(
+            f"https://c411.org/api/torrents/{infohash}",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+        ).json()
+
+    def _request(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
         with self._lock:
             for _attempt in range(MAX_RETRIES):
                 self._wait_turn()
-                response = self._http.get(url, params=params)
+                response = self._http.get(url, params=params, headers=headers)
                 if response.status_code != 429:
                     break
                 self._sleep(_retry_after(response))
             else:
                 self._wait_turn()
-                response = self._http.get(url, params=params)
+                response = self._http.get(url, params=params, headers=headers)
         response.raise_for_status()
         return response
 

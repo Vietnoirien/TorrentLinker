@@ -1,12 +1,17 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.plan import (
+    DiskSpace,
     PlanCandidate,
+    PlanGoal,
+    PlanOptions,
     catalogue_candidates,
     disk_budgets,
+    disk_space,
     make_plan,
 )
 from torrentlinker.store import CatalogueRow
@@ -52,6 +57,135 @@ def test_greedy_keeps_the_best_of_several_orderings() -> None:
     assert names(plan) == ["big"]
 
 
+@pytest.mark.parametrize("reseed", [False, True])
+def test_note_and_zen_goals_can_select_different_torrents(reseed: bool) -> None:
+    candidates = [
+        cand("high note", 4, seeders=3, reseed=reseed),
+        cand("high zen", 60, seeders=60, reseed=reseed),
+    ]
+
+    zen = make_plan(KEEPER, candidates, {"A": 60 * GB}, slots=1)
+    contribution = make_plan(
+        KEEPER, candidates, {"A": 60 * GB}, slots=1, options=PlanOptions(PlanGoal.NOTE)
+    )
+
+    assert names(zen) == ["high zen"]
+    assert names(contribution) == ["high note"]
+    assert contribution.average_note > zen.average_note
+    assert zen.zen_added > contribution.zen_added
+
+
+@pytest.mark.parametrize("goal", [PlanGoal.ZEN, PlanGoal.NOTE])
+@pytest.mark.parametrize("reseed", [False, True])
+def test_low_seeder_constraint_uses_the_current_swarm_and_includes_the_boundary(
+    goal: PlanGoal, reseed: bool
+) -> None:
+    candidates = [
+        cand("rare", 4, seeders=3, reseed=reseed),
+        cand("over limit", 4, seeders=4, reseed=reseed),
+        cand("popular", 60, seeders=60, reseed=reseed),
+    ]
+    options = PlanOptions(goal, max_download_bytes=4 * GB, max_torrents=1, max_seeders=3)
+    plan = make_plan(KEEPER, candidates, {"A": 100 * GB}, options=options)
+
+    assert names(plan) == ["rare"]
+    assert plan.download_size <= options.max_download_bytes
+    assert not make_plan(
+        KEEPER,
+        candidates[1:],
+        {"A": 100 * GB},
+        options=options,
+    ).items
+
+
+@pytest.mark.parametrize("goal", [PlanGoal.ZEN, PlanGoal.NOTE])
+def test_reseed_alternatives_are_filtered_before_choosing_the_best_match(
+    tmp_path: Path, goal: PlanGoal
+) -> None:
+    from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import Match
+    from torrentlinker.plan import reseed_candidates
+    from torrentlinker.review import CheckedCandidate
+    from torrentlinker.torrent_meta import TorrentMeta
+
+    path = tmp_path / "book.epub"
+    files = {path.name: 4 * GB}
+    entry = LibraryEntry(LibraryFolder(tmp_path), LocalItem(path, files), ItemState.ORPHAN)
+    full = Match({path.name: path.name}, [], [], 1.0)
+    alternatives = []
+    for title, seeds, h in [("popular", 5, "a" * 40), ("rare", 1, "b" * 40)]:
+        c = Candidate(title, 4 * GB, "u", seeds, h, categories=(7000,))
+        alternatives.append(CheckedCandidate(c, TorrentMeta(title, h, files, b""), full, full))
+    found = [(entry, alternatives)]
+
+    assert reseed_candidates(KEEPER, found, set(), goal=goal)[0].title == "popular"
+    rows = reseed_candidates(KEEPER, found, set(), goal=goal, max_seeders=1)
+    assert [r.title for r in rows] == ["rare"]
+
+
+@pytest.mark.parametrize("goal", [PlanGoal.ZEN, PlanGoal.NOTE])
+@pytest.mark.parametrize("size,count,expected", [(5, None, 5), (5, 1, 3), (0, 1, 9), (0, None, 14)])
+def test_download_and_optional_torrent_limits_apply_together(
+    goal: PlanGoal, size: int, count: int | None, expected: int
+) -> None:
+    candidates = [cand("large", 9), cand("medium", 3, disk="B"), cand("small", 2)]
+
+    plan = make_plan(
+        KEEPER,
+        candidates,
+        {"A": 100 * GB, "B": 100 * GB},
+        options=PlanOptions(goal, size * GB, count),
+    )
+
+    assert plan.download_size == expected * GB
+    assert count is None or len(plan.items) <= count
+
+
+def test_the_overall_torrent_cap_still_applies_with_a_larger_plan_limit() -> None:
+    plan = make_plan(
+        KEEPER,
+        [cand(str(i), 1) for i in range(10)],
+        {"A": 100 * GB},
+        slots=2,
+        options=PlanOptions(max_torrents=5),
+    )
+    assert len(plan.items) == 2
+
+
+def test_reseeds_use_a_torrent_slot_but_no_download_or_disk_budget() -> None:
+    candidates = [cand("reseed", 100, reseed=True), cand("download", 4), cand("extra", 1)]
+    spaces = [DiskSpace("A", Path("/dl"), free=10 * GB, reserved=2 * GB)]
+
+    plan = make_plan(
+        KEEPER,
+        candidates,
+        {"A": 8 * GB},
+        options=PlanOptions(max_download_bytes=4 * GB, max_torrents=2),
+        disk_spaces=spaces,
+    )
+
+    assert names(plan) == ["download", "reseed"]
+    assert plan.download_size == 4 * GB
+    assert plan.disk_spaces[0].download == 4 * GB
+    assert plan.disk_spaces[0].after_plan == 6 * GB
+
+
+def test_disk_report_counts_shared_disks_once_and_shows_free_space_for_empty_plans() -> None:
+    a, b, c = Path("/dl/a"), Path("/dl/b"), Path("/other")
+    spaces = disk_space(
+        [a, b, c],
+        margin=0.1,
+        disk=lambda p: "A" if p in [a, b] else "B",
+        usage=lambda p: (1000, 400, 600),
+    )
+    plan = make_plan(KEEPER, [], {s.disk: s.available for s in spaces}, disk_spaces=spaces)
+
+    assert len(plan.disk_spaces) == 2
+    assert all(s.available == 500 and s.after_plan == 600 for s in plan.disk_spaces)
+
+
 def test_plan_adds_the_zen_of_its_torrents_to_current_seeding() -> None:
     seeding = [ZenTorrent(4 * GB, 3, 100) for _ in range(4)]
     candidates = [cand("a", 4, 2)]
@@ -61,6 +195,40 @@ def test_plan_adds_the_zen_of_its_torrents_to_current_seeding() -> None:
     after = estimate(KEEPER, [*seeding, ZenTorrent(4 * GB, 3, 0, 2000)]).total
     assert plan.zen_added == pytest.approx(after - estimate(KEEPER, seeding).total)
     assert plan.payback_days == pytest.approx(4 / plan.zen_added)
+
+
+def test_crossing_a_class_threshold_counts_the_bonus_on_existing_seeding() -> None:
+    profile = ZenProfile(ZenClass.TANKER, tree_bonus=0.03)
+    seeding = [ZenTorrent(4 * GB, 100, 90) for _ in range(14)]
+    plan = make_plan(profile, [cand("fifteenth", 4, seeders=99)], {"A": 4 * GB}, seeding)
+
+    # Count 14 -> 15 adds +5% Class bonus, alongside the existing +3% tree bonus.
+    before = 14 * 1.7 * 1.03 / 7
+    after = (14 * 1.7 + 1.35) * 1.08 / 7
+    assert names(plan) == ["fifteenth"]
+    assert plan.zen_added == pytest.approx(after - before)
+    assert plan.zen_added > plan.items[0].zen  # the existing torrents also earn more
+
+
+@pytest.mark.parametrize(
+    "cls,chosen", [(ZenClass.TANKER, "popular"), (ZenClass.SWARM_KEEPER, "rare")]
+)
+def test_the_selected_class_changes_which_torrent_the_plan_prefers(
+    cls: ZenClass, chosen: str
+) -> None:
+    candidates = [cand("popular", 4, seeders=99), cand("rare", 4, seeders=3)]
+    plan = make_plan(ZenProfile(cls), candidates, {"A": 4 * GB}, slots=1)
+
+    assert names(plan) == [chosen]
+
+
+def test_keeper_selection_uses_the_category_component_of_the_note() -> None:
+    adult = replace(cand("adult", 4, seeders=5), category=6010)
+    ebook = replace(cand("ebook", 4, seeders=5), category=7000)
+
+    plan = make_plan(KEEPER, [adult, ebook], {"A": 4 * GB}, slots=1)
+
+    assert names(plan) == ["ebook"]
 
 
 def test_reseeds_come_first_and_cost_no_download() -> None:
@@ -134,6 +302,25 @@ def test_disk_budget_is_free_space_minus_a_margin_of_the_disk_shared_by_its_fold
 def test_a_full_disk_gives_no_budget(tmp_path: Path) -> None:
     assert disk_budgets([tmp_path], 0.10, usage=lambda p: (1000, 950, 50)) != {}
     assert set(disk_budgets([tmp_path], 0.10, usage=lambda p: (1000, 950, 50)).values()) == {0}
+
+
+def test_broad_snapshot_entries_do_not_guess_a_child_category_or_download_folder() -> None:
+    cats = {
+        2000: IndexerCategory("Video"),
+        2030: IndexerCategory("Film", 2000),
+        2060: IndexerCategory("Animation", 2000),
+    }
+    row = CatalogueRow("a" * 40, "Old video", GB, 10, 2000, "u", "d", 0, "zen-lab")
+    assert not catalogue_candidates(
+        [row], DownloadFolders({2030: "/films"}), cats, set(), lambda p: "d"
+    )
+    assert not catalogue_candidates(
+        [row], DownloadFolders({2000: "/video"}), cats, set(), lambda p: "d", {2030}
+    )
+    rows = catalogue_candidates(
+        [row], DownloadFolders({2000: "/video"}), cats, set(), lambda p: "d", {2000}
+    )
+    assert rows[0].category == 2000 and rows[0].folder == Path("/video")
 
 
 def test_orphans_with_a_full_match_become_reseed_rows_listed_first(tmp_path: Path) -> None:

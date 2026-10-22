@@ -13,8 +13,9 @@ Sources, as of 2026-10:
   upload a day.
 - ZEN LAB — reverse engineering of Zen Lab (zen.mma.dev): the exact weight curve, the
   rarity and seed-age tables, the Swarm Keeper Class bonus and the tree thresholds.
-- UNKNOWN — the guide says a torrent's value also depends on its category, without a
-  table: CATEGORY_FACTOR is empty, so every category counts 1.
+- OFFICIAL EXCERPT — Swarm Keeper scoring table supplied on 2026-10-22: the category
+  base is 1.00 except XXX at 0.50, added before seed age and size/seeder bonuses.
+  Other Classes' category bases are unconfirmed and still default to 1.00.
 
 Which bonuses make a "group" for the rounding is not documented: we group torrents
 with the same rarity and seed-age bonuses. Every figure is an estimate.
@@ -32,7 +33,7 @@ GB = 1_000_000_000  # c411 sizes are decimal: 1 Zen buys 1 Go of download credit
 DIVISOR = 7  # OFFICIAL
 MIN_SEED_HOURS = 0.5  # OFFICIAL: under 30 minutes a day a torrent counts nothing
 UPLOAD_ZEN_PER_DAY = 0.43  # OFFICIAL, upper figure: rough Reuploader estimate per upload
-CATEGORY_FACTOR: dict[int, float] = {}  # UNKNOWN: per-category factor, 1 when absent
+KEEPER_CATEGORY_BASES = {6000: 0.5}  # OFFICIAL EXCERPT: other listed categories have base 1
 
 # (minimum seed days, bonus) — ZEN LAB
 DURATION_STEPS = ((180, 0.5), (90, 0.35), (30, 0.25), (7, 0.1))
@@ -152,8 +153,12 @@ def rarity_bonus(zen_class: ZenClass, size: int, seeders: int) -> float:
 
 
 def note(zen_class: ZenClass, t: ZenTorrent) -> float:
-    """Contribution note of a torrent: 1 + rarity + seed age."""
-    return 1 + rarity_bonus(zen_class, t.size, t.seeders) + duration_bonus(t.seed_days)
+    """Contribution note: category base + size/seeder bonus + seed-age bonus."""
+    return (
+        category_base(zen_class, t.category)
+        + rarity_bonus(zen_class, t.size, t.seeders)
+        + duration_bonus(t.seed_days)
+    )
 
 
 def class_bonus(zen_class: ZenClass, count: int) -> float:
@@ -188,8 +193,10 @@ def day_share(seed_hours: float) -> float:
     return 0.0 if seed_hours < MIN_SEED_HOURS else min(seed_hours, 24.0) / 24.0
 
 
-def category_factor(category: int | None) -> float:
-    return CATEGORY_FACTOR.get(category, 1.0) if category is not None else 1.0
+def category_base(zen_class: ZenClass, category: int | None) -> float:
+    if zen_class is ZenClass.SWARM_KEEPER and category is not None:
+        return KEEPER_CATEGORY_BASES.get(category // 1000 * 1000, 1.0)
+    return 1.0
 
 
 # Estimates --------------------------------------------------------------------
@@ -203,10 +210,7 @@ def estimate(profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int =
         return ZenDay(zeros, zeros, 1.0, upload_zen, upload_zen, round(upload_zen))
     cls = profile.zen_class
     notes = [note(cls, t) for t in torrents]
-    values = [
-        n * weight(t.size) * category_factor(t.category)
-        for n, t in zip(notes, torrents, strict=True)
-    ]
+    values = [n * weight(t.size) for n, t in zip(notes, torrents, strict=True)]
     weights = [weight(t.size) for t in torrents]
     average = sum(n * w for n, w in zip(notes, weights, strict=True)) / sum(weights)
     tree = max(tree_bonus(cls, len(torrents), average), profile.tree_bonus)
@@ -240,7 +244,7 @@ def added_values(
         average = sum(n * w for n, w in zip(base.notes, weights, strict=True)) / sum(weights)
     tree = max(tree_bonus(cls, count, average), profile.tree_bonus)
     scale = (1 + class_bonus(cls, count) + tree) / DIVISOR * day_share(profile.seed_hours)
-    return [note(cls, t) * weight(t.size) * category_factor(t.category) * scale for t in torrents]
+    return [note(cls, t) * weight(t.size) * scale for t in torrents]
 
 
 def torrent_zen(

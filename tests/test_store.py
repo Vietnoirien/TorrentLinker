@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 from torrentlinker.store import Store
@@ -11,3 +12,47 @@ def test_edited_query_is_remembered_per_local_item(tmp_path: Path) -> None:
 
     assert reopened.item_query(item) == "joueur echecs zweig"
     assert reopened.item_query(Path("/other")) is None
+
+
+def test_old_completed_crawls_are_rechecked_without_losing_torrents(tmp_path: Path) -> None:
+    from torrentlinker.store import CatalogueRow, CrawlState
+
+    path = tmp_path / "s.db"
+    store = Store(path)
+    row = CatalogueRow("aa" * 20, "Book", 1, 1, 7000, "u", "d", 0)
+    store.save_catalogue([row])
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE catalogue_crawl")
+        db.execute(
+            "CREATE TABLE catalogue_crawl (category INTEGER PRIMARY KEY, next_offset INTEGER,"
+            " complete INTEGER, updated_at REAL)"
+        )
+        db.execute("INSERT INTO catalogue_crawl VALUES (7000, 0, 1, 123)")
+
+    reopened = Store(path)
+
+    assert reopened.crawl_state(7000) == CrawlState(7000, updated_at=123)
+    assert reopened.catalogue() == [row]
+    reopened.save_crawl_state(CrawlState(7000, complete=True, updated_at=124))
+    assert Store(path).crawl_state(7000).complete  # migration runs only once
+
+
+def test_existing_feed_states_accept_persistent_sync_checkpoints(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from torrentlinker.store import FeedState
+
+    path = tmp_path / "s.db"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE catalogue_feed (name TEXT PRIMARY KEY, next_page INTEGER,"
+            " updated_at REAL, count INTEGER, limited INTEGER)"
+        )
+        db.execute("INSERT INTO catalogue_feed VALUES ('live', 2, 123, 500, 1)")
+
+    store = Store(path)
+    state = store.feed_state("live")
+    assert state == FeedState("live", 2, 123, 500, True)
+    checkpoint = replace(state, head_hashes=("a" * 40, "b" * 40))
+    store.save_feed_state(checkpoint)
+    assert Store(path).feed_state("live") == checkpoint
