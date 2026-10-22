@@ -495,6 +495,12 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
 
     class StubIndexer:
         url, api_key = Settings().indexer.url, ""
+
+        def background(self):  # type: ignore[no-untyped-def]
+            import contextlib
+
+            return contextlib.nullcontext()
+
         fetched: list[str] = []
 
         def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
@@ -556,6 +562,11 @@ def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
 
     class LimitedIndexer:
         url, api_key = Settings().indexer.url, ""
+
+        def background(self):  # type: ignore[no-untyped-def]
+            import contextlib
+
+            return contextlib.nullcontext()
 
         def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
             raise RateLimited(30)
@@ -660,7 +671,7 @@ def test_plan_lists_reseeds_first_and_sends_them_through_verification(
     assert qbit.rechecked == [t.hash]
 
 
-def test_the_plan_offers_categories_with_a_download_folder_and_remembers_the_choice(
+def test_the_plan_offers_every_category_and_remembers_the_choice(
     qtbot,
     tmp_path: Path,  # type: ignore[no-untyped-def]
 ) -> None:
@@ -677,7 +688,11 @@ def test_the_plan_offers_categories_with_a_download_folder_and_remembers_the_cho
     qtbot.addWidget(window)
     view = window.zen_tab.plan_view
 
-    assert [cid for cid, _name, _sub in view.category_options] == [2000, 2030]
+    assert [cid for cid, _name, _sub in view.category_options] == [2000, 2030, 7000]
+    assert view.without_folder == {7000}
+    labels = [a.text() for a in view.categories_menu.actions()]
+    assert any("Ebook" in t and "no Download Folder" in t for t in labels)
+    window.prefetch_categories = lambda categories: None  # type: ignore[method-assign]
 
     view._toggle(2030, True)
 
@@ -1036,6 +1051,12 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
 
     class StoppingIndexer:
         url, api_key = Settings().indexer.url, ""
+
+        def background(self):  # type: ignore[no-untyped-def]
+            import contextlib
+
+            return contextlib.nullcontext()
+
         stop_once = True
 
         def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
@@ -1294,3 +1315,82 @@ def test_extra_api_keys_are_saved_and_each_gets_its_own_queues(qtbot, tmp_path: 
     indexer = window.indexer()
     assert [slot.key for slot in indexer.slots] == ["main", "second", "fourth"]
     assert window.indexer() is indexer  # kept while the keys stay the same
+
+
+def plan_window(qtbot, tmp_path: Path, monkeypatch, picked: str):  # type: ignore[no-untyped-def]
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.gui import main_window
+
+    s = Settings()
+    s.indexer_categories = {
+        2000: IndexerCategory("Films & Vidéos"),
+        2030: IndexerCategory("Film", parent=2000),
+        5000: IndexerCategory("Série TV", parent=2000),
+        2060: IndexerCategory("Animation", parent=2000),
+        7000: IndexerCategory("Ebook"),
+    }
+    s.download_folders = DownloadFolders(
+        {2030: str(tmp_path / "Film"), 5000: str(tmp_path / "Séries")}
+    )
+    s.plan_categories = [2030]
+    window = MainWindow(s, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    fetched: list[list[int]] = []
+    window.prefetch_categories = fetched.append  # type: ignore[method-assign]
+    asked: list[str] = []
+    monkeypatch.setattr(
+        main_window, "choose_directory", lambda parent, title: asked.append(title) or picked
+    )
+    return window, fetched, asked
+
+
+def test_choosing_a_category_without_a_folder_asks_for_one_and_fetches_it_meanwhile(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    window, fetched, asked = plan_window(qtbot, tmp_path, monkeypatch, str(tmp_path / "Ebooks"))
+
+    window.zen_tab.plan_view._toggle(7000, True)
+
+    assert fetched == [[7000]]
+    assert asked == ["Download Folder for Ebook"]
+    saved = Settings.load(tmp_path / "settings.json")
+    assert saved.plan_categories == [2030, 7000]
+    assert saved.download_folders.by_category[7000] == str(tmp_path / "Ebooks")
+    assert 7000 not in window.zen_tab.plan_view.without_folder
+
+
+def test_cancelling_the_folder_leaves_the_category_out(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    window, _fetched, asked = plan_window(qtbot, tmp_path, monkeypatch, "")
+
+    window.zen_tab.plan_view._toggle(7000, True)
+
+    assert asked and Settings.load(tmp_path / "settings.json").plan_categories == [2030]
+    assert window.zen_tab.plan_view.chosen_categories == {2030}
+
+
+def test_a_category_whose_subcategories_have_folders_can_skip_its_own(
+    qtbot,
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from torrentlinker.catalogue import plan_categories
+
+    window, _fetched, asked = plan_window(qtbot, tmp_path, monkeypatch, "")
+    questions: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *a, **k: questions.append(a[2]) or QMessageBox.StandardButton.No,
+    )
+
+    window.zen_tab.plan_view._toggle(2000, True)
+
+    assert "Film, Série TV have theirs" in questions[0] and asked == []
+    s = Settings.load(tmp_path / "settings.json")
+    assert s.plan_categories == [2000, 2030]
+    # Its subcategories with a folder are fetched and planned; Animation has none.
+    assert plan_categories([2000], s.download_folders, s.indexer_categories) == [2030, 5000]

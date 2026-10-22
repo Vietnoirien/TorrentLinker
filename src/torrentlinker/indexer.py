@@ -6,7 +6,8 @@ import hashlib
 import threading
 import time
 import xml.etree.ElementTree as ET
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -45,6 +46,8 @@ class KeyRefused(Exception):
 
 
 MAX_KEYS = 5  # c411's limit per account
+# A request the user waits for gives up, rather than wait longer than this for c411.
+FOREGROUND_PATIENCE = 30.0  # seconds
 
 
 @dataclass
@@ -203,6 +206,18 @@ class Indexer:
         ]
         self._caps_lock = threading.Lock()
         self._modes: dict[SearchMode, set[str]] | None = None
+        self._thread = threading.local()  # .background: this thread's requests can wait
+
+    @contextmanager
+    def background(self) -> Iterator[None]:
+        """Requests made in this block, on this thread, let the user's own go first and
+        wait out c411's refusals (a Plan being sent, Catalogue updates)."""
+        before = getattr(self._thread, "background", False)
+        self._thread.background = True
+        try:
+            yield
+        finally:
+            self._thread.background = before
 
     def caps(self) -> Caps:
         root = ET.fromstring(self._get({"t": "caps"}))
@@ -322,15 +337,17 @@ class Indexer:
     ) -> httpx.Response:
         """Send with the key whose queue is free soonest; `build(key)` gives the URL,
         parameters and headers. A key refused with 429 rests as long as c411 asks while
-        the others go on; with every key resting, the request waits (or, with
-        `retry=False`, raises RateLimited)."""
+        the others go on. With every key resting, a background request waits; a
+        foreground one, or one with `retry=False`, raises RateLimited unless the wait is
+        short."""
+        background = getattr(self._thread, "background", False)
         waits = 0
         last: httpx.Response | None = None  # keys only rest after a 429, so it is set
         while True:
             slot = self._pick(queue)
             if slot is None:
                 wait = min(s.resting.get(queue, 0.0) for s in self.slots) - self._clock()
-                if not retry:
+                if not retry or (not background and wait > FOREGROUND_PATIENCE):
                     raise RateLimited(max(wait, 0.0))
                 if waits >= MAX_RETRIES and last is not None:
                     return self._checked(last)
@@ -339,8 +356,7 @@ class Indexer:
                 continue
             lane = slot.queue(queue)
             url, params, headers = build(slot.key)
-            with lane.lock:
-                lane.wait_turn()
+            with lane.turn(background):
                 last = self._http.get(url, params=params, headers=headers)
                 lane.observe(last.headers)
             if last.status_code == 429:

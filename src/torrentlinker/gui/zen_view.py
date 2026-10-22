@@ -398,6 +398,7 @@ class PlanView(QGroupBox):
         self.categories_button.setMenu(self.categories_menu)
         self.category_options: list[tuple[int, str, bool]] = []
         self.chosen_categories: set[int] | None = None
+        self.without_folder: set[int] = set()
         top.addWidget(self.categories_button)
         self._refresh_categories_label()
         self.make_button = QPushButton(self.tr("Make a Plan"))
@@ -522,11 +523,19 @@ class PlanView(QGroupBox):
     # Categories ------------------------------------------------------------
 
     def set_category_options(
-        self, options: list[tuple[int, str, bool]], chosen: set[int] | None
+        self,
+        options: list[tuple[int, str, bool]],
+        chosen: set[int] | None,
+        without_folder: set[int] | None = None,
     ) -> None:
-        """Offer these (id, name, is_subcategory) categories; `chosen` None means all."""
+        """Offer these (id, name, is_subcategory) categories; `chosen` None means all.
+
+        Categories in `without_folder` are marked: choosing one asks for its folder.
+        """
         self.category_options = options
         self.chosen_categories = chosen
+        if without_folder is not None:
+            self.without_folder = without_folder
         self.categories_menu.clear()
         everything = self.categories_menu.addAction(self.tr("All categories"))
         everything.setCheckable(True)
@@ -534,7 +543,10 @@ class PlanView(QGroupBox):
         everything.triggered.connect(lambda: self._choose(None))
         self.categories_menu.addSeparator()
         for cid, name, sub in options:
-            action = self.categories_menu.addAction(("    " if sub else "") + name)
+            label = ("    " if sub else "") + name
+            if cid in self.without_folder:
+                label += "  —  " + self.tr("no Download Folder")
+            action = self.categories_menu.addAction(label)
             action.setCheckable(True)
             action.setChecked(chosen is not None and cid in chosen)
             action.toggled.connect(lambda on, cid=cid: self._toggle(cid, on))
@@ -715,7 +727,12 @@ class PlanView(QGroupBox):
             self._send_started = None
             self.send_progress.hide()
             self.stop_send_button.hide()
+            self.make_button.setToolTip("")
             return
+        # A new Plan would replace the one being sent, and its progress.
+        self.make_button.setToolTip(
+            self.tr("Wait for the Plan being sent to finish, or stop it, to make a new one.")
+        )
         if self._send_started is None:
             self._send_started = time.monotonic()
             self.stop_send_button.setEnabled(True)

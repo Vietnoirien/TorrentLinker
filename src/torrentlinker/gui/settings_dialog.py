@@ -404,13 +404,7 @@ class SettingsDialog(QDialog):
         self.typed_folder.clear()
 
     def _choose_dir(self, title: str, start: str = "") -> str:
-        options = QFileDialog.Option.ShowDirsOnly
-        if sys.platform.startswith("linux"):
-            # The desktop-portal picker can hand back an empty path under Wayland.
-            options |= QFileDialog.Option.DontUseNativeDialog
-        path = QFileDialog.getExistingDirectory(self, title, start or str(Path.home()), options)
-        log.info("folder picked: %r", path)
-        return path
+        return choose_directory(self, title, start)
 
     def _pick_folder(self) -> None:
         if path := self._choose_dir(self.tr("Choose a Library Folder")):
@@ -952,3 +946,14 @@ class SettingsDialog(QDialog):
 def extra_indexer_keys() -> list[str]:
     """The Indexer keys saved after the main one, in order, without empty ones."""
     return [k for name in EXTRA_INDEXER_KEYS if (k := get_secret(name))]
+
+
+def choose_directory(parent: QWidget, title: str, start: str = "") -> str:
+    """A folder the user picks, or "" if they cancel."""
+    options = QFileDialog.Option.ShowDirsOnly
+    if sys.platform.startswith("linux"):
+        # The desktop-portal picker can hand back an empty path under Wayland.
+        options |= QFileDialog.Option.DontUseNativeDialog
+    path = QFileDialog.getExistingDirectory(parent, title, start or str(Path.home()), options)
+    log.info("folder picked: %r", path)
+    return path

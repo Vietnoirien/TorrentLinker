@@ -17,7 +17,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 
 DOWNLOAD_INTERVAL = 4.1  # seconds between .torrent downloads
 API_INTERVAL = 0.5  # 120 requests a minute, as c411's guide documents
@@ -27,7 +28,13 @@ LOW_BUDGET = 100  # below this, slow down to what the hour can sustain (3 s a re
 
 
 class Queue:
-    """One request at a time, at least `interval` seconds apart."""
+    """One request at a time, at least `interval` seconds apart.
+
+    A request the user is waiting for passes before background ones (a Plan being sent,
+    Catalogue updates): a background request lets every waiting foreground one go
+    first. Pacing waits happen outside the queue, so a foreground request arriving
+    during a background one's wait still goes first.
+    """
 
     def __init__(
         self,
@@ -36,10 +43,12 @@ class Queue:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.interval = interval
-        self.lock = threading.Lock()  # held for a whole request, retries included
         self._clock = clock
         self._sleep = sleep
         self._last: float | None = None
+        self._state = threading.Condition()
+        self._busy = False  # a request is in flight
+        self._foreground = 0  # foreground requests waiting for their turn
 
     def next_in(self) -> float:
         """Seconds before the next request may go."""
@@ -47,12 +56,43 @@ class Queue:
             return 0.0
         return max(0.0, self._last + self._interval() - self._clock())
 
-    def wait_turn(self) -> None:
-        """Call with the lock held, just before sending."""
-        if (wait := self.next_in()) > 0:
-            self._sleep(wait)
-        self._last = self._clock()
-        self._sent()
+    @contextmanager
+    def turn(self, background: bool = False) -> Iterator[None]:
+        """Wait for this request's turn, then hold the queue while it is sent."""
+        self._claim(background)
+        try:
+            yield
+        finally:
+            with self._state:
+                self._busy = False
+                self._state.notify_all()
+
+    def wait_turn(self, background: bool = False) -> None:
+        """Wait for a turn and count it as sent, for callers sending on their own."""
+        with self.turn(background):
+            pass
+
+    def _claim(self, background: bool) -> None:
+        with self._state:
+            if not background:
+                self._foreground += 1
+        try:
+            while True:
+                with self._state:
+                    while self._busy or (background and self._foreground > 0):
+                        self._state.wait()
+                    wait = self.next_in()
+                    if wait <= 0:
+                        self._busy = True
+                        self._last = self._clock()
+                        self._sent()
+                        return
+                self._sleep(wait)  # outside: others may still claim their turn
+        finally:
+            if not background:
+                with self._state:
+                    self._foreground -= 1
+                    self._state.notify_all()
 
     def _interval(self) -> float:
         return self.interval

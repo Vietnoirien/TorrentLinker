@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 
 from torrentlinker.indexer import KeyRefused, RateLimited
 from torrentlinker.plan import Plan, PlanCandidate
-from torrentlinker.qbit import Qbit
+from torrentlinker.qbit import AlreadyInClient, Qbit
 from torrentlinker.torrent_meta import TorrentMeta, read_torrent
 
 ZEN_TAG = "torrentlinker:zen"
@@ -86,7 +86,10 @@ def send_one(qbit: Qbit, candidate: PlanCandidate, data: bytes) -> str:
         raise Refused("already in qBittorrent")
     if existing := existing_targets(candidate.folder, meta):
         raise Refused(f"would overwrite {existing[0]}")
-    return qbit.download(data, str(candidate.folder), [ZEN_TAG])
+    try:
+        return qbit.download(data, str(candidate.folder), [ZEN_TAG])
+    except AlreadyInClient as e:  # added meanwhile, e.g. by a Reseed
+        raise Refused(str(e)) from e
 
 
 def send_plan(

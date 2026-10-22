@@ -52,6 +52,13 @@ class Qbit(Protocol):
     def remove_tags(self, hash: str, tags: list[str]) -> None: ...
 
 
+class AlreadyInClient(RuntimeError):
+    """qBittorrent already has this torrent, e.g. added meanwhile by a Plan or a Reseed."""
+
+    def __init__(self) -> None:
+        super().__init__("already in qBittorrent")
+
+
 API_KEY_PATTERN = re.compile(r"^qbt_[A-Za-z0-9]{28}$")
 
 
@@ -165,15 +172,21 @@ class QbitApi:
 
     def _add(self, data: bytes, save_path: str, tags: list[str], stopped: bool) -> str:
         h = read_torrent(data).infohash
-        result = self._client.torrents_add(
-            torrent_files=data,
-            save_path=save_path,
-            is_stopped=stopped,
-            use_auto_torrent_management=False,
-            content_layout="Original",
-            tags=tags,
-        )
+        try:
+            result = self._client.torrents_add(
+                torrent_files=data,
+                save_path=save_path,
+                is_stopped=stopped,
+                use_auto_torrent_management=False,
+                content_layout="Original",
+                tags=tags,
+            )
+        except qbittorrentapi.Conflict409Error:
+            result = "Fails."
         if str(result).strip().lower().startswith("fail"):
+            # Another task may have added it a moment ago (a Plan and a Reseed at once).
+            if self._client.torrents_info(torrent_hashes=h):
+                raise AlreadyInClient()
             raise RuntimeError("qBittorrent refused the torrent")
         for _ in range(50):  # the add is asynchronous inside qBittorrent
             if self._client.torrents_info(torrent_hashes=h):

@@ -444,3 +444,60 @@ def test_a_refused_extra_key_is_named() -> None:
         indexer.search(SearchQuery(q="b"), cached=False)
 
     assert refused.value.key_number == 2 and "API key 2" in str(refused.value)
+
+
+# Foreground and background ----------------------------------------------------
+
+
+def test_a_request_the_user_waits_for_goes_before_the_background_ones() -> None:
+    import threading
+
+    from torrentlinker.ratelimit import Queue
+
+    queue = Queue(0.15)  # real time, kept short
+    order: list[str] = []
+    first_sent = threading.Event()
+
+    def plan_being_sent() -> None:
+        for i in range(3):
+            with queue.turn(background=True):
+                order.append(f"plan {i}")
+            first_sent.set()
+
+    worker = threading.Thread(target=plan_being_sent)
+    worker.start()
+    first_sent.wait(2)
+    with queue.turn():  # the user's Library search
+        order.append("search")
+    worker.join(5)
+
+    assert order == ["plan 0", "search", "plan 1", "plan 2"]
+
+
+def test_a_search_does_not_wait_long_when_c411_rests_every_key() -> None:
+    clock = FakeClock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, headers={"Retry-After": "1200"})
+
+    indexer = pool(handler, clock, ["K1", "K2"])
+
+    with pytest.raises(RateLimited) as limited:
+        indexer.search(SearchQuery(q="a"), cached=False)
+
+    assert limited.value.retry_after == pytest.approx(1200)
+    assert clock.sleeps == []  # told at once, not stuck for 20 minutes
+
+
+def test_background_requests_wait_out_c411s_rest() -> None:
+    clock = FakeClock()
+    answers = [
+        httpx.Response(429, headers={"Retry-After": "1200"}),
+        httpx.Response(200, text=SEARCH_XML),
+    ]
+    indexer = pool(lambda r: answers.pop(0), clock, ["K1"])
+
+    with indexer.background():
+        found = indexer.search(SearchQuery(q="a"), cached=False)
+
+    assert found and 1200 in [round(s) for s in clock.sleeps]

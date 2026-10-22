@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -51,6 +52,7 @@ from torrentlinker.gui.settings_dialog import (
     QBIT_PASSWORD,
     TMDB_API_KEY,
     SettingsDialog,
+    choose_directory,
     extra_indexer_keys,
 )
 from torrentlinker.gui.tasks import run_in_background
@@ -373,23 +375,83 @@ class MainWindow(QMainWindow):
         run_in_background(self.plan_maker(), done, self.zen_tab.plan_view.failed)
 
     def offer_plan_categories(self) -> None:
-        """Let the Plan pick among the categories that have a Download Folder."""
+        """Offer every category and subcategory, marking those without a Download Folder."""
         s = self.settings
+        cats, folders = s.indexer_categories, s.download_folders
         options = []
-        for cid, cat in sorted(s.indexer_categories.items()):
-            if cat.parent is None and s.download_folders.resolve(cid, s.indexer_categories):
+        for cid, cat in sorted(cats.items()):
+            if cat.parent is None:
                 options.append((cid, cat.name, False))
                 options += [
-                    (sid, sub.name, True)
-                    for sid, sub in sorted(s.indexer_categories.items())
-                    if sub.parent == cid and s.download_folders.resolve(sid, s.indexer_categories)
+                    (sid, sub.name, True) for sid, sub in sorted(cats.items()) if sub.parent == cid
                 ]
+        without = {cid for cid, _name, _sub in options if folders.resolve(cid, cats) is None}
         chosen = set(s.plan_categories) if s.plan_categories is not None else None
-        self.zen_tab.plan_view.set_category_options(options, chosen)
+        self.zen_tab.plan_view.set_category_options(options, chosen, without)
 
     def _plan_categories_changed(self, chosen: set[int] | None) -> None:
+        before = set(self.settings.plan_categories or ())
+        added = sorted(chosen - before) if chosen is not None else []
+        if added:
+            self.prefetch_categories(added)  # fetched while the user picks folders
+        refused = {cid for cid in added if not self.ensure_download_folder(cid)}
+        if chosen is not None and refused:
+            chosen = (chosen - refused) or None
         self.settings.plan_categories = sorted(chosen) if chosen is not None else None
         self.settings.save(self.settings_path)
+        self.offer_plan_categories()
+
+    def ensure_download_folder(self, cid: int) -> bool:
+        """Whether the Plan can draw from `cid`; asks for its Download Folder if needed."""
+        s = self.settings
+        cats, folders = s.indexer_categories, s.download_folders
+        if folders.resolve(cid, cats) is not None:
+            return True
+        name = cats[cid].name if cid in cats else str(cid)
+        covered = [
+            c.name
+            for sid, c in sorted(cats.items())
+            if c.parent == cid and folders.resolve(sid, cats) is not None
+        ]
+        if covered:
+            answer = QMessageBox.question(
+                self,
+                self.tr("Download Folder"),
+                self.tr(
+                    "{0} has no Download Folder, but {1} have theirs. Choose a folder for "
+                    "its other subcategories? Otherwise the Plan draws only from those."
+                ).format(name, ", ".join(covered)),
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return True
+        path = choose_directory(self, self.tr("Download Folder for {0}").format(name))
+        if not path:
+            return bool(covered)
+        folders.by_category[cid] = path
+        s.save(self.settings_path)
+        log.info("Download Folder of category %s set to %s", cid, path)
+        return True
+
+    def prefetch_categories(self, categories: list[int]) -> None:
+        """Start fetching the Catalogue of newly chosen categories, in the background."""
+        if self.catalogue_runner is not None or not get_secret(INDEXER_API_KEY):
+            return  # the update under way, or the next Plan, fetches them
+        indexer, store, known = self.indexer(), self.store, dict(self.settings.indexer_categories)
+
+        def work(stop: Callable[[], bool], progress: Progress) -> None:
+            log.info("Fetching the Catalogue of newly chosen categories: %s", categories)
+            sync_catalogue(
+                indexer,
+                store,
+                categories,
+                full=False,
+                bootstrap=True,
+                stop=stop,
+                progress=progress,
+                categories=known,
+            )
+
+        self._run_catalogue(work)
 
     def _plan_options_changed(self, options: PlanOptions) -> None:
         self.settings.plan_options = options
@@ -577,11 +639,13 @@ class MainWindow(QMainWindow):
         def record(c: PlanCandidate, outcome: str, reason: str) -> None:
             store.mark_plan_item(c.infohash, outcome, reason)
 
-        runner = SendRunner(
-            lambda stop, progress: send_plan(
-                plan, qbit, fetch, reseeder, on_progress=progress, on_outcome=record, stop=stop
-            )
-        )
+        def work(stop: threading.Event, progress: Callable[[SendProgress], None]) -> SendReport:
+            with indexer.background():  # the user's own searches and Reseeds go first
+                return send_plan(
+                    plan, qbit, fetch, reseeder, on_progress=progress, on_outcome=record, stop=stop
+                )
+
+        runner = SendRunner(work)
         runner.signals.progress.connect(self._send_progress)
         runner.signals.finished.connect(self._plan_sent)
         runner.signals.failed.connect(self._send_failed)
@@ -797,7 +861,13 @@ class MainWindow(QMainWindow):
             self.zen_tab.catalogue.set_status(self.tr("Pausing after the current page…"))
 
     def _run_catalogue(self, work: Callable[[Callable[[], bool], Progress], None]) -> None:
-        runner = CatalogueRunner(work)
+        indexer = self.indexer()
+
+        def in_background(stop: Callable[[], bool], progress: Progress) -> None:
+            with indexer.background():  # the user's own searches go first
+                work(stop, progress)
+
+        runner = CatalogueRunner(in_background)
         self._catalogue_added: dict[int, int] = {}
         self._last_crawl_progress = None
         self._catalogue_error: Exception | None = None

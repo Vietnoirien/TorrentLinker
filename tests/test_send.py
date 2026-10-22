@@ -202,3 +202,20 @@ def test_progress_counts_the_zen_per_day_of_what_was_sent(tmp_path: Path) -> Non
     send_plan(plan, FakeQbit(), lambda c: data[c.infohash], on_progress=seen.append)
 
     assert [round(p.zen_added, 2) for p in seen] == [0.0, 0.1, 0.2]
+
+
+def test_a_torrent_added_meanwhile_by_a_reseed_is_refused_not_failed(tmp_path: Path) -> None:
+    from torrentlinker.qbit import AlreadyInClient
+
+    plan, data = two_releases(tmp_path)
+    qbit = FakeQbit()
+
+    def added_meanwhile(data: bytes, save_path: str, tags: list[str]) -> str:
+        raise AlreadyInClient()
+
+    qbit.download = added_meanwhile  # type: ignore[method-assign]
+
+    report = send_plan(plan, qbit, lambda c: data[c.infohash])
+
+    assert [why for _, why in report.refused] == ["already in qBittorrent"] * 2
+    assert report.failed == []

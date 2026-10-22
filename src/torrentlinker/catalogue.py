@@ -140,13 +140,9 @@ def plan_categories(
     with every subcategory on its own: an Indexer pages through a limited number of
     results per query (~600 on c411), so each subcategory reaches deeper."""
     wanted = set(chosen) if chosen is not None else set(folders.by_category)
-    plannable = {c for c in wanted if folders.resolve(c, categories) is not None}
-    expanded = set(plannable)
-    for cid in categories:
-        ancestor = _parent(cid, categories)
-        if ancestor in plannable:
-            expanded.add(cid)
-    return sorted(expanded)
+    expanded = set(wanted) | {c for c in categories if _parent(c, categories) in wanted}
+    # A chosen category without a folder still brings its subcategories that have one.
+    return sorted(c for c in expanded if folders.resolve(c, categories) is not None)
 
 
 def crawl_categories(categories: Mapping[int, IndexerCategory]) -> list[int]:
