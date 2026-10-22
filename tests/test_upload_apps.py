@@ -1,3 +1,4 @@
+import zipfile
 from pathlib import Path
 
 from torrentlinker.domain import ContentKind
@@ -13,7 +14,7 @@ from torrentlinker.upload import (
     default_category,
     upload_files,
 )
-from torrentlinker.upload_software import ReleaseType, release_type
+from torrentlinker.upload_software import ReleaseType, release_types
 
 IGNORE = IgnoreList.default()
 APPS = ApplicationsProfile()
@@ -55,19 +56,67 @@ def test_the_default_subcategory_comes_from_the_files(tmp_path: Path) -> None:
         assert APPS.default_subcategory(folder, IGNORE) == expected, files
 
 
-def test_the_release_type_is_decided_from_the_files_present() -> None:
-    assert release_type(["App/setup.exe"]) is ReleaseType.INSTALLER
-    assert release_type(["App/setup.exe", "Crack/crack.exe"]) is ReleaseType.CRACK
-    assert release_type(["App/setup.exe", "keygen/KeyGen.exe"]) is ReleaseType.KEYGEN
-    assert release_type(["App/setup.exe", "Patch.exe"]) is ReleaseType.PATCH
-    assert release_type(["App/App.exe", "App/lib.dll"]) is ReleaseType.PORTABLE
-    assert release_type(["App.exe"], "App Portable") is ReleaseType.PORTABLE
-    assert release_type(["Tool.dmg"]) is ReleaseType.INSTALLER
-    assert release_type(["app.apk"]) is ReleaseType.INSTALLER
-    assert release_type(["setup.exe", "Activator.exe", "patch.exe"]) is ReleaseType.CRACK
-    assert release_type(["a/keygen.exe", "a/crack.exe"]) is ReleaseType.KEYGEN
-    assert release_type(["readme.txt"]) is ReleaseType.INSTALLER
-    assert release_type(["Setup_x64.msi"]) is ReleaseType.INSTALLER
+K, C, P, U, A, PORT = (
+    ReleaseType.KEYGEN,
+    ReleaseType.CRACK,
+    ReleaseType.PATCH,
+    ReleaseType.UNLOCKED,
+    ReleaseType.PREACTIVATED,
+    ReleaseType.PORTABLE,
+)
+
+
+def test_the_release_type_follows_c411s_table() -> None:
+    setup = "App/setup.exe"
+    assert release_types([setup, "keygen/KeyGen.exe"]) == (K,)
+    assert release_types(["keygen/KeyGen.exe", "App/app.exe"]) == (K, PORT)
+    assert release_types([setup, "Crack/crack.exe"]) == (C,)
+    assert release_types(["Crack/crack.exe", "App/app.exe"]) == (C, PORT)
+    assert release_types([setup, "Patch.exe"]) == (P,)
+    assert release_types(["Patch.exe", "App.exe"]) == (P, PORT)
+    assert release_types([setup]) == (U,)
+    assert release_types(["App/App.exe", "App/lib.dll"]) == (U, PORT)
+    assert release_types([setup], "App PreActivated") == (A,)
+    assert release_types(["App.exe"], "App Preactivated") == (A, PORT)
+    assert release_types([setup], "App Portable") == (U, PORT)
+    assert release_types(["a/keygen.exe", "a/crack.exe", setup]) == (K,)  # keygen first
+    assert release_types([setup, "Activator.exe", "patch.exe"]) == (C,)
+    assert release_types(["Tool.dmg"]) == (U,)
+    assert release_types(["app.apk"]) == (U,)
+    assert release_types(["Setup_x64.msi", "crack.exe"]) == (C,)
+    assert release_types(["readme.txt"]) == (U, PORT)  # no installer
+
+
+def test_archives_are_refused_but_cabs_and_zipped_support_files_are_not(
+    tmp_path: Path,
+) -> None:
+    ok = item(tmp_path, "Ok", ["setup.exe", "data1.cab", "install.txt", "patch.cs", "run.bat"])
+    assert APPS.refusals(ok, IGNORE) == []
+    root = tmp_path / "Zipped"
+    root.mkdir()
+    (root / "setup.exe").write_bytes(b"x")
+    with zipfile.ZipFile(root / "notes.zip", "w") as z:
+        z.writestr("readme.txt", "hi")
+        z.writestr("src/patch.cs", "code")
+    assert APPS.refusals(scan_item(root), IGNORE) == []
+    with zipfile.ZipFile(root / "more.zip", "w") as z:
+        z.writestr("setup2.exe", "binary")
+    assert [r.detail for r in APPS.refusals(scan_item(root), IGNORE)] == ["zip"]
+
+
+def test_downloaders_and_missing_files_are_refused(tmp_path: Path) -> None:
+    bad = item(tmp_path, "Bad", ["a.zip", "b.7z", "InstallOnline.exe", "ok.exe"])
+    found = {r.problem: r.detail for r in APPS.refusals(bad, IGNORE)}
+    assert found == {Problem.ARCHIVE: "7z, zip", Problem.DOWNLOADER: "InstallOnline.exe"}
+    empty = tmp_path / "vide"
+    empty.mkdir()
+    assert [r.problem for r in APPS.refusals(scan_item(empty), IGNORE)] == [Problem.NO_FILE]
+
+
+def test_trainers_and_hack_tools_are_refused(tmp_path: Path) -> None:
+    bad = item(tmp_path, "Bad", ["setup.exe", "Game Trainer.exe", "CheatEngine.exe"])
+    found = {r.problem: r.detail for r in APPS.refusals(bad, IGNORE)}
+    assert found == {Problem.FORBIDDEN_TOOL: "CheatEngine.exe, Game Trainer.exe"}
 
 
 def test_archives_and_downloaders_are_refused_but_cabs_and_support_text_are_not(
@@ -89,6 +138,7 @@ def test_warnings_show_the_release_type_and_ask_for_an_install_note_unless_porta
     crack = item(tmp_path, "Photoshop", ["setup.exe", "crack/crack.exe"])
     found = {w.judgement: w.detail for w in APPS.warnings(crack, IGNORE, WINDOWS)}
     assert found[Judgement.RELEASE_TYPE] == "Crack"
+    assert Judgement.PLUGIN_HOST not in found
     for judgement in (
         Judgement.INSTALL_NOTE,
         Judgement.NO_ALPHA,
@@ -97,8 +147,20 @@ def test_warnings_show_the_release_type_and_ask_for_an_install_note_unless_porta
     ):
         assert judgement in found
     portable = item(tmp_path, "Tool Portable", ["Tool.exe"])
-    judged = [w.judgement for w in APPS.warnings(portable, IGNORE, WINDOWS)]
-    assert Judgement.INSTALL_NOTE not in judged and Judgement.RELEASE_TYPE in judged
+    judged = {w.judgement: w.detail for w in APPS.warnings(portable, IGNORE, WINDOWS)}
+    assert Judgement.INSTALL_NOTE not in judged
+    assert judged[Judgement.RELEASE_TYPE] == "Unlocked + Portable"
+
+
+def test_plugins_and_trainings_get_their_own_warnings(tmp_path: Path) -> None:
+    plugin = item(tmp_path, "Photoshop Plugin 1.0", ["setup.exe"])
+    assert Judgement.PLUGIN_HOST in [w.judgement for w in APPS.warnings(plugin, IGNORE, WINDOWS)]
+    course = item(tmp_path, "Cours Excel", ["cours.mp4"])
+    judged = [w.judgement for w in APPS.warnings(course, IGNORE, SubcategoryApps.TRAINING)]
+    assert Judgement.OFFICIAL_TRAINING in judged
+    assert Judgement.RELEASE_TYPE not in judged and Judgement.INSTALL_NOTE not in judged
+    name = APPS.suggested_name(course, IGNORE, "", SubcategoryApps.TRAINING)
+    assert name == "Cours Excel"
 
 
 def test_a_desktop_name_is_name_version_and_os_language_type(tmp_path: Path) -> None:
@@ -107,10 +169,12 @@ def test_a_desktop_name_is_name_version_and_os_language_type(tmp_path: Path) -> 
         "Adobe Photoshop 2024 25.1.0 [Windows MULTI Crack]"
     )
     plain = item(tmp_path, "Notepad++", ["Notepad.exe", "plugins/a.dll"])
-    assert APPS.suggested_name(plain, IGNORE, "", WINDOWS) == "Notepad++ [Windows Portable]"
+    assert (
+        APPS.suggested_name(plain, IGNORE, "", WINDOWS) == "Notepad++ [Windows Unlocked Portable]"
+    )
     mac = item(tmp_path, "Affinity Photo 2.3 (French)", ["Affinity.dmg"])
     assert APPS.suggested_name(mac, IGNORE, "", SubcategoryApps.MACOS) == (
-        "Affinity Photo 2.3 [macOS FR Installer]"
+        "Affinity Photo 2.3 [macOS FR Unlocked]"
     )
 
 

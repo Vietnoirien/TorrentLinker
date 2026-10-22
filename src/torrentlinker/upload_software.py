@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import zipfile
 from collections.abc import Iterable
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any
@@ -125,17 +126,27 @@ class ReleaseType(StrEnum):
     KEYGEN = "Keygen"
     CRACK = "Crack"
     PATCH = "Patch"
-    INSTALLER = "Installer"
+    UNLOCKED = "Unlocked"
+    PREACTIVATED = "Preactivated"
     PORTABLE = "Portable"
 
 
-# c411's decision table is on /wiki/cat-applications, which could not be read: this one
-# is the app's own reading, marked unverified in docs/research/upload-rules.md.
+# c411's table on /wiki/cat-applications (read 2026-10-22): the activation tag comes from
+# the files (a keygen, else a crack, else a patch, else unlocked or preactivated), and
+# Portable is added when the torrent holds no installer.
 KEYGEN_WORDS = ("keygen", "keymaker", "serialfish")
 CRACK_WORDS = ("crack", "cracked", "activator", "loader", "kmspico")
 PATCH_WORDS = ("patch", "patcher")
+PREACTIVATED_APP_WORDS = ("preactivated", "preactive")
 INSTALLER_EXTENSIONS = ("msi", "dmg", "pkg", "deb", "rpm", "apk", "xapk", "ipa", "appimage")
 INSTALLER_WORDS = ("setup", "install", "installer", "inst")
+# Text and code files may travel in a ZIP; any other archive is refused.
+APP_SUPPORT_EXTENSIONS = (
+    "txt", "nfo", "md", "rtf", "html", "htm", "xml", "json", "ini", "cfg", "log", "url",
+    "py", "js", "c", "cpp", "h", "cs", "java", "sh", "bat", "cmd", "ps1", "reg",
+)  # fmt: skip
+PLUGIN_WORDS = ("plugin", "plugins", "extension", "extensions", "addon", "addons")
+FORBIDDEN_TOOL_WORDS = ("trainer", "trainers", "hacktool", "hacktools", "aimbot", "cheatengine")
 APP_SYSTEMS = {
     SubcategoryApps.WINDOWS: ("exe", "msi"),
     SubcategoryApps.MACOS: ("dmg", "pkg", "app"),
@@ -159,28 +170,42 @@ def _words(text: str) -> list[str]:
     return [w for w in re.split(r"[^a-z0-9]+", text.casefold()) if w]
 
 
-def release_type(paths: Iterable[str], name: str = "") -> ReleaseType:
-    """The release type, decided from the files present: `portable` when the name says
-    so, then a keygen, a crack, a patch, an installer (a setup program or a package);
-    program files without installer are portable."""
+def release_types(paths: Iterable[str], name: str = "") -> tuple[ReleaseType, ...]:
+    """The release tags, decided from the files present as c411's table says: the
+    activation (a keygen, else a crack, else a patch, else unlocked or preactivated)
+    and Portable when there is no installer (a setup program or a package) or the name
+    says so."""
     paths = list(paths)
     words = [*_words(name), *(w for p in paths for w in _words(PurePosixPath(p).stem))]
-    if "portable" in words:
-        return ReleaseType.PORTABLE
     for kind, vocabulary in (
         (ReleaseType.KEYGEN, KEYGEN_WORDS),
         (ReleaseType.CRACK, CRACK_WORDS),
         (ReleaseType.PATCH, PATCH_WORDS),
+        (ReleaseType.PREACTIVATED, PREACTIVATED_APP_WORDS),
     ):
         if any(w in vocabulary for w in words):
-            return kind
+            activation = kind
+            break
+    else:
+        activation = ReleaseType.UNLOCKED
     exes = [p for p in paths if _ext(p) == "exe"]
     installer = any(_ext(p) in INSTALLER_EXTENSIONS for p in paths) or any(
         w in INSTALLER_WORDS for p in exes for w in _words(PurePosixPath(p).stem)
     )
-    if exes and not installer:
-        return ReleaseType.PORTABLE
-    return ReleaseType.INSTALLER
+    if "portable" in words or not installer:
+        return (activation, ReleaseType.PORTABLE)
+    return (activation,)
+
+
+def _forbidden_tools(files: dict[str, int], words: tuple[str, ...]) -> list[str]:
+    """Files whose name says trainer or hack tool (c411 forbids them)."""
+    return sorted(
+        {
+            PurePosixPath(p).name
+            for p in files
+            if any(w in words for w in _words(PurePosixPath(p).stem))
+        }
+    )
 
 
 def _stem(item: LocalItem) -> str:
@@ -221,6 +246,28 @@ def _downloaders(files: dict[str, int]) -> list[str]:
 
 def _archives(files: dict[str, int]) -> list[str]:
     return sorted({e for p in files if (e := _ext(p)) in ARCHIVES})
+
+
+def _kind_label(kinds: Iterable[ReleaseType]) -> str:
+    return " + ".join(k.value for k in kinds)
+
+
+def _support_zip(item: LocalItem, path: str) -> bool:
+    """A readable ZIP holding only text and code files (c411 lets those travel in one)."""
+    if _ext(path) != "zip":
+        return False
+    try:
+        with zipfile.ZipFile(item.save_path / path) as archive:
+            return all(
+                i.is_dir() or _ext(i.filename) in APP_SUPPORT_EXTENSIONS for i in archive.infolist()
+            )
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def _app_archives(item: LocalItem, files: dict[str, int]) -> list[str]:
+    """The archive formats an application holds, leaving out support-file ZIPs."""
+    return sorted({e for p in files if (e := _ext(p)) in ARCHIVES and not _support_zip(item, p)})
 
 
 def _info_nfo(title: str, rows: list[tuple[str, str]], files: list[UploadFile]) -> str:
@@ -559,19 +606,29 @@ class ApplicationsProfile:
         if not files:
             return [Refusal(Problem.NO_FILE)]
         found = []
-        if archives := _archives(files):
+        if archives := _app_archives(item, files):
             found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
         if downloaders := _downloaders(files):
             found.append(Refusal(Problem.DOWNLOADER, ", ".join(downloaders)))
+        if tools := _forbidden_tools(files, FORBIDDEN_TOOL_WORDS):
+            found.append(Refusal(Problem.FORBIDDEN_TOOL, ", ".join(tools)))
         return found
 
     def warnings(
         self, item: LocalItem, ignore: IgnoreList, subcategory: int
     ) -> list[UploadWarning]:
-        kind = release_type(_content(item, ignore), _stem(item))
-        found = [UploadWarning(Judgement.RELEASE_TYPE, kind.value)]
-        if kind is not ReleaseType.PORTABLE:
-            found.append(UploadWarning(Judgement.INSTALL_NOTE))
+        files = _content(item, ignore)
+        found: list[UploadWarning] = []
+        if subcategory == SubcategoryApps.TRAINING:
+            found.append(UploadWarning(Judgement.OFFICIAL_TRAINING))
+        else:
+            kinds = release_types(files, _stem(item))
+            found.append(UploadWarning(Judgement.RELEASE_TYPE, _kind_label(kinds)))
+            if ReleaseType.PORTABLE not in kinds:
+                found.append(UploadWarning(Judgement.INSTALL_NOTE))
+        words = [w for p in files for w in _words(PurePosixPath(p).stem)]
+        if any(w in PLUGIN_WORDS for w in [*_words(_stem(item)), *words]):
+            found.append(UploadWarning(Judgement.PLUGIN_HOST))
         found += [
             UploadWarning(Judgement.NO_ALPHA),
             UploadWarning(Judgement.NO_IPTV),
@@ -605,9 +662,9 @@ class ApplicationsProfile:
             ext = next((_ext(p).upper() for p in sorted(files) if _ext(p) in SYSTEMS), "")
             parts = [f"[{system}]" if system else "", name, version, language]
             return " ".join(p for p in parts if p) + (f" [{ext}]" if ext else "")
-        kind = release_type(files, stem)
-        tags = " ".join(t for t in (system, language, kind.value) if t)
-        return " ".join(p for p in (name, version, f"[{tags}]") if p)
+        kinds = () if subcategory == SubcategoryApps.TRAINING else release_types(files, stem)
+        tags = " ".join(t for t in (system, language, *(k.value for k in kinds)) if t)
+        return " ".join(p for p in (name, version, f"[{tags}]" if tags else "") if p)
 
     def suggested_options(
         self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
@@ -619,8 +676,8 @@ class ApplicationsProfile:
         name = _item_name(files)
         tags = " ".join(re.findall(r"\[([^\]]*)\]", title)).split()
         system = next((t for t in tags if t in OS_NAMES), "") or _system(sizes)
-        kinds = {k.value: k for k in ReleaseType}
-        kind = next((t for t in tags if t in kinds), "") or release_type(sizes, name).value
+        labels = {k.value for k in ReleaseType}
+        kind = " + ".join(t for t in tags if t in labels) or _kind_label(release_types(sizes, name))
         language = next(
             (
                 t
@@ -665,50 +722,65 @@ _SUBCATEGORY_SYSTEMS: dict[int, str] = {
 
 
 class GameType(StrEnum):
-    """How a PC game release was made; the label is what the Upload tab shows."""
+    """What c411's naming table decides for a PC game release; the label is what the
+    Upload tab shows."""
 
-    SCENE = "Scene"
-    REPACK = "Repack"
-    PORTABLE = "Portable"
+    TRUSTED = "Trusted release"  # keep the original uploader's name and NFO
+    CRACKED = "Cracked release"  # find the original crack, keep its name
+    PREACTIVATED = "Preactivated"
     GOG = "GOG"
     DRM_FREE = "DRM-free"
-    PREACTIVATED = "Preactivated"
+    ISO = "ISO"  # refused: extract it first
 
 
-# c411's decision table is on /wiki/cat-jeux-video, which could not be read: this one is
-# the app's own reading, marked unverified in docs/research/upload-rules.md.
-REPACKERS = (
+@dataclass(frozen=True)
+class GameRelease:
+    """The decision of the naming table: a type, and whether the release is portable
+    (no `setup.exe`)."""
+
+    kind: GameType
+    portable: bool = False
+
+    @property
+    def tags(self) -> tuple[str, ...]:
+        """The tags the name takes (none when the original name is kept)."""
+        if self.kind is GameType.PREACTIVATED:
+            return ("PORTABLE", "PREACTIVATED")
+        last = {GameType.GOG: "GOG", GameType.DRM_FREE: "DRM FREE"}.get(self.kind)
+        if last is None:
+            return ()
+        return ("PORTABLE", last) if self.portable else (last,)
+
+    @property
+    def label(self) -> str:
+        return " ".join(f"[{t}]" for t in self.tags) or self.kind.value
+
+    @property
+    def keeps_name(self) -> bool:
+        return self.kind in (GameType.TRUSTED, GameType.CRACKED)
+
+
+# c411's naming table on /wiki/cat-jeux-video (read 2026-10-22). MBC is named among the
+# trusted repackers in the page's prose but not in the table's list, so it is left out.
+TRUSTED_TAGS = (
+    "tenoke",
+    "rune",
+    "mephisto",
+    "elamigos",
     "fitgirl",
     "dodi",
-    "elamigos",
-    "gnarly",
-    "xatab",
-    "kaos",
-    "corepack",
-    "darck",
-    "qoob",
-    "masquerade",
-    "repack",
-)
-SCENE_GROUPS = (
-    "codex",
-    "skidrow",
-    "plaza",
-    "reloaded",
-    "flt",
-    "hoodlum",
-    "darksiders",
-    "tinyiso",
-    "cpy",
-    "rune",
-    "doge",
-    "tenoke",
-    "razor1911",
+    "chovka",
+    "armgddn",
+    "riddick",
     "empress",
-    "simplex",
+    "kaos",
+    "m4ckd0ge",
+    "voices38",
+    "linuxrulez",
 )
-CRACK_WORDS_GAMES = ("crack", "cracked", *SCENE_GROUPS)
+CRACK_WORDS_GAMES = ("crack", "cracked", "crackfix")
 PREACTIVATED_WORDS = ("preactivated", "steamrip", "goldberg", "smartsteamemu")
+GAME_FORBIDDEN_WORDS = (*FORBIDDEN_TOOL_WORDS, "hypervisor")
 # Container extensions each console takes, besides archives (one archive per game).
 CONSOLE_CONTAINERS = {
     SubcategoryGames.NINTENDO: (
@@ -780,34 +852,34 @@ CONSOLES = (SubcategoryGames.NINTENDO, SubcategoryGames.SONY, SubcategoryGames.M
 NFO_MAX_BYTES = 256 * 1024
 
 
-def game_type(paths: Iterable[str], name: str = "", nfo: str = "") -> GameType:
-    """The release type, decided from the files present: portable when the name says so,
-    scene when it names a scene group, GOG (a GOG file or GOG in the NFO), a repack (a
-    repacker's name, or a `setup.exe` with `.bin` data), scene again for an `.iso` or
-    crack files, a preactivated release (a `steam_api` library) and otherwise DRM-free."""
+def game_type(paths: Iterable[str], name: str = "", nfo: str = "") -> GameRelease:
+    """c411's naming table. A trusted tag in the name keeps the original name (`.iso` or
+    `setup.exe`) or makes a portable preactivated release; without one, a file named
+    crack keeps the cracker's name, an `.iso` is refused, `steam_api` without setup is
+    portable preactivated, and the rest is GOG (GOG in the NFO or a GOG file) or DRM-free,
+    portable when there is no `setup.exe`."""
     paths = list(paths)
-    words = [*_words(name), *(w for p in paths for w in _words(PurePosixPath(p).name))]
-    if "portable" in words:
-        return GameType.PORTABLE
-    if any(w in SCENE_GROUPS for w in _words(name)):
-        return GameType.SCENE  # `Game-GOG-CODEX` is a scene release of a GOG game
-    if "gog" in words or "goggame" in " ".join(words) or "gog" in _words(nfo):
-        return GameType.GOG
     names = {PurePosixPath(p).name.casefold() for p in paths}
-    if any(w in REPACKERS for w in words) or (
-        "setup.exe" in names and any(_ext(p) == "bin" for p in paths)
-    ):
-        return GameType.REPACK
-    folders = [w for p in paths for part in PurePosixPath(p).parts[:-1] for w in _words(part)]
-    if (
-        any(w in SCENE_GROUPS for w in words)
-        or any(_ext(p) == "iso" for p in paths)
-        or any(w in CRACK_WORDS_GAMES for w in [*folders, *words])
-    ):
-        return GameType.SCENE
-    if any(n.startswith("steam_api") for n in names) or any(w in PREACTIVATED_WORDS for w in words):
-        return GameType.PREACTIVATED
-    return GameType.DRM_FREE
+    iso = any(_ext(p) == "iso" for p in paths)
+    setup = "setup.exe" in names
+    steam = any(n.startswith("steam_api") for n in names) or any(
+        w in PREACTIVATED_WORDS for p in paths for w in _words(PurePosixPath(p).name)
+    )
+    if any(w in TRUSTED_TAGS for w in _words(name)):
+        if iso or setup:
+            return GameRelease(GameType.TRUSTED)
+        return GameRelease(GameType.PREACTIVATED, portable=True)
+    crack_words = [w for p in paths for part in PurePosixPath(p).parts for w in _words(part)]
+    if any(w in CRACK_WORDS_GAMES for w in crack_words):
+        return GameRelease(GameType.CRACKED)
+    if iso:
+        return GameRelease(GameType.ISO)
+    if steam and not setup:
+        return GameRelease(GameType.PREACTIVATED, portable=True)
+    words = [*_words(name), *(w for p in paths for w in _words(PurePosixPath(p).name))]
+    if "gog" in words or "goggame" in " ".join(words) or "gog" in _words(nfo):
+        return GameRelease(GameType.GOG, portable=not setup)
+    return GameRelease(GameType.DRM_FREE, portable=not setup)
 
 
 class GamesProfile:
@@ -855,7 +927,7 @@ class GamesProfile:
                 self.nfos[item.path.name] = data.decode("cp437")  # scene art, DOS code page
             return
 
-    def _type(self, item: LocalItem, ignore: IgnoreList) -> GameType:
+    def _type(self, item: LocalItem, ignore: IgnoreList) -> GameRelease:
         return game_type(_content(item, ignore), _stem(item), self.nfos.get(item.path.name, ""))
 
     # Rules -------------------------------------------------------------------
@@ -873,10 +945,15 @@ class GamesProfile:
             wrong = sorted({e for p in files if (e := _ext(p)) and e not in accepted})
             if wrong:
                 found.append(Refusal(Problem.CONSOLE_CONTAINER, ", ".join(wrong)))
-        elif archives := _archives(files):
-            found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
+        else:
+            if archives := _archives(files):
+                found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
+            if self._type(item, ignore).kind is GameType.ISO:
+                found.append(Refusal(Problem.ISO_NOT_ALLOWED))
         if downloaders := _downloaders(files):
             found.append(Refusal(Problem.DOWNLOADER, ", ".join(downloaders)))
+        if tools := _forbidden_tools(files, GAME_FORBIDDEN_WORDS):
+            found.append(Refusal(Problem.FORBIDDEN_TOOL, ", ".join(tools)))
         return found
 
     def warnings(
@@ -888,12 +965,15 @@ class GamesProfile:
                 UploadWarning(Judgement.ONE_PER_CONSOLE),
                 UploadWarning(Judgement.REGION, region),
             ]
-        kind = self._type(item, ignore)
-        found = [UploadWarning(Judgement.RELEASE_TYPE, kind.value)]
-        if kind is GameType.GOG:
+        release = self._type(item, ignore)
+        found = [UploadWarning(Judgement.RELEASE_TYPE, release.label)]
+        if release.kind is GameType.CRACKED:
+            found.append(UploadWarning(Judgement.ORIGINAL_CRACK))
+        if release.kind is GameType.GOG:
             found.append(UploadWarning(Judgement.ONE_GOG))
-        elif kind in (GameType.SCENE, GameType.REPACK, GameType.PORTABLE):
-            found.append(UploadWarning(Judgement.ONE_PER_RELEASE, kind.value))
+        elif release.kind is not GameType.ISO:
+            found.append(UploadWarning(Judgement.ONE_PER_RELEASE, release.label))
+        found.append(UploadWarning(Judgement.UPDATE_ONLY))
         return found
 
     def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int:
@@ -926,15 +1006,16 @@ class GamesProfile:
     def suggested_name(
         self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
     ) -> str:
-        """Scene and repack names are kept as they are; portable `Nom - version [OS -
-        Langue - PORTABLE]`, GOG `Nom (Version) [Langue - OS][GOG]`, VR prefixed `[VR]`,
+        """Trusted and cracked releases keep their name; otherwise `Nom - version [OS -
+        Langue]` or GOG `Nom (Version) [Langue - OS]` followed by the table's tags
+        (`[PORTABLE][PREACTIVATED]`, `[GOG]`, `[PORTABLE][DRM FREE]`…), VR prefixed `[VR]`,
         console `[Console]Nom [Région - Langue] Conteneur` (PS4/PS5 add `-CUSA…`/`-PPSA…`).
         Spaces and accents are allowed. Editable."""
         files = _content(item, ignore)
         stem = _stem(item)
         if subcategory in CONSOLES:
             return self._console_name(stem, files, subcategory)
-        kind = self._type(item, ignore)
+        release = self._type(item, ignore)
         version = _version(stem)
         title = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", VERSION_RE.sub(" ", stem))
         title = " ".join(
@@ -944,16 +1025,17 @@ class GamesProfile:
         )
         system = GAME_SYSTEMS.get(subcategory) or _system(files)
         language = next((GAME_LANGUAGES[w] for w in _words(stem) if w in GAME_LANGUAGES), "")
-        if kind is GameType.GOG:
+        suffix = "".join(f"[{t}]" for t in release.tags)
+        if release.keeps_name or release.kind is GameType.ISO:
+            name = stem  # the original uploader's name is kept
+        elif release.kind is GameType.GOG:
             name = f"{title} ({version})" if version else title
             tags = " - ".join(t for t in (language, system) if t)
-            name = f"{name} [{tags}][GOG]" if tags else f"{name} [GOG]"
-        elif kind is GameType.PORTABLE:
-            name = f"{title} - {version}" if version else title
-            tags = " - ".join(t for t in (system, language, "PORTABLE") if t)
-            name = f"{name} [{tags}]"
+            name = f"{name} [{tags}]{suffix}" if tags else f"{name} {suffix}"
         else:
-            name = stem  # scene and repack names are kept as they are
+            name = f"{title} - {version}" if version else title
+            tags = " - ".join(t for t in (system, language) if t)
+            name = f"{name} [{tags}]{suffix}" if tags else f"{name} {suffix}"
         if subcategory == SubcategoryGames.VR and not name.startswith("[VR]"):
             name = f"[VR]{name}"
         return name
@@ -1033,7 +1115,7 @@ class GamesProfile:
         sizes = {f.local_path: f.size for f in files}
         name = _item_name(files)
         words = _words(title)
-        kind = game_type(sizes, name, self.nfos.get(files[0].local_path.split("/")[0], ""))
+        release = game_type(sizes, name, self.nfos.get(files[0].local_path.split("/")[0], ""))
         console = bool(re.match(r"\[[^\]]*\]", title)) and not title.startswith("[VR]")
         return [
             ("Titre", re.sub(r"^\[[^\]]*\]", "", title).strip()),
@@ -1046,7 +1128,7 @@ class GamesProfile:
                 ", ".join(sorted({GAME_LANGUAGES[w] for w in words if w in GAME_LANGUAGES})),
             ),
             ("Région", self._region(title) if console else ""),
-            ("Crack / loader", "" if console else kind.value),
+            ("Crack / loader", "" if console else release.label),
             ("Configuration", ""),
         ]
 
@@ -1056,7 +1138,7 @@ class GamesProfile:
         own = self.nfos.get(files[0].local_path.split("/")[0])
         sizes = {f.local_path: f.size for f in files}
         name = _item_name(files)
-        if own and game_type(sizes, name, own) is GameType.SCENE:
+        if own and game_type(sizes, name, own).keeps_name:
             return own if own.endswith("\n") else own + "\n"
         return _info_nfo(title, self._rows(title, files), files)
 

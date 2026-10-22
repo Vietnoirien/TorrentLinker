@@ -16,7 +16,7 @@ from torrentlinker.upload import (
     profile_for,
     upload_files,
 )
-from torrentlinker.upload_software import GameType, game_type
+from torrentlinker.upload_software import GameRelease, GameType, game_type
 
 FIXTURES = Path(__file__).parent / "fixtures"
 IGNORE = IgnoreList.default()
@@ -58,18 +58,47 @@ def test_the_default_subcategory_comes_from_the_files(tmp_path: Path) -> None:
         assert GAMES.default_subcategory(item(tmp_path, name, files), IGNORE) == expected, name
 
 
-def test_the_release_type_is_decided_from_the_files_present() -> None:
-    assert game_type(["G/setup.exe", "G/setup-1.bin"], "G") is GameType.REPACK
-    assert game_type(["G/game.exe"], "G-FitGirl Repack") is GameType.REPACK
-    assert game_type(["G/game.iso", "G/g.nfo"], "G-RUNE") is GameType.SCENE
-    assert game_type(["G/game.exe", "G/Crack/steam_api64.dll"], "G") is GameType.SCENE
-    assert game_type(["G/game.exe"], "Game.Update.v1.0-CODEX") is GameType.SCENE
-    assert game_type(["G/game.exe", "G/steam_api64.dll"], "G") is GameType.PREACTIVATED
-    assert game_type(["G/game.exe"], "G Portable") is GameType.PORTABLE
-    assert game_type(["G/goggame-123.info", "G/game.exe"], "G") is GameType.GOG
-    assert game_type(["G/game.exe"], "G", nfo="Installer by GOG.com") is GameType.GOG
-    assert game_type(["G/game.exe", "G/data.pak"], "G") is GameType.DRM_FREE
-    assert game_type(["G/game.exe", "G/steam_api.dll"], "G Portable") is GameType.PORTABLE
+T, C, PA, G, D, ISO = (
+    GameType.TRUSTED,
+    GameType.CRACKED,
+    GameType.PREACTIVATED,
+    GameType.GOG,
+    GameType.DRM_FREE,
+    GameType.ISO,
+)
+
+
+def test_the_naming_table_rows() -> None:
+    # 1 and 2: a trusted tag with an iso or a setup keeps the original name
+    assert game_type(["G/game.iso", "G/g.nfo"], "G-RUNE") == GameRelease(T)
+    assert game_type(["G/setup.exe", "G/setup-1.bin"], "G [FitGirl Repack]") == GameRelease(T)
+    # 3 and 4: a trusted tag without iso or setup is portable and preactivated
+    assert game_type(["G/game.exe", "G/steam_api64.dll"], "G-TENOKE") == GameRelease(PA, True)
+    assert game_type(["G/game.exe"], "G-TENOKE") == GameRelease(PA, True)
+    # 5: not trusted, steam_api, no setup
+    assert game_type(["G/game.exe", "G/steam_api64.dll"], "G") == GameRelease(PA, True)
+    # 6 and 7: not trusted with a crack
+    assert game_type(["G/game.iso", "G/Crack/x.dll"], "G") == GameRelease(C)
+    assert game_type(["G/setup.exe", "G/crack/steam_api.dll"], "G") == GameRelease(C)
+    # 8 to 11: GOG or DRM free, portable without setup
+    assert game_type(["G/game.exe"], "G", nfo="Installer by GOG.com") == GameRelease(G, True)
+    assert game_type(["G/game.exe"], "G") == GameRelease(D, True)
+    assert game_type(["G/setup.exe", "G/goggame-1.info"], "G") == GameRelease(G)
+    assert game_type(["G/setup.exe", "G/data.bin"], "G") == GameRelease(D)
+    # 12: an iso outside crack, repack and scene
+    assert game_type(["G/game.iso"], "G") == GameRelease(ISO)
+    # a scene group name is not a crack file
+    assert game_type(["G/game.exe"], "Game.Update.v1.0-CODEX") == GameRelease(D, True)
+
+
+def test_the_tags_follow_the_table() -> None:
+    assert GameRelease(PA, True).tags == ("PORTABLE", "PREACTIVATED")
+    assert GameRelease(G, True).tags == ("PORTABLE", "GOG")
+    assert GameRelease(G).tags == ("GOG",)
+    assert GameRelease(D, True).tags == ("PORTABLE", "DRM FREE")
+    assert GameRelease(D).tags == ("DRM FREE",)
+    assert GameRelease(T).tags == () and GameRelease(T).keeps_name
+    assert GameRelease(C).keeps_name and not GameRelease(ISO).keeps_name
 
 
 def test_pc_games_refuse_archives_and_downloaders(tmp_path: Path) -> None:
@@ -81,6 +110,16 @@ def test_pc_games_refuse_archives_and_downloaders(tmp_path: Path) -> None:
     empty = tmp_path / "vide"
     empty.mkdir()
     assert [r.problem for r in GAMES.refusals(scan_item(empty), IGNORE)] == [Problem.NO_FILE]
+
+
+def test_an_iso_without_crack_and_trainers_are_refused_on_pc(tmp_path: Path) -> None:
+    iso = item(tmp_path, "Iso", ["game.iso"])
+    assert [r.problem for r in GAMES.refusals(iso, IGNORE, WINDOWS)] == [Problem.ISO_NOT_ALLOWED]
+    scene = item(tmp_path, "Game-RUNE", ["game.iso"])
+    assert GAMES.refusals(scene, IGNORE, WINDOWS) == []
+    tools = item(tmp_path, "Tools", ["setup.exe", "Hypervisor Crack.exe", "Game Trainer.exe"])
+    found = {r.problem: r.detail for r in GAMES.refusals(tools, IGNORE, WINDOWS)}
+    assert found == {Problem.FORBIDDEN_TOOL: "Game Trainer.exe, Hypervisor Crack.exe"}
 
 
 def test_console_games_may_be_archived_one_per_game_but_not_hold_other_containers(
@@ -96,17 +135,28 @@ def test_console_games_may_be_archived_one_per_game_but_not_hold_other_container
     assert GAMES.refusals(sony, IGNORE) == []  # the list judges by the default subcategory
 
 
-def test_pc_game_warnings_show_the_type_and_the_one_per_release_rules(tmp_path: Path) -> None:
-    scene = item(tmp_path, "Game-CODEX", ["game.iso"])
+def test_pc_game_warnings_show_the_type_and_the_duplicate_rules(tmp_path: Path) -> None:
+    scene = item(tmp_path, "Game-RUNE", ["game.iso"])
     found = {w.judgement: w.detail for w in GAMES.warnings(scene, IGNORE, WINDOWS)}
-    assert found == {Judgement.RELEASE_TYPE: "Scene", Judgement.ONE_PER_RELEASE: "Scene"}
-    gog = item(tmp_path, "Game GOG", ["goggame-1.info", "game.exe"])
+    assert found == {
+        Judgement.RELEASE_TYPE: "Trusted release",
+        Judgement.ONE_PER_RELEASE: "Trusted release",
+        Judgement.UPDATE_ONLY: "",
+    }
+    cracked = item(tmp_path, "Game", ["game.iso", "crack/a.dll"])
+    assert Judgement.ORIGINAL_CRACK in [
+        w.judgement for w in GAMES.warnings(cracked, IGNORE, WINDOWS)
+    ]
+    gog = item(tmp_path, "Game GOG", ["setup.exe", "goggame-1.info"])
     assert [w.judgement for w in GAMES.warnings(gog, IGNORE, WINDOWS)] == [
         Judgement.RELEASE_TYPE,
         Judgement.ONE_GOG,
+        Judgement.UPDATE_ONLY,
     ]
     free = item(tmp_path, "Free", ["game.exe"])
-    assert [w.judgement for w in GAMES.warnings(free, IGNORE, WINDOWS)] == [Judgement.RELEASE_TYPE]
+    found = {w.judgement: w.detail for w in GAMES.warnings(free, IGNORE, WINDOWS)}
+    assert found[Judgement.RELEASE_TYPE] == "[PORTABLE] [DRM FREE]"
+    assert found[Judgement.ONE_PER_RELEASE] == "[PORTABLE] [DRM FREE]"
 
 
 def test_console_warnings_are_one_version_and_the_region(tmp_path: Path) -> None:
@@ -122,24 +172,36 @@ def name(tmp_path: Path, folder: str, files: list[str], sub: int = WINDOWS) -> s
     return GAMES.suggested_name(item(tmp_path, folder, files), IGNORE, "", sub)
 
 
-def test_scene_and_repack_names_are_kept_as_they_are(tmp_path: Path) -> None:
-    assert name(tmp_path, "Cyberpunk.2077.v1.5-GOG-CODEX", ["g.iso"]) == (
-        "Cyberpunk.2077.v1.5-GOG-CODEX"
+def test_trusted_and_cracked_names_are_kept_as_they_are(tmp_path: Path) -> None:
+    assert name(tmp_path, "Cyberpunk.2077.v1.5-GOG-RUNE", ["g.iso"]) == (
+        "Cyberpunk.2077.v1.5-GOG-RUNE"
     )
     assert name(tmp_path, "Elden Ring [FitGirl Repack]", ["setup.exe", "setup-1.bin"]) == (
         "Elden Ring [FitGirl Repack]"
     )
+    assert name(tmp_path, "Game-XYZ", ["setup.exe", "crack/a.dll"]) == "Game-XYZ"
 
 
-def test_a_portable_game_is_named_title_version_and_os_language_portable(tmp_path: Path) -> None:
-    assert name(tmp_path, "Doom v1.2 FR Portable", ["doom.exe"]) == (
-        "Doom - 1.2 [Windows - FR - PORTABLE]"
+def test_a_portable_game_takes_the_portable_tag_and_its_type(tmp_path: Path) -> None:
+    assert name(tmp_path, "Doom v1.2 FR", ["doom.exe"]) == (
+        "Doom - 1.2 [Windows - FR][PORTABLE][DRM FREE]"
+    )
+    assert name(tmp_path, "Doom v1.2 FR", ["doom.exe", "steam_api64.dll"]) == (
+        "Doom - 1.2 [Windows - FR][PORTABLE][PREACTIVATED]"
+    )
+    assert name(tmp_path, "Doom v1.2 FR installed", ["setup.exe"]) == (
+        "Doom installed - 1.2 [Windows - FR][DRM FREE]"
     )
 
 
 def test_a_gog_game_is_named_title_version_language_os_and_gog(tmp_path: Path) -> None:
-    assert name(tmp_path, "The Witcher 3 v4.04 MULTI GOG", ["goggame-1.info", "w.exe"]) == (
+    assert name(tmp_path, "The Witcher 3 v4.04 MULTI GOG", ["goggame-1.info", "setup.exe"]) == (
         "The Witcher 3 (4.04) [MULTI - Windows][GOG]"
+    )
+    other = tmp_path / "other"
+    other.mkdir()
+    assert name(other, "The Witcher 3 v4.04 MULTI GOG", ["goggame-1.info", "w.exe"]) == (
+        "The Witcher 3 (4.04) [MULTI - Windows][PORTABLE][GOG]"
     )
 
 
@@ -172,7 +234,7 @@ def test_ps4_and_ps5_names_end_with_their_title_id(tmp_path: Path) -> None:
     )
 
 
-def test_a_scene_releases_own_nfo_is_kept_as_it_is(tmp_path: Path) -> None:
+def test_a_trusted_releases_own_nfo_is_kept_as_it_is(tmp_path: Path) -> None:
     root = tmp_path / "Game-RUNE"
     root.mkdir()
     (root / "game.iso").write_bytes(b"x" * 100)
@@ -191,25 +253,28 @@ def test_a_scene_releases_own_nfo_is_kept_as_it_is(tmp_path: Path) -> None:
 def test_a_non_scene_nfo_is_made_from_the_facts_with_room_for_the_install_instructions(
     tmp_path: Path,
 ) -> None:
-    folder = item(tmp_path, "Doom v1.2 (2016) FR Portable", ["doom.exe", "base/a.pak"])
-    title = "Doom - 1.2 [Windows - FR - PORTABLE]"
+    folder = item(tmp_path, "Doom v1.2 (2016) FR", ["doom.exe", "base/a.pak"])
+    title = "Doom - 1.2 [Windows - FR][PORTABLE][DRM FREE]"
     files = upload_files(folder, title, IGNORE)
     nfo = GAMES.nfo(title, files)
     for line in (
-        "Titre .......... : Doom - 1.2 [Windows - FR - PORTABLE]",
+        "Titre .......... : Doom - 1.2 [Windows - FR][PORTABLE][DRM FREE]",
         "Version ........ : 1.2",
         "Système ........ : Windows",
         "Année .......... : 2016",
         "Taille ......... : 200 o",
         "Langues ........ : FR",
-        "Crack / loader . : Portable",
+        "Crack / loader . : [PORTABLE] [DRM FREE]",
         "Configuration .. : -",
         "Installation :",
         "base/a.pak",
     ):
         assert line in nfo, line
     text = GAMES.description(title, files, "", "https://i/x.png")
-    assert "[img]https://i/x.png[/img]" in text and "[b]Crack / loader :[/b] Portable" in text
+    assert (
+        "[img]https://i/x.png[/img]" in text
+        and "[b]Crack / loader :[/b] [PORTABLE] [DRM FREE]" in text
+    )
 
 
 def test_a_console_nfo_states_the_region_and_no_crack(tmp_path: Path) -> None:

@@ -205,6 +205,8 @@ class Problem(StrEnum):
     CLONECD_INCOMPLETE = "clonecd-incomplete"  # detail: the CloneCD files missing
     PASSWORD_ARCHIVE = "password-archive"  # detail: the protected archives
     CONSOLE_CONTAINER = "console-container"  # detail: the extensions the console does not take
+    FORBIDDEN_TOOL = "forbidden-tool"  # detail: trainers, hack tools or hypervisor cracks found
+    ISO_NOT_ALLOWED = "iso-not-allowed"  # a PC game .iso that is not a crack, repack or scene
 
 
 @dataclass(frozen=True)
@@ -245,6 +247,10 @@ class Judgement(StrEnum):
     NO_IPTV = "no-iptv"
     OLDER_VERSION = "older-version"
     ONE_PER_RELEASE = "one-per-release"  # detail: the release type
+    OFFICIAL_TRAINING = "official-training"
+    PLUGIN_HOST = "plugin-host"
+    ORIGINAL_CRACK = "original-crack"
+    UPDATE_ONLY = "update-only"
     ONE_GOG = "one-gog"
     ONE_PER_CONSOLE = "one-per-console"
     REGION = "region"  # detail: the region found, empty when none

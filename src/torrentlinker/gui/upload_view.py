@@ -211,6 +211,15 @@ def refusal_text(r: Refusal) -> str:
         return QCoreApplication.translate(
             "Upload", "Files this console does not take (archives are fine, one per game): {0}"
         ).format(r.detail)
+    if r.problem is Problem.FORBIDDEN_TOOL:
+        return QCoreApplication.translate(
+            "Upload", "Trainers, hack tools and hypervisor cracks are forbidden: {0}"
+        ).format(r.detail)
+    if r.problem is Problem.ISO_NOT_ALLOWED:
+        return QCoreApplication.translate(
+            "Upload",
+            "An .iso is only allowed for a crack, repack or scene release: extract it first",
+        )
     return QCoreApplication.translate("Upload", "No file to upload")
 
 
@@ -291,9 +300,30 @@ def warning_text(w: UploadWarning) -> str:
     if w.judgement is Judgement.ONE_PER_RELEASE:
         return QCoreApplication.translate(
             "Upload",
-            "One scene release, plus one repack, one repacker release and one portable per "
-            "scene release: this is {0}",
+            "One scene version, plus one repack with language or bonus options, one repacker "
+            "release and one portable per scene release; a repack must be compressed and "
+            "smaller than the scene release: this is {0}",
         ).format(w.detail)
+    if w.judgement is Judgement.OFFICIAL_TRAINING:
+        return QCoreApplication.translate(
+            "Upload", "Official video trainings only (audio at 64 kbps or more)"
+        )
+    if w.judgement is Judgement.PLUGIN_HOST:
+        return QCoreApplication.translate(
+            "Upload",
+            "A plugin or extension needs its host software on the tracker, compatible with "
+            "that version, with a link to it in the description",
+        )
+    if w.judgement is Judgement.ORIGINAL_CRACK:
+        return QCoreApplication.translate(
+            "Upload", "Find the original crack and use the cracker's or repacker's own name"
+        )
+    if w.judgement is Judgement.UPDATE_ONLY:
+        return QCoreApplication.translate(
+            "Upload",
+            "An update holds only the update files (not a new full pack), states the crack "
+            "used, and is one per game version",
+        )
     if w.judgement is Judgement.ONE_GOG:
         return QCoreApplication.translate("Upload", "One GOG version per game")
     if w.judgement is Judgement.ONE_PER_CONSOLE:

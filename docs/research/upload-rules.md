@@ -153,37 +153,51 @@ The app's reading of these rules (issue #36): formats are checked by extension (
 
 The app's reading of the GPS and Emulation rules (issue #38): a downloader executable is an `.exe` or `.msi` whose name says downloader, web setup, online installer or stub installer; a CloneCD image is any folder with a `.ccd` or `.sub`, which then needs all of `.ccd`, `.img` and `.sub`; a `.bin` needs a `.cue` in its folder; archives count as files in the 50-file pack rule; a password is detected in zip archives only; the console of a ROM comes from a table of retro ROM extensions, and the region and languages from the `(Europe) (Fr,En)` tags of the name. GPS and emulation names are not dotted.
 
-#### Games: release type table (UNVERIFIED)
+#### Games: naming table
 
-Like the applications table below, c411's decision table on `/wiki/cat-jeux-video` could not be read when issue #40 was built; this is the app's own reading of the summary above and must be checked against the wiki page (`game_type` in `src/torrentlinker/upload_software.py`). The decision is a Warning, overridden by editing the name.
+c411's table on `/wiki/cat-jeux-video` (read 2026-10-22), implemented by `game_type` in `src/torrentlinker/upload_software.py`. Trusted tags: TENOKE, RUNE, Mephisto, ElAmigos, FitGirl Repack, Dodi Repack, Chovka, ARMGDDN, x.X.RIDDICK.X.x, EMPRESS, KaOs, M4CKD0GE Repacks, voices38, LinuxRulez (the page's prose also names MBC, which the table's list does not; the app leaves it out). The decision is a Warning, overridden by editing the name.
 
-| Files present (checked in this order) | Release type |
-|---|---|
-| the name or a file says `portable` | Portable |
-| a scene group in the name (CODEX, SKIDROW, PLAZA, RUNE, TENOKE…), even with GOG in it | Scene |
-| a `goggame-*` file, `gog` in a file name, or GOG in the release's `.nfo` | GOG |
-| a repacker in the name (FitGirl, DODI, ElAmigos, Xatab…) or `setup.exe` with `.bin` data | Repack |
-| an `.iso`, or crack files or a crack folder | Scene |
-| a `steam_api*.dll` (or `preactivated`, `steamrip`, Goldberg in the name) | Preactivated |
-| anything else | DRM-free |
+| Trusted tag | File named crack | `.iso` | `setup.exe` | `steam_api` | GOG in NFO | Action |
+|---|---|---|---|---|---|---|
+| yes | | yes | no | no | | Keep the original uploader's name (and NFO) |
+| yes | | no | yes | no | | Keep the original name |
+| yes | | no | no | yes | | `[PORTABLE] [PREACTIVATED]` |
+| yes | | no | no | no | | `[PORTABLE] [PREACTIVATED]` |
+| no | no | no | no | yes | | `[PORTABLE] [PREACTIVATED]` |
+| no | yes | yes | no | | | Find the original crack, use the cracker's or repacker's name |
+| no | yes | no | yes | | | Same |
+| no | no | no | no | | yes | `[PORTABLE] [GOG]` |
+| no | no | no | no | | no | `[PORTABLE] [DRM FREE]` |
+| no | no | no | yes | | yes | `[GOG]` |
+| no | no | no | yes | | no | `[DRM FREE]` |
+| no | no | yes | no | | | Refused: an `.iso` is only for crack, repack or scene releases (extract before upload) |
 
-Console containers by subcategory: Nintendo `nsp xci nsz xcz nds 3ds cia wbfs rvz iso gcm wux wua`, Sony `pkg iso cso bin cue chd`, Microsoft `iso xex xbe`, plus archives and support files (`nfo txt jpg png xml md sfv diz url`); these lists are the app's, not c411's. Adult games (archives allowed) are not detected. A scene release's own `.nfo` is sent as the NFO after decoding (UTF-8, else the DOS code page 437), so it is not byte for byte what c411 asks for ("unaltered").
+The app's reading of the gaps: the checks run in the order trusted tag, crack file, `.iso`, `steam_api` without setup, then GOG or DRM-free (portable when there is no `setup.exe`); a crack with neither `.iso` nor setup keeps the cracker's name; `steamrip`, `goldberg` or `preactivated` in a file name count as `steam_api`; a `goggame-*` file or `gog` in a file name counts as GOG in the NFO. A trusted release is kept with its own `.nfo`, decoded as UTF-8 else DOS code page 437, so it is not byte for byte what c411 asks for ("unaltered").
 
-#### Applications: release type table (UNVERIFIED)
+Duplicates (Warning): per scene release, one scene version plus one repack with language or bonus options, one repacker release and one portable; a repack is compressed and smaller than the scene release; one GOG version. PC allows full game, patch, update, DLC, language pack, crackfix and hotfix; an update holds only the update(s) and states the crack used (Warning). Refusals: archives (PC), `.iso` row 12, downloaders, trainers and hack tools and hypervisor cracks (by file name). Not checked: source or decompiled games, games without crack, bundles of patch and game, modded or pre-installed games.
 
-c411's table on `/wiki/cat-applications` could not be read when issue #39 was built (no browser access): the table below is the app's own reasonable reading of the summary above, not c411's. Check it against the wiki page and correct `release_type` in `src/torrentlinker/upload_software.py` when the real table is known. The decision is shown as a Warning ("Release type decided from the files") and the user overrides it by editing the release name.
+Console: containers per console are c411's (GameCube CCI, Wii ISO, DS NDS, 3DS 3ds, Wii U WUP/WUA, Switch NSP/XCI, Xbox ISO or JTAG/RGH, PS5, PS4 PKG, PS Vita VPK, PSP ISO/CSO, PS3 and PS2 ISO, PS1 BIN); the app's lists by subcategory are broader: Nintendo `nsp xci nsz xcz nds 3ds cia wbfs rvz iso gcm wux wua`, Sony `pkg iso cso bin cue chd`, Microsoft `iso xex xbe`, plus archives and support files (`nfo txt jpg png xml md sfv diz url`). Adult games (archives allowed) are not detected.
 
-| Files present (checked in this order) | Release type |
-|---|---|
-| a file or the name says `portable` | Portable |
-| a file named keygen, keymaker or serialfish | Keygen |
-| a file named crack, cracked, activator, loader or kmspico | Crack |
-| a file named patch or patcher | Patch |
-| a setup program (`setup`, `install`, `installer`, `inst` in an `.exe`) or a package (`.msi`, `.dmg`, `.pkg`, `.deb`, `.rpm`, `.apk`, `.xapk`, `.ipa`, `.AppImage`) | Installer |
-| `.exe` files without any installer | Portable |
-| anything else | Installer |
+#### Applications: release type table
 
-The subcategory defaults from the extensions (`.exe`/`.msi` Windows, `.dmg`/`.pkg`/`.app` macOS, `.deb`/`.rpm`/`.AppImage` Linux, `.apk`/`.ipa` Smartphone, else Autre). The install note is expected unless the type is Portable. Name templates are the ones in the table at the top: `Nom Version [OS Langue Type]`, mobile `[OS] Nom Version Langue [EXT]`, where the Type is the label above.
+c411's table on `/wiki/cat-applications` (read 2026-10-22), implemented by `release_types` in `src/torrentlinker/upload_software.py`. The tags come from the files in the torrent; the decision is shown as a Warning ("Release type decided from the files") and the user overrides it by editing the release name.
+
+| Keygen | Crack | Patch | Installer (`setup.exe`, package) | Tags |
+|---|---|---|---|---|
+| yes | | | yes | `[KEYGEN]` |
+| yes | | | no | `[KEYGEN]` `[PORTABLE]` |
+| no | yes | | yes | `[CRACK]` |
+| no | yes | | no | `[CRACK]` `[PORTABLE]` |
+| no | no | yes | yes | `[PATCH]` |
+| no | no | yes | no | `[PATCH]` `[PORTABLE]` |
+| no | no | no | yes | `[UNLOCKED]` or `[PREACTIVATED]` |
+| no | no | no | no | `[UNLOCKED]` or `[PREACTIVATED]` `[PORTABLE]` |
+
+The app's reading: a keygen is a file named keygen, keymaker or serialfish; a crack one named crack, cracked, activator, loader or kmspico; a patch one named patch or patcher; an installer is a setup program (`setup`, `install`, `installer`, `inst` in an `.exe`) or a package (`.msi`, `.dmg`, `.pkg`, `.deb`, `.rpm`, `.apk`, `.xapk`, `.ipa`, `.AppImage`); `portable` in the name adds Portable; `preactivated` in the name picks Preactivated, else Unlocked. A patch or crackfix is an improvement of a Crack version (not checked). In the name the tags sit in the one bracket, `Nom Version [OS Langue Type…]`; Portable must be in the title and the description, and the NFO and description "Activation" line lists every tag.
+
+Rules beyond the table. Allowed: software on Windows, macOS, Linux, iOS and Android; official video trainings (exempt from the video and multi-format rules, audio 64 kbps or more; the app gives them a Warning and no release type); plugins and extensions only if the host software is on the tracker, compatible with that version, linked in the description (Warning when the name or a file says plugin, extension or addon). Refusals: any archive (rar, 7z, zip) except a `.cab` for the install and a readable ZIP holding only text and code files; downloaders; trainers and hack tools (by file name). Warnings: install note mandatory unless Portable, no alpha or early access, no IPTV, an older version of the same generation is removed (Windows Service Packs and big Win10/11 updates count as generations). Not checked: source or decompiled versions (except Linux), paid software without crack or keygen, malware.
+
+The subcategory defaults from the extensions (`.exe`/`.msi` Windows, `.dmg`/`.pkg`/`.app` macOS, `.deb`/`.rpm`/`.AppImage` Linux, `.apk`/`.ipa` Smartphone, else Autre). Name templates are the ones in the table at the top: `Nom Version [OS Langue Type]`, mobile `[OS] Nom Version Langue [EXT]`.
 
 ### 3D printing
 
