@@ -33,6 +33,7 @@ from torrentlinker.torrent_meta import TorrentMeta, read_torrent
 MiB = 1 << 20
 GB = 1_000_000_000
 NOTAG = "NOTAG"
+IMAGE_PLACEHOLDER = "…"  # in [img][/img] until the image is uploaded on c411
 CATEGORY_3D = 10
 
 # c411's categories (GET /api/categories); Nulled and Adult get no profile.
@@ -132,6 +133,7 @@ class UploadProfile(Protocol):
 
     category: int
     subcategories: tuple[Subcategory, ...]
+    renders_models: bool  # the Upload tab shows its models and captures the description's image
 
     def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]: ...
     def warnings(
@@ -149,6 +151,7 @@ class UploadProfile(Protocol):
         self, title: str, files: list[UploadFile], source: str, image_url: str
     ) -> str: ...
     def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery: ...
+    def image_is_sheet(self, subcategory: int) -> bool: ...
 
 
 class Model3DProfile:
@@ -160,6 +163,7 @@ class Model3DProfile:
         Subcategory(Subcategory3D.CHARACTERS, "Characters"),
         Subcategory(Subcategory3D.PACK, "Pack"),
     )
+    renders_models = True
 
     def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]:
         files = _content(item, ignore)
@@ -202,6 +206,10 @@ class Model3DProfile:
         self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
     ) -> Chosen:
         return {}  # c411 lists no options for 3D models
+
+    def image_is_sheet(self, subcategory: int) -> bool:
+        """A Pack's image is a contact sheet of its models; any other is one model."""
+        return subcategory == Subcategory3D.PACK
 
     def nfo(self, title: str, files: list[UploadFile]) -> str:
         return nfo_3d(title, files)
@@ -369,13 +377,13 @@ def nfo_3d(title: str, files: list[UploadFile]) -> str:
 
 
 def description_3d(title: str, files: list[UploadFile], source: str, image_url: str) -> str:
-    """c411's description: an image, a presentation the user writes, then the facts of
-    the NFO; a pack lists its files in a spoiler."""
+    """c411's description: an image (a placeholder to fill on c411 until there is a URL),
+    a presentation the user writes, then the facts of the NFO; a pack lists its files in
+    a spoiler."""
     names = [f.torrent_path.split("/", 1)[-1] for f in files]
-    lines = []
-    if image_url:
-        lines += [f"[center][img]{image_url}[/img][/center]", ""]
-    lines += [
+    lines = [
+        f"[center][img]{image_url or IMAGE_PLACEHOLDER}[/img][/center]",
+        "",
         f"[center][h2]{title}[/h2][/center]",
         "",
         "[h3]Présentation[/h3]",

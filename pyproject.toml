@@ -15,6 +15,7 @@ dependencies = [
   "guessit>=3.8",
   "torf>=4.2",
   "keyring>=24",
+  "numpy>=1.26",  # the 3D preview reads and decimates meshes
 ]
 
 [project.optional-dependencies]
@@ -28,7 +29,7 @@ torrentlinker = "torrentlinker.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-torrentlinker = ["i18n/*.qm", "assets/*.png"]
+torrentlinker = ["i18n/*.qm", "assets/*.png", "gui/*.qml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

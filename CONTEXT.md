@@ -94,6 +94,10 @@ A c411 rule only the uploader can judge (no independent creators' paid files, on
 A release c411 already has for the item being uploaded, found by its title words or, for a category that has them, by ids, and shown before the Draft is saved. Information only: Team Pending refuses duplicates, the app never decides one.
 _Avoid_: Duplicate (that is Team Pending's verdict)
 
+**Presentation Image**:
+The picture of an Upload that its description needs and c411's image upload refuses an API key for; the app renders the model itself (one capture of the 3D view, or for a Pack a contact sheet of up to 9 models with their file names) and saves a PNG for the user to add on c411 while reviewing the Draft.
+_Avoid_: Screenshot, thumbnail, cover
+
 **Announce URL**:
 The user's private tracker address, holding their passkey, that every Upload's torrent carries.
 _Avoid_: Passkey (alone), tracker URL

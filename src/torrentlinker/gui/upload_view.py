@@ -43,6 +43,7 @@ from torrentlinker.bbcode import bbcode_to_html
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.model_viewer import ModelPanel
 from torrentlinker.gui.settings_dialog import kind_label
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.indexer import Candidate, Indexer
@@ -306,6 +307,10 @@ class UploadTab(QWidget):
         self.image.setMinimumHeight(200)
         il.addWidget(self.image, 1)
         self.pages.addTab(image_page, self.tr("Image"))
+        self.model_panel = ModelPanel(
+            folder, lambda: self.name.text().strip(), self.ignore, self._image_is_sheet
+        )
+        self.model_tab = self.pages.addTab(self.model_panel, self.tr("3D view"))
         right_layout.addWidget(self.pages, 1)
 
         actions = QHBoxLayout()
@@ -557,6 +562,7 @@ class UploadTab(QWidget):
         self._show_options()
         self._regenerate()
         self._show_existing()
+        self._show_model()
 
     def _subcategory_changed(self) -> None:
         """Another subcategory has other options, and the old picks do not apply."""
@@ -642,6 +648,18 @@ class UploadTab(QWidget):
         )
         self.existing_view.setHtml(f"<ul>{rows}</ul>")
         self.existing_view.show()
+
+    def _image_is_sheet(self) -> bool:
+        profile = self.profile()
+        return profile is not None and profile.image_is_sheet(self.subcategory.currentData())
+
+    def _show_model(self) -> None:
+        """The 3D page follows the selection; an archive's models are not on disk yet."""
+        profile, entry = self.profile(), self.entry
+        shown = profile is not None and profile.renders_models
+        self.pages.setTabVisible(self.model_tab, shown)
+        usable = entry is not None and shown and not self.needs_unpacking(entry)
+        self.model_panel.set_item(entry.item if usable and entry else None)
 
     def _choose_subcategory(self) -> None:
         profile, item = self.profile(), self.source_item()
@@ -835,6 +853,7 @@ class UploadTab(QWidget):
         )
         self.warnings.setText("\n".join(warning_text(w) for w in judged))
         self._show_files()
+        self.model_panel.refresh()
         if profile is not None and self.files:
             if "nfo" not in self._edited:
                 self._set_text(self.nfo, profile.nfo(title, self.files))

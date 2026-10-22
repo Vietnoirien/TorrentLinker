@@ -436,6 +436,10 @@ class FilmProfile:
 
     category = 1
     subcategories = (Subcategory(6, "Film"),)
+    renders_models = False
+
+    def image_is_sheet(self, subcategory):  # type: ignore[no-untyped-def]
+        return False
 
     def refusals(self, item, ignore):  # type: ignore[no-untyped-def]
         return []
@@ -579,3 +583,27 @@ def test_3d_has_no_options_to_show_and_sends_none(qtbot, tmp_path: Path) -> None
     qtbot.waitUntil(lambda: indexer.options_asked == [51], timeout=5000)
     qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
     assert view.options_box.isHidden() and view.chosen_options() == {}
+
+
+def test_the_3d_page_follows_the_selected_orphan_and_the_subcategory(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import shutil
+
+    view, _, _ = tab(qtbot, tmp_path)
+    box = model(tmp_path, "Boite.stl")
+    shutil.copy(Path(__file__).parent / "fixtures" / "models" / "cube-binary.stl", box.item.path)
+    box = LibraryEntry(box.folder, scan_item(box.item.path), ItemState.ORPHAN)
+    view.set_entries([box])
+    view.remember(box, [])
+    view.show()
+    assert view.pages.isTabVisible(view.model_tab) is False  # nothing picked
+
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: view.model_panel.viewer.display is not None, timeout=10000)
+    assert view.pages.isTabVisible(view.model_tab)
+    assert view.model_panel.sheet_button.isHidden()  # one model, an Objects upload
+    pack = view.subcategory.findData(Subcategory3D.PACK)
+    view.subcategory.setCurrentIndex(pack)
+    assert not view.model_panel.sheet_button.isHidden()  # a Pack gets its contact sheet
+    assert view.model_panel.upload_folder() == tmp_path / "uploads" / view.name.text()
+    assert "[img]…[/img]" in view.description.toPlainText()  # the image is added on c411
