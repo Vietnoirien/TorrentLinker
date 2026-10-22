@@ -1030,6 +1030,10 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
     window = MainWindow(Settings(), tmp_path / "settings.json", store)
     qtbot.addWidget(window)
 
+    import weakref
+
+    the_window = weakref.ref(window)  # a plain reference would make a cycle with the window
+
     class StoppingIndexer:
         url, api_key = Settings().indexer.url, ""
         stop_once = True
@@ -1037,7 +1041,7 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
         def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
             if self.stop_once:  # the user stops while A is being sent
                 self.stop_once = False
-                window.send_runner.stop()  # type: ignore[union-attr]
+                the_window().send_runner.stop()  # type: ignore[union-attr]
             return torrents[c.download_url]
 
         def unredact(self, text: str) -> str:

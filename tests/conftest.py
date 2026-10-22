@@ -1,5 +1,6 @@
 """Tests never touch the user's real keyring, except the opt-in live tests."""
 
+import gc
 import os
 
 import keyring
@@ -33,3 +34,16 @@ def memory_keyring():  # type: ignore[no-untyped-def]
     keyring.set_keyring(MemoryKeyring())
     yield
     keyring.set_keyring(previous)
+
+
+@pytest.fixture(autouse=True)
+def collect_garbage_on_the_gui_thread(request):  # type: ignore[no-untyped-def]
+    """Free each test's leftover windows here, on the GUI thread.
+
+    A window caught in a reference cycle is otherwise freed whenever the garbage
+    collector next runs, possibly on a later test's worker thread, and destroying Qt
+    widgets off the GUI thread crashes Python.
+    """
+    yield
+    if "qtbot" in request.fixturenames:
+        gc.collect()
