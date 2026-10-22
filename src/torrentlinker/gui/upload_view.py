@@ -114,6 +114,16 @@ SUBCATEGORY_LABELS = {
     25: QT_TRANSLATE_NOOP("Subcategory", "Smartphone"),
     26: QT_TRANSLATE_NOOP("Subcategory", "Tablet"),
     27: QT_TRANSLATE_NOOP("Subcategory", "Windows"),
+    28: QT_TRANSLATE_NOOP("Subcategory", "Other"),
+    29: QT_TRANSLATE_NOOP("Subcategory", "Linux"),
+    30: QT_TRANSLATE_NOOP("Subcategory", "macOS"),
+    31: QT_TRANSLATE_NOOP("Subcategory", "Microsoft"),
+    32: QT_TRANSLATE_NOOP("Subcategory", "Nintendo"),
+    33: QT_TRANSLATE_NOOP("Subcategory", "Smartphone"),
+    34: QT_TRANSLATE_NOOP("Subcategory", "Sony"),
+    35: QT_TRANSLATE_NOOP("Subcategory", "Tablet"),
+    36: QT_TRANSLATE_NOOP("Subcategory", "Windows"),
+    55: QT_TRANSLATE_NOOP("Subcategory", "VR"),
     39: QT_TRANSLATE_NOOP("Subcategory", "Applications"),
     40: QT_TRANSLATE_NOOP("Subcategory", "Maps"),
     41: QT_TRANSLATE_NOOP("Subcategory", "Miscellaneous"),
@@ -197,6 +207,10 @@ def refusal_text(r: Refusal) -> str:
         return QCoreApplication.translate("Upload", "Password-protected archives: {0}").format(
             r.detail
         )
+    if r.problem is Problem.CONSOLE_CONTAINER:
+        return QCoreApplication.translate(
+            "Upload", "Files this console does not take (archives are fine, one per game): {0}"
+        ).format(r.detail)
     return QCoreApplication.translate("Upload", "No file to upload")
 
 
@@ -273,6 +287,24 @@ def warning_text(w: UploadWarning) -> str:
     if w.judgement is Judgement.OLDER_VERSION:
         return QCoreApplication.translate(
             "Upload", "An older version of the same generation is removed when this one is accepted"
+        )
+    if w.judgement is Judgement.ONE_PER_RELEASE:
+        return QCoreApplication.translate(
+            "Upload",
+            "One scene release, plus one repack, one repacker release and one portable per "
+            "scene release: this is {0}",
+        ).format(w.detail)
+    if w.judgement is Judgement.ONE_GOG:
+        return QCoreApplication.translate("Upload", "One GOG version per game")
+    if w.judgement is Judgement.ONE_PER_CONSOLE:
+        return QCoreApplication.translate("Upload", "One version per console game")
+    if w.judgement is Judgement.REGION:
+        if w.detail:
+            return QCoreApplication.translate(
+                "Upload", "Region {0}: PAL/EU, NTSC/US, NTSC-J/JP or HK, one release each"
+            ).format(w.detail)
+        return QCoreApplication.translate(
+            "Upload", "State the region: PAL/EU, NTSC/US, NTSC-J/JP or HK"
         )
     if w.judgement is Judgement.NO_TRANSCODE:
         return QCoreApplication.translate(

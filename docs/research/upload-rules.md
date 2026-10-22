@@ -153,6 +153,22 @@ The app's reading of these rules (issue #36): formats are checked by extension (
 
 The app's reading of the GPS and Emulation rules (issue #38): a downloader executable is an `.exe` or `.msi` whose name says downloader, web setup, online installer or stub installer; a CloneCD image is any folder with a `.ccd` or `.sub`, which then needs all of `.ccd`, `.img` and `.sub`; a `.bin` needs a `.cue` in its folder; archives count as files in the 50-file pack rule; a password is detected in zip archives only; the console of a ROM comes from a table of retro ROM extensions, and the region and languages from the `(Europe) (Fr,En)` tags of the name. GPS and emulation names are not dotted.
 
+#### Games: release type table (UNVERIFIED)
+
+Like the applications table below, c411's decision table on `/wiki/cat-jeux-video` could not be read when issue #40 was built; this is the app's own reading of the summary above and must be checked against the wiki page (`game_type` in `src/torrentlinker/upload_software.py`). The decision is a Warning, overridden by editing the name.
+
+| Files present (checked in this order) | Release type |
+|---|---|
+| the name or a file says `portable` | Portable |
+| a scene group in the name (CODEX, SKIDROW, PLAZA, RUNE, TENOKE…), even with GOG in it | Scene |
+| a `goggame-*` file, `gog` in a file name, or GOG in the release's `.nfo` | GOG |
+| a repacker in the name (FitGirl, DODI, ElAmigos, Xatab…) or `setup.exe` with `.bin` data | Repack |
+| an `.iso`, or crack files or a crack folder | Scene |
+| a `steam_api*.dll` (or `preactivated`, `steamrip`, Goldberg in the name) | Preactivated |
+| anything else | DRM-free |
+
+Console containers by subcategory: Nintendo `nsp xci nsz xcz nds 3ds cia wbfs rvz iso gcm wux wua`, Sony `pkg iso cso bin cue chd`, Microsoft `iso xex xbe`, plus archives and support files (`nfo txt jpg png xml md sfv diz url`); these lists are the app's, not c411's. Adult games (archives allowed) are not detected. A scene release's own `.nfo` is sent as the NFO after decoding (UTF-8, else the DOS code page 437), so it is not byte for byte what c411 asks for ("unaltered").
+
 #### Applications: release type table (UNVERIFIED)
 
 c411's table on `/wiki/cat-applications` could not be read when issue #39 was built (no browser access): the table below is the app's own reasonable reading of the summary above, not c411's. Check it against the wiki page and correct `release_type` in `src/torrentlinker/upload_software.py` when the real table is known. The decision is shown as a Warning ("Release type decided from the files") and the user overrides it by editing the release name.

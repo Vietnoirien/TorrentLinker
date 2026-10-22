@@ -134,16 +134,15 @@ def test_the_category_picker_defaults_from_the_kind_and_reruns_the_profile(  # t
 def test_a_kind_whose_category_has_no_profile_yet_says_so(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     view, _, _ = tab(qtbot, tmp_path)
     vise = model(tmp_path)
-    game = LibraryEntry(LibraryFolder(tmp_path, 1, ContentKind.GAME), vise.item, ItemState.ORPHAN)
+    game = LibraryEntry(LibraryFolder(tmp_path, 1, ContentKind.OTHER), vise.item, ItemState.ORPHAN)
+    view._picked[game.item.path] = 9  # Nulled: no profile for it
     view.set_entries([game])
     view.remember(game, [])
     view.show_all.setChecked(True)
     view.items.selectRow(0)
 
-    assert (
-        "Jeux Vidéo" in (view.why_not(game) or "") and "not supported yet" in view.problems.text()
-    )
-    assert view.category.currentText() == "Jeux Vidéo"
+    assert "Nulled" in (view.why_not(game) or "") and "not supported yet" in view.problems.text()
+    assert view.category.currentText() == "Nulled"
     view.category.setCurrentIndex(view.category.findData(10))  # the user can still pick 3D
     assert view.why_not(game) is None
 

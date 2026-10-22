@@ -23,6 +23,7 @@ from torrentlinker.upload import (
     ARCHIVES,
     CATEGORY_APPS,
     CATEGORY_EMULATION,
+    CATEGORY_GAMES,
     CATEGORY_GPS,
     IMAGE_PLACEHOLDER,
     ExistingQuery,
@@ -32,6 +33,7 @@ from torrentlinker.upload import (
     Subcategory,
     SubcategoryApps,
     SubcategoryEmulation,
+    SubcategoryGames,
     SubcategoryGps,
     UploadFile,
     UploadWarning,
@@ -660,3 +662,411 @@ _SUBCATEGORY_SYSTEMS: dict[int, str] = {
     SubcategoryApps.SMARTPHONE: "Android",
     SubcategoryApps.TABLET: "Android",
 }
+
+
+class GameType(StrEnum):
+    """How a PC game release was made; the label is what the Upload tab shows."""
+
+    SCENE = "Scene"
+    REPACK = "Repack"
+    PORTABLE = "Portable"
+    GOG = "GOG"
+    DRM_FREE = "DRM-free"
+    PREACTIVATED = "Preactivated"
+
+
+# c411's decision table is on /wiki/cat-jeux-video, which could not be read: this one is
+# the app's own reading, marked unverified in docs/research/upload-rules.md.
+REPACKERS = (
+    "fitgirl",
+    "dodi",
+    "elamigos",
+    "gnarly",
+    "xatab",
+    "kaos",
+    "corepack",
+    "darck",
+    "qoob",
+    "masquerade",
+    "repack",
+)
+SCENE_GROUPS = (
+    "codex",
+    "skidrow",
+    "plaza",
+    "reloaded",
+    "flt",
+    "hoodlum",
+    "darksiders",
+    "tinyiso",
+    "cpy",
+    "rune",
+    "doge",
+    "tenoke",
+    "razor1911",
+    "empress",
+    "simplex",
+)
+CRACK_WORDS_GAMES = ("crack", "cracked", *SCENE_GROUPS)
+PREACTIVATED_WORDS = ("preactivated", "steamrip", "goldberg", "smartsteamemu")
+# Container extensions each console takes, besides archives (one archive per game).
+CONSOLE_CONTAINERS = {
+    SubcategoryGames.NINTENDO: (
+        "nsp",
+        "xci",
+        "nsz",
+        "xcz",
+        "nds",
+        "3ds",
+        "cia",
+        "wbfs",
+        "rvz",
+        "iso",
+        "gcm",
+        "wux",
+        "wua",
+    ),
+    SubcategoryGames.SONY: ("pkg", "iso", "cso", "bin", "cue", "chd"),
+    SubcategoryGames.MICROSOFT: ("iso", "xex", "xbe"),
+}
+SUPPORT_EXTENSIONS = ("nfo", "txt", "jpg", "jpeg", "png", "xml", "md", "sfv", "diz", "url")
+CONSOLE_DEFAULTS = {
+    "nsp": SubcategoryGames.NINTENDO,
+    "xci": SubcategoryGames.NINTENDO,
+    "nsz": SubcategoryGames.NINTENDO,
+    "xcz": SubcategoryGames.NINTENDO,
+    "nds": SubcategoryGames.NINTENDO,
+    "3ds": SubcategoryGames.NINTENDO,
+    "cia": SubcategoryGames.NINTENDO,
+    "wbfs": SubcategoryGames.NINTENDO,
+    "rvz": SubcategoryGames.NINTENDO,
+    "pkg": SubcategoryGames.SONY,
+    "cso": SubcategoryGames.SONY,
+    "xex": SubcategoryGames.MICROSOFT,
+    "xbe": SubcategoryGames.MICROSOFT,
+}
+GAME_REGIONS = {
+    "eur": "EU",
+    "europe": "EU",
+    "pal": "EU",
+    "eu": "EU",
+    "usa": "US",
+    "ntscu": "US",
+    "us": "US",
+    "jpn": "JP",
+    "japan": "JP",
+    "ntscj": "JP",
+    "jp": "JP",
+    "hk": "HK",
+}
+GAME_LANGUAGES = {
+    **LANGUAGE_TAGS,
+    "multi5": "MULTI",
+    "multi10": "MULTI",
+    "multi3": "MULTI",
+    "multi2": "MULTI",
+    "vff": "FR",
+}
+PS_TITLE_RE = re.compile(r"\b(CUSA\d{5}|PPSA\d{5})\b")
+GAME_SYSTEMS: dict[int, str] = {
+    SubcategoryGames.WINDOWS: "Windows",
+    SubcategoryGames.MACOS: "macOS",
+    SubcategoryGames.LINUX: "Linux",
+    SubcategoryGames.SMARTPHONE: "Android",
+    SubcategoryGames.TABLET: "Android",
+    SubcategoryGames.VR: "Windows",
+}
+CONSOLES = (SubcategoryGames.NINTENDO, SubcategoryGames.SONY, SubcategoryGames.MICROSOFT)
+NFO_MAX_BYTES = 256 * 1024
+
+
+def game_type(paths: Iterable[str], name: str = "", nfo: str = "") -> GameType:
+    """The release type, decided from the files present: portable when the name says so,
+    scene when it names a scene group, GOG (a GOG file or GOG in the NFO), a repack (a
+    repacker's name, or a `setup.exe` with `.bin` data), scene again for an `.iso` or
+    crack files, a preactivated release (a `steam_api` library) and otherwise DRM-free."""
+    paths = list(paths)
+    words = [*_words(name), *(w for p in paths for w in _words(PurePosixPath(p).name))]
+    if "portable" in words:
+        return GameType.PORTABLE
+    if any(w in SCENE_GROUPS for w in _words(name)):
+        return GameType.SCENE  # `Game-GOG-CODEX` is a scene release of a GOG game
+    if "gog" in words or "goggame" in " ".join(words) or "gog" in _words(nfo):
+        return GameType.GOG
+    names = {PurePosixPath(p).name.casefold() for p in paths}
+    if any(w in REPACKERS for w in words) or (
+        "setup.exe" in names and any(_ext(p) == "bin" for p in paths)
+    ):
+        return GameType.REPACK
+    folders = [w for p in paths for part in PurePosixPath(p).parts[:-1] for w in _words(part)]
+    if (
+        any(w in SCENE_GROUPS for w in words)
+        or any(_ext(p) == "iso" for p in paths)
+        or any(w in CRACK_WORDS_GAMES for w in [*folders, *words])
+    ):
+        return GameType.SCENE
+    if any(n.startswith("steam_api") for n in names) or any(w in PREACTIVATED_WORDS for w in words):
+        return GameType.PREACTIVATED
+    return GameType.DRM_FREE
+
+
+class GamesProfile:
+    """c411's Jeux Vidéo category: PC games by release type, and console games."""
+
+    category: int = CATEGORY_GAMES
+    renders_models = False
+    media_extensions: tuple[str, ...] = ()
+    dotted_names = False
+    subcategories: tuple[Subcategory, ...] = (
+        Subcategory(SubcategoryGames.OTHER, "Other"),
+        Subcategory(SubcategoryGames.LINUX, "Linux"),
+        Subcategory(SubcategoryGames.MACOS, "macOS"),
+        Subcategory(SubcategoryGames.MICROSOFT, "Microsoft"),
+        Subcategory(SubcategoryGames.NINTENDO, "Nintendo"),
+        Subcategory(SubcategoryGames.SMARTPHONE, "Smartphone"),
+        Subcategory(SubcategoryGames.SONY, "Sony"),
+        Subcategory(SubcategoryGames.TABLET, "Tablet"),
+        Subcategory(SubcategoryGames.WINDOWS, "Windows"),
+        Subcategory(SubcategoryGames.VR, "VR"),
+    )
+
+    def __init__(self) -> None:
+        self.nfos: dict[str, str] = {}  # the release's own .nfo, by the Local Item's name
+
+    def image_is_sheet(self, subcategory: int) -> bool:
+        return False
+
+    def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
+        """Read the release's own .nfo (the largest under 256 Ko): a scene NFO is kept as
+        it is, and GOG may be named in it."""
+        found = [
+            (size, path)
+            for path, size in item.files.items()
+            if _ext(path) == "nfo" and size <= NFO_MAX_BYTES
+        ]
+        for _, path in sorted(found, reverse=True):
+            try:
+                data = (item.save_path / path).read_bytes()
+            except OSError:
+                continue
+            try:
+                self.nfos[item.path.name] = data.decode("utf-8")
+            except UnicodeDecodeError:
+                self.nfos[item.path.name] = data.decode("cp437")  # scene art, DOS code page
+            return
+
+    def _type(self, item: LocalItem, ignore: IgnoreList) -> GameType:
+        return game_type(_content(item, ignore), _stem(item), self.nfos.get(item.path.name, ""))
+
+    # Rules -------------------------------------------------------------------
+
+    def refusals(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int | None = None
+    ) -> list[Refusal]:
+        files = _content(item, ignore)
+        if not files:
+            return [Refusal(Problem.NO_FILE)]
+        sub = subcategory if subcategory is not None else self.default_subcategory(item, ignore)
+        found = []
+        if sub in CONSOLES:
+            accepted = (*CONSOLE_CONTAINERS[SubcategoryGames(sub)], *ARCHIVES, *SUPPORT_EXTENSIONS)
+            wrong = sorted({e for p in files if (e := _ext(p)) and e not in accepted})
+            if wrong:
+                found.append(Refusal(Problem.CONSOLE_CONTAINER, ", ".join(wrong)))
+        elif archives := _archives(files):
+            found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
+        if downloaders := _downloaders(files):
+            found.append(Refusal(Problem.DOWNLOADER, ", ".join(downloaders)))
+        return found
+
+    def warnings(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int
+    ) -> list[UploadWarning]:
+        if subcategory in CONSOLES:
+            region = self._region(_stem(item))
+            return [
+                UploadWarning(Judgement.ONE_PER_CONSOLE),
+                UploadWarning(Judgement.REGION, region),
+            ]
+        kind = self._type(item, ignore)
+        found = [UploadWarning(Judgement.RELEASE_TYPE, kind.value)]
+        if kind is GameType.GOG:
+            found.append(UploadWarning(Judgement.ONE_GOG))
+        elif kind in (GameType.SCENE, GameType.REPACK, GameType.PORTABLE):
+            found.append(UploadWarning(Judgement.ONE_PER_RELEASE, kind.value))
+        return found
+
+    def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int:
+        """From the files: `.nsp`/`.xci` Nintendo, `.pkg` Sony, `.xex` Microsoft, `.apk`
+        Smartphone, `.dmg` MacOS, `.AppImage` Linux, `.exe` Windows (VR when the name
+        says so), else Autre."""
+        files = _content(item, ignore)
+        extensions = [_ext(p) for p in files]
+        for ext in extensions:
+            if ext in CONSOLE_DEFAULTS:
+                return CONSOLE_DEFAULTS[ext]
+        has = set(extensions)
+        if has & {"apk", "xapk", "ipa"}:
+            return SubcategoryGames.SMARTPHONE
+        if has & {"dmg", "app"}:
+            return SubcategoryGames.MACOS
+        if has & {"appimage", "deb", "rpm"}:
+            return SubcategoryGames.LINUX
+        if has & {"exe", "msi"}:
+            if "vr" in _words(_stem(item)):
+                return SubcategoryGames.VR
+            return SubcategoryGames.WINDOWS
+        return SubcategoryGames.OTHER
+
+    # Name ----------------------------------------------------------------------
+
+    def _region(self, name: str) -> str:
+        return next((GAME_REGIONS[w] for w in _words(name) if w in GAME_REGIONS), "")
+
+    def suggested_name(
+        self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
+    ) -> str:
+        """Scene and repack names are kept as they are; portable `Nom - version [OS -
+        Langue - PORTABLE]`, GOG `Nom (Version) [Langue - OS][GOG]`, VR prefixed `[VR]`,
+        console `[Console]Nom [Région - Langue] Conteneur` (PS4/PS5 add `-CUSA…`/`-PPSA…`).
+        Spaces and accents are allowed. Editable."""
+        files = _content(item, ignore)
+        stem = _stem(item)
+        if subcategory in CONSOLES:
+            return self._console_name(stem, files, subcategory)
+        kind = self._type(item, ignore)
+        version = _version(stem)
+        title = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", VERSION_RE.sub(" ", stem))
+        title = " ".join(
+            w
+            for w in title.replace("_", " ").replace(".", " ").split()
+            if w.casefold() not in (*GAME_LANGUAGES, "gog", "portable")
+        )
+        system = GAME_SYSTEMS.get(subcategory) or _system(files)
+        language = next((GAME_LANGUAGES[w] for w in _words(stem) if w in GAME_LANGUAGES), "")
+        if kind is GameType.GOG:
+            name = f"{title} ({version})" if version else title
+            tags = " - ".join(t for t in (language, system) if t)
+            name = f"{name} [{tags}][GOG]" if tags else f"{name} [GOG]"
+        elif kind is GameType.PORTABLE:
+            name = f"{title} - {version}" if version else title
+            tags = " - ".join(t for t in (system, language, "PORTABLE") if t)
+            name = f"{name} [{tags}]"
+        else:
+            name = stem  # scene and repack names are kept as they are
+        if subcategory == SubcategoryGames.VR and not name.startswith("[VR]"):
+            name = f"[VR]{name}"
+        return name
+
+    def _console_name(self, stem: str, files: dict[str, int], subcategory: int) -> str:
+        accepted = CONSOLE_CONTAINERS[SubcategoryGames(subcategory)]
+        main = next((p for p in sorted(files) if _ext(p) in (*accepted, *ARCHIVES)), "")
+        container = _ext(main).upper() if main else ""
+        words = _words(stem)
+        title = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", PS_TITLE_RE.sub(" ", stem))
+        title = " ".join(
+            w
+            for w in title.replace("_", " ").replace(".", " ").split()
+            if w.casefold() not in (*GAME_REGIONS, *GAME_LANGUAGES, "multi", "ntsc", "ntsc-u")
+        )
+        region = self._region(stem)
+        languages = [GAME_LANGUAGES[w] for w in words if w in GAME_LANGUAGES]
+        language = (
+            "MULTI" if len(set(languages)) > 1 or "multi" in words else (languages or [""])[0]
+        )
+        tags = " - ".join(t for t in (region, language) if t)
+        console = self._console(subcategory, words, _ext(main), stem)
+        name = f"[{console}]{title}" + (f" [{tags}]" if tags else "")
+        name += f" {container}" if container else ""
+        if match := PS_TITLE_RE.search(stem):
+            name += f"-{match.group(1)}"
+        return name
+
+    def _console(self, subcategory: int, words: list[str], ext: str, stem: str) -> str:
+        if subcategory == SubcategoryGames.SONY:
+            if (match := PS_TITLE_RE.search(stem)) is not None:
+                return "PS4" if match.group(1).startswith("CUSA") else "PS5"
+            for tag in ("ps2", "ps3", "psp", "ps4", "ps5", "vita"):
+                if tag in words:
+                    return tag.upper() if tag != "vita" else "PS Vita"
+            return "PlayStation"
+        if subcategory == SubcategoryGames.MICROSOFT:
+            return "Xbox 360" if ext == "xex" or "360" in words else "Xbox"
+        if ext in ("nsp", "xci", "nsz", "xcz") or "switch" in words:
+            return "Switch"
+        if ext in ("3ds", "cia"):
+            return "3DS"
+        if ext == "nds":
+            return "DS"
+        for tag, label in (("wiiu", "Wii U"), ("wii", "Wii"), ("gamecube", "GameCube")):
+            if tag in words:
+                return label
+        return "Wii" if ext in ("wbfs", "rvz") else "Nintendo"
+
+    # Category Options ----------------------------------------------------------
+
+    def suggested_options(
+        self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
+    ) -> Chosen:
+        """The language named in the release name, where c411's values name it."""
+        words = _words(_stem(item))
+        wanted = (
+            "Multi (Français inclus)"
+            if "multi" in words or any(w.startswith("multi") for w in words)
+            else "Français"
+            if {"fr", "french", "vff", "truefrench"} & set(words)
+            else "Anglais"
+            if {"en", "english"} & set(words)
+            else ""
+        )
+        chosen: Chosen = {}
+        for t in types:
+            if wanted and t.name.casefold().startswith("langue"):
+                ids = [v.id for v in t.values if v.label.startswith(wanted)]
+                if ids:
+                    chosen[t.id] = ids[:1]
+        return chosen
+
+    # NFO and description -------------------------------------------------------
+
+    def _rows(self, title: str, files: list[UploadFile]) -> list[tuple[str, str]]:
+        sizes = {f.local_path: f.size for f in files}
+        name = _item_name(files)
+        words = _words(title)
+        kind = game_type(sizes, name, self.nfos.get(files[0].local_path.split("/")[0], ""))
+        console = bool(re.match(r"\[[^\]]*\]", title)) and not title.startswith("[VR]")
+        return [
+            ("Titre", re.sub(r"^\[[^\]]*\]", "", title).strip()),
+            ("Version", _version(name) or _version(title)),
+            ("Système", _system(sizes)),
+            ("Année", _year(title) or _year(name)),
+            ("Taille", human_size(sum(sizes.values()))),
+            (
+                "Langues",
+                ", ".join(sorted({GAME_LANGUAGES[w] for w in words if w in GAME_LANGUAGES})),
+            ),
+            ("Région", self._region(title) if console else ""),
+            ("Crack / loader", "" if console else kind.value),
+            ("Configuration", ""),
+        ]
+
+    def nfo(self, title: str, files: list[UploadFile]) -> str:
+        """A scene release's own .nfo as it is; else the facts, the install instructions
+        to write (in French) and every file."""
+        own = self.nfos.get(files[0].local_path.split("/")[0])
+        sizes = {f.local_path: f.size for f in files}
+        name = _item_name(files)
+        if own and game_type(sizes, name, own) is GameType.SCENE:
+            return own if own.endswith("\n") else own + "\n"
+        return _info_nfo(title, self._rows(title, files), files)
+
+    def description(self, title: str, files: list[UploadFile], source: str, image_url: str) -> str:
+        return _info_description(title, self._rows(title, files), files, image_url)
+
+    def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery:
+        return ExistingQuery(name_query(item))
+
+    def draft_fields(
+        self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
+    ) -> dict[str, Any]:
+        return {}

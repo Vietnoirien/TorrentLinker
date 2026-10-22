@@ -144,6 +144,19 @@ class SubcategoryApps(IntEnum):
     WINDOWS = 27
 
 
+class SubcategoryGames(IntEnum):
+    OTHER = 28
+    LINUX = 29
+    MACOS = 30
+    MICROSOFT = 31
+    NINTENDO = 32
+    SMARTPHONE = 33
+    SONY = 34
+    TABLET = 35
+    WINDOWS = 36
+    VR = 55
+
+
 class SubcategoryGps(IntEnum):
     APPLICATIONS = 39
     MAPS = 40
@@ -191,6 +204,7 @@ class Problem(StrEnum):
     BIN_NO_CUE = "bin-no-cue"  # a .bin without a .cue next to it
     CLONECD_INCOMPLETE = "clonecd-incomplete"  # detail: the CloneCD files missing
     PASSWORD_ARCHIVE = "password-archive"  # detail: the protected archives
+    CONSOLE_CONTAINER = "console-container"  # detail: the extensions the console does not take
 
 
 @dataclass(frozen=True)
@@ -230,6 +244,10 @@ class Judgement(StrEnum):
     INSTALL_NOTE = "install-note"
     NO_IPTV = "no-iptv"
     OLDER_VERSION = "older-version"
+    ONE_PER_RELEASE = "one-per-release"  # detail: the release type
+    ONE_GOG = "one-gog"
+    ONE_PER_CONSOLE = "one-per-console"
+    REGION = "region"  # detail: the region found, empty when none
 
 
 @dataclass(frozen=True)
@@ -951,6 +969,7 @@ from torrentlinker.upload_audio import AudioProfile  # noqa: E402
 from torrentlinker.upload_software import (  # noqa: E402
     ApplicationsProfile,
     EmulationProfile,
+    GamesProfile,
     GpsProfile,
 )
 from torrentlinker.upload_video import VideoProfile  # noqa: E402
@@ -961,6 +980,7 @@ PROFILES.update(
         CATEGORY_EBOOK: EbookProfile(),
         CATEGORY_AUDIO: AudioProfile(),
         CATEGORY_APPS: ApplicationsProfile(),
+        CATEGORY_GAMES: GamesProfile(),
         CATEGORY_EMULATION: EmulationProfile(),
         CATEGORY_GPS: GpsProfile(),
         CATEGORY_3D: Model3DProfile(),
