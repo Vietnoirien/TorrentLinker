@@ -26,3 +26,19 @@ Two queues (`src/torrentlinker/ratelimit.py`):
 Five live searches through the new queue took 2.5 seconds, against about 20 seconds with the single 4.1-second queue.
 
 With several keys of the same account (ADR-0008), each key has its own two queues, and a key c411 answers with 429 rests while the others go on.
+
+## The site's own session shares the same budget (2026-10-22, evening)
+
+A tip from another user: the logged-in site seemed less limited, a dev-console script collecting hashes from the catalogue page's own requests. Measured with the user's logged-in browser and two of the app's keys, within a minute:
+
+| Request | `x-ratelimit-limit` | `remaining` | reset in |
+|---|---|---|---|
+| Session: `/api/torrents?perPage=25` | 1,200 | 1,199 | — |
+| Session: `HEAD /api/torrents/{hash}/download` (404, no grab) | 1,200 | 1,198 | — |
+| Session: `/api/torrents?perPage=100` (after the page's own ~9 requests) | 1,200 | 1,188 | 733 s |
+| Main key: `/api/torrents?perPage=100` | 1,200 | 1,187 | 725 s |
+| Key 2: `/api/torrents?perPage=100` | 1,200 | 1,186 | 725 s |
+
+The session and both keys draw on one budget: each request took one from the same count, with the same reset time. So the budget is per account (or per IP: all came from the same machine), not per key, and the session adds nothing to it. The session listing accepts `perPage=100`, as the keys do.
+
+This contradicts "each key has its own budget" above and in ADR-0008, at least for the JSON API today; it may have changed since the morning's measures. Several keys still help with `.torrent` downloads only if their limit is per key, which was not measured. The session's download limit was not measured either: a `HEAD` on the download route answers 404, and a `GET` would be a grab.
