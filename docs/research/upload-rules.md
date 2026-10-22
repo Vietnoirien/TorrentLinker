@@ -190,6 +190,33 @@ Missing metadata objects are sent as `null`. The browser authenticates with its 
 
 Tried with an API key holding `drafts:rw` on 2026-10-22: `POST /api/user/drafts` with the fields above (3D model, category 10, subcategory 51, `options` `{}`) answered `{"success":true,"message":"Brouillon créé","data":{"id":…}}`. `GET /api/user/drafts/{id}` returns the same fields plus `category`, `subcategory`, `createdAt`, `updatedAt`, `isAutosave`, and `torrentFile` / `nfoFile` as `{name, data}`; the stored .torrent was byte-identical to the one sent. The draft showed on c411's upload page with its category, torrent and NFO. Drafts unused for 30 days are deleted automatically.
 
+### Category Options (`GET /api/categories/{subId}/options`)
+
+Read on 2026-10-22 with the main key (`Authorization: Bearer`, no special scope; the same `x-ratelimit-*` budget as the other JSON calls): `GET /api/categories` for the subcategory ids, then one options call for a subcategory of most categories, 8 requests in all. Recorded answers are in `tests/fixtures/c411_options_{6,14,18,51}.json`.
+
+The answer is `{"data": [option type…]}`; each option type is:
+
+```json
+{"id": 1, "name": "Langue", "slug": "langue", "allowsMultiple": true, "isRequired": true,
+ "sortOrder": 1, "values": [{"id": 2, "value": "Français (VFF/TrueFrench)", "slug": "francais-vff-truefrench", "sortOrder": 2}]}
+```
+
+Option types and values have ids of their own, shared across subcategories (Langue is type 1 for films and games). The values' labels are French.
+
+| Subcategory | Option types (id name: kind, values) |
+|---|---|
+| 6 Film | 1 Langue: multiple, required, 9 (Anglais, Français (VFF/TrueFrench), Muet, Multi…, VOSTFR…); 5 Genre: multiple, 57; 4 Type: single, 4 (2D, 3D FSBS, 3D, 3D HSBS) |
+| 14 Livres | 12 Format fichier: single, required, 17 (EPUB, PDF, CBZ, Guitar Pro…); 13 Langue BD/Comics/Manga: single, required, 4; 14 Genre Ebook: multiple, 49; 29 Style littéraire: multiple, 3 |
+| 18 Musique | 15 Format Musique: single, required, 17 (FLAC 16 bit, MP3…); 16 Source: single, required, 5 (CD, Web, Vinyle…); 17 Type Musique: single, required, 9 (Album, EP, Discographie…); 18 Genre Musique: multiple, 28 |
+| 36 Jeux Windows | 1 Langue: multiple, required, 9; 23 Genre Jeux: multiple, 36 |
+| 51 Objets (3D), 37 Émulateur, 39 GPS Applications | `{"data": []}`: none |
+
+So options depend on the subcategory, not the category (Livres asks for a format, Audio's Musique for three required choices); 3D, Emulation and GPS have none in the subcategories read. Subcategories not read (the others of Films & Vidéos, Ebook, Audio, Applications, Jeux Vidéo, GPS and 3D 52 and 53) may differ; the app reads each as needed.
+
+The Draft's `options` is keyed by option type id with value ids, as `POST /api/torrents`'s `options` is said to be ("values from `GET /api/categories/{subId}/options`"). The app sends `{"<type id>": [value ids]}` for a multiple choice and `{"<type id>": value id}` for a single one; this exact shape was not tried against c411 (no Draft was saved with options), so the first Draft with options should be checked on c411's upload page.
+
+All subcategory ids (`GET /api/categories`): Films & Vidéos 1 Animation, 2 Animation Série, 3 Concert, 4 Documentaire, 57 Série Documentaire, 5 Emission TV, 6 Film, 7 Série TV, 8 Spectacle, 9 Sport, 10 Vidéo-clips, 54 Collection; Ebook 11 Audio, 12 BDs, 13 Comics, 14 Livres, 15 Manga, 16 Presse, 59 Partitions & Tablatures, 60 Revues & Manuels techniques; Audio 17 Karaoké, 18 Musique, 19 Podcast Radio, 20 Samples; Applications 21 Autre, 22 Formation, 23 Linux, 24 MacOS, 25 Smartphone, 26 Tablette, 27 Windows; Jeux Vidéo 28 Autre, 29 Linux, 30 MacOS, 31 Microsoft, 32 Nintendo, 33 Smartphone, 34 Sony, 35 Tablette, 36 Windows, 55 VR; Emulation 37 Émulateur, 38 ROM/ISO; GPS 39 Applications, 40 Cartes, 41 Divers; Nulled 47 Divers, 48 Mobile, 49 Scripts PHP & CMS, 50 Wordpress; Imprimante 3D 51 Objets, 52 Personnages, 53 Pack.
+
 ### Other upload endpoints
 
 Listed in the site's route rules (`_nuxt/BFnh6W14.js`). Tried with an API key on 2026-10-22, all four refuse it: `parse` answers 403 "CSRF Cookie not found", `image` redirects to the login page, `flow` answers 401. They serve the logged-in site only, so the app cannot get c411's own checks before saving a draft, and the description's image is added by the user on c411 while reviewing the draft.
@@ -200,13 +227,13 @@ All category ids (the upload handoff table; Nulled and Adult get no profile, and
 
 | Id | Category | Proposed by | Subcategories known |
 |---|---|---|---|
-| 1 | Films & Vidéos | movie, series | not yet read |
-| 2 | Ebook | ebook | not yet read |
-| 3 | Audio | music | not yet read |
-| 4 | Applications | (picked) | not yet read |
-| 5 | Jeux Vidéo | game | not yet read |
-| 6 | Emulation | (picked) | not yet read |
-| 7 | GPS | (picked) | not yet read |
+| 1 | Films & Vidéos | movie, series | see the list under Category Options |
+| 2 | Ebook | ebook | see the list under Category Options |
+| 3 | Audio | music | see the list under Category Options |
+| 4 | Applications | (picked) | see the list under Category Options |
+| 5 | Jeux Vidéo | game | see the list under Category Options |
+| 6 | Emulation | (picked) | see the list under Category Options |
+| 7 | GPS | (picked) | see the list under Category Options |
 | 9 | Nulled | no profile | none |
 | 10 | Imprimante 3D | 3d-model | 51 Objets, 52 Personnages, 53 Pack |
 

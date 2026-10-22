@@ -23,6 +23,7 @@ from torrentlinker.catalogue_sync import ROOTS
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.matching import IgnoreList, Match
+from torrentlinker.options import Chosen, OptionType
 from torrentlinker.qbit import Qbit
 from torrentlinker.queries import name_query
 from torrentlinker.reseed import start_reseed
@@ -85,6 +86,7 @@ class Problem(StrEnum):
     NO_FILE = "no-file"
     ARCHIVE = "archive"  # detail: the archive formats found
     NO_3D_FILE = "no-3d-file"
+    OPTION_MISSING = "option-missing"  # detail: the option's name
 
 
 @dataclass(frozen=True)
@@ -139,6 +141,9 @@ class UploadProfile(Protocol):
     def suggested_name(
         self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
     ) -> str: ...
+    def suggested_options(
+        self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
+    ) -> Chosen: ...
     def nfo(self, title: str, files: list[UploadFile]) -> str: ...
     def description(
         self, title: str, files: list[UploadFile], source: str, image_url: str
@@ -193,6 +198,11 @@ class Model3DProfile:
             parts.append("-".join(found))
         return ".".join(p for p in parts if p)
 
+    def suggested_options(
+        self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
+    ) -> Chosen:
+        return {}  # c411 lists no options for 3D models
+
     def nfo(self, title: str, files: list[UploadFile]) -> str:
         return nfo_3d(title, files)
 
@@ -238,6 +248,15 @@ def find_existing(
         root = ROOTS.get(category)
         found = search(SearchQuery(q=query.text, categories=(root,) if root else ()))
     return sorted(found, key=lambda c: -c.seeders)
+
+
+def missing_options(types: list[OptionType], chosen: Chosen) -> list[Refusal]:
+    """A Refusal for each required option the user left empty."""
+    return [
+        Refusal(Problem.OPTION_MISSING, t.name)
+        for t in types
+        if t.required and not chosen.get(t.id)
+    ]
 
 
 def _formats_3d(paths: Iterable[str]) -> list[str]:
@@ -380,15 +399,17 @@ def draft_body(
     subcategory: int,
     torrent: bytes,
     nfo: str,
+    options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """The JSON c411's upload page sends to save a Draft."""
+    """The JSON c411's upload page sends to save a Draft; `options` is as options_body
+    makes it, empty for 3D models."""
     return {
         "name": title,
         "title": title,
         "description": description,
         "categoryId": category,
         "subcategoryId": subcategory,
-        "options": {},
+        "options": options or {},
         "tmdbData": None,
         "musicData": None,
         "rawgData": None,
@@ -434,6 +455,7 @@ class UploadRequest:
     description: str
     category: int
     subcategory: int
+    options: dict[str, Any] = field(default_factory=dict)  # as options_body makes it
 
 
 def create_upload(
@@ -454,7 +476,13 @@ def create_upload(
     save_upload_files(folder, title, torrent, nfo)
     meta = read_torrent(torrent)
     body = draft_body(
-        title, request.description, request.category, request.subcategory, torrent, nfo
+        title,
+        request.description,
+        request.category,
+        request.subcategory,
+        torrent,
+        nfo,
+        request.options,
     )
     saved = SavedUpload(item.path, title, meta.infohash, save_draft(body), now())
     store.save_upload(saved)

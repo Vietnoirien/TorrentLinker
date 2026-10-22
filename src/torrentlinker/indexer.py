@@ -330,6 +330,18 @@ class Indexer:
             )
         ).json()
 
+    def category_options(self, subcategory: int) -> dict[str, Any]:
+        """The Category Options c411 lists for a subcategory (a Bearer key, no scope)."""
+        if not self.is_c411:
+            raise ValueError("Category Options are only available on c411.org")
+        return self._request(
+            lambda key: (
+                f"https://c411.org/api/categories/{int(subcategory)}/options",
+                None,
+                {"Authorization": f"Bearer {key}"},
+            )
+        ).json()
+
     def drafts(self) -> list[dict[str, Any]]:
         """The account's c411 upload Drafts (main key, scope drafts:rw; ADR-0011)."""
         return list(self._draft_request("GET", "/api/user/drafts").json().get("data") or [])

@@ -530,6 +530,24 @@ def test_drafts_go_to_c411_with_the_main_key_only() -> None:
     assert json.loads(seen[1].content) == {"title": "T"}
 
 
+def test_category_options_are_read_from_c411_with_a_key() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": [{"id": 1}]})
+
+    ix = Indexer(
+        url="https://c411.org/api",
+        api_key="MAIN",
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert ix.category_options(6) == {"data": [{"id": 1}]}
+    assert str(seen[0].url) == "https://c411.org/api/categories/6/options"
+    assert seen[0].headers["Authorization"] == "Bearer MAIN"
+
+
 def test_a_key_without_the_drafts_scope_is_named_in_the_error() -> None:
     ix = Indexer(
         url="https://c411.org/api",
