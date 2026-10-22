@@ -6,9 +6,8 @@ from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
 
 def test_settings_survive_a_save_and_load(tmp_path: Path) -> None:
     s = Settings()
-    s.library_folders = [
-        LibraryFolder(Path("/lib/films"), 2, ContentKind.MOVIE, PathMapping("/lib/films", "/data"))
-    ]
+    s.library_folders = [LibraryFolder(Path("/lib/films"), 2, ContentKind.MOVIE)]
+    s.path_mappings = [PathMapping("/mnt/nas", "/data")]
     s.kind_categories = {ContentKind.MOVIE: [2000, 2030]}
     s.matching.ignore_patterns = ["*.nfo"]
     s.save(tmp_path / "settings.json")
@@ -16,6 +15,7 @@ def test_settings_survive_a_save_and_load(tmp_path: Path) -> None:
     loaded = Settings.load(tmp_path / "settings.json")
 
     assert loaded.library_folders == s.library_folders
+    assert loaded.path_mappings == s.path_mappings
     assert loaded.categories(ContentKind.MOVIE) == (2000, 2030)
     assert loaded.matching.ignore_patterns == ["*.nfo"]
 
@@ -90,3 +90,38 @@ def test_the_tested_download_speed_survives_a_save_and_load(tmp_path: Path) -> N
 
     assert loaded.download_speed == 20_000_000.0
     assert loaded.download_speed_tested == "2026-10-22T04:30"
+
+
+def test_mappings_of_library_folders_from_0_2_move_to_the_shared_list(tmp_path: Path) -> None:
+    import json
+
+    old = {
+        "library_folders": [
+            {
+                "path": "/mnt/nas/films",
+                "depth": 1,
+                "kind": "movie",
+                "mapping": {"local": "/mnt/nas/films", "qbit": "/data/films"},
+            },
+            {
+                "path": "/mnt/nas/books",
+                "depth": 1,
+                "kind": "ebook",
+                "mapping": {"local": "/mnt/nas/books", "qbit": "/data/books"},
+            },
+            {"path": "/home/me/stl", "depth": 1, "kind": "3d-model", "mapping": None},
+        ]
+    }
+    (tmp_path / "settings.json").write_text(json.dumps(old))
+
+    loaded = Settings.load(tmp_path / "settings.json")
+
+    assert loaded.path_mappings == [
+        PathMapping("/mnt/nas/films", "/data/films"),
+        PathMapping("/mnt/nas/books", "/data/books"),
+    ]
+    assert [f.path for f in loaded.library_folders] == [
+        Path("/mnt/nas/films"),
+        Path("/mnt/nas/books"),
+        Path("/home/me/stl"),
+    ]

@@ -121,6 +121,10 @@ class QbitApi:
         self._client.auth_log_in()
         return str(self._client.app_version())
 
+    def default_save_path(self) -> str:
+        """qBittorrent's own download folder, as qBittorrent sees it."""
+        return str(self._client.app_default_save_path())
+
     def rotate_api_key(self) -> str:
         """Ask qBittorrent (5.2+) for a new API key, replacing any previous one."""
         return str(self._client.app_rotate_api_key()["apiKey"])

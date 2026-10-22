@@ -21,6 +21,10 @@ class FakeQbit:
     calls: list[str] = field(default_factory=list)
     pieces: dict[str, list[int]] = field(default_factory=dict)
     downloads: list[str] = field(default_factory=list)
+    default_path: str = "/downloads"
+
+    def default_save_path(self) -> str:
+        return self.default_path
 
     # Qbit port ---------------------------------------------------------------
 

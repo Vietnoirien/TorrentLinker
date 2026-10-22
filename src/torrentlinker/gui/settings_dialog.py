@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import logging
 import sys
 from pathlib import Path
@@ -35,11 +36,18 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
-from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
+from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.gui.zen_view import class_label
+from torrentlinker.gui.zen_view import WARNING, class_label
 from torrentlinker.indexer import Caps, Indexer
+from torrentlinker.paths import (
+    Detection,
+    MappingCheck,
+    check_mappings,
+    detect_mappings,
+    unreachable_download_folders,
+)
 from torrentlinker.qbit import QbitApi, is_api_key
 from torrentlinker.queries import default_categories
 from torrentlinker.zen import ZenClass, ZenProfile
@@ -51,7 +59,8 @@ QBIT_API_KEY = "qbit-api-key"
 INDEXER_API_KEY = "indexer-api-key"
 TMDB_API_KEY = "tmdb-api-key"
 
-COL_PATH, COL_KIND, COL_DEPTH, COL_MAPPING = range(4)
+COL_PATH, COL_KIND, COL_DEPTH = range(3)
+COL_LOCAL, COL_QBIT, COL_CHECK = range(3)
 COL_CATEGORY, COL_FOLDER, COL_RESOLVED = range(3)
 RED = QColor("#c62828")
 
@@ -91,6 +100,7 @@ class SettingsDialog(QDialog):
             self._page(self._search_box(), self._matching_box()), self.tr("Search && Matching")
         )
         self.tabs.addTab(self._page(self._downloads_box(), fill=True), self.tr("Download Folders"))
+        self.tabs.addTab(self._page(self._paths_box(), fill=True), self.tr("qBittorrent Paths"))
         self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
 
@@ -235,9 +245,18 @@ class SettingsDialog(QDialog):
         form.addRow(self.tr("Password"), self.qbit_password)
         form.addRow(self.tr("API key"), self.qbit_api_key)
         form.addRow("", test)
+        hint = QLabel(
+            self.tr(
+                "qBittorrent in Docker, on a NAS or on another computer? Tell the app how it "
+                "sees your folders in the qBittorrent Paths tab."
+            )
+        )
+        hint.setWordWrap(True)
+        form.addRow("", hint)
         return box
 
-    def _test_qbit(self) -> None:
+    def _form_qbit(self) -> QbitApi | None:
+        """qBittorrent as the form describes it, saved or not; None if the key is malformed."""
         key = self.qbit_api_key.text().strip()
         if key and not is_api_key(key):
             QMessageBox.warning(
@@ -245,8 +264,12 @@ class SettingsDialog(QDialog):
                 self.tr("qBittorrent"),
                 self.tr("An API key looks like qbt_ followed by 28 letters and digits."),
             )
+            return None
+        return QbitApi(self.qbit_host.text(), self.qbit_user.text(), self.qbit_password.text(), key)
+
+    def _test_qbit(self) -> None:
+        if (api := self._form_qbit()) is None:
             return
-        api = QbitApi(self.qbit_host.text(), self.qbit_user.text(), self.qbit_password.text(), key)
         run_in_background(
             api.check,
             lambda v: QMessageBox.information(
@@ -310,20 +333,10 @@ class SettingsDialog(QDialog):
     def _folders_box(self) -> QGroupBox:
         box = QGroupBox(self.tr("Library Folders"))
         layout = QVBoxLayout(box)
-        self.folders = QTableWidget(0, 4)
+        self.folders = QTableWidget(0, 3)
         self.folders.setHorizontalHeaderLabels(
-            [
-                self.tr("Folder"),
-                self.tr("Content Kind"),
-                self.tr("Scan depth"),
-                self.tr("qBittorrent sees it as"),
-            ]
+            [self.tr("Folder"), self.tr("Content Kind"), self.tr("Scan depth")]
         )
-        header = self.folders.horizontalHeaderItem(COL_MAPPING)
-        if header:
-            header.setToolTip(
-                self.tr("Path Mapping: fill in only if qBittorrent runs in Docker, on a NAS…")
-            )
         self.folders.horizontalHeader().setSectionResizeMode(
             COL_PATH, QHeaderView.ResizeMode.Stretch
         )
@@ -383,8 +396,6 @@ class SettingsDialog(QDialog):
         depth.setRange(1, 5)
         depth.setValue(folder.depth)
         self.folders.setCellWidget(r, COL_DEPTH, depth)
-        mapped = folder.mapping.qbit if folder.mapping else ""
-        self.folders.setItem(r, COL_MAPPING, QTableWidgetItem(mapped))
 
     def _read_folders(self) -> list[LibraryFolder]:
         result = []
@@ -395,12 +406,8 @@ class SettingsDialog(QDialog):
                 self.folders.cellWidget(r, COL_DEPTH),
             )
             assert cell is not None and isinstance(kind, QComboBox) and isinstance(depth, QSpinBox)
-            path = Path(cell.text())
-            mapped_cell = self.folders.item(r, COL_MAPPING)
-            mapped = mapped_cell.text().strip() if mapped_cell else ""
-            mapping = PathMapping(str(path), mapped) if mapped else None
             result.append(
-                LibraryFolder(path, depth.value(), ContentKind(kind.currentData()), mapping)
+                LibraryFolder(Path(cell.text()), depth.value(), ContentKind(kind.currentData()))
             )
         return result
 
@@ -535,6 +542,254 @@ class SettingsDialog(QDialog):
 
     # Search ----------------------------------------------------------------
 
+    # qBittorrent Paths -----------------------------------------------------
+
+    def _paths_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("qBittorrent in Docker, on a NAS or on another computer"))
+        layout = QVBoxLayout(box)
+        intro = QLabel(
+            self.tr(
+                "Fill this in only if qBittorrent sees your folders under other paths than "
+                "this computer does. For example, qBittorrent runs in Docker and sees /data, "
+                "while this computer reaches the same files as /mnt/nas or Z:\\. Detect finds "
+                "the paths from qBittorrent's own torrents, then Check counts the torrents "
+                "each path leads to."
+            )
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        self.mappings = QTableWidget(0, 3)
+        self.mappings.setHorizontalHeaderLabels(
+            [self.tr("On this computer"), self.tr("In qBittorrent"), self.tr("Check")]
+        )
+        header = self.mappings.horizontalHeader()
+        header.setSectionResizeMode(COL_LOCAL, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_QBIT, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.ResizeToContents)
+        self.mappings.verticalHeader().setVisible(False)
+        for m in self.settings.path_mappings:
+            self._add_mapping_row(m)
+        layout.addWidget(self.mappings)
+        row = QHBoxLayout()
+        add = QPushButton(self.tr("Add folder…"))
+        add.setToolTip(
+            self.tr("Choose a folder on this computer, then type how qBittorrent sees it")
+        )
+        add.clicked.connect(self._pick_mapping)
+        remove = QPushButton(self.tr("Remove"))
+        remove.clicked.connect(lambda: self.mappings.removeRow(self.mappings.currentRow()))
+        self.detect_button = QPushButton(self.tr("Detect"))
+        self.detect_button.setToolTip(
+            self.tr(
+                "Look for qBittorrent's torrents in your Library and Download Folders and "
+                "the folders above them, and add the paths that lead there"
+            )
+        )
+        self.detect_button.clicked.connect(self._detect_paths)
+        self.check_button = QPushButton(self.tr("Check"))
+        self.check_button.setToolTip(
+            self.tr("Count, for each path, the qBittorrent torrents whose folder is found here")
+        )
+        self.check_button.clicked.connect(lambda: self._check_paths())
+        row.addWidget(add)
+        row.addWidget(remove)
+        row.addStretch()
+        row.addWidget(self.detect_button)
+        row.addWidget(self.check_button)
+        layout.addLayout(row)
+        self.paths_status = QLabel()
+        self.paths_status.setTextFormat(Qt.TextFormat.RichText)
+        self._status_lines: list[tuple[str, bool]] = []  # text, is a warning
+        self.paths_status.setWordWrap(True)
+        self.paths_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self.paths_status)
+        return box
+
+    def _add_mapping_row(self, m: PathMapping) -> None:
+        r = self.mappings.rowCount()
+        self.mappings.insertRow(r)
+        self.mappings.setItem(r, COL_LOCAL, QTableWidgetItem(m.local))
+        self.mappings.setItem(r, COL_QBIT, QTableWidgetItem(m.qbit))
+        check = QTableWidgetItem("")
+        check.setFlags(check.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.mappings.setItem(r, COL_CHECK, check)
+
+    def _pick_mapping(self) -> None:
+        if path := self._choose_dir(self.tr("Choose a folder on this computer")):
+            self._add_mapping_row(PathMapping(path, ""))
+            row = self.mappings.rowCount() - 1
+            self.mappings.setCurrentCell(row, COL_QBIT)
+            if cell := self.mappings.item(row, COL_QBIT):
+                self.mappings.editItem(cell)
+
+    def _read_mappings(self) -> list[PathMapping]:
+        result = []
+        for r in range(self.mappings.rowCount()):
+            local, qbit = self.mappings.item(r, COL_LOCAL), self.mappings.item(r, COL_QBIT)
+            if local and qbit and local.text().strip() and qbit.text().strip():
+                m = PathMapping(local.text().strip(), qbit.text().strip())
+                if m not in result:
+                    result.append(m)
+        return result
+
+    def _local_folders(self) -> list[Path]:
+        downloads = self._read_download_folders()
+        paths = [f.path for f in self._read_folders()]
+        paths += [Path(p) for p in [*downloads.by_category.values(), downloads.default] if p]
+        return list(dict.fromkeys(paths))
+
+    def _paths_busy(self, busy: bool, text: str = "") -> None:
+        self.detect_button.setEnabled(not busy)
+        self.check_button.setEnabled(not busy)
+        if text:
+            self._set_status([(line, False) for line in text.splitlines()])
+
+    def _set_status(self, lines: list[tuple[str, bool]]) -> None:
+        """Show these lines under the paths; warnings in the warning color."""
+        self._status_lines = lines
+        self.paths_status.setText(
+            "<br>".join(
+                f'<span style="color: {WARNING.name()}">{html.escape(text)}</span>'
+                if warning
+                else html.escape(text)
+                for text, warning in lines
+            )
+        )
+
+    def _detect_paths(self) -> None:
+        folders = self._local_folders()
+        if not folders:
+            self.paths_status.setText(
+                self.tr(
+                    "Add your Library Folders or Download Folders first: Detect looks for "
+                    "qBittorrent's files in them."
+                )
+            )
+            return
+        if (api := self._form_qbit()) is None:
+            return
+
+        def work() -> Detection:
+            def files(t: Torrent) -> dict[str, int]:
+                found = api.torrent(t.hash)
+                return found.files if found else {}
+
+            return detect_mappings(api.torrents(with_files=False), folders, files)
+
+        self._paths_busy(True, self.tr("Looking for qBittorrent's torrents on this computer…"))
+        run_in_background(work, self._detected, self._paths_failed)
+
+    def _detected(self, d: Detection) -> None:
+        known = set(self._read_mappings())
+        added = [s for s in d.suggestions if s.mapping not in known]
+        for s in added:
+            self._add_mapping_row(s.mapping)
+        lines = []
+        for s in d.suggestions:
+            lines.append(
+                self.tr("{0} ↔ {1}: {2} torrents found").format(
+                    s.mapping.local, s.mapping.qbit, s.torrents
+                )
+            )
+        if d.same_paths:
+            lines.append(
+                self.tr("{0} torrents are at the same path here: they need no mapping.").format(
+                    d.same_paths
+                )
+            )
+        if d.not_found:
+            lines.append(
+                self.tr("Not found on this computer: {0}").format(", ".join(d.not_found[:4]))
+                + (" …" if len(d.not_found) > 4 else "")
+            )
+        if not d.suggestions and not d.same_paths:
+            lines.insert(
+                0,
+                self.tr(
+                    "No torrent of qBittorrent was found in your folders. Add the folder "
+                    "where this computer sees qBittorrent's downloads as a Download Folder "
+                    "or Library Folder, then detect again; or add the path by hand."
+                ),
+            )
+        elif added:
+            lines.insert(0, self.tr("{0} paths added. Save to use them.").format(len(added)))
+        self._paths_busy(False, "\n".join(lines))
+        if self._read_mappings():
+            self._check_paths(keep_status=True)
+
+    def _check_paths(self, keep_status: bool = False) -> None:
+        if (api := self._form_qbit()) is None:
+            return
+        if not keep_status:
+            self._set_status([])
+        for r in range(self.mappings.rowCount()):
+            if cell := self.mappings.item(r, COL_CHECK):
+                cell.setText("…")
+        mappings = self._read_mappings()
+        downloads = self._read_download_folders()
+        download_paths = [
+            Path(p) for p in [*downloads.by_category.values(), downloads.default] if p
+        ]
+
+        def work() -> tuple[list[MappingCheck], list[Path], str]:
+            default = api.default_save_path()
+            checks = check_mappings(api.torrents(with_files=False), mappings)
+            return checks, unreachable_download_folders(download_paths, mappings, default), default
+
+        self._paths_busy(True)
+        run_in_background(work, self._checked, self._paths_failed)
+
+    def _checked(self, result: tuple[list[MappingCheck], list[Path], str]) -> None:
+        checks, unreachable, default = result
+        lines = []
+        for c in checks:
+            if c.mapping is None:
+                if c.total:
+                    lines.append(
+                        self.tr("Outside every path above: {0} of {1} torrents found here.").format(
+                            c.found, c.total
+                        )
+                    )
+                continue
+            for r in range(self.mappings.rowCount()):
+                local, qbit = self.mappings.item(r, COL_LOCAL), self.mappings.item(r, COL_QBIT)
+                if (
+                    local
+                    and qbit
+                    and PathMapping(local.text().strip(), qbit.text().strip()) == c.mapping
+                ):
+                    cell = self.mappings.item(r, COL_CHECK)
+                    assert cell is not None
+                    ok = c.found == c.total
+                    cell.setText(
+                        self.tr("no torrent")
+                        if not c.total
+                        else (self.tr("✓ {0} of {1}") if ok else self.tr("⚠ {0} of {1}")).format(
+                            c.found, c.total
+                        )
+                    )
+                    cell.setForeground(QColor() if ok else WARNING)
+                    cell.setToolTip(
+                        self.tr("Not found here: {0}").format(", ".join(c.missing))
+                        if c.missing
+                        else ""
+                    )
+        if unreachable:
+            lines.append(
+                self.tr(
+                    "qBittorrent's own download folder ({0}) does not exist on this computer, "
+                    "and no path above covers these Download Folders: {1}. qBittorrent "
+                    "probably cannot save into them."
+                ).format(default, ", ".join(map(str, unreachable)))
+            )
+        self._paths_busy(False)
+        warnings = [(line, True) for line in lines[len(lines) - bool(unreachable) :]]
+        notes = [(line, False) for line in lines[: len(lines) - bool(unreachable)]]
+        self._set_status(self._status_lines + notes + warnings)
+
+    def _paths_failed(self, error: Exception) -> None:
+        self._paths_busy(False, self.tr("Could not reach qBittorrent: {0}").format(error))
+
     def _search_box(self) -> QGroupBox:
         box = QGroupBox(self.tr("Search"))
         form = QFormLayout(box)
@@ -645,6 +900,7 @@ class SettingsDialog(QDialog):
         s.free_space_margin = self.margin.value() / 100
         s.indexer_categories = dict(self._categories)
         s.download_folders = self._read_download_folders()
+        s.path_mappings = self._read_mappings()
         s.matching.size_tolerance = self.tolerance.value() / 100
         s.matching.min_partial_coverage = self.coverage.value() / 100
         s.matching.ignore_patterns = [

@@ -1069,3 +1069,84 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
 
     assert store.saved_plan() is None
     assert view.plan is not None and not view.plan.items
+
+
+def test_detect_adds_the_docker_path_and_check_counts_its_torrents(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import LibraryFolder, PathMapping, Torrent
+    from torrentlinker.downloads import DownloadFolders
+    from torrentlinker.gui.settings_dialog import COL_CHECK, COL_LOCAL, COL_QBIT, SettingsDialog
+
+    nas = tmp_path / "nas"
+    (nas / "ebooks").mkdir(parents=True)
+    (nas / "ebooks" / "Zweig.epub").write_bytes(b"x" * 300)
+    qbit = FakeQbit(default_path="/downloads")
+    qbit.by_hash["a" * 40] = Torrent("a" * 40, "Zweig", Path("/data/ebooks"), {"Zweig.epub": 300})
+    s = Settings()
+    s.library_folders = [LibraryFolder(nas / "ebooks")]
+    s.download_folders = DownloadFolders({}, str(tmp_path / "elsewhere"))
+    dialog = SettingsDialog(s)
+    qtbot.addWidget(dialog)
+    dialog._form_qbit = lambda: qbit  # type: ignore[assignment,method-assign,return-value]
+
+    dialog.detect_button.click()
+    qtbot.waitUntil(
+        lambda: (c := dialog.mappings.item(0, COL_CHECK)) is not None and "of" in c.text(),
+        timeout=5000,
+    )
+
+    assert dialog.mappings.item(0, COL_LOCAL).text() == str(nas)  # type: ignore[union-attr]
+    assert dialog.mappings.item(0, COL_QBIT).text() == "/data"  # type: ignore[union-attr]
+    assert dialog.mappings.item(0, COL_CHECK).text() == "✓ 1 of 1"  # type: ignore[union-attr]
+    status = dialog.paths_status.text()
+    assert "1 torrents found" in status
+    assert "cannot save into them" in status and str(tmp_path / "elsewhere") in status
+    dialog._save()
+    assert s.path_mappings == [PathMapping(str(nas), "/data")]
+
+
+def test_a_book_left_in_a_download_folder_is_left_out_of_the_plan(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.store import CatalogueRow
+
+    books = tmp_path / "books"
+    books.mkdir()
+    # Its torrent was removed from qBittorrent, but the file stayed.
+    (books / "La confidente - Audrey Lefevre.epub").write_bytes(b"x" * 250_000)
+    s = Settings()
+    s.indexer_categories = {7000: IndexerCategory("Ebook")}
+    s.download_folders = DownloadFolders({7000: str(books)})
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(
+        [
+            CatalogueRow(
+                "aa" * 20,
+                "La.Confidente.Audrey.Lefevre.2026.FR.[EPUB]-G11",
+                250_000,
+                5,
+                7000,
+                "u",
+                "d",
+                0,
+            ),
+            CatalogueRow(
+                "bb" * 20,
+                "Submersion.Marc.Dugain.2026.FR.[EPUB]-G11",
+                300_000,
+                5,
+                7000,
+                "u",
+                "d",
+                0,
+            ),
+        ]
+    )
+    window = MainWindow(s, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
+
+    plan = window.plan_maker()()
+
+    assert [i.candidate.title for i in plan.items] == ["Submersion.Marc.Dugain.2026.FR.[EPUB]-G11"]
+    assert [d.path for d in plan.on_disk] == [books / "La confidente - Audrey Lefevre.epub"]

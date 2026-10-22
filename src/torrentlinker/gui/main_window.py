@@ -37,7 +37,7 @@ from torrentlinker.catalogue import (
 from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
-from torrentlinker.domain import ContentKind, ItemState
+from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
@@ -91,6 +91,7 @@ from torrentlinker.review import (
     restore_checked,
     search_candidates,
 )
+from torrentlinker.scan import scan
 from torrentlinker.seeding import Seeding, indexer_torrents, observe_swarm, seeding
 from torrentlinker.send import SendProgress, SendReport, send_plan
 from torrentlinker.speedtest import measure_download_speed
@@ -247,8 +248,7 @@ class MainWindow(QMainWindow):
         key = (q.host, q.username, get_secret(QBIT_PASSWORD), get_secret(QBIT_API_KEY))
         if self._qbit is None or self._qbit[0] != key:
             self._qbit = (key, QbitApi(*key))
-        mappings = [f.mapping for f in self.settings.library_folders if f.mapping]
-        return MappedQbit(self._qbit[1], PathMapper(mappings))
+        return MappedQbit(self._qbit[1], PathMapper(self.settings.path_mappings))
 
     def indexer(self) -> Indexer:
         """One Indexer instance, so every search shares the same rate limiter.
@@ -415,6 +415,11 @@ class MainWindow(QMainWindow):
             if e.state is ItemState.ORPHAN and e.item.path in self.review.cache
         ]
         local_items = [e.item for e in self.library_model.entries]
+        # Download Folders hold books too, maybe from torrents removed from qBittorrent.
+        libraries = [f.path for f in s.library_folders]
+        unlisted = sorted(
+            f for f in planned_folders if not any(f.is_relative_to(r) for r in libraries)
+        )
 
         def work() -> Plan:
             torrents = qbit.torrents(with_files=False)
@@ -437,7 +442,13 @@ class MainWindow(QMainWindow):
                 disk_of,
                 only,
             )
-            already = on_disk(downloads, local_items)
+            on_disk_items = list(local_items)
+            for folder in unlisted:
+                try:
+                    on_disk_items += scan(LibraryFolder(folder), store)
+                except OSError as e:
+                    log.info("Download Folder not scanned for books on disk: %s", e)
+            already = on_disk(downloads, on_disk_items)
             left_out = {d.infohash for d in already}
             candidates += [c for c in downloads if c.infohash not in left_out]
             if already:

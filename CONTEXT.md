@@ -19,7 +19,7 @@ The nature of a Library Folder's contents (movie, series, music, ebook, game, 3D
 _Avoid_: Type, category (category is a tracker/qBittorrent term)
 
 **Path Mapping**:
-A correspondence between a path as this app sees it and the same location as qBittorrent sees it.
+A correspondence between a path prefix as this app sees it and the same location as qBittorrent sees it, for qBittorrent in Docker, on a NAS or on another computer. One list of them applies to every path exchanged with qBittorrent: Library Folders, Download Folders and Reseeds.
 _Avoid_: Remote path, docker path
 
 **Ignored File**:

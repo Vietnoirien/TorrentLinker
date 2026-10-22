@@ -24,7 +24,11 @@ class ContentKind(StrEnum):
 
 @dataclass(frozen=True)
 class PathMapping:
-    """Maps a path prefix as this app sees it to the same location as qBittorrent sees it."""
+    """Maps a path prefix as this app sees it to the same location as qBittorrent sees it.
+
+    One list of them applies to every path exchanged with qBittorrent: Library Folders,
+    Download Folders and Reseeds alike (ADR-0006).
+    """
 
     local: str
     qbit: str
@@ -35,7 +39,6 @@ class LibraryFolder:
     path: Path
     depth: int = 1
     kind: ContentKind = ContentKind.OTHER
-    mapping: PathMapping | None = None
 
 
 @dataclass(frozen=True)

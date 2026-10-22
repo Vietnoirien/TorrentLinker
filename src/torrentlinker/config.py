@@ -65,6 +65,8 @@ class Settings:
     free_space_margin: float = 0.10  # share of each disk a Plan leaves free
     plan_categories: list[int] | None = None  # categories a Plan draws from; None = all
     plan_options: PlanOptions = field(default_factory=PlanOptions)
+    # How qBittorrent sees this computer's paths, e.g. when it runs in Docker or on a NAS.
+    path_mappings: list[PathMapping] = field(default_factory=list)
     download_speed: float | None = None  # bytes/s from the last speed test
     download_speed_tested: str | None = None  # when, ISO 8601
 
@@ -77,6 +79,7 @@ class Settings:
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
+            "path_mappings": [asdict(m) for m in self.path_mappings],
             "zen": asdict(self.zen),
             "uploads": self.uploads,
             "free_space_margin": self.free_space_margin,
@@ -97,6 +100,10 @@ class Settings:
         if not path.exists():
             return cls()
         data = json.loads(path.read_text(encoding="utf-8"))
+        mappings = [PathMapping(**m) for m in data.get("path_mappings", [])]
+        for f in data.get("library_folders", []):  # before 0.3, each folder had its own
+            if f.get("mapping") and (old := PathMapping(**f["mapping"])) not in mappings:
+                mappings.append(old)
         return cls(
             qbit=QbitSettings(**data.get("qbit", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
@@ -107,6 +114,7 @@ class Settings:
                 for k, v in data.get("kind_categories", {}).items()
             },
             library_folders=[_folder_from_json(f) for f in data.get("library_folders", [])],
+            path_mappings=mappings,
             zen=_zen_from_json(data.get("zen", {})),
             uploads=int(data.get("uploads", 0)),
             free_space_margin=float(data.get("free_space_margin", 0.10)),
@@ -139,7 +147,6 @@ def _folder_to_json(f: LibraryFolder) -> dict[str, object]:
         "path": str(f.path),
         "depth": f.depth,
         "kind": f.kind.value,
-        "mapping": asdict(f.mapping) if f.mapping else None,
     }
 
 
@@ -148,7 +155,6 @@ def _folder_from_json(d: dict) -> LibraryFolder:  # type: ignore[type-arg]
         path=Path(d["path"]),
         depth=int(d.get("depth", 1)),
         kind=ContentKind(d.get("kind", ContentKind.OTHER.value)),
-        mapping=PathMapping(**d["mapping"]) if d.get("mapping") else None,
     )
 
 

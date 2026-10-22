@@ -15,8 +15,31 @@ On Linux, make the AppImage executable before opening it. See the [release notes
 
 1. Enable qBittorrent's Web UI in **Tools → Options → Web UI**.
 2. Open TorrentLinker's **Settings** and enter the qBittorrent connection and Indexer URL/API key. qBittorrent connections support a username/password or a Web UI API key where available.
-3. Register Library Folders to find files you can Reseed. Add Path Mappings if qBittorrent sees those folders under different paths.
+3. Register Library Folders to find files you can Reseed.
 4. Set Download Folders for the categories you want to plan, or choose a default folder. Categories without a resolved folder are excluded.
+5. If qBittorrent runs in Docker, on a NAS or on another computer, set its paths in **Settings → qBittorrent Paths** (see below).
+
+## qBittorrent in Docker, on a NAS or on another computer
+
+qBittorrent then sees your folders under other paths than this computer does. For example, a Docker container sees `/data`, while this computer reaches the same files as `/mnt/nas` or `Z:\`. TorrentLinker needs to know the correspondence to find qBittorrent's torrents in your folders, to Reseed, and to send a Plan's downloads where qBittorrent can write them.
+
+In **Settings → qBittorrent Paths**:
+
+1. Fill in the qBittorrent connection and your Library or Download Folders first.
+2. Click **Detect**. TorrentLinker reads a few torrents of each folder qBittorrent uses and looks for their files, by name and size, in your folders and the folders above them. It adds the paths that lead there, for example `/mnt/nas` ↔ `/data`, and says how many torrents each one found.
+3. **Check** counts, for each path, the qBittorrent torrents whose folder exists on this computer. It also warns about Download Folders that qBittorrent probably cannot reach.
+4. Save.
+
+You can also add a path by hand with **Add folder…**: choose the folder on this computer, then type how qBittorrent sees it. One path covers everything below it, and the longest matching path wins. Typical cases:
+
+| Setup | On this computer | In qBittorrent |
+| --- | --- | --- |
+| Docker on this computer, volume `-v /srv/media:/data` | `/srv/media` | `/data` |
+| qBittorrent on a NAS, share mounted on Linux | `/mnt/nas/media` | `/volume1/media` |
+| qBittorrent on a NAS, share mapped as a Windows drive | `Z:\` | `/volume1/media` |
+| Docker on a NAS, share mounted here | `/mnt/nas/media` | `/data` |
+
+Detection and checks only talk to qBittorrent.
 
 ## Reseed existing files
 
@@ -49,7 +72,7 @@ Choose categories, then configure the Plan:
 
 Reseeds come first. They count toward the torrent limit and consume no download budget. The overall torrent cap and disk-space reserve also apply. The results show each torrent's note, the size-weighted average note, estimated Zen gain and payback, and free disk space before and after the Plan. Download Folders sharing a physical disk are counted once. Plan options are saved across restarts.
 
-A Plan leaves out every torrent already in qBittorrent, whatever its tracker or state. It also leaves out Catalogue torrents that seem to be in your Library already: a Local Item, or one of its files, of the torrent's size (or up to 64 KiB smaller, for an .nfo or cover) whose name shares most of its significant words, with no other volume number. The Plan says how many it left out; hover over its summary to see them. No request is made for this, so only a search in the Library confirms a Match, which you can then Reseed instead of downloading.
+A Plan leaves out every torrent already in qBittorrent, whatever its tracker or state. It also leaves out Catalogue torrents that seem to be in your Library or in the Plan's Download Folders already, such as files kept after their torrent left qBittorrent: a Local Item, or one of its files, of the torrent's size (or up to 64 KiB smaller, for an .nfo or cover) whose name shares most of its significant words, with no other volume number. The Plan says how many it left out; hover over its summary to see them. No request is made for this, so only a search in the Library confirms a Match, which you can then Reseed instead of downloading.
 
 Each Plan shows two estimated times. **Sending** to qBittorrent takes about 4 seconds per torrent, the pace c411 allows for `.torrent` downloads. **Downloading** the data is the Plan's size divided by your download speed. **Test speed** measures that speed for about 8 seconds with Cloudflare's public speed test, anonymously, and remembers it. The download time is a lower bound: torrents with few seeders download slower than your connection. Run the test while qBittorrent is idle.
 

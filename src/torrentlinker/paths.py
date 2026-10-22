@@ -1,9 +1,14 @@
-"""Path Mappings: translate between this app's view of a path and qBittorrent's."""
+"""Path Mappings: translate between this app's view of a path and qBittorrent's.
+
+qBittorrent in Docker or on a NAS sees the same folders under other paths. The user can
+let the app detect the mappings from qBittorrent's own torrents, then check them.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from dataclasses import replace
+from collections import Counter
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from torrentlinker.domain import PathMapping, Torrent
@@ -103,3 +108,171 @@ class MappedQbit:
 
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         self._inner.remove_tags(hash, tags)
+
+
+# Detection and checks ---------------------------------------------------------
+
+ANCESTORS = 4  # how far above each local folder detection looks for qBittorrent's tree
+TRIES_PER_PATH = 3  # torrents tried in each qBittorrent save path
+
+
+@dataclass(frozen=True)
+class MappingSuggestion:
+    mapping: PathMapping
+    torrents: int  # qBittorrent torrents found on this computer through it
+
+
+@dataclass(frozen=True)
+class Detection:
+    suggestions: list[MappingSuggestion]
+    same_paths: int  # torrents found at the very path qBittorrent reports
+    not_found: list[str]  # qBittorrent save paths found nowhere under the given folders
+
+
+def detect_mappings(
+    torrents: Iterable[Torrent],
+    folders: Iterable[Path],
+    files: Callable[[Torrent], dict[str, int]] = lambda t: t.files,
+    is_file: Callable[[Path, int], bool] | None = None,
+) -> Detection:
+    """Find where qBittorrent's torrents are on this computer, and the mappings that say so.
+
+    `torrents` are as qBittorrent reports them; `files(t)` gives a torrent's files, read
+    for a few torrents of each save path only. A torrent's largest file is looked for, by
+    name and size, under each folder and the folders above it. The mapping is the part of
+    both paths before the end they share.
+    """
+    is_file = is_file or _is_file_of_size
+    by_path: dict[str, list[Torrent]] = {}
+    for t in torrents:
+        by_path.setdefault(str(t.save_path), []).append(t)
+    starts = _starts(folders)
+    found: Counter[PathMapping] = Counter()
+    same = 0
+    not_found = []
+    for qbit_path, group in sorted(by_path.items()):
+        pair = None
+        for t in group[:TRIES_PER_PATH]:
+            if not (listed := files(t)):
+                continue
+            name, size = max(listed.items(), key=lambda f: f[1])
+            if pair := _locate(qbit_path, name, size, starts, is_file):
+                break
+        if pair is None:
+            not_found.append(qbit_path)
+        elif pair.local == pair.qbit:
+            same += len(group)
+        else:
+            found[pair] += len(group)
+    suggestions = [MappingSuggestion(m, n) for m, n in found.most_common()]
+    return Detection(suggestions, same, not_found)
+
+
+def _is_file_of_size(path: Path, size: int) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size == size
+    except OSError:
+        return False
+
+
+def _starts(folders: Iterable[Path]) -> list[Path]:
+    """The folders and a few levels above each, where qBittorrent's tree may begin."""
+    seen: dict[Path, None] = {}
+    for folder in folders:
+        for p in [folder, *folder.parents][: ANCESTORS + 1]:
+            seen[p] = None
+    return list(seen)
+
+
+def _locate(
+    qbit_path: str,
+    name: str,
+    size: int,
+    starts: list[Path],
+    is_file: Callable[[Path, int], bool],
+) -> PathMapping | None:
+    segments = _split(qbit_path)
+    file_parts = _split(name)
+    for keep in range(len(segments), -1, -1):  # the longest shared end first
+        tail = segments[len(segments) - keep :]
+        for start in starts:
+            local = start.joinpath(*tail) if tail else start
+            if is_file(local.joinpath(*file_parts), size):
+                return _shortest(str(local), qbit_path)
+    return None
+
+
+def _shortest(local: str, qbit: str) -> PathMapping:
+    """The mapping with the end both paths share removed, keeping a folder on each side."""
+    a, b = _split(local), _split(qbit)
+    fold = _is_windows(local) or _is_windows(qbit)
+    while (
+        len(a) > 1
+        and len(b) > 1
+        and (a[-1].casefold() == b[-1].casefold() if fold else a[-1] == b[-1])
+    ):
+        a, b = a[:-1], b[:-1]
+    return PathMapping(_rebuild(local, a), _rebuild(qbit, b))
+
+
+def _rebuild(original: str, segments: list[str]) -> str:
+    if _is_windows(original):
+        return "\\".join(segments) if len(segments) > 1 else segments[0] + "\\"
+    return "/" + "/".join(segments)
+
+
+@dataclass(frozen=True)
+class MappingCheck:
+    mapping: PathMapping | None  # None: torrents outside every mapping
+    found: int  # torrents whose folder exists on this computer
+    total: int
+    missing: list[str]  # some qBittorrent save paths that do not exist here
+
+
+def check_mappings(
+    torrents: Iterable[Torrent],
+    mappings: list[PathMapping],
+    is_dir: Callable[[Path], bool] = Path.is_dir,
+) -> list[MappingCheck]:
+    """For each mapping, how many of qBittorrent's torrents it leads to on this computer."""
+    mapper = PathMapper(mappings)
+    totals: Counter[PathMapping | None] = Counter()
+    found: Counter[PathMapping | None] = Counter()
+    missing: dict[PathMapping | None, list[str]] = {}
+    exists: dict[str, bool] = {}
+    for t in torrents:
+        qbit_path = str(t.save_path)
+        used = _applying(qbit_path, mappings)
+        totals[used] += 1
+        if qbit_path not in exists:
+            exists[qbit_path] = is_dir(Path(mapper.to_local(qbit_path)))
+            if not exists[qbit_path]:
+                missing.setdefault(used, []).append(qbit_path)
+        if exists[qbit_path]:
+            found[used] += 1
+    return [
+        MappingCheck(m, found[m], totals[m], missing.get(m, [])[:5])
+        for m in [*mappings, None]
+        if totals[m] or m is not None
+    ]
+
+
+def _applying(qbit_path: str, mappings: list[PathMapping]) -> PathMapping | None:
+    best = None
+    for m in mappings:
+        if _strip_prefix(qbit_path, m.qbit) is not None and (
+            best is None or len(_split(m.qbit)) > len(_split(best.qbit))
+        ):
+            best = m
+    return best
+
+
+def unreachable_download_folders(
+    folders: Iterable[Path], mappings: list[PathMapping], qbit_default: str
+) -> list[Path]:
+    """Download Folders qBittorrent probably cannot see: no mapping covers them although
+    qBittorrent's own download folder does not exist on this computer (Docker, NAS…)."""
+    if not qbit_default or Path(qbit_default).is_dir():
+        return []  # qBittorrent seems to share this computer's paths
+    mapper = PathMapper(mappings)
+    return [f for f in folders if mapper.to_qbit(str(f)) == str(f)]
