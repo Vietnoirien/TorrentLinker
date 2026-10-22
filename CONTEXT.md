@@ -80,6 +80,10 @@ _Avoid_: Kind (a Content Kind is the Library's notion, not c411's)
 **Draft**:
 An Upload saved on c411 but not yet published; the user reviews and publishes it there.
 
+**Existing Release**:
+A release c411 already has for the item being uploaded, found by its title words or, for a category that has them, by ids, and shown before the Draft is saved. Information only: Team Pending refuses duplicates, the app never decides one.
+_Avoid_: Duplicate (that is Team Pending's verdict)
+
 **Announce URL**:
 The user's private tracker address, holding their passkey, that every Upload's torrent carries.
 _Avoid_: Passkey (alone), tracker URL

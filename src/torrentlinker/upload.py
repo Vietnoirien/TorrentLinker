@@ -14,14 +14,17 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from torrentlinker.catalogue_sync import ROOTS
 from torrentlinker.domain import ContentKind, LocalItem
+from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.matching import IgnoreList, Match
 from torrentlinker.qbit import Qbit
+from torrentlinker.queries import name_query
 from torrentlinker.reseed import start_reseed
 from torrentlinker.store import SavedUpload, Store
 from torrentlinker.torrent_meta import TorrentMeta, read_torrent
@@ -96,6 +99,15 @@ class Subcategory:
     label: str  # English, translated by the GUI
 
 
+@dataclass(frozen=True)
+class ExistingQuery:
+    """How to ask c411 what it already has of an item: its title words, or the ids a
+    category can look up (the video profile's TMDb id, say)."""
+
+    text: str
+    ids: dict[str, str] = field(default_factory=dict)
+
+
 class UploadProfile(Protocol):
     """What one c411 category needs to become an Upload: its rules, the release name, the
     NFO and a description template. One per category, 3D models first."""
@@ -112,6 +124,7 @@ class UploadProfile(Protocol):
     def description(
         self, title: str, files: list[UploadFile], source: str, image_url: str
     ) -> str: ...
+    def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery: ...
 
 
 class Model3DProfile:
@@ -159,6 +172,9 @@ class Model3DProfile:
     def description(self, title: str, files: list[UploadFile], source: str, image_url: str) -> str:
         return description_3d(title, files, source, image_url)
 
+    def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery:
+        return ExistingQuery(name_query(item))
+
 
 PROFILES: dict[int, UploadProfile] = {CATEGORY_3D: Model3DProfile()}
 
@@ -178,6 +194,23 @@ def profile_for(kind: ContentKind) -> UploadProfile | None:
     profile yet or the kind proposes none."""
     category = default_category(kind)
     return PROFILES.get(category) if category is not None else None
+
+
+def find_existing(
+    search: Callable[[SearchQuery], list[Candidate]],
+    query: ExistingQuery,
+    category: int,
+    by_ids: Callable[[dict[str, str]], list[Candidate]] | None = None,
+) -> list[Candidate]:
+    """The releases c411 already has for `query`, most seeded first; information only,
+    the app never decides a duplicate. Ids go to `by_ids` when the category has such a
+    lookup, else the title words are searched in the category."""
+    if query.ids and by_ids is not None:
+        found = by_ids(query.ids)
+    else:
+        root = ROOTS.get(category)
+        found = search(SearchQuery(q=query.text, categories=(root,) if root else ()))
+    return sorted(found, key=lambda c: -c.seeders)
 
 
 def _formats_3d(paths: Iterable[str]) -> list[str]:

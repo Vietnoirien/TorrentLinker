@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import shutil
 import threading
 from collections.abc import Callable
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from torrentlinker import net
 from torrentlinker.archives import Unpacked, is_archive, unpack, unpacked
@@ -41,7 +43,7 @@ from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.settings_dialog import kind_label
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
-from torrentlinker.indexer import Indexer
+from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import IgnoreList
 from torrentlinker.qbit import Qbit
@@ -59,6 +61,7 @@ from torrentlinker.upload import (
     category_name,
     create_upload,
     default_category,
+    find_existing,
     seed_upload,
     upload_files,
 )
@@ -118,6 +121,8 @@ class UploadTab(QWidget):
         self._to_select: tuple[Path, Path] | None = None  # (new folder, its archive)
         self.files: list[UploadFile] = []
         self._picked: dict[Path, int] = {}  # the category the user chose, by Local Item
+        self._existing: dict[tuple[Path, int], list[Candidate]] = {}  # searched this session
+        self._searching: set[tuple[Path, int]] = set()
         self._edited: set[str] = set()  # name, nfo, description: left alone once edited
         self._stop = threading.Event()
         self._image_url = ""  # the URL whose image the preview shows
@@ -188,6 +193,24 @@ class UploadTab(QWidget):
         self.problems.setWordWrap(True)
         self.problems.setStyleSheet("color: #c0392b")
         right_layout.addWidget(self.problems)
+
+        # What c411 already has: information only, collapsible
+        self.existing_box = QGroupBox()
+        self.existing_box.setCheckable(True)
+        self.existing_box.toggled.connect(self._existing_toggled)
+        existing_layout = QVBoxLayout(self.existing_box)
+        self.existing_body = QWidget()
+        body_layout = QVBoxLayout(self.existing_body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        self.existing_status = QLabel()
+        self.existing_status.setWordWrap(True)
+        self.existing_view = QTextBrowser()
+        self.existing_view.setOpenExternalLinks(True)
+        self.existing_view.setMaximumHeight(120)
+        body_layout.addWidget(self.existing_status)
+        body_layout.addWidget(self.existing_view)
+        existing_layout.addWidget(self.existing_body)
+        right_layout.addWidget(self.existing_box)
 
         self.pages = QTabWidget()
         self.file_table = QTableWidget(0, 3)
@@ -486,6 +509,85 @@ class UploadTab(QWidget):
         for field in (self.source, self.name, self.image_url, self.subcategory):
             field.setEnabled(profile is not None)
         self._regenerate()
+        self._show_existing()
+
+    # What c411 already has ---------------------------------------------------
+
+    def _existing_toggled(self, expanded: bool) -> None:
+        self.existing_body.setVisible(expanded)
+
+    def _show_existing(self) -> None:
+        """List the releases c411 already has of the selected item: one search per item
+        and category, off the GUI thread, kept for the session."""
+        entry, profile = self.entry, self.profile()
+        if entry is None or profile is None:
+            self.existing_box.hide()
+            return
+        self.existing_box.show()
+        key = (entry.item.path, profile.category)
+        if key in self._existing:
+            self._render_existing(self._existing[key])
+            return
+        self._render_existing(None)
+        if key in self._searching:
+            return
+        self._searching.add(key)
+        query = profile.existing_query(entry.item, self.ignore())
+        search = self.indexer().search
+
+        def current() -> bool:
+            return (
+                self.entry is not None
+                and self.entry.item.path == key[0]
+                and ((p := self.profile()) is not None and p.category == key[1])
+            )
+
+        def done(found: list[Candidate]) -> None:
+            self._searching.discard(key)
+            self._existing[key] = found
+            if isValid(self) and current():
+                self._render_existing(found)
+
+        def failed(error: Exception) -> None:
+            self._searching.discard(key)  # not kept: selecting the item again retries
+            if isValid(self) and current():
+                self._render_existing(None, error_text(error))
+
+        run_in_background(lambda: find_existing(search, query, key[1]), done, failed)
+
+    def _render_existing(self, found: list[Candidate] | None, error: str = "") -> None:
+        """`found` None: still searching, or failed with `error`."""
+        title = self.tr("Already on c411")
+        self.existing_view.hide()
+        if found is None:
+            self.existing_box.setTitle(title)
+            self.existing_status.setText(
+                self.tr("c411 could not be searched: {0}").format(error)
+                if error
+                else self.tr("Searching c411…")
+            )
+            return
+        if not found:
+            self.existing_box.setTitle(title)
+            self.existing_status.setText(self.tr("Nothing found on c411."))
+            return
+        self.existing_box.setTitle(f"{title} ({len(found)})")
+        self.existing_status.setText(
+            self.tr("Releases c411 already has, for information: Team Pending refuses duplicates.")
+        )
+        seeders = self.tr("seeders")
+        rows = "".join(
+            "<li>"
+            + (
+                f'<a href="{html.escape(c.details_url, quote=True)}">{html.escape(c.title)}</a>'
+                if c.details_url.startswith(("https://", "http://"))
+                else html.escape(c.title)
+            )
+            + f" — {human_size(c.size)}, {c.seeders} {html.escape(seeders)}</li>"
+            for c in found
+        )
+        self.existing_view.setHtml(f"<ul>{rows}</ul>")
+        self.existing_view.show()
 
     def _choose_subcategory(self) -> None:
         profile, item = self.profile(), self.source_item()

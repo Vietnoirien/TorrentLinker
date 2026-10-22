@@ -1,9 +1,12 @@
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from tests.fake_qbit import FakeQbit
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.gui.upload_view import UploadTab
+from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import IgnoreList
 from torrentlinker.scan import scan_item
@@ -15,6 +18,15 @@ ANNOUNCE = "https://c411.org/announce/secret"
 class StubIndexer:
     def __init__(self) -> None:
         self.saved: list[dict[str, Any]] = []
+        self.searches: list[SearchQuery] = []
+        self.found: list[Candidate] = []
+        self.search_error: Exception | None = None
+
+    def search(self, query: SearchQuery) -> list[Candidate]:
+        self.searches.append(query)
+        if self.search_error:
+            raise self.search_error
+        return self.found
 
     def save_draft(self, body: dict[str, Any]) -> int:
         self.saved.append(body)
@@ -323,3 +335,66 @@ def test_bbcode_renders_as_html_without_running_markup() -> None:
     assert '<img src="https://i.example/a.png"' in out and "<b>x</b>" in out
     assert "&lt;script&gt;" in out and "<script>" not in out
     assert "javascript" in out and 'href="javascript' not in out
+
+
+def test_selecting_an_item_lists_what_c411_already_has_once_per_session(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path
+) -> None:
+    view, indexer, _ = tab(qtbot, tmp_path)
+    indexer.found = [
+        Candidate("Etau.Pro.3MF", 2048, "d", 3, details_url="https://c411.org/torrent/abc"),
+        Candidate("Etau <b>.STL", 1 << 20, "d", 12, details_url="https://c411.org/torrent/def"),
+    ]
+    vise, other = model(tmp_path), model(tmp_path, "Dragon.3mf")
+    view.set_entries([vise, other])
+    view.remember(vise, [])
+    view.remember(other, [])
+    assert indexer.searches == []  # nothing is searched until the user selects an item
+
+    view.items.selectRow(0)
+    qtbot.waitUntil(lambda: "Etau.Pro.3MF" in view.existing_view.toPlainText(), timeout=5000)
+    text = view.existing_view.toPlainText()
+    assert text.index("Etau <b>.STL") < text.index("Etau.Pro.3MF")  # most seeded first
+    assert "https://c411.org/torrent/abc" in view.existing_view.toHtml()
+    assert [q.params()["q"] for q in indexer.searches] == ["Dragon"]
+    assert "(2)" in view.existing_box.title()
+
+    view.items.selectRow(1)
+    qtbot.waitUntil(lambda: len(indexer.searches) == 2, timeout=5000)
+    view.items.selectRow(0)
+    view.items.selectRow(1)
+    qtbot.wait(100)
+    assert len(indexer.searches) == 2  # cached for the session
+
+
+def test_nothing_found_says_so_and_a_failed_search_is_tried_again(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, indexer, _ = tab(qtbot, tmp_path)
+    entry = model(tmp_path)
+    view.set_entries([entry])
+    view.remember(entry, [])
+    indexer.search_error = httpx.ConnectError("down")
+
+    view.items.selectRow(0)
+    qtbot.waitUntil(lambda: "could not be searched" in view.existing_status.text(), timeout=5000)
+    indexer.search_error = None
+    view.items.clearSelection()
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: "Nothing found on c411" in view.existing_status.text(), timeout=5000)
+    assert len(indexer.searches) == 2
+    assert view.existing_view.isHidden()
+
+
+def test_the_list_of_existing_releases_collapses(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, indexer, _ = tab(qtbot, tmp_path)
+    indexer.found = [Candidate("Etau.3MF", 1, "d", details_url="https://c411.org/torrent/abc")]
+    entry = model(tmp_path)
+    view.set_entries([entry])
+    view.remember(entry, [])
+    view.show()
+    view.items.selectRow(0)
+    qtbot.waitUntil(lambda: view.existing_view.isVisible(), timeout=5000)
+
+    view.existing_box.setChecked(False)
+
+    assert not view.existing_view.isVisible()
