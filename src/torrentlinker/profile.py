@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 from urllib.parse import urlsplit
@@ -51,7 +51,7 @@ class UserProfile:
         """The Zen Profile with the Class and tree bonus read from c411."""
         if self.zen_class is None:
             return profile
-        return ZenProfile(self.zen_class, self.tree_bonus, profile.seed_hours, profile.torrent_cap)
+        return replace(profile, zen_class=self.zen_class, tree_bonus=self.tree_bonus)
 
 
 def class_from_slug(slug: str | None) -> ZenClass | None:

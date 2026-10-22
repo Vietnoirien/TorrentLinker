@@ -162,6 +162,7 @@ def _zen_from_json(d: dict) -> ZenProfile:  # type: ignore[type-arg]
     return ZenProfile(
         zen_class=ZenClass(d.get("zen_class", ZenClass.TANKER.value)),
         tree_bonus=float(d.get("tree_bonus", 0.0)),
+        badge_bonus=float(d.get("badge_bonus", 0.0)),
         seed_hours=float(d.get("seed_hours", 24.0)),
         torrent_cap=int(d.get("torrent_cap", 0)),
     )

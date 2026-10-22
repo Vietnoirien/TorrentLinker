@@ -189,6 +189,19 @@ class SettingsDialog(QDialog):
             self.tr("Bonus of the progression tree already unlocked on c411")
         )
         form.addRow(self.tr("Tree bonus unlocked"), self.tree_bonus)
+        self.badge_bonus = QDoubleSpinBox()
+        self.badge_bonus.setRange(0, 100)
+        self.badge_bonus.setDecimals(1)
+        self.badge_bonus.setSuffix(" %")
+        self.badge_bonus.setValue(z.badge_bonus * 100)
+        self.badge_bonus.setToolTip(
+            self.tr(
+                "What your shop badges add (Pondération + while worn, Pondération ++ once "
+                "owned), on top of your Class maximum. c411 shows it under Zen → Bonus; "
+                "its API does not report it."
+            )
+        )
+        form.addRow(self.tr("Shop badges bonus"), self.badge_bonus)
         self.seed_hours = QDoubleSpinBox()
         self.seed_hours.setRange(0, 24)
         self.seed_hours.setDecimals(1)
@@ -218,6 +231,7 @@ class SettingsDialog(QDialog):
         return ZenProfile(
             zen_class=ZenClass(self.zen_class.currentData()),  # Qt hands enum data back as str
             tree_bonus=self.tree_bonus.value() / 100,
+            badge_bonus=self.badge_bonus.value() / 100,
             seed_hours=self.seed_hours.value(),
             torrent_cap=self.torrent_cap.value(),
         )

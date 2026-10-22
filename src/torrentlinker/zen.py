@@ -16,14 +16,24 @@ Sources, as of 2026-10:
 - OFFICIAL EXCERPT — Swarm Keeper scoring table supplied on 2026-10-22: the category
   base is 1.00 except XXX at 0.50, added before seed age and size/seeder bonuses.
   Other Classes' category bases are unconfirmed and still default to 1.00.
+- OFFICIAL BONUS PAGE — c411's "Comment votre bonus est calculé", supplied on
+  2026-10-22: the bonus adds sources, each under its own maximum. The Class grid
+  (Swarm Keeper: +20 % from 5 torrents, +25 % from 15, +20 % from 50, +17.5 % from
+  100, +20 % from 150, then +1 % per 50 more up to +25 %); the progression tree, up to
+  +5 %, from challenges completed (reported by the profile as treeBonusBp); the shop's
+  Pondération badges, added on top even when the grid is at its maximum.
 
-Which bonuses make a "group" for the rounding is not documented: we group torrents
-with the same rarity and seed-age bonuses. Every figure is an estimate.
+- OFFICIAL FORMULA — c411's "Le calcul en cours", supplied on 2026-10-22:
+  payout = round(T × P × S × I ÷ 7 × (1 + B)), with T the torrents counted, P the share
+  of the day seeded, S their average weight, I their average note and B the bonus. With
+  I averaged by weight, T × S × I is the sum of each torrent's weight × note, which is
+  how torrents are counted here; the total is rounded once.
+
+Every figure is an estimate.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -32,6 +42,8 @@ from urllib.parse import urlsplit
 GB = 1_000_000_000  # c411 sizes are decimal: 1 Zen buys 1 Go of download credit
 DIVISOR = 7  # OFFICIAL
 MIN_SEED_HOURS = 0.5  # OFFICIAL: under 30 minutes a day a torrent counts nothing
+MAX_TREE_BONUS = 0.05  # OFFICIAL BONUS PAGE
+WEIGHT_EXPONENT = 0.119  # fitted to OFFICIAL FORMULA's 1.01, 1.24 and 1.38
 UPLOAD_ZEN_PER_DAY = 0.43  # OFFICIAL, upper figure: rough Reuploader estimate per upload
 KEEPER_CATEGORY_BASES = {6000: 0.5}  # OFFICIAL EXCERPT: other listed categories have base 1
 
@@ -42,22 +54,6 @@ DURATION_STEPS = ((180, 0.5), (90, 0.35), (30, 0.25), (7, 0.1))
 # from +5 % at 15 to +35 % at 750 (steps ZEN LAB); Swarm Keeper ZEN LAB (not monotonic).
 TANKER_CLASS_STEPS = ((15, 0.05), (50, 0.1), (100, 0.15), (150, 0.2), (300, 0.25))
 KEEPER_CLASS_STEPS = ((5, 0.2), (15, 0.25), (50, 0.2), (100, 0.175), (150, 0.2))
-
-# (minimum torrents, minimum average note, bonus) — ZEN LAB; OFFICIAL cap of +5 %.
-TANKER_TREE_STEPS = (
-    (1000, 2.0, 0.05),
-    (600, 0.0, 0.04),
-    (300, 0.0, 0.03),
-    (150, 0.0, 0.02),
-    (100, 1.5, 0.01),
-)
-KEEPER_TREE_STEPS = (
-    (300, 2.0, 0.05),
-    (250, 0.0, 0.04),
-    (200, 0.0, 0.03),
-    (150, 0.0, 0.02),
-    (100, 1.5, 0.01),
-)
 
 
 class ZenClass(StrEnum):
@@ -75,9 +71,10 @@ class ZenProfile:
     """The user's own parameters that change Zen."""
 
     zen_class: ZenClass = ZenClass.TANKER
-    tree_bonus: float = 0.0  # already unlocked on c411, e.g. 0.05 for +5 %
+    tree_bonus: float = 0.0  # already unlocked on c411, e.g. 0.05 for +5 % (at most)
     seed_hours: float = 24.0  # per day
     torrent_cap: int = 0  # most torrents the user wants to seed; 0 = no cap
+    badge_bonus: float = 0.0  # the shop's Pondération badges, on top of the Class maximum
 
 
 @dataclass(frozen=True)
@@ -103,20 +100,23 @@ class ZenDay:
     multiplier: float = 1.0
     uploads: float = 0.0
     total: float = 0.0  # unrounded
-    paid: int = 0  # rounded per group, as c411 pays
+    paid: int = 0  # the total rounded once, as c411 pays
 
 
 # Rules ----------------------------------------------------------------------
 
 
 def weight(size: int) -> float:
-    """Size weight: 1 for a 4 GB film. 0–4 GB OFFICIAL points, curve ZEN LAB."""
+    """Size weight: 1 for a 4 GB film (OFFICIAL FORMULA).
+
+    Up to 4 GB: (0.25 GB + size) / 4.25 GB. Above, it rises slowly; c411 gives 1.01 at
+    4.29 GB (4.00 GiB), 1.24 at 25 GB and 1.38 at 60 GB, which a power curve fits within
+    their rounding, where a straight line from 4 to 25 GB gives 1.00 at 4.29 GB.
+    """
     gb = size / GB
     if gb <= 4:
         return (0.25 + gb) / 4.25
-    if gb <= 25:
-        return 1 + (gb - 4) * 0.24 / 21
-    return 1.24 + (gb - 25) * 0.14 / 35
+    return float((gb / 4) ** WEIGHT_EXPONENT)
 
 
 def duration_bonus(seed_days: float) -> float:
@@ -179,15 +179,6 @@ def class_bonus(zen_class: ZenClass, count: int) -> float:
     return bonus
 
 
-def tree_bonus(zen_class: ZenClass, count: int, average_note: float) -> float:
-    """Progression tree bonus reachable with `count` torrents (ZEN LAB thresholds)."""
-    steps = {ZenClass.TANKER: TANKER_TREE_STEPS, ZenClass.SWARM_KEEPER: KEEPER_TREE_STEPS}
-    for n, min_note, bonus in steps.get(zen_class, ()):
-        if count >= n and average_note >= min_note:
-            return bonus
-    return 0.0
-
-
 def day_share(seed_hours: float) -> float:
     """Share of a full day's pay for the hours seeded."""
     return 0.0 if seed_hours < MIN_SEED_HOURS else min(seed_hours, 24.0) / 24.0
@@ -202,6 +193,11 @@ def category_base(zen_class: ZenClass, category: int | None) -> float:
 # Estimates --------------------------------------------------------------------
 
 
+def extra_bonus(profile: ZenProfile) -> float:
+    """The tree bonus c411 grants (never inferred: its challenges take time) and badges."""
+    return min(profile.tree_bonus, MAX_TREE_BONUS) + profile.badge_bonus
+
+
 def estimate(profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int = 0) -> ZenDay:
     """Zen a day for seeding `torrents` (plus `uploads` for a Reuploader)."""
     upload_zen = uploads * UPLOAD_ZEN_PER_DAY if profile.zen_class is ZenClass.REUPLOADER else 0
@@ -211,18 +207,11 @@ def estimate(profile: ZenProfile, torrents: Sequence[ZenTorrent], uploads: int =
     cls = profile.zen_class
     notes = [note(cls, t) for t in torrents]
     values = [n * weight(t.size) for n, t in zip(notes, torrents, strict=True)]
-    weights = [weight(t.size) for t in torrents]
-    average = sum(n * w for n, w in zip(notes, weights, strict=True)) / sum(weights)
-    tree = max(tree_bonus(cls, len(torrents), average), profile.tree_bonus)
-    multiplier = 1 + class_bonus(cls, len(torrents)) + tree
+    multiplier = 1 + class_bonus(cls, len(torrents)) + extra_bonus(profile)
     scale = multiplier / DIVISOR * day_share(profile.seed_hours)
     per_torrent = [v * scale for v in values]
-    groups: dict[tuple[float, float], float] = defaultdict(float)
-    for t, zen in zip(torrents, per_torrent, strict=True):
-        groups[(rarity_bonus(cls, t.size, t.seeders), duration_bonus(t.seed_days))] += zen
-    paid = sum(round(g) for g in groups.values())
     total = sum(per_torrent)
-    return ZenDay(per_torrent, notes, multiplier, upload_zen, total + upload_zen, paid)
+    return ZenDay(per_torrent, notes, multiplier, upload_zen, total + upload_zen, round(total))
 
 
 def added_values(
@@ -230,20 +219,18 @@ def added_values(
 ) -> list[float]:
     """Zen Estimate of each of `torrents` if one of them were added to `alongside`.
 
-    Fast: the Class and tree multipliers are those of `alongside` plus one torrent, so
-    thousands of Catalogue torrents can be ranked at once.
+    Fast: the Class multiplier is that of `alongside` plus one torrent, so thousands of
+    Catalogue torrents can be ranked at once.
     """
     if not profile.zen_class.paid_on_seeding or not torrents:
         return [0.0] * len(torrents)
     cls = profile.zen_class
-    base = estimate(profile, alongside) if alongside else None
     count = len(alongside) + 1
-    average = 1.0
-    if base is not None:
-        weights = [weight(t.size) for t in alongside]
-        average = sum(n * w for n, w in zip(base.notes, weights, strict=True)) / sum(weights)
-    tree = max(tree_bonus(cls, count, average), profile.tree_bonus)
-    scale = (1 + class_bonus(cls, count) + tree) / DIVISOR * day_share(profile.seed_hours)
+    scale = (
+        (1 + class_bonus(cls, count) + extra_bonus(profile))
+        / DIVISOR
+        * day_share(profile.seed_hours)
+    )
     return [note(cls, t) * weight(t.size) * scale for t in torrents]
 
 
@@ -259,14 +246,16 @@ def compare_classes(
 ) -> dict[ZenClass, ZenDay]:
     """What the same seeding would earn in each Class.
 
-    The tree bonus already unlocked belongs to the current Class; the others only get
-    what their tree would give for these torrents. The Reuploader figure is rough: it
+    The tree bonus already unlocked belongs to the current Class; the others start
+    their tree at 0. Shop badges count in every Class. The Reuploader figure is rough: it
     counts `uploads` at the guide's upper figure per upload.
     """
     return {
         c: estimate(
             replace(
-                profile, zen_class=c, tree_bonus=profile.tree_bonus if c is profile.zen_class else 0
+                profile,
+                zen_class=c,
+                tree_bonus=profile.tree_bonus if c is profile.zen_class else 0.0,
             ),
             torrents,
             uploads,

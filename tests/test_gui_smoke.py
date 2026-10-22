@@ -1257,3 +1257,20 @@ def test_after_a_verified_unpack_the_archive_can_go_to_the_trash(
     assert archive.exists() == kept
     assert trashed == ([] if kept else [str(archive)])
     assert store.take_unpacked(folder) is None  # never offered twice
+
+
+def test_shop_badges_go_past_the_tree_bonus_limit(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.gui.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(Settings())
+    qtbot.addWidget(dialog)
+
+    dialog.tree_bonus.setValue(12.5)  # c411's tree stops at +5 %
+    dialog.badge_bonus.setValue(12.5)  # badges add on top of every maximum
+
+    zen = dialog._read_zen()
+    assert zen.tree_bonus == pytest.approx(0.05) and zen.badge_bonus == pytest.approx(0.125)
+    s = Settings()
+    s.zen = zen
+    s.save(tmp_path / "settings.json")
+    assert Settings.load(tmp_path / "settings.json").zen.badge_bonus == pytest.approx(0.125)

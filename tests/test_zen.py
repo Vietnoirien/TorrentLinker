@@ -12,7 +12,6 @@ from torrentlinker.zen import (
     is_indexer_torrent,
     note,
     rarity_bonus,
-    tree_bonus,
     weight,
 )
 
@@ -34,15 +33,22 @@ def test_guide_worked_example_tanker_fifteen_films_of_4_gb_earns_about_4_a_day()
 
 @pytest.mark.parametrize(
     ("size", "expected"),
-    [(1 * GB, 0.29), (4 * GB, 1.0), (25 * GB, 1.24), (5_000_000, 0.06)],
+    [
+        (1_000_000, 0.06),
+        (1 * GB, 0.29),
+        (1024**3, 0.31),  # shown as 1,00 Go
+        (4 * GB, 1.0),
+        (4 * 1024**3, 1.01),  # shown as 4,00 Go
+        (25 * GB, 1.24),
+        (60 * GB, 1.38),
+    ],
 )
 def test_size_weight_matches_the_guide(size: float, expected: float) -> None:
     assert weight(int(size)) == pytest.approx(expected, abs=0.006)
 
 
 def test_weight_keeps_rising_slowly_beyond_25_gb() -> None:
-    assert weight(60 * GB) == pytest.approx(1.38)
-    assert weight(95 * GB) > weight(60 * GB)
+    assert weight(95 * GB) > weight(60 * GB) > weight(25 * GB)
 
 
 def test_seed_age_bonus_grows_by_steps() -> None:
@@ -85,11 +91,27 @@ def test_class_bonus_grows_with_the_number_of_torrents() -> None:
     assert class_bonus(ZenClass.SWARM_KEEPER, 10) == 0.2
 
 
-def test_tree_bonus_is_capped_at_5_percent() -> None:
-    assert tree_bonus(ZenClass.TANKER, 1000, 2.0) == 0.05
-    assert tree_bonus(ZenClass.TANKER, 50, 2.0) == 0
-    assert tree_bonus(ZenClass.SWARM_KEEPER, 100, 1.4) == 0
-    assert tree_bonus(ZenClass.SWARM_KEEPER, 100, 1.5) == 0.01
+def test_the_tree_bonus_is_never_inferred_from_the_torrents_seeded() -> None:
+    # c411 grants it for challenges completed over time: 5,682 torrents alone give none.
+    many = [film(100, 200) for _ in range(5682)]
+
+    day = estimate(ZenProfile(ZenClass.SWARM_KEEPER), many)
+
+    assert day.multiplier == pytest.approx(1.25)  # the grid's maximum, as c411 shows
+
+
+def test_the_tree_bonus_is_capped_at_5_percent() -> None:
+    profile = ZenProfile(ZenClass.SWARM_KEEPER, tree_bonus=0.08)
+
+    assert estimate(profile, [film()]).multiplier == pytest.approx(1.05)  # 1 torrent: no grid
+
+
+def test_shop_badges_add_on_top_of_the_class_maximum() -> None:
+    many = [film(100, 200) for _ in range(500)]
+    profile = ZenProfile(ZenClass.SWARM_KEEPER, tree_bonus=0.05, badge_bonus=0.04)
+
+    # Grid at its +25 % maximum, tree +5 %, badges +4 %: c411's 30 % maximum is passed.
+    assert estimate(profile, many).multiplier == pytest.approx(1.34)
 
 
 def test_tree_bonus_already_unlocked_on_c411_is_kept() -> None:
@@ -113,12 +135,15 @@ def test_each_torrent_estimate_adds_up_to_the_total() -> None:
     assert sum(day.per_torrent) == pytest.approx(day.total)
 
 
-def test_groups_of_torrents_with_the_same_bonuses_are_rounded_separately() -> None:
-    group = [film(100, 90) for _ in range(2)]  # note 1.7: 0.49/day, paid 0
-    other = [film(100, 200) for _ in range(2)]  # note 1.85: 0.53/day, paid 1
-    day = estimate(TANKER, group + other)
+def test_the_day_is_rounded_once_on_the_total() -> None:
+    # c411's example: 18.7 before bonus, +25 %, 23 paid.
+    day = estimate(KEEPER, [film(100, 90) for _ in range(4)])
 
-    assert day.paid == 1 == round(sum(day.per_torrent[:2])) + round(sum(day.per_torrent[2:]))
+    assert day.paid == round(day.total)
+
+
+def test_c411_worked_example_rounds_the_total_with_its_bonus() -> None:
+    assert round(18.7 * 1.25) == 23
 
 
 def test_a_reuploader_earns_nothing_from_seeding_and_a_rough_amount_per_upload() -> None:
