@@ -86,6 +86,14 @@ SUBCATEGORY_LABELS = {
     51: QT_TRANSLATE_NOOP("Subcategory", "Objects"),
     52: QT_TRANSLATE_NOOP("Subcategory", "Characters"),
     53: QT_TRANSLATE_NOOP("Subcategory", "Pack"),
+    11: QT_TRANSLATE_NOOP("Subcategory", "Audiobooks"),
+    12: QT_TRANSLATE_NOOP("Subcategory", "Comic strips (BD)"),
+    13: QT_TRANSLATE_NOOP("Subcategory", "Comics"),
+    14: QT_TRANSLATE_NOOP("Subcategory", "Books"),
+    15: QT_TRANSLATE_NOOP("Subcategory", "Manga"),
+    16: QT_TRANSLATE_NOOP("Subcategory", "Press"),
+    59: QT_TRANSLATE_NOOP("Subcategory", "Sheet music & tablature"),
+    60: QT_TRANSLATE_NOOP("Subcategory", "Journals & technical manuals"),
 }
 
 
@@ -98,12 +106,29 @@ def refusal_text(r: Refusal) -> str:
         return QCoreApplication.translate("Upload", "Choose a value for {0}").format(r.detail)
     if r.problem is Problem.NO_3D_FILE:
         return QCoreApplication.translate("Upload", "No 3D file (STL, 3MF, OBJ, STEP, GCODE…)")
+    if r.problem is Problem.NO_EBOOK_FORMAT:
+        return QCoreApplication.translate(
+            "Upload",
+            "No accepted format (PDF, EPUB, MOBI, DjVu, CBR, CBZ, JPG/PNG, MP3, M4A/M4B, FLAC)",
+        )
     return QCoreApplication.translate("Upload", "No file to upload")
 
 
 def warning_text(w: UploadWarning) -> str:
     if w.judgement is Judgement.PACK_THEME:
         return QCoreApplication.translate("Upload", "A pack must have one coherent theme")
+    if w.judgement is Judgement.FRENCH_ONLY:
+        return QCoreApplication.translate("Upload", "c411 accepts eBooks in French only")
+    if w.judgement is Judgement.NO_DUPLICATE:
+        return QCoreApplication.translate(
+            "Upload", "Duplicates are strictly forbidden (another format is not one)"
+        )
+    if w.judgement is Judgement.FEW_FORMATS:
+        return QCoreApplication.translate("Upload", "At most two or three formats of the same book")
+    if w.judgement is Judgement.WHOLE_VOLUMES:
+        return QCoreApplication.translate("Upload", "A pack must hold whole volumes")
+    if w.judgement is Judgement.EVERY_VOLUME:
+        return QCoreApplication.translate("Upload", "A BD pack must hold every volume")
     return QCoreApplication.translate(
         "Upload", "c411 forbids files from independent creators who live off them"
     )
