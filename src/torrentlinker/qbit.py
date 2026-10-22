@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -117,12 +118,21 @@ class _SharedLogin:
         return call
 
 
+LIST_TIMEOUT = 300  # seconds to read the first full listing: 15k torrents take 15 s on a NAS
+
+
 class QbitApi:
     """Adapter over qBittorrent's WebUI API (4.5+ and 5.x).
 
     With an API key (qBittorrent 5.2+) every request carries `Authorization: Bearer`
     and there is no login; otherwise the username and password open one session that
     every thread shares.
+
+    Every torrent is listed through one copy kept in step with qBittorrent's sync API,
+    as its own Web UI does: the first listing reads them all, later ones only what
+    changed. qBittorrent answers one request at a time, and with 15,000 torrents a full
+    listing is 22 MB that a NAS takes 15 s to send, so listings that overlap at start-up
+    timed out or were dropped. Listings wait for each other instead.
     """
 
     def __init__(self, host: str, username: str, password: str, api_key: str = "") -> None:
@@ -135,6 +145,9 @@ class QbitApi:
             REQUESTS_ARGS={"timeout": (5, 30)},
         )
         self._client: Any = client if api_key else _SharedLogin(client)
+        self._sync = threading.Lock()
+        self._rid = 0
+        self._known: dict[str, dict[str, Any]] = {}
 
     def check(self) -> str:
         """Log in (or validate the API key) and return the qBittorrent version."""
@@ -153,24 +166,43 @@ class QbitApi:
         self._client.app_delete_api_key()
 
     def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
-        return [self._torrent(t, with_files) for t in self._client.torrents_info(tag=tag)]
+        # A tag is filtered by qBittorrent itself: a short answer, sent at once.
+        found = self._client.torrents_info(tag=tag) if tag is not None else self._synced()
+        return [self._torrent(t, with_files) for t in found]
+
+    def _synced(self) -> list[dict[str, Any]]:
+        """Every torrent, from the copy kept in step with qBittorrent's sync API."""
+        with self._sync:
+            data = self._client.sync_maindata(
+                rid=self._rid, requests_args={"timeout": (5, LIST_TIMEOUT)}
+            )
+            if data.get("full_update"):
+                self._known = {}
+            for h, changed in (data.get("torrents") or {}).items():
+                self._known.setdefault(h, {"hash": h}).update(changed)
+            for h in data.get("torrents_removed") or []:
+                self._known.pop(h, None)
+            self._rid = int(data.get("rid", 0))
+            return [dict(t) for t in self._known.values()]
 
     def torrent(self, hash: str) -> Torrent | None:
         found = self._client.torrents_info(torrent_hashes=hash)
         return self._torrent(found[0]) if found else None
 
-    def _torrent(self, t: qbittorrentapi.TorrentDictionary, with_files: bool = True) -> Torrent:
+    def _torrent(self, t: Mapping[str, Any], with_files: bool = True) -> Torrent:
         files = (
-            {f.name: int(f.size) for f in self._client.torrents_files(t.hash)} if with_files else {}
+            {f.name: int(f.size) for f in self._client.torrents_files(t["hash"])}
+            if with_files
+            else {}
         )
         return Torrent(
-            hash=t.hash,
-            name=t.name,
-            save_path=Path(t.save_path),
+            hash=t["hash"],
+            name=t["name"],
+            save_path=Path(t["save_path"]),
             files=files,
-            tags=frozenset(x.strip() for x in t.tags.split(",") if x.strip()),
-            progress=float(t.progress),
-            state=str(t.state),
+            tags=frozenset(x.strip() for x in str(t.get("tags", "")).split(",") if x.strip()),
+            progress=float(t["progress"]),
+            state=str(t["state"]),
             tracker=str(t.get("tracker", "")),
             swarm_seeders=max(int(str(t.get("num_complete", -1))), -1),
             seeding_time=float(str(t.get("seeding_time", 0))),

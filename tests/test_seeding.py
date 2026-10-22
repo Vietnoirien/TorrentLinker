@@ -84,18 +84,16 @@ def test_estimates_use_cached_counts_until_the_tracker_responds_and_keep_the_cat
 def test_qbit_adapter_keeps_unknown_counts_distinct_from_a_reported_zero(
     raw: dict[str, int], expected: int
 ) -> None:
-    from types import SimpleNamespace
-
     from torrentlinker.qbit import QbitApi
 
-    data = SimpleNamespace(
-        hash="a" * 40,
-        name="Book",
-        save_path="/data",
-        tags="",
-        progress=0,
-        state="downloading",
-        get=raw.get,
-    )
+    data = {
+        "hash": "a" * 40,
+        "name": "Book",
+        "save_path": "/data",
+        "tags": "",
+        "progress": 0,
+        "state": "downloading",
+        **raw,
+    }
     qbit = QbitApi.__new__(QbitApi)
-    assert qbit._torrent(data, with_files=False).swarm_seeders == expected  # type: ignore[arg-type]
+    assert qbit._torrent(data, with_files=False).swarm_seeders == expected
