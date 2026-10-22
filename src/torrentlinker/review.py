@@ -179,7 +179,10 @@ def unpack_and_reseed(
     if found is None:
         raise ArchiveError("the unpacked files do not match the torrent")
     key = candidate_key(checked.candidate)
-    return start_reseed(qbit, store, local, checked.meta, found, key), local
+    h = start_reseed(qbit, store, local, checked.meta, found, key)
+    # Once Verification passes, the user is offered to put the archive in the trash.
+    store.remember_unpacked(local.path, checked.unpack.archive)
+    return h, local
 
 
 def match_zen(

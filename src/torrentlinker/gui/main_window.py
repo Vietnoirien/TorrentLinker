@@ -7,7 +7,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelection, Qt, QTimer
+from PySide6.QtCore import QFile, QItemSelection, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -42,7 +42,7 @@ from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.errors import error_text
-from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
+from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
@@ -1206,12 +1206,56 @@ class MainWindow(QMainWindow):
             else:
                 text = self.tr("Verification failed at {0}").format(f"{outcome.progress:.1%}")
             self.library_model.set_status(outcome.item_path, text)
+        unpacked = [(o, self.store.take_unpacked(o.item_path)) for o in outcomes]
         for path in pending:
             self.library_model.set_status(path, self.tr("Verifying…"))
         if pending:
             self.verify_timer.start()
         else:
             self.verify_timer.stop()
+        for outcome, archive in unpacked:
+            if archive is not None and outcome.verified and outcome.started:
+                self.offer_archive_removal(outcome.item_path, archive)
+
+    def offer_archive_removal(self, folder: Path, archive: Path) -> None:
+        """After an unpacked archive's Reseed is verified, offer to put the archive in the
+        trash: its contents now seed from `folder` (ADR-0007)."""
+        if not archive.is_file() or not folder.is_dir():
+            return
+        box = QMessageBox(
+            QMessageBox.Icon.Question,
+            self.tr("Unpack and Reseed"),
+            self.tr(
+                "{0} now seeds: qBittorrent verified every file. They are the contents of "
+                "{1}, so the archive ({2}) is no longer needed.\n\nMove it to the trash?"
+            ).format(folder.name, archive.name, human_size(archive.stat().st_size)),
+            parent=self,
+        )
+        trash = box.addButton(self.tr("Move to the trash"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(self.tr("Keep the archive"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is not trash:
+            log.info("archive kept after unpacking: %s", archive)
+            return
+        if QFile.moveToTrash(str(archive)):
+            log.info("archive moved to the trash after unpacking: %s", archive)
+        else:
+            answer = QMessageBox.question(
+                self,
+                self.tr("Unpack and Reseed"),
+                self.tr(
+                    "That disk has no trash. Delete {0} permanently? This cannot be undone."
+                ).format(archive.name),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                log.info("archive kept, no trash on its disk: %s", archive)
+                return
+            archive.unlink()
+            log.info("archive deleted after unpacking: %s", archive)
+        self.statusBar().showMessage(self.tr("{0} removed").format(archive.name), 10000)
+        self.scan()  # the archive leaves the Library
 
     def _verify_error(self, error: Exception) -> None:
         self._checking = False  # the timer keeps running: the next poll retries

@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS catalogue_feed (
     count INTEGER NOT NULL DEFAULT 0,
     limited INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS unpacked_archive (
+    folder TEXT PRIMARY KEY,
+    archive TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS plan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     made_at REAL NOT NULL,
@@ -510,6 +514,25 @@ class Store:
                 " AND name NOT LIKE 'c411-latest:%' LIMIT 1"
             ).fetchone()
         return row is not None or feed is not None
+
+    # Archives unpacked to Reseed --------------------------------------------
+
+    def remember_unpacked(self, folder: Path, archive: Path) -> None:
+        """The archive `folder` was unpacked from, until its Reseed is verified."""
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO unpacked_archive (folder, archive) VALUES (?, ?)",
+                (str(folder), str(archive)),
+            )
+
+    def take_unpacked(self, folder: Path) -> Path | None:
+        """The archive `folder` was unpacked from, forgotten once read."""
+        with self._lock, self._db:
+            row = self._db.execute(
+                "SELECT archive FROM unpacked_archive WHERE folder = ?", (str(folder),)
+            ).fetchone()
+            self._db.execute("DELETE FROM unpacked_archive WHERE folder = ?", (str(folder),))
+        return Path(row[0]) if row else None
 
     # The saved Plan ---------------------------------------------------------
 

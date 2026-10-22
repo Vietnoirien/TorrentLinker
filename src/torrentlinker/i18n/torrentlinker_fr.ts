@@ -516,7 +516,7 @@ Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajo
     </message>
     <message>
         <location filename="../gui/main_window.py" line="1182"/>
-        <location filename="../gui/main_window.py" line="1210"/>
+        <location filename="../gui/main_window.py" line="1211"/>
         <source>Verifying…</source>
         <translation>Vérification…</translation>
     </message>
@@ -541,7 +541,42 @@ Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajo
         <translation>Vérification échouée à {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1218"/>
+        <location filename="../gui/main_window.py" line="1227"/>
+        <location filename="../gui/main_window.py" line="1245"/>
+        <source>Unpack and Reseed</source>
+        <translation>Décompresser et repartager</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1229"/>
+        <source>{0} now seeds: qBittorrent verified every file. They are the contents of {1}, so the archive ({2}) is no longer needed.
+
+Move it to the trash?</source>
+        <translation>{0} est maintenant partagé : qBittorrent a vérifié chaque fichier. Ce sont les fichiers de {1}, donc l’archive ({2}) n’est plus nécessaire.
+
+La mettre à la corbeille ?</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1234"/>
+        <source>Move to the trash</source>
+        <translation>Mettre à la corbeille</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1235"/>
+        <source>Keep the archive</source>
+        <translation>Garder l’archive</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1247"/>
+        <source>That disk has no trash. Delete {0} permanently? This cannot be undone.</source>
+        <translation>Ce disque n’a pas de corbeille. Supprimer définitivement {0} ? C’est irréversible.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1257"/>
+        <source>{0} removed</source>
+        <translation>{0} supprimée</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1262"/>
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
     </message>
@@ -1051,21 +1086,6 @@ Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajo
         <translation>La décompression demande {0}, mais seulement {1} est libre sur ce disque.</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="424"/>
-        <source>Unpack {0} into the new folder
-{1}?
-
-It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten and your archive is kept: delete it yourself once the torrent seeds, if you wish.
-
-The torrent is then added to qBittorrent against the unpacked files, and verified before it seeds.</source>
-        <translation>Décompresser {0} dans le nouveau dossier
-{1} ?
-
-Cela écrit {2} en {3} fichiers ; {4} est libre sur ce disque. Rien n’est écrasé et votre archive est conservée : supprimez-la vous-même une fois le torrent en partage, si vous le souhaitez.
-
-Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, et vérifié avant d’être partagé.</translation>
-    </message>
-    <message>
         <location filename="../gui/review_panel.py" line="442"/>
         <source>Unpacking %p%</source>
         <translation>Décompression %p%</translation>
@@ -1099,6 +1119,21 @@ Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, 
         <location filename="../gui/review_panel.py" line="314"/>
         <source>Reseed {0} Matches</source>
         <translation>Repartager {0} correspondances</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="424"/>
+        <source>Unpack {0} into the new folder
+{1}?
+
+It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten.
+
+The torrent is then added to qBittorrent against the unpacked files, and verified before it seeds. Once it is verified, you are offered to move the archive to the trash.</source>
+        <translation>Décompresser {0} dans le nouveau dossier
+{1} ?
+
+Cela écrit {2} en {3} fichiers ; {4} est libre sur ce disque. Rien n’est écrasé.
+
+Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, et vérifié avant d’être partagé. Une fois la vérification réussie, il vous sera proposé de mettre l’archive à la corbeille.</translation>
     </message>
     <message>
         <location filename="../gui/review_panel.py" line="483"/>

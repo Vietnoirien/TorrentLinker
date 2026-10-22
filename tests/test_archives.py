@@ -120,7 +120,9 @@ def test_unpack_then_reseed_seeds_the_new_folder_and_keeps_the_archive(tmp_path:
     assert (local.path / "STL" / "head.stl").read_bytes() == (
         folder / "STL" / "head.stl"
     ).read_bytes()
-    assert archive.exists()  # kept
+    assert archive.exists()  # kept until the user decides, after Verification
+    assert store.take_unpacked(local.path) == archive
+    assert store.take_unpacked(local.path) is None  # asked once
     t = qbit.torrent(h)
     assert t is not None and t.save_path == tmp_path / "lib"
     assert seen[-1] == (checked.unpack.size, checked.unpack.size)  # type: ignore[union-attr]

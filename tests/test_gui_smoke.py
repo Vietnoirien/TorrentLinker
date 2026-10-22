@@ -1198,3 +1198,62 @@ def test_a_match_inside_an_archive_offers_to_unpack_and_reseed(qtbot, tmp_path: 
     assert panel.reseed_button.isEnabled()
     assert panel.files.item(0, 2).text() == "✓ in the archive"  # type: ignore[union-attr]
     assert window._summary(checked) == "Full match inside the archive"
+
+
+@pytest.mark.parametrize(
+    "verified,started,choice,kept",
+    [
+        (True, True, "Move to the trash", False),
+        (True, True, "Keep the archive", True),
+        (False, False, None, True),  # Verification failed: nothing is offered
+        (True, False, None, True),  # verified but left stopped: nothing is offered
+    ],
+)
+def test_after_a_verified_unpack_the_archive_can_go_to_the_trash(
+    qtbot,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+    verified: bool,
+    started: bool,
+    choice: str | None,
+    kept: bool,
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from torrentlinker.gui import main_window
+    from torrentlinker.reseed import Outcome
+
+    archive = tmp_path / "Tiamat.rar"
+    archive.write_bytes(b"rar" * 100)
+    folder = tmp_path / "Chuya Factory - Tiamat"
+    folder.mkdir()
+    store = Store(tmp_path / "s.db")
+    store.remember_unpacked(folder, archive)
+    window = MainWindow(Settings(), tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window.scan = lambda refresh=False: None  # type: ignore[method-assign]
+    asked: list[str] = []
+
+    def answer(box: QMessageBox) -> None:
+        asked.append(box.text())
+        box.chosen = next((b for b in box.buttons() if b.text() == choice), None)  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(QMessageBox, "exec", answer)
+    monkeypatch.setattr(QMessageBox, "clickedButton", lambda box: box.chosen)
+    trashed: list[str] = []
+
+    def to_trash(path: str) -> bool:
+        trashed.append(path)
+        Path(path).unlink()
+        return True
+
+    monkeypatch.setattr(main_window.QFile, "moveToTrash", staticmethod(to_trash))
+
+    window._verified(([Outcome(folder, "a" * 40, verified, 1.0, started)], []))
+
+    assert bool(asked) == (choice is not None)
+    if asked:
+        assert "Tiamat.rar" in asked[0] and "verified every file" in asked[0]
+    assert archive.exists() == kept
+    assert trashed == ([] if kept else [str(archive)])
+    assert store.take_unpacked(folder) is None  # never offered twice

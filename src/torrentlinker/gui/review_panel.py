@@ -422,10 +422,10 @@ class ReviewPanel(QWidget):
             self.tr("Unpack and Reseed"),
             self.tr(
                 "Unpack {0} into the new folder\n{1}?\n\n"
-                "It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten "
-                "and your archive is kept: delete it yourself once the torrent seeds, if you "
-                "wish.\n\nThe torrent is then added to qBittorrent against the unpacked files, "
-                "and verified before it seeds."
+                "It writes {2} in {3} files; {4} is free on that disk. Nothing is "
+                "overwritten.\n\nThe torrent is then added to qBittorrent against the "
+                "unpacked files, and verified before it seeds. Once it is verified, you are "
+                "offered to move the archive to the trash."
             ).format(
                 u.archive.name,
                 folder,
