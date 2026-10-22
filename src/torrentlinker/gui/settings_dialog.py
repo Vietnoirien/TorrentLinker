@@ -40,6 +40,7 @@ from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
+from torrentlinker.gui.errors import offer_whole_names
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import WARNING, class_label
 from torrentlinker.indexer import Caps, Indexer
@@ -59,6 +60,7 @@ log = logging.getLogger(__name__)
 QBIT_PASSWORD = "qbit-password"
 QBIT_API_KEY = "qbit-api-key"
 DELUGE_PASSWORD = "deluge-password"
+TRANSMISSION_PASSWORD = "transmission-password"
 INDEXER_API_KEY = "indexer-api-key"
 # Up to 4 more keys of the same c411 account, each within its own limits (ADR-0008).
 EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
@@ -256,6 +258,7 @@ class SettingsDialog(QDialog):
         self.client_forms = QStackedWidget()
         self.client_forms.addWidget(self._qbit_form())
         self.client_forms.addWidget(self._deluge_form())
+        self.client_forms.addWidget(self._transmission_form())
         self.client_forms.setCurrentIndex(self.client.currentIndex())
         self.client.currentIndexChanged.connect(self.client_forms.setCurrentIndex)
         layout.addWidget(self.client_forms)
@@ -296,6 +299,28 @@ class SettingsDialog(QDialog):
         form.addRow("", note)
         return page
 
+    def _transmission_form(self) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setContentsMargins(0, 0, 0, 0)
+        self.transmission_host = QLineEdit(self.settings.transmission.host)
+        self.transmission_user = QLineEdit(self.settings.transmission.username)
+        self.transmission_password = self._secret_field(TRANSMISSION_PASSWORD)
+        form.addRow(self.tr("Remote address"), self.transmission_host)
+        form.addRow(self.tr("Username"), self.transmission_user)
+        form.addRow(self.tr("Password"), self.transmission_password)
+        note = QLabel(
+            self.tr(
+                "Turn on remote access in Transmission (Preferences → Remote). Reseeds need "
+                "“Append .part to incomplete files' names” off: TorrentLinker offers to turn "
+                "it off. Transmission renames file and folder names in place only, so a "
+                "Match needing other folders cannot be Reseeded with it."
+            )
+        )
+        note.setWordWrap(True)
+        form.addRow("", note)
+        return page
+
     def _qbit_form(self) -> QWidget:
         page = QWidget()
         form = QFormLayout(page)
@@ -323,6 +348,13 @@ class SettingsDialog(QDialog):
         client = self._chosen_client()
         if client is TorrentClient.DELUGE:
             return connect(client, self.deluge_host.text(), "", self.deluge_password.text())
+        if client is TorrentClient.TRANSMISSION:
+            return connect(
+                client,
+                self.transmission_host.text(),
+                self.transmission_user.text(),
+                self.transmission_password.text(),
+            )
         key = self.qbit_api_key.text().strip()
         if key and not is_api_key(key):
             QMessageBox.warning(
@@ -339,12 +371,17 @@ class SettingsDialog(QDialog):
         if (api := self._form_qbit()) is None:
             return
         name = self._chosen_client().display_name
+
+        def failed(e: Exception) -> None:
+            if not offer_whole_names(self, e, then=self._test_qbit):
+                QMessageBox.warning(self, name, str(e))
+
         run_in_background(
             api.check,
             lambda v: QMessageBox.information(
                 self, name, self.tr("Connected to {0} {1}").format(name, v)
             ),
-            lambda e: QMessageBox.warning(self, name, str(e)),
+            failed,
         )
 
     # Indexer ---------------------------------------------------------------
@@ -957,6 +994,7 @@ class SettingsDialog(QDialog):
             QBIT_PASSWORD: self.qbit_password.text(),
             QBIT_API_KEY: self.qbit_api_key.text().strip(),
             DELUGE_PASSWORD: self.deluge_password.text(),
+            TRANSMISSION_PASSWORD: self.transmission_password.text(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
             **{
@@ -982,6 +1020,8 @@ class SettingsDialog(QDialog):
         s.language = self.language.currentData()
         s.client = self._chosen_client()
         s.deluge.host = self.deluge_host.text().strip()
+        s.transmission.host = self.transmission_host.text().strip()
+        s.transmission.username = self.transmission_user.text().strip()
         s.qbit.host = self.qbit_host.text().strip()
         s.qbit.username = self.qbit_user.text().strip()
         s.indexer.url = self.indexer_url.text().strip()

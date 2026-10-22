@@ -53,6 +53,7 @@ from torrentlinker.gui.settings_dialog import (
     QBIT_API_KEY,
     QBIT_PASSWORD,
     TMDB_API_KEY,
+    TRANSMISSION_PASSWORD,
     SettingsDialog,
     choose_directory,
     extra_indexer_keys,
@@ -255,10 +256,13 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
 
     def qbit(self) -> MappedQbit:
-        """The Torrent Client the user chose, qBittorrent or Deluge, through Path Mappings."""
+        """The Torrent Client the user chose, through Path Mappings."""
         s = self.settings
         if s.client is TorrentClient.DELUGE:
             key: tuple[str, ...] = (s.client, s.deluge.host, "", get_secret(DELUGE_PASSWORD))
+        elif s.client is TorrentClient.TRANSMISSION:
+            t = s.transmission
+            key = (s.client, t.host, t.username, get_secret(TRANSMISSION_PASSWORD))
         else:
             q = s.qbit
             key = (s.client, q.host, q.username, get_secret(QBIT_PASSWORD))

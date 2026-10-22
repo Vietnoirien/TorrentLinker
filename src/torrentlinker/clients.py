@@ -1,10 +1,11 @@
-"""Connect to the Torrent Client the user chose (ADR-0009)."""
+"""Connect to the Torrent Client the user chose (ADR-0009, ADR-0010)."""
 
 from __future__ import annotations
 
 from torrentlinker.deluge import DelugeApi
 from torrentlinker.domain import TorrentClient
 from torrentlinker.qbit import ClientApi, QbitApi
+from torrentlinker.transmission import TransmissionApi
 
 
 def connect(
@@ -13,4 +14,6 @@ def connect(
     """The client's adapter; Deluge's Web UI has a password and no username."""
     if client is TorrentClient.DELUGE:
         return DelugeApi(host, password)
+    if client is TorrentClient.TRANSMISSION:
+        return TransmissionApi(host, username, password)
     return QbitApi(host, username, password, api_key)

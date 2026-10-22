@@ -57,7 +57,7 @@ A user decision that a given Candidate is not the Orphan, remembered so it is ne
 ### Seeding
 
 **Torrent Client**:
-The program that seeds, qBittorrent or Deluge, as the user chooses; Reseeds and Plans are added to it, and its torrents decide which Local Items are Seeded.
+The program that seeds, qBittorrent, Deluge or Transmission, as the user chooses; Reseeds and Plans are added to it, and its torrents decide which Local Items are Seeded.
 _Avoid_: Client (alone, when the Indexer's API client could be meant), qBit (outside code)
 
 **Reseed**:

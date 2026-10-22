@@ -1,6 +1,6 @@
 # TorrentLinker
 
-TorrentLinker finds files that are no longer seeded in qBittorrent or Deluge, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings and plans which new torrents to download and seed. The interface is available in English and French.
+TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings and plans which new torrents to download and seed. The interface is available in English and French.
 
 ## Download 0.2.9
 
@@ -15,8 +15,9 @@ On Linux, make the AppImage executable before opening it. See the [release notes
 
 1. Enable your torrent client's Web UI:
    - **qBittorrent**: **Tools → Options → Web UI**.
+   - **Transmission** 4.x: turn on remote access in **Preferences → Remote**. Reseeds need **Append .part to incomplete files' names** off, or Transmission would rename your own files during a check: TorrentLinker offers to turn it off for you. Transmission renames file and folder names in place only, so a Match that needs other folders (a flattened folder, for example) cannot be Reseeded with it (see [ADR-0010](docs/adr/0010-transmission-with-whole-file-names-and-in-place-renames.md)).
    - **Deluge** 2.x: run its Web UI (`deluge-web`, port 8112 by default) connected to its daemon, and turn on the **Label** plugin in **Preferences → Plugins**. TorrentLinker labels the torrents it adds (`torrentlinker`, `torrentlinker-verifying`, `torrentlinker-partial`, `torrentlinker-zen`) to follow their Verification, as it tags them in qBittorrent.
-2. Open TorrentLinker's **Settings → Connections**, choose your **Client** and enter its connection, then the Indexer URL/API key. qBittorrent takes a username/password or a Web UI API key where available; Deluge takes its Web UI address and password.
+2. Open TorrentLinker's **Settings → Connections**, choose your **Client** and enter its connection, then the Indexer URL/API key. qBittorrent takes a username/password or a Web UI API key where available; Deluge takes its Web UI address and password; Transmission its remote address, and a username and password if you set them.
 3. Register Library Folders to find files you can Reseed.
 4. Set Download Folders for the categories you want to plan, or choose a default folder. Categories without a resolved folder are excluded.
 5. If your torrent client runs in Docker, on a NAS or on another computer, set its paths in **Settings → Client Paths** (see below).
@@ -171,6 +172,8 @@ docker stop tl-deluge
 ```
 
 `tests/test_deluge_docker_paths.py` does the same with Deluge seeing the folder as `/data`, to test Path Mappings; its docstring has the commands.
+
+Transmission works the same way, with `scripts/transmission_sandbox.py`, `tests/test_transmission_integration.py` and `tests/test_transmission_docker_paths.py`: their docstrings have the commands.
 
 Search c411 for a real file (enter the API key in Settings → Connections first):
 

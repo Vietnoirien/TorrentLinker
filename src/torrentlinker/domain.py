@@ -27,10 +27,13 @@ class TorrentClient(StrEnum):
 
     QBITTORRENT = "qbittorrent"
     DELUGE = "deluge"
+    TRANSMISSION = "transmission"
 
     @property
     def display_name(self) -> str:
-        return {"qbittorrent": "qBittorrent", "deluge": "Deluge"}[self.value]
+        return {"qbittorrent": "qBittorrent", "deluge": "Deluge", "transmission": "Transmission"}[
+            self.value
+        ]
 
 
 @dataclass(frozen=True)

@@ -63,6 +63,63 @@ def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(  # type: 
     assert isinstance(window._qbit[1], QbitApi)  # a new choice takes effect at once
 
 
+def test_choosing_transmission_saves_it_and_the_app_connects_through_it(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path
+) -> None:
+    from torrentlinker.credentials import get_secret
+    from torrentlinker.domain import TorrentClient
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.gui.settings_dialog import TRANSMISSION_PASSWORD, SettingsDialog
+    from torrentlinker.store import Store
+    from torrentlinker.transmission import TransmissionApi
+
+    settings = Settings()
+    dialog = SettingsDialog(settings)
+    qtbot.addWidget(dialog)
+    dialog.client.setCurrentIndex(dialog.client.findData(TorrentClient.TRANSMISSION.value))
+    assert dialog.client_forms.currentWidget().isAncestorOf(dialog.transmission_host)
+    dialog.transmission_host.setText("http://nas:9091")
+    dialog.transmission_user.setText("me")
+    dialog.transmission_password.setText("secret")
+    assert isinstance(dialog._form_qbit(), TransmissionApi)
+    dialog._save()
+
+    assert settings.client is TorrentClient.TRANSMISSION
+    assert (settings.transmission.host, settings.transmission.username) == ("http://nas:9091", "me")
+    assert get_secret(TRANSMISSION_PASSWORD) == "secret"
+    window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window.qbit()
+    assert window._qbit is not None and isinstance(window._qbit[1], TransmissionApi)
+
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_part_names_are_turned_off_only_if_the_user_agrees_then_the_action_runs_again(  # type: ignore[no-untyped-def]
+    qtbot, monkeypatch, accept: bool
+) -> None:
+    from PySide6.QtWidgets import QMessageBox, QWidget
+
+    from torrentlinker.gui.errors import offer_whole_names
+    from torrentlinker.transmission import PartialNamesOn
+
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    answer = QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: answer)
+    done: list[str] = []
+
+    assert offer_whole_names(
+        parent, PartialNamesOn(lambda: done.append("off")), lambda: done.append("again")
+    )
+    assert not offer_whole_names(parent, RuntimeError("other"), lambda: done.append("never"))
+
+    if accept:
+        qtbot.waitUntil(lambda: done == ["off", "again"])
+    else:
+        qtbot.wait(50)
+        assert done == []
+
+
 def test_content_kind_chosen_in_settings_comes_back_as_a_content_kind(qtbot) -> None:  # type: ignore[no-untyped-def]
     from torrentlinker.domain import ContentKind, LibraryFolder
     from torrentlinker.gui.settings_dialog import SettingsDialog

@@ -72,15 +72,22 @@ def start_reseed(
         # which moves the user's file back to the torrent's original path. So: rename only
         # once the torrent has settled, and check only once qBittorrent lists the new paths.
         _wait_for(lambda: _settled(qbit.torrent(h)), sleep, h, qbit, "the torrent to settle")
-        for old, new in rename_plan(match, set(meta.files)):
-            qbit.rename_file(h, old, new)
-        expected = {match.pairs.get(path, path) for path in meta.files}
+        try:
+            for old, new in rename_plan(match, set(meta.files)):
+                qbit.rename_file(h, old, new)
+        except Exception as e:  # e.g. a client that cannot rename into other folders
+            qbit.remove(h)  # never deletes files
+            store.end_verification(h)
+            raise ReseedAborted(str(e) or type(e).__name__) from e
+        # Every local file at its own path; absent files may move along with a renamed
+        # folder (Transmission renames whole folders).
+        expected = set(match.pairs.values())
         _wait_for(
-            lambda: _files(qbit.torrent(h)) == expected,
+            lambda: expected <= _files(qbit.torrent(h)),
             sleep,
             h,
             qbit,
-            "qBittorrent to take in the renamed files",
+            "the torrent client to take in the renamed files",
         )
         if missing := _missing(item.save_path, local_files):
             qbit.remove(h)  # never deletes files

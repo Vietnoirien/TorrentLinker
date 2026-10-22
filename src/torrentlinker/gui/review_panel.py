@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.domain import ItemState, LocalItem
-from torrentlinker.gui.errors import error_text
+from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.indexer import Candidate, Indexer
@@ -40,6 +40,7 @@ from torrentlinker.review import (
     unpack_and_reseed,
 )
 from torrentlinker.store import Store
+from torrentlinker.transmission import PartialNamesOn
 
 Searcher = Callable[[LibraryEntry, str | None], list[Candidate]]
 """Searches an Indexer for a Local Item, optionally with a user-edited query."""
@@ -369,23 +370,36 @@ class ReviewPanel(QWidget):
         self.reseed_button.setEnabled(False)
         qbit, store = self.qbit(), self.store
 
-        def work() -> tuple[list[str], list[str]]:
+        def work() -> tuple[list[str], list[str], Exception | None]:
             """Reseed each Match; one failing must not hide the ones already added."""
-            hashes, errors = [], []
+            hashes: list[str] = []
+            errors: list[str] = []
             for v in chosen:
                 assert v.meta is not None and v.match is not None
                 key = candidate_key(v.candidate)
                 try:
                     hashes.append(start_reseed(qbit, store, entry.item, v.meta, v.match, key))
+                except PartialNamesOn as e:
+                    return hashes, errors, e  # the user may let Transmission change, then retry
                 except Exception as e:  # noqa: BLE001 - reported to the user below
                     errors.append(f"{v.candidate.title}: {e or type(e).__name__}")
-            return hashes, errors
+            return hashes, errors, None
 
         run_in_background(work, lambda done: self._reseeded(entry, *done), self._reseed_failed)
 
-    def _reseeded(self, entry: LibraryEntry, hashes: list[str], errors: list[str]) -> None:
+    def _reseeded(
+        self,
+        entry: LibraryEntry,
+        hashes: list[str],
+        errors: list[str],
+        refused: Exception | None = None,
+    ) -> None:
         if hashes:
             self.reseed_started.emit(entry.item.path)
+        if refused is not None:
+            self._update_actions()
+            if offer_whole_names(self, refused, then=self._reseed_selected):
+                return
         if errors:
             self._reseed_failed(RuntimeError("\n".join(errors)))
 

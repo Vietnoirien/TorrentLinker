@@ -31,6 +31,12 @@ class DelugeSettings:
 
 
 @dataclass
+class TransmissionSettings:
+    host: str = "http://localhost:9091"  # its RPC; the password is a secret
+    username: str = ""
+
+
+@dataclass
 class IndexerSettings:
     url: str = "https://c411.org/api/torznab"
 
@@ -54,6 +60,7 @@ class Settings:
     client: TorrentClient = TorrentClient.QBITTORRENT
     qbit: QbitSettings = field(default_factory=QbitSettings)
     deluge: DelugeSettings = field(default_factory=DelugeSettings)
+    transmission: TransmissionSettings = field(default_factory=TransmissionSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
     # Torznab categories searched for each Content Kind; none listed = all categories.
@@ -83,6 +90,7 @@ class Settings:
             "client": self.client.value,
             "qbit": asdict(self.qbit),
             "deluge": asdict(self.deluge),
+            "transmission": asdict(self.transmission),
             "indexer": asdict(self.indexer),
             "matching": asdict(self.matching),
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
@@ -117,6 +125,7 @@ class Settings:
             client=TorrentClient(data.get("client", TorrentClient.QBITTORRENT.value)),
             qbit=QbitSettings(**data.get("qbit", {})),
             deluge=DelugeSettings(**data.get("deluge", {})),
+            transmission=TransmissionSettings(**data.get("transmission", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
             matching=MatchingSettings(**data.get("matching", {})),
             language=str(data.get("language", "auto")),

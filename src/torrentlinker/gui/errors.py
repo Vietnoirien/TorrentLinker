@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from PySide6.QtCore import QCoreApplication
+from PySide6.QtWidgets import QMessageBox, QWidget
 
+from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import KeyRefused, RateLimited
+from torrentlinker.transmission import PartialNamesOn
 
 
 def error_text(error: Exception) -> str:
@@ -30,3 +34,28 @@ def error_text(error: Exception) -> str:
             "sent waits on its own.",
         ).format(time.strftime("%H:%M", time.localtime(time.time() + error.retry_after)))
     return str(error) or type(error).__name__
+
+
+def offer_whole_names(parent: QWidget, error: Exception, then: Callable[[], object]) -> bool:
+    """When Transmission would rename files to .part, offer to turn that off, then run
+    `then`. Whether `error` was that refusal (ADR-0010)."""
+    if not isinstance(error, PartialNamesOn):
+        return False
+    answer = QMessageBox.question(
+        parent,
+        "Transmission",
+        QCoreApplication.translate(
+            "Errors",
+            "Transmission appends .part to the names of incomplete files: during a Reseed "
+            "that would rename your own files.\n\nTurn off “Append .part to incomplete "
+            "files' names” in Transmission? It applies to all its torrents. Your files are "
+            "left as they are either way.",
+        ),
+    )
+    if answer == QMessageBox.StandardButton.Yes:
+        run_in_background(
+            error.turn_off,
+            lambda _: then(),
+            lambda e: QMessageBox.warning(parent, "Transmission", error_text(e)),
+        )
+    return True
