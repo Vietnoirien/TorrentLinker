@@ -122,12 +122,21 @@ jobs:
       - name: Start two Deluge containers, one seeing a host folder at its own path, one as /data
         run: |
           mkdir -p "$RUNNER_TEMP/same" "$RUNNER_TEMP/nas"
+          # lscr.io answers 429 when many runners pull at once: retry, then Docker Hub's copy
+          image=""
+          for i in 1 2 3 4 5; do
+            for candidate in lscr.io/linuxserver/deluge linuxserver/deluge; do
+              if docker pull -q "$candidate:${{ matrix.version }}"; then
+                image="$candidate:${{ matrix.version }}"; break 2
+              fi
+            done
+            sleep $((i * 15))
+          done
+          [ -n "$image" ] || { echo "could not pull Deluge ${{ matrix.version }}"; exit 1; }
           docker run -d --name tl-deluge -p 127.0.0.1:18112:8112 \
-            -e PUID=$(id -u) -e PGID=$(id -g) -v "$RUNNER_TEMP/same:$RUNNER_TEMP/same" \
-            lscr.io/linuxserver/deluge:${{ matrix.version }}
+            -e PUID=$(id -u) -e PGID=$(id -g) -v "$RUNNER_TEMP/same:$RUNNER_TEMP/same" "$image"
           docker run -d --name tl-deluge-paths -p 127.0.0.1:18113:8112 \
-            -e PUID=$(id -u) -e PGID=$(id -g) -v "$RUNNER_TEMP/nas:/data" \
-            lscr.io/linuxserver/deluge:${{ matrix.version }}
+            -e PUID=$(id -u) -e PGID=$(id -g) -v "$RUNNER_TEMP/nas:/data" "$image"
           python scripts/deluge_sandbox.py http://127.0.0.1:18112
           python scripts/deluge_sandbox.py http://127.0.0.1:18113
       - run: pytest -q tests/test_deluge_integration.py tests/test_deluge_docker_paths.py -rs
