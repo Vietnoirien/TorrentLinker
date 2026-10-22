@@ -42,3 +42,11 @@ A tip from another user: the logged-in site seemed less limited, a dev-console s
 The session and both keys draw on one budget: each request took one from the same count, with the same reset time. So the budget is per account (or per IP: all came from the same machine), not per key, and the session adds nothing to it. The session listing accepts `perPage=100`, as the keys do.
 
 This contradicts "each key has its own budget" above and in ADR-0008, at least for the JSON API today; it may have changed since the morning's measures. Several keys still help with `.torrent` downloads only if their limit is per key, which was not measured. The session's download limit was not measured either: a `HEAD` on the download route answers 404, and a `GET` would be a grab.
+
+## `.torrent` downloads: 30 a minute, per key (2026-10-22, evening)
+
+Grabbing back to back with key 4 (Torznab `t=get`): 30 downloads went through in about 3 seconds; the 31st answered 429 with `retry-after: 43, 60`, `x-ratelimit-limit: 30`, `x-ratelimit-window: 60` and the body `Rate limit exceeded. Retry in 43 seconds.` Key 5, right after, downloaded 10 out of 10; key 4 was still refused ("42 seconds"). A first burst of 10 per key on keys 1 and 2 had all passed, with no rate-limit headers on successful downloads.
+
+So downloads are limited per key, to 30 in a 60-second window, and only a refusal reports it. Five keys allow 150 a minute. The app's 4.1 seconds between downloads is about 15 a minute: half of one key's allowance.
+
+The morning's refusal after 292 downloads in 20 minutes came at that 15-a-minute pace, below 30 a minute: there is probably a second, longer limit as well (846 had passed in the hour before). It was not reached here.
