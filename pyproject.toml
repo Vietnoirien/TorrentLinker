@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torrentlinker"
-version = "0.2.8"
+version = "0.2.9"
 description = "Reconcile local files with private-tracker torrents and reseed them in qBittorrent or Deluge"
 requires-python = ">=3.11"
 dependencies = [
