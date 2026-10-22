@@ -415,7 +415,7 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
         url, api_key = Settings().indexer.url, ""
         fetched: list[str] = []
 
-        def fetch_torrent(self, c):  # type: ignore[no-untyped-def]
+        def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
             self.fetched.append(c.download_url)
             return data
 
@@ -432,15 +432,105 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
     window._indexer = stub  # type: ignore[assignment]
     window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
     shown: list[str] = []
-    monkeypatch.setattr(QMessageBox, "information", lambda *a: shown.append(a[2]))
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box.text()))
+    window.zen_tab.plan_view.show_plan(plan)
 
     window.send_plan(plan)
+    assert window.zen_tab.plan_view.send_progress.isVisibleTo(window)
+    assert window.zen_tab.plan_view.stop_send_button.isVisibleTo(window)
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
     assert stub.fetched == ["https://c411.example/dl/1"], shown
     [t] = qbit.torrents()
     assert ZEN_TAG in t.tags and t.save_path == tmp_path / "dl"
     assert "1 torrents added" in shown[0]
+    assert not window.zen_tab.plan_view.send_progress.isVisibleTo(window)
+    assert window.send_runner is None
+
+
+def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
+    qtbot,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.indexer import RateLimited
+    from torrentlinker.plan import Plan, PlanCandidate, PlanItem
+    from torrentlinker.store import CatalogueRow
+
+    rows = [
+        CatalogueRow(f"{i:040x}", f"Book {i}", 1000, 3, 7020, f"https://c411.example/{i}", "", 0)
+        for i in range(3)
+    ]
+    plan = Plan(
+        [
+            PlanItem(PlanCandidate(r.infohash, r.title, 1000, 3, 7020, tmp_path, 1, source=r), 0.1)
+            for r in rows
+        ],
+        0.3,
+    )
+
+    class LimitedIndexer:
+        url, api_key = Settings().indexer.url, ""
+
+        def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
+            raise RateLimited(30)
+
+        def unredact(self, text: str) -> str:
+            return text
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
+    window._indexer = LimitedIndexer()  # type: ignore[assignment]
+    window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
+    shown: list[str] = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box.text()))
+    view = window.zen_tab.plan_view
+    view.show_plan(plan)
+
+    window.send_plan(plan)
+    qtbot.waitUntil(lambda: "limiting downloads" in view.summary.text(), timeout=5000)
+    assert "0 of 3" in view.summary.text()
+    assert "3" in window.band.plan.text() and "waiting" in window.band.plan.text()
+
+    view.stop_send_button.click()
+    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+
+    assert "Stopped after 0 of 3" in shown[0]
+    assert window.send_runner is None
+    assert view.make_button.isEnabled()
+
+
+def test_refreshing_a_long_seeding_list_again_is_quick(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import time
+
+    from PySide6.QtWidgets import QApplication
+
+    from torrentlinker.domain import Torrent
+    from torrentlinker.gui.zen_view import SeedingView
+    from torrentlinker.seeding import Seeding, SeedingRow
+    from torrentlinker.zen import ZenDay
+
+    rows = [
+        SeedingRow(Torrent(f"{i:040x}", f"Book.{i}.epub", tmp_path, {"b.epub": 1000 + i}), i / 1e4)
+        for i in range(1300)
+    ]
+    view = SeedingView(lambda: lambda: Seeding([], ZenDay(), []))
+    qtbot.addWidget(view)
+    view.resize(900, 600)
+    view.show()
+    qtbot.waitExposed(view)
+    view.show_seeding(Seeding(rows, ZenDay([r.zen or 0 for r in rows]), []))
+    QApplication.processEvents()
+
+    started = time.monotonic()
+    view.show_seeding(Seeding(rows, ZenDay([r.zen or 0 for r in rows]), []))
+
+    assert time.monotonic() - started < 5  # replacing filled cells took over a minute
+    assert view.table.rowCount() == 1300
 
 
 def test_plan_lists_reseeds_first_and_sends_them_through_verification(

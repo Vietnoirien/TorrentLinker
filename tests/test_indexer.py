@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from tests.torznab_fixtures import CAPS_XML, SEARCH_XML
-from torrentlinker.indexer import Indexer, SearchQuery
+from torrentlinker.indexer import Candidate, Indexer, RateLimited, SearchQuery
 
 
 class FakeClock:
@@ -80,6 +80,17 @@ def test_too_many_requests_is_retried_after_the_advertised_delay() -> None:
 
     assert len(candidates) == 2
     assert 25 in clock.sleeps
+
+
+def test_a_torrent_download_can_hand_a_429_back_instead_of_sleeping() -> None:
+    clock = FakeClock()
+    indexer = make_indexer(lambda r: httpx.Response(429, headers={"Retry-After": "900"}), clock)
+
+    with pytest.raises(RateLimited) as limited:
+        indexer.fetch_torrent(Candidate("t", 1, "https://c411.example/dl/1"), retry=False)
+
+    assert limited.value.retry_after == 900
+    assert 900 not in clock.sleeps
 
 
 def test_caps_lists_categories_and_supported_search_modes() -> None:

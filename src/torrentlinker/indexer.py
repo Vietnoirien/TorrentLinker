@@ -23,6 +23,14 @@ SEARCH_CACHE_MAX_AGE = 24 * 3600
 API_KEY_PLACEHOLDER = "{{TORRENTLINKER_APIKEY}}"
 
 
+class RateLimited(Exception):
+    """The Indexer answered 429; it asks to wait `retry_after` seconds."""
+
+    def __init__(self, retry_after: float) -> None:
+        super().__init__(f"rate limited, retry after {retry_after:.0f} s")
+        self.retry_after = retry_after
+
+
 class SearchMode(StrEnum):
     """Torznab search functions (`t=`)."""
 
@@ -189,11 +197,14 @@ class Indexer:
             body = self.unredact(body)
         return _parse_items(body)
 
-    def fetch_torrent(self, candidate: Candidate) -> bytes:
-        """The Candidate's .torrent; downloaded at most once (it may count as a grab)."""
+    def fetch_torrent(self, candidate: Candidate, *, retry: bool = True) -> bytes:
+        """The Candidate's .torrent; downloaded at most once (it may count as a grab).
+
+        With `retry=False` a 429 raises RateLimited at once, so the caller can wait.
+        """
         if (data := self.cached_torrent(candidate)) is not None:
             return data
-        data = self._request(candidate.download_url).content
+        data = self._request(candidate.download_url, retry=retry).content
         if self._cache:
             self._cache.cache_torrent(self._torrent_key(candidate), data)
         return data
@@ -251,8 +262,16 @@ class Indexer:
         params: dict[str, str] | None = None,
         *,
         headers: dict[str, str] | None = None,
+        retry: bool = True,
     ) -> httpx.Response:
         with self._lock:
+            if not retry:
+                self._wait_turn()
+                response = self._http.get(url, params=params, headers=headers)
+                if response.status_code == 429:
+                    raise RateLimited(_retry_after(response))
+                response.raise_for_status()
+                return response
             for _attempt in range(MAX_RETRIES):
                 self._wait_turn()
                 response = self._http.get(url, params=params, headers=headers)

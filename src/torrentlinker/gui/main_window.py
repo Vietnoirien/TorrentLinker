@@ -41,6 +41,7 @@ from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, state_label
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
+from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
     INDEXER_API_KEY,
     QBIT_API_KEY,
@@ -85,7 +86,7 @@ from torrentlinker.review import (
     search_candidates,
 )
 from torrentlinker.seeding import Seeding, indexer_torrents, observe_swarm, seeding
-from torrentlinker.send import SendReport, send_plan
+from torrentlinker.send import SendProgress, SendReport, send_plan
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.tmdb import Tmdb
 
@@ -195,6 +196,7 @@ class MainWindow(QMainWindow):
 
         self._checking = False
         self.catalogue_runner: CatalogueRunner | None = None
+        self.send_runner: SendRunner | None = None
         self._crawl_position = [0, 0]  # category being crawled, of how many (worker writes)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.plan_view.categories_changed.connect(self._plan_categories_changed)
@@ -203,6 +205,7 @@ class MainWindow(QMainWindow):
         self.zen_tab.plan_view.stop_fetch_requested.connect(self._stop_plan_fetch)
         self.offer_plan_categories()
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
+        self.zen_tab.plan_view.stop_send_requested.connect(self.stop_sending)
         self._after_catalogue: Callable[[], None] | None = None
         self._after_catalogue_always: Callable[[], None] | None = None
         self._pending_plan: Callable[[], None] | None = None
@@ -495,18 +498,43 @@ class MainWindow(QMainWindow):
             self.make_plan(then=self.confirm_send)  # fetches the Plan's categories first
 
     def send_plan(self, plan: Plan) -> None:
+        if self.send_runner is not None:
+            return
         qbit, indexer, reseeder = self.qbit(), self.indexer(), self.plan_reseeder()
 
         def fetch(c: PlanCandidate) -> bytes:
             assert isinstance(c.source, CatalogueRow)
-            return indexer.fetch_torrent(candidate(indexer, c.source))
+            return indexer.fetch_torrent(candidate(indexer, c.source), retry=False)
 
-        self.zen_tab.plan_view.busy(True, self.tr("Sending the Plan…"))
-        run_in_background(
-            lambda: send_plan(plan, qbit, fetch, reseeder),
-            self._plan_sent,
-            self.zen_tab.plan_view.failed,
+        runner = SendRunner(
+            lambda stop, progress: send_plan(
+                plan, qbit, fetch, reseeder, on_progress=progress, stop=stop
+            )
         )
+        runner.signals.progress.connect(self._send_progress)
+        runner.signals.finished.connect(self._plan_sent)
+        runner.signals.failed.connect(self._send_failed)
+        self.send_runner = runner
+        log.info("Sending a Plan of %d torrents", len(plan.items))
+        self._send_progress(SendProgress(0, len(plan.items), "", 0, 0, 0))
+        runner.start()
+
+    def stop_sending(self) -> None:
+        if self.send_runner is not None:
+            self.send_runner.stop()
+
+    def _send_progress(self, progress: SendProgress) -> None:
+        self.zen_tab.plan_view.sending(progress)
+        self.band.set_sending(progress)
+
+    def _send_ended(self) -> None:
+        self.send_runner = None
+        self.zen_tab.plan_view.sending(None)
+        self.band.set_sending(None)
+
+    def _send_failed(self, error: Exception) -> None:
+        self._send_ended()
+        self.zen_tab.plan_view.failed(error)
 
     def plan_reseeder(self) -> Callable[[PlanCandidate], None]:
         """Reseed rows run the normal Reseed flow, with Verification (ADR-0002)."""
@@ -523,14 +551,40 @@ class MainWindow(QMainWindow):
         return reseed
 
     def _plan_sent(self, report: SendReport) -> None:
+        self._send_ended()
+        total = len(self.zen_tab.plan_view.plan.items) if self.zen_tab.plan_view.plan else 0
+        log.info(
+            "Plan sent: %d added, %d Reseeds, %d refused, %d failed%s",
+            len(report.added),
+            len(report.reseeded),
+            len(report.refused),
+            len(report.failed),
+            ", stopped" if report.stopped else "",
+        )
         self.zen_tab.plan_view.show_plan(Plan())
-        self.band.set_plan(None)
         lines = [self.tr("{0} torrents added to qBittorrent.").format(len(report.added))]
         if report.reseeded:
             lines.append(self.tr("{0} Reseeds started.").format(len(report.reseeded)))
-        lines += [self.tr("Refused: {0} ({1})").format(t, why) for t, why in report.refused]
-        lines += [self.tr("Failed: {0} ({1})").format(t, why) for t, why in report.failed]
-        QMessageBox.information(self, self.tr("Plan sent"), "\n".join(lines))
+        if report.stopped:
+            lines.append(
+                self.tr(
+                    "Stopped after {0} of {1} torrents. Make a new Plan to continue: "
+                    "torrents already in qBittorrent are left out."
+                ).format(report.handled, total)
+            )
+        problems = [self.tr("Refused: {0} ({1})").format(t, why) for t, why in report.refused]
+        problems += [self.tr("Failed: {0} ({1})").format(t, why) for t, why in report.failed]
+        box = QMessageBox(
+            QMessageBox.Icon.Information, self.tr("Plan sent"), "\n".join(lines), parent=self
+        )
+        if problems:
+            box.setInformativeText(
+                self.tr("{0} refused, {1} failed: see the details.").format(
+                    len(report.refused), len(report.failed)
+                )
+            )
+            box.setDetailedText("\n".join(problems))
+        box.exec()
         self.zen_tab.seeding_view.refresh()
         if report.reseeded:
             self.check_verifications()  # shows them as Verifying… and keeps polling
@@ -784,6 +838,8 @@ class MainWindow(QMainWindow):
         self._pending_plan = None
         if self.catalogue_runner is not None:
             self.catalogue_runner.stop()
+        if self.send_runner is not None:
+            self.send_runner.stop()
         super().closeEvent(event)
 
     def seeding_loader(self) -> Callable[[], Seeding]:

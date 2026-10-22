@@ -51,6 +51,8 @@ Reseeds come first. They count toward the torrent limit and consume no download 
 
 Sending a Plan downloads each `.torrent` directly from c411 and adds it to its Download Folder. TorrentLinker refuses downloads that would overwrite existing files. Normal Reseeds still go through hash Verification.
 
+A progress bar shows how many torrents have been sent, added, refused, or failed, with an estimate of the time left. **Stop sending** ends after the current torrent; a new Plan leaves out torrents already in qBittorrent. If c411 refuses downloads (HTTP 429), sending waits and retries the same torrent, waiting longer each time up to 15 minutes, and shows the next try time.
+
 ### Catalog updates and provisional estimates
 
 The first Plan imports Zen Lab's public metadata snapshot anonymously. Your c411 API key and all `.torrent` requests go directly to c411.

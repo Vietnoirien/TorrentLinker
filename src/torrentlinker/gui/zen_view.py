@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, Signal
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -33,6 +35,7 @@ from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.plan import Plan, PlanGoal, PlanOptions
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
+from torrentlinker.send import SendProgress
 from torrentlinker.zen import GB, ZenClass, ZenProfile, compare_classes
 
 CLASS_LABELS = {
@@ -74,6 +77,18 @@ def readonly_table(headers: list[str]) -> QTableWidget:
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.verticalHeader().setVisible(False)
     return table
+
+
+def clear_rows(table: QTableWidget, rows: int) -> None:
+    """Empty the table, then size it for `rows` new rows.
+
+    Replacing the items of a filled table resizes its columns to their contents after
+    every cell: about 100 s for 1,300 rows. Filling empty rows takes a fraction of a
+    second.
+    """
+    table.setSortingEnabled(False)
+    table.setRowCount(0)
+    table.setRowCount(rows)
 
 
 class SeedingView(QWidget):
@@ -133,8 +148,8 @@ class SeedingView(QWidget):
     def show_seeding(self, view: Seeding) -> None:
         self.refresh_button.setEnabled(True)
         self.seeding = view
-        self.table.setSortingEnabled(False)
-        self.table.setRowCount(len(view.rows))
+        scrolled = self.table.verticalScrollBar().value()
+        clear_rows(self.table, len(view.rows))
         for r, row in enumerate(view.rows):
             t = row.torrent
             days = t.seeding_time / 86400
@@ -152,6 +167,7 @@ class SeedingView(QWidget):
                 cell.setToolTip(self.tr("Not seeding: earns no Zen"))
             self.table.setItem(r, 4, cell)
         self.table.setSortingEnabled(True)
+        self.table.verticalScrollBar().setValue(scrolled)
         self._show_total()
         self.updated.emit(view)
 
@@ -269,6 +285,7 @@ class PlanView(QGroupBox):
     send_requested = Signal()
     categories_changed = Signal(object)  # set[int] | None
     stop_fetch_requested = Signal()
+    stop_send_requested = Signal()
     options_changed = Signal(object)  # PlanOptions
 
     def __init__(self) -> None:
@@ -376,9 +393,24 @@ class PlanView(QGroupBox):
         self.send_button.setEnabled(False)
         self.send_button.clicked.connect(self.send_requested)
         top.addWidget(self.send_button)
+        self.stop_send_button = QPushButton(self.tr("Stop sending"))
+        self.stop_send_button.setToolTip(
+            self.tr(
+                "Stop after the current torrent. Torrents already sent stay in qBittorrent; "
+                "a new Plan leaves them out."
+            )
+        )
+        self.stop_send_button.clicked.connect(self._stop_send)
+        self.stop_send_button.hide()
+        top.addWidget(self.stop_send_button)
         self.action_row = top
         top.addStretch()
         layout.addLayout(top)
+        self.send_progress = QProgressBar()
+        self.send_progress.setFormat(self.tr("%v of %m torrents"))
+        self.send_progress.hide()
+        layout.addWidget(self.send_progress)
+        self._send_started: float | None = None
         self.space_table = readonly_table(
             [
                 self.tr("Disk / Download Folder"),
@@ -533,9 +565,8 @@ class PlanView(QGroupBox):
     def show_plan(self, plan: Plan) -> None:
         self.plan = plan
         self.busy(False)
-        self.table.setSortingEnabled(False)
+        clear_rows(self.table, len(plan.items))
         self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
-        self.table.setRowCount(len(plan.items))
         for r, item in enumerate(plan.items):
             c = item.candidate
             size_text = self.tr("Reseed (0 Go)") if c.reseed else human_size(c.size)
@@ -550,7 +581,7 @@ class PlanView(QGroupBox):
             self.table.setItem(r, 4, NumberItem(zen_text(item.zen), item.zen))
             self.table.setItem(r, 5, QTableWidgetItem(str(c.folder) if c.folder else ""))
         self.table.setSortingEnabled(True)
-        self.space_table.setRowCount(len(plan.disk_spaces))
+        clear_rows(self.space_table, len(plan.disk_spaces))
         for row, space in enumerate(plan.disk_spaces):
             self.space_table.setItem(row, 0, QTableWidgetItem(str(space.folder)))
             for col, amount in enumerate(
@@ -593,6 +624,64 @@ class PlanView(QGroupBox):
     def failed(self, error: Exception) -> None:
         self.busy(False)
         self.summary.setText(self.tr("Could not make a Plan: {0}").format(error))
+
+    # Sending ---------------------------------------------------------------
+
+    def sending(self, progress: SendProgress | None) -> None:
+        """Show how far sending the Plan has gone; None when it has ended."""
+        if progress is None:
+            self._send_started = None
+            self.send_progress.hide()
+            self.stop_send_button.hide()
+            return
+        if self._send_started is None:
+            self._send_started = time.monotonic()
+            self.stop_send_button.setEnabled(True)
+        self.send_progress.setRange(0, max(progress.total, 1))
+        self.send_progress.setValue(progress.done)
+        self.send_progress.show()
+        self.stop_send_button.show()
+        stopping = not self.stop_send_button.isEnabled()
+        self.busy(
+            True,
+            self.tr("Stopping after the current torrent…")
+            if stopping
+            else self.send_text(progress),
+        )
+
+    def send_text(self, p: SendProgress) -> str:
+        lines = [
+            self.tr("Sending the Plan: {0} of {1} · {2} added · {3} refused · {4} failed").format(
+                p.done, p.total, p.added, p.refused, p.failed
+            )
+        ]
+        if p.retry_at is not None:
+            lines.append(
+                self.tr(
+                    "c411 is limiting downloads. Next try at {0}; sending continues by itself."
+                ).format(time.strftime("%H:%M", time.localtime(p.retry_at)))
+            )
+        elif p.title:
+            lines.append(self.tr("Now: {0}").format(p.title))
+        elapsed = time.monotonic() - self._send_started if self._send_started else 0.0
+        if p.done and p.done < p.total and elapsed > 0:
+            left = elapsed / p.done * (p.total - p.done)
+            lines.append(self.tr("About {0} left").format(duration_text(left)))
+        return "\n".join(lines)
+
+    def _stop_send(self) -> None:
+        self.stop_send_button.setEnabled(False)
+        self.summary.setText(self.tr("Stopping after the current torrent…"))
+        self.stop_send_requested.emit()
+
+
+def duration_text(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    if minutes < 60:
+        return QCoreApplication.translate("PlanView", "{0} min").format(max(minutes, 1))
+    return QCoreApplication.translate("PlanView", "{0} h {1:02d}").format(
+        minutes // 60, minutes % 60
+    )
 
 
 class ZenTab(QWidget):
@@ -670,6 +759,15 @@ class ZenBand(QFrame):
     def set_plan(self, added: float | None) -> None:
         value = f"+{added:.2f}" if added is not None else "–"
         self.plan.setText(self.tr("with Plan: {0}").format(value))
+
+    def set_sending(self, progress: SendProgress | None) -> None:
+        if progress is None:
+            self.set_plan(None)
+            return
+        self.plan.setText(
+            self.tr("Sending the Plan: <b>{0}/{1}</b>").format(progress.done, progress.total)
+            + (" " + self.tr("(c411 limit, waiting)") if progress.retry_at is not None else "")
+        )
 
     def set_catalogue(self, text: str | None) -> None:
         self.catalogue.setText(self.tr("Catalogue: {0}").format(text or "–"))

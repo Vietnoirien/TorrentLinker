@@ -1,11 +1,13 @@
+import threading
 from pathlib import Path
 
 import pytest
 
 from tests.fake_qbit import FakeQbit
 from tests.torrents import make_torrent
+from torrentlinker.indexer import RateLimited
 from torrentlinker.plan import Plan, PlanCandidate, PlanItem
-from torrentlinker.send import ZEN_TAG, Refused, send_one, send_plan
+from torrentlinker.send import ZEN_TAG, Refused, SendProgress, send_one, send_plan
 from torrentlinker.torrent_meta import read_torrent
 
 
@@ -91,3 +93,72 @@ def test_sending_reports_each_torrent_and_one_failure_does_not_stop_the_rest(
     assert report.added == ["A"]
     assert [t for t, _ in report.refused] == ["B"]
     assert report.failed == [("broken", "HTTP 404")]
+
+
+def two_releases(tmp_path: Path) -> tuple[Plan, dict[str, bytes]]:
+    a, b = release(tmp_path, "A"), release(tmp_path, "B")
+    folder = tmp_path / "dl"
+    plan = Plan([PlanItem(candidate(a, folder), 0.1), PlanItem(candidate(b, folder), 0.1)], 0.2)
+    return plan, {read_torrent(a).infohash: a, read_torrent(b).infohash: b}
+
+
+def test_progress_is_reported_for_each_torrent_and_at_the_end(tmp_path: Path) -> None:
+    plan, data = two_releases(tmp_path)
+    seen: list[SendProgress] = []
+
+    send_plan(plan, FakeQbit(), lambda c: data[c.infohash], on_progress=seen.append)
+
+    assert [(p.done, p.total, p.title) for p in seen] == [(0, 2, "A"), (1, 2, "B"), (2, 2, "")]
+    assert seen[-1].added == 2
+
+
+def test_when_the_indexer_limits_downloads_the_same_torrent_is_tried_again_later(
+    tmp_path: Path,
+) -> None:
+    plan, data = two_releases(tmp_path)
+    limits = [RateLimited(5), RateLimited(5)]
+    waits: list[float] = []
+    seen: list[SendProgress] = []
+
+    def fetch(c: PlanCandidate) -> bytes:
+        if limits:
+            raise limits.pop(0)
+        return data[c.infohash]
+
+    def wait(seconds: float) -> bool:
+        waits.append(seconds)
+        return False
+
+    report = send_plan(
+        plan, FakeQbit(), fetch, on_progress=seen.append, wait=wait, now=lambda: 1000.0
+    )
+
+    assert report.added == ["A", "B"] and report.failed == []
+    assert waits == [60, 120]  # longer each time, never shorter than a minute
+    assert [p.retry_at for p in seen if p.retry_at] == [1060, 1120]
+
+
+def test_stopping_during_a_wait_ends_sending_and_says_so(tmp_path: Path) -> None:
+    plan, _data = two_releases(tmp_path)
+
+    def fetch(c: PlanCandidate) -> bytes:
+        raise RateLimited(900)
+
+    report = send_plan(plan, FakeQbit(), fetch, wait=lambda seconds: True)
+
+    assert report.stopped
+    assert report.handled == 0 and report.failed == []
+
+
+def test_stopping_ends_sending_before_the_next_torrent(tmp_path: Path) -> None:
+    plan, data = two_releases(tmp_path)
+    stop = threading.Event()
+
+    def fetch(c: PlanCandidate) -> bytes:
+        stop.set()  # the user stops while the first torrent is being sent
+        return data[c.infohash]
+
+    report = send_plan(plan, FakeQbit(), fetch, stop=stop)
+
+    assert report.added == ["A"]
+    assert report.stopped
