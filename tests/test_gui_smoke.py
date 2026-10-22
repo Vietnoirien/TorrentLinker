@@ -1150,3 +1150,51 @@ def test_a_book_left_in_a_download_folder_is_left_out_of_the_plan(qtbot, tmp_pat
 
     assert [i.candidate.title for i in plan.items] == ["Submersion.Marc.Dugain.2026.FR.[EPUB]-G11"]
     assert [d.path for d in plan.on_disk] == [books / "La confidente - Audrey Lefevre.epub"]
+
+
+def test_a_match_inside_an_archive_offers_to_unpack_and_reseed(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import zipfile
+
+    from tests.torrents import make_torrent
+    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import IgnoreList, MatchRules
+    from torrentlinker.review import check_candidates
+    from torrentlinker.torrent_meta import read_torrent
+
+    folder = tmp_path / "src" / "Xenomorph"
+    folder.mkdir(parents=True)
+    (folder / "xeno.stl").write_bytes(b"solid xeno " * 5000)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    archive = lib / "Xenomorph (Alien) - nomnom.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(folder / "xeno.stl", "Xenomorph/xeno.stl")
+    data = make_torrent(folder)
+    item = LocalItem(archive, {archive.name: archive.stat().st_size})
+
+    class Torrents:
+        def fetch_torrent(self, c):  # type: ignore[no-untyped-def]
+            return data
+
+    size = sum(read_torrent(data).files.values())
+    checked = check_candidates(
+        Torrents(),  # type: ignore[arg-type]
+        item,
+        [Candidate("NomNom.figures.Alien.Xenomorph[STL]", size, "u", 4)],
+        MatchRules(0.02, 0.5, IgnoreList.default()),
+    )
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    entry = LibraryEntry(LibraryFolder(lib, 1, ContentKind.MODEL_3D), item, ItemState.ORPHAN)
+    window.review.set_entry(entry)
+
+    window.review._show(entry, checked)
+
+    panel = window.review
+    assert panel.candidates.item(0, 3).text() == "Full match inside the archive"  # type: ignore[union-attr]
+    assert panel.reseed_button.text() == "Unpack and Reseed…"
+    assert panel.reseed_button.isEnabled()
+    assert panel.files.item(0, 2).text() == "✓ in the archive"  # type: ignore[union-attr]
+    assert window._summary(checked) == "Full match inside the archive"

@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 class _Signals(QObject):
     done = Signal(object)
     failed = Signal(object)
+    progress = Signal(object)
 
 
 class _Job(QRunnable):
@@ -37,6 +38,36 @@ def run_in_background(
     on_error: Callable[[Exception], object],
 ) -> None:
     job = _Job(fn)
+    job.setAutoDelete(False)
+    _alive.add(job)
+
+    def finish(cb: Callable[[Any], object]) -> Callable[[Any], None]:
+        def handler(value: Any) -> None:
+            _alive.discard(job)
+            cb(value)
+
+        return handler
+
+    job.signals.done.connect(finish(on_done))
+    job.signals.failed.connect(finish(on_error))
+    QThreadPool.globalInstance().start(job)
+
+
+def run_with_progress(
+    fn: Callable[[Callable[[object], None]], Any],
+    on_progress: Callable[[Any], object],
+    on_done: Callable[[Any], object],
+    on_error: Callable[[Exception], object],
+) -> None:
+    """Like run_in_background; `fn(report)` may report progress, shown by `on_progress`."""
+    signals: list[_Signals] = []
+
+    def work() -> Any:
+        return fn(lambda value: signals[0].progress.emit(value))
+
+    job = _Job(work)
+    signals.append(job.signals)
+    job.signals.progress.connect(on_progress)
     job.setAutoDelete(False)
     _alive.add(job)
 

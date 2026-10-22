@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from torrentlinker.archives import ArchiveError, Unpacked, unpack, unpacked
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, Indexer, SearchMode
 from torrentlinker.matching import FileComparison, Match, MatchRules, compare, is_plausible, match
+from torrentlinker.qbit import Qbit
 from torrentlinker.queries import ExternalIds, build_queries, find_ids, parse_name
+from torrentlinker.reseed import start_reseed
+from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
 from torrentlinker.tmdb import Tmdb
 from torrentlinker.torrent_meta import TorrentMeta, read_torrent
@@ -23,6 +27,8 @@ class CheckedCandidate:
     meta: TorrentMeta | None = None
     comparison: FileComparison | None = None
     match: Match | None = None
+    # Set when the Match is with the archive's contents: Reseeding means unpacking first.
+    unpack: Unpacked | None = None
 
     @property
     def compared(self) -> bool:
@@ -65,12 +71,18 @@ def check_candidates(
     rules: MatchRules,
     rejections: Mapping[str, str] = {},
 ) -> list[CheckedCandidate]:
-    """Fetch the .torrent of every size-plausible, non-rejected Candidate and compare files."""
+    """Fetch the .torrent of every size-plausible, non-rejected Candidate and compare files.
+
+    An archive is also compared by what it holds: its unpacked size, then its files.
+    """
     result = []
+    inside = unpacked(item)
     for c in candidates:
         if candidate_key(c) in rejections:
             continue
-        if not is_plausible(c.size, item, rules.size_tolerance):
+        if not is_plausible(c.size, item, rules.size_tolerance) and not (
+            inside and is_plausible(c.size, inside.item, rules.size_tolerance)
+        ):
             result.append(CheckedCandidate(c))
             continue
         result.append(check_candidate(indexer, item, c, rules))
@@ -129,12 +141,45 @@ def check_candidate(
 def _compared(
     item: LocalItem, candidate: Candidate, meta: TorrentMeta, rules: MatchRules
 ) -> CheckedCandidate:
-    return CheckedCandidate(
+    plain = CheckedCandidate(
         candidate,
         meta,
         compare(item, meta.files, rules.ignore),
         match(item, meta.files, rules),
     )
+    if plain.match is not None and plain.match.is_full:
+        return plain
+    inside = unpacked(item)
+    found = match(inside.item, meta.files, rules) if inside else None
+    if inside is None or found is None:
+        return plain
+    if plain.match is not None and plain.match.coverage >= found.coverage:
+        return plain
+    return CheckedCandidate(
+        candidate, meta, compare(inside.item, meta.files, rules.ignore), found, inside
+    )
+
+
+def unpack_and_reseed(
+    qbit: Qbit,
+    store: Store,
+    checked: CheckedCandidate,
+    rules: MatchRules,
+    progress: Callable[[int, int], None] = lambda done, total: None,
+) -> tuple[str, LocalItem]:
+    """Unpack the archive into its new folder, then Reseed the torrent against it.
+
+    The unpacked files are compared again before the Reseed, which still verifies them.
+    """
+    if checked.unpack is None or checked.meta is None:
+        raise ArchiveError("this Candidate is not a Match with an archive's contents")
+    unpack(checked.unpack, progress)
+    local = scan_item(checked.unpack.item.path)
+    found = match(local, checked.meta.files, rules)
+    if found is None:
+        raise ArchiveError("the unpacked files do not match the torrent")
+    key = candidate_key(checked.candidate)
+    return start_reseed(qbit, store, local, checked.meta, found, key), local
 
 
 def match_zen(

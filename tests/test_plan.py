@@ -483,3 +483,26 @@ def test_a_book_inside_a_library_folder_of_many_books_is_found(tmp_path: Path) -
     )
 
     assert found.path == tmp_path / "Jules Renard" / "renard_sourires_pinces.epub"
+
+
+def test_a_match_inside_an_archive_is_never_a_plan_reseed(tmp_path: Path) -> None:
+    from torrentlinker.archives import Unpacked
+    from torrentlinker.domain import ItemState, LibraryFolder
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import Match
+    from torrentlinker.plan import reseed_candidates
+    from torrentlinker.review import CheckedCandidate
+    from torrentlinker.torrent_meta import TorrentMeta
+
+    archive = tmp_path / "Kaneda.rar"
+    item = LocalItem(archive, {archive.name: 2 * GB})
+    inside = LocalItem(tmp_path / "Kaneda", {"Kaneda/a.stl": 4 * GB})
+    entry = LibraryEntry(LibraryFolder(tmp_path), item, ItemState.ORPHAN)
+    full = Match({"Kaneda/a.stl": "Kaneda/a.stl"}, (), (), 1.0)
+    c = Candidate("Kaneda[STL]", 4 * GB, "u", 2, "a" * 40, categories=(8010,))
+    meta = TorrentMeta("Kaneda", "a" * 40, {"Kaneda/a.stl": 4 * GB}, b"")
+    checked = CheckedCandidate(c, meta, full, full, Unpacked(archive, tmp_path, inside))
+
+    # Unpacking writes gigabytes into the Library: only the user decides it.
+    assert reseed_candidates(KEEPER, [(entry, [checked])], set()) == []

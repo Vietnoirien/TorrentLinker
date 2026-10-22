@@ -36,6 +36,11 @@ def _entries_at_depth(root: Path, depth: int) -> list[Path]:
     return found
 
 
+def scan_item(path: Path) -> LocalItem:
+    """One Local Item read afresh, e.g. a folder the app just unpacked."""
+    return _local_item(path, None, False)
+
+
 def _local_item(path: Path, cache: Store | None, refresh: bool) -> LocalItem:
     base = path.parent
     if path.is_file():

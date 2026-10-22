@@ -362,6 +362,7 @@ def reseed_candidates(
             for v in checked
             if v.match is not None
             and v.match.is_full
+            and v.unpack is None  # a Plan never unpacks: that is the user's choice
             and v.meta is not None
             and v.meta.infohash.lower() not in in_client
             and (max_seeders is None or v.candidate.seeders <= max_seeders)

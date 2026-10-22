@@ -48,6 +48,7 @@ _Avoid_: Result, hit
 
 **Match**:
 A Candidate whose file tree has been compared to the Orphan's files and found to correspond by size; either Full (every torrent file has a local counterpart) or Partial (some torrent files are absent locally and will be skipped).
+A Match inside an archive pairs the torrent's files with what a .zip, .rar or .7z Local Item holds; Reseeding it means unpacking the archive first, which only the user decides.
 _Avoid_: Link
 
 **Rejection**:

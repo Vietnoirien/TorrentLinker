@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSplitter,
     QTableWidget,
@@ -20,10 +22,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from torrentlinker.domain import ItemState
+from torrentlinker.domain import ItemState, LocalItem
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
-from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import MatchRules
@@ -35,6 +37,7 @@ from torrentlinker.review import (
     check_candidate,
     check_candidates,
     remember_candidates,
+    unpack_and_reseed,
 )
 from torrentlinker.store import Store
 
@@ -60,6 +63,7 @@ class ReviewPanel(QWidget):
     """Candidates for the selected Orphan, and how a Candidate's files line up locally."""
 
     reseed_started = Signal(object)  # Path of the Local Item
+    unpacked = Signal(object)  # Path of the new folder: the Library needs a Scan
     candidates_checked = Signal(object, object)  # LibraryEntry, list[CheckedCandidate]
 
     def __init__(
@@ -129,12 +133,15 @@ class ReviewPanel(QWidget):
         self.reseed_button.clicked.connect(self._reseed_selected)
         actions.addWidget(self.reseed_button)
         self.action_row = actions
+        self.unpack_progress = QProgressBar()
+        self.unpack_progress.hide()
 
         lower = QWidget()
         lower_layout = QVBoxLayout(lower)
         lower_layout.setContentsMargins(0, 0, 0, 0)
         lower_layout.addWidget(self.files)
         lower_layout.addLayout(actions)
+        lower_layout.addWidget(self.unpack_progress)
 
         split = QSplitter(Qt.Orientation.Vertical)
         split.addWidget(self.candidates)
@@ -243,6 +250,12 @@ class ReviewPanel(QWidget):
     def _match_label(self, v: CheckedCandidate) -> tuple[str, QColor | None]:
         if not v.compared:
             return self.tr("Not checked"), None
+        if v.match is not None and v.unpack is not None:
+            if v.match.is_full:
+                return self.tr("Full match inside the archive"), GREEN
+            return self.tr("Partial match inside the archive ({0})").format(
+                f"{v.match.coverage:.0%}"
+            ), ORANGE
         if v.match is not None and v.match.is_full:
             return self.tr("Full match"), GREEN
         if v.match is not None:
@@ -273,6 +286,8 @@ class ReviewPanel(QWidget):
                 status, color = self.tr("– ignored, not downloaded"), ORANGE
             elif local is None:
                 status, color = self.tr("✗ absent, not downloaded"), RED
+            elif v.unpack is not None:
+                status, color = self.tr("✓ in the archive"), GREEN
             elif local != t_path:
                 status, color = self.tr("✓ renamed"), ORANGE
             else:
@@ -285,12 +300,21 @@ class ReviewPanel(QWidget):
         v, chosen = self.selected(), self.selected_all()
         self.check_button.setEnabled(v is not None and not v.compared)
         self.reject_button.setEnabled(bool(chosen))
-        self.reseed_button.setEnabled(bool(chosen) and all(c.match for c in chosen))
-        self.reseed_button.setText(
-            self.tr("Reseed {0} Matches").format(len(chosen))
-            if len(chosen) > 1
-            else self.tr("Reseed")
+        archive = any(c.unpack for c in chosen)
+        self.reseed_button.setEnabled(
+            bool(chosen)
+            and all(c.match for c in chosen)
+            and not (archive and len(chosen) > 1)
+            and self.unpack_progress.isHidden()
         )
+        if archive:
+            self.reseed_button.setText(self.tr("Unpack and Reseed…"))
+        else:
+            self.reseed_button.setText(
+                self.tr("Reseed {0} Matches").format(len(chosen))
+                if len(chosen) > 1
+                else self.tr("Reseed")
+            )
 
     def _reject_selected(self) -> None:
         if self.entry is None:
@@ -330,6 +354,9 @@ class ReviewPanel(QWidget):
         chosen = [v for v in self.selected_all() if v.meta is not None and v.match is not None]
         if entry is None or not chosen:
             return
+        if len(chosen) == 1 and chosen[0].unpack is not None:
+            self._unpack_and_reseed(entry, chosen[0])
+            return
         for v in chosen:
             assert v.match is not None
             if not v.match.is_full and not self._confirm_partial(
@@ -361,6 +388,94 @@ class ReviewPanel(QWidget):
             self.reseed_started.emit(entry.item.path)
         if errors:
             self._reseed_failed(RuntimeError("\n".join(errors)))
+
+    # Archives --------------------------------------------------------------
+
+    def _unpack_and_reseed(self, entry: LibraryEntry, v: CheckedCandidate) -> None:
+        u = v.unpack
+        assert u is not None and v.match is not None
+        folder = u.item.path
+        if folder.exists():
+            QMessageBox.information(
+                self,
+                self.tr("Unpack and Reseed"),
+                self.tr(
+                    "{0} already exists. If it holds this archive unpacked, scan the Library "
+                    "and search that folder to Reseed it."
+                ).format(folder),
+            )
+            return
+        free = shutil.disk_usage(u.archive.parent).free
+        if free < u.size:
+            QMessageBox.warning(
+                self,
+                self.tr("Unpack and Reseed"),
+                self.tr("Unpacking needs {0}, but only {1} is free on that disk.").format(
+                    human_size(u.size), human_size(free)
+                ),
+            )
+            return
+        if not v.match.is_full and not self._confirm_partial(len(v.match.absent), v.match.coverage):
+            return
+        answer = QMessageBox.question(
+            self,
+            self.tr("Unpack and Reseed"),
+            self.tr(
+                "Unpack {0} into the new folder\n{1}?\n\n"
+                "It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten "
+                "and your archive is kept: delete it yourself once the torrent seeds, if you "
+                "wish.\n\nThe torrent is then added to qBittorrent against the unpacked files, "
+                "and verified before it seeds."
+            ).format(
+                u.archive.name,
+                folder,
+                human_size(u.size),
+                len(u.item.files),
+                human_size(free),
+            ),
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        qbit, store, rules = self.qbit(), self.store, self.rules()
+        self.unpack_progress.setRange(0, 1000)
+        self.unpack_progress.setValue(0)
+        self.unpack_progress.setFormat(self.tr("Unpacking %p%"))
+        self.unpack_progress.show()
+        self._update_actions()
+
+        def work(report: Callable[[object], None]) -> tuple[str, LocalItem]:
+            return unpack_and_reseed(
+                qbit, store, v, rules, lambda done, total: report((done, total))
+            )
+
+        run_with_progress(
+            work,
+            self._unpack_progress,
+            lambda result: self._unpacked(entry, result[1].path),
+            self._unpack_failed,
+        )
+
+    def _unpack_progress(self, value: tuple[int, int]) -> None:
+        done, total = value
+        self.unpack_progress.setValue(round(1000 * done / total) if total else 0)
+        self.unpack_progress.setFormat(
+            self.tr("Unpacking: {0} of {1}").format(human_size(done), human_size(total))
+        )
+
+    def _unpacked(self, entry: LibraryEntry, folder: Path) -> None:
+        self.unpack_progress.hide()
+        self._update_actions()
+        self.unpacked.emit(folder)
+        self.reseed_started.emit(folder)
+
+    def _unpack_failed(self, error: Exception) -> None:
+        self.unpack_progress.hide()
+        self._update_actions()
+        QMessageBox.warning(
+            self,
+            self.tr("Unpack and Reseed"),
+            self.tr("Could not unpack and Reseed: {0}").format(error_text(error)),
+        )
 
     def _confirm_partial(self, missing: int, coverage: float) -> bool:
         answer = QMessageBox.question(

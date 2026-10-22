@@ -181,6 +181,7 @@ class MainWindow(QMainWindow):
             store, self.indexer, self.qbit, self.match_rules, self.searcher, self.default_query
         )
         self.review.reseed_started.connect(self._reseed_started)
+        self.review.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.review.candidates_checked.connect(self._show_match_zen)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(library_pane)
@@ -1097,8 +1098,10 @@ class MainWindow(QMainWindow):
         )
 
     def _summary(self, checked: list[CheckedCandidate]) -> str:
-        if any(v.match and v.match.is_full for v in checked):
+        if any(v.match and v.match.is_full and not v.unpack for v in checked):
             return self.tr("Full match found")
+        if any(v.match and v.match.is_full for v in checked):
+            return self.tr("Full match inside the archive")
         if any(v.match for v in checked):
             return self.tr("Partial match found")
         if checked:
