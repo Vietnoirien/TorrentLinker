@@ -15,6 +15,7 @@ from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.upload import (
     CATEGORY_3D,
     PROFILES,
+    Judgement,
     MiB,
     Model3DProfile,
     Problem,
@@ -22,6 +23,7 @@ from torrentlinker.upload import (
     Subcategory3D,
     UploadRequest,
     UploadStopped,
+    UploadWarning,
     bencode,
     category_name,
     default_category,
@@ -79,6 +81,17 @@ def test_archives_and_folders_without_a_3d_file_are_refused(tmp_path: Path) -> N
         Refusal(Problem.NO_3D_FILE),
     ]
     assert PROFILE.refusals(vise(tmp_path), IGNORE) == []
+
+
+def test_3d_judgement_rules_are_warnings_never_refusals(tmp_path: Path) -> None:
+    objects, pack = Subcategory3D.OBJECTS, Subcategory3D.PACK
+    paid = UploadWarning(Judgement.PAID_CREATORS)
+    theme = UploadWarning(Judgement.PACK_THEME)
+
+    assert PROFILE.warnings(vise(tmp_path), IGNORE, objects) == [paid]
+    dragons = dragon_pack(tmp_path)
+    assert PROFILE.warnings(dragons, IGNORE, pack) == [paid, theme]
+    assert PROFILE.refusals(dragons, IGNORE) == []  # they do not block
 
 
 def test_profiles_are_keyed_by_c411_category_and_a_kind_only_proposes_one(tmp_path: Path) -> None:

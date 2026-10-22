@@ -8,6 +8,7 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import IgnoreList
 from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
+from torrentlinker.upload import Subcategory3D
 
 ANNOUNCE = "https://c411.org/announce/secret"
 
@@ -323,3 +324,21 @@ def test_bbcode_renders_as_html_without_running_markup() -> None:
     assert '<img src="https://i.example/a.png"' in out and "<b>x</b>" in out
     assert "&lt;script&gt;" in out and "<script>" not in out
     assert "javascript" in out and 'href="javascript' not in out
+
+
+def test_warnings_show_beside_refusals_and_never_block_the_draft(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, _, _ = tab(qtbot, tmp_path)
+    vise, archive = model(tmp_path), model(tmp_path, "Dragon.rar")
+    view.set_entries([vise, archive])
+    view.remember(vise, [])
+    view.remember(archive, [])
+    view.items.selectRow(view.shown.index(vise))
+
+    assert "independent creators" in view.warnings.text()
+    assert "independent creators" not in view.problems.text()
+    assert "coherent theme" not in view.warnings.text()  # only for a pack
+    assert view.create_button.isEnabled()  # a Warning does not block
+
+    view.subcategory.setCurrentIndex(view.subcategory.findData(Subcategory3D.PACK))
+    assert "coherent theme" in view.warnings.text()
+    assert view.create_button.isEnabled()

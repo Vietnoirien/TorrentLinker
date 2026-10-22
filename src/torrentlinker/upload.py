@@ -86,8 +86,24 @@ class Problem(StrEnum):
 
 @dataclass(frozen=True)
 class Refusal:
+    """A mechanical rule a program can check: the Draft cannot be saved."""
+
     problem: Problem
     detail: str = ""
+
+
+class Judgement(StrEnum):
+    """A c411 rule only the uploader can judge; the GUI words each one."""
+
+    PAID_CREATORS = "paid-creators"
+    PACK_THEME = "pack-theme"
+
+
+@dataclass(frozen=True)
+class UploadWarning:
+    """A judgement rule: shown beside the Refusals, but the Draft can still be saved."""
+
+    judgement: Judgement
 
 
 @dataclass(frozen=True)
@@ -104,6 +120,9 @@ class UploadProfile(Protocol):
     subcategories: tuple[Subcategory, ...]
 
     def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]: ...
+    def warnings(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int
+    ) -> list[UploadWarning]: ...
     def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int: ...
     def suggested_name(
         self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
@@ -134,6 +153,14 @@ class Model3DProfile:
             found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
         if not any(_ext(p) in FORMATS_3D for p in files):
             found.append(Refusal(Problem.NO_3D_FILE))
+        return found
+
+    def warnings(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int
+    ) -> list[UploadWarning]:
+        found = [UploadWarning(Judgement.PAID_CREATORS)]
+        if subcategory == Subcategory3D.PACK:
+            found.append(UploadWarning(Judgement.PACK_THEME))
         return found
 
     def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int:

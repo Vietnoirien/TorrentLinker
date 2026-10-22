@@ -49,6 +49,7 @@ from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import Store
 from torrentlinker.upload import (
     PROFILES,
+    Judgement,
     PreparedUpload,
     Problem,
     Refusal,
@@ -56,6 +57,7 @@ from torrentlinker.upload import (
     UploadProfile,
     UploadRequest,
     UploadStopped,
+    UploadWarning,
     category_name,
     create_upload,
     default_category,
@@ -82,6 +84,14 @@ def refusal_text(r: Refusal) -> str:
     if r.problem is Problem.NO_3D_FILE:
         return QCoreApplication.translate("Upload", "No 3D file (STL, 3MF, OBJ, STEP, GCODE…)")
     return QCoreApplication.translate("Upload", "No file to upload")
+
+
+def warning_text(w: UploadWarning) -> str:
+    if w.judgement is Judgement.PACK_THEME:
+        return QCoreApplication.translate("Upload", "A pack must have one coherent theme")
+    return QCoreApplication.translate(
+        "Upload", "c411 forbids files from independent creators who live off them"
+    )
 
 
 class UploadTab(QWidget):
@@ -188,6 +198,10 @@ class UploadTab(QWidget):
         self.problems.setWordWrap(True)
         self.problems.setStyleSheet("color: #c0392b")
         right_layout.addWidget(self.problems)
+        self.warnings = QLabel()  # judgement rules: amber, the Draft can still be saved
+        self.warnings.setWordWrap(True)
+        self.warnings.setStyleSheet("color: #b9770e")
+        right_layout.addWidget(self.warnings)
 
         self.pages = QTabWidget()
         self.file_table = QTableWidget(0, 3)
@@ -556,6 +570,12 @@ class UploadTab(QWidget):
             except ValueError as e:
                 problems.append(str(e))
         self.problems.setText("\n".join(p for p in problems if p))
+        judged = (
+            profile.warnings(item, self.ignore(), self.subcategory.currentData())
+            if profile is not None and item is not None and title
+            else []
+        )
+        self.warnings.setText("\n".join(warning_text(w) for w in judged))
         self._show_files()
         if profile is not None and self.files:
             if "nfo" not in self._edited:

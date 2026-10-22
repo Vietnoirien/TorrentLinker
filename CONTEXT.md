@@ -80,6 +80,12 @@ _Avoid_: Kind (a Content Kind is the Library's notion, not c411's)
 **Draft**:
 An Upload saved on c411 but not yet published; the user reviews and publishes it there.
 
+**Refusal**:
+A c411 rule a program can check (archives, formats, no file…): while an Orphan breaks one, its Draft cannot be saved.
+
+**Warning**:
+A c411 rule only the uploader can judge (no independent creators' paid files, one theme per pack): shown in the Upload tab beside the Refusals, but the Draft can still be saved.
+
 **Announce URL**:
 The user's private tracker address, holding their passkey, that every Upload's torrent carries.
 _Avoid_: Passkey (alone), tracker URL

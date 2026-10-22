@@ -149,7 +149,7 @@ Common to almost every category: no RAR/ZIP/7z (exceptions: console and emulatio
 
 ### 3D printing
 
-- STL, OBJ, 3MF, STEP/STP, GCODE (with target printer and filament, STL source if possible); sources BLEND, F3D/F3Z, SLDPRT, FCStd. Packs must have one coherent theme, with every model listed in the NFO. No files stolen from independent creators who live off them.
+- STL, OBJ, 3MF, STEP/STP, GCODE (with target printer and filament, STL source if possible); sources BLEND, F3D/F3Z, SLDPRT, FCStd. Packs must have one coherent theme, with every model listed in the NFO. No files stolen from independent creators who live off them. (Both are judgement rules: the app shows them as Warnings, not Refusals.)
 
 ### Adult
 
