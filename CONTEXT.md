@@ -77,6 +77,10 @@ _Avoid_: Reupload (c411's term for one kind of Upload), release, post
 The c411 category an Upload is made for (Films & Vidéos, Ebook, Imprimante 3D…); it decides the Upload's rules, name, NFO and description. The Library Folder's Content Kind only proposes one; the user can pick another.
 _Avoid_: Kind (a Content Kind is the Library's notion, not c411's)
 
+**Category Options**:
+The choices c411 asks for beyond the category (language, genre, format…), listed per subcategory; some are required, some allow several values. An Upload's Draft carries the chosen ones.
+_Avoid_: Tags, metadata
+
 **Draft**:
 An Upload saved on c411 but not yet published; the user reviews and publishes it there.
 

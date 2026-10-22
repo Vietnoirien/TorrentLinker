@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from torrentlinker import net
 from torrentlinker.archives import Unpacked, is_archive, unpack, unpacked
@@ -44,6 +47,13 @@ from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.indexer import Indexer
 from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import IgnoreList
+from torrentlinker.options import (
+    Chosen,
+    OptionType,
+    category_options,
+    fresh_options,
+    options_body,
+)
 from torrentlinker.qbit import Qbit
 from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import Store
@@ -59,6 +69,7 @@ from torrentlinker.upload import (
     category_name,
     create_upload,
     default_category,
+    missing_options,
     seed_upload,
     upload_files,
 )
@@ -79,6 +90,8 @@ def refusal_text(r: Refusal) -> str:
         return QCoreApplication.translate(
             "Upload", "c411 refuses archives ({0}), and this one cannot be read"
         ).format(r.detail)
+    if r.problem is Problem.OPTION_MISSING:
+        return QCoreApplication.translate("Upload", "Choose a value for {0}").format(r.detail)
     if r.problem is Problem.NO_3D_FILE:
         return QCoreApplication.translate("Upload", "No 3D file (STL, 3MF, OBJ, STEP, GCODE…)")
     return QCoreApplication.translate("Upload", "No file to upload")
@@ -121,6 +134,11 @@ class UploadTab(QWidget):
         self._edited: set[str] = set()  # name, nfo, description: left alone once edited
         self._stop = threading.Event()
         self._image_url = ""  # the URL whose image the preview shows
+        self.option_types: list[OptionType] = []  # the subcategory's, once read
+        self._option_widgets: dict[int, QComboBox | QListWidget] = {}
+        self._picks: Chosen = {}  # what the user chose, which the profile's suggestion yields to
+        self._options_for: int | None = None  # the subcategory whose options are awaited
+        self._options_state = ""  # what the Options box says while no selector shows
 
         layout = QVBoxLayout(self)
         self.notice = QLabel()
@@ -171,7 +189,7 @@ class UploadTab(QWidget):
         self.source.setPlaceholderText(self.tr("Where it comes from; empty for NOTAG"))
         self.source.textChanged.connect(self._regenerate)
         self.subcategory = QComboBox()
-        self.subcategory.currentIndexChanged.connect(self._regenerate)
+        self.subcategory.currentIndexChanged.connect(self._subcategory_changed)
         self.name = QLineEdit()
         self.name.textEdited.connect(lambda: self._edited.add("name"))
         self.name.textChanged.connect(self._name_changed)
@@ -184,6 +202,20 @@ class UploadTab(QWidget):
         form.addRow(self.tr("Release name"), self.name)
         form.addRow(self.tr("Image URL"), self.image_url)
         right_layout.addLayout(form)
+        self.options_box = QGroupBox(self.tr("Options"))
+        options_layout = QVBoxLayout(self.options_box)
+        self.options_form = QFormLayout()
+        options_layout.addLayout(self.options_form)
+        status_row = QHBoxLayout()
+        self.options_status = QLabel()
+        self.options_status.setWordWrap(True)
+        status_row.addWidget(self.options_status, 1)
+        self.options_refresh = QPushButton(self.tr("Refresh options"))
+        self.options_refresh.setToolTip(self.tr("Read this subcategory's options from c411 again"))
+        self.options_refresh.clicked.connect(lambda: self._show_options(refresh=True))
+        status_row.addWidget(self.options_refresh)
+        options_layout.addLayout(status_row)
+        right_layout.addWidget(self.options_box)
         self.problems = QLabel()
         self.problems.setWordWrap(True)
         self.problems.setStyleSheet("color: #c0392b")
@@ -468,6 +500,7 @@ class UploadTab(QWidget):
 
     def _show_entry(self) -> None:
         self._edited.clear()
+        self._picks = {}
         self.unpack_target = None
         entry, profile = self.entry, self.profile()
         if entry is not None and self.needs_unpacking(entry):
@@ -485,6 +518,13 @@ class UploadTab(QWidget):
         self._choose_subcategory()
         for field in (self.source, self.name, self.image_url, self.subcategory):
             field.setEnabled(profile is not None)
+        self._show_options()
+        self._regenerate()
+
+    def _subcategory_changed(self) -> None:
+        """Another subcategory has other options, and the old picks do not apply."""
+        self._picks = {}
+        self._show_options()
         self._regenerate()
 
     def _choose_subcategory(self) -> None:
@@ -508,9 +548,121 @@ class UploadTab(QWidget):
             if self.entry is not None and self.entry.item.path == path:
                 self.unpack_target = target
                 self._choose_subcategory()
+                self._show_options()  # the profile may suggest from the unpacked files
                 self._regenerate()
 
         run_in_background(lambda: unpacked(entry.item), done, lambda e: done(None))
+
+    # Category Options ------------------------------------------------------
+
+    def chosen_options(self) -> Chosen:
+        """The values the selectors show, by option type id."""
+        chosen: Chosen = {}
+        for option_id, widget in self._option_widgets.items():
+            if isinstance(widget, QListWidget):
+                chosen[option_id] = [
+                    widget.item(r).data(Qt.ItemDataRole.UserRole)
+                    for r in range(widget.count())
+                    if widget.item(r).checkState() == Qt.CheckState.Checked
+                ]
+            else:
+                value = widget.currentData()
+                chosen[option_id] = [] if value is None else [value]
+        return chosen
+
+    def missing_options(self) -> list[Refusal]:
+        return missing_options(self.option_types, self.chosen_options())
+
+    def _show_options(self, refresh: bool = False) -> None:
+        """Show the selectors of the chosen subcategory: from the store when kept for less
+        than a week, else read from c411 off the GUI thread."""
+        subcategory = self.subcategory.currentData()
+        self._options_for = subcategory
+        self._clear_options()
+        if self.profile() is None or subcategory is None:
+            self._set_options_state("")
+            return
+        if not refresh and (kept := fresh_options(self.store, subcategory)) is not None:
+            self._options_read(subcategory, kept)
+            return
+        self._set_options_state(self.tr("Reading the options…"))
+        try:
+            fetch = self.indexer().category_options
+        except Exception as e:  # noqa: BLE001 - shown where the options would be
+            self._options_failed(subcategory, e)
+            return
+        store = self.store
+        run_in_background(
+            lambda: category_options(store, fetch, subcategory, refresh=refresh),
+            lambda types: self._options_read(subcategory, types),
+            lambda e: self._options_failed(subcategory, e),
+        )
+
+    def _clear_options(self) -> None:
+        self.option_types = []
+        self._option_widgets = {}
+        while self.options_form.rowCount():
+            self.options_form.removeRow(0)
+
+    def _set_options_state(self, text: str) -> None:
+        """Say why no selector shows (reading, failed), or hide the box when there are
+        none to show."""
+        self._options_state = text
+        self.options_status.setText(text)
+        self.options_refresh.setVisible(bool(text) and text != self.tr("Reading the options…"))
+        self.options_box.setVisible(bool(text) or bool(self.option_types))
+        self._name_changed()
+
+    def _options_failed(self, subcategory: int, error: Exception) -> None:
+        if not isValid(self) or subcategory != self._options_for:
+            return
+        self._clear_options()
+        self._set_options_state(
+            self.tr("Could not read the options: {0}").format(error_text(error))
+        )
+
+    def _options_read(self, subcategory: int, types: list[OptionType]) -> None:
+        if not isValid(self) or subcategory != self._options_for:
+            return  # the tab is gone, or another subcategory was chosen meanwhile
+        self._clear_options()
+        self.option_types = types
+        item, profile = self.source_item(), self.profile()
+        suggested = (
+            profile.suggested_options(item, self.ignore(), types) if profile and item else {}
+        )
+        wanted = {**suggested, **self._picks}
+        for t in types:
+            label = f"{t.name} *" if t.required else t.name
+            widget: QComboBox | QListWidget
+            if t.multiple:
+                widget = QListWidget()
+                widget.setMaximumHeight(110)
+                for v in t.values:
+                    entry = QListWidgetItem(v.label)
+                    entry.setData(Qt.ItemDataRole.UserRole, v.id)
+                    entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                    on = v.id in wanted.get(t.id, [])
+                    entry.setCheckState(Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+                    widget.addItem(entry)
+                widget.itemChanged.connect(lambda _item, o=t.id: self._option_picked(o))
+            else:
+                widget = QComboBox()
+                widget.addItem("—", None)
+                for v in t.values:
+                    widget.addItem(v.label, v.id)
+                first = next(iter(wanted.get(t.id, [])), None)
+                widget.setCurrentIndex(max(widget.findData(first), 0))
+                widget.currentIndexChanged.connect(lambda _i, o=t.id: self._option_picked(o))
+            if t.required:
+                widget.setToolTip(self.tr("c411 requires this one"))
+            self._option_widgets[t.id] = widget
+            self.options_form.addRow(label, widget)
+        self._set_options_state("")
+
+    def _option_picked(self, option_id: int) -> None:
+        """The user's choice for this option wins over the profile's suggestion."""
+        self._picks[option_id] = self.chosen_options()[option_id]
+        self._name_changed()
 
     def _regenerate(self) -> None:
         """Fill what the user has not edited from the profile: name, NFO, description."""
@@ -555,6 +707,10 @@ class UploadTab(QWidget):
                 self.files = upload_files(item, title, self.ignore())
             except ValueError as e:
                 problems.append(str(e))
+        if entry is not None and profile is not None:
+            if self._options_state:
+                problems.append(self._options_state)
+            problems += [refusal_text(r) for r in self.missing_options()]
         self.problems.setText("\n".join(p for p in problems if p))
         self._show_files()
         if profile is not None and self.files:
@@ -682,6 +838,8 @@ class UploadTab(QWidget):
             and title.isascii()
             and bool(self.nfo.toPlainText().strip())
             and bool(self.announce())
+            and not self._options_state
+            and not self.missing_options()
             and not self.progress.isVisible()
         )
         self.create_button.setEnabled(ready)
@@ -712,6 +870,7 @@ class UploadTab(QWidget):
             self.description.toPlainText(),
             profile.category,
             self.subcategory.currentData(),
+            options_body(self.option_types, self.chosen_options()),
         )
         store, announce, indexer, folder, stop = (
             self.store,

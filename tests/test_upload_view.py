@@ -1,5 +1,8 @@
+import json
 from pathlib import Path
 from typing import Any
+
+from PySide6.QtCore import Qt
 
 from tests.fake_qbit import FakeQbit
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
@@ -8,13 +11,16 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import IgnoreList
 from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
+from torrentlinker.upload import Subcategory
 
 ANNOUNCE = "https://c411.org/announce/secret"
+FIXTURES = Path(__file__).parent / "fixtures"  # c411's own answers, recorded
 
 
 class StubIndexer:
     def __init__(self) -> None:
         self.saved: list[dict[str, Any]] = []
+        self.options_asked: list[int] = []
 
     def save_draft(self, body: dict[str, Any]) -> int:
         self.saved.append(body)
@@ -22,6 +28,12 @@ class StubIndexer:
 
     def drafts(self) -> list[dict[str, Any]]:
         return [{"name": b["title"], "subcategory": {"name": "Objets"}} for b in self.saved]
+
+    def category_options(self, subcategory: int) -> dict[str, Any]:
+        self.options_asked.append(subcategory)
+        if subcategory in (6, 51):
+            return json.loads((FIXTURES / f"c411_options_{subcategory}.json").read_text("utf-8"))
+        return {"data": []}
 
 
 def model(tmp_path: Path, name: str = "Petit étau de bureau.3mf") -> LibraryEntry:
@@ -93,7 +105,7 @@ def test_the_category_picker_defaults_from_the_kind_and_reruns_the_profile(  # t
     assert view.why_not(loose) is None and view.items.item(0, 3).text() == "Ready"
     assert view.name.text() == "Petit.Etau.De.Bureau.NOTAG.3MF"
     assert view.subcategory.count() == 3 and view.name.isEnabled()
-    assert view.create_button.isEnabled()
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
 
     view.set_entries([loose, model(tmp_path)])  # a 3D folder defaults to Imprimante 3D
     view.remember(view.candidates()[1], [])
@@ -147,7 +159,7 @@ def test_selecting_an_orphan_suggests_a_compliant_name_and_previews_the_nfo(
     assert view.file_table.item(0, 1).text() == "Petit étau de bureau.3mf"
     assert "Printables" in view.description.toPlainText()
     assert "Informations" in view.preview.toPlainText()  # rendered, without BBCode
-    assert view.create_button.isEnabled()
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
 
     view.name.setText("Petit étau")
     assert not view.create_button.isEnabled()
@@ -186,6 +198,7 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     started: list[Path] = []
     view.upload_started.connect(started.append)
 
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
     view.create_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
@@ -290,7 +303,8 @@ def test_an_archive_is_unpacked_next_to_it_then_its_folder_is_offered(  # type: 
     view.remember(entry, [])
     view.items.selectRow(0)
     qtbot.waitUntil(lambda: view.file_table.rowCount() == 2, timeout=5000)
-    assert view.create_button.text() == "Unpack…" and view.create_button.isEnabled()
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
+    assert view.create_button.text() == "Unpack…"
     assert view.name.text() == "Dragon.NOTAG.[PACK].STL"
     new: list[Path] = []
     view.unpacked.connect(new.append)
@@ -323,3 +337,147 @@ def test_bbcode_renders_as_html_without_running_markup() -> None:
     assert '<img src="https://i.example/a.png"' in out and "<b>x</b>" in out
     assert "&lt;script&gt;" in out and "<script>" not in out
     assert "javascript" in out and 'href="javascript' not in out
+
+
+class FilmProfile:
+    """A stand-in for a video profile, to exercise Category Options the 3D one has none of."""
+
+    category = 1
+    subcategories = (Subcategory(6, "Film"),)
+
+    def refusals(self, item, ignore):  # type: ignore[no-untyped-def]
+        return []
+
+    def default_subcategory(self, item, ignore):  # type: ignore[no-untyped-def]
+        return 6
+
+    def suggested_name(self, item, ignore, source, subcategory):  # type: ignore[no-untyped-def]
+        return "Film.2020.NOTAG"
+
+    def suggested_options(self, item, ignore, types):  # type: ignore[no-untyped-def]
+        return {1: [2]}  # from MediaInfo: a French track
+
+    def nfo(self, title, files):  # type: ignore[no-untyped-def]
+        return "nfo"
+
+    def description(self, title, files, source, image_url):  # type: ignore[no-untyped-def]
+        return "description"
+
+
+def film_tab(qtbot, tmp_path: Path, monkeypatch):  # type: ignore[no-untyped-def]
+    from torrentlinker.gui import upload_view
+
+    monkeypatch.setitem(upload_view.PROFILES, 1, FilmProfile())
+    view, indexer, qbit = tab(qtbot, tmp_path)
+    entry = model(tmp_path)
+    film = LibraryEntry(
+        LibraryFolder(tmp_path / "STL", 2, ContentKind.MOVIE), entry.item, ItemState.ORPHAN
+    )
+    view.set_entries([film])
+    view.remember(film, [])
+    view.items.selectRow(0)
+    return view, indexer, qbit
+
+
+def test_the_options_of_a_subcategory_show_as_selectors_the_profile_prefills(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    from PySide6.QtWidgets import QComboBox, QListWidget
+
+    view, indexer, _ = film_tab(qtbot, tmp_path, monkeypatch)
+
+    qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
+    langue, genre, kind = (view._option_widgets[i] for i in (1, 5, 4))
+    assert isinstance(langue, QListWidget) and isinstance(genre, QListWidget)
+    assert isinstance(kind, QComboBox)
+    assert view.options_form.labelForField(langue).text() == "Langue *"  # required
+    assert view.options_form.labelForField(genre).text() == "Genre"
+    assert view.chosen_options() == {1: [2], 5: [], 4: []}  # prefilled from the profile
+    assert indexer.options_asked == [6]
+
+
+def test_a_required_option_left_empty_blocks_the_draft_until_the_user_chooses(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    view, _, _ = film_tab(qtbot, tmp_path, monkeypatch)
+    qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
+    assert view.create_button.isEnabled()
+
+    langue = view._option_widgets[1]
+    langue.item(1).setCheckState(Qt.CheckState.Unchecked)  # the profile's French track
+
+    assert view.chosen_options()[1] == []
+    assert "Choose a value for Langue" in view.problems.text()
+    assert not view.create_button.isEnabled()
+
+    langue.item(0).setCheckState(Qt.CheckState.Checked)  # the user's own pick
+    assert view.chosen_options()[1] == [1]
+    assert "Choose a value" not in view.problems.text()
+    assert view.create_button.isEnabled()
+
+
+def test_the_users_choice_wins_over_the_profile_and_is_sent_in_the_draft(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    shown: list[str] = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: shown.append(a[2]))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
+    view, indexer, _ = film_tab(qtbot, tmp_path, monkeypatch)
+    qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
+
+    view._option_widgets[5].item(0).setCheckState(Qt.CheckState.Checked)  # Action
+    kind = view._option_widgets[4]
+    kind.setCurrentIndex(kind.findData(38))  # 3D
+    view.source.setText("WEB")  # regenerating keeps the picks
+
+    assert view.chosen_options() == {1: [2], 5: [39], 4: [38]}
+    view.create_button.click()
+    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+    assert indexer.saved[0]["options"] == {"1": [2], "5": [39], "4": 38}
+    assert indexer.saved[0]["subcategoryId"] == 6
+
+
+def test_options_are_read_once_then_kept_until_refreshed(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    view, indexer, _ = film_tab(qtbot, tmp_path, monkeypatch)
+    qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
+
+    view._show_options()  # from the store this time
+    assert view.option_types and indexer.options_asked == [6]
+
+    view._show_options(refresh=True)
+    qtbot.waitUntil(lambda: indexer.options_asked == [6, 6], timeout=5000)
+
+
+def test_options_that_cannot_be_read_say_so_and_block_the_draft(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    view, indexer, _ = film_tab(qtbot, tmp_path, monkeypatch)
+    qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
+
+    def offline(subcategory: int) -> dict[str, Any]:
+        raise OSError("offline")
+
+    indexer.category_options = offline  # type: ignore[method-assign]
+    view._show_options(refresh=True)
+
+    qtbot.waitUntil(
+        lambda: "Could not read the options" in view.options_status.text(), timeout=5000
+    )
+    assert not view.option_types and not view.create_button.isEnabled()
+    assert not view.options_refresh.isHidden()
+
+
+def test_3d_has_no_options_to_show_and_sends_none(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, indexer, _ = tab(qtbot, tmp_path)
+    vise = model(tmp_path)
+    view.set_entries([vise])
+    view.remember(vise, [])
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: indexer.options_asked == [51], timeout=5000)
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
+    assert view.options_box.isHidden() and view.chosen_options() == {}

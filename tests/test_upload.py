@@ -8,6 +8,7 @@ import torf
 from tests.fake_qbit import FakeQbit
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.matching import IgnoreList
+from torrentlinker.options import OptionType, OptionValue
 from torrentlinker.reseed import TAG, VERIFYING, start_reseed
 from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
@@ -27,6 +28,7 @@ from torrentlinker.upload import (
     default_category,
     draft_body,
     make_torrent,
+    missing_options,
     nfo_3d,
     piece_size,
     profile_for,
@@ -272,3 +274,42 @@ def test_no_announce_url_means_no_upload(tmp_path: Path) -> None:
         item = vise(tmp_path)
         request = UploadRequest(item, "T", upload_files(item, "T", IGNORE), "n", "d", 10, 51)
         create_upload(request, "", tmp_path / "uploads", lambda body: 1, Store(tmp_path / "s.db"))
+
+
+def test_the_draft_sends_the_chosen_options_and_3d_still_sends_none() -> None:
+    chosen = {"1": [2], "4": 35}
+
+    body = draft_body("T", "D", 1, 6, b"d4:infoe", "nfo", chosen)
+    assert body["options"] == chosen
+    assert draft_body("T", "D", 10, 51, b"d4:infoe", "nfo")["options"] == {}
+
+
+def test_a_required_option_left_empty_is_a_refusal() -> None:
+    langue = OptionType(1, "Langue", True, True, (OptionValue(2, "Français"),))
+    genre = OptionType(5, "Genre", True, False, (OptionValue(39, "Action"),))
+
+    assert missing_options([langue, genre], {}) == [Refusal(Problem.OPTION_MISSING, "Langue")]
+    assert missing_options([langue, genre], {1: []}) == [Refusal(Problem.OPTION_MISSING, "Langue")]
+    assert missing_options([langue, genre], {1: [2]}) == []
+    assert missing_options([], {}) == []
+
+
+def test_a_profile_suggests_no_options_unless_it_knows_them(tmp_path: Path) -> None:
+    assert PROFILE.suggested_options(vise(tmp_path), IGNORE, []) == {}
+
+
+def test_an_upload_sends_its_options_in_the_draft(tmp_path: Path) -> None:
+    from torrentlinker.upload import create_upload
+
+    item = vise(tmp_path)
+    sent: list[dict[str, object]] = []
+
+    def save_draft(body: dict[str, object]) -> int:
+        sent.append(body)
+        return 1
+
+    files = upload_files(item, "T", IGNORE)
+    request = UploadRequest(item, "T", files, "n", "d", 10, 51, options={"9": 3})
+    create_upload(request, ANNOUNCE, tmp_path / "uploads", save_draft, Store(tmp_path / "s.db"))
+
+    assert sent[0]["options"] == {"9": 3}

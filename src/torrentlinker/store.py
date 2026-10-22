@@ -78,6 +78,11 @@ CREATE TABLE IF NOT EXISTS upload (
     draft_id INTEGER,
     made_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS category_options (
+    subcategory INTEGER PRIMARY KEY,
+    body TEXT NOT NULL,
+    fetched_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS plan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     made_at REAL NOT NULL,
@@ -576,6 +581,23 @@ class Store:
                 "ORDER BY made_at DESC"
             ).fetchall()
         return [SavedUpload(Path(r[0]), r[1], r[2], r[3], r[4]) for r in rows]
+
+    def cached_options(self, subcategory: int) -> tuple[str, float] | None:
+        """The Category Options response kept for a subcategory, and when it was fetched."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT body, fetched_at FROM category_options WHERE subcategory = ?",
+                (subcategory,),
+            ).fetchone()
+        return (str(row[0]), float(row[1])) if row else None
+
+    def cache_options(self, subcategory: int, body: str, fetched_at: float) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO category_options (subcategory, body, fetched_at) "
+                "VALUES (?, ?, ?)",
+                (subcategory, body, fetched_at),
+            )
 
     # The saved Plan ---------------------------------------------------------
 
