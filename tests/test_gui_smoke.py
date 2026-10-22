@@ -412,6 +412,61 @@ def test_plan_maker_plans_catalogue_torrents_into_download_folders(qtbot, tmp_pa
     assert plan.items[0].candidate.folder == tmp_path / "films"
 
 
+def test_a_plan_leaves_out_books_already_in_the_library_and_says_so(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.store import CatalogueRow
+
+    s = Settings()
+    s.indexer_categories = {7000: IndexerCategory("Ebook")}
+    s.download_folders = DownloadFolders({7000: str(tmp_path / "books")})
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(
+        [
+            CatalogueRow(
+                "aa" * 20,
+                "La.Confidente.Audrey.Lefevre.2026.FR.[EPUB]-G11",
+                250_000,
+                5,
+                7000,
+                "u",
+                "d",
+                0,
+            ),
+            CatalogueRow(
+                "bb" * 20,
+                "Submersion.Marc.Dugain.2026.FR.[EPUB]-G11",
+                300_000,
+                5,
+                7000,
+                "u",
+                "d",
+                0,
+            ),
+        ]
+    )
+    window = MainWindow(s, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
+    mine = tmp_path / "library" / "La confidente - Audrey Lefevre.epub"
+    folder = LibraryFolder(tmp_path / "library", 1, ContentKind.EBOOK)
+    window.library_model.set_entries(
+        [LibraryEntry(folder, LocalItem(mine, {mine.name: 250_000}), ItemState.ORPHAN)]
+    )
+
+    plan = window.plan_maker()()
+    window._plan_made(plan)
+
+    assert [i.candidate.title for i in plan.items] == ["Submersion.Marc.Dugain.2026.FR.[EPUB]-G11"]
+    [left_out] = plan.on_disk
+    assert left_out.path == mine
+    view = window.zen_tab.plan_view
+    assert "1 torrents left out: they seem to be on disk already" in view.summary.text()
+    assert "La.Confidente" in view.summary.toolTip()
+
+
 def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     from PySide6.QtWidgets import QMessageBox
 
@@ -521,7 +576,10 @@ def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
     window.send_plan(plan)
     qtbot.waitUntil(lambda: "limiting downloads" in view.summary.text(), timeout=5000)
     assert "0 of 3" in view.summary.text()
-    assert "3" in window.band.plan.text() and "waiting" in window.band.plan.text()
+    assert "≈ +0.30 Zen/day" in view.summary.text()  # the Plan's Zen stays in view
+    assert "≈ +0.00 Zen/day sent" in view.summary.text()
+    band = window.band.plan.text()
+    assert "+0.30" in band and "0/3" in band and "waiting" in band
 
     view.stop_send_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)

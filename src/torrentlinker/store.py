@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS catalogue_feed (
 CREATE TABLE IF NOT EXISTS plan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     made_at REAL NOT NULL,
-    sending INTEGER NOT NULL DEFAULT 0
+    sending INTEGER NOT NULL DEFAULT 0,
+    zen_added REAL
 );
 CREATE TABLE IF NOT EXISTS plan_item (
     position INTEGER PRIMARY KEY,
@@ -124,6 +125,7 @@ class SavedPlan:
     made_at: float
     sending: bool  # a send was running when the app stopped
     items: list[SavedPlanItem]
+    zen_added: float | None = None  # ≈ Zen/day of the whole Plan, as it was made
 
     @property
     def pending(self) -> list[SavedPlanItem]:
@@ -195,6 +197,9 @@ class Store:
             self._db.execute(
                 "UPDATE catalogue_crawl SET complete = 0, next_offset = 0 WHERE complete = 1"
             )
+        plan_columns = {r[1] for r in self._db.execute("PRAGMA table_info(plan_state)")}
+        if "zen_added" not in plan_columns:  # 0.2.3 saved Plans without it
+            self._db.execute("ALTER TABLE plan_state ADD COLUMN zen_added REAL")
         columns = {r[1] for r in self._db.execute("PRAGMA table_info(verification)")}
         if "required_progress" not in columns:
             self._db.execute(
@@ -508,7 +513,12 @@ class Store:
 
     # The saved Plan ---------------------------------------------------------
 
-    def save_plan(self, items: list[SavedPlanItem], made_at: float | None = None) -> None:
+    def save_plan(
+        self,
+        items: list[SavedPlanItem],
+        made_at: float | None = None,
+        zen_added: float | None = None,
+    ) -> None:
         """Replace the saved Plan, so it survives a crash or a restart."""
         with self._lock, self._db:
             self._db.execute("DELETE FROM plan_item")
@@ -516,8 +526,8 @@ class Store:
             if not items:
                 return
             self._db.execute(
-                "INSERT INTO plan_state (id, made_at, sending) VALUES (1, ?, 0)",
-                (time.time() if made_at is None else made_at,),
+                "INSERT INTO plan_state (id, made_at, sending, zen_added) VALUES (1, ?, 0, ?)",
+                (time.time() if made_at is None else made_at, zen_added),
             )
             self._db.executemany(
                 "INSERT INTO plan_item (position, infohash, title, size, seeders, category,"
@@ -542,14 +552,18 @@ class Store:
 
     def saved_plan(self) -> SavedPlan | None:
         with self._lock:
-            state = self._db.execute("SELECT made_at, sending FROM plan_state").fetchone()
+            state = self._db.execute(
+                "SELECT made_at, sending, zen_added FROM plan_state"
+            ).fetchone()
             rows = self._db.execute(
                 "SELECT infohash, title, size, seeders, category, folder, zen, note, outcome,"
                 " reason FROM plan_item ORDER BY position"
             ).fetchall()
         if state is None:
             return None
-        return SavedPlan(float(state[0]), bool(state[1]), [SavedPlanItem(*r) for r in rows])
+        return SavedPlan(
+            float(state[0]), bool(state[1]), [SavedPlanItem(*r) for r in rows], state[2]
+        )
 
     def set_plan_sending(self, sending: bool) -> None:
         with self._lock, self._db:

@@ -47,6 +47,7 @@ class SendProgress:
     refused: int
     failed: int
     retry_at: float | None = None  # time.time() of the next try while the Indexer limits
+    zen_added: float = 0.0  # ≈ Zen/day of the torrents added or Reseeded so far
 
 
 class _Stopped(Exception):
@@ -109,6 +110,7 @@ def send_plan(
     stop = stop or threading.Event()
     wait = wait or stop.wait
     total = len(plan.items)
+    zen_sent = 0.0
 
     def progress(title: str, retry_at: float | None = None) -> None:
         on_progress(
@@ -120,6 +122,7 @@ def send_plan(
                 len(report.refused),
                 len(report.failed),
                 retry_at,
+                zen_sent,
             )
         )
 
@@ -148,10 +151,12 @@ def send_plan(
                     raise Refused("Reseeds are not handled here")
                 reseed(c)
                 report.reseeded.append(c.title)
+                zen_sent += item.zen
                 on_outcome(c, "reseeded", "")
             else:
                 send_one(qbit, c, fetch_patiently(c))
                 report.added.append(c.title)
+                zen_sent += item.zen
                 on_outcome(c, "added", "")
         except _Stopped:
             report.stopped = True

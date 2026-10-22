@@ -193,3 +193,12 @@ def test_each_torrent_outcome_is_reported_so_it_can_be_saved(tmp_path: Path) -> 
     )
 
     assert outcomes == [("A", "added"), ("B", "refused")]
+
+
+def test_progress_counts_the_zen_per_day_of_what_was_sent(tmp_path: Path) -> None:
+    plan, data = two_releases(tmp_path)
+    seen: list[SendProgress] = []
+
+    send_plan(plan, FakeQbit(), lambda c: data[c.infohash], on_progress=seen.append)
+
+    assert [round(p.zen_added, 2) for p in seen] == [0.0, 0.1, 0.2]

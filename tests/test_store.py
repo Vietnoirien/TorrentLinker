@@ -87,3 +87,18 @@ def test_clearing_the_plan_leaves_nothing_saved(tmp_path: Path) -> None:
     store.clear_plan()
 
     assert store.saved_plan() is None
+
+
+def test_a_plan_saved_by_0_2_3_gets_room_for_its_zen(tmp_path: Path) -> None:
+    db = sqlite3.connect(tmp_path / "s.db")
+    db.execute(
+        "CREATE TABLE plan_state (id INTEGER PRIMARY KEY CHECK (id = 1),"
+        " made_at REAL NOT NULL, sending INTEGER NOT NULL DEFAULT 0)"
+    )
+    db.execute("INSERT INTO plan_state VALUES (1, 5.0, 1)")
+    db.commit()
+    db.close()
+
+    saved = Store(tmp_path / "s.db").saved_plan()
+
+    assert saved is not None and saved.sending and saved.zen_added is None

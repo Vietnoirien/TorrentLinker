@@ -633,21 +633,32 @@ class PlanView(QGroupBox):
                 )
             )
             return
+        text = self.plan_text(plan)
+        self.summary.setToolTip("")
+        if plan.on_disk:
+            text += "\n" + self.tr(
+                "{0} torrents left out: they seem to be on disk already. Search them in the "
+                "Library to Reseed them instead."
+            ).format(len(plan.on_disk))
+            shown = [f"{d.title} ← {d.path}" for d in plan.on_disk[:30]]
+            if len(plan.on_disk) > 30:
+                shown.append(self.tr("… and {0} more").format(len(plan.on_disk) - 30))
+            self.summary.setToolTip("\n".join(shown))
+        self.summary.setText(text)
+
+    def plan_text(self, plan: Plan) -> str:
         payback = plan.payback_days
-        self.summary.setText(
-            self.tr(
-                "{0} torrents · ≈ +{1} Zen/day · {2} Go to download · paid back in ≈ {3} days"
-            ).format(
-                len(plan.items),
-                f"{plan.zen_added:.2f}",
-                f"{plan.download_size / 1e9:.1f}",
-                f"{payback:.0f}" if payback is not None else "–",
-            )
-            + (
-                self.tr(" · average note {0}").format(f"{plan.average_note:.2f}")
-                if plan.average_note is not None
-                else ""
-            )
+        return self.tr(
+            "{0} torrents · ≈ +{1} Zen/day · {2} Go to download · paid back in ≈ {3} days"
+        ).format(
+            len(plan.items),
+            f"{plan.zen_added:.2f}",
+            f"{plan.download_size / 1e9:.1f}",
+            f"{payback:.0f}" if payback is not None else "–",
+        ) + (
+            self.tr(" · average note {0}").format(f"{plan.average_note:.2f}")
+            if plan.average_note is not None
+            else ""
         )
 
     def failed(self, error: Exception) -> None:
@@ -721,11 +732,14 @@ class PlanView(QGroupBox):
         )
 
     def send_text(self, p: SendProgress) -> str:
-        lines = [
+        lines = [self.plan_text(self.plan)] if self.plan and self.plan.items else []
+        lines.append(
             self.tr("Sending the Plan: {0} of {1} · {2} added · {3} refused · {4} failed").format(
                 p.done, p.total, p.added, p.refused, p.failed
             )
-        ]
+            + " · "
+            + self.tr("≈ +{0} Zen/day sent").format(f"{p.zen_added:.2f}")
+        )
         if p.retry_at is not None:
             lines.append(
                 self.tr(
@@ -833,12 +847,15 @@ class ZenBand(QFrame):
         value = f"+{added:.2f}" if added is not None else "–"
         self.plan.setText(self.tr("with Plan: {0}").format(value))
 
-    def set_sending(self, progress: SendProgress | None) -> None:
+    def set_sending(self, progress: SendProgress | None, added: float | None = None) -> None:
+        """Sending progress after the Plan's Zen; with None, the Plan's Zen alone."""
+        self.set_plan(added)
         if progress is None:
-            self.set_plan(None)
             return
         self.plan.setText(
-            self.tr("Sending the Plan: <b>{0}/{1}</b>").format(progress.done, progress.total)
+            self.plan.text()
+            + " · "
+            + self.tr("Sending the Plan: <b>{0}/{1}</b>").format(progress.done, progress.total)
             + (" " + self.tr("(c411 limit, waiting)") if progress.retry_at is not None else "")
         )
 

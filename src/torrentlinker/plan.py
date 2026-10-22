@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import shutil
+import unicodedata
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from torrentlinker.domain import ItemState
+from torrentlinker.domain import ItemState, LocalItem
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.library import LibraryEntry
 from torrentlinker.review import CheckedCandidate
@@ -83,11 +86,21 @@ class PlanItem:
 
 
 @dataclass(frozen=True)
+class OnDisk:
+    """A Catalogue torrent left out of the Plan: its data seems to be on disk already."""
+
+    infohash: str
+    title: str
+    path: Path  # the local file or Local Item that seems to hold it
+
+
+@dataclass(frozen=True)
 class Plan:
     items: list[PlanItem] = field(default_factory=list)
     zen_added: float = 0.0  # ≈ Zen/day the whole Plan adds to current seeding
     goal: PlanGoal = PlanGoal.ZEN
     disk_spaces: tuple[DiskSpace, ...] = ()
+    on_disk: tuple[OnDisk, ...] = ()
 
     @property
     def average_note(self) -> float | None:
@@ -115,6 +128,71 @@ class Plan:
     def download_seconds(self, bytes_per_second: float) -> float:
         """Time for qBittorrent to download the Plan's data at this speed, at best."""
         return self.download_size / bytes_per_second
+
+
+EXTRAS = 64 * 1024  # bytes a torrent may hold beyond the local data: .nfo, cover…
+NOISE = frozenset(
+    "epub pdf mobi azw azw3 cbz cbr djvu txt doc docx rtf fb2 mp3 m4b flac "
+    "french francais vff vf multi notag ebook ebooks livre book books "
+    "the and les des une pour avec dans sur par aux".split()
+)
+
+
+def on_disk(candidates: Iterable[PlanCandidate], items: Iterable[LocalItem]) -> list[OnDisk]:
+    """Downloads whose data seems already in the Library, compared without any request.
+
+    A Local Item, or one of its files, must be the torrent's size or up to EXTRAS
+    smaller, and its name must look like the torrent's: most significant words in common
+    (Jaccard ≥ SIMILAR) and no other volume number. Only a search in the Library can
+    confirm it, by comparing the torrent's files.
+    """
+    pieces: list[tuple[int, _Name, Path]] = []
+    for item in items:
+        pieces.append((item.size, _name(item.path.name), item.path))
+        if len(item.files) > 1:
+            for name, size in item.files.items():
+                pieces.append((size, _name(name), item.save_path / PurePosixPath(name)))
+    pieces.sort(key=lambda p: p[0])
+    sizes = [p[0] for p in pieces]
+    found = []
+    for c in candidates:
+        if c.reseed:
+            continue
+        low, high = bisect_left(sizes, c.size - EXTRAS), bisect_right(sizes, c.size)
+        if low == high:
+            continue
+        title = _name(c.title)
+        for _size, local, path in pieces[low:high]:
+            if _similar(local, title):
+                found.append(OnDisk(c.infohash, c.title, path))
+                break
+    return found
+
+
+SIMILAR = 0.7  # checked on 1,800 real ebooks: lower lets an author's other books match
+
+
+@dataclass(frozen=True)
+class _Name:
+    words: frozenset[str]  # significant words: no accents, case, format or release tag
+    numbers: frozenset[int]  # volume or part numbers; years left out
+
+
+def _name(name: str) -> _Name:
+    plain = unicodedata.normalize("NFKD", name)
+    plain = "".join(ch for ch in plain if not unicodedata.combining(ch)).casefold()
+    words = frozenset(w for w in re.split(r"[^0-9a-z]+", plain) if len(w) >= 3 and not w.isdigit())
+    numbers = frozenset(n for n in map(int, re.findall(r"\d+", plain)) if not 1900 <= n < 2100)
+    return _Name(words - NOISE, numbers)
+
+
+def _similar(a: _Name, b: _Name) -> bool:
+    if a.numbers and b.numbers and not a.numbers & b.numbers:
+        return False  # T1 and T2 of a series
+    shared = len(a.words & b.words)
+    if shared == 0 or shared < min(2, len(a.words), len(b.words)):
+        return False
+    return shared / len(a.words | b.words) >= SIMILAR
 
 
 def saved_items(plan: Plan) -> list[SavedPlanItem]:
@@ -147,7 +225,12 @@ def restore_plan(saved: SavedPlan, rows: Mapping[str, CatalogueRow]) -> Plan:
         for i in saved.pending
         if i.infohash in rows
     ]
-    return Plan(items, sum(i.zen for i in items))
+    left = sum(i.zen for i in items)
+    whole = sum(i.zen for i in saved.items)
+    if saved.zen_added is None or whole <= 0:
+        return Plan(items, left)
+    # The Plan's total counts how its torrents change each other's Zen; keep its share.
+    return Plan(items, saved.zen_added * left / whole)
 
 
 ORDERINGS: dict[str, Callable[[PlanCandidate, float], float]] = {

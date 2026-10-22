@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from torrentlinker.domain import LocalItem
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.plan import (
     DiskSpace,
@@ -402,3 +403,83 @@ def test_a_saved_plan_restores_only_what_is_left_to_send(tmp_path: Path) -> None
     assert item.candidate.title == "Book b" and item.candidate.folder == tmp_path
     assert item.candidate.source == row("b")
     assert restored.zen_added == pytest.approx(0.1)
+
+
+def test_a_restored_plan_keeps_its_share_of_the_plan_zen(tmp_path: Path) -> None:
+    from torrentlinker.plan import restore_plan
+    from torrentlinker.store import SavedPlan, SavedPlanItem
+
+    items = [
+        SavedPlanItem(h * 40, h, 1000, 2, 7020, str(tmp_path), zen, None, outcome)
+        for h, zen, outcome in (("a", 0.3, "added"), ("b", 0.1, None))
+    ]
+    rows = {"b" * 40: CatalogueRow("b" * 40, "b", 1000, 2, 7020, "u", "", 0)}
+
+    restored = restore_plan(SavedPlan(0.0, False, items, zen_added=0.8), rows)
+
+    assert restored.zen_added == pytest.approx(0.2)  # a quarter of the Plan's 0.8 is left
+
+
+def ebook(path: Path, size: int) -> LocalItem:
+    return LocalItem(path, {path.name: size})
+
+
+def download(title: str, size: int, tmp_path: Path, h: str = "a") -> PlanCandidate:
+    return PlanCandidate(h * 40, title, size, 3, 7020, tmp_path, 1)
+
+
+def test_a_book_already_in_the_library_is_found_under_another_name(tmp_path: Path) -> None:
+    from torrentlinker.plan import on_disk
+
+    local = ebook(tmp_path / "Un homme dangereux - Alexandre KAUFFMANN.epub", 250_000)
+    torrent = "Un.Homme.Dangereux.Alexandre.Kauffmann.2024.FR.[EPUB]-NOTAG"
+
+    # The torrent may also hold a small .nfo or cover the Library lacks.
+    [found] = on_disk([download(torrent, 250_000 + 4_000, tmp_path)], [local])
+
+    assert found.title == torrent and found.path == local.path
+
+
+def test_another_book_of_the_same_author_is_not_taken_for_it(tmp_path: Path) -> None:
+    from torrentlinker.plan import on_disk
+
+    local = ebook(tmp_path / "La petite Fadette - George Sand.epub", 250_000)
+
+    assert (
+        on_disk([download("Indiana.George.Sand.FR.[EPUB]-NOTAG", 250_000, tmp_path)], [local]) == []
+    )
+
+
+def test_another_volume_of_a_series_is_not_taken_for_it(tmp_path: Path) -> None:
+    from torrentlinker.plan import on_disk
+
+    local = ebook(tmp_path / "Outsphere.T1.Guy.Roger.Duvert.FR.2019.[EPUB].NOTAG.epub", 250_000)
+    torrent = "Outsphere.T2.Guy.Roger.Duvert.FR.2019.[EPUB]-NOTAG"
+
+    assert on_disk([download(torrent, 250_000, tmp_path)], [local]) == []
+
+
+def test_a_different_size_is_not_the_same_book(tmp_path: Path) -> None:
+    from torrentlinker.plan import on_disk
+
+    local = ebook(tmp_path / "La confidente - Audrey Lefevre.epub", 250_000)
+    torrent = "La.Confidente.Audrey.Lefevre.2026.FR.[EPUB]-G11"
+
+    assert on_disk([download(torrent, 400_000, tmp_path)], [local]) == []
+    assert on_disk([download(torrent, 249_000, tmp_path)], [local]) == []  # smaller than mine
+
+
+def test_a_book_inside_a_library_folder_of_many_books_is_found(tmp_path: Path) -> None:
+    from torrentlinker.plan import on_disk
+
+    author = LocalItem(
+        tmp_path / "Jules Renard",
+        {"Jules Renard/renard_sourires_pinces.epub": 120_000, "Jules Renard/poil.epub": 90_000},
+    )
+
+    [found] = on_disk(
+        [download("Sourires.Pincés.Jules.Renard.2017.FR.[EPUB]-NOTAG", 120_000, tmp_path)],
+        [author],
+    )
+
+    assert found.path == tmp_path / "Jules Renard" / "renard_sourires_pinces.epub"

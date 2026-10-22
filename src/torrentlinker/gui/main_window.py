@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -66,6 +67,7 @@ from torrentlinker.plan import (
     disk_of,
     disk_space,
     make_plan,
+    on_disk,
     reseed_candidates,
     restore_plan,
     saved_items,
@@ -412,6 +414,7 @@ class MainWindow(QMainWindow):
             for e in self.library_model.entries
             if e.state is ItemState.ORPHAN and e.item.path in self.review.cache
         ]
+        local_items = [e.item for e in self.library_model.entries]
 
         def work() -> Plan:
             torrents = qbit.torrents(with_files=False)
@@ -426,7 +429,7 @@ class MainWindow(QMainWindow):
                 goal=options.goal,
                 max_seeders=options.max_seeders,
             )
-            candidates += catalogue_candidates(
+            downloads = catalogue_candidates(
                 store.catalogue(),
                 folders,
                 categories,
@@ -434,13 +437,22 @@ class MainWindow(QMainWindow):
                 disk_of,
                 only,
             )
+            already = on_disk(downloads, local_items)
+            left_out = {d.infohash for d in already}
+            candidates += [c for c in downloads if c.infohash not in left_out]
+            if already:
+                log.info(
+                    "Plan leaves out %d torrents that seem to be on disk, e.g. %s",
+                    len(already),
+                    "; ".join(f"{d.title} <- {d.path}" for d in already[:5]),
+                )
             spaces = disk_space(
                 sorted(planned_folders | {c.folder for c in candidates if c.folder}, key=str),
                 margin,
             )
             budgets = {space.disk: space.available for space in spaces}
             slots = max(0, profile.torrent_cap - view.count) if profile.torrent_cap else None
-            return make_plan(
+            plan = make_plan(
                 profile,
                 candidates,
                 budgets,
@@ -449,11 +461,12 @@ class MainWindow(QMainWindow):
                 options=options,
                 disk_spaces=spaces,
             )
+            return replace(plan, on_disk=tuple(already))
 
         return work
 
     def _plan_made(self, plan: Plan) -> None:
-        self.store.save_plan(saved_items(plan))
+        self.store.save_plan(saved_items(plan), zen_added=plan.zen_added)
         self.zen_tab.plan_view.show_plan(plan)
         s = self.settings
         targets = plan_categories(s.plan_categories, s.download_folders, s.indexer_categories)
@@ -565,7 +578,8 @@ class MainWindow(QMainWindow):
 
     def _send_progress(self, progress: SendProgress) -> None:
         self.zen_tab.plan_view.sending(progress)
-        self.band.set_sending(progress)
+        plan = self.zen_tab.plan_view.plan
+        self.band.set_sending(progress, plan.zen_added if plan and plan.items else None)
 
     def _send_ended(self) -> None:
         self.send_runner = None
