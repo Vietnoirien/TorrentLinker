@@ -1,12 +1,13 @@
 """How fast the app may ask c411: two queues, one per limit c411 applies.
 
-Measured on 2026-10-22 with one key (docs/research/rate-limits.md):
+Measured on 2026-10-22 (docs/research/rate-limits.md):
 
 - Searches, Catalogue pages and the profile share a budget of 1,200 requests per
-  rolling hour per key, which c411's JSON API reports in `x-ratelimit-*` headers; its
-  guide also documents 120 requests a minute.
-- .torrent downloads do not count in that budget. They have their own limit, which
-  c411 does not report; past it, it answers 429 for a while.
+  rolling hour, which c411's JSON API reports in `x-ratelimit-*` headers; its guide also
+  documents 120 requests a minute. Every key of the account draws on that one budget.
+- .torrent downloads do not count in it. Each key may download 30 in any 60 seconds,
+  which c411 only reports when it refuses one; a longer limit refused a key after 292
+  in 20 minutes.
 
 So a Library search never waits behind a Plan's downloads, and goes as fast as c411
 allows while the budget lasts.
@@ -20,7 +21,10 @@ from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 
-DOWNLOAD_INTERVAL = 4.1  # seconds between .torrent downloads
+DOWNLOAD_INTERVAL = 2.05  # seconds between a key's .torrent downloads: 29 a minute
+# Rolling limits on a key's downloads: (downloads, seconds). 30 a minute is c411's; 280 in
+# 20 minutes stays under the refusal seen after 292.
+DOWNLOAD_LIMITS = ((30, 60.0), (280, 1200.0))
 API_INTERVAL = 0.5  # 120 requests a minute, as c411's guide documents
 API_BUDGET = 1200  # requests per rolling hour on searches, listings and the profile
 API_WINDOW = 3600.0
@@ -102,6 +106,49 @@ class Queue:
 
     def observe(self, headers: Mapping[str, str]) -> None:
         """What c411 said about the budget in a response; plain queues ignore it."""
+
+
+class WindowQueue(Queue):
+    """A queue that also keeps to rolling limits: at most n requests in any w seconds."""
+
+    def __init__(
+        self,
+        interval: float = DOWNLOAD_INTERVAL,
+        limits: tuple[tuple[int, float], ...] = DOWNLOAD_LIMITS,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        super().__init__(interval, clock, sleep)
+        self.limits = limits
+        self._sent_at: deque[float] = deque()
+
+    def next_in(self) -> float:
+        now = self._clock()
+        longest = max((w for _, w in self.limits), default=0.0)
+        while self._sent_at and self._sent_at[0] <= now - longest:
+            self._sent_at.popleft()
+        wait = super().next_in()
+        for count, window in self.limits:
+            recent = [t for t in self._sent_at if t > now - window]
+            if len(recent) >= count:
+                # The oldest request that keeps the window full must leave it first.
+                wait = max(wait, recent[len(recent) - count] + window - now)
+        return wait
+
+    def _sent(self) -> None:
+        self._sent_at.append(self._clock())
+
+
+def sending_seconds(downloads: int, keys: int) -> float:
+    """About how long `downloads` .torrent files take, spread over `keys` keys."""
+    per_key = -(-downloads // max(keys, 1))
+    clock = [0.0]
+    queue = WindowQueue(clock=lambda: clock[0], sleep=lambda _s: None)
+    for _ in range(per_key):
+        clock[0] += queue.next_in()
+        queue._sent()
+        queue._last = clock[0]
+    return clock[0]
 
 
 class BudgetQueue(Queue):

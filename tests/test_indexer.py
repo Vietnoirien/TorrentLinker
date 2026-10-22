@@ -259,7 +259,7 @@ def test_a_search_never_waits_behind_a_torrent_download() -> None:
 
     times = dict(sent)
     assert times["/api/torznab"] == pytest.approx(times["/dl/a"])  # no wait at all
-    assert times["/dl/b"] - times["/dl/a"] == pytest.approx(4.1)  # downloads keep theirs
+    assert times["/dl/b"] - times["/dl/a"] == pytest.approx(2.05)  # downloads keep theirs
 
 
 def test_a_low_budget_slows_searches_down_to_what_the_hour_sustains() -> None:
@@ -342,7 +342,7 @@ def test_downloads_take_turns_between_keys_each_at_its_own_pace() -> None:
         indexer.fetch_torrent(Candidate(str(i), 1, url))
 
     assert [k for k, _ in sent] == ["K1", "K2", "K1", "K2"]
-    assert [t - sent[0][1] for _, t in sent] == pytest.approx([0, 0, 4.1, 4.1])
+    assert [t - sent[0][1] for _, t in sent] == pytest.approx([0, 0, 2.05, 2.05])
 
 
 def test_a_key_c411_asks_to_wait_rests_while_another_carries_on() -> None:
@@ -539,3 +539,38 @@ def test_a_key_without_the_drafts_scope_is_named_in_the_error() -> None:
 
     with pytest.raises(KeyRefused, match="drafts:rw"):
         ix.save_draft({})
+
+
+def test_a_keys_downloads_keep_to_30_a_minute_and_280_in_20_minutes() -> None:
+    from torrentlinker.ratelimit import WindowQueue
+
+    clock = FakeClock()
+    queue = WindowQueue(interval=0.1, clock=clock.time, sleep=clock.sleep)
+    times = []
+    for _ in range(31):
+        queue.wait_turn()
+        times.append(clock.now - 1000.0)
+
+    assert times[29] == pytest.approx(2.9)  # 30 go at the pace
+    assert times[30] == pytest.approx(60.0)  # the 31st waits for the first to leave the minute
+
+    clock2 = FakeClock()
+    long = WindowQueue(interval=0.0, limits=((280, 1200.0),), clock=clock2.time, sleep=clock2.sleep)
+    for _ in range(281):
+        long.wait_turn()
+    assert clock2.now - 1000.0 == pytest.approx(1200.0)
+
+
+def test_c411s_two_number_retry_after_is_read_as_the_wait() -> None:
+    from torrentlinker.indexer import _retry_after
+
+    assert _retry_after(httpx.Response(429, headers={"Retry-After": "43, 60"})) == 43
+    assert _retry_after(httpx.Response(429, headers={"Retry-After": "900"})) == 900
+    assert _retry_after(httpx.Response(429)) == 25
+
+
+def test_a_plans_sending_time_shrinks_with_more_keys() -> None:
+    from torrentlinker.ratelimit import sending_seconds
+
+    assert sending_seconds(31, 1) == pytest.approx(61.5)  # the minute's limit, then the pace
+    assert sending_seconds(1000, 5) < sending_seconds(1000, 1) / 9

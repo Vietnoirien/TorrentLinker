@@ -468,7 +468,8 @@ def test_the_plan_estimates_sending_and_downloading_times_from_a_speed_test(
     c = PlanCandidate("aa" * 20, "Book", 360 * GB // 1000, 4, 7000, tmp_path, 1)
     window._plan_made(Plan([PlanItem(c, 0.01)] * 1000, 10))
 
-    assert "Sending to the torrent client: ≈ 1 h 08" in view.times.text()  # 1000 × 4.1 s
+    # 1000 on one key: 280 in the first 20 minutes, then 280 every 20 minutes
+    assert "Sending to the torrent client: ≈ 1 h 05" in view.times.text()
     assert "test your speed" in view.times.text()
 
     monkeypatch.setattr(main_window, "measure_download_speed", lambda: 100_000_000.0)

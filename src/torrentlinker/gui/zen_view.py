@@ -35,7 +35,6 @@ from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.plan import Plan, PlanGoal, PlanOptions
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
-from torrentlinker.ratelimit import DOWNLOAD_INTERVAL
 from torrentlinker.seeding import Seeding
 from torrentlinker.send import SendProgress
 from torrentlinker.zen import GB, ZenClass, ZenProfile, compare_classes
@@ -307,16 +306,18 @@ class PlanView(QGroupBox):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
         self.speed: float | None = None  # bytes/s
+        self.keys = 1  # API keys a Plan's downloads spread over
         self.speed_tested: str | None = None
         times = QHBoxLayout()
         self.times = QLabel()
         self.times.setWordWrap(True)
         self.times.setToolTip(
             self.tr(
-                "Sending: c411 allows one .torrent about every {0:.0f} seconds. "
-                "Downloading: at the speed of your last speed test, so at best; a torrent "
-                "with few seeders is slower than your connection."
-            ).format(DOWNLOAD_INTERVAL)
+                "Sending: c411 allows each API key 30 .torrent files a minute, and about "
+                "280 in 20 minutes; more keys send faster. Downloading: at the speed of your "
+                "last speed test, so at best; a torrent with few seeders is slower than your "
+                "connection."
+            )
         )
         times.addWidget(self.times, 1)
         self.speed_button = QPushButton(self.tr("Test speed"))
@@ -748,7 +749,7 @@ class PlanView(QGroupBox):
             lines.insert(
                 0,
                 self.tr("Sending to the torrent client: ≈ {0}").format(
-                    duration_text(plan.sending_seconds(DOWNLOAD_INTERVAL))
+                    duration_text(plan.sending_seconds(self.keys))
                 )
                 + " · "
                 + (

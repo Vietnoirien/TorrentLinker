@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
+from torrentlinker import ratelimit
 from torrentlinker.domain import ItemState, LocalItem
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.library import LibraryEntry
@@ -128,12 +129,14 @@ class Plan:
             return None
         return self.download_size / GB / self.zen_added
 
-    def sending_seconds(self, interval: float) -> float:
-        """Time to send the Plan: one .torrent per download from the Indexer, `interval` apart.
+    def sending_seconds(self, keys: int) -> float:
+        """Time to send the Plan: one .torrent per download from the Indexer, spread over
+        the `keys` API keys, each within c411's limits.
 
         Reseeds fetch nothing new: their .torrent came with the search.
         """
-        return sum(1 for i in self.items if not i.candidate.reseed) * interval
+        downloads = sum(1 for i in self.items if not i.candidate.reseed)
+        return ratelimit.sending_seconds(downloads, keys)
 
     def download_seconds(self, bytes_per_second: float) -> float:
         """Time for qBittorrent to download the Plan's data at this speed, at best."""

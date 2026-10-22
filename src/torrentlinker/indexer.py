@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from torrentlinker.ratelimit import DOWNLOAD_INTERVAL, BudgetQueue, Queue
+from torrentlinker.ratelimit import BudgetQueue, Queue, WindowQueue
 from torrentlinker.store import Store
 
 TORZNAB_NS = "{http://torznab.com/schemas/2015/feed}"
@@ -201,7 +201,7 @@ class Indexer:
                 n,
                 k,
                 BudgetQueue(clock=clock, sleep=sleep, wall=wall),
-                Queue(DOWNLOAD_INTERVAL, clock, sleep),
+                WindowQueue(clock=clock, sleep=sleep),
             )
             for n, k in enumerate(keys, 1)
         ]
@@ -422,8 +422,9 @@ class Indexer:
 
 
 def _retry_after(response: httpx.Response) -> float:
+    """The wait c411 asks for; a download refusal says `43, 60` (the wait, the window)."""
     try:
-        return float(response.headers.get("Retry-After", "25"))
+        return float(response.headers.get("Retry-After", "25").split(",")[0])
     except ValueError:
         return 25.0
 

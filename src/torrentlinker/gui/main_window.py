@@ -244,6 +244,7 @@ class MainWindow(QMainWindow):
         self.zen_tab.plan_view.stop_send_requested.connect(self.stop_sending)
         self.zen_tab.plan_view.speed_test_requested.connect(self.test_speed)
         self.zen_tab.plan_view.set_speed(settings.download_speed, settings.download_speed_tested)
+        self.zen_tab.plan_view.keys = 1 + len(extra_indexer_keys())
         self._after_catalogue: Callable[[], None] | None = None
         self._after_catalogue_always: Callable[[], None] | None = None
         self._pending_plan: Callable[[], None] | None = None
@@ -1109,6 +1110,7 @@ class MainWindow(QMainWindow):
             self.offer_plan_categories()
             self.zen_tab.seeding_view.refresh()
             self.upload_tab.set_entries(self.upload_tab.entries)  # the Announce URL
+            self.zen_tab.plan_view.keys = 1 + len(extra_indexer_keys())
             if self.settings.library_folders != folders:
                 self.scan()  # a new folder, depth or Content Kind changes every entry
         else:

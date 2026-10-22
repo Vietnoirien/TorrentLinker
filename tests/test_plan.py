@@ -399,7 +399,8 @@ def test_sending_takes_one_interval_per_download_and_none_for_reseeds(tmp_path: 
     reseed = replace(download, infohash="bb" * 20, reseed=True)
     plan = Plan([PlanItem(download, 0.1), PlanItem(download, 0.1), PlanItem(reseed, 0.1)])
 
-    assert plan.sending_seconds(4.1) == pytest.approx(8.2)
+    assert plan.sending_seconds(1) == pytest.approx(2.05)  # the second one waits its turn
+    assert plan.sending_seconds(2) == pytest.approx(0)  # one per key, at once
 
 
 def test_downloading_takes_the_plan_size_over_the_speed(tmp_path: Path) -> None:
