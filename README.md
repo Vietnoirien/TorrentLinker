@@ -17,7 +17,7 @@ On Linux, make the AppImage executable before opening it. See the [release notes
    - **qBittorrent**: **Tools → Options → Web UI**.
    - **Transmission** 4.x: turn on remote access in **Preferences → Remote**. Reseeds need **Append .part to incomplete files' names** off, or Transmission would rename your own files during a check: TorrentLinker offers to turn it off for you. Transmission renames file and folder names in place only, so a Match that needs other folders (a flattened folder, for example) cannot be Reseeded with it (see [ADR-0010](docs/adr/0010-transmission-with-whole-file-names-and-in-place-renames.md)).
    - **Deluge** 2.x: run its Web UI (`deluge-web`, port 8112 by default) connected to its daemon, and turn on the **Label** plugin in **Preferences → Plugins**. TorrentLinker labels the torrents it adds (`torrentlinker`, `torrentlinker-verifying`, `torrentlinker-partial`, `torrentlinker-zen`) to follow their Verification, as it tags them in qBittorrent.
-2. Open TorrentLinker's **Settings → Connections**, choose your **Client** and enter its connection, then the Indexer URL/API key. qBittorrent takes a username/password or a Web UI API key where available; Deluge takes its Web UI address and password; Transmission its remote address, and a username and password if you set them.
+2. Open TorrentLinker's **Settings → Connections**, choose your **Client** and enter its connection, then the Indexer URL/API key (and your Announce URL, for Uploads). qBittorrent takes a username/password or a Web UI API key where available; Deluge takes its Web UI address and password; Transmission its remote address, and a username and password if you set them.
 3. Register Library Folders to find files you can Reseed.
 4. Set Download Folders for the categories you want to plan, or choose a default folder. Categories without a resolved folder are excluded.
 5. If your torrent client runs in Docker, on a NAS or on another computer, set its paths in **Settings → Client Paths** (see below).
@@ -55,6 +55,12 @@ Reseeds rename paths inside the torrent client, leaving local filenames and cont
 A Local Item that is a .zip, .rar or .7z archive is also compared by what it holds, since torrents usually share the same files unpacked. A Candidate matching the archive's contents shows as **Full match inside the archive**. **Unpack and Reseed…** then unpacks it into a new folder next to the archive, after showing the size and the free space, and Reseeds the torrent against the unpacked files with the usual Verification. Nothing is overwritten. Once the client has verified every unpacked file and the torrent seeds, TorrentLinker offers to move the archive to the trash, or to keep it. Plans never unpack archives.
 
 Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-zip.org/) (or unrar for rar); without it they are compared as plain files.
+
+## Upload 3D models as c411 Drafts
+
+The **Upload** tab lists 3D-model Orphans that a search found no Match for: c411 may not have them yet. Set the Library Folder's Content Kind to **3D models**, enter your **Announce URL** (from your c411 profile) in **Settings → Connections**, and use a main API key with the **Brouillons d'upload** (`drafts:rw`) scope.
+
+For the chosen item, TorrentLinker checks c411's 3D rules (accepted formats, no archives), suggests a release name such as `Petit.Etau.De.Bureau.NOTAG.3MF` (dots between words, no accents, `NOTAG` when the source is unknown), makes a private torrent with c411's piece size and an NFO listing every file, and saves them as a Draft on c411. The torrent then joins your torrent client against your own files, renamed inside the client as a Reseed is, so your files keep their names; it seeds once Verification passes. Open c411's upload page, load the Draft, add the image the rules ask for, and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
 
 ## Zen integration
 
@@ -118,7 +124,8 @@ See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the
 It holds:
 
 - `torrents/`: every `.torrent` downloaded from c411, so none is requested twice, even after a restart or when a saved Plan is sent again. Files are named after a fingerprint of their download address, without your key. Deleting the folder is harmless: the files are fetched again when needed.
-- `state.db`: the Catalogue, remembered searches, Rejections, Verifications in progress and the saved Plan.
+- `uploads/`: the `.torrent` and `.nfo` of each Upload, as sent in its Draft.
+- `state.db`: the Catalogue, remembered searches, Rejections, Verifications in progress, the saved Plan and the Uploads made.
 - `settings.json`: your settings. API keys and passwords are not in it: they stay in the system keyring.
 - `torrentlinker.log`: the log, useful when reporting a problem.
 

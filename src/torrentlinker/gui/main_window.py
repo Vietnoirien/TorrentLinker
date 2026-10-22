@@ -48,6 +48,7 @@ from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_s
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
+    ANNOUNCE_URL,
     DELUGE_PASSWORD,
     INDEXER_API_KEY,
     QBIT_API_KEY,
@@ -59,6 +60,7 @@ from torrentlinker.gui.settings_dialog import (
     extra_indexer_keys,
 )
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.gui.upload_view import UploadTab
 from torrentlinker.gui.zen_view import ZenBand, ZenTab
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import (
@@ -203,6 +205,17 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
         self.tabs.addTab(splitter, self.tr("Library"))
+        self.upload_tab = UploadTab(
+            store,
+            self.indexer,
+            self.qbit,
+            lambda: self.settings.matching.ignore,
+            lambda: get_secret(ANNOUNCE_URL),
+            store.torrent_dir.parent / "uploads",
+        )
+        self.review.candidates_checked.connect(self.upload_tab.remember)
+        self.upload_tab.upload_started.connect(self._reseed_started)
+        self.tabs.addTab(self.upload_tab, self.tr("Upload"))
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.seeding_view.updated.connect(self.band.set_seeding)
@@ -251,6 +264,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
             QTimer.singleShot(0, self.refresh_profile)
+            QTimer.singleShot(0, self.upload_tab.refresh_drafts)
             QTimer.singleShot(0, lambda: self.refresh_categories(then=self.update_catalogue))
             if settings.library_folders:
                 QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
@@ -1086,6 +1100,7 @@ class MainWindow(QMainWindow):
             self._fill_folder_filter()
             self.offer_plan_categories()
             self.zen_tab.seeding_view.refresh()
+            self.upload_tab.set_entries(self.upload_tab.entries)  # Announce URL, kinds
         else:
             log.info("settings dialog cancelled")
 
@@ -1231,6 +1246,7 @@ class MainWindow(QMainWindow):
 
     def _scan_done(self, entries: list) -> None:  # type: ignore[type-arg]
         self.library_model.set_entries(entries)
+        self.upload_tab.set_entries(entries)
         self.scan_action.setEnabled(True)
         self.rescan_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("{0} Local Items").format(len(entries)))

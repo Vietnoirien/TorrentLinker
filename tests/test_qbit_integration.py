@@ -236,3 +236,50 @@ def test_tasks_starting_together_share_one_login() -> None:
             t.join()
 
         assert errors == []
+
+
+def library_with_3d_models(root: Path) -> Path:
+    """A 3MF file and a pack folder, both named against c411's rules (accents, spaces)."""
+    lib = root / "STL"
+    pack = lib / "Dragon de feu"
+    (pack / "Têtes").mkdir(parents=True)
+    (pack / "Corps entier.stl").write_bytes(os.urandom(1_500_000))
+    (pack / "Têtes" / "tête ouverte.stl").write_bytes(os.urandom(700_000))
+    (lib / "Petit étau de bureau.3mf").write_bytes(os.urandom(2_300_000))
+    return lib
+
+
+def check_uploads_seed_from_the_local_files(client: object, root: Path) -> None:
+    """Each Upload's torrent, named by c411's rules, verifies and seeds from the user's
+    files under their own names, which stay as they were (ADR-0011)."""
+    from torrentlinker.matching import IgnoreList
+    from torrentlinker.store import SavedUpload
+    from torrentlinker.upload import PreparedUpload, make_torrent, seed_upload, upload_files
+
+    lib = library_with_3d_models(root)
+    items = scan(LibraryFolder(lib))
+    before = {p: digest(p) for p in lib.rglob("*") if p.is_file()}
+    store = Store(root / "s.db")
+    hashes = {}
+    for item in items:
+        title = "Dragon.NOTAG.[PACK].STL" if item.path.is_dir() else "Petit.Etau.NOTAG.3MF"
+        files = upload_files(item, title, IgnoreList.default())
+        meta = read_torrent(make_torrent(item, files, "http://127.0.0.1:9/announce"))
+        prepared = PreparedUpload(SavedUpload(item.path, title, meta.infohash, 1, 0.0), meta, files)
+        hashes[item.path] = seed_upload(client, store, item, prepared)  # type: ignore[arg-type]
+
+    outcomes: list[Outcome] = []
+    while len(outcomes) < len(items):
+        outcomes += settle(client, store)  # type: ignore[arg-type]
+
+    assert all(o.verified and o.started for o in outcomes), outcomes
+    for item in items:
+        t = client.torrent(hashes[item.path])  # type: ignore[attr-defined]
+        assert t is not None and t.files == item.files
+    assert {p: digest(p) for p in lib.rglob("*") if p.is_file()} == before
+
+
+def test_uploads_seed_from_the_local_files_under_their_own_names(
+    tmp_path: Path, qbit: QbitApi
+) -> None:
+    check_uploads_seed_from_the_local_files(qbit, tmp_path)

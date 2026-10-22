@@ -14,6 +14,13 @@ from torrentlinker.transmission import PartialNamesOn
 
 
 def error_text(error: Exception) -> str:
+    if isinstance(error, KeyRefused) and error.scope == "drafts:rw":
+        return QCoreApplication.translate(
+            "Errors",
+            "c411 refused your API key for Drafts (HTTP {0}). Your main key needs the "
+            "“Brouillons d'upload” (drafts:rw) scope: create one at "
+            "https://c411.org/user/integrations and enter it in Settings → Connections.",
+        ).format(error.status)
     if isinstance(error, KeyRefused) and error.key_number > 1:
         return QCoreApplication.translate(
             "Errors",

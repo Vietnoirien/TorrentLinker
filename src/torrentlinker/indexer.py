@@ -35,14 +35,15 @@ class RateLimited(Exception):
 class KeyRefused(Exception):
     """The Indexer refused the API key (401 or 403): wrong, revoked or missing a scope."""
 
-    def __init__(self, status: int, key_number: int = 1) -> None:
+    def __init__(self, status: int, key_number: int = 1, scope: str = "torznab:read") -> None:
         which = "the API key" if key_number == 1 else f"API key {key_number}"
         super().__init__(
             f"the Indexer refused {which} (HTTP {status}): check it in Settings → "
-            "Connections; on c411 it needs the torznab:read scope"
+            f"Connections; on c411 it needs the {scope} scope"
         )
         self.status = status
         self.key_number = key_number
+        self.scope = scope
 
 
 MAX_KEYS = 5  # c411's limit per account
@@ -328,25 +329,51 @@ class Indexer:
             )
         ).json()
 
+    def drafts(self) -> list[dict[str, Any]]:
+        """The account's c411 upload Drafts (main key, scope drafts:rw; ADR-0011)."""
+        return list(self._draft_request("GET", "/api/user/drafts").json().get("data") or [])
+
+    def save_draft(self, body: dict[str, Any]) -> int:
+        """Save a new c411 Draft and return its id."""
+        return int(self._draft_request("POST", "/api/user/drafts", body).json()["data"]["id"])
+
+    def _draft_request(
+        self, method: str, path: str, body: dict[str, Any] | None = None
+    ) -> httpx.Response:
+        if not self.is_c411:
+            raise ValueError("Drafts are only available on c411.org")
+        return self._request(
+            lambda key: (f"https://c411.org{path}", None, {"Authorization": f"Bearer {key}"}),
+            method=method,
+            json=body,
+            main_key_only=True,
+            scope="drafts:rw",
+        )
+
     def _request(
         self,
         build: Callable[[str], tuple[str, dict[str, str] | None, dict[str, str] | None]],
         *,
         retry: bool = True,
         queue: str = "api",
+        method: str = "GET",
+        json: Any = None,
+        main_key_only: bool = False,
+        scope: str = "torznab:read",
     ) -> httpx.Response:
         """Send with the key whose queue is free soonest; `build(key)` gives the URL,
         parameters and headers. A key refused with 429 rests as long as c411 asks while
         the others go on. With every key resting, a background request waits; a
         foreground one, or one with `retry=False`, raises RateLimited unless the wait is
-        short."""
+        short. `main_key_only` keeps to the main key, for what only it may do."""
         background = getattr(self._thread, "background", False)
         waits = 0
         last: httpx.Response | None = None  # keys only rest after a 429, so it is set
         while True:
-            slot = self._pick(queue)
+            slots = self.slots[:1] if main_key_only else self.slots
+            slot = self._pick(queue, slots)
             if slot is None:
-                wait = min(s.resting.get(queue, 0.0) for s in self.slots) - self._clock()
+                wait = min(s.resting.get(queue, 0.0) for s in slots) - self._clock()
                 if not retry or (not background and wait > FOREGROUND_PATIENCE):
                     raise RateLimited(max(wait, 0.0))
                 if waits >= MAX_RETRIES and last is not None:
@@ -357,19 +384,19 @@ class Indexer:
             lane = slot.queue(queue)
             url, params, headers = build(slot.key)
             with lane.turn(background):
-                last = self._http.get(url, params=params, headers=headers)
+                last = self._http.request(method, url, params=params, headers=headers, json=json)
                 lane.observe(last.headers)
             if last.status_code == 429:
                 slot.resting[queue] = self._clock() + _retry_after(last)
                 continue
             if last.status_code in (401, 403):
-                raise KeyRefused(last.status_code, slot.number)
+                raise KeyRefused(last.status_code, slot.number, scope)
             return self._checked(last)
 
-    def _pick(self, queue: str) -> KeySlot | None:
+    def _pick(self, queue: str, slots: Sequence[KeySlot]) -> KeySlot | None:
         """The key, among those not resting, whose queue lets a request go soonest."""
         now = self._clock()
-        ready = [s for s in self.slots if s.resting.get(queue, 0.0) <= now]
+        ready = [s for s in slots if s.resting.get(queue, 0.0) <= now]
         return min(ready, key=lambda s: s.queue(queue).next_in()) if ready else None
 
     def _checked(self, response: httpx.Response) -> httpx.Response:

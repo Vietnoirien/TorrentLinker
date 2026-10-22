@@ -212,3 +212,12 @@ def test_a_plan_torrent_downloads_into_its_download_folder_labelled_zen(
     assert not t.state.startswith("stopped")
     with pytest.raises(AlreadyInClient):
         transmission.download(data, str(shared / "dl3"), [ZEN_TAG])
+
+
+def test_uploads_seed_from_the_local_files_under_their_own_names(
+    shared: Path, transmission: TransmissionApi
+) -> None:
+    from tests.test_qbit_integration import check_uploads_seed_from_the_local_files
+
+    check_uploads_seed_from_the_local_files(transmission, shared)
+    assert not no_part_files(shared)

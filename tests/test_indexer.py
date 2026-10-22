@@ -501,3 +501,41 @@ def test_background_requests_wait_out_c411s_rest() -> None:
         found = indexer.search(SearchQuery(q="a"), cached=False)
 
     assert found and 1200 in [round(s) for s in clock.sleeps]
+
+
+def test_drafts_go_to_c411_with_the_main_key_only() -> None:
+    import json
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "POST":
+            return httpx.Response(200, json={"success": True, "data": {"id": 128232}})
+        return httpx.Response(200, json={"success": True, "data": [{"id": 1}], "count": 1})
+
+    ix = Indexer(
+        url="https://c411.org/api",
+        api_key="MAIN",
+        extra_keys=["EXTRA"],
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert ix.drafts() == [{"id": 1}]
+    assert ix.save_draft({"title": "T"}) == 128232
+    assert ix.save_draft({"title": "U"}) == 128232
+
+    assert [r.method for r in seen] == ["GET", "POST", "POST"]
+    assert {r.headers["Authorization"] for r in seen} == {"Bearer MAIN"}
+    assert json.loads(seen[1].content) == {"title": "T"}
+
+
+def test_a_key_without_the_drafts_scope_is_named_in_the_error() -> None:
+    ix = Indexer(
+        url="https://c411.org/api",
+        api_key="K",
+        http=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(403))),
+    )
+
+    with pytest.raises(KeyRefused, match="drafts:rw"):
+        ix.save_draft({})

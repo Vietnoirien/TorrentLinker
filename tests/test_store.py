@@ -102,3 +102,13 @@ def test_a_plan_saved_by_0_2_3_gets_room_for_its_zen(tmp_path: Path) -> None:
     saved = Store(tmp_path / "s.db").saved_plan()
 
     assert saved is not None and saved.sending and saved.zen_added is None
+
+
+def test_uploads_are_remembered_newest_first(tmp_path: Path) -> None:
+    from torrentlinker.store import SavedUpload
+
+    store = Store(tmp_path / "s.db")
+    store.save_upload(SavedUpload(Path("/l/a"), "A.NOTAG.STL", "aa" * 20, 1, 10.0))
+    store.save_upload(SavedUpload(Path("/l/b"), "B.NOTAG.STL", "bb" * 20, None, 20.0))
+
+    assert [u.title for u in Store(tmp_path / "s.db").uploads()] == ["B.NOTAG.STL", "A.NOTAG.STL"]

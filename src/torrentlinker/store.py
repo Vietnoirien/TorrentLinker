@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS unpacked_archive (
     folder TEXT PRIMARY KEY,
     archive TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS upload (
+    item_path TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    infohash TEXT NOT NULL,
+    draft_id INTEGER,
+    made_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS plan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     made_at REAL NOT NULL,
@@ -155,6 +162,17 @@ class CrawlState:
     complete: bool = False  # a full crawl reached the end once
     updated_at: float | None = None
     limited: bool = False  # the Indexer stopped paging before coverage was established
+
+
+@dataclass(frozen=True)
+class SavedUpload:
+    """An Upload the app made: its torrent and the c411 Draft it went to (ADR-0011)."""
+
+    item_path: Path
+    title: str
+    infohash: str
+    draft_id: int | None
+    made_at: float
 
 
 @dataclass(frozen=True)
@@ -533,6 +551,31 @@ class Store:
             ).fetchone()
             self._db.execute("DELETE FROM unpacked_archive WHERE folder = ?", (str(folder),))
         return Path(row[0]) if row else None
+
+    # Uploads ----------------------------------------------------------------
+
+    def save_upload(self, upload: SavedUpload) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO upload (item_path, title, infohash, draft_id, made_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    str(upload.item_path),
+                    upload.title,
+                    upload.infohash,
+                    upload.draft_id,
+                    upload.made_at,
+                ),
+            )
+
+    def uploads(self) -> list[SavedUpload]:
+        """Every Upload made, newest first."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT item_path, title, infohash, draft_id, made_at FROM upload "
+                "ORDER BY made_at DESC"
+            ).fetchall()
+        return [SavedUpload(Path(r[0]), r[1], r[2], r[3], r[4]) for r in rows]
 
     # The saved Plan ---------------------------------------------------------
 
