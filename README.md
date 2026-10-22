@@ -104,6 +104,22 @@ The snapshot has coarse categories and unknown upstream age. Broad entries are e
 
 See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the design decisions.
 
+## Where TorrentLinker keeps its data
+
+| System | Folder |
+| --- | --- |
+| Linux | `~/.local/share/TorrentLinker/TorrentLinker/` |
+| Windows | `%APPDATA%\TorrentLinker\TorrentLinker\` (`C:\Users\<you>\AppData\Roaming\TorrentLinker\TorrentLinker\`) |
+
+It holds:
+
+- `torrents/`: every `.torrent` downloaded from c411, so none is requested twice, even after a restart or when a saved Plan is sent again. Files are named after a fingerprint of their download address, without your key. Deleting the folder is harmless: the files are fetched again when needed.
+- `state.db`: the Catalogue, remembered searches, Rejections, Verifications in progress and the saved Plan.
+- `settings.json`: your settings. API keys and passwords are not in it: they stay in the system keyring.
+- `torrentlinker.log`: the log, useful when reporting a problem.
+
+qBittorrent keeps its own copy of every torrent added to it, in its own profile folder.
+
 ## Development
 
 ```bash
