@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 import zipfile
+from collections.abc import Iterable
+from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -19,6 +21,7 @@ from torrentlinker.options import Chosen, OptionType
 from torrentlinker.queries import name_query
 from torrentlinker.upload import (
     ARCHIVES,
+    CATEGORY_APPS,
     CATEGORY_EMULATION,
     CATEGORY_GPS,
     IMAGE_PLACEHOLDER,
@@ -27,6 +30,7 @@ from torrentlinker.upload import (
     Problem,
     Refusal,
     Subcategory,
+    SubcategoryApps,
     SubcategoryEmulation,
     SubcategoryGps,
     UploadFile,
@@ -40,8 +44,8 @@ from torrentlinker.upload import (
 
 INSTALLERS = ("exe", "msi", "bat", "cmd")
 DOWNLOADER_RE = re.compile(
-    r"down\s?loader|web[-_ .]?(?:setup|install\w*)|online[-_ .]?(?:setup|install\w*)"
-    r"|stub[-_ .]?(?:setup|install\w*)|net[-_ .]?install|bootstrapper",
+    r"down\s?loader|(?:web|online|stub)[-_ .]?(?:setup|install\w*)"
+    r"|(?:setup|install\w*)[-_ .]?(?:web|online|stub)|net[-_ .]?install|bootstrapper",
     re.IGNORECASE,
 )
 VERSION_RE = re.compile(r"(?<!\w)v?(\d+(?:\.\d+){1,3})(?![\w])", re.IGNORECASE)
@@ -111,6 +115,70 @@ ROM_REGIONS = {
 LANGUAGE_CODES = ("fr", "en", "de", "es", "it", "ja", "nl", "pt", "sv", "zh")
 ENCRYPTED_ZIP_FLAG = 0x1
 PACK_FILES = 50  # archives are allowed in an emulation pack of more files than this
+
+
+class ReleaseType(StrEnum):
+    """How an application release is activated; the label is what its name carries."""
+
+    KEYGEN = "Keygen"
+    CRACK = "Crack"
+    PATCH = "Patch"
+    INSTALLER = "Installer"
+    PORTABLE = "Portable"
+
+
+# c411's decision table is on /wiki/cat-applications, which could not be read: this one
+# is the app's own reading, marked unverified in docs/research/upload-rules.md.
+KEYGEN_WORDS = ("keygen", "keymaker", "serialfish")
+CRACK_WORDS = ("crack", "cracked", "activator", "loader", "kmspico")
+PATCH_WORDS = ("patch", "patcher")
+INSTALLER_EXTENSIONS = ("msi", "dmg", "pkg", "deb", "rpm", "apk", "xapk", "ipa", "appimage")
+INSTALLER_WORDS = ("setup", "install", "installer", "inst")
+APP_SYSTEMS = {
+    SubcategoryApps.WINDOWS: ("exe", "msi"),
+    SubcategoryApps.MACOS: ("dmg", "pkg", "app"),
+    SubcategoryApps.LINUX: ("deb", "rpm", "appimage"),
+    SubcategoryApps.SMARTPHONE: ("apk", "xapk", "ipa"),
+}
+OS_NAMES = ("Windows", "macOS", "Linux", "Android", "iOS")
+MOBILE = (SubcategoryApps.SMARTPHONE, SubcategoryApps.TABLET)
+LANGUAGE_TAGS = {
+    "multi": "MULTI",
+    "multilang": "MULTI",
+    "multilingual": "MULTI",
+    "french": "FR",
+    "fr": "FR",
+    "english": "EN",
+    "en": "EN",
+}
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in re.split(r"[^a-z0-9]+", text.casefold()) if w]
+
+
+def release_type(paths: Iterable[str], name: str = "") -> ReleaseType:
+    """The release type, decided from the files present: `portable` when the name says
+    so, then a keygen, a crack, a patch, an installer (a setup program or a package);
+    program files without installer are portable."""
+    paths = list(paths)
+    words = [*_words(name), *(w for p in paths for w in _words(PurePosixPath(p).stem))]
+    if "portable" in words:
+        return ReleaseType.PORTABLE
+    for kind, vocabulary in (
+        (ReleaseType.KEYGEN, KEYGEN_WORDS),
+        (ReleaseType.CRACK, CRACK_WORDS),
+        (ReleaseType.PATCH, PATCH_WORDS),
+    ):
+        if any(w in vocabulary for w in words):
+            return kind
+    exes = [p for p in paths if _ext(p) == "exe"]
+    installer = any(_ext(p) in INSTALLER_EXTENSIONS for p in paths) or any(
+        w in INSTALLER_WORDS for p in exes for w in _words(PurePosixPath(p).stem)
+    )
+    if exes and not installer:
+        return ReleaseType.PORTABLE
+    return ReleaseType.INSTALLER
 
 
 def _stem(item: LocalItem) -> str:
@@ -457,3 +525,138 @@ class EmulationProfile:
         self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
     ) -> dict[str, Any]:
         return {}
+
+
+class ApplicationsProfile:
+    """c411's Applications category: software for Windows, macOS, Linux and mobile."""
+
+    category: int = CATEGORY_APPS
+    renders_models = False
+    media_extensions: tuple[str, ...] = ()
+    dotted_names = False
+    subcategories: tuple[Subcategory, ...] = (
+        Subcategory(SubcategoryApps.OTHER, "Other"),
+        Subcategory(SubcategoryApps.TRAINING, "Training"),
+        Subcategory(SubcategoryApps.LINUX, "Linux"),
+        Subcategory(SubcategoryApps.MACOS, "macOS"),
+        Subcategory(SubcategoryApps.SMARTPHONE, "Smartphone"),
+        Subcategory(SubcategoryApps.TABLET, "Tablet"),
+        Subcategory(SubcategoryApps.WINDOWS, "Windows"),
+    )
+
+    def image_is_sheet(self, subcategory: int) -> bool:
+        return False
+
+    def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
+        """Nothing to read: the rules go by file names."""
+
+    def refusals(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int | None = None
+    ) -> list[Refusal]:
+        files = _content(item, ignore)
+        if not files:
+            return [Refusal(Problem.NO_FILE)]
+        found = []
+        if archives := _archives(files):
+            found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
+        if downloaders := _downloaders(files):
+            found.append(Refusal(Problem.DOWNLOADER, ", ".join(downloaders)))
+        return found
+
+    def warnings(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int
+    ) -> list[UploadWarning]:
+        kind = release_type(_content(item, ignore), _stem(item))
+        found = [UploadWarning(Judgement.RELEASE_TYPE, kind.value)]
+        if kind is not ReleaseType.PORTABLE:
+            found.append(UploadWarning(Judgement.INSTALL_NOTE))
+        found += [
+            UploadWarning(Judgement.NO_ALPHA),
+            UploadWarning(Judgement.NO_IPTV),
+            UploadWarning(Judgement.OLDER_VERSION),
+        ]
+        return found
+
+    def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int:
+        """From the files: `.exe`/`.msi` Windows, `.dmg`/`.pkg`/`.app` macOS, `.deb`/`.rpm`/
+        `.AppImage` Linux, `.apk`/`.ipa` Smartphone, else Autre."""
+        extensions = {_ext(p) for p in _content(item, ignore)}
+        for sub, exts in APP_SYSTEMS.items():
+            if extensions & set(exts):
+                return sub
+        return SubcategoryApps.OTHER
+
+    def suggested_name(
+        self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
+    ) -> str:
+        """`Nom Version [OS Langue Type]`; mobile `[OS] Nom Version Langue [EXT]`.
+        Spaces are allowed. `source` is not used. Editable."""
+        files = _content(item, ignore)
+        stem = _stem(item)
+        version = _version(stem)
+        name = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", stem)
+        name = VERSION_RE.sub(" ", name).replace("_", " ")
+        name = " ".join(w for w in name.split() if w.casefold() not in LANGUAGE_TAGS)
+        language = next((LANGUAGE_TAGS[w] for w in _words(stem) if w in LANGUAGE_TAGS), "")
+        system = _system(files) or _SUBCATEGORY_SYSTEMS.get(subcategory, "")
+        if subcategory in MOBILE:
+            ext = next((_ext(p).upper() for p in sorted(files) if _ext(p) in SYSTEMS), "")
+            parts = [f"[{system}]" if system else "", name, version, language]
+            return " ".join(p for p in parts if p) + (f" [{ext}]" if ext else "")
+        kind = release_type(files, stem)
+        tags = " ".join(t for t in (system, language, kind.value) if t)
+        return " ".join(p for p in (name, version, f"[{tags}]") if p)
+
+    def suggested_options(
+        self, item: LocalItem, ignore: IgnoreList, types: list[OptionType]
+    ) -> Chosen:
+        return {}  # c411 lists no options for the subcategories read
+
+    def _rows(self, title: str, files: list[UploadFile]) -> list[tuple[str, str]]:
+        sizes = {f.local_path: f.size for f in files}
+        name = _item_name(files)
+        tags = " ".join(re.findall(r"\[([^\]]*)\]", title)).split()
+        system = next((t for t in tags if t in OS_NAMES), "") or _system(sizes)
+        kinds = {k.value: k for k in ReleaseType}
+        kind = next((t for t in tags if t in kinds), "") or release_type(sizes, name).value
+        language = next(
+            (
+                t
+                for t in tags
+                if t.casefold() in LANGUAGE_TAGS.values() or t.casefold() in LANGUAGE_TAGS
+            ),
+            "",
+        )
+        return [
+            ("Titre", re.sub(r"\[[^\]]*\]", "", title).strip()),
+            ("Version", _version(title) or _version(name)),
+            ("Système", system),
+            ("Année", _year(title) or _year(name)),
+            ("Taille", human_size(sum(sizes.values()))),
+            ("Langues", language),
+            ("Activation", kind),
+            ("Configuration", ""),
+        ]
+
+    def nfo(self, title: str, files: list[UploadFile]) -> str:
+        return _info_nfo(title, self._rows(title, files), files)
+
+    def description(self, title: str, files: list[UploadFile], source: str, image_url: str) -> str:
+        return _info_description(title, self._rows(title, files), files, image_url)
+
+    def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery:
+        return ExistingQuery(name_query(item))
+
+    def draft_fields(
+        self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
+    ) -> dict[str, Any]:
+        return {}
+
+
+_SUBCATEGORY_SYSTEMS: dict[int, str] = {
+    SubcategoryApps.WINDOWS: "Windows",
+    SubcategoryApps.MACOS: "macOS",
+    SubcategoryApps.LINUX: "Linux",
+    SubcategoryApps.SMARTPHONE: "Android",
+    SubcategoryApps.TABLET: "Android",
+}

@@ -134,6 +134,16 @@ class SubcategoryAudio(IntEnum):
     SAMPLES = 20
 
 
+class SubcategoryApps(IntEnum):
+    OTHER = 21
+    TRAINING = 22
+    LINUX = 23
+    MACOS = 24
+    SMARTPHONE = 25
+    TABLET = 26
+    WINDOWS = 27
+
+
 class SubcategoryGps(IntEnum):
     APPLICATIONS = 39
     MAPS = 40
@@ -216,6 +226,10 @@ class Judgement(StrEnum):
     NO_ALPHA = "no-alpha"
     RETRO_ONLY = "retro-only"
     NO_MIXED_MACHINES = "no-mixed-machines"  # detail: the machines found
+    RELEASE_TYPE = "release-type"  # detail: the type decided from the files
+    INSTALL_NOTE = "install-note"
+    NO_IPTV = "no-iptv"
+    OLDER_VERSION = "older-version"
 
 
 @dataclass(frozen=True)
@@ -934,7 +948,11 @@ def _volume_range(files: dict[str, int]) -> str:
 
 # Profiles that need this module's types come last (see upload_audio's docstring).
 from torrentlinker.upload_audio import AudioProfile  # noqa: E402
-from torrentlinker.upload_software import EmulationProfile, GpsProfile  # noqa: E402
+from torrentlinker.upload_software import (  # noqa: E402
+    ApplicationsProfile,
+    EmulationProfile,
+    GpsProfile,
+)
 from torrentlinker.upload_video import VideoProfile  # noqa: E402
 
 PROFILES.update(
@@ -942,6 +960,7 @@ PROFILES.update(
         CATEGORY_VIDEO: VideoProfile(),
         CATEGORY_EBOOK: EbookProfile(),
         CATEGORY_AUDIO: AudioProfile(),
+        CATEGORY_APPS: ApplicationsProfile(),
         CATEGORY_EMULATION: EmulationProfile(),
         CATEGORY_GPS: GpsProfile(),
         CATEGORY_3D: Model3DProfile(),

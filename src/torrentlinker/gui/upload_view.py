@@ -107,6 +107,13 @@ SUBCATEGORY_LABELS = {
     9: QT_TRANSLATE_NOOP("Subcategory", "Sport"),
     10: QT_TRANSLATE_NOOP("Subcategory", "Music videos"),
     54: QT_TRANSLATE_NOOP("Subcategory", "Collection"),
+    21: QT_TRANSLATE_NOOP("Subcategory", "Other"),
+    22: QT_TRANSLATE_NOOP("Subcategory", "Training"),
+    23: QT_TRANSLATE_NOOP("Subcategory", "Linux"),
+    24: QT_TRANSLATE_NOOP("Subcategory", "macOS"),
+    25: QT_TRANSLATE_NOOP("Subcategory", "Smartphone"),
+    26: QT_TRANSLATE_NOOP("Subcategory", "Tablet"),
+    27: QT_TRANSLATE_NOOP("Subcategory", "Windows"),
     39: QT_TRANSLATE_NOOP("Subcategory", "Applications"),
     40: QT_TRANSLATE_NOOP("Subcategory", "Maps"),
     41: QT_TRANSLATE_NOOP("Subcategory", "Miscellaneous"),
@@ -253,6 +260,20 @@ def warning_text(w: UploadWarning) -> str:
         return QCoreApplication.translate(
             "Upload", "Do not mix machines in one pack (except MAME): {0}"
         ).format(w.detail)
+    if w.judgement is Judgement.RELEASE_TYPE:
+        return QCoreApplication.translate(
+            "Upload", "Release type decided from the files: {0} (edit the name to change it)"
+        ).format(w.detail)
+    if w.judgement is Judgement.INSTALL_NOTE:
+        return QCoreApplication.translate(
+            "Upload", "An install note is mandatory unless the release is portable"
+        )
+    if w.judgement is Judgement.NO_IPTV:
+        return QCoreApplication.translate("Upload", "No IPTV software")
+    if w.judgement is Judgement.OLDER_VERSION:
+        return QCoreApplication.translate(
+            "Upload", "An older version of the same generation is removed when this one is accepted"
+        )
     if w.judgement is Judgement.NO_TRANSCODE:
         return QCoreApplication.translate(
             "Upload", "No transcodes (MP3 to FLAC, 128 to 320 kbps, stereo to 5.1)"

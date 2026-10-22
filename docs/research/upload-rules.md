@@ -153,6 +153,22 @@ The app's reading of these rules (issue #36): formats are checked by extension (
 
 The app's reading of the GPS and Emulation rules (issue #38): a downloader executable is an `.exe` or `.msi` whose name says downloader, web setup, online installer or stub installer; a CloneCD image is any folder with a `.ccd` or `.sub`, which then needs all of `.ccd`, `.img` and `.sub`; a `.bin` needs a `.cue` in its folder; archives count as files in the 50-file pack rule; a password is detected in zip archives only; the console of a ROM comes from a table of retro ROM extensions, and the region and languages from the `(Europe) (Fr,En)` tags of the name. GPS and emulation names are not dotted.
 
+#### Applications: release type table (UNVERIFIED)
+
+c411's table on `/wiki/cat-applications` could not be read when issue #39 was built (no browser access): the table below is the app's own reasonable reading of the summary above, not c411's. Check it against the wiki page and correct `release_type` in `src/torrentlinker/upload_software.py` when the real table is known. The decision is shown as a Warning ("Release type decided from the files") and the user overrides it by editing the release name.
+
+| Files present (checked in this order) | Release type |
+|---|---|
+| a file or the name says `portable` | Portable |
+| a file named keygen, keymaker or serialfish | Keygen |
+| a file named crack, cracked, activator, loader or kmspico | Crack |
+| a file named patch or patcher | Patch |
+| a setup program (`setup`, `install`, `installer`, `inst` in an `.exe`) or a package (`.msi`, `.dmg`, `.pkg`, `.deb`, `.rpm`, `.apk`, `.xapk`, `.ipa`, `.AppImage`) | Installer |
+| `.exe` files without any installer | Portable |
+| anything else | Installer |
+
+The subcategory defaults from the extensions (`.exe`/`.msi` Windows, `.dmg`/`.pkg`/`.app` macOS, `.deb`/`.rpm`/`.AppImage` Linux, `.apk`/`.ipa` Smartphone, else Autre). The install note is expected unless the type is Portable. Name templates are the ones in the table at the top: `Nom Version [OS Langue Type]`, mobile `[OS] Nom Version Langue [EXT]`, where the Type is the label above.
+
 ### 3D printing
 
 - STL, OBJ, 3MF, STEP/STP, GCODE (with target printer and filament, STL source if possible); sources BLEND, F3D/F3Z, SLDPRT, FCStd. Packs must have one coherent theme, with every model listed in the NFO. No files stolen from independent creators who live off them. (Both are judgement rules: the app shows them as Warnings, not Refusals.)
