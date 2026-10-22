@@ -13,13 +13,13 @@ import hashlib
 import re
 import time
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from torrentlinker.domain import LocalItem
+from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.matching import IgnoreList, Match
 from torrentlinker.qbit import Qbit
 from torrentlinker.reseed import start_reseed
@@ -54,37 +54,103 @@ class UploadFile:
     size: int
 
 
-def problems_3d(item: LocalItem, ignore: IgnoreList) -> list[str]:
-    """Why c411 would refuse this Local Item as a 3D model; empty when it may go."""
-    files = _content(item, ignore)
-    if not files:
-        return ["No file to upload"]
-    found = []
-    archives = sorted({e for p in files if (e := _ext(p)) in ARCHIVES})
-    if archives:
-        found.append(f"Archives are refused: {', '.join(archives)}")
-    if not any(_ext(p) in FORMATS_3D for p in files):
-        found.append("No 3D file (STL, 3MF, OBJ, STEP, GCODE…)")
-    return found
+class Problem(StrEnum):
+    """Why c411 would refuse a Local Item; the GUI words each one."""
+
+    NO_FILE = "no-file"
+    ARCHIVE = "archive"  # detail: the archive formats found
+    NO_3D_FILE = "no-3d-file"
 
 
-def formats(item: LocalItem, ignore: IgnoreList) -> list[str]:
-    """The 3D formats the Local Item holds, as a release name lists them."""
-    present = {_ext(p) for p in _content(item, ignore)}
+@dataclass(frozen=True)
+class Refusal:
+    problem: Problem
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class Subcategory:
+    id: int
+    label: str  # English, translated by the GUI
+
+
+class UploadProfile(Protocol):
+    """What one Content Kind needs to become an Upload: c411's category and rules, the
+    release name, the NFO and a description template. One per kind, 3D models first."""
+
+    kind: ContentKind
+    category: int
+    subcategories: tuple[Subcategory, ...]
+
+    def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]: ...
+    def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int: ...
+    def suggested_name(
+        self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
+    ) -> str: ...
+    def nfo(self, title: str, files: list[UploadFile]) -> str: ...
+    def description(
+        self, title: str, files: list[UploadFile], source: str, image_url: str
+    ) -> str: ...
+
+
+class Model3DProfile:
+    """c411's Imprimante 3D category (docs/research/upload-rules.md)."""
+
+    kind: ContentKind = ContentKind.MODEL_3D
+    category: int = CATEGORY_3D
+    subcategories: tuple[Subcategory, ...] = (
+        Subcategory(Subcategory3D.OBJECTS, "Objects"),
+        Subcategory(Subcategory3D.CHARACTERS, "Characters"),
+        Subcategory(Subcategory3D.PACK, "Pack"),
+    )
+
+    def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]:
+        files = _content(item, ignore)
+        if not files:
+            return [Refusal(Problem.NO_FILE)]
+        found = []
+        archives = sorted({e for p in files if (e := _ext(p)) in ARCHIVES})
+        if archives:
+            found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
+        if not any(_ext(p) in FORMATS_3D for p in files):
+            found.append(Refusal(Problem.NO_3D_FILE))
+        return found
+
+    def default_subcategory(self, item: LocalItem, ignore: IgnoreList) -> int:
+        models = [p for p in _content(item, ignore) if _ext(p) in FORMATS_3D]
+        return Subcategory3D.PACK if len(models) > 1 else Subcategory3D.OBJECTS
+
+    def suggested_name(
+        self, item: LocalItem, ignore: IgnoreList, source: str, subcategory: int
+    ) -> str:
+        """`Nom.Source.FORMATS`, or `Nom.Source.[PACK].FORMATS`; NOTAG for an unknown
+        source."""
+        stem = item.path.stem if item.path.is_file() else item.path.name
+        parts = [_words(stem), _words(source) or NOTAG]
+        if subcategory == Subcategory3D.PACK:
+            parts.append("[PACK]")
+        if found := _formats_3d(_content(item, ignore)):
+            parts.append("-".join(found))
+        return ".".join(p for p in parts if p)
+
+    def nfo(self, title: str, files: list[UploadFile]) -> str:
+        return nfo_3d(title, files)
+
+    def description(self, title: str, files: list[UploadFile], source: str, image_url: str) -> str:
+        return description_3d(title, files, source, image_url)
+
+
+PROFILES: dict[ContentKind, UploadProfile] = {ContentKind.MODEL_3D: Model3DProfile()}
+
+
+def profile_for(kind: ContentKind) -> UploadProfile | None:
+    """How a Content Kind becomes an Upload; None for kinds not supported yet."""
+    return PROFILES.get(kind)
+
+
+def _formats_3d(paths: Iterable[str]) -> list[str]:
+    present = {_ext(p) for p in paths}
     return [f.upper() for f in FORMATS_3D if f in present]
-
-
-def suggested_name(
-    item: LocalItem, ignore: IgnoreList, source: str = "", pack: bool = False
-) -> str:
-    """`Nom.Source.FORMATS`, or `Nom.Source.[PACK].FORMATS`; NOTAG for an unknown source."""
-    stem = item.path.stem if item.path.is_file() else item.path.name
-    parts = [_words(stem), _words(source) or NOTAG]
-    if pack:
-        parts.append("[PACK]")
-    if found := formats(item, ignore):
-        parts.append("-".join(found))
-    return ".".join(p for p in parts if p)
 
 
 def upload_files(item: LocalItem, title: str, ignore: IgnoreList) -> list[UploadFile]:
@@ -172,7 +238,7 @@ def seed_match(files: list[UploadFile]) -> Match:
 def nfo_3d(title: str, files: list[UploadFile]) -> str:
     """c411's 3D NFO: name, file count, total size, formats, then every file."""
     names = [f.torrent_path.split("/", 1)[-1] for f in files]
-    found = [x.upper() for x in FORMATS_3D if any(_ext(n) == x for n in names)]
+    found = _formats_3d(names)
     width = max(len(n) for n in names)
     lines = [
         title,
@@ -191,16 +257,28 @@ def nfo_3d(title: str, files: list[UploadFile]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def description_3d(title: str, files: list[UploadFile]) -> str:
-    """A plain BBCode description; the user adds the required image on c411."""
+def description_3d(title: str, files: list[UploadFile], source: str, image_url: str) -> str:
+    """c411's description: an image, a presentation the user writes, then the facts of
+    the NFO; a pack lists its files in a spoiler."""
     names = [f.torrent_path.split("/", 1)[-1] for f in files]
-    found = [x.upper() for x in FORMATS_3D if any(_ext(n) == x for n in names)]
-    return (
-        f"[h2]{title}[/h2]\n\n"
-        f"[b]Fichiers :[/b] {len(files)}\n"
-        f"[b]Taille totale :[/b] {human_size(sum(f.size for f in files))}\n"
-        f"[b]Format :[/b] {', '.join(found)}\n"
-    )
+    lines = []
+    if image_url:
+        lines += [f"[center][img]{image_url}[/img][/center]", ""]
+    lines += [
+        f"[center][h2]{title}[/h2][/center]",
+        "",
+        "[h3]Présentation[/h3]",
+        "",
+        "",
+        "[h3]Informations[/h3]",
+        f"[b]Source :[/b] {source or 'Inconnue'}",
+        f"[b]Formats :[/b] {', '.join(_formats_3d(names))}",
+        f"[b]Fichiers :[/b] {len(files)}",
+        f"[b]Taille totale :[/b] {human_size(sum(f.size for f in files))}",
+    ]
+    if len(files) > 1:
+        lines += ["", "[spoiler=Contenu][list]", *(f"[*]{n}" for n in names), "[/list][/spoiler]"]
+    return "\n".join(lines) + "\n"
 
 
 def draft_body(
@@ -253,12 +331,22 @@ class PreparedUpload:
     files: list[UploadFile]
 
 
+@dataclass(frozen=True)
+class UploadRequest:
+    """An Upload as the user set it up: the files, the name, the texts and the category."""
+
+    item: LocalItem
+    title: str
+    files: list[UploadFile]
+    nfo: str
+    description: str
+    category: int
+    subcategory: int
+
+
 def create_upload(
-    item: LocalItem,
-    title: str,
-    subcategory: Subcategory3D,
+    request: UploadRequest,
     announce: str,
-    ignore: IgnoreList,
     folder: Path,
     save_draft: Callable[[dict[str, Any]], int],
     store: Store,
@@ -266,15 +354,16 @@ def create_upload(
     stopped: Callable[[], bool] = lambda: False,
     now: Callable[[], float] = time.time,
 ) -> PreparedUpload:
-    """Make the torrent and NFO, keep them in `folder`, then save the c411 Draft."""
+    """Make the torrent, keep it and the NFO in `folder`, then save the c411 Draft."""
     if not announce:
         raise ValueError("No Announce URL: enter yours in Settings → Connections")
-    files = upload_files(item, title, ignore)
+    item, title, files, nfo = request.item, request.title, request.files, request.nfo
     torrent = make_torrent(item, files, announce, report, stopped, now)
-    nfo = nfo_3d(title, files)
     save_upload_files(folder, title, torrent, nfo)
     meta = read_torrent(torrent)
-    body = draft_body(title, description_3d(title, files), CATEGORY_3D, subcategory, torrent, nfo)
+    body = draft_body(
+        title, request.description, request.category, request.subcategory, torrent, nfo
+    )
     saved = SavedUpload(item.path, title, meta.infohash, save_draft(body), now())
     store.save_upload(saved)
     return PreparedUpload(saved, meta, files)

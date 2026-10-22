@@ -3,6 +3,9 @@
 import gc
 import os
 
+# Test windows and their dialogs never show on the user's screen, as in CI.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
@@ -75,3 +78,16 @@ def never_reach_the_users_own_clients(monkeypatch):  # type: ignore[no-untyped-d
             __original(self, host, *args, **kwargs)
 
         monkeypatch.setattr(cls, "__init__", guarded)
+
+
+@pytest.fixture(autouse=True)
+def dialogs_answer_at_once(monkeypatch):  # type: ignore[no-untyped-def]
+    """A message box a test did not expect returns at once, as if dismissed, rather than
+    waiting offscreen for a click that never comes. Tests that answer one patch it."""
+    from PySide6.QtWidgets import QMessageBox
+
+    def dismissed(*args, **kwargs):  # type: ignore[no-untyped-def]
+        return QMessageBox.StandardButton.NoButton
+
+    for name in ("information", "warning", "critical", "question"):
+        monkeypatch.setattr(QMessageBox, name, dismissed)

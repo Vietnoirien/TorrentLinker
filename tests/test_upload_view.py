@@ -51,12 +51,32 @@ def test_only_searched_3d_orphans_without_a_match_may_be_uploaded(qtbot, tmp_pat
     other = LibraryEntry(LibraryFolder(tmp_path, 1, ContentKind.MOVIE), vise.item, ItemState.ORPHAN)
     view.set_entries([vise, archive, other])
 
-    assert view.candidates() == [vise, archive]
+    assert view.candidates() == [vise, archive, other]
     assert "Search it first" in (view.why_not(vise) or "")
+    assert "not supported yet" in (view.why_not(other) or "")
+    assert view.items.rowCount() == 0  # nothing ready: the rest hides behind Show all
+    view.show_all.setChecked(True)
+    assert view.items.rowCount() == 3
+    view.show_all.setChecked(False)
+
     view.remember(vise, [])
     view.remember(archive, [])
     assert view.why_not(vise) is None
-    assert "Archives are refused" in (view.why_not(archive) or "")
+    assert view.why_not(archive) is None and view.needs_unpacking(archive)  # unpacked first
+    assert view.items.rowCount() == 2
+    assert view.items.item(0, 3).text() == "Archive: unpack it to upload"
+
+
+def test_an_archive_that_cannot_be_read_cannot_be_unpacked(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, _, _ = tab(qtbot, tmp_path)
+    broken = model(tmp_path, "Dragon.zip")  # not a zip inside
+    view.set_entries([broken])
+    view.remember(broken, [])
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: "cannot be read" in view.problems.text(), timeout=5000)
+    assert view.create_button.text() == "Unpack…"
+    assert not view.create_button.isEnabled()
 
 
 def test_selecting_an_orphan_suggests_a_compliant_name_and_previews_the_nfo(
@@ -71,7 +91,11 @@ def test_selecting_an_orphan_suggests_a_compliant_name_and_previews_the_nfo(
     assert view.name.text() == "Petit.Etau.De.Bureau.NOTAG.3MF"
     view.source.setText("Printables")
     assert view.name.text() == "Petit.Etau.De.Bureau.Printables.3MF"
-    assert "Petit.Etau.De.Bureau.Printables.3MF.3mf" in view.preview.toPlainText()
+    assert "Petit.Etau.De.Bureau.Printables.3MF.3mf" in view.nfo.toPlainText()
+    assert view.file_table.item(0, 0).text() == "Petit.Etau.De.Bureau.Printables.3MF.3mf"
+    assert view.file_table.item(0, 1).text() == "Petit étau de bureau.3mf"
+    assert "Printables" in view.description.toPlainText()
+    assert "Informations" in view.preview.toPlainText()  # rendered, without BBCode
     assert view.create_button.isEnabled()
 
     view.name.setText("Petit étau")
@@ -97,6 +121,12 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     shown: list[str] = []
     monkeypatch.setattr(QMessageBox, "information", lambda *a: shown.append(a[2]))
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: shown.append(a[2]))
+    asked: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *a: asked.append(a[2]) or QMessageBox.StandardButton.Yes,
+    )
     view, indexer, qbit = tab(qtbot, tmp_path)
     vise = model(tmp_path)
     view.set_entries([vise])
@@ -108,6 +138,7 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     view.create_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
+    assert "requires an image" in asked[0]
     assert "saved as a Draft" in shown[0], shown
     assert indexer.saved[0]["title"] == "Petit.Etau.De.Bureau.NOTAG.3MF"
     [t] = qbit.torrents()
@@ -154,6 +185,7 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
     qtbot.addWidget(window)
     scans: list[bool] = []
     window.scan = lambda refresh=False: scans.append(refresh)  # type: ignore[method-assign]
+    window.zen_tab.seeding_view.refresh = lambda quiet=False: None  # type: ignore[method-assign]
 
     class Dialog:
         def __init__(self, settings: Settings, parent: object) -> None:
@@ -168,3 +200,75 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
     assert scans == [False]
     window.open_settings()  # nothing changed this time
     assert scans == [False]
+
+
+def test_edits_to_the_description_survive_other_changes_until_reset(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, _, _ = tab(qtbot, tmp_path)
+    vise = model(tmp_path)
+    view.set_entries([vise])
+    view.remember(vise, [])
+    view.items.selectRow(0)
+
+    view.description.setPlainText("[b]Mine[/b]")
+    view.source.setText("Printables")
+    assert view.description.toPlainText() == "[b]Mine[/b]"
+    view.image_url.setText("https://i.example/v.png")
+    assert view.description.toPlainText() == "[b]Mine[/b]"
+
+    view._reset("description")
+    assert "[img]https://i.example/v.png[/img]" in view.description.toPlainText()
+
+
+def test_an_archive_is_unpacked_next_to_it_then_its_folder_is_offered(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    import zipfile
+
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
+    folder = LibraryFolder(tmp_path / "STL", 1, ContentKind.MODEL_3D)
+    folder.path.mkdir()
+    archive = folder.path / "Dragon.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("Dragon/Corps.stl", b"c" * 1500)
+        z.writestr("Dragon/Tete.stl", b"t" * 700)
+    entry = LibraryEntry(folder, scan_item(archive), ItemState.ORPHAN)
+    view, _, _ = tab(qtbot, tmp_path)
+    view.set_entries([entry])
+    view.remember(entry, [])
+    view.items.selectRow(0)
+    qtbot.waitUntil(lambda: view.file_table.rowCount() == 2, timeout=5000)
+    assert view.create_button.text() == "Unpack…" and view.create_button.isEnabled()
+    assert view.name.text() == "Dragon.NOTAG.[PACK].STL"
+    new: list[Path] = []
+    view.unpacked.connect(new.append)
+
+    view.create_button.click()
+    qtbot.waitUntil(lambda: bool(new), timeout=5000)
+
+    unpacked_folder = new[0]
+    assert (unpacked_folder / "Dragon" / "Corps.stl").exists() or (
+        unpacked_folder / "Corps.stl"
+    ).exists()
+    assert archive.exists()  # the archive stays until the Upload seeds
+    assert view.store.take_unpacked(unpacked_folder) == archive
+    # The Library scans; the new folder comes back selected, its archive's search kept.
+    folder_entry = LibraryEntry(folder, scan_item(unpacked_folder), ItemState.ORPHAN)
+    view.set_entries([entry, folder_entry])
+    assert view.entry == folder_entry
+    assert view.why_not(folder_entry) is None
+    assert view.create_button.text() == "Create Draft"
+
+
+def test_bbcode_renders_as_html_without_running_markup() -> None:
+    from torrentlinker.bbcode import bbcode_to_html
+
+    out = bbcode_to_html(
+        "[center][img]https://i.example/a.png[/img][/center]\n[b]x[/b] <script>[*]y"
+        "[url=javascript:alert(1)]no[/url]"
+    )
+
+    assert '<img src="https://i.example/a.png"' in out and "<b>x</b>" in out
+    assert "&lt;script&gt;" in out and "<script>" not in out
+    assert "javascript" in out and 'href="javascript' not in out

@@ -6,7 +6,7 @@ import pytest
 import torf
 
 from tests.fake_qbit import FakeQbit
-from torrentlinker.domain import LocalItem
+from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.matching import IgnoreList
 from torrentlinker.reseed import TAG, VERIFYING, start_reseed
 from torrentlinker.scan import scan_item
@@ -14,20 +14,24 @@ from torrentlinker.store import Store
 from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.upload import (
     MiB,
+    Model3DProfile,
+    Problem,
+    Refusal,
     Subcategory3D,
+    UploadRequest,
     UploadStopped,
     bencode,
     draft_body,
     make_torrent,
     nfo_3d,
     piece_size,
-    problems_3d,
+    profile_for,
     seed_match,
-    suggested_name,
     upload_files,
 )
 
 IGNORE = IgnoreList.default()
+PROFILE = Model3DProfile()
 ANNOUNCE = "https://c411.org/announce/secret"
 
 
@@ -50,12 +54,15 @@ def dragon_pack(tmp_path: Path) -> LocalItem:
 def test_a_release_name_has_dotted_words_without_accents_the_source_and_the_formats(
     tmp_path: Path,
 ) -> None:
-    item = vise(tmp_path)
+    item, objects, pack = vise(tmp_path), Subcategory3D.OBJECTS, Subcategory3D.PACK
 
-    assert suggested_name(item, IGNORE) == "Petit.Etau.De.Bureau.NOTAG.3MF"
-    assert suggested_name(item, IGNORE, "Printables") == "Petit.Etau.De.Bureau.Printables.3MF"
+    assert PROFILE.suggested_name(item, IGNORE, "", objects) == "Petit.Etau.De.Bureau.NOTAG.3MF"
     assert (
-        suggested_name(dragon_pack(tmp_path), IGNORE, "My Mini Factory", pack=True)
+        PROFILE.suggested_name(item, IGNORE, "Printables", objects)
+        == "Petit.Etau.De.Bureau.Printables.3MF"
+    )
+    assert (
+        PROFILE.suggested_name(dragon_pack(tmp_path), IGNORE, "My Mini Factory", pack)
         == "Dragon.De.Feu.My.Mini.Factory.[PACK].STL"
     )
 
@@ -63,11 +70,29 @@ def test_a_release_name_has_dotted_words_without_accents_the_source_and_the_form
 def test_archives_and_folders_without_a_3d_file_are_refused(tmp_path: Path) -> None:
     archive = tmp_path / "Model.rar"
     archive.write_bytes(b"r" * 10)
-    assert problems_3d(scan_item(archive), IGNORE) == [
-        "Archives are refused: rar",
-        "No 3D file (STL, 3MF, OBJ, STEP, GCODE…)",
+    assert PROFILE.refusals(scan_item(archive), IGNORE) == [
+        Refusal(Problem.ARCHIVE, "rar"),
+        Refusal(Problem.NO_3D_FILE),
     ]
-    assert problems_3d(vise(tmp_path), IGNORE) == []
+    assert PROFILE.refusals(vise(tmp_path), IGNORE) == []
+
+
+def test_only_3d_models_have_an_upload_profile_so_far(tmp_path: Path) -> None:
+    assert isinstance(profile_for(ContentKind.MODEL_3D), Model3DProfile)
+    assert profile_for(ContentKind.MOVIE) is None
+    assert PROFILE.default_subcategory(vise(tmp_path), IGNORE) == Subcategory3D.OBJECTS
+    assert PROFILE.default_subcategory(dragon_pack(tmp_path), IGNORE) == Subcategory3D.PACK
+
+
+def test_the_description_shows_the_image_the_facts_and_a_packs_files(tmp_path: Path) -> None:
+    files = upload_files(dragon_pack(tmp_path), "Dragon.NOTAG.[PACK].STL", IGNORE)
+
+    text = PROFILE.description("Dragon.NOTAG.[PACK].STL", files, "", "https://i.example/d.png")
+
+    assert text.startswith("[center][img]https://i.example/d.png[/img][/center]")
+    assert "[b]Source :[/b] Inconnue" in text and "[b]Formats :[/b] STL" in text
+    assert "[spoiler=Contenu][list]" in text and "[*]Tetes/tete.ouverte.stl" in text
+    assert "[img]" not in PROFILE.description("T", files, "", "")
 
 
 def test_a_single_file_is_named_the_release_title_plus_its_extension(tmp_path: Path) -> None:
@@ -201,16 +226,11 @@ def test_an_upload_keeps_its_files_saves_the_draft_then_seeds(tmp_path: Path) ->
         sent.append(body)
         return 128232
 
+    title = "Petit.Etau.De.Bureau.NOTAG.3MF"
+    files = upload_files(item, title, IGNORE)
+    request = UploadRequest(item, title, files, "my nfo", "my description", 10, 51)
     prepared = create_upload(
-        item,
-        "Petit.Etau.De.Bureau.NOTAG.3MF",
-        Subcategory3D.OBJECTS,
-        ANNOUNCE,
-        IGNORE,
-        tmp_path / "uploads",
-        save_draft,
-        store,
-        now=lambda: 50.0,
+        request, ANNOUNCE, tmp_path / "uploads", save_draft, store, now=lambda: 50.0
     )
     h = seed_upload(qbit, store, item, prepared)
 
@@ -218,6 +238,8 @@ def test_an_upload_keeps_its_files_saves_the_draft_then_seeds(tmp_path: Path) ->
     assert (tmp_path / "uploads" / "Petit.Etau.De.Bureau.NOTAG.3MF.nfo").exists()
     assert sorted(p.name for p in item.path.parent.iterdir()) == ["Petit étau de bureau.3mf"]
     assert sent[0]["categoryId"] == 10 and sent[0]["subcategoryId"] == 51
+    assert sent[0]["description"] == "my description"
+    assert base64.b64decode(sent[0]["nfoFileData"]) == b"my nfo"  # type: ignore[arg-type]
     assert store.uploads()[0].draft_id == 128232
     assert h == prepared.meta.infohash
     t = qbit.torrent(h)
@@ -228,13 +250,6 @@ def test_no_announce_url_means_no_upload(tmp_path: Path) -> None:
     from torrentlinker.upload import create_upload
 
     with pytest.raises(ValueError, match="Announce URL"):
-        create_upload(
-            vise(tmp_path),
-            "T",
-            Subcategory3D.OBJECTS,
-            "",
-            IGNORE,
-            tmp_path / "uploads",
-            lambda body: 1,
-            Store(tmp_path / "s.db"),
-        )
+        item = vise(tmp_path)
+        request = UploadRequest(item, "T", upload_files(item, "T", IGNORE), "n", "d", 10, 51)
+        create_upload(request, "", tmp_path / "uploads", lambda body: 1, Store(tmp_path / "s.db"))

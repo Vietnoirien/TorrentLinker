@@ -217,6 +217,7 @@ class MainWindow(QMainWindow):
         self.review.upload_blocker = self.upload_tab.why_not
         self.review.upload_requested.connect(self._open_upload)
         self.upload_tab.upload_started.connect(self._reseed_started)
+        self.upload_tab.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.tabs.addTab(self.upload_tab, self.tr("Upload"))
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
