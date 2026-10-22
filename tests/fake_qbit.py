@@ -29,10 +29,17 @@ class FakeQbit:
     # Qbit port ---------------------------------------------------------------
 
     def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
-        return [t for t in self.by_hash.values() if tag is None or tag in t.tags]
+        return [
+            t if with_files else replace(t, files={})
+            for t in self.by_hash.values()
+            if tag is None or tag in t.tags
+        ]
 
     def torrent(self, hash: str) -> Torrent | None:
         return self.by_hash.get(hash)
+
+    def files(self, hash: str) -> dict[str, int]:
+        return dict(self.by_hash[hash].files)
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         meta = read_torrent(data)

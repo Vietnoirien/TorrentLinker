@@ -60,7 +60,12 @@ from torrentlinker.gui.settings_dialog import (
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import ZenBand, ZenTab
 from torrentlinker.indexer import Candidate, Indexer
-from torrentlinker.library import LibraryEntry, auto_searchable, build_library
+from torrentlinker.library import (
+    LibraryEntry,
+    auto_searchable,
+    build_library,
+    indexer_contents,
+)
 from torrentlinker.matching import MatchRules
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.plan import (
@@ -1211,8 +1216,11 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(self.tr("Scanning…"))
         folders = list(self.settings.library_folders)
         qbit, ignore, store = self.qbit(), self.settings.matching.ignore, self.store
+        url = self.settings.indexer.url
         run_in_background(
-            lambda: build_library(folders, qbit.torrents(), ignore, store, refresh),
+            lambda: build_library(
+                folders, indexer_contents(qbit, store, url), ignore, store, refresh
+            ),
             self._scan_done,
             self._scan_failed,
         )

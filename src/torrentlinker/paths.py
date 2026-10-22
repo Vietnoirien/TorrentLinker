@@ -79,6 +79,9 @@ class MappedQbit:
         t = self._inner.torrent(hash)
         return self._local(t) if t else None
 
+    def files(self, hash: str) -> dict[str, int]:
+        return self._inner.files(hash)
+
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         return self._inner.add(data, self._mapper.to_qbit(save_path), tags)
 

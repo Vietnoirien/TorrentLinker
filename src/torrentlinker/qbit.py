@@ -26,6 +26,10 @@ class Qbit(Protocol):
         ...
 
     def torrent(self, hash: str) -> Torrent | None: ...
+    def files(self, hash: str) -> dict[str, int]:
+        """The torrent's file paths, relative to its save path, and sizes."""
+        ...
+
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         """Add stopped, with automatic management off and the original layout; return hash."""
         ...
@@ -189,12 +193,11 @@ class QbitApi:
         found = self._client.torrents_info(torrent_hashes=hash)
         return self._torrent(found[0]) if found else None
 
+    def files(self, hash: str) -> dict[str, int]:
+        return {f.name: int(f.size) for f in self._client.torrents_files(hash)}
+
     def _torrent(self, t: Mapping[str, Any], with_files: bool = True) -> Torrent:
-        files = (
-            {f.name: int(f.size) for f in self._client.torrents_files(t["hash"])}
-            if with_files
-            else {}
-        )
+        files = self.files(t["hash"]) if with_files else {}
         return Torrent(
             hash=t["hash"],
             name=t["name"],

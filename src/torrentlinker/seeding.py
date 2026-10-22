@@ -6,10 +6,11 @@ reaches the Indexer.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 
 from torrentlinker.domain import Torrent
+from torrentlinker.reseed import TAG
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.zen import (
     ZenDay,
@@ -65,8 +66,19 @@ def observe_swarm(
     return {r.infohash: r for r in store.catalogue([t.hash.lower() for t in mine])}
 
 
-def indexer_torrents(torrents: Iterable[Torrent], indexer_url: str) -> list[Torrent]:
-    return [t for t in torrents if is_indexer_torrent(t.tracker, indexer_url)]
+def indexer_torrents(
+    torrents: Iterable[Torrent], indexer_url: str, known: Collection[str] = ()
+) -> list[Torrent]:
+    """Torrents from the Indexer: by their tracker, or, since a torrent that has not
+    announced yet has none, by their infohash in `known` (the Catalogue) or this app's tag.
+    """
+    return [
+        t
+        for t in torrents
+        if is_indexer_torrent(t.tracker, indexer_url)
+        or t.hash.lower() in known
+        or any(tag == TAG or tag.startswith(TAG + ":") for tag in t.tags)
+    ]
 
 
 def seeding(

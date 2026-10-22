@@ -55,3 +55,44 @@ def test_only_orphans_are_searched_automatically() -> None:
     ]
 
     assert [e.item.path.name for e in auto_searchable(entries)] == ["x"]
+
+
+def test_only_indexer_torrents_make_items_seeded_and_only_their_files_are_read(
+    tmp_path: Path,
+) -> None:
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.library import indexer_contents
+    from torrentlinker.store import CatalogueRow, Store
+
+    url = "https://c411.org/api/torznab"
+    book = LocalItem(LIB / "Book.epub", {"Book.epub": 5})
+    music = LocalItem(LIB / "Album", {"Album/a.flac": 7})
+    client = FakeQbit()
+    client.by_hash = {
+        "a" * 40: Torrent(
+            "a" * 40, "Movie.mkv", LIB, {"Movie.mkv": 10}, tracker="https://tracker.c411.org/a"
+        ),
+        # Stopped, so no tracker yet: known from the Catalogue
+        "b" * 40: Torrent("b" * 40, "Book.epub", LIB, {"Book.epub": 5}),
+        "c" * 40: Torrent(
+            "c" * 40, "Album", LIB, {"Album/a.flac": 7}, tracker="https://other.example/a"
+        ),
+        "d" * 40: Torrent(
+            "d" * 40, "Show", LIB, dict(show.files), frozenset({"torrentlinker:zen"})
+        ),
+    }
+    read: list[str] = []
+    files = client.files
+    client.files = lambda h: read.append(h) or files(h)  # type: ignore[method-assign]
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue([CatalogueRow("b" * 40, "Book", 5, 1, 7000, "u", "d", 0)])
+
+    torrents = indexer_contents(client, store, url)
+
+    assert sorted(read) == ["a" * 40, "b" * 40, "d" * 40]  # never the other tracker's
+    assert classify([movie, book, music, show], torrents) == {
+        movie.path: ItemState.SEEDED,
+        book.path: ItemState.SEEDED,
+        music.path: ItemState.ORPHAN,  # seeded for another tracker: searched on c411
+        show.path: ItemState.SEEDED,
+    }

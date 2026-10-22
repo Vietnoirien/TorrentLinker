@@ -193,6 +193,10 @@ class DelugeApi:
         s = self._call("core.get_torrent_status", hash, [*KEYS, "files"])
         return self._torrent(hash, s) if s else None
 
+    def files(self, hash: str) -> dict[str, int]:
+        found = self._call("core.get_torrent_status", hash, ["files"]).get("files") or []
+        return {str(f["path"]): int(f["size"]) for f in found}
+
     @staticmethod
     def _torrent(hash: str, s: dict[str, Any]) -> Torrent:
         progress = float(s.get("progress") or 0)

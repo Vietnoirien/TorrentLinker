@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from torrentlinker.domain import ItemState, LibraryFolder, LocalItem, Torrent
 from torrentlinker.matching import IgnoreList
+from torrentlinker.qbit import Qbit
 from torrentlinker.reconcile import classify
 from torrentlinker.scan import scan
+from torrentlinker.seeding import indexer_torrents
 from torrentlinker.store import Store
 
 
@@ -32,6 +34,20 @@ def build_library(
         states = classify(items, torrents, ignore)
         entries.extend(LibraryEntry(folder, i, states[i.path]) for i in items)
     return entries
+
+
+def indexer_contents(client: Qbit, store: Store, indexer_url: str) -> list[Torrent]:
+    """The Indexer's torrents in the Torrent Client, with their files.
+
+    Only they make a Local Item Seeded: a file seeded for another tracker stays an Orphan,
+    to be searched and cross-seeded. Files are read for these torrents alone, one request
+    each, which spares thousands of requests when the client seeds for other trackers.
+    """
+    listed = client.torrents(with_files=False)
+    known = store.known_hashes([t.hash.lower() for t in listed])
+    return [
+        replace(t, files=client.files(t.hash)) for t in indexer_torrents(listed, indexer_url, known)
+    ]
 
 
 def auto_searchable(entries: Iterable[LibraryEntry]) -> list[LibraryEntry]:

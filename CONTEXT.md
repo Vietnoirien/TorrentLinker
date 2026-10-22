@@ -29,13 +29,13 @@ _Avoid_: Junk, extra
 ### Reconciliation
 
 **Seeded Item**:
-A Local Item whose files are already content of a torrent in the Torrent Client.
+A Local Item whose files are already content of an Indexer torrent in the Torrent Client. A torrent of another tracker does not count: its files can still be cross-seeded.
 
 **Partially Seeded Item**:
-A Local Item of which some files, but not all, are content of torrents in the Torrent Client; not searched unless the user forces it.
+A Local Item of which some files, but not all, are content of Indexer torrents in the Torrent Client; not searched unless the user forces it.
 
 **Orphan**:
-A Local Item that no torrent in the Torrent Client covers; the only kind of Local Item that gets searched.
+A Local Item that no Indexer torrent in the Torrent Client covers, even if a torrent of another tracker does; the only kind of Local Item that gets searched.
 _Avoid_: Missing, unseeded
 
 **Indexer**:

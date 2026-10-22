@@ -168,7 +168,7 @@ class ReviewPanel(QWidget):
             return
         title = f"<b>{entry.item.path.name}</b> — {human_size(entry.item.size)}"
         if entry.state is ItemState.SEEDED:
-            title += "<br>" + self.tr("Already seeded by your torrent client.")
+            title += "<br>" + self.tr("Already seeded for c411 by your torrent client.")
         elif partial:
             title += "<br>" + self.tr(
                 "Some of these files are already seeded: a Match would overlap that torrent."
