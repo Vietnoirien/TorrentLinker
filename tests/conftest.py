@@ -91,3 +91,12 @@ def dialogs_answer_at_once(monkeypatch):  # type: ignore[no-untyped-def]
 
     for name in ("information", "warning", "critical", "question"):
         monkeypatch.setattr(QMessageBox, name, dismissed)
+
+
+@pytest.fixture(autouse=True)
+def no_proxy_left_over():  # type: ignore[no-untyped-def]
+    """The proxy is app-wide: one test's never leaks into the next."""
+    from torrentlinker import net
+
+    yield
+    net.configure(None)

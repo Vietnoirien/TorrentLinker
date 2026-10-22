@@ -9,6 +9,7 @@ from keyring.errors import KeyringError
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker import net
 from torrentlinker.clients import connect
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
@@ -66,6 +68,7 @@ INDEXER_API_KEY = "indexer-api-key"
 EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
 ANNOUNCE_URL = "announce-url"  # holds the passkey: a secret like the keys (ADR-0011)
 TMDB_API_KEY = "tmdb-api-key"
+PROXY_PASSWORD = "proxy-password"
 
 COL_PATH, COL_KIND, COL_DEPTH = range(3)
 COL_LOCAL, COL_QBIT, COL_CHECK = range(3)
@@ -99,7 +102,11 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(
             self._page(
-                self._keyring_note(), self._client_box(), self._indexer_box(), self._tmdb_box()
+                self._keyring_note(),
+                self._client_box(),
+                self._indexer_box(),
+                self._tmdb_box(),
+                self._proxy_box(),
             ),
             self.tr("Connections"),
         )
@@ -457,6 +464,74 @@ class SettingsDialog(QDialog):
                 self.tr("Indexer OK: {0} categories").format(len(caps.categories)),
             ),
             lambda e: QMessageBox.warning(self, self.tr("Indexer"), str(e)),
+        )
+
+    # Proxy -----------------------------------------------------------------
+
+    def _proxy_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Proxy (optional)"))
+        form = QFormLayout(box)
+        p = self.settings.proxy
+        self.proxy_address = QLineEdit(p.address)
+        self.proxy_address.setPlaceholderText(
+            self.tr("Empty for none, or socks5://host:port, http://host:port")
+        )
+        self.proxy_user = QLineEdit(p.username)
+        self.proxy_password = self._secret_field(PROXY_PASSWORD)
+        self.proxy_client = QCheckBox(self.tr("Also for the torrent client"))
+        self.proxy_client.setChecked(p.torrent_client)
+        self.proxy_client.setToolTip(
+            self.tr(
+                "Off: the torrent client is reached directly, as it usually runs on this "
+                "computer or your network."
+            )
+        )
+        note = QLabel(
+            self.tr(
+                "Every connection to c411, TMDb, the Zen Lab snapshot, images and the speed "
+                "test goes through it. socks5h:// also resolves names through the proxy."
+            )
+        )
+        note.setWordWrap(True)
+        test = QPushButton(self.tr("Test proxy"))
+        test.clicked.connect(self._test_proxy)
+        form.addRow(self.tr("Address"), self.proxy_address)
+        form.addRow(self.tr("Username"), self.proxy_user)
+        form.addRow(self.tr("Password"), self.proxy_password)
+        form.addRow("", self.proxy_client)
+        form.addRow("", note)
+        form.addRow("", test)
+        return box
+
+    def _form_proxy(self) -> str | None:
+        """The proxy as the form sets it; raises ValueError for an unusable address."""
+        return net.proxy_url(
+            self.proxy_address.text(), self.proxy_user.text().strip(), self.proxy_password.text()
+        )
+
+    def _test_proxy(self) -> None:
+        try:
+            proxy = self._form_proxy()
+        except ValueError as e:
+            QMessageBox.warning(self, self.tr("Proxy"), str(e))
+            return
+
+        def failed(e: Exception) -> None:
+            text = (str(e) or type(e).__name__).replace(self.proxy_password.text() or "\0", "…")
+            QMessageBox.warning(self, self.tr("Proxy"), text)
+
+        run_in_background(
+            lambda: net.address_seen(proxy),
+            lambda ip: QMessageBox.information(
+                self,
+                self.tr("Proxy"),
+                (
+                    self.tr("Through {0}, c411 sees the address {1}.")
+                    if proxy
+                    else self.tr("Without a proxy, c411 sees the address {1}.")
+                ).format(net.redacted(proxy), ip),
+            ),
+            failed,
         )
 
     # Library Folders -------------------------------------------------------
@@ -1003,6 +1078,7 @@ class SettingsDialog(QDialog):
             TRANSMISSION_PASSWORD: self.transmission_password.text(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
+            PROXY_PASSWORD: self.proxy_password.text(),
             ANNOUNCE_URL: self.announce_url.text().strip(),
             **{
                 name: field.text().strip()
@@ -1022,8 +1098,17 @@ class SettingsDialog(QDialog):
             )
 
     def _save(self) -> None:
+        try:
+            self._form_proxy()
+        except ValueError as e:
+            self.tabs.setCurrentIndex(0)
+            QMessageBox.warning(self, self.tr("Proxy"), str(e))
+            return
         self._save_secrets()
         s = self.settings
+        s.proxy.address = self.proxy_address.text().strip()
+        s.proxy.username = self.proxy_user.text().strip()
+        s.proxy.torrent_client = self.proxy_client.isChecked()
         s.language = self.language.currentData()
         s.client = self._chosen_client()
         s.deluge.host = self.deluge_host.text().strip()

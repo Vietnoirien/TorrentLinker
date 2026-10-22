@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 
+from torrentlinker import net
 from torrentlinker.domain import ContentKind
 
 API = "https://api.themoviedb.org/3"
@@ -12,7 +13,7 @@ API = "https://api.themoviedb.org/3"
 class Tmdb:
     def __init__(self, api_key: str, http: httpx.Client | None = None) -> None:
         self._key = api_key
-        self._http = http or httpx.Client(timeout=15)
+        self._http = http or net.client(timeout=15)
 
     def lookup(self, title: str, year: int | None, kind: ContentKind) -> str | None:
         if kind is ContentKind.MOVIE:

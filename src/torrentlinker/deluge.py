@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from torrentlinker import net
 from torrentlinker.domain import Torrent
 from torrentlinker.qbit import AlreadyInClient
 
@@ -102,7 +103,9 @@ class DelugeApi:
             base = "http://" + base
         self._url = base + "/json"
         self._password = password
-        self._http = http or httpx.Client(timeout=httpx.Timeout(30, connect=5), verify=False)
+        self._http = http or net.client(
+            torrent_client=True, timeout=httpx.Timeout(30, connect=5), verify=False
+        )
         self._lock = threading.Lock()
         self._ready = False
         self._labels: bool | None = None

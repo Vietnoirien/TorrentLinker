@@ -15,6 +15,9 @@ hiddenimports = (
     + collect_submodules("guessit")
     + collect_submodules("babelfish")
     + collect_submodules("rebulk")
+    # Imported only when a SOCKS proxy is set (httpx, and requests for qBittorrent)
+    + collect_submodules("socksio")
+    + ["socks", "sockshandler"]
 )
 excludes = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtPdf", "tkinter"]
 

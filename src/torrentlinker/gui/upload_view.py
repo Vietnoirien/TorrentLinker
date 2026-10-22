@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker import net
 from torrentlinker.archives import Unpacked, is_archive, unpack, unpacked
 from torrentlinker.bbcode import bbcode_to_html
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
@@ -105,7 +106,7 @@ class UploadTab(QWidget):
         self.ignore = ignore
         self.announce = announce
         self.folder = folder  # where the .torrent and .nfo files are kept
-        self.http = http or httpx.Client(timeout=20, follow_redirects=True)
+        self._http = http  # tests' own; otherwise one per image, through today's proxy
         self.entries: list[LibraryEntry] = []
         self.searched: dict[Path, list[CheckedCandidate]] = {}
         self.shown: list[LibraryEntry] = []
@@ -575,7 +576,7 @@ class UploadTab(QWidget):
             self.image.setText(self.tr("Enter the image URL above") if not url else url)
             return
         self.image.setText(self.tr("Loading the image…"))
-        http = self.http
+        http = self._http or net.client(timeout=20, follow_redirects=True)
 
         def fetch() -> bytes:
             with http.stream("GET", url) as r:

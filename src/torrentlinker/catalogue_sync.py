@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from torrentlinker import net
 from torrentlinker.catalogue import PAGE, CrawlProgress, Progress, update_categories
 from torrentlinker.downloads import IndexerCategory
 from torrentlinker.indexer import API_KEY_PLACEHOLDER, Indexer
@@ -132,7 +133,7 @@ def bootstrap_snapshot(
     progress(CrawlProgress(0, 0, 0, 0, SNAPSHOT_NAME))
     # A separate client is essential: no Indexer headers, cookies or API key.
     with (
-        httpx.Client(timeout=90, follow_redirects=False)
+        net.client(timeout=90, follow_redirects=False)
         if http is None
         else nullcontext(http) as client
     ):

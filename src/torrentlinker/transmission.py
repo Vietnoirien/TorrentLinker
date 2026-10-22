@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+from torrentlinker import net
 from torrentlinker.domain import Torrent
 from torrentlinker.qbit import AlreadyInClient
 
@@ -90,7 +91,9 @@ class TransmissionApi:
             url += "/transmission/rpc"
         self._url = url
         auth = httpx.BasicAuth(username, password) if username or password else None
-        self._http = http or httpx.Client(timeout=httpx.Timeout(300, connect=5), verify=False)
+        self._http = http or net.client(
+            torrent_client=True, timeout=httpx.Timeout(300, connect=5), verify=False
+        )
         self._auth = auth
         self._session = ""
         self._lock = threading.Lock()

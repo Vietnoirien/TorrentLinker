@@ -42,6 +42,15 @@ class IndexerSettings:
 
 
 @dataclass
+class ProxySettings:
+    """One proxy for the app's internet connections; its password is a secret."""
+
+    address: str = ""  # e.g. socks5://127.0.0.1:1080; empty for none
+    username: str = ""
+    torrent_client: bool = False  # also for the Torrent Client
+
+
+@dataclass
 class MatchingSettings:
     size_tolerance: float = DEFAULT_SIZE_TOLERANCE
     min_partial_coverage: float = DEFAULT_MIN_PARTIAL_COVERAGE
@@ -62,6 +71,7 @@ class Settings:
     deluge: DelugeSettings = field(default_factory=DelugeSettings)
     transmission: TransmissionSettings = field(default_factory=TransmissionSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
+    proxy: ProxySettings = field(default_factory=ProxySettings)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
     # Torznab categories searched for each Content Kind; none listed = all categories.
     kind_categories: dict[ContentKind, list[int]] = field(default_factory=dict)
@@ -92,6 +102,7 @@ class Settings:
             "deluge": asdict(self.deluge),
             "transmission": asdict(self.transmission),
             "indexer": asdict(self.indexer),
+            "proxy": asdict(self.proxy),
             "matching": asdict(self.matching),
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
@@ -127,6 +138,7 @@ class Settings:
             deluge=DelugeSettings(**data.get("deluge", {})),
             transmission=TransmissionSettings(**data.get("transmission", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
+            proxy=ProxySettings(**data.get("proxy", {})),
             matching=MatchingSettings(**data.get("matching", {})),
             language=str(data.get("language", "auto")),
             kind_categories={

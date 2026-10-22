@@ -16,6 +16,7 @@ from typing import Any, Protocol
 
 import qbittorrentapi
 
+from torrentlinker import net
 from torrentlinker.domain import Torrent
 from torrentlinker.torrent_meta import read_torrent
 
@@ -146,7 +147,7 @@ class QbitApi:
             password=None if api_key else password,
             api_key=api_key or None,
             VERIFY_WEBUI_CERTIFICATE=False,
-            REQUESTS_ARGS={"timeout": (5, 30)},
+            REQUESTS_ARGS={"timeout": (5, 30), "proxies": net.requests_proxies()},
         )
         self._client: Any = client if api_key else _SharedLogin(client)
         self._sync = threading.Lock()

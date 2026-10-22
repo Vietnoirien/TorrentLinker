@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from torrentlinker import net
 from torrentlinker.ratelimit import BudgetQueue, Queue, WindowQueue
 from torrentlinker.store import Store
 
@@ -189,7 +190,7 @@ class Indexer:
     ) -> None:
         self.url = url
         self.api_key = api_key  # the main key: profile, stored URLs, the first slot
-        self._http = http or httpx.Client(timeout=30, follow_redirects=True)
+        self._http = http or net.client(timeout=30, follow_redirects=True)
         self._clock = clock
         self._sleep = sleep
         self._cache = cache

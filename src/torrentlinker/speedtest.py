@@ -14,6 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
+from torrentlinker import net
+
 SPEED_TEST_URL = "https://speed.cloudflare.com/__down"
 CHUNK = 25_000_000  # bytes per request; Cloudflare refuses 100 MB
 STREAMS = 4
@@ -28,7 +30,7 @@ def measure_download_speed(
     clock: Callable[[], float] = time.monotonic,
 ) -> float:
     """Bytes per second received over `streams` connections during about `duration` s."""
-    client = http or httpx.Client(timeout=30, follow_redirects=True)
+    client = http or net.client(timeout=30, follow_redirects=True)
     lock = threading.Lock()
     received = 0
     start = clock()

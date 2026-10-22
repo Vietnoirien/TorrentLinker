@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker import net
 from torrentlinker.catalogue import (
     STARTUP_PAGES,
     CrawlProgress,
@@ -51,6 +52,7 @@ from torrentlinker.gui.settings_dialog import (
     ANNOUNCE_URL,
     DELUGE_PASSWORD,
     INDEXER_API_KEY,
+    PROXY_PASSWORD,
     QBIT_API_KEY,
     QBIT_PASSWORD,
     TMDB_API_KEY,
@@ -121,8 +123,11 @@ class MainWindow(QMainWindow):
         self.settings_path = settings_path
         self.store = store
         self._indexer: Indexer | None = None
-        self._profile: tuple[tuple[str, str], ProfileClient] | None = None
-        self._qbit: tuple[tuple[str, ...], ClientApi] | None = None
+        # Kept connections, with what they were made for, the proxy in use included.
+        self._profile: tuple[tuple[object, ...], ProfileClient] | None = None
+        self._qbit: tuple[tuple[str, ...], ClientApi, tuple[str | None, str | None]] | None = None
+        self.apply_proxy()
+        self._indexer_proxy = net.current()  # what the Indexer, once made, goes through
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
 
@@ -273,6 +278,17 @@ class MainWindow(QMainWindow):
             if settings.library_folders:
                 QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
 
+    def apply_proxy(self) -> None:
+        """Make every connection from now on go through the proxy set in Settings."""
+        p = self.settings.proxy
+        try:
+            proxy = net.proxy_url(p.address, p.username, get_secret(PROXY_PASSWORD))
+        except ValueError as e:
+            log.warning("proxy ignored: %s", e)
+            proxy = None
+        net.configure(proxy, p.torrent_client)
+        log.info("proxy: %s", net.redacted(proxy) or "none")
+
     def qbit(self) -> MappedQbit:
         """The Torrent Client the user chose, through Path Mappings."""
         s = self.settings
@@ -285,8 +301,8 @@ class MainWindow(QMainWindow):
             q = s.qbit
             key = (s.client, q.host, q.username, get_secret(QBIT_PASSWORD))
             key += (get_secret(QBIT_API_KEY),)
-        if self._qbit is None or self._qbit[0] != key:
-            self._qbit = (key, connect(s.client, *key[1:]))
+        if self._qbit is None or self._qbit[2] != net.current() or self._qbit[0] != key:
+            self._qbit = (key, connect(s.client, *key[1:]), net.current())
         return MappedQbit(self._qbit[1], PathMapper(s.path_mappings))
 
     def indexer(self) -> Indexer:
@@ -297,19 +313,25 @@ class MainWindow(QMainWindow):
         url, key = self.settings.indexer.url, get_secret(INDEXER_API_KEY)
         extra = tuple(extra_indexer_keys())
         current = self._indexer
-        if current is None or (
-            current.url,
-            current.api_key,
-            tuple(getattr(current, "extra_keys", ())),  # test stubs have none
-        ) != (url, key, extra):
+        if (
+            current is None
+            or self._indexer_proxy != net.current()
+            or (
+                current.url,
+                current.api_key,
+                tuple(getattr(current, "extra_keys", ())),  # test stubs have none
+            )
+            != (url, key, extra)
+        ):
             current = self._indexer = Indexer(url, key, cache=self.store, extra_keys=extra)
+            self._indexer_proxy = net.current()
         return current
 
     def profile_client(self) -> ProfileClient:
         """One client, so its 30-second freshness window holds across refreshes."""
         wanted = (self.settings.indexer.url, get_secret(INDEXER_API_KEY))
-        if self._profile is None or self._profile[0] != wanted:
-            self._profile = (wanted, ProfileClient(*wanted))
+        if self._profile is None or self._profile[0] != (*wanted, net.current()):
+            self._profile = ((*wanted, net.current()), ProfileClient(*wanted))
         return self._profile[1]
 
     def refresh_profile(self) -> None:
@@ -1106,6 +1128,7 @@ class MainWindow(QMainWindow):
         if SettingsDialog(self.settings, self).exec():
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
+            self.apply_proxy()
             self._fill_folder_filter()
             self.offer_plan_categories()
             self.zen_tab.seeding_view.refresh()

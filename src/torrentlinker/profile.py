@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from torrentlinker import net
 from torrentlinker.zen import ZenClass, ZenProfile
 
 PROFILE_PATH = "/api/user/profile"
@@ -97,7 +98,7 @@ class ProfileClient:
     ) -> None:
         self.url = profile_url(indexer_url)
         self.api_key = api_key
-        self._http = http or httpx.Client(timeout=30, follow_redirects=True)
+        self._http = http or net.client(timeout=30, follow_redirects=True)
         self._clock = clock
         self._lock = threading.Lock()
         self._last: tuple[float, UserProfile] | None = None
