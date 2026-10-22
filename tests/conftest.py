@@ -47,3 +47,31 @@ def collect_garbage_on_the_gui_thread(request):  # type: ignore[no-untyped-def]
     yield
     if "qtbot" in request.fixturenames:
         gc.collect()
+
+
+# The app's default client addresses are the user's own clients on this machine: a test
+# must never log in to them (a wrong password gets localhost banned by qBittorrent).
+USER_CLIENTS = {
+    f"{scheme}://{host}:{port}"
+    for scheme in ("http", "https")
+    for host in ("localhost", "127.0.0.1")
+    for port in (8080, 8112, 9091)
+}
+NOWHERE = "http://127.0.0.1:9"  # discard port: refused at once
+
+
+@pytest.fixture(autouse=True)
+def never_reach_the_users_own_clients(monkeypatch):  # type: ignore[no-untyped-def]
+    from torrentlinker.deluge import DelugeApi
+    from torrentlinker.qbit import QbitApi
+    from torrentlinker.transmission import TransmissionApi
+
+    for cls in (QbitApi, DelugeApi, TransmissionApi):
+        original = cls.__init__
+
+        def guarded(self, host, *args, __original=original, **kwargs):  # type: ignore[no-untyped-def]
+            if host.strip().rstrip("/") in USER_CLIENTS:
+                host = NOWHERE
+            __original(self, host, *args, **kwargs)
+
+        monkeypatch.setattr(cls, "__init__", guarded)

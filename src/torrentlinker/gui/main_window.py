@@ -214,6 +214,8 @@ class MainWindow(QMainWindow):
             store.torrent_dir.parent / "uploads",
         )
         self.review.candidates_checked.connect(self.upload_tab.remember)
+        self.review.upload_blocker = self.upload_tab.why_not
+        self.review.upload_requested.connect(self._open_upload)
         self.upload_tab.upload_started.connect(self._reseed_started)
         self.tabs.addTab(self.upload_tab, self.tr("Upload"))
         self.band = ZenBand()
@@ -1093,14 +1095,21 @@ class MainWindow(QMainWindow):
     def match_rules(self) -> MatchRules:
         return self.settings.matching.rules()
 
+    def _open_upload(self, entry: LibraryEntry) -> None:
+        self.tabs.setCurrentWidget(self.upload_tab)
+        self.upload_tab.select(entry.item.path)
+
     def open_settings(self) -> None:
+        folders = list(self.settings.library_folders)
         if SettingsDialog(self.settings, self).exec():
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
             self._fill_folder_filter()
             self.offer_plan_categories()
             self.zen_tab.seeding_view.refresh()
-            self.upload_tab.set_entries(self.upload_tab.entries)  # Announce URL, kinds
+            self.upload_tab.set_entries(self.upload_tab.entries)  # the Announce URL
+            if self.settings.library_folders != folders:
+                self.scan()  # a new folder, depth or Content Kind changes every entry
         else:
             log.info("settings dialog cancelled")
 

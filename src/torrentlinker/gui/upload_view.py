@@ -187,6 +187,13 @@ class UploadTab(QWidget):
         self.entries = entries
         self._fill()
 
+    def select(self, path: Path) -> None:
+        """Show the Upload form for this Local Item."""
+        for r, e in enumerate(self.shown):
+            if e.item.path == path:
+                self.items.selectRow(r)
+                return
+
     def remember(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
         """An Orphan's latest search, from the Library."""
         self.searched[entry.item.path] = checked

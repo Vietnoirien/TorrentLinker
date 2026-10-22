@@ -114,3 +114,57 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     assert set(t.files) == {"Petit étau de bureau.3mf"}
     assert started == [vise.item.path]
     qtbot.waitUntil(lambda: view.drafts.rowCount() == 1, timeout=5000)
+
+
+def test_the_library_offers_an_upload_once_searched_without_a_match(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.config import Settings
+    from torrentlinker.gui.main_window import MainWindow
+
+    vise = model(tmp_path)
+    window = MainWindow(
+        Settings(library_folders=[vise.folder]),
+        tmp_path / "settings.json",
+        Store(tmp_path / "s.db"),
+    )
+    qtbot.addWidget(window)
+    window.upload_tab.set_entries([vise])
+    window.review.set_entry(vise)
+    button = window.review.upload_button
+    assert not button.isHidden() and not button.isEnabled()  # not searched yet
+
+    window.review.remember(vise, [])
+    assert button.isEnabled()
+    button.click()
+
+    assert window.tabs.currentWidget() is window.upload_tab
+    assert window.upload_tab.entry == vise
+
+
+def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from dataclasses import replace
+
+    from torrentlinker.config import Settings
+    from torrentlinker.gui import main_window
+    from torrentlinker.gui.main_window import MainWindow
+
+    folder = LibraryFolder(tmp_path, 1, ContentKind.OTHER)
+    window = MainWindow(
+        Settings(library_folders=[folder]), tmp_path / "settings.json", Store(tmp_path / "s.db")
+    )
+    qtbot.addWidget(window)
+    scans: list[bool] = []
+    window.scan = lambda refresh=False: scans.append(refresh)  # type: ignore[method-assign]
+
+    class Dialog:
+        def __init__(self, settings: Settings, parent: object) -> None:
+            self.settings = settings
+
+        def exec(self) -> bool:
+            self.settings.library_folders = [replace(folder, kind=ContentKind.MODEL_3D)]
+            return True
+
+    monkeypatch.setattr(main_window, "SettingsDialog", Dialog)
+    window.open_settings()
+    assert scans == [False]
+    window.open_settings()  # nothing changed this time
+    assert scans == [False]

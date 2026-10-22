@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from torrentlinker.domain import ItemState, LocalItem
+from torrentlinker.domain import ContentKind, ItemState, LocalItem
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
@@ -66,6 +66,7 @@ class ReviewPanel(QWidget):
     reseed_started = Signal(object)  # Path of the Local Item
     unpacked = Signal(object)  # Path of the new folder: the Library needs a Scan
     candidates_checked = Signal(object, object)  # LibraryEntry, list[CheckedCandidate]
+    upload_requested = Signal(object)  # LibraryEntry to make an Upload of
 
     def __init__(
         self,
@@ -83,6 +84,8 @@ class ReviewPanel(QWidget):
         self.rules = rules
         self.searcher = searcher
         self.default_query = default_query
+        # Why the entry cannot be an Upload, None when it can; set by the window.
+        self.upload_blocker: Callable[[LibraryEntry], str | None] = lambda e: ""
         self.entry: LibraryEntry | None = None
         self.checked: list[CheckedCandidate] = []
         self.cache: dict[
@@ -126,6 +129,11 @@ class ReviewPanel(QWidget):
         self.reject_button.setToolTip(self.tr("Not this Local Item: never propose it again"))
         self.reject_button.clicked.connect(self._reject_selected)
         actions.addWidget(self.reject_button)
+        self.upload_button = QPushButton(self.tr("Upload…"))
+        self.upload_button.clicked.connect(
+            lambda: self.entry is not None and self.upload_requested.emit(self.entry)
+        )
+        actions.addWidget(self.upload_button)
         actions.addStretch()
         self.reseed_button = QPushButton(self.tr("Reseed"))
         self.reseed_button.setToolTip(
@@ -230,6 +238,7 @@ class ReviewPanel(QWidget):
             checked, key=lambda v: (v.match is None, not v.compared, -v.candidate.seeders)
         )
         self._fill_candidates()
+        self._update_actions()
         if not checked:
             self.title.setText(self.title.text() + "<br>" + self.tr("No Candidates found"))
         elif self.checked[0].match is not None:
@@ -302,6 +311,14 @@ class ReviewPanel(QWidget):
         self.check_button.setEnabled(v is not None and not v.compared)
         self.reject_button.setEnabled(bool(chosen))
         archive = any(c.unpack for c in chosen)
+        blocker = self.upload_blocker(self.entry) if self.entry is not None else ""
+        self.upload_button.setVisible(
+            self.entry is not None and self.entry.folder.kind is ContentKind.MODEL_3D
+        )
+        self.upload_button.setEnabled(blocker is None)
+        self.upload_button.setToolTip(
+            blocker or self.tr("c411 does not have it: make it a c411 Draft in the Upload tab")
+        )
         self.reseed_button.setEnabled(
             bool(chosen)
             and all(c.match for c in chosen)
