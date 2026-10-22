@@ -18,9 +18,16 @@ def data_dir() -> Path:
 
 
 def smoke_checks() -> None:
-    """Exercise what a broken bundle would miss: guessit data, translations, assets."""
+    """Exercise what a broken bundle would miss: guessit data, translations, assets, and
+    the SOCKS support imported only once a SOCKS proxy is set."""
+    import httpx
+
     from torrentlinker.domain import LocalItem
     from torrentlinker.queries import parse_name
+
+    httpx.Client(proxy="socks5://127.0.0.1:1080").close()  # needs socksio
+    import socks  # noqa: F401 - requests' SOCKS support, for qBittorrent's adapter
+    import sockshandler  # noqa: F401
 
     info = parse_name(LocalItem(Path("Amelie.2001.1080p.mkv"), {"Amelie.2001.1080p.mkv": 1}))
     assert info.get("title") == "Amelie" and info.get("year") == 2001, info

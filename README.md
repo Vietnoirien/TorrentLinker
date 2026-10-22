@@ -1,15 +1,15 @@
 # TorrentLinker
 
-TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings and plans which new torrents to download and seed. The interface is available in English and French.
+TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings, plans which new torrents to download and seed, and prepares c411 uploads of what the tracker does not have yet. The interface is available in English and French.
 
-## Download 0.2.10
+## Download 0.3.0
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.2.10/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.2.10/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.3.0/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.3.0/TorrentLinker-x86_64.AppImage) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.2.10) for changes and assets.
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.3.0) for changes and assets.
 
 ## Set up
 
