@@ -86,6 +86,10 @@ A c411 rule a program can check (archives, formats, no file…): while an Orphan
 **Warning**:
 A c411 rule only the uploader can judge (no independent creators' paid files, one theme per pack): shown in the Upload tab beside the Refusals, but the Draft can still be saved.
 
+**Existing Release**:
+A release c411 already has for the item being uploaded, found by its title words or, for a category that has them, by ids, and shown before the Draft is saved. Information only: Team Pending refuses duplicates, the app never decides one.
+_Avoid_: Duplicate (that is Team Pending's verdict)
+
 **Announce URL**:
 The user's private tracker address, holding their passkey, that every Upload's torrent carries.
 _Avoid_: Passkey (alone), tracker URL

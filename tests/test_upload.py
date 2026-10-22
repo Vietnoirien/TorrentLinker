@@ -7,6 +7,7 @@ import torf
 
 from tests.fake_qbit import FakeQbit
 from torrentlinker.domain import ContentKind, LocalItem
+from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.matching import IgnoreList
 from torrentlinker.reseed import TAG, VERIFYING, start_reseed
 from torrentlinker.scan import scan_item
@@ -15,6 +16,7 @@ from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.upload import (
     CATEGORY_3D,
     PROFILES,
+    ExistingQuery,
     Judgement,
     MiB,
     Model3DProfile,
@@ -28,6 +30,7 @@ from torrentlinker.upload import (
     category_name,
     default_category,
     draft_body,
+    find_existing,
     make_torrent,
     nfo_3d,
     piece_size,
@@ -285,3 +288,52 @@ def test_no_announce_url_means_no_upload(tmp_path: Path) -> None:
         item = vise(tmp_path)
         request = UploadRequest(item, "T", upload_files(item, "T", IGNORE), "n", "d", 10, 51)
         create_upload(request, "", tmp_path / "uploads", lambda body: 1, Store(tmp_path / "s.db"))
+
+
+def test_a_profile_queries_c411_by_the_title_words_of_its_item(tmp_path: Path) -> None:
+    query = PROFILE.existing_query(vise(tmp_path), IGNORE)
+
+    assert query == ExistingQuery("Petit étau de bureau")
+    assert query.ids == {}
+
+
+def test_existing_releases_are_searched_in_the_category_by_name() -> None:
+    asked: list[SearchQuery] = []
+    found = [Candidate("Vise.NOTAG.STL", 10, "d", seeders=1), Candidate("Vise.Pro.STL", 5, "d", 9)]
+
+    def search(q: SearchQuery) -> list[Candidate]:
+        asked.append(q)
+        return found
+
+    result = find_existing(search, ExistingQuery("Vise"), CATEGORY_3D)
+
+    assert [q.params()["q"] for q in asked] == ["Vise"]
+    assert asked[0].categories == (8010,)  # c411's 3D category, as Torznab numbers it
+    assert [c.title for c in result] == ["Vise.Pro.STL", "Vise.NOTAG.STL"]  # most seeded first
+
+
+def test_an_ids_query_goes_to_the_ids_lookup_when_there_is_one() -> None:
+    def never(q: SearchQuery) -> list[Candidate]:
+        raise AssertionError("searched by name")
+
+    query = ExistingQuery("Dune", {"tmdbId": "438631", "tmdbType": "movie"})
+    seen: list[dict[str, str]] = []
+
+    def by_ids(ids: dict[str, str]) -> list[Candidate]:
+        seen.append(ids)
+        return [Candidate("Dune.2021", 1, "d")]
+
+    assert [c.title for c in find_existing(never, query, 1, by_ids)] == ["Dune.2021"]
+    assert seen == [query.ids]
+
+
+def test_an_ids_query_without_a_lookup_falls_back_to_its_name() -> None:
+    asked: list[SearchQuery] = []
+
+    def search(q: SearchQuery) -> list[Candidate]:
+        asked.append(q)
+        return []
+
+    find_existing(search, ExistingQuery("Dune", {"tmdbId": "1"}), 1)
+
+    assert asked[0].params()["q"] == "Dune"
