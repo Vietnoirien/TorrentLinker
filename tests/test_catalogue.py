@@ -13,7 +13,8 @@ from torrentlinker.catalogue import (
     update_category,
 )
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
-from torrentlinker.indexer import MIN_INTERVAL, Indexer
+from torrentlinker.indexer import Indexer
+from torrentlinker.ratelimit import API_INTERVAL
 from torrentlinker.store import CatalogueRow, Store
 
 CATEGORIES = {
@@ -101,7 +102,7 @@ def test_requests_respect_the_rate_limit(tmp_path: Path) -> None:
     update_category(indexer(fake, clock), Store(tmp_path / "s.db"), 7000)
 
     gaps = [b - a for a, b in zip(sent, sent[1:], strict=False)]
-    assert gaps and min(gaps) >= MIN_INTERVAL
+    assert gaps and min(gaps) >= API_INTERVAL
 
 
 def test_a_subcategory_is_stored_when_the_indexer_lists_it(tmp_path: Path) -> None:

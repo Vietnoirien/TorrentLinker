@@ -51,6 +51,7 @@ from torrentlinker.gui.settings_dialog import (
     QBIT_PASSWORD,
     TMDB_API_KEY,
     SettingsDialog,
+    extra_indexer_keys,
 )
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import ZenBand, ZenTab
@@ -257,9 +258,15 @@ class MainWindow(QMainWindow):
         Only call on the GUI thread; workers get the instance passed in.
         """
         url, key = self.settings.indexer.url, get_secret(INDEXER_API_KEY)
-        if self._indexer is None or (self._indexer.url, self._indexer.api_key) != (url, key):
-            self._indexer = Indexer(url, key, cache=self.store)
-        return self._indexer
+        extra = tuple(extra_indexer_keys())
+        current = self._indexer
+        if current is None or (
+            current.url,
+            current.api_key,
+            tuple(getattr(current, "extra_keys", ())),  # test stubs have none
+        ) != (url, key, extra):
+            current = self._indexer = Indexer(url, key, cache=self.store, extra_keys=extra)
+        return current
 
     def profile_client(self) -> ProfileClient:
         """One client, so its 30-second freshness window holds across refreshes."""

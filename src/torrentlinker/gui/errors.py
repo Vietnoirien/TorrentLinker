@@ -8,6 +8,12 @@ from torrentlinker.indexer import KeyRefused
 
 
 def error_text(error: Exception) -> str:
+    if isinstance(error, KeyRefused) and error.key_number > 1:
+        return QCoreApplication.translate(
+            "Errors",
+            "c411 refused API key {1} (HTTP {0}). Check it in Settings → Connections, under "
+            "More API keys: it needs the torznab:read scope.",
+        ).format(error.status, error.key_number)
     if isinstance(error, KeyRefused):
         return QCoreApplication.translate(
             "Errors",

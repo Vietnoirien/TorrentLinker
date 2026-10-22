@@ -33,9 +33,9 @@ from PySide6.QtWidgets import (
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.indexer import MIN_INTERVAL
 from torrentlinker.plan import Plan, PlanGoal, PlanOptions
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
+from torrentlinker.ratelimit import DOWNLOAD_INTERVAL
 from torrentlinker.seeding import Seeding
 from torrentlinker.send import SendProgress
 from torrentlinker.zen import GB, ZenClass, ZenProfile, compare_classes
@@ -314,7 +314,7 @@ class PlanView(QGroupBox):
                 "Sending: c411 allows one .torrent about every {0:.0f} seconds. "
                 "Downloading: at the speed of your last speed test, so at best; a torrent "
                 "with few seeders is slower than your connection."
-            ).format(MIN_INTERVAL)
+            ).format(DOWNLOAD_INTERVAL)
         )
         times.addWidget(self.times, 1)
         self.speed_button = QPushButton(self.tr("Test speed"))
@@ -684,7 +684,7 @@ class PlanView(QGroupBox):
             lines.insert(
                 0,
                 self.tr("Sending to qBittorrent: ≈ {0}").format(
-                    duration_text(plan.sending_seconds(MIN_INTERVAL))
+                    duration_text(plan.sending_seconds(DOWNLOAD_INTERVAL))
                 )
                 + " · "
                 + (

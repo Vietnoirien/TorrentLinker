@@ -92,6 +92,8 @@ The Plan and each torrent's result are saved as sending goes. After you stop sen
 
 The first Plan imports Zen Lab's public metadata snapshot anonymously. Your c411 API key and all `.torrent` requests go directly to c411.
 
+c411 limits each API key to 1,200 searches and Catalogue requests an hour, and limits `.torrent` downloads separately. TorrentLinker keeps the two apart: searches go up to two a second while the hour's budget lasts, then slow down, even while a Plan is being sent; downloads keep their own pace of one every 4 seconds. You can add up to 4 more keys of the same c411 account in **Settings → Connections → More API keys**: each keeps within its own limits, and requests go to whichever is free soonest (see [ADR-0008](docs/adr/0008-several-c411-keys-each-within-its-own-limits.md)). See [the measurements](docs/research/rate-limits.md).
+
 Planning and startup refresh c411 newest-first, stopping at the previous successful update's checkpoint, or an already known page on the first update. Historical scans and their saved page positions are reserved for the explicit Catalogue fetch action. Interrupted updates retain their checkpoint and check for new arrivals when resumed.
 
 Plans use cached metadata and show provisional estimates. There are no per-torrent c411 metadata checks before planning or sending. qBittorrent is refreshed every 30 seconds to update Seeding estimates as tracker responses arrive. Its known swarm counts also update the local Catalogue for future Plans; unknown counts retain the cached estimate.

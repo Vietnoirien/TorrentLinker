@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -51,7 +53,7 @@ def test_search_returns_candidates_from_torznab_items() -> None:
     assert candidates[1].infohash is None
 
 
-def test_requests_are_spaced_at_least_the_minimum_interval_apart() -> None:
+def test_searches_are_spaced_by_c411s_documented_rate() -> None:
     clock = FakeClock()
     sent_at: list[float] = []
 
@@ -66,7 +68,7 @@ def test_requests_are_spaced_at_least_the_minimum_interval_apart() -> None:
     indexer.search(SearchQuery(q="c"))
 
     gaps = [b - a for a, b in zip(sent_at, sent_at[1:], strict=False)]
-    assert gaps == [pytest.approx(4.1), pytest.approx(4.1)]
+    assert gaps == [pytest.approx(0.5), pytest.approx(0.5)]  # 120 a minute
 
 
 def test_too_many_requests_is_retried_after_the_advertised_delay() -> None:
@@ -194,9 +196,9 @@ def test_indexer_tells_how_long_until_its_next_request_is_allowed() -> None:
     assert indexer.next_request_in() == 0
 
     indexer.search(SearchQuery(q="a"))
-    clock.now += 1.0
+    clock.now += 0.2
 
-    assert indexer.next_request_in() == pytest.approx(3.1)
+    assert indexer.next_request_in() == pytest.approx(0.3)
 
 
 def test_supported_modes_are_fetched_once_and_unknown_when_caps_fail() -> None:
@@ -233,3 +235,212 @@ def test_c411_caps_give_one_entry_per_category_id_in_c411s_own_tree() -> None:
     assert caps.parents[7020] == 7000
     assert all(child != parent for child, parent in caps.parents.items())
     assert all(parent not in caps.parents for parent in caps.parents.values())
+
+
+# The two queues ------------------------------------------------------------------
+
+
+def test_a_search_never_waits_behind_a_torrent_download() -> None:
+    clock = FakeClock()
+    sent: list[tuple[str, float]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append((request.url.path, clock.now))
+        if "dl" in request.url.path:
+            return httpx.Response(200, content=b"d8:announce0:e")
+        return httpx.Response(200, text=SEARCH_XML)
+
+    indexer = make_indexer(handler, clock)
+    one, two = (Candidate(t, 1, f"https://c411.example/dl/{t}") for t in "ab")
+
+    indexer.fetch_torrent(one)
+    indexer.search(SearchQuery(q="a"))
+    indexer.fetch_torrent(two)
+
+    times = dict(sent)
+    assert times["/api/torznab"] == pytest.approx(times["/dl/a"])  # no wait at all
+    assert times["/dl/b"] - times["/dl/a"] == pytest.approx(4.1)  # downloads keep theirs
+
+
+def test_a_low_budget_slows_searches_down_to_what_the_hour_sustains() -> None:
+    from torrentlinker.ratelimit import BudgetQueue
+
+    clock = FakeClock()
+    queue = BudgetQueue(clock=clock.time, sleep=clock.sleep, wall=lambda: 5000.0)
+    queue.observe({"x-ratelimit-remaining": "80", "x-ratelimit-reset": "5600"})
+
+    queue.wait_turn()
+    queue.wait_turn()
+
+    assert clock.sleeps == [pytest.approx(3.0)]  # 3600 s / 1,200 requests
+
+
+def test_an_empty_budget_waits_for_c411s_reset() -> None:
+    from torrentlinker.ratelimit import BudgetQueue
+
+    clock = FakeClock()
+    queue = BudgetQueue(clock=clock.time, sleep=clock.sleep, wall=lambda: 5000.0)
+    queue.wait_turn()
+    queue.observe({"x-ratelimit-remaining": "0", "x-ratelimit-reset": "5120"})
+
+    queue.wait_turn()
+
+    assert clock.sleeps == [pytest.approx(120)]  # until c411 gives requests back
+
+
+def test_without_headers_the_queue_counts_its_own_requests_over_the_hour() -> None:
+    from torrentlinker.ratelimit import BudgetQueue
+
+    clock = FakeClock()
+    queue = BudgetQueue(budget=150, clock=clock.time, sleep=clock.sleep)
+    start = clock.now
+
+    for _ in range(151):
+        queue.wait_turn()
+
+    # 50 at the full rate, 100 at the sustained rate, then a wait for the first to expire.
+    assert clock.now - start == pytest.approx(3600)
+    assert queue.left() == 0  # the 151st replaced the first, gone from the hour
+
+
+def test_c411s_reported_budget_wins_over_the_own_count() -> None:
+    from torrentlinker.ratelimit import BudgetQueue
+
+    queue = BudgetQueue(clock=lambda: 10.0, wall=lambda: 5000.0)
+    queue.observe(
+        {"x-ratelimit-limit": "1200", "x-ratelimit-remaining": "300", "x-ratelimit-reset": "5900"}
+    )
+
+    assert queue.left() == 300  # other apps used the key too
+
+
+# Several keys ---------------------------------------------------------------------
+
+
+def pool(handler, clock: FakeClock, keys: list[str]) -> Indexer:  # type: ignore[no-untyped-def]
+    return Indexer(
+        url="https://c411.example/api/torznab",
+        api_key=keys[0],
+        extra_keys=keys[1:],
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+
+
+def test_downloads_take_turns_between_keys_each_at_its_own_pace() -> None:
+    clock = FakeClock()
+    sent: list[tuple[str, float]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append((request.url.params["apikey"], clock.now))
+        return httpx.Response(200, content=b"d8:announce0:e")
+
+    indexer = pool(handler, clock, ["K1", "K2"])
+    for i in range(4):
+        url = f"https://c411.example/api?t=get&id={i}&apikey=K1"
+        indexer.fetch_torrent(Candidate(str(i), 1, url))
+
+    assert [k for k, _ in sent] == ["K1", "K2", "K1", "K2"]
+    assert [t - sent[0][1] for _, t in sent] == pytest.approx([0, 0, 4.1, 4.1])
+
+
+def test_a_key_c411_asks_to_wait_rests_while_another_carries_on() -> None:
+    clock = FakeClock()
+    used: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        used.append(request.url.params["apikey"])
+        if request.url.params["apikey"] == "K1":
+            return httpx.Response(429, headers={"Retry-After": "900"})
+        return httpx.Response(200, text=SEARCH_XML)
+
+    indexer = pool(handler, clock, ["K1", "K2"])
+
+    assert indexer.search(SearchQuery(q="a"), cached=False)
+    indexer.search(SearchQuery(q="b"), cached=False)
+
+    assert used == ["K1", "K2", "K2"]  # K1 rests for its 900 s
+    assert clock.sleeps == [pytest.approx(0.5)]  # K2's own pace, no wait for K1
+
+
+def test_with_every_key_resting_a_download_hands_back_the_shortest_wait() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        wait = {"K1": "600", "K2": "120"}[request.url.params["apikey"]]
+        return httpx.Response(429, headers={"Retry-After": wait})
+
+    indexer = pool(handler, FakeClock(), ["K1", "K2"])
+
+    with pytest.raises(RateLimited) as limited:
+        indexer.fetch_torrent(
+            Candidate("t", 1, "https://c411.example/api?t=get&id=1&apikey=K1"), retry=False
+        )
+
+    assert limited.value.retry_after == pytest.approx(120)
+
+
+def test_the_json_api_gets_each_key_as_a_bearer_token() -> None:
+    clock = FakeClock()
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["authorization"])
+        return httpx.Response(200, json={"data": [], "meta": {}})
+
+    indexer = Indexer(
+        url="https://c411.org/api/torznab",
+        api_key="K1",
+        extra_keys=["K2"],
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+    indexer.catalogue_json({"page": "1"})
+    indexer.catalogue_json({"page": "2"})
+
+    assert seen == ["Bearer K1", "Bearer K2"]
+
+
+def test_no_key_ever_shows_in_errors_or_stored_searches(tmp_path: Path) -> None:
+    from torrentlinker.store import Store
+
+    clock = FakeClock()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            return httpx.Response(500)
+        return httpx.Response(200, text=SEARCH_XML.replace("apikey=K", "apikey=SECRET2"))
+
+    store = Store(tmp_path / "s.db")
+    indexer = Indexer(
+        url="https://c411.example/api/torznab",
+        api_key="SECRET1",
+        extra_keys=["SECRET2"],
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+        clock=clock.time,
+        sleep=clock.sleep,
+        cache=store,
+    )
+    indexer.search(SearchQuery(q="a"))
+    with pytest.raises(httpx.HTTPStatusError) as failed:
+        indexer.search(SearchQuery(q="b"))
+
+    stored = store._db.execute("SELECT body FROM search_cache").fetchone()[0]
+    assert "SECRET" not in stored and "SECRET" not in str(failed.value)
+
+
+def test_a_refused_extra_key_is_named() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401 if request.url.params["apikey"] == "K2" else 200, text=SEARCH_XML)
+
+    clock = FakeClock()
+    indexer = pool(handler, clock, ["K1", "K2"])
+    indexer.search(SearchQuery(q="a"), cached=False)
+
+    with pytest.raises(KeyRefused) as refused:
+        indexer.search(SearchQuery(q="b"), cached=False)
+
+    assert refused.value.key_number == 2 and "API key 2" in str(refused.value)

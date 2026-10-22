@@ -1274,3 +1274,23 @@ def test_shop_badges_go_past_the_tree_bonus_limit(qtbot, tmp_path: Path) -> None
     s.zen = zen
     s.save(tmp_path / "settings.json")
     assert Settings.load(tmp_path / "settings.json").zen.badge_bonus == pytest.approx(0.125)
+
+
+def test_extra_api_keys_are_saved_and_each_gets_its_own_queues(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from torrentlinker.credentials import get_secret
+    from torrentlinker.gui.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(Settings())
+    qtbot.addWidget(dialog)
+    dialog.indexer_key.setText("main")
+    dialog.extra_keys[0].setText("second")
+    dialog.extra_keys[2].setText("fourth")  # gaps are fine
+
+    dialog._save_secrets()
+
+    assert get_secret("indexer-api-key-2") == "second"
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    indexer = window.indexer()
+    assert [slot.key for slot in indexer.slots] == ["main", "second", "fourth"]
+    assert window.indexer() is indexer  # kept while the keys stay the same

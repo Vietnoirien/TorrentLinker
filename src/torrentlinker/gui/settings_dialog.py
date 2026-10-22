@@ -57,6 +57,8 @@ log = logging.getLogger(__name__)
 QBIT_PASSWORD = "qbit-password"
 QBIT_API_KEY = "qbit-api-key"
 INDEXER_API_KEY = "indexer-api-key"
+# Up to 4 more keys of the same c411 account, each within its own limits (ADR-0008).
+EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
 TMDB_API_KEY = "tmdb-api-key"
 
 COL_PATH, COL_KIND, COL_DEPTH = range(3)
@@ -309,6 +311,21 @@ class SettingsDialog(QDialog):
         hint.setOpenExternalLinks(True)
         form.addRow(self.tr("Torznab URL"), self.indexer_url)
         form.addRow(self.tr("API key"), self.indexer_key)
+        self.extra_keys = [self._secret_field(name) for name in EXTRA_INDEXER_KEYS]
+        extra = QVBoxLayout()
+        for n, field in enumerate(self.extra_keys, 2):
+            field.setPlaceholderText(self.tr("Key {0} (optional)").format(n))
+            extra.addWidget(field)
+        note = QLabel(
+            self.tr(
+                "Up to 4 more keys of the same c411 account (5 in all). c411 limits each key "
+                "separately: each request goes to the key that is free soonest, and a key "
+                "c411 asks to wait rests while the others go on."
+            )
+        )
+        note.setWordWrap(True)
+        extra.addWidget(note)
+        form.addRow(self.tr("More API keys"), extra)
         form.addRow("", hint)
         form.addRow("", test)
         return box
@@ -329,7 +346,11 @@ class SettingsDialog(QDialog):
         return box
 
     def _form_indexer(self) -> Indexer:
-        return Indexer(self.indexer_url.text().strip(), self.indexer_key.text().strip())
+        return Indexer(
+            self.indexer_url.text().strip(),
+            self.indexer_key.text().strip(),
+            extra_keys=[f.text().strip() for f in self.extra_keys],
+        )
 
     def _test_indexer(self) -> None:
         run_in_background(
@@ -888,6 +909,10 @@ class SettingsDialog(QDialog):
             QBIT_API_KEY: self.qbit_api_key.text().strip(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
+            **{
+                name: field.text().strip()
+                for name, field in zip(EXTRA_INDEXER_KEYS, self.extra_keys, strict=True)
+            },
         }
         try:
             for name, value in fields.items():
@@ -922,3 +947,8 @@ class SettingsDialog(QDialog):
         ]
         log.info("settings saved: %d Library Folders", len(s.library_folders))
         self.accept()
+
+
+def extra_indexer_keys() -> list[str]:
+    """The Indexer keys saved after the main one, in order, without empty ones."""
+    return [k for name in EXTRA_INDEXER_KEYS if (k := get_secret(name))]

@@ -6,7 +6,7 @@ import hashlib
 import threading
 import time
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -14,10 +14,10 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from torrentlinker.ratelimit import DOWNLOAD_INTERVAL, BudgetQueue, Queue
 from torrentlinker.store import Store
 
 TORZNAB_NS = "{http://torznab.com/schemas/2015/feed}"
-MIN_INTERVAL = 4.1  # seconds; c411 answers 429 above ~15 requests per minute
 MAX_RETRIES = 3
 SEARCH_CACHE_MAX_AGE = 24 * 3600
 API_KEY_PLACEHOLDER = "{{TORRENTLINKER_APIKEY}}"
@@ -34,12 +34,31 @@ class RateLimited(Exception):
 class KeyRefused(Exception):
     """The Indexer refused the API key (401 or 403): wrong, revoked or missing a scope."""
 
-    def __init__(self, status: int) -> None:
+    def __init__(self, status: int, key_number: int = 1) -> None:
+        which = "the API key" if key_number == 1 else f"API key {key_number}"
         super().__init__(
-            f"the Indexer refused the API key (HTTP {status}): check it in Settings → "
+            f"the Indexer refused {which} (HTTP {status}): check it in Settings → "
             "Connections; on c411 it needs the torznab:read scope"
         )
         self.status = status
+        self.key_number = key_number
+
+
+MAX_KEYS = 5  # c411's limit per account
+
+
+@dataclass
+class KeySlot:
+    """One API key and its own two queues: c411 limits each key separately (ADR-0008)."""
+
+    number: int  # 1 for the main key
+    key: str
+    api: BudgetQueue
+    downloads: Queue
+    resting: dict[str, float] = field(default_factory=dict)  # queue name -> until (clock)
+
+    def queue(self, name: str) -> Queue:
+        return self.api if name == "api" else self.downloads
 
 
 class SearchMode(StrEnum):
@@ -161,17 +180,29 @@ class Indexer:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         cache: Store | None = None,
+        wall: Callable[[], float] = time.time,
+        extra_keys: Sequence[str] = (),
     ) -> None:
         self.url = url
-        self.api_key = api_key
+        self.api_key = api_key  # the main key: profile, stored URLs, the first slot
         self._http = http or httpx.Client(timeout=30, follow_redirects=True)
         self._clock = clock
         self._sleep = sleep
         self._cache = cache
-        self._lock = threading.Lock()
+        self.extra_keys = tuple(extra_keys)
+        keys = [k for k in dict.fromkeys([api_key, *extra_keys]) if k][:MAX_KEYS] or [api_key]
+        # Per key, two queues: c411 limits searches and .torrent downloads separately.
+        self.slots = [
+            KeySlot(
+                n,
+                k,
+                BudgetQueue(clock=clock, sleep=sleep, wall=wall),
+                Queue(DOWNLOAD_INTERVAL, clock, sleep),
+            )
+            for n, k in enumerate(keys, 1)
+        ]
         self._caps_lock = threading.Lock()
         self._modes: dict[SearchMode, set[str]] | None = None
-        self._last_request: float | None = None
 
     def caps(self) -> Caps:
         root = ET.fromstring(self._get({"t": "caps"}))
@@ -215,7 +246,10 @@ class Indexer:
         """
         if (data := self.cached_torrent(candidate)) is not None:
             return data
-        data = self._request(candidate.download_url, retry=retry).content
+        url = candidate.download_url
+        data = self._request(
+            lambda key: (self._with_key(url, key), None, None), retry=retry, queue="downloads"
+        ).content
         if self._cache:
             self._cache.cache_torrent(self._torrent_key(candidate), data)
         return data
@@ -228,7 +262,14 @@ class Indexer:
         return hashlib.sha1(self._redact(candidate.download_url).encode()).hexdigest()
 
     def _redact(self, body: str) -> str:
-        return body.replace(self.api_key, API_KEY_PLACEHOLDER) if self.api_key else body
+        for slot in self.slots:
+            if slot.key:
+                body = body.replace(slot.key, API_KEY_PLACEHOLDER)
+        return body
+
+    def _with_key(self, url: str, key: str) -> str:
+        """A URL made with the main key, as another key would make it."""
+        return url.replace(self.api_key, key) if self.api_key else url
 
     def redact(self, text: str) -> str:
         """`text` with the API key replaced by a placeholder, safe to store."""
@@ -238,7 +279,7 @@ class Indexer:
         return text.replace(API_KEY_PLACEHOLDER, self.api_key)
 
     def _get(self, params: dict[str, str]) -> str:
-        return self._request(self.url, {**params, "apikey": self.api_key}).text
+        return self._request(lambda key: (self.url, {**params, "apikey": key}, None)).text
 
     @property
     def is_c411(self) -> bool:
@@ -249,9 +290,11 @@ class Indexer:
         if not self.is_c411:
             raise ValueError("The JSON catalogue is only available on c411.org")
         return self._request(
-            "https://c411.org/api/torrents",
-            params,
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            lambda key: (
+                "https://c411.org/api/torrents",
+                params,
+                {"Authorization": f"Bearer {key}"},
+            )
         ).json()
 
     def torrent_json(self, infohash: str) -> dict[str, Any]:
@@ -263,35 +306,55 @@ class Indexer:
         ):
             raise ValueError("Invalid c411 torrent hash")
         return self._request(
-            f"https://c411.org/api/torrents/{infohash}",
-            headers={"Authorization": f"Bearer {self.api_key}"},
+            lambda key: (
+                f"https://c411.org/api/torrents/{infohash}",
+                None,
+                {"Authorization": f"Bearer {key}"},
+            )
         ).json()
 
     def _request(
         self,
-        url: str,
-        params: dict[str, str] | None = None,
+        build: Callable[[str], tuple[str, dict[str, str] | None, dict[str, str] | None]],
         *,
-        headers: dict[str, str] | None = None,
         retry: bool = True,
+        queue: str = "api",
     ) -> httpx.Response:
-        with self._lock:
-            if not retry:
-                self._wait_turn()
-                response = self._http.get(url, params=params, headers=headers)
-                if response.status_code == 429:
-                    raise RateLimited(_retry_after(response))
-                return self._checked(response)
-            for _attempt in range(MAX_RETRIES):
-                self._wait_turn()
-                response = self._http.get(url, params=params, headers=headers)
-                if response.status_code != 429:
-                    break
-                self._sleep(_retry_after(response))
-            else:
-                self._wait_turn()
-                response = self._http.get(url, params=params, headers=headers)
-        return self._checked(response)
+        """Send with the key whose queue is free soonest; `build(key)` gives the URL,
+        parameters and headers. A key refused with 429 rests as long as c411 asks while
+        the others go on; with every key resting, the request waits (or, with
+        `retry=False`, raises RateLimited)."""
+        waits = 0
+        last: httpx.Response | None = None  # keys only rest after a 429, so it is set
+        while True:
+            slot = self._pick(queue)
+            if slot is None:
+                wait = min(s.resting.get(queue, 0.0) for s in self.slots) - self._clock()
+                if not retry:
+                    raise RateLimited(max(wait, 0.0))
+                if waits >= MAX_RETRIES and last is not None:
+                    return self._checked(last)
+                waits += 1
+                self._sleep(max(wait, 0.0))
+                continue
+            lane = slot.queue(queue)
+            url, params, headers = build(slot.key)
+            with lane.lock:
+                lane.wait_turn()
+                last = self._http.get(url, params=params, headers=headers)
+                lane.observe(last.headers)
+            if last.status_code == 429:
+                slot.resting[queue] = self._clock() + _retry_after(last)
+                continue
+            if last.status_code in (401, 403):
+                raise KeyRefused(last.status_code, slot.number)
+            return self._checked(last)
+
+    def _pick(self, queue: str) -> KeySlot | None:
+        """The key, among those not resting, whose queue lets a request go soonest."""
+        now = self._clock()
+        ready = [s for s in self.slots if s.resting.get(queue, 0.0) <= now]
+        return min(ready, key=lambda s: s.queue(queue).next_in()) if ready else None
 
     def _checked(self, response: httpx.Response) -> httpx.Response:
         """The response if it succeeded; errors never carry the key, which URLs hold."""
@@ -305,17 +368,14 @@ class Indexer:
             ) from None
 
     def next_request_in(self) -> float:
-        """Seconds before the rate limiter lets the next request through."""
-        if self._last_request is None:
-            return 0.0
-        return max(0.0, self._last_request + MIN_INTERVAL - self._clock())
+        """Seconds before the next search or Catalogue request may go, with any key."""
+        now = self._clock()
+        return min(max(s.api.next_in(), s.resting.get("api", 0.0) - now) for s in self.slots)
 
-    def _wait_turn(self) -> None:
-        if self._last_request is not None:
-            wait = self._last_request + MIN_INTERVAL - self._clock()
-            if wait > 0:
-                self._sleep(wait)
-        self._last_request = self._clock()
+    @property
+    def api(self) -> BudgetQueue:
+        """The main key's search queue."""
+        return self.slots[0].api
 
 
 def _retry_after(response: httpx.Response) -> float:
