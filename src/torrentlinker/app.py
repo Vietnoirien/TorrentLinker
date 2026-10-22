@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import multiprocessing
 import sys
 from pathlib import Path
 
@@ -67,6 +68,7 @@ def show_unexpected_errors() -> None:
 
 
 def main() -> int:
+    multiprocessing.freeze_support()  # a frozen build re-runs itself for child processes
     app = QApplication(sys.argv)
     app.setApplicationName("TorrentLinker")
     app.setOrganizationName("TorrentLinker")

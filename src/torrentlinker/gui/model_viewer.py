@@ -8,6 +8,8 @@ own. Files are parsed and decimated off the GUI thread (torrentlinker.mesh).
 
 from __future__ import annotations
 
+import multiprocessing
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -78,6 +80,53 @@ class RenderUnavailable(Exception):
     """No OpenGL here: the model can be shown nowhere, so no image can be captured."""
 
 
+def _context_format() -> QSurfaceFormat:
+    fmt = QSurfaceFormat()
+    fmt.setDepthBufferSize(24)
+    fmt.setStencilBufferSize(8)
+    fmt.setVersion(3, 3)
+    fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
+    return fmt
+
+
+def _probe_gl() -> None:
+    """Child process: create and bind the OpenGL context, exiting 0 if that works."""
+    app = QGuiApplication(sys.argv[:1])
+    context = QOpenGLContext()
+    context.setFormat(_context_format())
+    surface = QOffscreenSurface()
+    if context.create():
+        surface.setFormat(context.format())
+        surface.create()
+        if context.makeCurrent(surface):
+            context.doneCurrent()
+            del app
+            return
+    sys.exit(1)
+
+
+_gl_probed: dict[str, bool] = {}
+
+
+def gl_is_safe() -> bool:
+    """Whether an OpenGL context can be created here. Through GLX (X11, XWayland) a failing
+    driver raises a fatal X error that kills or crashes the whole process, so the first
+    attempt on such a platform is made in a child process; elsewhere the in-process
+    create() reports failure safely."""
+    platform = QGuiApplication.platformName()
+    if not sys.platform.startswith("linux") or platform not in ("xcb", "offscreen"):
+        return True
+    if platform not in _gl_probed:
+        child = multiprocessing.get_context("spawn").Process(target=_probe_gl)
+        child.start()
+        child.join(30)
+        if child.is_alive():
+            child.kill()
+            child.join()
+        _gl_probed[platform] = child.exitcode == 0
+    return _gl_probed[platform]
+
+
 def make_geometry(display: DisplayMesh) -> QQuick3DGeometry:
     """The scene's mesh: float32 position and normal for each triangle corner. The caller
     keeps it alive for as long as the scene shows it."""
@@ -102,13 +151,10 @@ class OffscreenScene:
         self._target: QOpenGLFramebufferObject | None = None
         if QGuiApplication.instance() is None:
             raise RenderUnavailable("No application")
-        fmt = QSurfaceFormat()
-        fmt.setDepthBufferSize(24)
-        fmt.setStencilBufferSize(8)
-        fmt.setVersion(3, 3)
-        fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
+        if not gl_is_safe():
+            raise RenderUnavailable("OpenGL is not available")
         self.context = QOpenGLContext()
-        self.context.setFormat(fmt)
+        self.context.setFormat(_context_format())
         self.surface = QOffscreenSurface()
         if not self.context.create():
             raise RenderUnavailable("OpenGL is not available")
