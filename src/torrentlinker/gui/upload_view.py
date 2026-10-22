@@ -385,6 +385,9 @@ class UploadTab(QWidget):
         self._http = http  # tests' own; otherwise one per image, through today's proxy
         self.entries: list[LibraryEntry] = []
         self.searched: dict[Path, list[CheckedCandidate]] = {}
+        # Orphans whose last search, kept by the Store, found no Candidate at all: known
+        # at once after a restart, while the Library still compares the others.
+        self._found_nothing: set[Path] = set()
         self.shown: list[LibraryEntry] = []
         self.entry: LibraryEntry | None = None
         self.unpack_target: Unpacked | None = None  # the selected archive, once unpacked
@@ -617,6 +620,11 @@ class UploadTab(QWidget):
 
     def set_entries(self, entries: list[LibraryEntry]) -> None:
         self.entries = entries
+        self._found_nothing = {
+            e.item.path
+            for e in entries
+            if e.state is ItemState.ORPHAN and self.store.remembered_candidates(e.item.path) == "[]"
+        }
         if self._to_select is not None:
             folder, archive = self._to_select
             if any(e.item.path == folder for e in entries):
@@ -666,6 +674,8 @@ class UploadTab(QWidget):
         if profile is None:
             return self.tr("Uploads to {0} are not supported yet").format(category_name(category))
         checked = self.searched.get(entry.item.path)
+        if checked is None and entry.item.path in self._found_nothing:
+            checked = []
         if checked is None:
             return self.tr("Search it first: c411 may already have it")
         if any(v.match for v in checked):

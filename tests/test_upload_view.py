@@ -703,3 +703,21 @@ def test_a_games_name_may_keep_its_spaces_and_accents(qtbot, tmp_path: Path) -> 
     assert "dots between words" not in view.problems.text()
     qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
     assert view.files[0].torrent_path == "[SNES]Zelda [EU - MULTI] SFC.sfc"
+
+
+def test_after_a_restart_a_persisted_search_without_candidates_is_ready(
+    qtbot, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    vise = model(tmp_path)
+    other = model(tmp_path, "Autre.3mf")
+    never = model(tmp_path, "Jamais cherche.3mf")
+    store = Store(tmp_path / "s.db")
+    store.remember_candidates(vise.item.path, "[]")
+    store.remember_candidates(other.item.path, '[{"title": "t", "size": 1, "download_url": "u"}]')
+
+    view, _, _ = tab(qtbot, tmp_path)  # a fresh view: nothing searched this session
+    view.set_entries([vise, other, never])
+
+    assert view.why_not(vise) is None
+    assert view.why_not(other) is not None  # compared again by the Library first
+    assert view.why_not(never) == "Search it first: c411 may already have it"
