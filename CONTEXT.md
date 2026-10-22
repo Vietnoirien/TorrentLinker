@@ -91,7 +91,7 @@ A c411 rule a program can check (archives, formats, no file…): while an Orphan
 A c411 rule only the uploader can judge (no independent creators' paid files, one theme per pack): shown in the Upload tab beside the Refusals, but the Draft can still be saved.
 
 **Inspection**:
-A profile's reading of what an Upload's files say about themselves (audio tags and bitrate, later MediaInfo), done off the GUI thread when an item is selected; Refusals and names that need those facts say nothing until it ends.
+A profile's reading of what an Upload's files say about themselves (audio tags and bitrate, MediaInfo and TMDb for video), done off the GUI thread when an item is selected; Refusals and names that need those facts say nothing until it ends.
 _Avoid_: Scan (that is the Library's reading of file names and sizes)
 
 **Existing Release**:

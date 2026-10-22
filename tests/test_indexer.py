@@ -548,6 +548,41 @@ def test_category_options_are_read_from_c411_with_a_key() -> None:
     assert seen[0].headers["Authorization"] == "Bearer MAIN"
 
 
+def test_releases_c411_has_of_a_tmdb_id_are_read_with_a_key() -> None:
+    seen: list[httpx.Request] = []
+    answer = {
+        "data": [
+            {
+                "name": "Film.2020.VFF.1080p.BluRay.x264-TFA",
+                "size": 5,
+                "seeders": 3,
+                "infoHash": "ab",
+            },
+            {"name": "Film.2020.MULTI.2160p.WEB.x265-X", "size": 9},
+            {"size": 1},
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=answer)
+
+    ix = Indexer(
+        url="https://c411.org/api",
+        api_key="MAIN",
+        http=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    found = ix.by_tmdb({"tmdbId": "27205", "tmdbType": "movie"})
+
+    assert [(c.title, c.size, c.seeders, c.infohash) for c in found] == [
+        ("Film.2020.VFF.1080p.BluRay.x264-TFA", 5, 3, "ab"),
+        ("Film.2020.MULTI.2160p.WEB.x265-X", 9, 0, None),
+    ]
+    assert str(seen[0].url) == "https://c411.org/api/torrents/by-tmdb?tmdbId=27205&tmdbType=movie"
+    assert seen[0].headers["Authorization"] == "Bearer MAIN"
+
+
 def test_a_key_without_the_drafts_scope_is_named_in_the_error() -> None:
     ix = Indexer(
         url="https://c411.org/api",

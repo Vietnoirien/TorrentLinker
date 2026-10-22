@@ -122,7 +122,7 @@ def test_profiles_are_keyed_by_c411_category_and_a_kind_only_proposes_one(tmp_pa
         ContentKind.OTHER: None,
     }
     assert isinstance(profile_for(ContentKind.MODEL_3D), Model3DProfile)
-    assert profile_for(ContentKind.MOVIE) is None  # category 1 has no profile yet
+    assert profile_for(ContentKind.GAME) is None  # category 5 has no profile yet
     assert profile_for(ContentKind.OTHER) is None
     assert category_name(1) == "Films & Vidéos" and category_name(6) == "Emulation"
     assert category_name(10) == "Imprimante 3D" and category_name(99) == "99"

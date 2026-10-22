@@ -36,6 +36,7 @@ GB = 1_000_000_000
 NOTAG = "NOTAG"
 IMAGE_PLACEHOLDER = "…"  # in [img][/img] until the image is uploaded on c411
 CATEGORY_3D = 10
+CATEGORY_VIDEO = 1
 CATEGORY_EBOOK = 2
 CATEGORY_AUDIO = 3
 AUDIOBOOK_KBPS = 64  # an audiobook's minimum bitrate
@@ -107,6 +108,21 @@ class SubcategoryEbook(IntEnum):
     MANUALS = 60
 
 
+class SubcategoryVideo(IntEnum):
+    ANIMATION = 1
+    ANIMATION_SERIES = 2
+    CONCERT = 3
+    DOCUMENTARY = 4
+    DOCUMENTARY_SERIES = 57
+    TV_SHOW = 5
+    MOVIE = 6
+    SERIES = 7
+    SHOW = 8
+    SPORT = 9
+    CLIPS = 10
+    COLLECTION = 54
+
+
 class SubcategoryAudio(IntEnum):
     KARAOKE = 17
     MUSIC = 18
@@ -138,6 +154,14 @@ class Problem(StrEnum):
     LOW_BITRATE = "low-bitrate"  # detail: what is too low, and the minimum
     NEEDS_CUE = "needs-cue"  # one audio file without a .cue
     MIXED_AUDIO = "mixed-audio"  # detail: the formats or bitrates found
+    NO_MEDIAINFO = "no-mediainfo"  # libmediainfo is not installed
+    NO_VIDEO_FILE = "no-video-file"
+    BAD_CONTAINER = "bad-container"  # detail: the containers found that c411 refuses
+    GPU_ENCODER = "gpu-encoder"  # detail: NVENC, QSV or AMF
+    LOW_VIDEO_BITRATE = "low-video-bitrate"  # detail: what is too low, and the minimum
+    BANNED_TEAM = "banned-team"  # detail: the tag
+    NO_FRENCH = "no-french"  # no French audio and no full French subtitles; detail: file
+    MIXED_PACK = "mixed-pack"  # detail: what differs
 
 
 @dataclass(frozen=True)
@@ -163,6 +187,12 @@ class Judgement(StrEnum):
     DISCOGRAPHY = "discography"
     CD_RIP_MISSING = "cd-rip-missing"  # detail: what a CD-Rip lacks
     CD_RIP_LINKS = "cd-rip-links"
+    FRENCH_TITLE = "french-title"  # detail: the French title when TMDb gave it
+    FORBIDDEN_SOURCE = "forbidden-source"
+    INCOMPLETE_SEASON = "incomplete-season"  # detail: the episodes missing
+    WEB_PLATFORM = "web-platform"
+    MICKEY_TAG = "mickey-tag"
+    SLOTS = "slots"
 
 
 @dataclass(frozen=True)
@@ -195,6 +225,7 @@ class UploadProfile(Protocol):
     category: int
     subcategories: tuple[Subcategory, ...]
     renders_models: bool  # the Upload tab shows its models and captures the description's image
+    media_extensions: tuple[str, ...]  # a lone file of these in a folder is named the release
 
     # `inspect` reads what the files say about themselves (tags, MediaInfo): slow, so the
     # GUI runs it off its thread before it asks the other methods, which never touch the
@@ -219,6 +250,9 @@ class UploadProfile(Protocol):
         self, title: str, files: list[UploadFile], source: str, image_url: str
     ) -> str: ...
     def existing_query(self, item: LocalItem, ignore: IgnoreList) -> ExistingQuery: ...
+    def draft_fields(
+        self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
+    ) -> dict[str, Any]: ...
     def image_is_sheet(self, subcategory: int) -> bool: ...
 
 
@@ -232,6 +266,12 @@ class Model3DProfile:
         Subcategory(Subcategory3D.PACK, "Pack"),
     )
     renders_models = True
+    media_extensions: tuple[str, ...] = ()
+
+    def draft_fields(
+        self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
+    ) -> dict[str, Any]:
+        return {}
 
     def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
         """Nothing to read: a model's rules go by its file names."""
@@ -300,6 +340,7 @@ class EbookProfile:
 
     category: int = CATEGORY_EBOOK
     renders_models = False  # no model to render; the image is made by hand
+    media_extensions: tuple[str, ...] = ()
     subcategories: tuple[Subcategory, ...] = (
         Subcategory(SubcategoryEbook.AUDIO, "Audiobooks"),
         Subcategory(SubcategoryEbook.BD, "Comic strips (BD)"),
@@ -316,6 +357,11 @@ class EbookProfile:
 
     def image_is_sheet(self, subcategory: int) -> bool:
         return False
+
+    def draft_fields(
+        self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
+    ) -> dict[str, Any]:
+        return {}
 
     def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
         """Read the tags of the audiobook files."""
@@ -472,21 +518,28 @@ def _formats_ebook(paths: Iterable[str]) -> list[str]:
     return [f for f in FORMATS_EBOOK if f in present]
 
 
-def upload_files(item: LocalItem, title: str, ignore: IgnoreList) -> list[UploadFile]:
+def upload_files(
+    item: LocalItem, title: str, ignore: IgnoreList, media: tuple[str, ...] = ()
+) -> list[UploadFile]:
     """Each content file under its compliant torrent path, in torrent order.
 
     A single file is named the release title plus its extension, as c411 names media
     files; a folder becomes the release title, and the names below it lose accents and
-    spaces. Ignored Files are left out.
+    spaces. Ignored Files are left out. When a folder holds a single file with one of the
+    `media` extensions, that file is named the release title too (c411's detag engine
+    compares a media file's name with the title); a pack of such files keeps its names.
     """
     content = _content(item, ignore)
     if item.path.is_file():
         ((local, size),) = content.items()
         return [UploadFile(f"{title}.{_ext(local)}", local, size)]
     result: dict[str, UploadFile] = {}
+    medias = [p for p in content if _ext(p) in media]
     for local, size in content.items():
         below = local.split("/")[1:]
         path = "/".join([title, *(_clean_segment(s) for s in below)])
+        if len(medias) == 1 and local == medias[0]:
+            path = f"{title}/{title}.{_ext(local)}"
         if path.casefold() in {p.casefold() for p in result}:
             raise ValueError(f"Two files would share the name {path}")
         result[path] = UploadFile(path, local, size)
@@ -663,9 +716,10 @@ def draft_body(
     torrent: bytes,
     nfo: str,
     options: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The JSON c411's upload page sends to save a Draft; `options` is as options_body
-    makes it, empty for 3D models."""
+    makes it, empty for 3D models; `extra` sets other fields (mediainfo, tmdbData)."""
     return {
         "name": title,
         "title": title,
@@ -686,6 +740,7 @@ def draft_body(
         "torrentFileData": base64.b64encode(torrent).decode(),
         "nfoFileName": f"{title}.nfo",
         "nfoFileData": base64.b64encode(nfo.encode()).decode(),
+        **(extra or {}),
     }
 
 
@@ -719,6 +774,7 @@ class UploadRequest:
     category: int
     subcategory: int
     options: dict[str, Any] = field(default_factory=dict)  # as options_body makes it
+    extra: dict[str, Any] = field(default_factory=dict)  # Draft fields: mediainfo, tmdbData
 
 
 def create_upload(
@@ -746,6 +802,7 @@ def create_upload(
         torrent,
         nfo,
         request.options,
+        request.extra,
     )
     saved = SavedUpload(item.path, title, meta.infohash, save_draft(body), now())
     store.save_upload(saved)
@@ -851,9 +908,11 @@ def _volume_range(files: dict[str, int]) -> str:
 
 # Profiles that need this module's types come last (see upload_audio's docstring).
 from torrentlinker.upload_audio import AudioProfile  # noqa: E402
+from torrentlinker.upload_video import VideoProfile  # noqa: E402
 
 PROFILES.update(
     {
+        CATEGORY_VIDEO: VideoProfile(),
         CATEGORY_EBOOK: EbookProfile(),
         CATEGORY_AUDIO: AudioProfile(),
         CATEGORY_3D: Model3DProfile(),

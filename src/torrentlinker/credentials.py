@@ -6,6 +6,7 @@ import keyring
 import keyring.errors
 
 SERVICE = "torrentlinker"
+TMDB_API_KEY = "tmdb-api-key"  # the video profile identifies releases with it
 
 
 def get_secret(name: str) -> str:

@@ -1,7 +1,7 @@
 # PyInstaller spec: one-file .exe on Windows, one-dir build on Linux (wrapped into an AppImage).
 import sys
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 windows = sys.platform == "win32"
 
@@ -23,11 +23,14 @@ hiddenimports = (
     # The Upload tab's 3D view is a QML scene, which PyInstaller cannot see from imports
     + ["PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.QtQuickWidgets", "PySide6.QtQml"]
 )
+# libmediainfo, which pymediainfo's wheels carry (ADR-0012)
+binaries = collect_dynamic_libs("pymediainfo")
 excludes = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtPdf", "tkinter"]
 
 a = Analysis(
     ["launcher.py"],
     pathex=["../src"],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=excludes,

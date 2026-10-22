@@ -26,11 +26,16 @@ class StubIndexer:
         self.found: list[Candidate] = []
         self.search_error: Exception | None = None
         self.options_asked: list[int] = []
+        self.by_ids: list[dict[str, str]] = []
 
     def search(self, query: SearchQuery) -> list[Candidate]:
         self.searches.append(query)
         if self.search_error:
             raise self.search_error
+        return self.found
+
+    def by_tmdb(self, ids: dict[str, str]) -> list[Candidate]:
+        self.by_ids.append(ids)
         return self.found
 
     def save_draft(self, body: dict[str, Any]) -> int:
@@ -71,12 +76,14 @@ def tab(qtbot, tmp_path: Path, announce: str = ANNOUNCE) -> tuple[UploadTab, Stu
 def test_only_searched_3d_orphans_without_a_match_may_be_uploaded(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     view, _, _ = tab(qtbot, tmp_path)
     vise, archive = model(tmp_path), model(tmp_path, "Dragon.rar")
-    other = LibraryEntry(LibraryFolder(tmp_path, 1, ContentKind.MOVIE), vise.item, ItemState.ORPHAN)
+    nulled = model(tmp_path, "Autre.3mf").item
+    other = LibraryEntry(LibraryFolder(tmp_path, 1, ContentKind.OTHER), nulled, ItemState.ORPHAN)
+    view._picked[other.item.path] = 9  # Nulled: c411 has it, the app has no profile for it
     view.set_entries([vise, archive, other])
 
     assert view.candidates() == [vise, archive, other]
     assert "Search it first" in (view.why_not(vise) or "")
-    assert "Films & Vidéos" in (view.why_not(other) or "")
+    assert "Nulled" in (view.why_not(other) or "")
     assert "not supported yet" in (view.why_not(other) or "")
     assert view.items.rowCount() == 0  # nothing ready: the rest hides behind Show all
     view.show_all.setChecked(True)
@@ -437,6 +444,10 @@ class FilmProfile:
     category = 1
     subcategories = (Subcategory(6, "Film"),)
     renders_models = False
+    media_extensions = ()
+
+    def draft_fields(self, item, ignore, files):  # type: ignore[no-untyped-def]
+        return {}
 
     def image_is_sheet(self, subcategory):  # type: ignore[no-untyped-def]
         return False
@@ -645,3 +656,31 @@ def test_a_profile_reads_the_files_off_the_gui_thread_then_redoes_the_name(  # t
     assert readers and threading.get_ident() not in readers
     assert view.name.text() == "Daft.Punk.Discovery.2001.MP3.320kbps-NOTAG"
     assert view.subcategory.currentData() == 18
+
+
+def test_an_identified_film_is_looked_up_on_c411_by_tmdb_id_once_inspected(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    from tests.test_upload_video import FR_1080, LE_FILM, Tmdb, profile
+    from torrentlinker.gui import upload_view
+
+    video = profile({FR_1080: "film_x264_1080p_fr"}, tmdb=Tmdb(LE_FILM))
+    monkeypatch.setitem(upload_view.PROFILES, 1, video)
+    view, indexer, _ = tab(qtbot, tmp_path)
+    indexer.found = [Candidate("Le.Film.2020.VFF.1080p.BluRay-TFA", 5, "", 4)]
+    folder = LibraryFolder(tmp_path / "Films", 1, ContentKind.MOVIE)
+    folder.path.mkdir()
+    (folder.path / FR_1080).write_bytes(b"v" * 100)
+    entry = LibraryEntry(folder, scan_item(folder.path / FR_1080), ItemState.ORPHAN)
+    view.set_entries([entry])
+    view.remember(entry, [])
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: bool(indexer.by_ids), timeout=5000)
+    assert indexer.by_ids == [{"tmdbId": "1", "tmdbType": "movie"}]
+    assert indexer.searches == []  # not by title words
+    qtbot.waitUntil(lambda: "(1)" in view.existing_box.title(), timeout=5000)
+    assert view.subcategory.currentData() == 6
+    assert view.name.text() == "Le.Film.Francais.2020.VFF.1080p.BluRay.AC3.5.1.x264-TFA"
+    assert "Le Film Français" in view.warnings.text()
+    assert view.files[0].torrent_path.endswith(f"{view.name.text()}.mkv")

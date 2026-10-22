@@ -125,6 +125,8 @@ Common to almost every category: no RAR/ZIP/7z (exceptions: console and emulatio
 - Zen: an upload in a main slot (COMPAT 1080p BluRay H.264, OPTI 1080p BluRay H.265 SDR, HCO 2160p H.265 DV/HDR) gets +0.50 on its note; another slot gets +0.35 while a main slot is still free, +0.50 once they are all filled. Fixed at upload.
 - Banned tags: Wawacity, WAWA, k0RE/kORE, P2P, RARBG, FYR3N, Arkas, R3Z, ByPlex, WebVision, AgroaQc; MICKEY is a known detag to check closely.
 
+The app's reading of these rules (issue #37, ADR-0012): the resolution tag comes from the frame size (3840 wide or 1800 high is 2160p, 1700 or 900 is 1080p, 1200 or 650 is 720p); an "encode" is a file whose video track names x264 or x265 as its writing library (or an XviD or AV1 file), so an untouched WEB-DL, a remux and a disc have no minimum bitrate; "French audio" is a track tagged `fr` (`fr-CA` is VFQ, `fr-BE` VFB, else VFF unless the name says another variant) and "full French subtitles" a non-forced `fr` track; a season range is named `S01S03`, a collection `Nom.COLLECTION.2001.2005`, a documentary series `Nom.Année.DOC.SXXEXX`. These are the app's choices where the wiki table leaves room. The Draft's `tmdbData` is sent as TMDb's own details answer plus `media_type`, and the by-tmdb answer is read as a list of `{name, size, seeders, infoHash}` under `data`: neither shape was seen on c411 (no call was made), so check them on the first Draft.
+
 ### Audio
 
 - Accepted: full albums, commercial box sets, complete discographies and complete studio/live sets (inactive artists only), podcasts and radio, sample packs. Singles only when 20 minutes or longer.

@@ -342,6 +342,37 @@ class Indexer:
             )
         ).json()
 
+    def by_tmdb(self, ids: dict[str, str]) -> list[Candidate]:
+        """The releases c411 has of a TMDb id (`tmdbId`, `tmdbType` movie or tv)."""
+        if not self.is_c411:
+            raise ValueError("The by-tmdb lookup is only available on c411.org")
+        params = {"tmdbId": str(ids["tmdbId"]), "tmdbType": str(ids["tmdbType"])}
+        payload = self._request(
+            lambda key: (
+                "https://c411.org/api/torrents/by-tmdb",
+                params,
+                {"Authorization": f"Bearer {key}"},
+            )
+        ).json()
+        items = (
+            payload.get("data", payload.get("torrents")) if isinstance(payload, dict) else payload
+        )
+        found = []
+        for item in items if isinstance(items, list) else []:
+            title, infohash = item.get("name") or item.get("title"), item.get("infoHash")
+            if not isinstance(item, dict) or not title:
+                continue
+            found.append(
+                Candidate(
+                    title=str(title),
+                    size=int(item.get("size") or 0),
+                    download_url="",
+                    seeders=int(item.get("seeders") or 0),
+                    infohash=str(infohash) if infohash else None,
+                )
+            )
+        return found
+
     def drafts(self) -> list[dict[str, Any]]:
         """The account's c411 upload Drafts (main key, scope drafts:rw; ADR-0011)."""
         return list(self._draft_request("GET", "/api/user/drafts").json().get("data") or [])

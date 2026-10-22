@@ -1,0 +1,92 @@
+General
+Unique ID                                : 27740330597503959035165694464214391955 (0x14DE97E4E682D22F85B6F1887BCB5C93)
+Complete name                            : /tmp/claude-1000/-home-viet-git-perso-TorrentLinker/4d1871a7-3702-4a4e-849e-53fc60e783bd/scratchpad/vid/film_multi.mkv
+Format                                   : Matroska
+Format version                           : Version 4
+File size                                : 103 KiB
+Duration                                 : 1 s 6 ms
+Overall bit rate                         : 842 kb/s
+Frame rate                               : 2.000 FPS
+Writing application                      : Lavf63.1.102
+Writing library                          : Lavf63.1.102
+ErrorDetectionType                       : Per level 1
+
+Video
+ID                                       : 1
+Format                                   : AVC
+Format/Info                              : Advanced Video Codec
+Format profile                           : High 4:4:4 Predictive@L4
+Format settings                          : 1 Ref Frames
+Format settings, CABAC                   : No
+Format settings, Reference frames        : 1 frame
+Codec ID                                 : V_MPEG4/ISO/AVC
+Duration                                 : 1 s 0 ms
+Bit rate                                 : 4 000 kb/s
+Width                                    : 1 920 pixels
+Height                                   : 1 080 pixels
+Display aspect ratio                     : 16:9
+Frame rate mode                          : Constant
+Frame rate                               : 2.000 FPS
+Chroma subsampling                       : 4:4:4
+Bit depth                                : 8 bits
+Scan type                                : Progressive
+Bits/(Pixel*Frame)                       : 0.965
+Stream size                              : 488 KiB
+Writing library                          : x264 core 165
+Encoding settings                        : cabac=0 / ref=1 / deblock=0:0:0 / analyse=0:0 / me=dia / subme=0 / psy=1 / psy_rd=1.00:0.00 / mixed_ref=0 / me_range=16 / chroma_me=1 / trellis=0 / 8x8dct=0 / cqm=0 / deadzone=21,11 / fast_pskip=1 / chroma_qp_offset=6 / threads=24 / lookahead_threads=4 / sliced_threads=0 / nr=0 / decimate=1 / interlaced=0 / bluray_compat=0 / constrained_intra=0 / bframes=0 / weightp=0 / keyint=250 / keyint_min=2 / scenecut=0 / intra_refresh=0 / rc=abr / mbtree=0 / bitrate=4000 / ratetol=1.0 / qcomp=0.60 / qpmin=0 / qpmax=69 / qpstep=4 / ip_ratio=1.40 / aq=0
+Default                                  : No
+Forced                                   : No
+Color range                              : Limited
+
+Audio #1
+ID                                       : 2
+Format                                   : AC-3
+Format/Info                              : Audio Coding 3
+Commercial name                          : Dolby Digital
+Codec ID                                 : A_AC3
+Duration                                 : 1 s 6 ms
+Bit rate mode                            : Constant
+Bit rate                                 : 96.0 kb/s
+Channel(s)                               : 1 channel
+Channel layout                           : M
+Sampling rate                            : 44.1 kHz
+Frame rate                               : 28.711 FPS (1536 SPF)
+Bit depth                                : 32 bits
+Compression mode                         : Lossy
+Stream size                              : 11.8 KiB (11%)
+Writing library                          : Lavc63.1.102 ac3
+Language                                 : English
+Service kind                             : Complete Main
+Default                                  : Yes
+Forced                                   : No
+Dialog Normalization                     : -31 dB
+dialnorm_Average                         : -31 dB
+dialnorm_Minimum                         : -31 dB
+dialnorm_Maximum                         : -31 dB
+
+Audio #2
+ID                                       : 3
+Format                                   : AC-3
+Format/Info                              : Audio Coding 3
+Commercial name                          : Dolby Digital
+Codec ID                                 : A_AC3
+Duration                                 : 1 s 6 ms
+Bit rate mode                            : Constant
+Bit rate                                 : 96.0 kb/s
+Channel(s)                               : 1 channel
+Channel layout                           : M
+Sampling rate                            : 44.1 kHz
+Frame rate                               : 28.711 FPS (1536 SPF)
+Bit depth                                : 32 bits
+Compression mode                         : Lossy
+Stream size                              : 11.8 KiB (11%)
+Writing library                          : Lavc63.1.102 ac3
+Language                                 : French
+Service kind                             : Complete Main
+Default                                  : No
+Forced                                   : No
+Dialog Normalization                     : -31 dB
+dialnorm_Average                         : -31 dB
+dialnorm_Minimum                         : -31 dB
+dialnorm_Maximum                         : -31 dB
+

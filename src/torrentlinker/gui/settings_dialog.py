@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
 from torrentlinker import net
 from torrentlinker.clients import connect
 from torrentlinker.config import Settings
-from torrentlinker.credentials import get_secret, set_secret
+from torrentlinker.credentials import TMDB_API_KEY, get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.errors import offer_whole_names
@@ -67,7 +67,6 @@ INDEXER_API_KEY = "indexer-api-key"
 # Up to 4 more keys of the same c411 account, each within its own limits (ADR-0008).
 EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
 ANNOUNCE_URL = "announce-url"  # holds the passkey: a secret like the keys (ADR-0011)
-TMDB_API_KEY = "tmdb-api-key"
 PROXY_PASSWORD = "proxy-password"
 
 COL_PATH, COL_KIND, COL_DEPTH = range(3)

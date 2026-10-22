@@ -65,37 +65,37 @@
 <context>
     <name>ContentKind</name>
     <message>
-        <location filename="../gui/settings_dialog.py" line="80"/>
+        <location filename="../gui/settings_dialog.py" line="79"/>
         <source>Movies</source>
         <translation>Films</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="81"/>
+        <location filename="../gui/settings_dialog.py" line="80"/>
         <source>Series</source>
         <translation>Séries</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="82"/>
+        <location filename="../gui/settings_dialog.py" line="81"/>
         <source>Music</source>
         <translation>Musique</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="83"/>
+        <location filename="../gui/settings_dialog.py" line="82"/>
         <source>Ebooks</source>
         <translation>Livres numériques</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="84"/>
+        <location filename="../gui/settings_dialog.py" line="83"/>
         <source>Games</source>
         <translation>Jeux</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="85"/>
+        <location filename="../gui/settings_dialog.py" line="84"/>
         <source>3D models</source>
         <translation>Modèles 3D</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="86"/>
+        <location filename="../gui/settings_dialog.py" line="85"/>
         <source>Other</source>
         <translation>Autre</translation>
     </message>
@@ -1428,641 +1428,641 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../gui/settings_dialog.py" line="97"/>
+        <location filename="../gui/settings_dialog.py" line="96"/>
         <source>Settings</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="111"/>
+        <location filename="../gui/settings_dialog.py" line="110"/>
         <source>Connections</source>
         <translation>Connexions</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="115"/>
+        <location filename="../gui/settings_dialog.py" line="114"/>
         <source>Search &amp;&amp; Matching</source>
         <translation>Recherche &amp;&amp; correspondances</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="117"/>
-        <location filename="../gui/settings_dialog.py" line="617"/>
+        <location filename="../gui/settings_dialog.py" line="116"/>
+        <location filename="../gui/settings_dialog.py" line="616"/>
         <source>Download Folders</source>
         <translation>Dossiers de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="119"/>
+        <location filename="../gui/settings_dialog.py" line="118"/>
         <source>Zen</source>
         <translation>Zen</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="120"/>
-        <location filename="../gui/settings_dialog.py" line="176"/>
+        <location filename="../gui/settings_dialog.py" line="119"/>
+        <location filename="../gui/settings_dialog.py" line="175"/>
         <source>General</source>
         <translation>Général</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="149"/>
+        <location filename="../gui/settings_dialog.py" line="148"/>
         <source>Passwords and API keys are stored in your system keyring, never in TorrentLinker&apos;s settings file.</source>
         <translation>Les mots de passe et clés d’API sont stockés dans le trousseau du système, jamais dans le fichier de paramètres de TorrentLinker.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="165"/>
+        <location filename="../gui/settings_dialog.py" line="164"/>
         <source>Show / hide</source>
         <translation>Afficher / masquer</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="179"/>
+        <location filename="../gui/settings_dialog.py" line="178"/>
         <source>Automatic (system language)</source>
         <translation>Automatique (langue du système)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="183"/>
+        <location filename="../gui/settings_dialog.py" line="182"/>
         <source>Takes effect after restarting the app</source>
         <translation>Pris en compte au prochain démarrage</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="184"/>
+        <location filename="../gui/settings_dialog.py" line="183"/>
         <source>Language</source>
         <translation>Langue</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="190"/>
+        <location filename="../gui/settings_dialog.py" line="189"/>
         <source>Zen Profile</source>
         <translation>Profil Zen</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="197"/>
+        <location filename="../gui/settings_dialog.py" line="196"/>
         <source>Class</source>
         <translation>Classe</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="204"/>
+        <location filename="../gui/settings_dialog.py" line="203"/>
         <source>Bonus of the progression tree already unlocked on c411</source>
         <translation>Bonus de l&apos;arbre de progression déjà débloqué sur c411</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="206"/>
+        <location filename="../gui/settings_dialog.py" line="205"/>
         <source>Tree bonus unlocked</source>
         <translation>Bonus d&apos;arbre débloqué</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="223"/>
+        <location filename="../gui/settings_dialog.py" line="222"/>
         <source> h</source>
         <translation> h</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="228"/>
+        <location filename="../gui/settings_dialog.py" line="227"/>
         <source>Seed hours per day</source>
         <translation>Heures de partage par jour</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="231"/>
+        <location filename="../gui/settings_dialog.py" line="230"/>
         <source>No cap</source>
         <translation>Sans limite</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="233"/>
+        <location filename="../gui/settings_dialog.py" line="232"/>
         <source>Most torrents you want to seed at once</source>
         <translation>Nombre maximal de torrents que vous voulez partager à la fois</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="234"/>
+        <location filename="../gui/settings_dialog.py" line="233"/>
         <source>Torrent cap</source>
         <translation>Limite de torrents</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="240"/>
+        <location filename="../gui/settings_dialog.py" line="239"/>
         <source>Share of each disk holding Download Folders that a Plan leaves free</source>
         <translation>Part de chaque disque contenant des Dossiers de téléchargement qu&apos;un Plan laisse libre</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="242"/>
+        <location filename="../gui/settings_dialog.py" line="241"/>
         <source>Free space kept on each disk</source>
         <translation>Espace gardé libre sur chaque disque</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="370"/>
+        <location filename="../gui/settings_dialog.py" line="369"/>
         <source>qBittorrent</source>
         <translation>qBittorrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="340"/>
+        <location filename="../gui/settings_dialog.py" line="339"/>
         <source>qbt_… (qBittorrent 5.2 or later)</source>
         <translation>qbt_… (qBittorrent 5.2 ou plus récent)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="343"/>
+        <location filename="../gui/settings_dialog.py" line="342"/>
         <source>Generate it in qBittorrent: Options → WebUI → API key. When filled, it is used instead of the username and password; leave it empty on older versions.</source>
         <translation>Générez-la dans qBittorrent : Options → Interface web → Clé d’API. Si elle est renseignée, elle remplace le nom d’utilisateur et le mot de passe ; laissez-la vide avec les versions plus anciennes.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="273"/>
+        <location filename="../gui/settings_dialog.py" line="272"/>
         <source>Test connection</source>
         <translation>Tester la connexion</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="347"/>
+        <location filename="../gui/settings_dialog.py" line="346"/>
         <source>WebUI address</source>
         <translation>Adresse de l’interface Web</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="317"/>
+        <location filename="../gui/settings_dialog.py" line="347"/>
+        <location filename="../gui/settings_dialog.py" line="498"/>
+        <source>Username</source>
+        <translation>Nom d’utilisateur</translation>
     </message>
     <message>
         <location filename="../gui/settings_dialog.py" line="318"/>
         <location filename="../gui/settings_dialog.py" line="348"/>
         <location filename="../gui/settings_dialog.py" line="499"/>
-        <source>Username</source>
-        <translation>Nom d’utilisateur</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="319"/>
-        <location filename="../gui/settings_dialog.py" line="349"/>
-        <location filename="../gui/settings_dialog.py" line="500"/>
         <source>Password</source>
         <translation>Mot de passe</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="371"/>
+        <location filename="../gui/settings_dialog.py" line="370"/>
         <source>An API key looks like qbt_ followed by 28 letters and digits.</source>
         <translation>Une clé d’API s’écrit qbt_ suivi de 28 lettres et chiffres.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="398"/>
+        <location filename="../gui/settings_dialog.py" line="397"/>
         <source>Indexer (Torznab)</source>
         <translation>Indexeur (Torznab)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="402"/>
+        <location filename="../gui/settings_dialog.py" line="401"/>
         <source>Test Indexer</source>
         <translation>Tester l’indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="405"/>
+        <location filename="../gui/settings_dialog.py" line="404"/>
         <source>On c411, generate your key at &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</source>
         <translation>Sur c411, générez votre clé sur &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="410"/>
+        <location filename="../gui/settings_dialog.py" line="409"/>
         <source>Torznab URL</source>
         <translation>URL Torznab</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="350"/>
-        <location filename="../gui/settings_dialog.py" line="411"/>
+        <location filename="../gui/settings_dialog.py" line="349"/>
+        <location filename="../gui/settings_dialog.py" line="410"/>
         <source>API key</source>
         <translation>Clé d’API</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="118"/>
+        <location filename="../gui/settings_dialog.py" line="117"/>
         <source>Client Paths</source>
         <translation>Chemins du client</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="214"/>
+        <location filename="../gui/settings_dialog.py" line="213"/>
         <source>What your shop badges add (Pondération + while worn, Pondération ++ once owned), on top of your Class maximum. c411 shows it under Zen → Bonus; its API does not report it.</source>
         <translation>Ce qu’ajoutent vos badges de la boutique (Pondération + quand il est porté, Pondération ++ dès qu’il est possédé), par-dessus le maximum de votre classe. c411 l’affiche dans Zen → Bonus ; son API ne le donne pas.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="219"/>
+        <location filename="../gui/settings_dialog.py" line="218"/>
         <source>Shop badges bonus</source>
         <translation>Bonus des badges de la boutique</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="226"/>
+        <location filename="../gui/settings_dialog.py" line="225"/>
         <source>Hours a day your torrent client runs; under 30 minutes earns nothing</source>
         <translation>Heures par jour où votre client torrent tourne ; moins de 30 minutes ne rapporte rien</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="257"/>
+        <location filename="../gui/settings_dialog.py" line="256"/>
         <source>Torrent client</source>
         <translation>Client torrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="264"/>
+        <location filename="../gui/settings_dialog.py" line="263"/>
         <source>Client</source>
         <translation>Client</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="281"/>
+        <location filename="../gui/settings_dialog.py" line="280"/>
         <source>Your torrent client in Docker, on a NAS or on another computer? Tell the app how it sees your folders in the Client Paths tab.</source>
         <translation>Votre client torrent dans Docker, sur un NAS ou sur un autre ordinateur ? Indiquez comment il voit vos dossiers dans l’onglet Chemins du client.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="298"/>
+        <location filename="../gui/settings_dialog.py" line="297"/>
         <source>Web UI address</source>
         <translation>Adresse de l’interface Web</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="299"/>
+        <location filename="../gui/settings_dialog.py" line="298"/>
         <source>Web UI password</source>
         <translation>Mot de passe de l’interface Web</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="302"/>
+        <location filename="../gui/settings_dialog.py" line="301"/>
         <source>Deluge 2. Turn on its Label plugin (Preferences → Plugins): TorrentLinker labels the torrents it adds to follow their Verification.</source>
         <translation>Deluge 2. Activez son extension Label (Préférences → Extensions) : TorrentLinker étiquette les torrents qu’il ajoute pour suivre leur vérification.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="317"/>
+        <location filename="../gui/settings_dialog.py" line="316"/>
         <source>Remote address</source>
         <translation>Adresse d’accès distant</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="322"/>
+        <location filename="../gui/settings_dialog.py" line="321"/>
         <source>Turn on remote access in Transmission (Preferences → Remote). Reseeds need “Append .part to incomplete files&apos; names” off: TorrentLinker offers to turn it off. Transmission renames file and folder names in place only, so a Match needing other folders cannot be Reseeded with it.</source>
         <translation>Activez l’accès distant dans Transmission (Préférences → Distant). Les repartages demandent que « Ajouter .part aux noms des fichiers incomplets » soit désactivé : TorrentLinker propose de le désactiver. Transmission ne renomme les fichiers et dossiers que sur place, donc une correspondance qui demande d’autres dossiers ne peut pas être repartagée avec lui.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="390"/>
+        <location filename="../gui/settings_dialog.py" line="389"/>
         <source>Connected to {0} {1}</source>
         <translation>Connecté à {0} {1}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="415"/>
+        <location filename="../gui/settings_dialog.py" line="414"/>
         <source>Key {0} (optional)</source>
         <translation>Clé {0} (facultative)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="419"/>
+        <location filename="../gui/settings_dialog.py" line="418"/>
         <source>Up to 4 more keys of the same c411 account (5 in all). c411 limits each key separately: each request goes to the key that is free soonest, and a key c411 asks to wait rests while the others go on.</source>
         <translation>Jusqu’à 4 clés de plus du même compte c411 (5 en tout). c411 limite chaque clé séparément : chaque requête part par la clé libre le plus tôt, et une clé que c411 fait patienter se repose pendant que les autres continuent.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="426"/>
+        <location filename="../gui/settings_dialog.py" line="425"/>
         <source>More API keys</source>
         <translation>Autres clés API</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="429"/>
+        <location filename="../gui/settings_dialog.py" line="428"/>
         <source>Optional: your private announce URL, for Uploads</source>
         <translation>Facultatif : votre adresse d’annonce privée, pour les Uploads</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="431"/>
+        <location filename="../gui/settings_dialog.py" line="430"/>
         <source>Announce URL</source>
         <translation>Adresse d’annonce</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="437"/>
+        <location filename="../gui/settings_dialog.py" line="436"/>
         <source>TMDb (optional)</source>
         <translation>TMDb (facultatif)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="442"/>
+        <location filename="../gui/settings_dialog.py" line="441"/>
         <source>Free key at &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</source>
         <translation>Clé gratuite sur &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="463"/>
-        <location filename="../gui/settings_dialog.py" line="466"/>
-        <location filename="../gui/settings_dialog.py" line="1013"/>
-        <location filename="../gui/settings_dialog.py" line="1027"/>
+        <location filename="../gui/settings_dialog.py" line="462"/>
+        <location filename="../gui/settings_dialog.py" line="465"/>
+        <location filename="../gui/settings_dialog.py" line="1012"/>
+        <location filename="../gui/settings_dialog.py" line="1026"/>
         <source>Indexer</source>
         <translation>Indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="464"/>
+        <location filename="../gui/settings_dialog.py" line="463"/>
         <source>Indexer OK: {0} categories</source>
         <translation>Indexeur OK : {0} catégories</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="472"/>
+        <location filename="../gui/settings_dialog.py" line="471"/>
         <source>Proxy (optional)</source>
         <translation>Proxy (facultatif)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="477"/>
+        <location filename="../gui/settings_dialog.py" line="476"/>
         <source>Empty for none, or socks5://host:port, http://host:port</source>
         <translation>Vide pour aucun, ou socks5://hôte:port, http://hôte:port</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="481"/>
+        <location filename="../gui/settings_dialog.py" line="480"/>
         <source>Also for the torrent client</source>
         <translation>Aussi pour le client torrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="485"/>
+        <location filename="../gui/settings_dialog.py" line="484"/>
         <source>Off: the torrent client is reached directly, as it usually runs on this computer or your network.</source>
         <translation>Décoché : le client torrent est joint directement, car il tourne d’habitude sur cet ordinateur ou votre réseau.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="491"/>
+        <location filename="../gui/settings_dialog.py" line="490"/>
         <source>Every connection to c411, TMDb, the Zen Lab snapshot, images and the speed test goes through it. socks5h:// also resolves names through the proxy.</source>
         <translation>Toutes les connexions à c411, TMDb, l’instantané Zen Lab, les images et le test de vitesse passent par lui. socks5h:// résout aussi les noms par le proxy.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="496"/>
+        <location filename="../gui/settings_dialog.py" line="495"/>
         <source>Test proxy</source>
         <translation>Tester le proxy</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="498"/>
+        <location filename="../gui/settings_dialog.py" line="497"/>
         <source>Address</source>
         <translation>Adresse</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="516"/>
-        <location filename="../gui/settings_dialog.py" line="521"/>
-        <location filename="../gui/settings_dialog.py" line="527"/>
-        <location filename="../gui/settings_dialog.py" line="1105"/>
+        <location filename="../gui/settings_dialog.py" line="515"/>
+        <location filename="../gui/settings_dialog.py" line="520"/>
+        <location filename="../gui/settings_dialog.py" line="526"/>
+        <location filename="../gui/settings_dialog.py" line="1104"/>
         <source>Proxy</source>
         <translation>Proxy</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="529"/>
+        <location filename="../gui/settings_dialog.py" line="528"/>
         <source>Through {0}, c411 sees the address {1}.</source>
         <translation>Par {0}, c411 voit l’adresse {1}.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="531"/>
+        <location filename="../gui/settings_dialog.py" line="530"/>
         <source>Without a proxy, c411 sees the address {1}.</source>
         <translation>Sans proxy, c411 voit l’adresse {1}.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="555"/>
+        <location filename="../gui/settings_dialog.py" line="554"/>
         <source>…or type a folder path and press Enter</source>
         <translation>…ou tapez le chemin d’un dossier puis Entrée</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="571"/>
+        <location filename="../gui/settings_dialog.py" line="570"/>
         <source>Not a folder: {0}</source>
         <translation>Ce n’est pas un dossier : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="621"/>
+        <location filename="../gui/settings_dialog.py" line="620"/>
         <source>Where Plan torrents are downloaded. A subcategory uses its own folder, else its category&apos;s, else the default. A category left without any is excluded from Plans. A Download Folder may lie inside a Library Folder: downloads only ever create their own files.</source>
         <translation>Où les torrents d&apos;un Plan sont téléchargés. Une sous-catégorie utilise son propre dossier, sinon celui de sa catégorie, sinon celui par défaut. Une catégorie qui n&apos;en a aucun est exclue des Plans. Un Dossier de téléchargement peut se trouver dans un Dossier de bibliothèque : un téléchargement ne crée jamais que ses propres fichiers.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="632"/>
+        <location filename="../gui/settings_dialog.py" line="631"/>
         <source>No default: unset categories are excluded</source>
         <translation>Pas de dossier par défaut : les catégories sans dossier sont exclues</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="635"/>
+        <location filename="../gui/settings_dialog.py" line="634"/>
         <source>Choose…</source>
         <translation>Choisir…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="637"/>
+        <location filename="../gui/settings_dialog.py" line="636"/>
         <source>Default</source>
         <translation>Par défaut</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="645"/>
+        <location filename="../gui/settings_dialog.py" line="644"/>
         <source>Category</source>
         <translation>Catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="645"/>
-        <location filename="../gui/settings_dialog.py" line="740"/>
+        <location filename="../gui/settings_dialog.py" line="644"/>
+        <location filename="../gui/settings_dialog.py" line="739"/>
         <source>Download Folder</source>
         <translation>Dossier de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="645"/>
+        <location filename="../gui/settings_dialog.py" line="644"/>
         <source>Used</source>
         <translation>Utilisé</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="663"/>
+        <location filename="../gui/settings_dialog.py" line="662"/>
         <source>Load categories from the Indexer</source>
         <translation>Charger les catégories depuis l&apos;Indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="665"/>
+        <location filename="../gui/settings_dialog.py" line="664"/>
         <source>Choose folder for the selected category…</source>
         <translation>Choisir le dossier de la catégorie sélectionnée…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="724"/>
+        <location filename="../gui/settings_dialog.py" line="723"/>
         <source>No Download Folder: excluded from Plans</source>
         <translation>Aucun Dossier de téléchargement : exclue des Plans</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="733"/>
+        <location filename="../gui/settings_dialog.py" line="732"/>
         <source>Default Download Folder</source>
         <translation>Dossier de téléchargement par défaut</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="763"/>
+        <location filename="../gui/settings_dialog.py" line="762"/>
         <source>On this computer</source>
         <translation>Sur cet ordinateur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="763"/>
-        <location filename="../gui/settings_dialog.py" line="789"/>
+        <location filename="../gui/settings_dialog.py" line="762"/>
+        <location filename="../gui/settings_dialog.py" line="788"/>
         <source>Check</source>
         <translation>Vérifier</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="781"/>
+        <location filename="../gui/settings_dialog.py" line="780"/>
         <source>Detect</source>
         <translation>Détecter</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="818"/>
+        <location filename="../gui/settings_dialog.py" line="817"/>
         <source>Choose a folder on this computer</source>
         <translation>Choisir un dossier sur cet ordinateur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="892"/>
+        <location filename="../gui/settings_dialog.py" line="891"/>
         <source>{0} ↔ {1}: {2} torrents found</source>
         <translation>{0} ↔ {1} : {2} torrents trouvés</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="898"/>
+        <location filename="../gui/settings_dialog.py" line="897"/>
         <source>{0} torrents are at the same path here: they need no mapping.</source>
         <translation>{0} torrents sont au même chemin ici : ils n’ont besoin d’aucune correspondance.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="904"/>
+        <location filename="../gui/settings_dialog.py" line="903"/>
         <source>Not found on this computer: {0}</source>
         <translation>Introuvables sur cet ordinateur : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="911"/>
+        <location filename="../gui/settings_dialog.py" line="910"/>
         <source>None of your torrent client&apos;s torrents was found in your folders. Add the folder where this computer sees its downloads as a Download Folder or Library Folder, then detect again; or add the path by hand.</source>
         <translation>Aucun torrent de votre client torrent n’a été trouvé dans vos dossiers. Ajoutez le dossier où cet ordinateur voit ses téléchargements comme dossier de téléchargement ou de bibliothèque, puis détectez de nouveau ; ou ajoutez le chemin à la main.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="917"/>
+        <location filename="../gui/settings_dialog.py" line="916"/>
         <source>{0} paths added. Save to use them.</source>
         <translation>{0} chemins ajoutés. Enregistrez pour les utiliser.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="951"/>
+        <location filename="../gui/settings_dialog.py" line="950"/>
         <source>Outside every path above: {0} of {1} torrents found here.</source>
         <translation>Hors de tous les chemins ci-dessus : {0} torrents sur {1} trouvés ici.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="967"/>
+        <location filename="../gui/settings_dialog.py" line="966"/>
         <source>no torrent</source>
         <translation>aucun torrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="969"/>
+        <location filename="../gui/settings_dialog.py" line="968"/>
         <source>✓ {0} of {1}</source>
         <translation>✓ {0} sur {1}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="969"/>
+        <location filename="../gui/settings_dialog.py" line="968"/>
         <source>⚠ {0} of {1}</source>
         <translation>⚠ {0} sur {1}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="975"/>
+        <location filename="../gui/settings_dialog.py" line="974"/>
         <source>Not found here: {0}</source>
         <translation>Introuvables ici : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1096"/>
+        <location filename="../gui/settings_dialog.py" line="1095"/>
         <source>Keyring unavailable</source>
         <translation>Trousseau indisponible</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1097"/>
+        <location filename="../gui/settings_dialog.py" line="1096"/>
         <source>Your keys could not be saved in the system keyring: {0}</source>
         <translation>Vos clés n’ont pas pu être enregistrées dans le trousseau du système : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="113"/>
-        <location filename="../gui/settings_dialog.py" line="540"/>
-        <location filename="../gui/settings_dialog.py" line="571"/>
+        <location filename="../gui/settings_dialog.py" line="112"/>
+        <location filename="../gui/settings_dialog.py" line="539"/>
+        <location filename="../gui/settings_dialog.py" line="570"/>
         <source>Library Folders</source>
         <translation>Dossiers de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="544"/>
+        <location filename="../gui/settings_dialog.py" line="543"/>
         <source>Folder</source>
         <translation>Dossier</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="544"/>
+        <location filename="../gui/settings_dialog.py" line="543"/>
         <source>Content Kind</source>
         <translation>Type de contenu</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="544"/>
+        <location filename="../gui/settings_dialog.py" line="543"/>
         <source>Scan depth</source>
         <translation>Profondeur d’analyse</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="557"/>
-        <location filename="../gui/settings_dialog.py" line="774"/>
+        <location filename="../gui/settings_dialog.py" line="556"/>
+        <location filename="../gui/settings_dialog.py" line="773"/>
         <source>Add folder…</source>
         <translation>Ajouter un dossier…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="559"/>
-        <location filename="../gui/settings_dialog.py" line="779"/>
+        <location filename="../gui/settings_dialog.py" line="558"/>
+        <location filename="../gui/settings_dialog.py" line="778"/>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="581"/>
+        <location filename="../gui/settings_dialog.py" line="580"/>
         <source>Choose a Library Folder</source>
         <translation>Choisir un dossier de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="996"/>
+        <location filename="../gui/settings_dialog.py" line="995"/>
         <source>Search</source>
         <translation>Rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="440"/>
+        <location filename="../gui/settings_dialog.py" line="439"/>
         <source>Optional: finds IDs for movies and series</source>
         <translation>Facultatif : trouve les identifiants des films et séries</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="447"/>
+        <location filename="../gui/settings_dialog.py" line="446"/>
         <source>TMDb API key</source>
         <translation>Clé d’API TMDb</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="748"/>
+        <location filename="../gui/settings_dialog.py" line="747"/>
         <source>Torrent client in Docker, on a NAS or on another computer</source>
         <translation>Client torrent dans Docker, sur un NAS ou sur un autre ordinateur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="752"/>
+        <location filename="../gui/settings_dialog.py" line="751"/>
         <source>Fill this in only if your torrent client sees your folders under other paths than this computer does. For example, it runs in Docker and sees /data, while this computer reaches the same files as /mnt/nas or Z:\. Detect finds the paths from the client&apos;s own torrents, then Check counts the torrents each path leads to.</source>
         <translation>À remplir seulement si votre client torrent voit vos dossiers sous d’autres chemins que cet ordinateur. Par exemple, il tourne dans Docker et voit /data, tandis que cet ordinateur atteint les mêmes fichiers par /mnt/nas ou Z:\. Détecter trouve les chemins à partir des torrents du client, puis Vérifier compte les torrents auxquels mène chaque chemin.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="763"/>
+        <location filename="../gui/settings_dialog.py" line="762"/>
         <source>In the client</source>
         <translation>Dans le client</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="776"/>
+        <location filename="../gui/settings_dialog.py" line="775"/>
         <source>Choose a folder on this computer, then type how your torrent client sees it</source>
         <translation>Choisissez un dossier sur cet ordinateur, puis saisissez comment votre client torrent le voit</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="784"/>
+        <location filename="../gui/settings_dialog.py" line="783"/>
         <source>Look for your torrent client&apos;s torrents in your Library and Download Folders and the folders above them, and add the paths that lead there</source>
         <translation>Cherche les torrents de votre client torrent dans vos dossiers de bibliothèque et de téléchargement et les dossiers au-dessus, et ajoute les chemins qui y mènent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="791"/>
+        <location filename="../gui/settings_dialog.py" line="790"/>
         <source>Count, for each path, the client&apos;s torrents whose folder is found here</source>
         <translation>Compte, pour chaque chemin, les torrents du client dont le dossier est trouvé ici</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="864"/>
+        <location filename="../gui/settings_dialog.py" line="863"/>
         <source>Add your Library Folders or Download Folders first: Detect looks for your torrent client&apos;s files in them.</source>
         <translation>Ajoutez d’abord vos dossiers de bibliothèque ou de téléchargement : Détecter y cherche les fichiers de votre client torrent.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="880"/>
+        <location filename="../gui/settings_dialog.py" line="879"/>
         <source>Looking for your torrent client&apos;s torrents on this computer…</source>
         <translation>Recherche des torrents de votre client torrent sur cet ordinateur…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="982"/>
+        <location filename="../gui/settings_dialog.py" line="981"/>
         <source>Your torrent client&apos;s own download folder ({0}) does not exist on this computer, and no path above covers these Download Folders: {1}. The client probably cannot save into them.</source>
         <translation>Le dossier de téléchargement de votre client torrent ({0}) n’existe pas sur cet ordinateur, et aucun chemin ci-dessus ne couvre ces dossiers de téléchargement : {1}. Le client ne peut probablement pas y enregistrer.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="993"/>
+        <location filename="../gui/settings_dialog.py" line="992"/>
         <source>Could not reach your torrent client: {0}</source>
         <translation>Impossible de joindre votre client torrent : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1001"/>
+        <location filename="../gui/settings_dialog.py" line="1000"/>
         <source>All categories</source>
         <translation>Toutes les catégories</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1003"/>
+        <location filename="../gui/settings_dialog.py" line="1002"/>
         <source>Categories: {0}</source>
         <translation>Catégories : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1004"/>
+        <location filename="../gui/settings_dialog.py" line="1003"/>
         <source>Fill categories from the Indexer</source>
         <translation>Remplir les catégories depuis l’indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1051"/>
+        <location filename="../gui/settings_dialog.py" line="1050"/>
         <source>Matching</source>
         <translation>Correspondances</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1058"/>
+        <location filename="../gui/settings_dialog.py" line="1057"/>
         <source>Size tolerance before fetching a .torrent</source>
         <translation>Tolérance de taille avant de récupérer un .torrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1063"/>
+        <location filename="../gui/settings_dialog.py" line="1062"/>
         <source>Minimum coverage of a Partial Match</source>
         <translation>Couverture minimale d’une correspondance partielle</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1065"/>
+        <location filename="../gui/settings_dialog.py" line="1064"/>
         <source>One pattern per line, matched against each path segment</source>
         <translation>Un motif par ligne, comparé à chaque segment du chemin</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="1067"/>
+        <location filename="../gui/settings_dialog.py" line="1066"/>
         <source>Ignored Files</source>
         <translation>Fichiers ignorés</translation>
     </message>
@@ -2126,21 +2126,81 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="98"/>
+        <source>Animation</source>
+        <translation>Animation</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="99"/>
+        <source>Animated series</source>
+        <translation>Séries d'animation</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="100"/>
+        <source>Concert</source>
+        <translation>Concert</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="101"/>
+        <source>Documentary</source>
+        <translation>Documentaire</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="102"/>
+        <source>Documentary series</source>
+        <translation>Série documentaire</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="103"/>
+        <source>TV programme</source>
+        <translation>Émission TV</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="104"/>
+        <source>Movie</source>
+        <translation>Film</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="105"/>
+        <source>TV series</source>
+        <translation>Série TV</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="106"/>
+        <source>Stage show</source>
+        <translation>Spectacle</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="107"/>
+        <source>Sport</source>
+        <translation>Sport</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="108"/>
+        <source>Music videos</source>
+        <translation>Vidéo-clips</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="109"/>
+        <source>Collection</source>
+        <translation>Collection</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="110"/>
         <source>Karaoke</source>
         <translation>Karaoké</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="99"/>
+        <location filename="../gui/upload_view.py" line="111"/>
         <source>Music</source>
         <translation>Musique</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="100"/>
+        <location filename="../gui/upload_view.py" line="112"/>
         <source>Podcasts &amp; radio</source>
         <translation>Podcasts et radio</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="101"/>
+        <location filename="../gui/upload_view.py" line="113"/>
         <source>Samples</source>
         <translation>Samples</translation>
     </message>
@@ -2148,112 +2208,187 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>Upload</name>
     <message>
-        <location filename="../gui/upload_view.py" line="107"/>
+        <location filename="../gui/upload_view.py" line="119"/>
         <source>c411 refuses archives ({0}), and this one cannot be read</source>
         <translation>c411 refuse les archives ({0}), et celle-ci est illisible</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="111"/>
+        <location filename="../gui/upload_view.py" line="123"/>
         <source>Choose a value for {0}</source>
         <translation>Choisissez une valeur pour {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="113"/>
+        <location filename="../gui/upload_view.py" line="125"/>
         <source>No 3D file (STL, 3MF, OBJ, STEP, GCODE…)</source>
         <translation>Aucun fichier 3D (STL, 3MF, OBJ, STEP, GCODE…)</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="115"/>
+        <location filename="../gui/upload_view.py" line="127"/>
         <source>No accepted format (PDF, EPUB, MOBI, DjVu, CBR, CBZ, JPG/PNG, MP3, M4A/M4B, FLAC)</source>
         <translation>Aucun format accepté (PDF, EPUB, MOBI, DjVu, CBR, CBZ, JPG/PNG, MP3, M4A/M4B, FLAC)</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="120"/>
+        <location filename="../gui/upload_view.py" line="132"/>
         <source>No audio file (FLAC, MP3, M4A, WAV, OGG…)</source>
         <translation>Aucun fichier audio (FLAC, MP3, M4A, WAV, OGG…)</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="122"/>
+        <location filename="../gui/upload_view.py" line="134"/>
         <source>c411 does not accept these formats: {0}</source>
         <translation>c411 n&apos;accepte pas ces formats : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="126"/>
+        <location filename="../gui/upload_view.py" line="138"/>
         <source>Bitrate too low: {0}</source>
         <translation>Débit trop faible : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="128"/>
+        <location filename="../gui/upload_view.py" line="140"/>
         <source>A single-file album needs its .cue sheet</source>
         <translation>Un album en un seul fichier a besoin de sa feuille .cue</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="130"/>
+        <location filename="../gui/upload_view.py" line="142"/>
         <source>One format and bitrate per album, found: {0}</source>
         <translation>Un seul format et un seul débit par album, trouvés : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="133"/>
+        <location filename="../gui/upload_view.py" line="146"/>
+        <source>MediaInfo is not installed: install libmediainfo (for example the libmediainfo0v5 package) to upload videos</source>
+        <translation>MediaInfo n'est pas installé : installez libmediainfo (par exemple le paquet libmediainfo0v5) pour téléverser des vidéos</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="152"/>
+        <source>No video file (MKV, MP4, M4V, AVI, TS, M2TS)</source>
+        <translation>Aucun fichier vidéo (MKV, MP4, M4V, AVI, TS, M2TS)</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="154"/>
+        <source>c411 does not accept these containers: {0}</source>
+        <translation>c411 n'accepte pas ces conteneurs : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="158"/>
+        <source>GPU encoders are forbidden ({0})</source>
+        <translation>Les encodeurs GPU sont interdits ({0})</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="162"/>
+        <source>Video bitrate too low: {0}</source>
+        <translation>Débit vidéo trop faible : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="164"/>
+        <source>Banned team or source: {0}</source>
+        <translation>Team ou source bannie : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="166"/>
+        <source>No French audio and no full French subtitles in {0}</source>
+        <translation>Ni audio français ni sous-titres français complets dans {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="170"/>
+        <source>The files of a pack must share their specs and their team; they differ in: {0}</source>
+        <translation>Les fichiers d'un pack doivent avoir les mêmes caractéristiques et la même team ; ils diffèrent par : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="174"/>
         <source>No file to upload</source>
         <translation>Aucun fichier à uploader</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="138"/>
+        <location filename="../gui/upload_view.py" line="179"/>
         <source>A pack must have one coherent theme</source>
         <translation>Un pack doit avoir un thème cohérent</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="140"/>
+        <location filename="../gui/upload_view.py" line="181"/>
         <source>c411 accepts eBooks in French only</source>
         <translation>c411 n&apos;accepte que des eBooks en français</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="142"/>
+        <location filename="../gui/upload_view.py" line="183"/>
         <source>Duplicates are strictly forbidden (another format is not one)</source>
         <translation>Les doublons sont strictement interdits (un autre format n&apos;en est pas un)</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="146"/>
+        <location filename="../gui/upload_view.py" line="187"/>
         <source>At most two or three formats of the same book</source>
         <translation>Deux ou trois formats au plus pour un même livre</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="148"/>
+        <location filename="../gui/upload_view.py" line="189"/>
         <source>A pack must hold whole volumes</source>
         <translation>Un pack doit contenir des tomes entiers</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="150"/>
+        <location filename="../gui/upload_view.py" line="191"/>
         <source>A BD pack must hold every volume</source>
         <translation>Un pack de BD doit contenir tous les tomes</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="152"/>
+        <location filename="../gui/upload_view.py" line="194"/>
+        <source>The release title must be the French one: {0}</source>
+        <translation>Le titre de la release doit être le titre français : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="197"/>
+        <source>The release title must be the French one (the original goes in the description)</source>
+        <translation>Le titre de la release doit être le titre français (l'original va dans la description)</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="202"/>
+        <source>Forbidden sources: CAM, TS, upscales, Plex transcodes, films still in cinemas</source>
+        <translation>Sources interdites : CAM, TS, upscales, transcodes Plex, films encore en salles</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="207"/>
+        <source>Incomplete season, missing: {0}</source>
+        <translation>Saison incomplète, manque : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="211"/>
+        <source>A WEB release must name its VOD platform in the description</source>
+        <translation>Une release WEB doit nommer sa plateforme VOD dans la description</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="215"/>
+        <source>The MICKEY tag is a known detag: check the original release</source>
+        <translation>Le tag MICKEY est un detag connu : vérifiez la release d'origine</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="219"/>
+        <source>c411 keeps 28 slots per release: check the existing releases for a free one</source>
+        <translation>c411 garde 28 slots par release : regardez les releases existantes pour en trouver un libre</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="224"/>
         <source>No transcodes (MP3 to FLAC, 128 to 320 kbps, stereo to 5.1)</source>
         <translation>Pas de transcodage (MP3 vers FLAC, 128 vers 320 kbps, stéréo vers 5.1)</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="156"/>
+        <location filename="../gui/upload_view.py" line="228"/>
         <source>Singles are accepted from 20 minutes only</source>
         <translation>Les singles ne sont acceptés qu&apos;à partir de 20 minutes</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="158"/>
+        <location filename="../gui/upload_view.py" line="230"/>
         <source>Discographies are accepted for inactive artists only</source>
         <translation>Les discographies ne sont acceptées que pour les artistes inactifs</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="162"/>
+        <location filename="../gui/upload_view.py" line="234"/>
         <source>A CD-Rip needs: {0}</source>
         <translation>Un CD-Rip demande : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="164"/>
+        <location filename="../gui/upload_view.py" line="236"/>
         <source>A CD-Rip&apos;s description gives the catalogue number and a Discogs or MusicBrainz link</source>
         <translation>La description d&apos;un CD-Rip donne le numéro de catalogue et un lien Discogs ou MusicBrainz</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="168"/>
+        <location filename="../gui/upload_view.py" line="240"/>
         <source>c411 forbids files from independent creators who live off them</source>
         <translation>c411 interdit les fichiers de créateurs indépendants qui en vivent</translation>
     </message>
@@ -2261,360 +2396,360 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>UploadTab</name>
     <message>
-        <location filename="../gui/upload_view.py" line="242"/>
+        <location filename="../gui/upload_view.py" line="315"/>
         <source>Local Item</source>
         <translation>Élément local</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="242"/>
-        <location filename="../gui/upload_view.py" line="325"/>
+        <location filename="../gui/upload_view.py" line="315"/>
+        <location filename="../gui/upload_view.py" line="398"/>
         <source>Size</source>
         <translation>Taille</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="276"/>
+        <location filename="../gui/upload_view.py" line="349"/>
         <source>Source</source>
         <translation>Source</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="277"/>
+        <location filename="../gui/upload_view.py" line="350"/>
         <source>Subcategory</source>
         <translation>Sous-catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="278"/>
+        <location filename="../gui/upload_view.py" line="351"/>
         <source>Release name</source>
         <translation>Nom de la release</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="381"/>
+        <location filename="../gui/upload_view.py" line="454"/>
         <source>Stop</source>
         <translation>Arrêter</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="546"/>
+        <location filename="../gui/upload_view.py" line="619"/>
         <source>Orphans that a search found no Match for. Each Upload is saved as a Draft on c411, where you publish it.</source>
         <translation>Orphelins pour lesquels la recherche n’a trouvé aucune correspondance. Chaque Upload est enregistré comme brouillon sur c411, où vous le publiez.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="766"/>
-        <location filename="../gui/upload_view.py" line="911"/>
+        <location filename="../gui/upload_view.py" line="849"/>
+        <location filename="../gui/upload_view.py" line="994"/>
         <source>Reading the archive…</source>
         <translation>Lecture de l’archive…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="913"/>
+        <location filename="../gui/upload_view.py" line="996"/>
         <source>This archive cannot be read: install 7-Zip to unpack it.</source>
         <translation>Cette archive est illisible : installez 7-Zip pour la décompresser.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="917"/>
+        <location filename="../gui/upload_view.py" line="1000"/>
         <source>c411 refuses archives: it will be unpacked into {0}, next to it.</source>
         <translation>c411 refuse les archives : elle sera décompressée dans {0}, à côté.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="971"/>
+        <location filename="../gui/upload_view.py" line="1054"/>
         <source>Files ({0})</source>
         <translation>Fichiers ({0})</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1005"/>
+        <location filename="../gui/upload_view.py" line="1088"/>
         <source>Loading the image…</source>
         <translation>Chargement de l’image…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1027"/>
+        <location filename="../gui/upload_view.py" line="1110"/>
         <source>not an image</source>
         <translation>ce n’est pas une image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1045"/>
+        <location filename="../gui/upload_view.py" line="1128"/>
         <source>Could not load the image: {0}</source>
         <translation>Impossible de charger l’image : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1052"/>
+        <location filename="../gui/upload_view.py" line="1135"/>
         <source>Create Draft</source>
         <translation>Créer le brouillon</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="230"/>
+        <location filename="../gui/upload_view.py" line="303"/>
         <source>All kinds</source>
         <translation>Tous les types</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="234"/>
+        <location filename="../gui/upload_view.py" line="307"/>
         <source>Show all</source>
         <translation>Tout afficher</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="235"/>
+        <location filename="../gui/upload_view.py" line="308"/>
         <source>Also show Orphans not searched yet or refused</source>
         <translation>Afficher aussi les orphelins pas encore recherchés ou refusés</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="242"/>
+        <location filename="../gui/upload_view.py" line="315"/>
         <source>Kind</source>
         <translation>Type</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="242"/>
+        <location filename="../gui/upload_view.py" line="315"/>
         <source>Status</source>
         <translation>État</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="265"/>
+        <location filename="../gui/upload_view.py" line="338"/>
         <source>Where it comes from; empty for NOTAG</source>
         <translation>D’où il vient ; vide pour NOTAG</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="273"/>
+        <location filename="../gui/upload_view.py" line="346"/>
         <source>https://… an image of it, required by c411</source>
         <translation>https://… une image, exigée par c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="279"/>
+        <location filename="../gui/upload_view.py" line="352"/>
         <source>Image URL</source>
         <translation>URL de l’image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="325"/>
+        <location filename="../gui/upload_view.py" line="398"/>
         <source>In the torrent</source>
         <translation>Dans le torrent</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="325"/>
+        <location filename="../gui/upload_view.py" line="398"/>
         <source>Your file</source>
         <translation>Votre fichier</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="333"/>
+        <location filename="../gui/upload_view.py" line="406"/>
         <source>Files</source>
         <translation>Fichiers</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="346"/>
+        <location filename="../gui/upload_view.py" line="419"/>
         <source>Reset from the template</source>
         <translation>Rétablir le modèle</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="349"/>
+        <location filename="../gui/upload_view.py" line="422"/>
         <source>Description</source>
         <translation>Description</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="359"/>
+        <location filename="../gui/upload_view.py" line="432"/>
         <source>Reset from the files</source>
         <translation>Régénérer depuis les fichiers</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="362"/>
+        <location filename="../gui/upload_view.py" line="435"/>
         <source>NFO</source>
         <translation>NFO</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="366"/>
-        <location filename="../gui/upload_view.py" line="1003"/>
+        <location filename="../gui/upload_view.py" line="439"/>
+        <location filename="../gui/upload_view.py" line="1086"/>
         <source>Enter the image URL above</source>
         <translation>Saisissez l’URL de l’image ci-dessus</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="370"/>
+        <location filename="../gui/upload_view.py" line="443"/>
         <source>Image</source>
         <translation>Image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="397"/>
+        <location filename="../gui/upload_view.py" line="470"/>
         <source>Your c411 Drafts</source>
         <translation>Vos brouillons c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="401"/>
+        <location filename="../gui/upload_view.py" line="474"/>
         <source>Draft</source>
         <translation>Brouillon</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="275"/>
-        <location filename="../gui/upload_view.py" line="401"/>
+        <location filename="../gui/upload_view.py" line="348"/>
+        <location filename="../gui/upload_view.py" line="474"/>
         <source>Category</source>
         <translation>Catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="401"/>
+        <location filename="../gui/upload_view.py" line="474"/>
         <source>Modified</source>
         <translation>Modifié</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="411"/>
+        <location filename="../gui/upload_view.py" line="484"/>
         <source>Refresh</source>
         <translation>Actualiser</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="414"/>
+        <location filename="../gui/upload_view.py" line="487"/>
         <source>Open c411&apos;s upload page</source>
         <translation>Ouvrir la page d’upload de c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="481"/>
+        <location filename="../gui/upload_view.py" line="554"/>
         <source>Search it first: c411 may already have it</source>
         <translation>Recherchez-le d’abord : c411 l’a peut-être déjà</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="483"/>
+        <location filename="../gui/upload_view.py" line="556"/>
         <source>c411 already has it: Reseed it from the Library</source>
         <translation>c411 l’a déjà : repartagez-le depuis la Bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="512"/>
+        <location filename="../gui/upload_view.py" line="585"/>
         <source>Archive: unpack it to upload</source>
         <translation>Archive : à décompresser pour l’uploader</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="514"/>
+        <location filename="../gui/upload_view.py" line="587"/>
         <source>Ready</source>
         <translation>Prêt</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1226"/>
+        <location filename="../gui/upload_view.py" line="1310"/>
         <source>{0} is saved as a Draft on c411 and is being verified in your torrent client. Once it seeds, open c411&apos;s upload page, load the Draft, check it and publish it.</source>
         <translation>{0} est enregistré comme brouillon sur c411 et en cours de vérification dans votre client torrent. Une fois partagé, ouvrez la page d’upload de c411, chargez le brouillon, vérifiez-le et publiez-le.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="533"/>
+        <location filename="../gui/upload_view.py" line="606"/>
         <source>Enter your Announce URL in Settings → Connections to make Uploads.</source>
         <translation>Saisissez votre adresse d’annonce dans Paramètres → Connexions pour faire des Uploads.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="281"/>
+        <location filename="../gui/upload_view.py" line="354"/>
         <source>Options</source>
         <translation>Options</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="289"/>
+        <location filename="../gui/upload_view.py" line="362"/>
         <source>Refresh options</source>
         <translation>Actualiser les options</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="290"/>
+        <location filename="../gui/upload_view.py" line="363"/>
         <source>Read this subcategory&apos;s options from c411 again</source>
         <translation>Relire les options de cette sous-catégorie sur c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="374"/>
+        <location filename="../gui/upload_view.py" line="447"/>
         <source>3D view</source>
         <translation>Vue 3D</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="475"/>
-        <location filename="../gui/upload_view.py" line="573"/>
+        <location filename="../gui/upload_view.py" line="548"/>
+        <location filename="../gui/upload_view.py" line="646"/>
         <source>Choose a category</source>
         <translation>Choisissez une catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="478"/>
+        <location filename="../gui/upload_view.py" line="551"/>
         <source>Uploads to {0} are not supported yet</source>
         <translation>Les Uploads vers {0} ne sont pas encore pris en charge</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="538"/>
+        <location filename="../gui/upload_view.py" line="611"/>
         <source>No Orphan is ready to upload. Search your Orphans in the Library, or tick Show all to pick a category and see why the {0} others are not ready.</source>
         <translation>Aucun Orphelin n’est prêt à être uploadé. Recherchez vos Orphelins dans la Bibliothèque, ou cochez Tout afficher pour choisir une catégorie et voir pourquoi les {0} autres ne sont pas prêts.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="708"/>
+        <location filename="../gui/upload_view.py" line="791"/>
         <source>Already on c411</source>
         <translation>Déjà sur c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="713"/>
+        <location filename="../gui/upload_view.py" line="796"/>
         <source>c411 could not be searched: {0}</source>
         <translation>c411 n&apos;a pas pu être interrogé : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="715"/>
+        <location filename="../gui/upload_view.py" line="798"/>
         <source>Searching c411…</source>
         <translation>Recherche sur c411…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="720"/>
+        <location filename="../gui/upload_view.py" line="803"/>
         <source>Nothing found on c411.</source>
         <translation>Rien trouvé sur c411.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="724"/>
+        <location filename="../gui/upload_view.py" line="807"/>
         <source>Releases c411 already has, for information: Team Pending refuses duplicates.</source>
         <translation>Les releases que c411 a déjà, à titre d&apos;information : Team Pending refuse les doublons.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="726"/>
+        <location filename="../gui/upload_view.py" line="809"/>
         <source>seeders</source>
         <translation>seeders</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="810"/>
-        <location filename="../gui/upload_view.py" line="834"/>
+        <location filename="../gui/upload_view.py" line="893"/>
+        <location filename="../gui/upload_view.py" line="917"/>
         <source>Reading the options…</source>
         <translation>Lecture des options…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="843"/>
+        <location filename="../gui/upload_view.py" line="926"/>
         <source>Could not read the options: {0}</source>
         <translation>Impossible de lire les options : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="879"/>
+        <location filename="../gui/upload_view.py" line="962"/>
         <source>c411 requires this one</source>
         <translation>c411 exige celle-ci</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="926"/>
+        <location filename="../gui/upload_view.py" line="1009"/>
         <source>A release name has dots between words, no spaces and no accents.</source>
         <translation>Un nom de release sépare les mots par des points, sans espaces ni accents.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1052"/>
+        <location filename="../gui/upload_view.py" line="1135"/>
         <source>Unpack…</source>
         <translation>Décompresser…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1054"/>
+        <location filename="../gui/upload_view.py" line="1137"/>
         <source>Unpack the archive into a new folder next to it, then prepare its Upload</source>
         <translation>Décompresser l’archive dans un nouveau dossier à côté, puis préparer son Upload</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1057"/>
+        <location filename="../gui/upload_view.py" line="1140"/>
         <source>Make the torrent, save it with the NFO and description as a Draft on c411, then seed from your files. You publish it on c411.</source>
         <translation>Créer le torrent, l’enregistrer avec le NFO et la description comme brouillon sur c411, puis partager depuis vos fichiers. Vous le publiez sur c411.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1086"/>
+        <location filename="../gui/upload_view.py" line="1169"/>
         <source>No image</source>
         <translation>Pas d’image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1088"/>
+        <location filename="../gui/upload_view.py" line="1171"/>
         <source>c411 requires an image in the description. Save the Draft anyway and add the image on c411 before publishing?</source>
         <translation>c411 exige une image dans la description. Enregistrer quand même le brouillon et ajouter l’image sur c411 avant de publier ?</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1150"/>
-        <location filename="../gui/upload_view.py" line="1161"/>
-        <location filename="../gui/upload_view.py" line="1169"/>
+        <location filename="../gui/upload_view.py" line="1234"/>
+        <location filename="../gui/upload_view.py" line="1245"/>
+        <location filename="../gui/upload_view.py" line="1253"/>
         <source>Unpack</source>
         <translation>Décompresser</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1152"/>
+        <location filename="../gui/upload_view.py" line="1236"/>
         <source>{0} already exists. If it holds this archive unpacked, scan the Library and pick that folder.</source>
         <translation>{0} existe déjà. S’il contient cette archive décompressée, analysez la Bibliothèque et choisissez ce dossier.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1162"/>
+        <location filename="../gui/upload_view.py" line="1246"/>
         <source>Unpacking needs {0}, but only {1} is free on that disk.</source>
         <translation>La décompression demande {0}, mais seulement {1} est libre sur ce disque.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1171"/>
+        <location filename="../gui/upload_view.py" line="1255"/>
         <source>c411 refuses archives. Unpack {0} into the new folder
 {1}?
 
@@ -2625,17 +2760,17 @@ It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten. Th
 Cela écrit {2} en {3} fichiers ; {4} est libre sur ce disque. Rien n’est écrasé. L’Upload est ensuite fait depuis les fichiers décompressés ; une fois partagé, il vous est proposé de mettre l’archive à la corbeille.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1224"/>
+        <location filename="../gui/upload_view.py" line="1308"/>
         <source>Draft saved</source>
         <translation>Brouillon enregistré</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1238"/>
+        <location filename="../gui/upload_view.py" line="1322"/>
         <source>Not seeding</source>
         <translation>Pas en partage</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1240"/>
+        <location filename="../gui/upload_view.py" line="1324"/>
         <source>The Draft is saved on c411, but its torrent could not be added to your torrent client: {0}
 
 c411 refuses an upload whose uploader is not seeding: do not publish it before it seeds.</source>
@@ -2644,17 +2779,17 @@ c411 refuses an upload whose uploader is not seeding: do not publish it before i
 c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant qu’il soit partagé.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1250"/>
+        <location filename="../gui/upload_view.py" line="1334"/>
         <source>Upload failed</source>
         <translation>Échec de l’Upload</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1263"/>
+        <location filename="../gui/upload_view.py" line="1347"/>
         <source>Reading your Drafts…</source>
         <translation>Lecture de vos brouillons…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="1275"/>
+        <location filename="../gui/upload_view.py" line="1359"/>
         <source>{0}/15 Drafts on c411</source>
         <translation>{0}/15 brouillons sur c411</translation>
     </message>

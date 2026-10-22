@@ -1,0 +1,49 @@
+General
+Complete name                            : /tmp/claude-1000/-home-viet-git-perso-TorrentLinker/4d1871a7-3702-4a4e-849e-53fc60e783bd/scratchpad/vid/film_xvid_sd.avi
+Format                                   : AVI
+Format/Info                              : Audio Video Interleave
+Format settings                          : BitmapInfoHeader / WaveFormatEx
+File size                                : 34.5 KiB
+Duration                                 : 1 s 10 ms
+Overall bit rate                         : 280 kb/s
+Frame rate                               : 2.000 FPS
+Writing application                      : Lavf63.1.102
+
+Video
+ID                                       : 0
+Format                                   : xvid
+Codec ID                                 : xvid
+Duration                                 : 1 s 0 ms
+Bit rate                                 : 100 kb/s
+Width                                    : 720 pixels
+Height                                   : 400 pixels
+Display aspect ratio                     : 16:9
+Frame rate                               : 2.000 FPS
+Scan type                                : Progressive
+Bits/(Pixel*Frame)                       : 0.174
+Stream size                              : 12.2 KiB (35%)
+
+Audio
+ID                                       : 1
+Format                                   : AC-3
+Format/Info                              : Audio Coding 3
+Commercial name                          : Dolby Digital
+Codec ID                                 : 2000
+Duration                                 : 1 s 10 ms
+Bit rate mode                            : Constant
+Bit rate                                 : 96.0 kb/s
+Channel(s)                               : 1 channel
+Channel layout                           : M
+Sampling rate                            : 44.1 kHz
+Frame rate                               : 28.711 FPS (1536 SPF)
+Bit depth                                : 16 bits
+Compression mode                         : Lossy
+Stream size                              : 11.8 KiB (34%)
+Alignment                                : Aligned on interleaves
+Interleave, duration                     : 34  ms (0.07 video frame)
+Service kind                             : Complete Main
+Dialog Normalization                     : -31 dB
+dialnorm_Average                         : -31 dB
+dialnorm_Minimum                         : -31 dB
+dialnorm_Maximum                         : -31 dB
+

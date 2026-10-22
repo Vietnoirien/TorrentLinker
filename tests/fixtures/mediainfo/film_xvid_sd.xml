@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mediainfo version="24.12">
+<File>
+<track type="General">
+<Count>349</Count>
+<Count_of_stream_of_this_kind>1</Count_of_stream_of_this_kind>
+<Kind_of_stream>General</Kind_of_stream>
+<Kind_of_stream>General</Kind_of_stream>
+<Stream_identifier>0</Stream_identifier>
+<Count_of_video_streams>1</Count_of_video_streams>
+<Count_of_audio_streams>1</Count_of_audio_streams>
+<Video_Format_List>xvid</Video_Format_List>
+<Video_Format_WithHint_List>xvid</Video_Format_WithHint_List>
+<Codecs_Video>xvid</Codecs_Video>
+<Audio_Format_List>AC-3</Audio_Format_List>
+<Audio_Format_WithHint_List>AC-3</Audio_Format_WithHint_List>
+<Audio_codecs>AC-3</Audio_codecs>
+<Audio_Channels_Total>1</Audio_Channels_Total>
+<Complete_name>/tmp/claude-1000/-home-viet-git-perso-TorrentLinker/4d1871a7-3702-4a4e-849e-53fc60e783bd/scratchpad/vid/film_xvid_sd.avi</Complete_name>
+<Folder_name>/tmp/claude-1000/-home-viet-git-perso-TorrentLinker/4d1871a7-3702-4a4e-849e-53fc60e783bd/scratchpad/vid</Folder_name>
+<File_name_extension>film_xvid_sd.avi</File_name_extension>
+<File_name>film_xvid_sd</File_name>
+<File_extension>avi</File_extension>
+<Format>AVI</Format>
+<Format>AVI</Format>
+<Format_Info>Audio Video Interleave</Format_Info>
+<Format_Extensions_usually_used>avi</Format_Extensions_usually_used>
+<Commercial_name>AVI</Commercial_name>
+<Format_settings>BitmapInfoHeader / WaveFormatEx</Format_settings>
+<Internet_media_type>video/vnd.avi</Internet_media_type>
+<Interleaved>Yes</Interleaved>
+<File_size>35358</File_size>
+<File_size>34.5 KiB</File_size>
+<File_size>35 KiB</File_size>
+<File_size>35 KiB</File_size>
+<File_size>34.5 KiB</File_size>
+<File_size>34.53 KiB</File_size>
+<Duration>1010</Duration>
+<Duration>1 s 10 ms</Duration>
+<Duration>1 s 10 ms</Duration>
+<Duration>1 s 10 ms</Duration>
+<Duration>00:00:01.010</Duration>
+<Duration>00:00:01:00</Duration>
+<Duration>00:00:01.010 (00:00:01:00)</Duration>
+<Overall_bit_rate>280063</Overall_bit_rate>
+<Overall_bit_rate>280 kb/s</Overall_bit_rate>
+<Frame_rate>2.000</Frame_rate>
+<Frame_rate>2.000 FPS</Frame_rate>
+<Frame_count>2</Frame_count>
+<Stream_size>10736</Stream_size>
+<Stream_size>10.5 KiB (30%)</Stream_size>
+<Stream_size>10 KiB</Stream_size>
+<Stream_size>10 KiB</Stream_size>
+<Stream_size>10.5 KiB</Stream_size>
+<Stream_size>10.48 KiB</Stream_size>
+<Stream_size>10.5 KiB (30%)</Stream_size>
+<Proportion_of_this_stream>0.30364</Proportion_of_this_stream>
+<File_last_modification_date>2026-10-22 19:47:45 UTC</File_last_modification_date>
+<File_last_modification_date__local_>2026-10-22 21:47:45</File_last_modification_date__local_>
+<Writing_application>Lavf63.1.102</Writing_application>
+<Writing_application>Lavf63.1.102</Writing_application>
+</track>
+<track type="Video">
+<Count>390</Count>
+<Count_of_stream_of_this_kind>1</Count_of_stream_of_this_kind>
+<Kind_of_stream>Video</Kind_of_stream>
+<Kind_of_stream>Video</Kind_of_stream>
+<Stream_identifier>0</Stream_identifier>
+<ID>0</ID>
+<ID>0</ID>
+<Format>xvid</Format>
+<Format>xvid</Format>
+<Commercial_name>xvid</Commercial_name>
+<Codec_ID>xvid</Codec_ID>
+<Duration>1000</Duration>
+<Duration>1 s 0 ms</Duration>
+<Duration>1 s 0 ms</Duration>
+<Duration>1 s 0 ms</Duration>
+<Duration>00:00:01.000</Duration>
+<Duration>00:00:01:00</Duration>
+<Duration>00:00:01.000 (00:00:01:00)</Duration>
+<Bit_rate>100016</Bit_rate>
+<Bit_rate>100 kb/s</Bit_rate>
+<Width>720</Width>
+<Width>720 pixels</Width>
+<Height>400</Height>
+<Height>400 pixels</Height>
+<Pixel_aspect_ratio>1.000</Pixel_aspect_ratio>
+<Display_aspect_ratio>1.800</Display_aspect_ratio>
+<Display_aspect_ratio>16:9</Display_aspect_ratio>
+<Frame_rate>2.000</Frame_rate>
+<Frame_rate>2.000 FPS</Frame_rate>
+<FrameRate_Num>2</FrameRate_Num>
+<FrameRate_Den>1</FrameRate_Den>
+<Frame_count>2</Frame_count>
+<Scan_type>Progressive</Scan_type>
+<Scan_type>Progressive</Scan_type>
+<Bits__Pixel_Frame_>0.174</Bits__Pixel_Frame_>
+<Delay>0</Delay>
+<Delay>00:00:00.000</Delay>
+<Delay>00:00:00:00</Delay>
+<Delay>00:00:00.000 (00:00:00:00)</Delay>
+<Stream_size>12502</Stream_size>
+<Stream_size>12.2 KiB (35%)</Stream_size>
+<Stream_size>12 KiB</Stream_size>
+<Stream_size>12 KiB</Stream_size>
+<Stream_size>12.2 KiB</Stream_size>
+<Stream_size>12.21 KiB</Stream_size>
+<Stream_size>12.2 KiB (35%)</Stream_size>
+<Proportion_of_this_stream>0.35358</Proportion_of_this_stream>
+</track>
+<track type="Audio">
+<Count>297</Count>
+<Count_of_stream_of_this_kind>1</Count_of_stream_of_this_kind>
+<Kind_of_stream>Audio</Kind_of_stream>
+<Kind_of_stream>Audio</Kind_of_stream>
+<Stream_identifier>0</Stream_identifier>
+<StreamOrder>1</StreamOrder>
+<ID>1</ID>
+<ID>1</ID>
+<Format>AC-3</Format>
+<Format>AC-3</Format>
+<Format_Info>Audio Coding 3</Format_Info>
+<Format_Url>https://en.wikipedia.org/wiki/AC3</Format_Url>
+<Commercial_name>Dolby Digital</Commercial_name>
+<Commercial_name>Dolby Digital</Commercial_name>
+<Format_settings__Endianness>Big</Format_settings__Endianness>
+<Codec_ID>2000</Codec_ID>
+<Duration>1010</Duration>
+<Duration>1 s 10 ms</Duration>
+<Duration>1 s 10 ms</Duration>
+<Duration>1 s 10 ms</Duration>
+<Duration>00:00:01.010</Duration>
+<Duration>00:00:01.010</Duration>
+<Bit_rate_mode>CBR</Bit_rate_mode>
+<Bit_rate_mode>Constant</Bit_rate_mode>
+<Bit_rate>96000</Bit_rate>
+<Bit_rate>96.0 kb/s</Bit_rate>
+<Channel_s_>1</Channel_s_>
+<Channel_s_>1 channel</Channel_s_>
+<Channel_positions>Front: C</Channel_positions>
+<Channel_positions>1/0/0</Channel_positions>
+<Channel_layout>M</Channel_layout>
+<Samples_per_frame>1536</Samples_per_frame>
+<Sampling_rate>44100</Sampling_rate>
+<Sampling_rate>44.1 kHz</Sampling_rate>
+<Samples_count>44541</Samples_count>
+<Frame_rate>28.711</Frame_rate>
+<Frame_rate>28.711 FPS (1536 SPF)</Frame_rate>
+<Bit_depth>16</Bit_depth>
+<Bit_depth>16 bits</Bit_depth>
+<Compression_mode>Lossy</Compression_mode>
+<Compression_mode>Lossy</Compression_mode>
+<Delay>0</Delay>
+<Delay>00:00:00.000</Delay>
+<Delay>00:00:00.000</Delay>
+<Delay__origin>Stream</Delay__origin>
+<Delay__origin>Raw stream</Delay__origin>
+<Delay_relative_to_video>0</Delay_relative_to_video>
+<Delay_relative_to_video>00:00:00.000</Delay_relative_to_video>
+<Delay_relative_to_video>00:00:00.000</Delay_relative_to_video>
+<Stream_size>12120</Stream_size>
+<Stream_size>11.8 KiB (34%)</Stream_size>
+<Stream_size>12 KiB</Stream_size>
+<Stream_size>12 KiB</Stream_size>
+<Stream_size>11.8 KiB</Stream_size>
+<Stream_size>11.84 KiB</Stream_size>
+<Stream_size>11.8 KiB (34%)</Stream_size>
+<Proportion_of_this_stream>0.34278</Proportion_of_this_stream>
+<Alignment>Aligned</Alignment>
+<Alignment>Aligned on interleaves</Alignment>
+<Interleave__duration>0.07</Interleave__duration>
+<Interleave__duration>34</Interleave__duration>
+<Interleave__duration>34  ms (0.07 video frame)</Interleave__duration>
+<Service_kind>CM</Service_kind>
+<Service_kind>Complete Main</Service_kind>
+<bsid>8</bsid>
+<Dialog_Normalization>-31</Dialog_Normalization>
+<Dialog_Normalization>-31 dB</Dialog_Normalization>
+<acmod>1</acmod>
+<lfeon>0</lfeon>
+<dialnorm_Average>-31</dialnorm_Average>
+<dialnorm_Average>-31 dB</dialnorm_Average>
+<dialnorm_Minimum>-31</dialnorm_Minimum>
+<dialnorm_Minimum>-31 dB</dialnorm_Minimum>
+<dialnorm_Maximum>-31</dialnorm_Maximum>
+<dialnorm_Maximum>-31 dB</dialnorm_Maximum>
+<dialnorm_Count>29</dialnorm_Count>
+</track>
+</File>
+</Mediainfo>

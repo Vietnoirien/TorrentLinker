@@ -95,6 +95,18 @@ SUBCATEGORY_LABELS = {
     16: QT_TRANSLATE_NOOP("Subcategory", "Press"),
     59: QT_TRANSLATE_NOOP("Subcategory", "Sheet music & tablature"),
     60: QT_TRANSLATE_NOOP("Subcategory", "Journals & technical manuals"),
+    1: QT_TRANSLATE_NOOP("Subcategory", "Animation"),
+    2: QT_TRANSLATE_NOOP("Subcategory", "Animated series"),
+    3: QT_TRANSLATE_NOOP("Subcategory", "Concert"),
+    4: QT_TRANSLATE_NOOP("Subcategory", "Documentary"),
+    57: QT_TRANSLATE_NOOP("Subcategory", "Documentary series"),
+    5: QT_TRANSLATE_NOOP("Subcategory", "TV programme"),
+    6: QT_TRANSLATE_NOOP("Subcategory", "Movie"),
+    7: QT_TRANSLATE_NOOP("Subcategory", "TV series"),
+    8: QT_TRANSLATE_NOOP("Subcategory", "Stage show"),
+    9: QT_TRANSLATE_NOOP("Subcategory", "Sport"),
+    10: QT_TRANSLATE_NOOP("Subcategory", "Music videos"),
+    54: QT_TRANSLATE_NOOP("Subcategory", "Collection"),
     17: QT_TRANSLATE_NOOP("Subcategory", "Karaoke"),
     18: QT_TRANSLATE_NOOP("Subcategory", "Music"),
     19: QT_TRANSLATE_NOOP("Subcategory", "Podcasts & radio"),
@@ -130,6 +142,35 @@ def refusal_text(r: Refusal) -> str:
         return QCoreApplication.translate(
             "Upload", "One format and bitrate per album, found: {0}"
         ).format(r.detail)
+    if r.problem is Problem.NO_MEDIAINFO:
+        return QCoreApplication.translate(
+            "Upload",
+            "MediaInfo is not installed: install libmediainfo (for example the "
+            "libmediainfo0v5 package) to upload videos",
+        )
+    if r.problem is Problem.NO_VIDEO_FILE:
+        return QCoreApplication.translate("Upload", "No video file (MKV, MP4, M4V, AVI, TS, M2TS)")
+    if r.problem is Problem.BAD_CONTAINER:
+        return QCoreApplication.translate(
+            "Upload", "c411 does not accept these containers: {0}"
+        ).format(r.detail)
+    if r.problem is Problem.GPU_ENCODER:
+        return QCoreApplication.translate("Upload", "GPU encoders are forbidden ({0})").format(
+            r.detail
+        )
+    if r.problem is Problem.LOW_VIDEO_BITRATE:
+        return QCoreApplication.translate("Upload", "Video bitrate too low: {0}").format(r.detail)
+    if r.problem is Problem.BANNED_TEAM:
+        return QCoreApplication.translate("Upload", "Banned team or source: {0}").format(r.detail)
+    if r.problem is Problem.NO_FRENCH:
+        return QCoreApplication.translate(
+            "Upload", "No French audio and no full French subtitles in {0}"
+        ).format(r.detail)
+    if r.problem is Problem.MIXED_PACK:
+        return QCoreApplication.translate(
+            "Upload",
+            "The files of a pack must share their specs and their team; they differ in: {0}",
+        ).format(r.detail)
     return QCoreApplication.translate("Upload", "No file to upload")
 
 
@@ -148,6 +189,37 @@ def warning_text(w: UploadWarning) -> str:
         return QCoreApplication.translate("Upload", "A pack must hold whole volumes")
     if w.judgement is Judgement.EVERY_VOLUME:
         return QCoreApplication.translate("Upload", "A BD pack must hold every volume")
+    if w.judgement is Judgement.FRENCH_TITLE:
+        if w.detail:
+            return QCoreApplication.translate(
+                "Upload", "The release title must be the French one: {0}"
+            ).format(w.detail)
+        return QCoreApplication.translate(
+            "Upload",
+            "The release title must be the French one (the original goes in the description)",
+        )
+    if w.judgement is Judgement.FORBIDDEN_SOURCE:
+        return QCoreApplication.translate(
+            "Upload",
+            "Forbidden sources: CAM, TS, upscales, Plex transcodes, films still in cinemas",
+        )
+    if w.judgement is Judgement.INCOMPLETE_SEASON:
+        return QCoreApplication.translate("Upload", "Incomplete season, missing: {0}").format(
+            w.detail
+        )
+    if w.judgement is Judgement.WEB_PLATFORM:
+        return QCoreApplication.translate(
+            "Upload", "A WEB release must name its VOD platform in the description"
+        )
+    if w.judgement is Judgement.MICKEY_TAG:
+        return QCoreApplication.translate(
+            "Upload", "The MICKEY tag is a known detag: check the original release"
+        )
+    if w.judgement is Judgement.SLOTS:
+        return QCoreApplication.translate(
+            "Upload",
+            "c411 keeps 28 slots per release: check the existing releases for a free one",
+        )
     if w.judgement is Judgement.NO_TRANSCODE:
         return QCoreApplication.translate(
             "Upload", "No transcodes (MP3 to FLAC, 128 to 320 kbps, stereo to 5.1)"
@@ -215,6 +287,7 @@ class UploadTab(QWidget):
         self._options_for: int | None = None  # the subcategory whose options are awaited
         self._options_state = ""  # what the Options box says while no selector shows
         self._inspected: set[tuple[Path, int]] = set()  # items a profile has read, by category
+        self._inspecting: set[tuple[Path, int]] = set()  # ... being read now
 
         layout = QVBoxLayout(self)
         self.notice = QLabel()
@@ -626,9 +699,9 @@ class UploadTab(QWidget):
             field.setEnabled(profile is not None)
         self._show_options()
         self._regenerate()
+        self._inspect()
         self._show_existing()
         self._show_model()
-        self._inspect()
 
     def _inspect(self) -> None:
         """Let the profile read what the files say (tags, MediaInfo) off the GUI thread,
@@ -640,15 +713,24 @@ class UploadTab(QWidget):
         if key in self._inspected:
             return
         self._inspected.add(key)
+        self._inspecting.add(key)
         ignore = self.ignore()
 
+        def current() -> bool:
+            return isValid(self) and self.source_item() is item and self.profile() is profile
+
         def done(_: object) -> None:
-            if isValid(self) and self.source_item() is item and self.profile() is profile:
+            self._inspecting.discard(key)
+            if current():
                 self._show_options()
                 self._regenerate()
+                self._show_existing()  # the profile may now look an item up by ids
 
         def failed(error: Exception) -> None:
             self._inspected.discard(key)  # selecting the item again retries
+            self._inspecting.discard(key)
+            if current():
+                self._show_existing()
 
         run_in_background(lambda: profile.inspect(item, ignore), done, failed)
 
@@ -677,11 +759,12 @@ class UploadTab(QWidget):
             self._render_existing(self._existing[key])
             return
         self._render_existing(None)
-        if key in self._searching:
-            return
+        if key in self._searching or key in self._inspecting:
+            return  # an inspection first: its answers may give the search ids
         self._searching.add(key)
         query = profile.existing_query(entry.item, self.ignore())
-        search = self.indexer().search
+        indexer = self.indexer()
+        search, by_ids = indexer.search, indexer.by_tmdb
 
         def current() -> bool:
             return (
@@ -701,7 +784,7 @@ class UploadTab(QWidget):
             if isValid(self) and current():
                 self._render_existing(None, error_text(error))
 
-        run_in_background(lambda: find_existing(search, query, key[1]), done, failed)
+        run_in_background(lambda: find_existing(search, query, key[1], by_ids), done, failed)
 
     def _render_existing(self, found: list[Candidate] | None, error: str = "") -> None:
         """`found` None: still searching, or failed with `error`."""
@@ -926,7 +1009,7 @@ class UploadTab(QWidget):
                     self.tr("A release name has dots between words, no spaces and no accents.")
                 )
             try:
-                self.files = upload_files(item, title, self.ignore())
+                self.files = upload_files(item, title, self.ignore(), profile.media_extensions)
             except ValueError as e:
                 problems.append(str(e))
         if entry is not None and profile is not None:
@@ -1100,6 +1183,7 @@ class UploadTab(QWidget):
             profile.category,
             self.subcategory.currentData(),
             options_body(self.option_types, self.chosen_options()),
+            profile.draft_fields(entry.item, self.ignore(), self.files),
         )
         store, announce, indexer, folder, stop = (
             self.store,

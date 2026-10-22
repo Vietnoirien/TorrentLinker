@@ -1,0 +1,79 @@
+General
+Unique ID                                : 192302805337718916039748187862671625431 (0x90AC2C518627F913F73C1C52EE890CD7)
+Complete name                            : /tmp/claude-1000/-home-viet-git-perso-TorrentLinker/4d1871a7-3702-4a4e-849e-53fc60e783bd/scratchpad/vid/film_x264_1080p_fr.mkv
+Format                                   : Matroska
+Format version                           : Version 4
+File size                                : 135 KiB
+Duration                                 : 1 s 6 ms
+Overall bit rate                         : 1 097 kb/s
+Frame rate                               : 2.000 FPS
+Writing application                      : Lavf63.1.102
+Writing library                          : Lavf63.1.102
+ErrorDetectionType                       : Per level 1
+
+Video
+ID                                       : 1
+Format                                   : AVC
+Format/Info                              : Advanced Video Codec
+Format profile                           : High 4:4:4 Predictive@L4
+Format settings                          : 1 Ref Frames
+Format settings, CABAC                   : No
+Format settings, Reference frames        : 1 frame
+Codec ID                                 : V_MPEG4/ISO/AVC
+Duration                                 : 1 s 0 ms
+Bit rate                                 : 6 000 kb/s
+Width                                    : 1 920 pixels
+Height                                   : 1 080 pixels
+Display aspect ratio                     : 16:9
+Frame rate mode                          : Constant
+Frame rate                               : 2.000 FPS
+Chroma subsampling                       : 4:4:4
+Bit depth                                : 8 bits
+Scan type                                : Progressive
+Bits/(Pixel*Frame)                       : 1.447
+Stream size                              : 732 KiB
+Writing library                          : x264 core 165
+Encoding settings                        : cabac=0 / ref=1 / deblock=0:0:0 / analyse=0:0 / me=dia / subme=0 / psy=1 / psy_rd=1.00:0.00 / mixed_ref=0 / me_range=16 / chroma_me=1 / trellis=0 / 8x8dct=0 / cqm=0 / deadzone=21,11 / fast_pskip=1 / chroma_qp_offset=6 / threads=24 / lookahead_threads=4 / sliced_threads=0 / nr=0 / decimate=1 / interlaced=0 / bluray_compat=0 / constrained_intra=0 / bframes=0 / weightp=0 / keyint=250 / keyint_min=2 / scenecut=0 / intra_refresh=0 / rc=abr / mbtree=0 / bitrate=6000 / ratetol=1.0 / qcomp=0.60 / qpmin=0 / qpmax=69 / qpstep=4 / ip_ratio=1.40 / aq=0
+Default                                  : No
+Forced                                   : No
+Color range                              : Limited
+
+Audio
+ID                                       : 2
+Format                                   : AC-3
+Format/Info                              : Audio Coding 3
+Commercial name                          : Dolby Digital
+Codec ID                                 : A_AC3
+Duration                                 : 1 s 6 ms
+Bit rate mode                            : Constant
+Bit rate                                 : 448 kb/s
+Channel(s)                               : 6 channels
+Channel layout                           : L R C LFE Ls Rs
+Sampling rate                            : 44.1 kHz
+Frame rate                               : 28.711 FPS (1536 SPF)
+Bit depth                                : 32 bits
+Compression mode                         : Lossy
+Stream size                              : 55.0 KiB (41%)
+Writing library                          : Lavc63.1.102 ac3
+Language                                 : French
+Service kind                             : Complete Main
+Default                                  : No
+Forced                                   : No
+Dialog Normalization                     : -31 dB
+cmixlev                                  : -4.5 dB
+surmixlev                                : -6 dB
+dialnorm_Average                         : -31 dB
+dialnorm_Minimum                         : -31 dB
+dialnorm_Maximum                         : -31 dB
+
+Text
+ID                                       : 3
+Format                                   : UTF-8
+Codec ID                                 : S_TEXT/UTF8
+Codec ID/Info                            : UTF-8 Plain Text
+Duration                                 : 1 s 0 ms
+Writing library                          : Lavc63.1.102 srt
+Language                                 : French
+Default                                  : No
+Forced                                   : No
+

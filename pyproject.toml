@@ -16,6 +16,7 @@ dependencies = [
   "torf>=4.2",
   "keyring>=24",
   "numpy>=1.26",  # the 3D preview reads and decimates meshes
+  "pymediainfo>=6.1",  # MediaInfo of videos, for the Films & Vidéos upload (ADR-0012)
   "mutagen>=1.47",  # audio tags for the Audio and Ebook uploads
 ]
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from typing import Any
 
 from torrentlinker.audio_tags import AudioTags, TagCache, image_size
 from torrentlinker.domain import LocalItem
@@ -76,6 +77,7 @@ class AudioProfile:
 
     category: int = CATEGORY_AUDIO
     renders_models = False
+    media_extensions: tuple[str, ...] = ()
     subcategories: tuple[Subcategory, ...] = (
         Subcategory(SubcategoryAudio.KARAOKE, "Karaoke"),
         Subcategory(SubcategoryAudio.MUSIC, "Music"),
@@ -89,6 +91,11 @@ class AudioProfile:
 
     def image_is_sheet(self, subcategory: int) -> bool:
         return False
+
+    def draft_fields(
+        self, item: LocalItem, ignore: IgnoreList, files: list[UploadFile]
+    ) -> dict[str, Any]:
+        return {}
 
     def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
         """Read the tags of every audio file and the size of the covers."""
