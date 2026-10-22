@@ -73,6 +73,10 @@ The Torrent Client's hash check a Reseed must pass at 100% before the torrent is
 A new torrent the app creates from an Orphan that no Candidate matches, named and described by the Indexer's rules, with its NFO, to be published on the Indexer and seeded from the existing data.
 _Avoid_: Reupload (c411's term for one kind of Upload), release, post
 
+**Upload Category**:
+The c411 category an Upload is made for (Films & Vidéos, Ebook, Imprimante 3D…); it decides the Upload's rules, name, NFO and description. The Library Folder's Content Kind only proposes one; the user can pick another.
+_Avoid_: Kind (a Content Kind is the Library's notion, not c411's)
+
 **Draft**:
 An Upload saved on c411 but not yet published; the user reviews and publishes it there.
 

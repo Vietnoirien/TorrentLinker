@@ -31,6 +31,28 @@ GB = 1_000_000_000
 NOTAG = "NOTAG"
 CATEGORY_3D = 10
 
+# c411's categories (GET /api/categories); Nulled and Adult get no profile.
+CATEGORIES = {
+    1: "Films & Vidéos",
+    2: "Ebook",
+    3: "Audio",
+    4: "Applications",
+    5: "Jeux Vidéo",
+    6: "Emulation",
+    7: "GPS",
+    9: "Nulled",
+    10: "Imprimante 3D",
+}
+# The category a Content Kind proposes; `other` proposes none, the user picks.
+DEFAULT_CATEGORIES = {
+    ContentKind.MOVIE: 1,
+    ContentKind.SERIES: 1,
+    ContentKind.EBOOK: 2,
+    ContentKind.MUSIC: 3,
+    ContentKind.GAME: 5,
+    ContentKind.MODEL_3D: CATEGORY_3D,
+}
+
 # c411's 3D formats, in the order a release name lists them.
 FORMATS_3D = ("stl", "3mf", "obj", "step", "stp", "gcode", "blend", "f3d", "f3z", "sldprt", "fcstd")
 ARCHIVES = ("rar", "zip", "7z")
@@ -75,10 +97,9 @@ class Subcategory:
 
 
 class UploadProfile(Protocol):
-    """What one Content Kind needs to become an Upload: c411's category and rules, the
-    release name, the NFO and a description template. One per kind, 3D models first."""
+    """What one c411 category needs to become an Upload: its rules, the release name, the
+    NFO and a description template. One per category, 3D models first."""
 
-    kind: ContentKind
     category: int
     subcategories: tuple[Subcategory, ...]
 
@@ -96,7 +117,6 @@ class UploadProfile(Protocol):
 class Model3DProfile:
     """c411's Imprimante 3D category (docs/research/upload-rules.md)."""
 
-    kind: ContentKind = ContentKind.MODEL_3D
     category: int = CATEGORY_3D
     subcategories: tuple[Subcategory, ...] = (
         Subcategory(Subcategory3D.OBJECTS, "Objects"),
@@ -140,12 +160,24 @@ class Model3DProfile:
         return description_3d(title, files, source, image_url)
 
 
-PROFILES: dict[ContentKind, UploadProfile] = {ContentKind.MODEL_3D: Model3DProfile()}
+PROFILES: dict[int, UploadProfile] = {CATEGORY_3D: Model3DProfile()}
+
+
+def category_name(category: int) -> str:
+    """c411's name for a category, as the site spells it."""
+    return CATEGORIES.get(category, str(category))
+
+
+def default_category(kind: ContentKind) -> int | None:
+    """The category a Content Kind proposes; None when the user must pick."""
+    return DEFAULT_CATEGORIES.get(kind)
 
 
 def profile_for(kind: ContentKind) -> UploadProfile | None:
-    """How a Content Kind becomes an Upload; None for kinds not supported yet."""
-    return PROFILES.get(kind)
+    """How a Content Kind becomes an Upload by default; None when its category has no
+    profile yet or the kind proposes none."""
+    category = default_category(kind)
+    return PROFILES.get(category) if category is not None else None
 
 
 def _formats_3d(paths: Iterable[str]) -> list[str]:

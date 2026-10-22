@@ -53,6 +53,7 @@ def test_only_searched_3d_orphans_without_a_match_may_be_uploaded(qtbot, tmp_pat
 
     assert view.candidates() == [vise, archive, other]
     assert "Search it first" in (view.why_not(vise) or "")
+    assert "Films & Vidéos" in (view.why_not(other) or "")
     assert "not supported yet" in (view.why_not(other) or "")
     assert view.items.rowCount() == 0  # nothing ready: the rest hides behind Show all
     view.show_all.setChecked(True)
@@ -65,6 +66,56 @@ def test_only_searched_3d_orphans_without_a_match_may_be_uploaded(qtbot, tmp_pat
     assert view.why_not(archive) is None and view.needs_unpacking(archive)  # unpacked first
     assert view.items.rowCount() == 2
     assert view.items.item(0, 3).text() == "Archive: unpack it to upload"
+
+
+def test_the_category_picker_defaults_from_the_kind_and_reruns_the_profile(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path
+) -> None:
+    view, _, _ = tab(qtbot, tmp_path)
+    vise = model(tmp_path)
+    loose = LibraryEntry(
+        LibraryFolder(tmp_path / "STL", 2, ContentKind.OTHER), vise.item, ItemState.ORPHAN
+    )
+    view.set_entries([loose])
+    view.remember(loose, [])
+
+    assert view.items.rowCount() == 0  # no category: not ready, hidden behind Show all
+    view.show_all.setChecked(True)
+    assert view.why_not(loose) == "Choose a category"
+    assert view.items.item(0, 3).text() == "Choose a category"
+    view.items.selectRow(0)
+    assert (
+        view.category.currentData() is None and view.category.currentText() == "Choose a category"
+    )
+    assert not view.name.isEnabled() and not view.create_button.isEnabled()
+
+    view.category.setCurrentIndex(view.category.findData(10))
+    assert view.why_not(loose) is None and view.items.item(0, 3).text() == "Ready"
+    assert view.name.text() == "Petit.Etau.De.Bureau.NOTAG.3MF"
+    assert view.subcategory.count() == 3 and view.name.isEnabled()
+    assert view.create_button.isEnabled()
+
+    view.set_entries([loose, model(tmp_path)])  # a 3D folder defaults to Imprimante 3D
+    view.remember(view.candidates()[1], [])
+    view.items.selectRow(1 if view.shown[0] is loose else 0)
+    assert view.category.currentData() == 10
+
+
+def test_a_kind_whose_category_has_no_profile_yet_says_so(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, _, _ = tab(qtbot, tmp_path)
+    vise = model(tmp_path)
+    game = LibraryEntry(LibraryFolder(tmp_path, 1, ContentKind.GAME), vise.item, ItemState.ORPHAN)
+    view.set_entries([game])
+    view.remember(game, [])
+    view.show_all.setChecked(True)
+    view.items.selectRow(0)
+
+    assert (
+        "Jeux Vidéo" in (view.why_not(game) or "") and "not supported yet" in view.problems.text()
+    )
+    assert view.category.currentText() == "Jeux Vidéo"
+    view.category.setCurrentIndex(view.category.findData(10))  # the user can still pick 3D
+    assert view.why_not(game) is None
 
 
 def test_an_archive_that_cannot_be_read_cannot_be_unpacked(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

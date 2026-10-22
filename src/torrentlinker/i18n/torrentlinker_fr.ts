@@ -1969,17 +1969,17 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>Subcategory</name>
     <message>
-        <location filename="../gui/upload_view.py" line="69"/>
+        <location filename="../gui/upload_view.py" line="71"/>
         <source>Objects</source>
         <translation>Objets</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="70"/>
+        <location filename="../gui/upload_view.py" line="72"/>
         <source>Characters</source>
         <translation>Personnages</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="71"/>
+        <location filename="../gui/upload_view.py" line="73"/>
         <source>Pack</source>
         <translation>Pack</translation>
     </message>
@@ -1987,17 +1987,17 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>Upload</name>
     <message>
-        <location filename="../gui/upload_view.py" line="77"/>
+        <location filename="../gui/upload_view.py" line="79"/>
         <source>c411 refuses archives ({0}), and this one cannot be read</source>
         <translation>c411 refuse les archives ({0}), et celle-ci est illisible</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="81"/>
+        <location filename="../gui/upload_view.py" line="83"/>
         <source>No 3D file (STL, 3MF, OBJ, STEP, GCODE…)</source>
         <translation>Aucun fichier 3D (STL, 3MF, OBJ, STEP, GCODE…)</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="82"/>
+        <location filename="../gui/upload_view.py" line="84"/>
         <source>No file to upload</source>
         <translation>Aucun fichier à uploader</translation>
     </message>
@@ -2005,287 +2005,294 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>UploadTab</name>
     <message>
-        <location filename="../gui/upload_view.py" line="145"/>
+        <location filename="../gui/upload_view.py" line="148"/>
         <source>Local Item</source>
         <translation>Élément local</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="145"/>
-        <location filename="../gui/upload_view.py" line="189"/>
+        <location filename="../gui/upload_view.py" line="148"/>
+        <location filename="../gui/upload_view.py" line="195"/>
         <source>Size</source>
         <translation>Taille</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="176"/>
+        <location filename="../gui/upload_view.py" line="182"/>
         <source>Source</source>
         <translation>Source</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="177"/>
+        <location filename="../gui/upload_view.py" line="183"/>
         <source>Subcategory</source>
         <translation>Sous-catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="178"/>
+        <location filename="../gui/upload_view.py" line="184"/>
         <source>Release name</source>
         <translation>Nom de la release</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="241"/>
+        <location filename="../gui/upload_view.py" line="247"/>
         <source>Stop</source>
         <translation>Arrêter</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="393"/>
-        <source>No Orphan is ready to upload. Search your Orphans in the Library, set a Library Folder&apos;s Content Kind (3D models are supported so far), or tick Show all to see why the {0} others are not.</source>
-        <translation>Aucun orphelin n’est prêt à être uploadé. Recherchez vos orphelins dans la Bibliothèque, choisissez le type de contenu d’un dossier de bibliothèque (seuls les modèles 3D sont pris en charge pour l’instant), ou cochez Tout afficher pour voir pourquoi les {0} autres ne le sont pas.</translation>
-    </message>
-    <message>
-        <location filename="../gui/upload_view.py" line="401"/>
+        <location filename="../gui/upload_view.py" line="408"/>
         <source>Orphans that a search found no Match for. Each Upload is saved as a Draft on c411, where you publish it.</source>
         <translation>Orphelins pour lesquels la recherche n’a trouvé aucune correspondance. Chaque Upload est enregistré comme brouillon sur c411, où vous le publiez.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="462"/>
-        <location filename="../gui/upload_view.py" line="495"/>
+        <location filename="../gui/upload_view.py" line="504"/>
+        <location filename="../gui/upload_view.py" line="537"/>
         <source>Reading the archive…</source>
         <translation>Lecture de l’archive…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="497"/>
+        <location filename="../gui/upload_view.py" line="539"/>
         <source>This archive cannot be read: install 7-Zip to unpack it.</source>
         <translation>Cette archive est illisible : installez 7-Zip pour la décompresser.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="501"/>
+        <location filename="../gui/upload_view.py" line="543"/>
         <source>c411 refuses archives: it will be unpacked into {0}, next to it.</source>
         <translation>c411 refuse les archives : elle sera décompressée dans {0}, à côté.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="544"/>
+        <location filename="../gui/upload_view.py" line="586"/>
         <source>Files ({0})</source>
         <translation>Fichiers ({0})</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="578"/>
+        <location filename="../gui/upload_view.py" line="620"/>
         <source>Loading the image…</source>
         <translation>Chargement de l’image…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="600"/>
+        <location filename="../gui/upload_view.py" line="642"/>
         <source>not an image</source>
         <translation>ce n’est pas une image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="618"/>
+        <location filename="../gui/upload_view.py" line="660"/>
         <source>Could not load the image: {0}</source>
         <translation>Impossible de charger l’image : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="625"/>
+        <location filename="../gui/upload_view.py" line="667"/>
         <source>Create Draft</source>
         <translation>Créer le brouillon</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="133"/>
+        <location filename="../gui/upload_view.py" line="136"/>
         <source>All kinds</source>
         <translation>Tous les types</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="137"/>
+        <location filename="../gui/upload_view.py" line="140"/>
         <source>Show all</source>
         <translation>Tout afficher</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="138"/>
+        <location filename="../gui/upload_view.py" line="141"/>
         <source>Also show Orphans not searched yet or refused</source>
         <translation>Afficher aussi les orphelins pas encore recherchés ou refusés</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="145"/>
+        <location filename="../gui/upload_view.py" line="148"/>
         <source>Kind</source>
         <translation>Type</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="145"/>
+        <location filename="../gui/upload_view.py" line="148"/>
         <source>Status</source>
         <translation>État</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="166"/>
+        <location filename="../gui/upload_view.py" line="171"/>
         <source>Where it comes from; empty for NOTAG</source>
         <translation>D’où il vient ; vide pour NOTAG</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="174"/>
+        <location filename="../gui/upload_view.py" line="179"/>
         <source>https://… an image of it, required by c411</source>
         <translation>https://… une image, exigée par c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="179"/>
+        <location filename="../gui/upload_view.py" line="185"/>
         <source>Image URL</source>
         <translation>URL de l’image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="189"/>
+        <location filename="../gui/upload_view.py" line="195"/>
         <source>In the torrent</source>
         <translation>Dans le torrent</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="189"/>
+        <location filename="../gui/upload_view.py" line="195"/>
         <source>Your file</source>
         <translation>Votre fichier</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="197"/>
+        <location filename="../gui/upload_view.py" line="203"/>
         <source>Files</source>
         <translation>Fichiers</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="210"/>
+        <location filename="../gui/upload_view.py" line="216"/>
         <source>Reset from the template</source>
         <translation>Rétablir le modèle</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="213"/>
+        <location filename="../gui/upload_view.py" line="219"/>
         <source>Description</source>
         <translation>Description</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="223"/>
+        <location filename="../gui/upload_view.py" line="229"/>
         <source>Reset from the files</source>
         <translation>Régénérer depuis les fichiers</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="226"/>
+        <location filename="../gui/upload_view.py" line="232"/>
         <source>NFO</source>
         <translation>NFO</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="230"/>
-        <location filename="../gui/upload_view.py" line="576"/>
+        <location filename="../gui/upload_view.py" line="236"/>
+        <location filename="../gui/upload_view.py" line="618"/>
         <source>Enter the image URL above</source>
         <translation>Saisissez l’URL de l’image ci-dessus</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="234"/>
+        <location filename="../gui/upload_view.py" line="240"/>
         <source>Image</source>
         <translation>Image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="257"/>
+        <location filename="../gui/upload_view.py" line="263"/>
         <source>Your c411 Drafts</source>
         <translation>Vos brouillons c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="261"/>
+        <location filename="../gui/upload_view.py" line="267"/>
         <source>Draft</source>
         <translation>Brouillon</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="261"/>
+        <location filename="../gui/upload_view.py" line="181"/>
+        <location filename="../gui/upload_view.py" line="267"/>
         <source>Category</source>
         <translation>Catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="261"/>
+        <location filename="../gui/upload_view.py" line="267"/>
         <source>Modified</source>
         <translation>Modifié</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="271"/>
+        <location filename="../gui/upload_view.py" line="277"/>
         <source>Refresh</source>
         <translation>Actualiser</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="274"/>
+        <location filename="../gui/upload_view.py" line="280"/>
         <source>Open c411&apos;s upload page</source>
         <translation>Ouvrir la page d’upload de c411</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="335"/>
-        <source>Uploads of {0} are not supported yet</source>
-        <translation>Les Uploads de {0} ne sont pas encore pris en charge</translation>
-    </message>
-    <message>
-        <location filename="../gui/upload_view.py" line="340"/>
+        <location filename="../gui/upload_view.py" line="347"/>
         <source>Search it first: c411 may already have it</source>
         <translation>Recherchez-le d’abord : c411 l’a peut-être déjà</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="342"/>
+        <location filename="../gui/upload_view.py" line="349"/>
         <source>c411 already has it: Reseed it from the Library</source>
         <translation>c411 l’a déjà : repartagez-le depuis la Bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="367"/>
+        <location filename="../gui/upload_view.py" line="374"/>
         <source>Archive: unpack it to upload</source>
         <translation>Archive : à décompresser pour l’uploader</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="369"/>
+        <location filename="../gui/upload_view.py" line="376"/>
         <source>Ready</source>
         <translation>Prêt</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="796"/>
+        <location filename="../gui/upload_view.py" line="838"/>
         <source>{0} is saved as a Draft on c411 and is being verified in your torrent client. Once it seeds, open c411&apos;s upload page, load the Draft, check it and publish it.</source>
         <translation>{0} est enregistré comme brouillon sur c411 et en cours de vérification dans votre client torrent. Une fois partagé, ouvrez la page d’upload de c411, chargez le brouillon, vérifiez-le et publiez-le.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="388"/>
+        <location filename="../gui/upload_view.py" line="395"/>
         <source>Enter your Announce URL in Settings → Connections to make Uploads.</source>
         <translation>Saisissez votre adresse d’annonce dans Paramètres → Connexions pour faire des Uploads.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="510"/>
+        <location filename="../gui/upload_view.py" line="341"/>
+        <location filename="../gui/upload_view.py" line="435"/>
+        <source>Choose a category</source>
+        <translation>Choisissez une catégorie</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="344"/>
+        <source>Uploads to {0} are not supported yet</source>
+        <translation>Les Uploads vers {0} ne sont pas encore pris en charge</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="400"/>
+        <source>No Orphan is ready to upload. Search your Orphans in the Library, or tick Show all to pick a category and see why the {0} others are not ready.</source>
+        <translation>Aucun Orphelin n’est prêt à être uploadé. Recherchez vos Orphelins dans la Bibliothèque, ou cochez Tout afficher pour choisir une catégorie et voir pourquoi les {0} autres ne sont pas prêts.</translation>
+    </message>
+    <message>
+        <location filename="../gui/upload_view.py" line="552"/>
         <source>A release name has dots between words, no spaces and no accents.</source>
         <translation>Un nom de release sépare les mots par des points, sans espaces ni accents.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="625"/>
+        <location filename="../gui/upload_view.py" line="667"/>
         <source>Unpack…</source>
         <translation>Décompresser…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="627"/>
+        <location filename="../gui/upload_view.py" line="669"/>
         <source>Unpack the archive into a new folder next to it, then prepare its Upload</source>
         <translation>Décompresser l’archive dans un nouveau dossier à côté, puis préparer son Upload</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="630"/>
+        <location filename="../gui/upload_view.py" line="672"/>
         <source>Make the torrent, save it with the NFO and description as a Draft on c411, then seed from your files. You publish it on c411.</source>
         <translation>Créer le torrent, l’enregistrer avec le NFO et la description comme brouillon sur c411, puis partager depuis vos fichiers. Vous le publiez sur c411.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="657"/>
+        <location filename="../gui/upload_view.py" line="699"/>
         <source>No image</source>
         <translation>Pas d’image</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="659"/>
+        <location filename="../gui/upload_view.py" line="701"/>
         <source>c411 requires an image in the description. Save the Draft anyway and add the image on c411 before publishing?</source>
         <translation>c411 exige une image dans la description. Enregistrer quand même le brouillon et ajouter l’image sur c411 avant de publier ?</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="720"/>
-        <location filename="../gui/upload_view.py" line="731"/>
-        <location filename="../gui/upload_view.py" line="739"/>
+        <location filename="../gui/upload_view.py" line="762"/>
+        <location filename="../gui/upload_view.py" line="773"/>
+        <location filename="../gui/upload_view.py" line="781"/>
         <source>Unpack</source>
         <translation>Décompresser</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="722"/>
+        <location filename="../gui/upload_view.py" line="764"/>
         <source>{0} already exists. If it holds this archive unpacked, scan the Library and pick that folder.</source>
         <translation>{0} existe déjà. S’il contient cette archive décompressée, analysez la Bibliothèque et choisissez ce dossier.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="732"/>
+        <location filename="../gui/upload_view.py" line="774"/>
         <source>Unpacking needs {0}, but only {1} is free on that disk.</source>
         <translation>La décompression demande {0}, mais seulement {1} est libre sur ce disque.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="741"/>
+        <location filename="../gui/upload_view.py" line="783"/>
         <source>c411 refuses archives. Unpack {0} into the new folder
 {1}?
 
@@ -2296,17 +2303,17 @@ It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten. Th
 Cela écrit {2} en {3} fichiers ; {4} est libre sur ce disque. Rien n’est écrasé. L’Upload est ensuite fait depuis les fichiers décompressés ; une fois partagé, il vous est proposé de mettre l’archive à la corbeille.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="794"/>
+        <location filename="../gui/upload_view.py" line="836"/>
         <source>Draft saved</source>
         <translation>Brouillon enregistré</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="808"/>
+        <location filename="../gui/upload_view.py" line="850"/>
         <source>Not seeding</source>
         <translation>Pas en partage</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="810"/>
+        <location filename="../gui/upload_view.py" line="852"/>
         <source>The Draft is saved on c411, but its torrent could not be added to your torrent client: {0}
 
 c411 refuses an upload whose uploader is not seeding: do not publish it before it seeds.</source>
@@ -2315,17 +2322,17 @@ c411 refuses an upload whose uploader is not seeding: do not publish it before i
 c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant qu’il soit partagé.</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="820"/>
+        <location filename="../gui/upload_view.py" line="862"/>
         <source>Upload failed</source>
         <translation>Échec de l’Upload</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="833"/>
+        <location filename="../gui/upload_view.py" line="875"/>
         <source>Reading your Drafts…</source>
         <translation>Lecture de vos brouillons…</translation>
     </message>
     <message>
-        <location filename="../gui/upload_view.py" line="845"/>
+        <location filename="../gui/upload_view.py" line="887"/>
         <source>{0}/15 Drafts on c411</source>
         <translation>{0}/15 brouillons sur c411</translation>
     </message>

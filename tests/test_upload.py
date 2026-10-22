@@ -13,6 +13,8 @@ from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
 from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.upload import (
+    CATEGORY_3D,
+    PROFILES,
     MiB,
     Model3DProfile,
     Problem,
@@ -21,6 +23,8 @@ from torrentlinker.upload import (
     UploadRequest,
     UploadStopped,
     bencode,
+    category_name,
+    default_category,
     draft_body,
     make_torrent,
     nfo_3d,
@@ -77,9 +81,24 @@ def test_archives_and_folders_without_a_3d_file_are_refused(tmp_path: Path) -> N
     assert PROFILE.refusals(vise(tmp_path), IGNORE) == []
 
 
-def test_only_3d_models_have_an_upload_profile_so_far(tmp_path: Path) -> None:
+def test_profiles_are_keyed_by_c411_category_and_a_kind_only_proposes_one(tmp_path: Path) -> None:
+    assert isinstance(PROFILES[CATEGORY_3D], Model3DProfile)
+    assert PROFILES[CATEGORY_3D].category == CATEGORY_3D == 10
+    assert all(p.category == c for c, p in PROFILES.items())
+    assert {k: default_category(k) for k in ContentKind} == {
+        ContentKind.MOVIE: 1,
+        ContentKind.SERIES: 1,
+        ContentKind.EBOOK: 2,
+        ContentKind.MUSIC: 3,
+        ContentKind.GAME: 5,
+        ContentKind.MODEL_3D: 10,
+        ContentKind.OTHER: None,
+    }
     assert isinstance(profile_for(ContentKind.MODEL_3D), Model3DProfile)
-    assert profile_for(ContentKind.MOVIE) is None
+    assert profile_for(ContentKind.MOVIE) is None  # category 1 has no profile yet
+    assert profile_for(ContentKind.OTHER) is None
+    assert category_name(1) == "Films & Vidéos" and category_name(6) == "Emulation"
+    assert category_name(10) == "Imprimante 3D" and category_name(99) == "99"
     assert PROFILE.default_subcategory(vise(tmp_path), IGNORE) == Subcategory3D.OBJECTS
     assert PROFILE.default_subcategory(dragon_pack(tmp_path), IGNORE) == Subcategory3D.PACK
 

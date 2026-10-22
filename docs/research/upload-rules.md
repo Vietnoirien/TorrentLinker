@@ -196,6 +196,20 @@ Listed in the site's route rules (`_nuxt/BFnh6W14.js`). Tried with an API key on
 
 c411 category ids from `GET /api/categories` (same day): Imprimante 3D is category 10, with subcategories 51 Objets, 52 Personnages, 53 Pack.
 
+All category ids (the upload handoff table; Nulled and Adult get no profile, and the table lists no id for Adult), with the Content Kind that proposes each in the Upload tab (the user can pick another):
+
+| Id | Category | Proposed by | Subcategories known |
+|---|---|---|---|
+| 1 | Films & Vidéos | movie, series | not yet read |
+| 2 | Ebook | ebook | not yet read |
+| 3 | Audio | music | not yet read |
+| 4 | Applications | (picked) | not yet read |
+| 5 | Jeux Vidéo | game | not yet read |
+| 6 | Emulation | (picked) | not yet read |
+| 7 | GPS | (picked) | not yet read |
+| 9 | Nulled | no profile | none |
+| 10 | Imprimante 3D | 3d-model | 51 Objets, 52 Personnages, 53 Pack |
+
 - `POST /api/upload/parse`: the upload page's analysis. It takes `torrentName`, `nfoContent`, `mediainfoContent`, `nfoFileName`, `categoryId`, `subcategoryId`, `templateId`, `fileCount`, `fileSize`, `fileNames`, `releaseName` and more. It returns the parsed name, a suggested title, suggested option values with confidence, warnings, NFO validation, naming validation and similar torrents already on c411. Checking a draft with it before saving would show c411's own verdict, if it accepts an API key.
 - `POST /api/upload/image`: image upload, a likely host for the description's required image.
 - `GET /api/upload/flow`: the upload mode (`manual` or `semi-auto`) and its configuration.

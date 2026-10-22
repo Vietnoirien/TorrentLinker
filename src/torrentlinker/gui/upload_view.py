@@ -48,6 +48,7 @@ from torrentlinker.qbit import Qbit
 from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import Store
 from torrentlinker.upload import (
+    PROFILES,
     PreparedUpload,
     Problem,
     Refusal,
@@ -55,8 +56,9 @@ from torrentlinker.upload import (
     UploadProfile,
     UploadRequest,
     UploadStopped,
+    category_name,
     create_upload,
-    profile_for,
+    default_category,
     seed_upload,
     upload_files,
 )
@@ -115,6 +117,7 @@ class UploadTab(QWidget):
         self._listings: dict[Path, Unpacked | None] = {}  # archives read so far
         self._to_select: tuple[Path, Path] | None = None  # (new folder, its archive)
         self.files: list[UploadFile] = []
+        self._picked: dict[Path, int] = {}  # the category the user chose, by Local Item
         self._edited: set[str] = set()  # name, nfo, description: left alone once edited
         self._stop = threading.Event()
         self._image_url = ""  # the URL whose image the preview shows
@@ -162,6 +165,8 @@ class UploadTab(QWidget):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
+        self.category = QComboBox()
+        self.category.currentIndexChanged.connect(self._category_picked)
         self.source = QLineEdit()
         self.source.setPlaceholderText(self.tr("Where it comes from; empty for NOTAG"))
         self.source.textChanged.connect(self._regenerate)
@@ -173,6 +178,7 @@ class UploadTab(QWidget):
         self.image_url = QLineEdit()
         self.image_url.setPlaceholderText(self.tr("https://… an image of it, required by c411"))
         self.image_url.textChanged.connect(self._image_changed)
+        form.addRow(self.tr("Category"), self.category)
         form.addRow(self.tr("Source"), self.source)
         form.addRow(self.tr("Subcategory"), self.subcategory)
         form.addRow(self.tr("Release name"), self.name)
@@ -321,7 +327,7 @@ class UploadTab(QWidget):
 
     def needs_unpacking(self, entry: LibraryEntry) -> bool:
         """An archive whose only fault is being one: unpacked, it may become an Upload."""
-        profile = profile_for(entry.folder.kind)
+        profile = self._profile_of(entry)
         if profile is None or not is_archive(entry.item):
             return False
         found = profile.refusals(entry.item, self.ignore())
@@ -330,11 +336,12 @@ class UploadTab(QWidget):
     def why_not(self, entry: LibraryEntry) -> str | None:
         """Why this Orphan cannot be uploaded now; None when it can, an archive included
         (it is unpacked first)."""
-        profile = profile_for(entry.folder.kind)
+        category = self._category_of(entry)
+        if category is None:
+            return self.tr("Choose a category")
+        profile = PROFILES.get(category)
         if profile is None:
-            return self.tr("Uploads of {0} are not supported yet").format(
-                kind_label(entry.folder.kind)
-            )
+            return self.tr("Uploads to {0} are not supported yet").format(category_name(category))
         checked = self.searched.get(entry.item.path)
         if checked is None:
             return self.tr("Search it first: c411 may already have it")
@@ -390,9 +397,9 @@ class UploadTab(QWidget):
         elif not self.shown and not everything:
             self.notice.setText(
                 self.tr(
-                    "No Orphan is ready to upload. Search your Orphans in the Library, set a "
-                    "Library Folder's Content Kind (3D models are supported so far), or tick "
-                    "Show all to see why the {0} others are not."
+                    "No Orphan is ready to upload. Search your Orphans in the Library, or "
+                    "tick Show all to pick a category and see why the {0} others are not "
+                    "ready."
                 ).format(hidden)
             )
         else:
@@ -406,8 +413,42 @@ class UploadTab(QWidget):
 
     # The release -----------------------------------------------------------
 
+    def _category_of(self, entry: LibraryEntry) -> int | None:
+        """The user's pick, else what the Library Folder's Content Kind proposes."""
+        return self._picked.get(entry.item.path, default_category(entry.folder.kind))
+
+    def _profile_of(self, entry: LibraryEntry) -> UploadProfile | None:
+        category = self._category_of(entry)
+        return PROFILES.get(category) if category is not None else None
+
     def profile(self) -> UploadProfile | None:
-        return profile_for(self.entry.folder.kind) if self.entry else None
+        return self._profile_of(self.entry) if self.entry else None
+
+    def _fill_categories(self) -> None:
+        """The picker lists every profile; a category proposed but not supported yet
+        shows first, so the picker never says otherwise than the status."""
+        self.category.blockSignals(True)
+        self.category.clear()
+        current = self._category_of(self.entry) if self.entry else None
+        if current not in PROFILES:
+            self.category.addItem(
+                category_name(current) if current is not None else self.tr("Choose a category"),
+                current,
+            )
+        for category in PROFILES:
+            self.category.addItem(category_name(category), category)
+        self.category.setCurrentIndex(self.category.findData(current))
+        self.category.blockSignals(False)
+        self.category.setEnabled(self.entry is not None)
+
+    def _category_picked(self) -> None:
+        """Another category is another profile: its refusals, subcategories and texts."""
+        category = self.category.currentData()
+        if self.entry is None or category is None:
+            return
+        self._picked[self.entry.item.path] = category
+        self._show_entry()
+        self._fill()
 
     def source_item(self) -> LocalItem | None:
         """What the Upload is made of: the selected item, or the archive as unpacked."""
@@ -431,6 +472,7 @@ class UploadTab(QWidget):
         entry, profile = self.entry, self.profile()
         if entry is not None and self.needs_unpacking(entry):
             self._read_archive(entry)
+        self._fill_categories()
         self.subcategory.blockSignals(True)
         self.subcategory.clear()
         if profile is not None:
