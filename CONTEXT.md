@@ -76,6 +76,10 @@ _Avoid_: Reupload (c411's term for one kind of Upload), release, post
 **Draft**:
 An Upload saved on c411 but not yet published; the user reviews and publishes it there.
 
+**Presentation Image**:
+The picture of an Upload that its description needs and c411's image upload refuses an API key for; the app renders the model itself (one capture of the 3D view, or for a Pack a contact sheet of up to 9 models with their file names) and saves a PNG for the user to add on c411 while reviewing the Draft.
+_Avoid_: Screenshot, thumbnail, cover
+
 **Announce URL**:
 The user's private tracker address, holding their passkey, that every Upload's torrent carries.
 _Avoid_: Passkey (alone), tracker URL

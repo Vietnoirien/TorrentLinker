@@ -64,7 +64,17 @@ Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-z
 
 The **Upload** tab lists 3D-model Orphans that a search found no Match for: c411 may not have them yet. Set the Library Folder's Content Kind to **3D models**, enter your **Announce URL** (from your c411 profile) in **Settings → Connections**, and use a main API key with the **Brouillons d'upload** (`drafts:rw`) scope.
 
-For the chosen item, TorrentLinker checks c411's 3D rules (accepted formats, no archives), suggests a release name such as `Petit.Etau.De.Bureau.NOTAG.3MF` (dots between words, no accents, `NOTAG` when the source is unknown), makes a private torrent with c411's piece size and an NFO listing every file, and saves them as a Draft on c411. The torrent then joins your torrent client against your own files, renamed inside the client as a Reseed is, so your files keep their names; it seeds once Verification passes. Open c411's upload page, load the Draft, add the image the rules ask for, and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
+For the chosen item, TorrentLinker checks c411's 3D rules (accepted formats, no archives), suggests a release name such as `Petit.Etau.De.Bureau.NOTAG.3MF` (dots between words, no accents, `NOTAG` when the source is unknown), makes a private torrent with c411's piece size and an NFO listing every file, and saves them as a Draft on c411. The torrent then joins your torrent client against your own files, renamed inside the client as a Reseed is, so your files keep their names; it seeds once Verification passes. Open c411's upload page, load the Draft, add the image the rules ask for (see below), and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
+
+### The image for the description
+
+c411's image upload only accepts a logged-in browser, so TorrentLinker renders the model itself. The **3D view** page of the Upload tab shows the chosen item's model (STL, binary or ASCII; OBJ; 3MF) at an isometric angle, framed on its bounding box: drag to rotate, scroll to zoom, double-click or **Reset the view** to start over. A folder with several models offers each in a list. Big meshes are read off the interface thread and thinned for display only.
+
+- **Capture** saves the current view as a PNG at least 1000 px wide.
+- For a **Pack**, **Capture the Pack sheet** saves a grid of up to 9 models, each seen from the isometric angle with its file name below.
+- **Open the folder** shows the images, which are in `uploads/<release name>/` (never in your Library). Add the one you choose on c411's upload page while reviewing the Draft; the description keeps an `[img]…[/img]` placeholder for it.
+
+STEP, GCODE, BLEND, F3D, SLDPRT and FCStd items show no preview and say so: make that image yourself. Rendering needs OpenGL; without it the view and captures are unavailable and the message says why.
 
 ## Zen integration
 
@@ -128,7 +138,7 @@ See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the
 It holds:
 
 - `torrents/`: every `.torrent` downloaded from c411, so none is requested twice, even after a restart or when a saved Plan is sent again. Files are named after a fingerprint of their download address, without your key. Deleting the folder is harmless: the files are fetched again when needed.
-- `uploads/`: the `.torrent` and `.nfo` of each Upload, as sent in its Draft.
+- `uploads/`: the `.torrent` and `.nfo` of each Upload, as sent in its Draft, and a folder per Upload with the images captured for its description.
 - `state.db`: the Catalogue, remembered searches, Rejections, Verifications in progress, the saved Plan and the Uploads made.
 - `settings.json`: your settings. API keys and passwords are not in it: they stay in the system keyring.
 - `torrentlinker.log`: the log, useful when reporting a problem.

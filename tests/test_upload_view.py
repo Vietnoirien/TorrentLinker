@@ -8,6 +8,7 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import IgnoreList
 from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
+from torrentlinker.upload import Subcategory3D
 
 ANNOUNCE = "https://c411.org/announce/secret"
 
@@ -272,3 +273,27 @@ def test_bbcode_renders_as_html_without_running_markup() -> None:
     assert '<img src="https://i.example/a.png"' in out and "<b>x</b>" in out
     assert "&lt;script&gt;" in out and "<script>" not in out
     assert "javascript" in out and 'href="javascript' not in out
+
+
+def test_the_3d_page_follows_the_selected_orphan_and_the_subcategory(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    import shutil
+
+    view, _, _ = tab(qtbot, tmp_path)
+    box = model(tmp_path, "Boite.stl")
+    shutil.copy(Path(__file__).parent / "fixtures" / "models" / "cube-binary.stl", box.item.path)
+    box = LibraryEntry(box.folder, scan_item(box.item.path), ItemState.ORPHAN)
+    view.set_entries([box])
+    view.remember(box, [])
+    view.show()
+    assert view.pages.isTabVisible(view.model_tab) is False  # nothing picked
+
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: view.model_panel.viewer.display is not None, timeout=10000)
+    assert view.pages.isTabVisible(view.model_tab)
+    assert view.model_panel.sheet_button.isHidden()  # one model, an Objects upload
+    pack = view.subcategory.findData(Subcategory3D.PACK)
+    view.subcategory.setCurrentIndex(pack)
+    assert not view.model_panel.sheet_button.isHidden()  # a Pack gets its contact sheet
+    assert view.model_panel.upload_folder() == tmp_path / "uploads" / view.name.text()
+    assert "[img]…[/img]" in view.description.toPlainText()  # the image is added on c411

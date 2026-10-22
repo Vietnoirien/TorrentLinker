@@ -92,7 +92,8 @@ def test_the_description_shows_the_image_the_facts_and_a_packs_files(tmp_path: P
     assert text.startswith("[center][img]https://i.example/d.png[/img][/center]")
     assert "[b]Source :[/b] Inconnue" in text and "[b]Formats :[/b] STL" in text
     assert "[spoiler=Contenu][list]" in text and "[*]Tetes/tete.ouverte.stl" in text
-    assert "[img]" not in PROFILE.description("T", files, "", "")
+    # no URL yet: a placeholder for the image the user adds on c411
+    assert PROFILE.description("T", files, "", "").startswith("[center][img]…[/img][/center]")
 
 
 def test_a_single_file_is_named_the_release_title_plus_its_extension(tmp_path: Path) -> None:
