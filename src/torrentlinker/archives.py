@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from collections.abc import Callable
@@ -210,26 +211,57 @@ def _unzip(target: Unpacked, progress: Callable[[int, int], None]) -> None:
 
 
 def _unpack_with_tool(target: Unpacked, progress: Callable[[int, int], None]) -> None:
-    archive, into = target.archive, target.into
+    """Unpack with each available tool in turn; a tool may list an archive it cannot
+    decompress (Debian's 7-Zip and RAR5), so the next one gets a clean try."""
+    commands = _unpack_commands(target.archive, target.into)
+    if not commands:
+        raise ArchiveError(f"no tool to unpack {target.archive.suffix} archives: install 7-Zip")
+    errors = []
+    for args in commands:
+        try:
+            _run_unpacking(args, target, progress)
+            return
+        except ArchiveError as e:
+            errors.append(f"{Path(args[0]).name}: {e}")
+            shutil.rmtree(target.item.path, ignore_errors=True)  # this call's own folder
+    raise ArchiveError("\n".join(errors))
+
+
+def _unpack_commands(archive: Path, into: Path) -> list[list[str]]:
+    commands = []
+    if archive.suffix.lower() == ".rar" and (unrar := _tool("unrar")):
+        # -o-: never overwrite an existing file.
+        commands.append([unrar, "x", "-o-", "-idq", "-cfg-", str(archive), str(into) + os.sep])
     if seven := _tool("7z"):
         # -aos: skip a file that would already exist; never overwrite.
-        args = [seven, "x", "-aos", "-bd", "-y", "-sccUTF-8", f"-o{into}", str(archive)]
-    elif unrar := _tool("unrar"):
-        args = [unrar, "x", "-o-", "-idq", "-cfg-", str(archive), str(into) + os.sep]
-    else:
-        raise ArchiveError(f"no tool to unpack {archive.suffix} archives: install 7-Zip")
-    into.mkdir(parents=True, exist_ok=True)
+        commands.append([seven, "x", "-aos", "-bd", "-y", "-sccUTF-8", f"-o{into}", str(archive)])
+    return commands
+
+
+def _run_unpacking(args: list[str], target: Unpacked, progress: Callable[[int, int], None]) -> None:
+    target.into.mkdir(parents=True, exist_ok=True)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    process = subprocess.Popen(
-        args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=flags
-    )
-    folder, total = target.item.path, target.size
-    while process.poll() is None:
-        time.sleep(0.5)
-        progress(_bytes_under(folder), total)
-    if process.returncode != 0:
-        error = process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
-        raise ArchiveError(error or f"unpacking failed ({process.returncode})")
+    # Errors go to a file: a tool reporting every entry would fill a pipe and stall.
+    with tempfile.TemporaryFile() as errors:
+        process = subprocess.Popen(
+            args, stdout=subprocess.DEVNULL, stderr=errors, creationflags=flags
+        )
+        folder, total = target.item.path, target.size
+        while process.poll() is None:
+            time.sleep(0.5)
+            progress(_bytes_under(folder), total)
+        if process.returncode != 0:
+            errors.seek(0)
+            text = errors.read().decode(errors="replace")
+            raise ArchiveError(_shortened(text) or f"failed ({process.returncode})")
+
+
+def _shortened(text: str, keep: int = 3) -> str:
+    """A tool's error output cut to a few lines: it may repeat one error per file."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) <= keep:
+        return "\n".join(lines)
+    return "\n".join([*lines[:keep], f"… and {len(lines) - keep} more lines"])
 
 
 def _bytes_under(folder: Path) -> int:

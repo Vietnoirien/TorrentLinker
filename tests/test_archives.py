@@ -172,3 +172,41 @@ def test_a_7z_archive_is_listed_and_unpacked_with_7_zip(tmp_path: Path) -> None:
     assert (tmp_path / "lib" / "Kaneda" / "STL" / "body.stl").stat().st_size == (
         folder / "STL" / "body.stl"
     ).stat().st_size
+
+
+@pytest.mark.skipif(shutil.which("7z") is None, reason="7-Zip is not installed")
+def test_when_a_tool_cannot_unpack_the_next_one_gets_a_clean_try(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from torrentlinker import archives
+
+    folder = release(tmp_path / "src" / "Kaneda")
+    (tmp_path / "lib").mkdir()
+    archive = tmp_path / "lib" / "Kaneda.7z"
+    subprocess.run(["7z", "a", "-bd", str(archive), str(folder)], check=True, capture_output=True)
+    target = unpacked(item_of(archive))
+    assert target is not None
+    real = archives._unpack_commands
+    # Like Debian's 7-Zip with RAR5: it starts writing, then fails on every entry.
+    broken = [
+        "sh",
+        "-c",
+        'mkdir -p "$0/Kaneda" && touch "$0/Kaneda/half" && exit 2',
+        str(target.into),
+    ]
+    monkeypatch.setattr(archives, "_unpack_commands", lambda a, i: [broken, *real(a, i)])
+
+    unpack(target)
+
+    assert not (tmp_path / "lib" / "Kaneda" / "half").exists()
+    assert (tmp_path / "lib" / "Kaneda" / "STL" / "head.stl").is_file()
+
+
+def test_a_tool_reporting_every_file_is_cut_to_a_few_lines() -> None:
+    from torrentlinker.archives import _shortened
+
+    text = "\n".join(f"ERROR: Unsupported Method : Kaneda/bike1-{i}.stl" for i in range(200))
+
+    short = _shortened(text)
+
+    assert short.count("\n") == 3 and short.endswith("… and 197 more lines")

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from torrentlinker.domain import LocalItem
-from torrentlinker.matching import match
+from torrentlinker.matching import compare, match
 
 EBOOK_LOCAL = "Le joueur d'echecs - Stefan Zweig.epub"
 EBOOK = LocalItem(Path("/windocs/E-Book") / EBOOK_LOCAL, {EBOOK_LOCAL: 67163})
@@ -76,3 +76,26 @@ def test_candidate_size_within_tolerance_is_plausible() -> None:
     assert is_plausible(1020, LocalItem(Path("/x"), {"x": 1000}), tolerance=0.02)
     assert not is_plausible(1021, LocalItem(Path("/x"), {"x": 1000}), tolerance=0.02)
     assert not is_plausible(9000000, EBOOK, tolerance=0.02)
+
+
+def test_same_size_files_are_paired_within_the_same_folder() -> None:
+    # Two scales of one model: same triangles, so same sizes, in different folders.
+    sizes = {"head.stl": 1084, "bike1-3.stl": 5084}
+    torrent = {
+        f"CA3D.Kaneda[STL]/{scale} scale/{name}": size
+        for scale in ("1-6", "1-9", "1-12")
+        for name, size in sizes.items()
+    }
+    item = LocalItem(
+        Path("/lib/CA3D Studios - Kaneda - Akira"),
+        {
+            f"CA3D Studios - Kaneda - Akira/{scale} scale/{name}": size
+            for scale in ("1-12", "1-9", "1-6")  # another order on disk
+            for name, size in sizes.items()
+        },
+    )
+
+    pairs = compare(item, torrent).pairs
+
+    for t_path, local in pairs.items():
+        assert t_path.split("/")[1] == local.split("/")[1], (t_path, local)

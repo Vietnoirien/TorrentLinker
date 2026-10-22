@@ -95,7 +95,8 @@ def match(
 def compare(
     item: LocalItem, torrent_files: dict[str, int], ignore: IgnoreList = IgnoreList()
 ) -> FileComparison:
-    """Pair torrent files with local files of identical size; names only break ties."""
+    """Pair torrent files with local files of identical size; names, then folders, only
+    break ties."""
     by_size: dict[int, list[str]] = defaultdict(list)
     for path, size in item.files.items():
         by_size[size].append(path)
@@ -125,6 +126,20 @@ def is_plausible(candidate_size: int, item: LocalItem, tolerance: float) -> bool
     return abs(candidate_size - item.size) <= tolerance * item.size
 
 
-def _name_similarity(a: str, b: str) -> float:
+def _name_similarity(a: str, b: str) -> tuple[float, float]:
+    """How alike two paths are: file names first, then the folders below the top one.
+
+    Folders break ties between same-size files: the same model at another scale has the
+    same number of triangles, so an STL file of exactly the same size.
+    """
     name_a, name_b = a.rsplit("/", 1)[-1].casefold(), b.rsplit("/", 1)[-1].casefold()
-    return SequenceMatcher(None, name_a, name_b).ratio()
+    folders_a, folders_b = (_folders_below_top(p).casefold() for p in (a, b))
+    return (
+        SequenceMatcher(None, name_a, name_b).ratio(),
+        SequenceMatcher(None, folders_a, folders_b).ratio(),
+    )
+
+
+def _folders_below_top(path: str) -> str:
+    """The folders between the top one, named differently by each side, and the file."""
+    return "/".join(path.split("/")[1:-1])
