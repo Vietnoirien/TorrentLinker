@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.indexer import MIN_INTERVAL
 from torrentlinker.plan import Plan, PlanGoal, PlanOptions
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
@@ -286,6 +287,7 @@ class PlanView(QGroupBox):
     categories_changed = Signal(object)  # set[int] | None
     stop_fetch_requested = Signal()
     stop_send_requested = Signal()
+    speed_test_requested = Signal()
     options_changed = Signal(object)  # PlanOptions
 
     def __init__(self) -> None:
@@ -301,6 +303,30 @@ class PlanView(QGroupBox):
         )
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        self.speed: float | None = None  # bytes/s
+        self.speed_tested: str | None = None
+        times = QHBoxLayout()
+        self.times = QLabel()
+        self.times.setWordWrap(True)
+        self.times.setToolTip(
+            self.tr(
+                "Sending: c411 allows one .torrent about every {0:.0f} seconds. "
+                "Downloading: at the speed of your last speed test, so at best; a torrent "
+                "with few seeders is slower than your connection."
+            ).format(MIN_INTERVAL)
+        )
+        times.addWidget(self.times, 1)
+        self.speed_button = QPushButton(self.tr("Test speed"))
+        self.speed_button.setToolTip(
+            self.tr(
+                "Measure your download speed for about 8 seconds with Cloudflare's public "
+                "speed test (anonymous). Run it while qBittorrent is not downloading."
+            )
+        )
+        self.speed_button.clicked.connect(self.speed_test_requested)
+        times.addWidget(self.speed_button)
+        layout.addLayout(times)
+        self._show_times()
         options = QHBoxLayout()
         self.goal = QComboBox()
         self.goal.addItem(self.tr("Zen/day"), PlanGoal.ZEN.value)
@@ -543,6 +569,7 @@ class PlanView(QGroupBox):
     def begin(self) -> None:
         """Clear the previous result while a new Plan is being prepared."""
         self.plan = None
+        self._show_times()
         self.table.setRowCount(0)
         self.space_table.setRowCount(0)
         self.space_table.hide()
@@ -565,6 +592,7 @@ class PlanView(QGroupBox):
     def show_plan(self, plan: Plan) -> None:
         self.plan = plan
         self.busy(False)
+        self._show_times()
         clear_rows(self.table, len(plan.items))
         self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         for r, item in enumerate(plan.items):
@@ -625,6 +653,48 @@ class PlanView(QGroupBox):
         self.busy(False)
         self.summary.setText(self.tr("Could not make a Plan: {0}").format(error))
 
+    # Estimated times -------------------------------------------------------
+
+    def set_speed(self, speed: float | None, tested: str | None) -> None:
+        self.speed, self.speed_tested = speed, tested
+        self.speed_button.setEnabled(True)
+        self.speed_button.setText(self.tr("Test speed"))
+        self._show_times()
+
+    def speed_testing(self) -> None:
+        self.speed_button.setEnabled(False)
+        self.speed_button.setText(self.tr("Testing speed…"))
+
+    def _show_times(self) -> None:
+        plan = self.plan
+        lines = [self.speed_text()]
+        if plan is not None and plan.items:
+            lines.insert(
+                0,
+                self.tr("Sending to qBittorrent: ≈ {0}").format(
+                    duration_text(plan.sending_seconds(MIN_INTERVAL))
+                )
+                + " · "
+                + (
+                    self.tr("Downloading the data: ≈ {0} at best").format(
+                        duration_text(plan.download_seconds(self.speed))
+                    )
+                    if self.speed
+                    else self.tr("Downloading the data: test your speed to estimate it")
+                ),
+            )
+        self.times.setText("\n".join(lines))
+
+    def speed_text(self) -> str:
+        if not self.speed:
+            return self.tr("Download speed: not tested")
+        text = self.tr("Download speed: {0} Mbit/s ({1}/s)").format(
+            f"{self.speed * 8 / 1e6:.0f}", human_size(round(self.speed))
+        )
+        if self.speed_tested:
+            text += " · " + self.tr("tested {0}").format(self.speed_tested[:16].replace("T", " "))
+        return text
+
     # Sending ---------------------------------------------------------------
 
     def sending(self, progress: SendProgress | None) -> None:
@@ -677,6 +747,8 @@ class PlanView(QGroupBox):
 
 def duration_text(seconds: float) -> str:
     minutes = round(seconds / 60)
+    if minutes >= 48 * 60:
+        return QCoreApplication.translate("PlanView", "{0} days").format(f"{minutes / 1440:.1f}")
     if minutes < 60:
         return QCoreApplication.translate("PlanView", "{0} min").format(max(minutes, 1))
     return QCoreApplication.translate("PlanView", "{0} h {1:02d}").format(

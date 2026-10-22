@@ -65,6 +65,8 @@ class Settings:
     free_space_margin: float = 0.10  # share of each disk a Plan leaves free
     plan_categories: list[int] | None = None  # categories a Plan draws from; None = all
     plan_options: PlanOptions = field(default_factory=PlanOptions)
+    download_speed: float | None = None  # bytes/s from the last speed test
+    download_speed_tested: str | None = None  # when, ISO 8601
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +82,8 @@ class Settings:
             "free_space_margin": self.free_space_margin,
             "plan_categories": self.plan_categories,
             "plan_options": asdict(self.plan_options),
+            "download_speed": self.download_speed,
+            "download_speed_tested": self.download_speed_tested,
             "indexer_categories": {str(k): asdict(v) for k, v in self.indexer_categories.items()},
             "download_folders": {
                 "by_category": {str(k): v for k, v in self.download_folders.by_category.items()},
@@ -112,6 +116,10 @@ class Settings:
                 else None
             ),
             plan_options=_plan_options_from_json(data.get("plan_options", {})),
+            download_speed=(
+                float(data["download_speed"]) if data.get("download_speed") is not None else None
+            ),
+            download_speed_tested=data.get("download_speed_tested"),
             indexer_categories={
                 int(k): IndexerCategory(str(v.get("name", "")), v.get("parent"))
                 for k, v in data.get("indexer_categories", {}).items()

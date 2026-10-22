@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelection, Qt, QTimer
@@ -87,6 +88,7 @@ from torrentlinker.review import (
 )
 from torrentlinker.seeding import Seeding, indexer_torrents, observe_swarm, seeding
 from torrentlinker.send import SendProgress, SendReport, send_plan
+from torrentlinker.speedtest import measure_download_speed
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.tmdb import Tmdb
 
@@ -206,6 +208,8 @@ class MainWindow(QMainWindow):
         self.offer_plan_categories()
         self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
         self.zen_tab.plan_view.stop_send_requested.connect(self.stop_sending)
+        self.zen_tab.plan_view.speed_test_requested.connect(self.test_speed)
+        self.zen_tab.plan_view.set_speed(settings.download_speed, settings.download_speed_tested)
         self._after_catalogue: Callable[[], None] | None = None
         self._after_catalogue_always: Callable[[], None] | None = None
         self._pending_plan: Callable[[], None] | None = None
@@ -487,6 +491,8 @@ class MainWindow(QMainWindow):
                 f"{payback:.0f}" if payback is not None else "–",
                 self.catalogue_age(),
             )
+            + "\n\n"
+            + self.zen_tab.plan_view.times.text()
         )
         send = box.addButton(self.tr("Send"), QMessageBox.ButtonRole.AcceptRole)
         refresh = box.addButton(self.tr("Refresh first"), QMessageBox.ButtonRole.ActionRole)
@@ -496,6 +502,27 @@ class MainWindow(QMainWindow):
             self.send_plan(plan)
         elif box.clickedButton() is refresh:
             self.make_plan(then=self.confirm_send)  # fetches the Plan's categories first
+
+    def test_speed(self) -> None:
+        self.zen_tab.plan_view.speed_testing()
+        run_in_background(measure_download_speed, self._speed_measured, self._speed_failed)
+
+    def _speed_measured(self, speed: float) -> None:
+        self.settings.download_speed = speed
+        self.settings.download_speed_tested = datetime.now().isoformat(timespec="minutes")
+        self.settings.save(self.settings_path)
+        log.info("Download speed tested: %.0f Mbit/s", speed * 8 / 1e6)
+        view = self.zen_tab.plan_view
+        view.set_speed(speed, self.settings.download_speed_tested)
+
+    def _speed_failed(self, error: Exception) -> None:
+        view = self.zen_tab.plan_view
+        view.set_speed(self.settings.download_speed, self.settings.download_speed_tested)
+        QMessageBox.warning(
+            self,
+            self.tr("Speed test"),
+            self.tr("The speed test failed: {0}").format(str(error) or type(error).__name__),
+        )
 
     def send_plan(self, plan: Plan) -> None:
         if self.send_runner is not None:

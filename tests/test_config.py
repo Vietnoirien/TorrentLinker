@@ -79,3 +79,14 @@ def test_old_settings_default_to_zen_and_unlimited_plan_limits(tmp_path: Path) -
     path.write_text("{}")
 
     assert Settings.load(path).plan_options == PlanOptions()
+
+
+def test_the_tested_download_speed_survives_a_save_and_load(tmp_path: Path) -> None:
+    s = Settings()
+    s.download_speed, s.download_speed_tested = 20_000_000.0, "2026-10-22T04:30"
+    s.save(tmp_path / "s.json")
+
+    loaded = Settings.load(tmp_path / "s.json")
+
+    assert loaded.download_speed == 20_000_000.0
+    assert loaded.download_speed_tested == "2026-10-22T04:30"

@@ -6,8 +6,10 @@ import pytest
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.plan import (
     DiskSpace,
+    Plan,
     PlanCandidate,
     PlanGoal,
+    PlanItem,
     PlanOptions,
     catalogue_candidates,
     disk_budgets,
@@ -362,3 +364,17 @@ def test_orphans_with_a_full_match_become_reseed_rows_listed_first(tmp_path: Pat
     assert [i.candidate.title for i in plan.items] == ["Book", "dl"]  # not downloaded twice
     assert plan.download_size == 4 * GB
     assert reseed_candidates(KEEPER, found, in_client={meta.infohash}) == []
+
+
+def test_sending_takes_one_interval_per_download_and_none_for_reseeds(tmp_path: Path) -> None:
+    download = PlanCandidate("aa" * 20, "Book", 2_000_000, 3, 7000, tmp_path, 1)
+    reseed = replace(download, infohash="bb" * 20, reseed=True)
+    plan = Plan([PlanItem(download, 0.1), PlanItem(download, 0.1), PlanItem(reseed, 0.1)])
+
+    assert plan.sending_seconds(4.1) == pytest.approx(8.2)
+
+
+def test_downloading_takes_the_plan_size_over_the_speed(tmp_path: Path) -> None:
+    c = PlanCandidate("aa" * 20, "Film", 8 * GB, 3, 2000, tmp_path, 1)
+
+    assert Plan([PlanItem(c, 0.1)]).download_seconds(100_000_000) == pytest.approx(80)

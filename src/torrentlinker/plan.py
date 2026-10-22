@@ -105,6 +105,17 @@ class Plan:
             return None
         return self.download_size / GB / self.zen_added
 
+    def sending_seconds(self, interval: float) -> float:
+        """Time to send the Plan: one .torrent per download from the Indexer, `interval` apart.
+
+        Reseeds fetch nothing new: their .torrent came with the search.
+        """
+        return sum(1 for i in self.items if not i.candidate.reseed) * interval
+
+    def download_seconds(self, bytes_per_second: float) -> float:
+        """Time for qBittorrent to download the Plan's data at this speed, at best."""
+        return self.download_size / bytes_per_second
+
 
 ORDERINGS: dict[str, Callable[[PlanCandidate, float], float]] = {
     "zen per GB": lambda c, v: v / max(c.size / GB, 1e-9),

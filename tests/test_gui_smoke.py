@@ -360,6 +360,33 @@ def test_plan_view_shows_zen_added_size_and_payback_and_the_band_follows(
     assert window.zen_tab.plan_view.table.rowCount() == 1
 
 
+def test_the_plan_estimates_sending_and_downloading_times_from_a_speed_test(
+    qtbot,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    from torrentlinker.gui import main_window
+    from torrentlinker.plan import Plan, PlanCandidate, PlanItem
+    from torrentlinker.zen import GB
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    view = window.zen_tab.plan_view
+    c = PlanCandidate("aa" * 20, "Book", 360 * GB // 1000, 4, 7000, tmp_path, 1)
+    window._plan_made(Plan([PlanItem(c, 0.01)] * 1000, 10))
+
+    assert "Sending to qBittorrent: ≈ 1 h 08" in view.times.text()  # 1000 × 4.1 s
+    assert "test your speed" in view.times.text()
+
+    monkeypatch.setattr(main_window, "measure_download_speed", lambda: 100_000_000.0)
+    view.speed_button.click()
+    qtbot.waitUntil(lambda: window.settings.download_speed is not None, timeout=5000)
+
+    assert "Downloading the data: ≈ 1 h 00 at best" in view.times.text()  # 360 GB at 100 MB/s
+    assert "800 Mbit/s" in view.times.text()
+    assert Settings.load(tmp_path / "settings.json").download_speed == 100_000_000.0
+
+
 def test_plan_maker_plans_catalogue_torrents_into_download_folders(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     from tests.fake_qbit import FakeQbit
     from torrentlinker.downloads import DownloadFolders, IndexerCategory
