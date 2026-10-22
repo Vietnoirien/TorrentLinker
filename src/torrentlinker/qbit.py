@@ -1,7 +1,8 @@
-"""qBittorrent port and its WebUI adapter.
+"""Torrent Client port, named after qBittorrent, and qBittorrent's WebUI adapter.
 
-Paths crossing this boundary are in qBittorrent's view; translation to the app's
-view happens in the caller through Path Mappings.
+Deluge's adapter is in deluge.py; it speaks qBittorrent's state names and tags too.
+Paths crossing this boundary are in the client's view; translation to the app's view
+happens in the caller through Path Mappings.
 """
 
 from __future__ import annotations
@@ -50,6 +51,18 @@ class Qbit(Protocol):
 
     def add_tags(self, hash: str, tags: list[str]) -> None: ...
     def remove_tags(self, hash: str, tags: list[str]) -> None: ...
+
+
+class ClientApi(Qbit, Protocol):
+    """A Torrent Client as the app connects to it: QbitApi or DelugeApi."""
+
+    def check(self) -> str:
+        """Log in and return the client's version."""
+        ...
+
+    def default_save_path(self) -> str:
+        """The client's own download folder, as the client sees it."""
+        ...
 
 
 class AlreadyInClient(RuntimeError):

@@ -4,27 +4,27 @@
 <context>
     <name>CatalogueBox</name>
     <message>
-        <location filename="../gui/zen_view.py" line="250"/>
+        <location filename="../gui/zen_view.py" line="252"/>
         <source>Catalogue</source>
         <translation>Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="258"/>
+        <location filename="../gui/zen_view.py" line="260"/>
         <source>Fetch the available torrents in every category. You can pause and resume after closing the app. The Indexer may limit how far the Catalogue can be read.</source>
         <translation>Récupère les torrents disponibles dans chaque catégorie. Vous pouvez mettre en pause et reprendre après avoir fermé l&apos;application. L&apos;Indexeur peut limiter la profondeur de lecture du Catalogue.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="275"/>
+        <location filename="../gui/zen_view.py" line="277"/>
         <source>Resume fetching all categories</source>
         <translation>Reprendre la récupération de toutes les catégories</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="277"/>
+        <location filename="../gui/zen_view.py" line="279"/>
         <source>Fetch all categories</source>
         <translation>Récupérer toutes les catégories</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="273"/>
+        <location filename="../gui/zen_view.py" line="275"/>
         <source>Pause</source>
         <translation>Pause</translation>
     </message>
@@ -32,32 +32,32 @@
 <context>
     <name>ClassComparison</name>
     <message>
-        <location filename="../gui/zen_view.py" line="200"/>
+        <location filename="../gui/zen_view.py" line="202"/>
         <source>Class comparison</source>
         <translation>Comparaison des Classes</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="213"/>
+        <location filename="../gui/zen_view.py" line="215"/>
         <source>Rough: a Reuploader is paid per upload, counted here at the guide&apos;s upper figure of about 0.43 Zen per upload a day.</source>
         <translation>Approximatif : un Reuploader est payé par upload, compté ici au chiffre maximal du guide, environ 0,43 Zen par upload et par jour.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="218"/>
+        <location filename="../gui/zen_view.py" line="220"/>
         <source>Your uploads</source>
         <translation>Vos uploads</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="235"/>
+        <location filename="../gui/zen_view.py" line="237"/>
         <source>{0}: {1} Zen/day</source>
         <translation>{0} : {1} Zen/jour</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="237"/>
+        <location filename="../gui/zen_view.py" line="239"/>
         <source>(rough)</source>
         <translation>(approximatif)</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="239"/>
+        <location filename="../gui/zen_view.py" line="241"/>
         <source>← your Class</source>
         <translation>← votre Classe</translation>
     </message>
@@ -65,37 +65,37 @@
 <context>
     <name>ContentKind</name>
     <message>
-        <location filename="../gui/settings_dialog.py" line="71"/>
+        <location filename="../gui/settings_dialog.py" line="74"/>
         <source>Movies</source>
         <translation>Films</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="72"/>
+        <location filename="../gui/settings_dialog.py" line="75"/>
         <source>Series</source>
         <translation>Séries</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="73"/>
+        <location filename="../gui/settings_dialog.py" line="76"/>
         <source>Music</source>
         <translation>Musique</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="74"/>
+        <location filename="../gui/settings_dialog.py" line="77"/>
         <source>Ebooks</source>
         <translation>Livres numériques</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="75"/>
+        <location filename="../gui/settings_dialog.py" line="78"/>
         <source>Games</source>
         <translation>Jeux</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="76"/>
+        <location filename="../gui/settings_dialog.py" line="79"/>
         <source>3D models</source>
         <translation>Modèles 3D</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="77"/>
+        <location filename="../gui/settings_dialog.py" line="80"/>
         <source>Other</source>
         <translation>Autre</translation>
     </message>
@@ -164,108 +164,103 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../gui/main_window.py" line="119"/>
+        <location filename="../gui/main_window.py" line="121"/>
         <source>Main</source>
         <translation>Principal</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="120"/>
+        <location filename="../gui/main_window.py" line="122"/>
         <source>Scan</source>
         <translation>Analyser</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="122"/>
+        <location filename="../gui/main_window.py" line="124"/>
         <source>Rescan everything</source>
         <translation>Tout réanalyser</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="124"/>
+        <location filename="../gui/main_window.py" line="126"/>
         <source>Walk every file again, ignoring the scan cache (slower)</source>
         <translation>Relire chaque fichier sans le cache d’analyse (plus lent)</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="127"/>
+        <location filename="../gui/main_window.py" line="129"/>
         <source>Settings</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="129"/>
+        <location filename="../gui/main_window.py" line="131"/>
         <source>Search selected</source>
         <translation>Rechercher la sélection</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="131"/>
+        <location filename="../gui/main_window.py" line="133"/>
         <source>Search all Orphans</source>
         <translation>Rechercher tous les orphelins</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="133"/>
+        <location filename="../gui/main_window.py" line="135"/>
         <source>Cancel search</source>
         <translation>Annuler la recherche</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="167"/>
+        <location filename="../gui/main_window.py" line="169"/>
         <source>All states</source>
         <translation>Tous les états</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="173"/>
+        <location filename="../gui/main_window.py" line="175"/>
         <source>Show</source>
         <translation>Afficher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="196"/>
+        <location filename="../gui/main_window.py" line="198"/>
         <source>Zen</source>
         <translation>Zen</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="197"/>
+        <location filename="../gui/main_window.py" line="199"/>
         <source>Library</source>
         <translation>Bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="207"/>
+        <location filename="../gui/main_window.py" line="209"/>
         <source>Ready</source>
         <translation>Prêt</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="317"/>
-        <location filename="../gui/main_window.py" line="931"/>
+        <location filename="../gui/main_window.py" line="325"/>
+        <location filename="../gui/main_window.py" line="938"/>
         <source>Waiting for the Catalogue refresh to finish…</source>
         <translation>En attente de la fin de l’actualisation du Catalogue…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="343"/>
+        <location filename="../gui/main_window.py" line="351"/>
         <source>Fetching the Catalogue for the Plan…</source>
         <translation>Récupération du Catalogue pour le Plan…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="419"/>
+        <location filename="../gui/main_window.py" line="427"/>
         <source>Download Folder</source>
         <translation>Dossier de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="421"/>
+        <location filename="../gui/main_window.py" line="429"/>
         <source>{0} has no Download Folder, but {1} have theirs. Choose a folder for its other subcategories? Otherwise the Plan draws only from those.</source>
         <translation>{0} n’a pas de dossier de téléchargement, mais {1} ont le leur. Choisir un dossier pour ses autres sous-catégories ? Sinon le Plan ne puise que dans celles-ci.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="427"/>
+        <location filename="../gui/main_window.py" line="435"/>
         <source>Download Folder for {0}</source>
         <translation>Dossier de téléchargement pour {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="559"/>
+        <location filename="../gui/main_window.py" line="566"/>
         <source>Based on an incomplete Catalogue; older torrents may be missing.</source>
         <translation>Ce Plan repose sur un Catalogue incomplet ; des torrents plus anciens peuvent manquer.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="581"/>
-        <source>Send the Plan to qBittorrent</source>
-        <translation>Envoyer le Plan à qBittorrent</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="584"/>
+        <location filename="../gui/main_window.py" line="591"/>
         <source>{0} torrents · {1} Go to download · ≈ +{2} Zen/day · paid back in ≈ {3} days.
 Catalogue: {4}.
 
@@ -276,332 +271,337 @@ Catalogue : {4}.
 Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajouté à son Dossier de téléchargement. Un torrent dont des fichiers existent déjà à cet endroit est refusé.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="598"/>
+        <location filename="../gui/main_window.py" line="605"/>
         <source>Send</source>
         <translation>Envoyer</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="599"/>
+        <location filename="../gui/main_window.py" line="606"/>
         <source>Refresh first</source>
         <translation>Actualiser d&apos;abord</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="624"/>
+        <location filename="../gui/main_window.py" line="631"/>
         <source>Speed test</source>
         <translation>Test de débit</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="625"/>
+        <location filename="../gui/main_window.py" line="632"/>
         <source>The speed test failed: {0}</source>
         <translation>Le test de débit a échoué : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="694"/>
-        <source>Sending was interrupted: {0} torrents of this Plan are left. Send to qBittorrent to continue.</source>
-        <translation>L’envoi a été interrompu : il reste {0} torrents dans ce Plan. Envoyez-le à qBittorrent pour continuer.</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="698"/>
+        <location filename="../gui/main_window.py" line="705"/>
         <source>Saved Plan: {0} torrents left to send.</source>
         <translation>Plan enregistré : {0} torrents restent à envoyer.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="731"/>
-        <source>{0} torrents added to qBittorrent.</source>
-        <translation>{0} torrents ajoutés à qBittorrent.</translation>
+        <location filename="../gui/main_window.py" line="574"/>
+        <source>Provisional estimates from cached metadata. Seeder counts update from your torrent client after tracker responses.</source>
+        <translation>Estimations provisoires à partir des données en cache. Le nombre de sources est actualisé via votre client torrent après les réponses du tracker.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="733"/>
+        <location filename="../gui/main_window.py" line="588"/>
+        <source>Send the Plan to your torrent client</source>
+        <translation>Envoyer le Plan à votre client torrent</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="701"/>
+        <source>Sending was interrupted: {0} torrents of this Plan are left. Send to the torrent client to continue.</source>
+        <translation>L’envoi a été interrompu : il reste {0} torrents dans ce Plan. Envoyez-le au client torrent pour continuer.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="738"/>
+        <source>{0} torrents added to your torrent client.</source>
+        <translation>{0} torrents ajoutés à votre client torrent.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="740"/>
         <source>{0} Reseeds started.</source>
         <translation>{0} repartages lancés.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="741"/>
+        <location filename="../gui/main_window.py" line="748"/>
         <source>Refused: {0} ({1})</source>
         <translation>Refusé : {0} ({1})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="742"/>
+        <location filename="../gui/main_window.py" line="749"/>
         <source>Failed: {0} ({1})</source>
         <translation>Échec : {0} ({1})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="744"/>
+        <location filename="../gui/main_window.py" line="751"/>
         <source>Plan sent</source>
         <translation>Plan envoyé</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="748"/>
+        <location filename="../gui/main_window.py" line="755"/>
         <source>{0} refused, {1} failed: see the details.</source>
         <translation>{0} refusés, {1} en échec : voir les détails.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="822"/>
+        <location filename="../gui/main_window.py" line="829"/>
         <source>The Catalogue is already being updated</source>
         <translation>Le Catalogue est déjà en cours de mise à jour</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="826"/>
+        <location filename="../gui/main_window.py" line="833"/>
         <source>Catalogue</source>
         <translation>Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="826"/>
+        <location filename="../gui/main_window.py" line="833"/>
         <source>Enter your Indexer API key in Settings first.</source>
         <translation>Saisissez d&apos;abord la clé d&apos;API de l&apos;Indexeur dans les Paramètres.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="861"/>
+        <location filename="../gui/main_window.py" line="868"/>
         <source>Pausing after the current page…</source>
         <translation>Pause après la page en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="892"/>
+        <location filename="../gui/main_window.py" line="899"/>
         <source>Importing Zen Lab metadata: {0} torrents (+{1})</source>
         <translation>Import des métadonnées Zen Lab : {0} torrents (+{1})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="907"/>
+        <location filename="../gui/main_window.py" line="914"/>
         <source>updating {0}, page {1} (+{2})</source>
         <translation>mise à jour de {0}, page {1} (+{2})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="914"/>
+        <location filename="../gui/main_window.py" line="921"/>
         <source>Category {0}/{1}: {2} · {3} torrents in the Catalogue</source>
         <translation>Catégorie {0}/{1} : {2} · {3} torrents dans le Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="919"/>
+        <location filename="../gui/main_window.py" line="926"/>
         <source>Updating selected categories: {0} · {1} torrents in the Catalogue</source>
         <translation>Mise à jour des catégories sélectionnées : {0} · {1} torrents dans le Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="923"/>
+        <location filename="../gui/main_window.py" line="930"/>
         <source>Updating your categories: {0} · {1} torrents in the Catalogue</source>
         <translation>Mise à jour de vos catégories : {0} · {1} torrents dans le Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="926"/>
+        <location filename="../gui/main_window.py" line="933"/>
         <source>Catalogue: {0}</source>
         <translation>Catalogue : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="935"/>
+        <location filename="../gui/main_window.py" line="942"/>
         <source>Fetching the Catalogue for the Plan: {0}</source>
         <translation>Récupération du Catalogue pour le Plan : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="942"/>
-        <location filename="../gui/main_window.py" line="964"/>
+        <location filename="../gui/main_window.py" line="949"/>
+        <location filename="../gui/main_window.py" line="971"/>
         <source>Catalogue update failed: {0}</source>
         <translation>Échec de la mise à jour du Catalogue : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="957"/>
+        <location filename="../gui/main_window.py" line="964"/>
         <source>Catalogue paused: +{0} torrents · {1} in total</source>
         <translation>Catalogue en pause : +{0} torrents · {1} au total</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="959"/>
+        <location filename="../gui/main_window.py" line="966"/>
         <source>Catalogue updated: +{0} torrents · {1} in total</source>
         <translation>Catalogue à jour : +{0} torrents · {1} au total</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="966"/>
-        <location filename="../gui/main_window.py" line="989"/>
+        <location filename="../gui/main_window.py" line="973"/>
+        <location filename="../gui/main_window.py" line="996"/>
         <source>Catalogue incomplete: the Indexer stopped paging.</source>
         <translation>Catalogue incomplet : l&apos;Indexeur a atteint sa limite de pagination.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="987"/>
+        <location filename="../gui/main_window.py" line="994"/>
         <source>whole-catalogue fetch paused</source>
         <translation>récupération du catalogue complet en pause</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="994"/>
+        <location filename="../gui/main_window.py" line="1001"/>
         <source>Zen Lab snapshot imported; c411 data takes priority</source>
         <translation>Instantané Zen Lab importé ; les données c411 sont prioritaires</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1003"/>
+        <location filename="../gui/main_window.py" line="1010"/>
         <source>not fetched yet</source>
         <translation>pas encore récupéré</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1005"/>
+        <location filename="../gui/main_window.py" line="1012"/>
         <source>{0} min</source>
         <translation>{0} min</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1005"/>
+        <location filename="../gui/main_window.py" line="1012"/>
         <source>{0} h</source>
         <translation>{0} h</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1005"/>
+        <location filename="../gui/main_window.py" line="1012"/>
         <source>{0} d</source>
         <translation>{0} j</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1006"/>
+        <location filename="../gui/main_window.py" line="1013"/>
         <source>{0} torrents, {1} old</source>
         <translation>{0} torrents, vieux de {1}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1080"/>
+        <location filename="../gui/main_window.py" line="1087"/>
         <source>All Library Folders</source>
         <translation>Tous les dossiers de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1119"/>
+        <location filename="../gui/main_window.py" line="1126"/>
         <source>No Orphans to search</source>
         <translation>Aucun orphelin à rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1139"/>
+        <location filename="../gui/main_window.py" line="1146"/>
         <source>Searching {0} Orphans…</source>
         <translation>Recherche de {0} orphelins…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1145"/>
+        <location filename="../gui/main_window.py" line="1152"/>
         <source>Cancelling after the current item…</source>
         <translation>Annulation après l’élément en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="910"/>
-        <location filename="../gui/main_window.py" line="1158"/>
-        <source> · next request in {0} s</source>
-        <translation> · prochaine requête dans {0} s</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="567"/>
-        <source>Provisional estimates from cached metadata. Seeder counts update from qBittorrent after tracker responses.</source>
-        <translation>Estimations provisoires à partir des données en cache. Le nombre de sources est actualisé via qBittorrent après les réponses du tracker.</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="737"/>
-        <source>Stopped after {0} of {1} torrents. The rest of the Plan is saved: send it again to continue, even after restarting the app.</source>
-        <translation>Arrêté après {0} torrents sur {1}. Le reste du Plan est enregistré : envoyez-le de nouveau pour continuer, même après avoir redémarré l’application.</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1164"/>
-        <source>Searched {0}/{1}: {2}</source>
-        <translation>Recherché {0}/{1} : {2}</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1179"/>
-        <source>Full match found</source>
-        <translation>Correspondance complète trouvée</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1181"/>
-        <source>Full match inside the archive</source>
-        <translation>Correspondance complète dans l’archive</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1183"/>
-        <source>Partial match found</source>
-        <translation>Correspondance partielle trouvée</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1185"/>
-        <source>No match</source>
-        <translation>Aucune correspondance</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1186"/>
-        <source>No Candidates</source>
-        <translation>Aucun candidat</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1190"/>
-        <source>Search failed: {0}</source>
-        <translation>Échec de la recherche : {0}</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1196"/>
-        <source>Batch search finished: {0} searched</source>
-        <translation>Recherche groupée terminée : {0} recherchés</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1204"/>
-        <source>Scanning…</source>
-        <translation>Analyse…</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1217"/>
-        <source>{0} Local Items</source>
-        <translation>{0} éléments locaux</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1253"/>
-        <location filename="../gui/main_window.py" line="1254"/>
-        <source>Scan failed</source>
-        <translation>Échec de l’analyse</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1259"/>
-        <location filename="../gui/main_window.py" line="1288"/>
-        <source>Verifying…</source>
-        <translation>Vérification…</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1278"/>
-        <source>Reseeded</source>
-        <translation>Repartagé</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1280"/>
-        <source>Verified, left stopped: some files are absent</source>
-        <translation>Vérifié, laissé à l’arrêt : certains fichiers sont absents</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1282"/>
-        <source>Reseed undone: {0}</source>
-        <translation>Repartage annulé : {0}</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1284"/>
-        <source>Verification failed at {0}</source>
-        <translation>Vérification échouée à {0}</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1304"/>
-        <location filename="../gui/main_window.py" line="1322"/>
-        <source>Unpack and Reseed</source>
-        <translation>Décompresser et repartager</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="1306"/>
-        <source>{0} now seeds: qBittorrent verified every file. They are the contents of {1}, so the archive ({2}) is no longer needed.
+        <location filename="../gui/main_window.py" line="1313"/>
+        <source>{0} now seeds: your torrent client verified every file. They are the contents of {1}, so the archive ({2}) is no longer needed.
 
 Move it to the trash?</source>
-        <translation>{0} est maintenant partagé : qBittorrent a vérifié chaque fichier. Ce sont les fichiers de {1}, donc l’archive ({2}) n’est plus nécessaire.
+        <translation>{0} est maintenant partagé : votre client torrent a vérifié chaque fichier. Ce sont les fichiers de {1}, donc l’archive ({2}) n’est plus nécessaire.
 
 La mettre à la corbeille ?</translation>
     </message>
     <message>
+        <location filename="../gui/main_window.py" line="917"/>
+        <location filename="../gui/main_window.py" line="1165"/>
+        <source> · next request in {0} s</source>
+        <translation> · prochaine requête dans {0} s</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="744"/>
+        <source>Stopped after {0} of {1} torrents. The rest of the Plan is saved: send it again to continue, even after restarting the app.</source>
+        <translation>Arrêté après {0} torrents sur {1}. Le reste du Plan est enregistré : envoyez-le de nouveau pour continuer, même après avoir redémarré l’application.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1171"/>
+        <source>Searched {0}/{1}: {2}</source>
+        <translation>Recherché {0}/{1} : {2}</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1186"/>
+        <source>Full match found</source>
+        <translation>Correspondance complète trouvée</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1188"/>
+        <source>Full match inside the archive</source>
+        <translation>Correspondance complète dans l’archive</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1190"/>
+        <source>Partial match found</source>
+        <translation>Correspondance partielle trouvée</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1192"/>
+        <source>No match</source>
+        <translation>Aucune correspondance</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1193"/>
+        <source>No Candidates</source>
+        <translation>Aucun candidat</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1197"/>
+        <source>Search failed: {0}</source>
+        <translation>Échec de la recherche : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1203"/>
+        <source>Batch search finished: {0} searched</source>
+        <translation>Recherche groupée terminée : {0} recherchés</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1211"/>
+        <source>Scanning…</source>
+        <translation>Analyse…</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1224"/>
+        <source>{0} Local Items</source>
+        <translation>{0} éléments locaux</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1260"/>
+        <location filename="../gui/main_window.py" line="1261"/>
+        <source>Scan failed</source>
+        <translation>Échec de l’analyse</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1266"/>
+        <location filename="../gui/main_window.py" line="1295"/>
+        <source>Verifying…</source>
+        <translation>Vérification…</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1285"/>
+        <source>Reseeded</source>
+        <translation>Repartagé</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1287"/>
+        <source>Verified, left stopped: some files are absent</source>
+        <translation>Vérifié, laissé à l’arrêt : certains fichiers sont absents</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1289"/>
+        <source>Reseed undone: {0}</source>
+        <translation>Repartage annulé : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1291"/>
+        <source>Verification failed at {0}</source>
+        <translation>Vérification échouée à {0}</translation>
+    </message>
+    <message>
         <location filename="../gui/main_window.py" line="1311"/>
+        <location filename="../gui/main_window.py" line="1329"/>
+        <source>Unpack and Reseed</source>
+        <translation>Décompresser et repartager</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1318"/>
         <source>Move to the trash</source>
         <translation>Mettre à la corbeille</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1312"/>
+        <location filename="../gui/main_window.py" line="1319"/>
         <source>Keep the archive</source>
         <translation>Garder l’archive</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1324"/>
+        <location filename="../gui/main_window.py" line="1331"/>
         <source>That disk has no trash. Delete {0} permanently? This cannot be undone.</source>
         <translation>Ce disque n’a pas de corbeille. Supprimer définitivement {0} ? C’est irréversible.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1334"/>
+        <location filename="../gui/main_window.py" line="1341"/>
         <source>{0} removed</source>
         <translation>{0} supprimée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1339"/>
+        <location filename="../gui/main_window.py" line="1346"/>
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
     </message>
@@ -609,341 +609,367 @@ La mettre à la corbeille ?</translation>
 <context>
     <name>PlanView</name>
     <message>
-        <location filename="../gui/zen_view.py" line="295"/>
+        <location filename="../gui/zen_view.py" line="297"/>
         <source>Plan</source>
         <translation>Plan</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="301"/>
+        <location filename="../gui/zen_view.py" line="303"/>
         <source>Choose whether to prioritize Zen/day or torrent notes, within your download limit and available disk space.</source>
         <translation>Choisissez de privilégier les Zen/jour ou les notes des torrents, dans votre limite de téléchargement et l’espace disque disponible.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="314"/>
+        <location filename="../gui/zen_view.py" line="316"/>
         <source>Sending: c411 allows one .torrent about every {0:.0f} seconds. Downloading: at the speed of your last speed test, so at best; a torrent with few seeders is slower than your connection.</source>
         <translation>Envoi : c411 autorise un .torrent environ toutes les {0:.0f} secondes. Téléchargement : au débit de votre dernier test, donc au mieux ; un torrent avec peu de sources est plus lent que votre connexion.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="320"/>
-        <location filename="../gui/zen_view.py" line="685"/>
+        <location filename="../gui/zen_view.py" line="322"/>
+        <location filename="../gui/zen_view.py" line="737"/>
         <source>Test speed</source>
         <translation>Tester le débit</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="323"/>
-        <source>Measure your download speed for about 8 seconds with Cloudflare&apos;s public speed test (anonymous). Run it while qBittorrent is not downloading.</source>
-        <translation>Mesure votre débit descendant pendant environ 8 secondes avec le test de débit public de Cloudflare (anonyme). Lancez-le quand qBittorrent ne télécharge pas.</translation>
-    </message>
-    <message>
-        <location filename="../gui/zen_view.py" line="333"/>
+        <location filename="../gui/zen_view.py" line="335"/>
         <source>Zen/day</source>
         <translation>Zen/jour</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="334"/>
-        <location filename="../gui/zen_view.py" line="465"/>
+        <location filename="../gui/zen_view.py" line="336"/>
+        <location filename="../gui/zen_view.py" line="484"/>
         <source>Note</source>
         <translation>Note</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="337"/>
+        <location filename="../gui/zen_view.py" line="339"/>
         <source>Zen/day maximizes estimated earnings. Note prefers the highest-note torrents first.</source>
         <translation>Zen/jour maximise les gains estimés. Note privilégie les torrents ayant les meilleures notes.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="341"/>
+        <location filename="../gui/zen_view.py" line="343"/>
         <source>Optimize for</source>
         <translation>Optimiser pour</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="348"/>
+        <location filename="../gui/zen_view.py" line="350"/>
+        <location filename="../gui/zen_view.py" line="507"/>
         <source> GB</source>
         <translation> Go</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="349"/>
+        <location filename="../gui/zen_view.py" line="351"/>
         <source>No limit</source>
         <translation>Sans limite</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="352"/>
+        <location filename="../gui/zen_view.py" line="354"/>
         <source>Maximum total download size for this Plan. 1 GB = 1,000,000,000 bytes. Reseeds use no download budget.</source>
         <translation>Volume maximal à télécharger pour ce Plan. 1 Go = 1 000 000 000 octets. Les Reseeds ne consomment aucun budget de téléchargement.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="356"/>
+        <location filename="../gui/zen_view.py" line="358"/>
         <source>Download limit</source>
         <translation>Limite de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="363"/>
+        <location filename="../gui/zen_view.py" line="365"/>
         <source>Limit torrents</source>
         <translation>Limiter les torrents</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="369"/>
+        <location filename="../gui/zen_view.py" line="371"/>
         <source>Maximum torrents added by this Plan, including Reseeds. Your overall torrent cap still applies.</source>
         <translation>Nombre maximal de torrents ajoutés par ce Plan, Reseeds compris. Votre plafond global de torrents s’applique aussi.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="377"/>
+        <location filename="../gui/zen_view.py" line="379"/>
         <source>Low seeders only</source>
         <translation>Peu de sources uniquement</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="381"/>
+        <location filename="../gui/zen_view.py" line="383"/>
         <source> seeders max.</source>
         <translation> sources max.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="383"/>
+        <location filename="../gui/zen_view.py" line="385"/>
         <source>Only include torrents with at most this many current seeders, before you join. Applies to downloads and Reseeds, in both Note and Zen/day modes.</source>
         <translation>Inclure uniquement les torrents ayant au plus ce nombre de sources actuelles, avant votre arrivée. S&apos;applique aux téléchargements et aux remises en seed, en mode Note comme en mode Zen/jour.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="396"/>
+        <location filename="../gui/zen_view.py" line="397"/>
+        <source>Only include torrents of at least / at most this size each, in decimal GB. Applies to downloads and Reseeds.</source>
+        <translation>Inclure uniquement les torrents d&apos;au moins / d&apos;au plus cette taille chacun, en Go décimaux. S&apos;applique aux téléchargements et aux remises en seed.</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="400"/>
+        <source>No minimum</source>
+        <translation>Sans minimum</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="401"/>
+        <source>No maximum</source>
+        <translation>Sans maximum</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="402"/>
+        <source>Torrent size from</source>
+        <translation>Taille des torrents de</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="406"/>
+        <source>to</source>
+        <translation>à</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="415"/>
         <source>Categories this Plan draws from</source>
         <translation>Catégories dans lesquelles le Plan choisit</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="404"/>
+        <location filename="../gui/zen_view.py" line="423"/>
         <source>Make a Plan</source>
         <translation>Faire un Plan</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="407"/>
+        <location filename="../gui/zen_view.py" line="426"/>
         <source>Stop fetching and plan now</source>
         <translation>Arrêter et planifier maintenant</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="409"/>
+        <location filename="../gui/zen_view.py" line="428"/>
         <source>Make the Plan from the Catalogue fetched so far; the fetch resumes next time</source>
         <translation>Faire le Plan avec le Catalogue déjà récupéré ; la récupération reprendra la prochaine fois</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="414"/>
-        <source>Send to qBittorrent…</source>
-        <translation>Envoyer à qBittorrent…</translation>
-    </message>
-    <message>
-        <location filename="../gui/zen_view.py" line="417"/>
+        <location filename="../gui/zen_view.py" line="436"/>
         <source>Download each .torrent directly from c411 and add it to its Download Folder. A torrent whose files already exist there is refused.</source>
         <translation>Télécharge chaque .torrent directement depuis c411 et l&apos;ajoute à son Dossier de téléchargement. Un torrent dont des fichiers existent déjà à cet endroit est refusé.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="424"/>
+        <location filename="../gui/zen_view.py" line="443"/>
         <source>Stop sending</source>
         <translation>Arrêter l’envoi</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="427"/>
-        <source>Stop after the current torrent. Torrents already sent stay in qBittorrent; a new Plan leaves them out.</source>
-        <translation>Arrêter après le torrent en cours. Les torrents déjà envoyés restent dans qBittorrent ; un nouveau Plan les exclut.</translation>
+        <location filename="../gui/zen_view.py" line="325"/>
+        <source>Measure your download speed for about 8 seconds with Cloudflare&apos;s public speed test (anonymous). Run it while your torrent client is not downloading.</source>
+        <translation>Mesure votre débit descendant pendant environ 8 secondes avec le test de débit public de Cloudflare (anonyme). Lancez-le quand votre client torrent ne télécharge pas.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="438"/>
+        <location filename="../gui/zen_view.py" line="433"/>
+        <source>Send to the torrent client…</source>
+        <translation>Envoyer au client torrent…</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="446"/>
+        <source>Stop after the current torrent. Torrents already sent stay in your torrent client; a new Plan leaves them out.</source>
+        <translation>Arrêter après le torrent en cours. Les torrents déjà envoyés restent dans votre client torrent ; un nouveau Plan les exclut.</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="457"/>
         <source>%v of %m torrents</source>
         <translation>%v torrents sur %m</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="444"/>
+        <location filename="../gui/zen_view.py" line="463"/>
         <source>Disk / Download Folder</source>
         <translation>Disque / Dossier de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="445"/>
+        <location filename="../gui/zen_view.py" line="464"/>
         <source>Free now</source>
         <translation>Libre actuellement</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="446"/>
+        <location filename="../gui/zen_view.py" line="465"/>
         <source>Reserved</source>
         <translation>Réservé</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="447"/>
+        <location filename="../gui/zen_view.py" line="466"/>
         <source>Plan downloads</source>
         <translation>Téléchargements du Plan</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="448"/>
+        <location filename="../gui/zen_view.py" line="467"/>
         <source>Free after Plan</source>
         <translation>Libre après le Plan</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="453"/>
+        <location filename="../gui/zen_view.py" line="472"/>
         <source>Free after Plan includes the reserved disk-space margin. Download Folders on the same disk are counted once.</source>
         <translation>L’espace libre après le Plan comprend la marge de sécurité réservée. Les Dossiers de téléchargement sur un même disque sont comptés une seule fois.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="462"/>
+        <location filename="../gui/zen_view.py" line="481"/>
         <source>Torrent</source>
         <translation>Torrent</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="463"/>
+        <location filename="../gui/zen_view.py" line="482"/>
         <source>Size</source>
         <translation>Taille</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="464"/>
+        <location filename="../gui/zen_view.py" line="483"/>
         <source>Seeders</source>
         <translation>Sources</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="466"/>
+        <location filename="../gui/zen_view.py" line="485"/>
         <source>≈ Zen/day</source>
         <translation>≈ Zen/jour</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="467"/>
+        <location filename="../gui/zen_view.py" line="486"/>
         <source>Download Folder</source>
         <translation>Dossier de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="521"/>
+        <location filename="../gui/zen_view.py" line="571"/>
         <source>Plan options changed. Make a new Plan to apply them.</source>
         <translation>Options du Plan modifiées. Créez un nouveau Plan pour les appliquer.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="540"/>
-        <location filename="../gui/zen_view.py" line="567"/>
+        <location filename="../gui/zen_view.py" line="590"/>
+        <location filename="../gui/zen_view.py" line="617"/>
         <source>All categories</source>
         <translation>Toutes les catégories</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="548"/>
+        <location filename="../gui/zen_view.py" line="598"/>
         <source>no Download Folder</source>
         <translation>aucun dossier de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="573"/>
+        <location filename="../gui/zen_view.py" line="623"/>
         <source>{0} categories</source>
         <translation>{0} catégories</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="603"/>
+        <location filename="../gui/zen_view.py" line="655"/>
         <source>Making a Plan…</source>
         <translation>Préparation du Plan…</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="613"/>
+        <location filename="../gui/zen_view.py" line="665"/>
         <source>Reseed (0 Go)</source>
         <translation>Repartage (0 Go)</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="644"/>
+        <location filename="../gui/zen_view.py" line="696"/>
         <source>Nothing to add: fetch the Catalogue, set Download Folders, or free some space.</source>
         <translation>Rien à ajouter : récupérez le Catalogue, définissez des Dossiers de téléchargement ou libérez de l&apos;espace.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="652"/>
+        <location filename="../gui/zen_view.py" line="704"/>
         <source>{0} torrents left out: they seem to be on disk already. Search them in the Library to Reseed them instead.</source>
         <translation>{0} torrents écartés : ils semblent déjà sur le disque. Recherchez-les dans la Bibliothèque pour les repartager à la place.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="657"/>
+        <location filename="../gui/zen_view.py" line="709"/>
         <source>… and {0} more</source>
         <translation>… et {0} de plus</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="664"/>
+        <location filename="../gui/zen_view.py" line="716"/>
         <source>{0} torrents · ≈ +{1} Zen/day · {2} Go to download · paid back in ≈ {3} days</source>
         <translation>{0} torrents · ≈ +{1} Zen/jour · {2} Go à télécharger · remboursé en ≈ {3} jours</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="671"/>
+        <location filename="../gui/zen_view.py" line="723"/>
         <source> · average note {0}</source>
         <translation> · note moyenne {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="678"/>
+        <location filename="../gui/zen_view.py" line="730"/>
         <source>Could not make a Plan: {0}</source>
         <translation>Impossible de faire un Plan : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="690"/>
+        <location filename="../gui/zen_view.py" line="742"/>
         <source>Testing speed…</source>
         <translation>Test du débit…</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="698"/>
-        <source>Sending to qBittorrent: ≈ {0}</source>
-        <translation>Envoi à qBittorrent : ≈ {0}</translation>
+        <location filename="../gui/zen_view.py" line="750"/>
+        <source>Sending to the torrent client: ≈ {0}</source>
+        <translation>Envoi au client torrent : ≈ {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="703"/>
+        <location filename="../gui/zen_view.py" line="755"/>
         <source>Downloading the data: ≈ {0} at best</source>
         <translation>Téléchargement des données : ≈ {0} au mieux</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="707"/>
+        <location filename="../gui/zen_view.py" line="759"/>
         <source>Downloading the data: test your speed to estimate it</source>
         <translation>Téléchargement des données : testez votre débit pour l’estimer</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="714"/>
+        <location filename="../gui/zen_view.py" line="766"/>
         <source>Download speed: not tested</source>
         <translation>Débit descendant : non testé</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="715"/>
+        <location filename="../gui/zen_view.py" line="767"/>
         <source>Download speed: {0} Mbit/s ({1}/s)</source>
         <translation>Débit descendant : {0} Mbit/s ({1}/s)</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="719"/>
+        <location filename="../gui/zen_view.py" line="771"/>
         <source>tested {0}</source>
         <translation>testé le {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="734"/>
+        <location filename="../gui/zen_view.py" line="786"/>
         <source>Wait for the Plan being sent to finish, or stop it, to make a new one.</source>
         <translation>Attendez la fin de l’envoi du Plan, ou arrêtez-le, pour en faire un nouveau.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="746"/>
-        <location filename="../gui/zen_view.py" line="776"/>
+        <location filename="../gui/zen_view.py" line="798"/>
+        <location filename="../gui/zen_view.py" line="828"/>
         <source>Stopping after the current torrent…</source>
         <translation>Arrêt après le torrent en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="754"/>
+        <location filename="../gui/zen_view.py" line="806"/>
         <source>Sending the Plan: {0} of {1} · {2} added · {3} refused · {4} failed</source>
         <translation>Envoi du Plan : {0} sur {1} · {2} ajoutés · {3} refusés · {4} en échec</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="758"/>
+        <location filename="../gui/zen_view.py" line="810"/>
         <source>≈ +{0} Zen/day sent</source>
         <translation>≈ +{0} Zen/jour envoyés</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="763"/>
+        <location filename="../gui/zen_view.py" line="815"/>
         <source>c411 is limiting downloads. Next try at {0}; sending continues by itself.</source>
         <translation>c411 limite les téléchargements. Prochain essai à {0} ; l’envoi reprendra tout seul.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="767"/>
+        <location filename="../gui/zen_view.py" line="819"/>
         <source>Now: {0}</source>
         <translation>En cours : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="771"/>
+        <location filename="../gui/zen_view.py" line="823"/>
         <source>About {0} left</source>
         <translation>Environ {0} restant</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="783"/>
+        <location filename="../gui/zen_view.py" line="835"/>
         <source>{0} days</source>
         <translation>{0} jours</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="785"/>
+        <location filename="../gui/zen_view.py" line="837"/>
         <source>{0} min</source>
         <translation>{0} min</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="786"/>
+        <location filename="../gui/zen_view.py" line="838"/>
         <source>{0} h {1:02d}</source>
         <translation>{0} h {1:02d}</translation>
     </message>
@@ -1018,11 +1044,6 @@ La mettre à la corbeille ?</translation>
         <translation>Repartager</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="131"/>
-        <source>Add to qBittorrent against your files, verify, then seed</source>
-        <translation>Ajouter à qBittorrent sur vos fichiers, vérifier, puis partager</translation>
-    </message>
-    <message>
         <location filename="../gui/review_panel.py" line="163"/>
         <source>Force search</source>
         <translation>Forcer la recherche</translation>
@@ -1033,9 +1054,14 @@ La mettre à la corbeille ?</translation>
         <translation>Sélectionnez un élément local</translation>
     </message>
     <message>
+        <location filename="../gui/review_panel.py" line="131"/>
+        <source>Add to your torrent client against your files, verify, then seed</source>
+        <translation>Ajouter à votre client torrent sur vos fichiers, vérifier, puis partager</translation>
+    </message>
+    <message>
         <location filename="../gui/review_panel.py" line="171"/>
-        <source>Already seeded by qBittorrent.</source>
-        <translation>Déjà partagé par qBittorrent.</translation>
+        <source>Already seeded by your torrent client.</source>
+        <translation>Déjà partagé par votre client torrent.</translation>
     </message>
     <message>
         <location filename="../gui/review_panel.py" line="174"/>
@@ -1121,6 +1147,21 @@ La mettre à la corbeille ?</translation>
         <translation>La décompression demande {0}, mais seulement {1} est libre sur ce disque.</translation>
     </message>
     <message>
+        <location filename="../gui/review_panel.py" line="424"/>
+        <source>Unpack {0} into the new folder
+{1}?
+
+It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten.
+
+The torrent is then added to your torrent client against the unpacked files, and verified before it seeds. Once it is verified, you are offered to move the archive to the trash.</source>
+        <translation>Décompresser {0} dans le nouveau dossier
+{1} ?
+
+Cela écrit {2} en {3} fichiers ; {4} est libre sur ce disque. Rien n’est écrasé.
+
+Le torrent est ensuite ajouté à votre client torrent avec les fichiers décompressés, et vérifié avant d’être partagé. Une fois la vérification réussie, il vous sera proposé de mettre l’archive à la corbeille.</translation>
+    </message>
+    <message>
         <location filename="../gui/review_panel.py" line="442"/>
         <source>Unpacking %p%</source>
         <translation>Décompression %p%</translation>
@@ -1136,9 +1177,9 @@ La mettre à la corbeille ?</translation>
         <translation>Impossible de décompresser et repartager : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="485"/>
-        <source>You have {0} of this torrent. The {1} absent files will not be downloaded. After Verification the torrent is left stopped: starting it in qBittorrent would fetch the few pieces it shares with your files. Reseed?</source>
-        <translation>Vous avez {0} de ce torrent. Les {1} fichiers absents ne seront pas téléchargés. Après la vérification, le torrent reste à l’arrêt : le démarrer dans qBittorrent récupérerait les quelques pièces qu’il partage avec vos fichiers. Repartager ?</translation>
+        <location filename="../gui/review_panel.py" line="501"/>
+        <source>These files will be renamed inside your torrent client to match yours (your files are not touched):</source>
+        <translation>Ces fichiers seront renommés dans votre client torrent pour correspondre aux vôtres (vos fichiers ne sont pas modifiés) :</translation>
     </message>
     <message>
         <location filename="../gui/review_panel.py" line="292"/>
@@ -1156,24 +1197,14 @@ La mettre à la corbeille ?</translation>
         <translation>Repartager {0} correspondances</translation>
     </message>
     <message>
-        <location filename="../gui/review_panel.py" line="424"/>
-        <source>Unpack {0} into the new folder
-{1}?
-
-It writes {2} in {3} files; {4} is free on that disk. Nothing is overwritten.
-
-The torrent is then added to qBittorrent against the unpacked files, and verified before it seeds. Once it is verified, you are offered to move the archive to the trash.</source>
-        <translation>Décompresser {0} dans le nouveau dossier
-{1} ?
-
-Cela écrit {2} en {3} fichiers ; {4} est libre sur ce disque. Rien n’est écrasé.
-
-Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, et vérifié avant d’être partagé. Une fois la vérification réussie, il vous sera proposé de mettre l’archive à la corbeille.</translation>
-    </message>
-    <message>
         <location filename="../gui/review_panel.py" line="483"/>
         <source>Partial Match</source>
         <translation>Correspondance partielle</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="485"/>
+        <source>You have {0} of this torrent. The {1} absent files will not be downloaded. After Verification the torrent is left stopped: starting it in your torrent client would fetch the few pieces it shares with your files. Reseed?</source>
+        <translation>Vous avez {0} de ce torrent. Les {1} fichiers absents ne seront pas téléchargés. Après la vérification, le torrent reste à l’arrêt : le démarrer dans votre client torrent récupérerait les quelques pièces qu’il partage avec vos fichiers. Repartager ?</translation>
     </message>
     <message>
         <location filename="../gui/review_panel.py" line="496"/>
@@ -1184,11 +1215,6 @@ Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, 
         <location filename="../gui/review_panel.py" line="499"/>
         <source>Rename inside the torrent</source>
         <translation>Renommer dans le torrent</translation>
-    </message>
-    <message>
-        <location filename="../gui/review_panel.py" line="501"/>
-        <source>These files will be renamed inside qBittorrent to match yours (your files are not touched):</source>
-        <translation>Ces fichiers seront renommés dans qBittorrent pour correspondre aux vôtres (vos fichiers ne sont pas modifiés) :</translation>
     </message>
     <message>
         <location filename="../gui/review_panel.py" line="511"/>
@@ -1210,8 +1236,8 @@ Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, 
     </message>
     <message>
         <location filename="../gui/zen_view.py" line="113"/>
-        <source>Read your torrents from qBittorrent again</source>
-        <translation>Relire vos torrents dans qBittorrent</translation>
+        <source>Read your torrents from your torrent client again</source>
+        <translation>Relire vos torrents dans votre client torrent</translation>
     </message>
     <message>
         <location filename="../gui/zen_view.py" line="119"/>
@@ -1240,13 +1266,23 @@ Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, 
     </message>
     <message>
         <location filename="../gui/zen_view.py" line="130"/>
-        <source>From qBittorrent&apos;s seeding time: a lower bound of c411&apos;s count, which also includes time seeded before the torrent was added again.</source>
-        <translation>D&apos;après le temps de partage de qBittorrent : une borne basse du décompte de c411, qui inclut aussi le temps partagé avant que le torrent soit ajouté à nouveau.</translation>
+        <source>From your torrent client&apos;s seeding time: a lower bound of c411&apos;s count, which also includes time seeded before the torrent was added again.</source>
+        <translation>D&apos;après le temps de partage de votre client torrent : une borne basse du décompte de c411, qui inclut aussi le temps partagé avant que le torrent soit ajouté à nouveau.</translation>
     </message>
     <message>
         <location filename="../gui/zen_view.py" line="147"/>
-        <source>Reading qBittorrent…</source>
-        <translation>Lecture de qBittorrent…</translation>
+        <source>Reading your torrent client…</source>
+        <translation>Lecture de votre client torrent…</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="180"/>
+        <source>Refresh to read your c411 torrents from your torrent client.</source>
+        <translation>Actualisez pour lire vos torrents c411 dans votre client torrent.</translation>
+    </message>
+    <message>
+        <location filename="../gui/zen_view.py" line="193"/>
+        <source>Torrent client</source>
+        <translation>Client torrent</translation>
     </message>
     <message>
         <location filename="../gui/zen_view.py" line="169"/>
@@ -1254,560 +1290,572 @@ Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, 
         <translation>Pas en partage : ne rapporte aucun Zen</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="179"/>
-        <source>Refresh to read your c411 torrents from qBittorrent.</source>
-        <translation>Actualisez pour lire vos torrents c411 dans qBittorrent.</translation>
-    </message>
-    <message>
-        <location filename="../gui/zen_view.py" line="182"/>
+        <location filename="../gui/zen_view.py" line="184"/>
         <source>{0} torrents seeding · {1} Zen/day (paid ≈ {2}) · estimates</source>
         <translation>{0} torrents en partage · {1} Zen/jour (versé ≈ {2}) · estimations</translation>
-    </message>
-    <message>
-        <location filename="../gui/zen_view.py" line="191"/>
-        <source>qBittorrent</source>
-        <translation>qBittorrent</translation>
     </message>
 </context>
 <context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../gui/settings_dialog.py" line="88"/>
+        <location filename="../gui/settings_dialog.py" line="91"/>
         <source>Settings</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="98"/>
+        <location filename="../gui/settings_dialog.py" line="101"/>
         <source>Connections</source>
         <translation>Connexions</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="102"/>
+        <location filename="../gui/settings_dialog.py" line="105"/>
         <source>Search &amp;&amp; Matching</source>
         <translation>Recherche &amp;&amp; correspondances</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="104"/>
-        <location filename="../gui/settings_dialog.py" line="446"/>
+        <location filename="../gui/settings_dialog.py" line="107"/>
+        <location filename="../gui/settings_dialog.py" line="499"/>
         <source>Download Folders</source>
         <translation>Dossiers de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="105"/>
-        <source>qBittorrent Paths</source>
-        <translation>Chemins qBittorrent</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="106"/>
+        <location filename="../gui/settings_dialog.py" line="109"/>
         <source>Zen</source>
         <translation>Zen</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="107"/>
-        <location filename="../gui/settings_dialog.py" line="163"/>
+        <location filename="../gui/settings_dialog.py" line="110"/>
+        <location filename="../gui/settings_dialog.py" line="166"/>
         <source>General</source>
         <translation>Général</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="136"/>
+        <location filename="../gui/settings_dialog.py" line="139"/>
         <source>Passwords and API keys are stored in your system keyring, never in TorrentLinker&apos;s settings file.</source>
         <translation>Les mots de passe et clés d’API sont stockés dans le trousseau du système, jamais dans le fichier de paramètres de TorrentLinker.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="152"/>
+        <location filename="../gui/settings_dialog.py" line="155"/>
         <source>Show / hide</source>
         <translation>Afficher / masquer</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="166"/>
+        <location filename="../gui/settings_dialog.py" line="169"/>
         <source>Automatic (system language)</source>
         <translation>Automatique (langue du système)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="170"/>
+        <location filename="../gui/settings_dialog.py" line="173"/>
         <source>Takes effect after restarting the app</source>
         <translation>Pris en compte au prochain démarrage</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="171"/>
+        <location filename="../gui/settings_dialog.py" line="174"/>
         <source>Language</source>
         <translation>Langue</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="177"/>
+        <location filename="../gui/settings_dialog.py" line="180"/>
         <source>Zen Profile</source>
         <translation>Profil Zen</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="184"/>
+        <location filename="../gui/settings_dialog.py" line="187"/>
         <source>Class</source>
         <translation>Classe</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="191"/>
+        <location filename="../gui/settings_dialog.py" line="194"/>
         <source>Bonus of the progression tree already unlocked on c411</source>
         <translation>Bonus de l&apos;arbre de progression déjà débloqué sur c411</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="193"/>
+        <location filename="../gui/settings_dialog.py" line="196"/>
         <source>Tree bonus unlocked</source>
         <translation>Bonus d&apos;arbre débloqué</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="210"/>
+        <location filename="../gui/settings_dialog.py" line="213"/>
         <source> h</source>
         <translation> h</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="213"/>
-        <source>Hours a day qBittorrent runs; under 30 minutes earns nothing</source>
-        <translation>Heures par jour où qBittorrent tourne ; moins de 30 minutes ne rapporte rien</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="215"/>
+        <location filename="../gui/settings_dialog.py" line="218"/>
         <source>Seed hours per day</source>
         <translation>Heures de partage par jour</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="218"/>
+        <location filename="../gui/settings_dialog.py" line="221"/>
         <source>No cap</source>
         <translation>Sans limite</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="220"/>
+        <location filename="../gui/settings_dialog.py" line="223"/>
         <source>Most torrents you want to seed at once</source>
         <translation>Nombre maximal de torrents que vous voulez partager à la fois</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="221"/>
+        <location filename="../gui/settings_dialog.py" line="224"/>
         <source>Torrent cap</source>
         <translation>Limite de torrents</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="227"/>
+        <location filename="../gui/settings_dialog.py" line="230"/>
         <source>Share of each disk holding Download Folders that a Plan leaves free</source>
         <translation>Part de chaque disque contenant des Dossiers de téléchargement qu&apos;un Plan laisse libre</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="229"/>
+        <location filename="../gui/settings_dialog.py" line="232"/>
         <source>Free space kept on each disk</source>
         <translation>Espace gardé libre sur chaque disque</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="244"/>
-        <location filename="../gui/settings_dialog.py" line="280"/>
-        <location filename="../gui/settings_dialog.py" line="292"/>
-        <location filename="../gui/settings_dialog.py" line="294"/>
+        <location filename="../gui/settings_dialog.py" line="330"/>
         <source>qBittorrent</source>
         <translation>qBittorrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="250"/>
+        <location filename="../gui/settings_dialog.py" line="307"/>
         <source>qbt_… (qBittorrent 5.2 or later)</source>
         <translation>qbt_… (qBittorrent 5.2 ou plus récent)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="253"/>
+        <location filename="../gui/settings_dialog.py" line="310"/>
         <source>Generate it in qBittorrent: Options → WebUI → API key. When filled, it is used instead of the username and password; leave it empty on older versions.</source>
         <translation>Générez-la dans qBittorrent : Options → Interface web → Clé d’API. Si elle est renseignée, elle remplace le nom d’utilisateur et le mot de passe ; laissez-la vide avec les versions plus anciennes.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="257"/>
+        <location filename="../gui/settings_dialog.py" line="262"/>
         <source>Test connection</source>
         <translation>Tester la connexion</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="259"/>
+        <location filename="../gui/settings_dialog.py" line="314"/>
         <source>WebUI address</source>
         <translation>Adresse de l’interface Web</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="260"/>
+        <location filename="../gui/settings_dialog.py" line="315"/>
         <source>Username</source>
         <translation>Nom d’utilisateur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="261"/>
+        <location filename="../gui/settings_dialog.py" line="316"/>
         <source>Password</source>
         <translation>Mot de passe</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="266"/>
-        <source>qBittorrent in Docker, on a NAS or on another computer? Tell the app how it sees your folders in the qBittorrent Paths tab.</source>
-        <translation>qBittorrent dans Docker, sur un NAS ou sur un autre ordinateur ? Indiquez comment il voit vos dossiers dans l’onglet Chemins qBittorrent.</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="281"/>
+        <location filename="../gui/settings_dialog.py" line="331"/>
         <source>An API key looks like qbt_ followed by 28 letters and digits.</source>
         <translation>Une clé d’API s’écrit qbt_ suivi de 28 lettres et chiffres.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="292"/>
-        <source>Connected to qBittorrent {0}</source>
-        <translation>Connecté à qBittorrent {0}</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="300"/>
+        <location filename="../gui/settings_dialog.py" line="353"/>
         <source>Indexer (Torznab)</source>
         <translation>Indexeur (Torznab)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="304"/>
+        <location filename="../gui/settings_dialog.py" line="357"/>
         <source>Test Indexer</source>
         <translation>Tester l’indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="307"/>
+        <location filename="../gui/settings_dialog.py" line="360"/>
         <source>On c411, generate your key at &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</source>
         <translation>Sur c411, générez votre clé sur &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="312"/>
+        <location filename="../gui/settings_dialog.py" line="365"/>
         <source>Torznab URL</source>
         <translation>URL Torznab</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="262"/>
-        <location filename="../gui/settings_dialog.py" line="313"/>
+        <location filename="../gui/settings_dialog.py" line="317"/>
+        <location filename="../gui/settings_dialog.py" line="366"/>
         <source>API key</source>
         <translation>Clé d’API</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="201"/>
+        <location filename="../gui/settings_dialog.py" line="108"/>
+        <source>Client Paths</source>
+        <translation>Chemins du client</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="204"/>
         <source>What your shop badges add (Pondération + while worn, Pondération ++ once owned), on top of your Class maximum. c411 shows it under Zen → Bonus; its API does not report it.</source>
         <translation>Ce qu’ajoutent vos badges de la boutique (Pondération + quand il est porté, Pondération ++ dès qu’il est possédé), par-dessus le maximum de votre classe. c411 l’affiche dans Zen → Bonus ; son API ne le donne pas.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="206"/>
+        <location filename="../gui/settings_dialog.py" line="209"/>
         <source>Shop badges bonus</source>
         <translation>Bonus des badges de la boutique</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="317"/>
+        <location filename="../gui/settings_dialog.py" line="216"/>
+        <source>Hours a day your torrent client runs; under 30 minutes earns nothing</source>
+        <translation>Heures par jour où votre client torrent tourne ; moins de 30 minutes ne rapporte rien</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="247"/>
+        <source>Torrent client</source>
+        <translation>Client torrent</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="254"/>
+        <source>Client</source>
+        <translation>Client</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="270"/>
+        <source>Your torrent client in Docker, on a NAS or on another computer? Tell the app how it sees your folders in the Client Paths tab.</source>
+        <translation>Votre client torrent dans Docker, sur un NAS ou sur un autre ordinateur ? Indiquez comment il voit vos dossiers dans l’onglet Chemins du client.</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="287"/>
+        <source>Web UI address</source>
+        <translation>Adresse de l’interface Web</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="288"/>
+        <source>Web UI password</source>
+        <translation>Mot de passe de l’interface Web</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="291"/>
+        <source>Deluge 2. Turn on its Label plugin (Preferences → Plugins): TorrentLinker labels the torrents it adds to follow their Verification.</source>
+        <translation>Deluge 2. Activez son extension Label (Préférences → Extensions) : TorrentLinker étiquette les torrents qu’il ajoute pour suivre leur vérification.</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="345"/>
+        <source>Connected to {0} {1}</source>
+        <translation>Connecté à {0} {1}</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="370"/>
         <source>Key {0} (optional)</source>
         <translation>Clé {0} (facultative)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="321"/>
+        <location filename="../gui/settings_dialog.py" line="374"/>
         <source>Up to 4 more keys of the same c411 account (5 in all). c411 limits each key separately: each request goes to the key that is free soonest, and a key c411 asks to wait rests while the others go on.</source>
         <translation>Jusqu’à 4 clés de plus du même compte c411 (5 en tout). c411 limite chaque clé séparément : chaque requête part par la clé libre le plus tôt, et une clé que c411 fait patienter se repose pendant que les autres continuent.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="328"/>
+        <location filename="../gui/settings_dialog.py" line="381"/>
         <source>More API keys</source>
         <translation>Autres clés API</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="334"/>
+        <location filename="../gui/settings_dialog.py" line="387"/>
         <source>TMDb (optional)</source>
         <translation>TMDb (facultatif)</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="339"/>
+        <location filename="../gui/settings_dialog.py" line="392"/>
         <source>Free key at &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</source>
         <translation>Clé gratuite sur &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="360"/>
-        <location filename="../gui/settings_dialog.py" line="363"/>
-        <location filename="../gui/settings_dialog.py" line="840"/>
-        <location filename="../gui/settings_dialog.py" line="854"/>
+        <location filename="../gui/settings_dialog.py" line="413"/>
+        <location filename="../gui/settings_dialog.py" line="416"/>
+        <location filename="../gui/settings_dialog.py" line="895"/>
+        <location filename="../gui/settings_dialog.py" line="909"/>
         <source>Indexer</source>
         <translation>Indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="361"/>
+        <location filename="../gui/settings_dialog.py" line="414"/>
         <source>Indexer OK: {0} categories</source>
         <translation>Indexeur OK : {0} catégories</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="384"/>
+        <location filename="../gui/settings_dialog.py" line="437"/>
         <source>…or type a folder path and press Enter</source>
         <translation>…ou tapez le chemin d’un dossier puis Entrée</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="400"/>
+        <location filename="../gui/settings_dialog.py" line="453"/>
         <source>Not a folder: {0}</source>
         <translation>Ce n’est pas un dossier : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="450"/>
+        <location filename="../gui/settings_dialog.py" line="503"/>
         <source>Where Plan torrents are downloaded. A subcategory uses its own folder, else its category&apos;s, else the default. A category left without any is excluded from Plans. A Download Folder may lie inside a Library Folder: downloads only ever create their own files.</source>
         <translation>Où les torrents d&apos;un Plan sont téléchargés. Une sous-catégorie utilise son propre dossier, sinon celui de sa catégorie, sinon celui par défaut. Une catégorie qui n&apos;en a aucun est exclue des Plans. Un Dossier de téléchargement peut se trouver dans un Dossier de bibliothèque : un téléchargement ne crée jamais que ses propres fichiers.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="461"/>
+        <location filename="../gui/settings_dialog.py" line="514"/>
         <source>No default: unset categories are excluded</source>
         <translation>Pas de dossier par défaut : les catégories sans dossier sont exclues</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="464"/>
+        <location filename="../gui/settings_dialog.py" line="517"/>
         <source>Choose…</source>
         <translation>Choisir…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="466"/>
+        <location filename="../gui/settings_dialog.py" line="519"/>
         <source>Default</source>
         <translation>Par défaut</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="474"/>
+        <location filename="../gui/settings_dialog.py" line="527"/>
         <source>Category</source>
         <translation>Catégorie</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="474"/>
-        <location filename="../gui/settings_dialog.py" line="569"/>
+        <location filename="../gui/settings_dialog.py" line="527"/>
+        <location filename="../gui/settings_dialog.py" line="622"/>
         <source>Download Folder</source>
         <translation>Dossier de téléchargement</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="474"/>
+        <location filename="../gui/settings_dialog.py" line="527"/>
         <source>Used</source>
         <translation>Utilisé</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="492"/>
+        <location filename="../gui/settings_dialog.py" line="545"/>
         <source>Load categories from the Indexer</source>
         <translation>Charger les catégories depuis l&apos;Indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="494"/>
+        <location filename="../gui/settings_dialog.py" line="547"/>
         <source>Choose folder for the selected category…</source>
         <translation>Choisir le dossier de la catégorie sélectionnée…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="553"/>
+        <location filename="../gui/settings_dialog.py" line="606"/>
         <source>No Download Folder: excluded from Plans</source>
         <translation>Aucun Dossier de téléchargement : exclue des Plans</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="562"/>
+        <location filename="../gui/settings_dialog.py" line="615"/>
         <source>Default Download Folder</source>
         <translation>Dossier de téléchargement par défaut</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="577"/>
-        <source>qBittorrent in Docker, on a NAS or on another computer</source>
-        <translation>qBittorrent dans Docker, sur un NAS ou sur un autre ordinateur</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="581"/>
-        <source>Fill this in only if qBittorrent sees your folders under other paths than this computer does. For example, qBittorrent runs in Docker and sees /data, while this computer reaches the same files as /mnt/nas or Z:\. Detect finds the paths from qBittorrent&apos;s own torrents, then Check counts the torrents each path leads to.</source>
-        <translation>À remplir seulement si qBittorrent voit vos dossiers sous d’autres chemins que cet ordinateur. Par exemple, qBittorrent tourne dans Docker et voit /data, tandis que cet ordinateur atteint les mêmes fichiers par /mnt/nas ou Z:\. Détecter trouve les chemins à partir des torrents de qBittorrent, puis Vérifier compte les torrents auxquels mène chaque chemin.</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="592"/>
+        <location filename="../gui/settings_dialog.py" line="645"/>
         <source>On this computer</source>
         <translation>Sur cet ordinateur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="592"/>
-        <source>In qBittorrent</source>
-        <translation>Dans qBittorrent</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="592"/>
-        <location filename="../gui/settings_dialog.py" line="618"/>
+        <location filename="../gui/settings_dialog.py" line="645"/>
+        <location filename="../gui/settings_dialog.py" line="671"/>
         <source>Check</source>
         <translation>Vérifier</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="605"/>
-        <source>Choose a folder on this computer, then type how qBittorrent sees it</source>
-        <translation>Choisissez un dossier sur cet ordinateur, puis saisissez comment qBittorrent le voit</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="610"/>
+        <location filename="../gui/settings_dialog.py" line="663"/>
         <source>Detect</source>
         <translation>Détecter</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="613"/>
-        <source>Look for qBittorrent&apos;s torrents in your Library and Download Folders and the folders above them, and add the paths that lead there</source>
-        <translation>Cherche les torrents de qBittorrent dans vos dossiers de bibliothèque et de téléchargement et les dossiers au-dessus, et ajoute les chemins qui y mènent</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="620"/>
-        <source>Count, for each path, the qBittorrent torrents whose folder is found here</source>
-        <translation>Compte, pour chaque chemin, les torrents de qBittorrent dont le dossier est trouvé ici</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="647"/>
+        <location filename="../gui/settings_dialog.py" line="700"/>
         <source>Choose a folder on this computer</source>
         <translation>Choisir un dossier sur cet ordinateur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="693"/>
-        <source>Add your Library Folders or Download Folders first: Detect looks for qBittorrent&apos;s files in them.</source>
-        <translation>Ajoutez d’abord vos dossiers de bibliothèque ou de téléchargement : Détecter y cherche les fichiers de qBittorrent.</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="708"/>
-        <source>Looking for qBittorrent&apos;s torrents on this computer…</source>
-        <translation>Recherche des torrents de qBittorrent sur cet ordinateur…</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="719"/>
+        <location filename="../gui/settings_dialog.py" line="774"/>
         <source>{0} ↔ {1}: {2} torrents found</source>
         <translation>{0} ↔ {1} : {2} torrents trouvés</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="725"/>
+        <location filename="../gui/settings_dialog.py" line="780"/>
         <source>{0} torrents are at the same path here: they need no mapping.</source>
         <translation>{0} torrents sont au même chemin ici : ils n’ont besoin d’aucune correspondance.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="731"/>
+        <location filename="../gui/settings_dialog.py" line="786"/>
         <source>Not found on this computer: {0}</source>
         <translation>Introuvables sur cet ordinateur : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="738"/>
-        <source>No torrent of qBittorrent was found in your folders. Add the folder where this computer sees qBittorrent&apos;s downloads as a Download Folder or Library Folder, then detect again; or add the path by hand.</source>
-        <translation>Aucun torrent de qBittorrent n’a été trouvé dans vos dossiers. Ajoutez le dossier où cet ordinateur voit les téléchargements de qBittorrent comme dossier de téléchargement ou de bibliothèque, puis détectez de nouveau ; ou ajoutez le chemin à la main.</translation>
+        <location filename="../gui/settings_dialog.py" line="793"/>
+        <source>None of your torrent client&apos;s torrents was found in your folders. Add the folder where this computer sees its downloads as a Download Folder or Library Folder, then detect again; or add the path by hand.</source>
+        <translation>Aucun torrent de votre client torrent n’a été trouvé dans vos dossiers. Ajoutez le dossier où cet ordinateur voit ses téléchargements comme dossier de téléchargement ou de bibliothèque, puis détectez de nouveau ; ou ajoutez le chemin à la main.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="744"/>
+        <location filename="../gui/settings_dialog.py" line="799"/>
         <source>{0} paths added. Save to use them.</source>
         <translation>{0} chemins ajoutés. Enregistrez pour les utiliser.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="778"/>
+        <location filename="../gui/settings_dialog.py" line="833"/>
         <source>Outside every path above: {0} of {1} torrents found here.</source>
         <translation>Hors de tous les chemins ci-dessus : {0} torrents sur {1} trouvés ici.</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="794"/>
+        <location filename="../gui/settings_dialog.py" line="849"/>
         <source>no torrent</source>
         <translation>aucun torrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="796"/>
+        <location filename="../gui/settings_dialog.py" line="851"/>
         <source>✓ {0} of {1}</source>
         <translation>✓ {0} sur {1}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="796"/>
+        <location filename="../gui/settings_dialog.py" line="851"/>
         <source>⚠ {0} of {1}</source>
         <translation>⚠ {0} sur {1}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="802"/>
+        <location filename="../gui/settings_dialog.py" line="857"/>
         <source>Not found here: {0}</source>
         <translation>Introuvables ici : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="809"/>
-        <source>qBittorrent&apos;s own download folder ({0}) does not exist on this computer, and no path above covers these Download Folders: {1}. qBittorrent probably cannot save into them.</source>
-        <translation>Le dossier de téléchargement de qBittorrent ({0}) n’existe pas sur cet ordinateur, et aucun chemin ci-dessus ne couvre ces dossiers de téléchargement : {1}. qBittorrent ne peut probablement pas y enregistrer.</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="820"/>
-        <source>Could not reach qBittorrent: {0}</source>
-        <translation>Impossible de joindre qBittorrent : {0}</translation>
-    </message>
-    <message>
-        <location filename="../gui/settings_dialog.py" line="919"/>
+        <location filename="../gui/settings_dialog.py" line="975"/>
         <source>Keyring unavailable</source>
         <translation>Trousseau indisponible</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="920"/>
+        <location filename="../gui/settings_dialog.py" line="976"/>
         <source>Your keys could not be saved in the system keyring: {0}</source>
         <translation>Vos clés n’ont pas pu être enregistrées dans le trousseau du système : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="100"/>
-        <location filename="../gui/settings_dialog.py" line="369"/>
-        <location filename="../gui/settings_dialog.py" line="400"/>
+        <location filename="../gui/settings_dialog.py" line="103"/>
+        <location filename="../gui/settings_dialog.py" line="422"/>
+        <location filename="../gui/settings_dialog.py" line="453"/>
         <source>Library Folders</source>
         <translation>Dossiers de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="373"/>
+        <location filename="../gui/settings_dialog.py" line="426"/>
         <source>Folder</source>
         <translation>Dossier</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="373"/>
+        <location filename="../gui/settings_dialog.py" line="426"/>
         <source>Content Kind</source>
         <translation>Type de contenu</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="373"/>
+        <location filename="../gui/settings_dialog.py" line="426"/>
         <source>Scan depth</source>
         <translation>Profondeur d’analyse</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="386"/>
-        <location filename="../gui/settings_dialog.py" line="603"/>
+        <location filename="../gui/settings_dialog.py" line="439"/>
+        <location filename="../gui/settings_dialog.py" line="656"/>
         <source>Add folder…</source>
         <translation>Ajouter un dossier…</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="388"/>
-        <location filename="../gui/settings_dialog.py" line="608"/>
+        <location filename="../gui/settings_dialog.py" line="441"/>
+        <location filename="../gui/settings_dialog.py" line="661"/>
         <source>Remove</source>
         <translation>Retirer</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="410"/>
+        <location filename="../gui/settings_dialog.py" line="463"/>
         <source>Choose a Library Folder</source>
         <translation>Choisir un dossier de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="823"/>
+        <location filename="../gui/settings_dialog.py" line="878"/>
         <source>Search</source>
         <translation>Rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="337"/>
+        <location filename="../gui/settings_dialog.py" line="390"/>
         <source>Optional: finds IDs for movies and series</source>
         <translation>Facultatif : trouve les identifiants des films et séries</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="344"/>
+        <location filename="../gui/settings_dialog.py" line="397"/>
         <source>TMDb API key</source>
         <translation>Clé d’API TMDb</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="828"/>
+        <location filename="../gui/settings_dialog.py" line="630"/>
+        <source>Torrent client in Docker, on a NAS or on another computer</source>
+        <translation>Client torrent dans Docker, sur un NAS ou sur un autre ordinateur</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="634"/>
+        <source>Fill this in only if your torrent client sees your folders under other paths than this computer does. For example, it runs in Docker and sees /data, while this computer reaches the same files as /mnt/nas or Z:\. Detect finds the paths from the client&apos;s own torrents, then Check counts the torrents each path leads to.</source>
+        <translation>À remplir seulement si votre client torrent voit vos dossiers sous d’autres chemins que cet ordinateur. Par exemple, il tourne dans Docker et voit /data, tandis que cet ordinateur atteint les mêmes fichiers par /mnt/nas ou Z:\. Détecter trouve les chemins à partir des torrents du client, puis Vérifier compte les torrents auxquels mène chaque chemin.</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="645"/>
+        <source>In the client</source>
+        <translation>Dans le client</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="658"/>
+        <source>Choose a folder on this computer, then type how your torrent client sees it</source>
+        <translation>Choisissez un dossier sur cet ordinateur, puis saisissez comment votre client torrent le voit</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="666"/>
+        <source>Look for your torrent client&apos;s torrents in your Library and Download Folders and the folders above them, and add the paths that lead there</source>
+        <translation>Cherche les torrents de votre client torrent dans vos dossiers de bibliothèque et de téléchargement et les dossiers au-dessus, et ajoute les chemins qui y mènent</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="673"/>
+        <source>Count, for each path, the client&apos;s torrents whose folder is found here</source>
+        <translation>Compte, pour chaque chemin, les torrents du client dont le dossier est trouvé ici</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="746"/>
+        <source>Add your Library Folders or Download Folders first: Detect looks for your torrent client&apos;s files in them.</source>
+        <translation>Ajoutez d’abord vos dossiers de bibliothèque ou de téléchargement : Détecter y cherche les fichiers de votre client torrent.</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="762"/>
+        <source>Looking for your torrent client&apos;s torrents on this computer…</source>
+        <translation>Recherche des torrents de votre client torrent sur cet ordinateur…</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="864"/>
+        <source>Your torrent client&apos;s own download folder ({0}) does not exist on this computer, and no path above covers these Download Folders: {1}. The client probably cannot save into them.</source>
+        <translation>Le dossier de téléchargement de votre client torrent ({0}) n’existe pas sur cet ordinateur, et aucun chemin ci-dessus ne couvre ces dossiers de téléchargement : {1}. Le client ne peut probablement pas y enregistrer.</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="875"/>
+        <source>Could not reach your torrent client: {0}</source>
+        <translation>Impossible de joindre votre client torrent : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="883"/>
         <source>All categories</source>
         <translation>Toutes les catégories</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="830"/>
+        <location filename="../gui/settings_dialog.py" line="885"/>
         <source>Categories: {0}</source>
         <translation>Catégories : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="831"/>
+        <location filename="../gui/settings_dialog.py" line="886"/>
         <source>Fill categories from the Indexer</source>
         <translation>Remplir les catégories depuis l’indexeur</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="878"/>
+        <location filename="../gui/settings_dialog.py" line="933"/>
         <source>Matching</source>
         <translation>Correspondances</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="885"/>
+        <location filename="../gui/settings_dialog.py" line="940"/>
         <source>Size tolerance before fetching a .torrent</source>
         <translation>Tolérance de taille avant de récupérer un .torrent</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="890"/>
+        <location filename="../gui/settings_dialog.py" line="945"/>
         <source>Minimum coverage of a Partial Match</source>
         <translation>Couverture minimale d’une correspondance partielle</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="892"/>
+        <location filename="../gui/settings_dialog.py" line="947"/>
         <source>One pattern per line, matched against each path segment</source>
         <translation>Un motif par ligne, comparé à chaque segment du chemin</translation>
     </message>
     <message>
-        <location filename="../gui/settings_dialog.py" line="894"/>
+        <location filename="../gui/settings_dialog.py" line="949"/>
         <source>Ignored Files</source>
         <translation>Fichiers ignorés</translation>
     </message>
@@ -1815,87 +1863,87 @@ Le torrent est ensuite ajouté à qBittorrent avec les fichiers décompressés, 
 <context>
     <name>ZenBand</name>
     <message>
-        <location filename="../gui/zen_view.py" line="839"/>
+        <location filename="../gui/zen_view.py" line="891"/>
         <source>Refresh profile</source>
         <translation>Actualiser le profil</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="840"/>
+        <location filename="../gui/zen_view.py" line="892"/>
         <source>Read your Zen Balance and Class from c411</source>
         <translation>Lire votre Solde Zen et votre Classe sur c411</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="857"/>
+        <location filename="../gui/zen_view.py" line="909"/>
         <source>Zen Balance: &lt;b&gt;{0}&lt;/b&gt;</source>
         <translation>Solde Zen : &lt;b&gt;{0}&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="861"/>
+        <location filename="../gui/zen_view.py" line="913"/>
         <source>Seeding: &lt;b&gt;{0}&lt;/b&gt; Zen/day</source>
         <translation>En partage : &lt;b&gt;{0}&lt;/b&gt; Zen/jour</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="865"/>
+        <location filename="../gui/zen_view.py" line="917"/>
         <source>with Plan: {0}</source>
         <translation>avec le Plan : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="875"/>
+        <location filename="../gui/zen_view.py" line="927"/>
         <source>Sending the Plan: &lt;b&gt;{0}/{1}&lt;/b&gt;</source>
         <translation>Envoi du Plan : &lt;b&gt;{0}/{1}&lt;/b&gt;</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="876"/>
+        <location filename="../gui/zen_view.py" line="928"/>
         <source>(c411 limit, waiting)</source>
         <translation>(limite c411, en attente)</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="880"/>
+        <location filename="../gui/zen_view.py" line="932"/>
         <source>Catalogue: {0}</source>
         <translation>Catalogue : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="892"/>
+        <location filename="../gui/zen_view.py" line="944"/>
         <source>Downloads are blocked on c411: not enough Zen.</source>
         <translation>Les téléchargements sont bloqués sur c411 : Zen insuffisant.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="895"/>
+        <location filename="../gui/zen_view.py" line="947"/>
         <source>Downloads are blocked on c411 ({0}).</source>
         <translation>Les téléchargements sont bloqués sur c411 ({0}).</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="902"/>
+        <location filename="../gui/zen_view.py" line="954"/>
         <source>c411 Class “{0}” is not known here: enter your Zen Profile in Settings → Zen.</source>
         <translation>La Classe c411 « {0} » est inconnue ici : saisissez votre Profil Zen dans Paramètres → Zen.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="903"/>
+        <location filename="../gui/zen_view.py" line="955"/>
         <source>none</source>
         <translation>aucune</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="912"/>
+        <location filename="../gui/zen_view.py" line="964"/>
         <source>Enter your c411 key in Settings → Connections to see your Zen Balance.</source>
         <translation>Saisissez votre clé c411 dans Paramètres → Connexions pour voir votre Solde Zen.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="915"/>
+        <location filename="../gui/zen_view.py" line="967"/>
         <source>c411 refused the key: check it in Settings → Connections.</source>
         <translation>c411 a refusé la clé : vérifiez-la dans Paramètres → Connexions.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="918"/>
+        <location filename="../gui/zen_view.py" line="970"/>
         <source>Your c411 key cannot read your profile: create one with the &quot;Profil (lecture)&quot; scope at &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;. Until then, enter your Zen Profile in Settings → Zen.</source>
         <translation>Votre clé c411 ne peut pas lire votre profil : créez-en une avec la portée « Profil (lecture) » sur &lt;a href=&quot;{0}&quot;&gt;{0}&lt;/a&gt;. En attendant, saisissez votre Profil Zen dans Paramètres → Zen.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="923"/>
+        <location filename="../gui/zen_view.py" line="975"/>
         <source>c411 is limiting requests: refresh your profile in a minute.</source>
         <translation>c411 limite les requêtes : actualisez votre profil dans une minute.</translation>
     </message>
     <message>
-        <location filename="../gui/zen_view.py" line="927"/>
+        <location filename="../gui/zen_view.py" line="979"/>
         <source>Could not read your c411 profile: {0}</source>
         <translation>Impossible de lire votre profil c411 : {0}</translation>
     </message>

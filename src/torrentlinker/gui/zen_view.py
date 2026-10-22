@@ -110,7 +110,7 @@ class SeedingView(QWidget):
         top.addWidget(self.title)
         top.addStretch()
         self.refresh_button = QPushButton(self.tr("Refresh"))
-        self.refresh_button.setToolTip(self.tr("Read your torrents from qBittorrent again"))
+        self.refresh_button.setToolTip(self.tr("Read your torrents from your torrent client again"))
         self.refresh_button.clicked.connect(self.refresh)
         top.addWidget(self.refresh_button)
         layout.addLayout(top)
@@ -127,7 +127,7 @@ class SeedingView(QWidget):
         if age:
             age.setToolTip(
                 self.tr(
-                    "From qBittorrent's seeding time: a lower bound of c411's count, which "
+                    "From your torrent client's seeding time: a lower bound of c411's count, which "
                     "also includes time seeded before the torrent was added again."
                 )
             )
@@ -144,7 +144,7 @@ class SeedingView(QWidget):
         self._quiet = quiet
         self.refresh_button.setEnabled(False)
         if not quiet:
-            self.total.setText(self.tr("Reading qBittorrent…"))
+            self.total.setText(self.tr("Reading your torrent client…"))
         run_in_background(self.load(), self.show_seeding, self._failed)
 
     def show_seeding(self, view: Seeding) -> None:
@@ -176,7 +176,9 @@ class SeedingView(QWidget):
     def _show_total(self) -> None:
         view = self.seeding
         if view is None:
-            self.total.setText(self.tr("Refresh to read your c411 torrents from qBittorrent."))
+            self.total.setText(
+                self.tr("Refresh to read your c411 torrents from your torrent client.")
+            )
             return
         self.total.setText(
             self.tr("{0} torrents seeding · {1} Zen/day (paid ≈ {2}) · estimates").format(
@@ -188,7 +190,7 @@ class SeedingView(QWidget):
         self.refresh_button.setEnabled(True)
         self._show_total()
         if not self._quiet:
-            QMessageBox.warning(self, self.tr("qBittorrent"), str(error) or type(error).__name__)
+            QMessageBox.warning(self, self.tr("Torrent client"), str(error) or type(error).__name__)
 
 
 class ClassComparison(QGroupBox):
@@ -321,7 +323,7 @@ class PlanView(QGroupBox):
         self.speed_button.setToolTip(
             self.tr(
                 "Measure your download speed for about 8 seconds with Cloudflare's public "
-                "speed test (anonymous). Run it while qBittorrent is not downloading."
+                "speed test (anonymous). Run it while your torrent client is not downloading."
             )
         )
         self.speed_button.clicked.connect(self.speed_test_requested)
@@ -390,6 +392,23 @@ class PlanView(QGroupBox):
         limits.addWidget(self.seeder_limit)
         limits.addStretch()
         layout.addLayout(limits)
+        sizes = QHBoxLayout()
+        tooltip = self.tr(
+            "Only include torrents of at least / at most this size each, in decimal GB. "
+            "Applies to downloads and Reseeds."
+        )
+        self.min_size = self._size_box(self.tr("No minimum"), tooltip)
+        self.max_size = self._size_box(self.tr("No maximum"), tooltip)
+        label = QLabel(self.tr("Torrent size from"))
+        label.setBuddy(self.min_size)
+        sizes.addWidget(label)
+        sizes.addWidget(self.min_size)
+        label = QLabel(self.tr("to"))
+        label.setBuddy(self.max_size)
+        sizes.addWidget(label)
+        sizes.addWidget(self.max_size)
+        sizes.addStretch()
+        layout.addLayout(sizes)
         top = QHBoxLayout()
         self.categories_button = QToolButton()
         self.categories_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -411,7 +430,7 @@ class PlanView(QGroupBox):
         self.stop_fetch_button.clicked.connect(self.stop_fetch_requested)
         self.stop_fetch_button.hide()
         top.addWidget(self.stop_fetch_button)
-        self.send_button = QPushButton(self.tr("Send to qBittorrent…"))
+        self.send_button = QPushButton(self.tr("Send to the torrent client…"))
         self.send_button.setToolTip(
             self.tr(
                 "Download each .torrent directly from c411 and add it to its Download "
@@ -424,8 +443,8 @@ class PlanView(QGroupBox):
         self.stop_send_button = QPushButton(self.tr("Stop sending"))
         self.stop_send_button.setToolTip(
             self.tr(
-                "Stop after the current torrent. Torrents already sent stay in qBittorrent; "
-                "a new Plan leaves them out."
+                "Stop after the current torrent. Torrents already sent stay in your torrent "
+                "client; a new Plan leaves them out."
             )
         )
         self.stop_send_button.clicked.connect(self._stop_send)
@@ -478,6 +497,31 @@ class PlanView(QGroupBox):
         self.torrent_limit.valueChanged.connect(self._options_changed)
         self.low_seeders.toggled.connect(self._options_changed)
         self.seeder_limit.valueChanged.connect(self._options_changed)
+        self.min_size.valueChanged.connect(self._min_size_changed)
+        self.max_size.valueChanged.connect(self._max_size_changed)
+
+    def _size_box(self, unset: str, tooltip: str) -> QDoubleSpinBox:
+        box = QDoubleSpinBox()
+        box.setRange(0, 1_000_000)
+        box.setDecimals(3)  # 1 MB steps, for ebooks
+        box.setSuffix(self.tr(" GB"))
+        box.setSpecialValueText(unset)
+        box.setToolTip(tooltip)
+        return box
+
+    def _min_size_changed(self) -> None:
+        if self.max_size.value() and self.min_size.value() > self.max_size.value():
+            self.max_size.blockSignals(True)
+            self.max_size.setValue(self.min_size.value())
+            self.max_size.blockSignals(False)
+        self._options_changed()
+
+    def _max_size_changed(self) -> None:
+        if self.max_size.value() and self.min_size.value() > self.max_size.value():
+            self.min_size.blockSignals(True)
+            self.min_size.setValue(self.max_size.value())
+            self.min_size.blockSignals(False)
+        self._options_changed()
 
     def set_options(self, value: PlanOptions) -> None:
         controls = [
@@ -487,6 +531,8 @@ class PlanView(QGroupBox):
             self.torrent_limit,
             self.low_seeders,
             self.seeder_limit,
+            self.min_size,
+            self.max_size,
         ]
         for control in controls:
             control.blockSignals(True)
@@ -499,6 +545,8 @@ class PlanView(QGroupBox):
             self.low_seeders.setChecked(value.max_seeders is not None)
             self.seeder_limit.setValue(value.max_seeders if value.max_seeders is not None else 10)
             self.seeder_limit.setEnabled(not self._busy and value.max_seeders is not None)
+            self.min_size.setValue(value.min_size / GB)
+            self.max_size.setValue(value.max_size / GB)
         finally:
             for control in controls:
                 control.blockSignals(False)
@@ -512,6 +560,8 @@ class PlanView(QGroupBox):
                 round(self.download_limit.value() * GB),
                 self.torrent_limit.value() if self.limit_torrents.isChecked() else None,
                 self.seeder_limit.value() if self.low_seeders.isChecked() else None,
+                round(self.min_size.value() * GB),
+                round(self.max_size.value() * GB),
             )
         )
 
@@ -597,6 +647,8 @@ class PlanView(QGroupBox):
         self.torrent_limit.setEnabled(not busy and self.limit_torrents.isChecked())
         self.low_seeders.setEnabled(not busy)
         self.seeder_limit.setEnabled(not busy and self.low_seeders.isChecked())
+        self.min_size.setEnabled(not busy)
+        self.max_size.setEnabled(not busy)
         self.categories_button.setEnabled(not busy)
         self.send_button.setEnabled(not busy and bool(self.plan and self.plan.items))
         if busy:
@@ -695,7 +747,7 @@ class PlanView(QGroupBox):
         if plan is not None and plan.items:
             lines.insert(
                 0,
-                self.tr("Sending to qBittorrent: ≈ {0}").format(
+                self.tr("Sending to the torrent client: ≈ {0}").format(
                     duration_text(plan.sending_seconds(DOWNLOAD_INTERVAL))
                 )
                 + " · "

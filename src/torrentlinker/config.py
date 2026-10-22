@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
+from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.matching import (
     DEFAULT_IGNORE_PATTERNS,
@@ -23,6 +23,11 @@ from torrentlinker.zen import ZenClass, ZenProfile
 class QbitSettings:
     host: str = "http://localhost:8080"
     username: str = "admin"
+
+
+@dataclass
+class DelugeSettings:
+    host: str = "http://localhost:8112"  # its Web UI; the password is a secret
 
 
 @dataclass
@@ -46,7 +51,9 @@ class MatchingSettings:
 
 @dataclass
 class Settings:
+    client: TorrentClient = TorrentClient.QBITTORRENT
     qbit: QbitSettings = field(default_factory=QbitSettings)
+    deluge: DelugeSettings = field(default_factory=DelugeSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
     # Torznab categories searched for each Content Kind; none listed = all categories.
@@ -73,7 +80,9 @@ class Settings:
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
+            "client": self.client.value,
             "qbit": asdict(self.qbit),
+            "deluge": asdict(self.deluge),
             "indexer": asdict(self.indexer),
             "matching": asdict(self.matching),
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
@@ -105,7 +114,9 @@ class Settings:
             if f.get("mapping") and (old := PathMapping(**f["mapping"])) not in mappings:
                 mappings.append(old)
         return cls(
+            client=TorrentClient(data.get("client", TorrentClient.QBITTORRENT.value)),
             qbit=QbitSettings(**data.get("qbit", {})),
+            deluge=DelugeSettings(**data.get("deluge", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
             matching=MatchingSettings(**data.get("matching", {})),
             language=str(data.get("language", "auto")),
@@ -176,4 +187,6 @@ def _plan_options_from_json(d: dict) -> PlanOptions:  # type: ignore[type-arg]
             max(1, int(d["max_torrents"])) if d.get("max_torrents") is not None else None
         ),
         max_seeders=max(1, int(d["max_seeders"])) if d.get("max_seeders") is not None else None,
+        min_size=max(0, int(d.get("min_size", 0))),
+        max_size=max(0, int(d.get("max_size", 0))),
     )

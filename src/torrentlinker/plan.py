@@ -39,6 +39,16 @@ class PlanOptions:
     max_download_bytes: int = 0  # 0 = no additional limit
     max_torrents: int | None = None  # additional torrents in this Plan, including Reseeds
     max_seeders: int | None = None  # current swarm, before the user joins
+    min_size: int = 0  # bytes per torrent; 0 = no minimum
+    max_size: int = 0  # bytes per torrent; 0 = no maximum
+
+    def admits(self, size: int, seeders: int) -> bool:
+        """Whether a torrent of this size and current swarm may enter the Plan."""
+        return (
+            (self.max_seeders is None or seeders <= self.max_seeders)
+            and size >= self.min_size
+            and (self.max_size <= 0 or size <= self.max_size)
+        )
 
 
 @dataclass(frozen=True)
@@ -251,9 +261,7 @@ def make_plan(
     disk_spaces: Sequence[DiskSpace] = (),
 ) -> Plan:
     """Choose candidates within each disk's budget (bytes) and `slots` more torrents."""
-    candidates = [
-        c for c in candidates if options.max_seeders is None or c.seeders <= options.max_seeders
-    ]
+    candidates = [c for c in candidates if options.admits(c.size, c.seeders)]
     values = added_values(profile, [c.as_zen() for c in candidates], seeding)
     notes = {
         c.infohash: note(profile.zen_class, c.as_zen())
@@ -346,8 +354,7 @@ def reseed_candidates(
     in_client: set[str],
     seeding: Sequence[ZenTorrent] = (),
     *,
-    goal: PlanGoal = PlanGoal.ZEN,
-    max_seeders: int | None = None,
+    options: PlanOptions = PlanOptions(),
 ) -> list[PlanCandidate]:
     """One Reseed row per Orphan with a Full Match, chosen for the Plan's goal.
 
@@ -365,14 +372,14 @@ def reseed_candidates(
             and v.unpack is None  # a Plan never unpacks: that is the user's choice
             and v.meta is not None
             and v.meta.infohash.lower() not in in_client
-            and (max_seeders is None or v.candidate.seeders <= max_seeders)
+            and options.admits(v.candidate.size, v.candidate.seeders)
         ]
         if not full:
             continue
         rows = [_reseed_row(entry, v) for v in full]
         values = (
             added_values(profile, [r.as_zen() for r in rows], seeding)
-            if goal is PlanGoal.ZEN
+            if options.goal is PlanGoal.ZEN
             else [note(profile.zen_class, r.as_zen()) for r in rows]
         )
         result.append(max(zip(values, rows, strict=True), key=lambda vr: vr[0])[1])

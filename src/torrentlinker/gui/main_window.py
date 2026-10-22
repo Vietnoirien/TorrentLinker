@@ -36,9 +36,10 @@ from torrentlinker.catalogue import (
     startup_categories,
 )
 from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
+from torrentlinker.clients import connect
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
-from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
+from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, TorrentClient
 from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
@@ -47,6 +48,7 @@ from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_s
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
+    DELUGE_PASSWORD,
     INDEXER_API_KEY,
     QBIT_API_KEY,
     QBIT_PASSWORD,
@@ -76,7 +78,7 @@ from torrentlinker.plan import (
     saved_items,
 )
 from torrentlinker.profile import ProfileClient, UserProfile
-from torrentlinker.qbit import QbitApi
+from torrentlinker.qbit import ClientApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import (
     Outcome,
@@ -112,7 +114,7 @@ class MainWindow(QMainWindow):
         self.store = store
         self._indexer: Indexer | None = None
         self._profile: tuple[tuple[str, str], ProfileClient] | None = None
-        self._qbit: tuple[tuple[str, str, str, str], QbitApi] | None = None
+        self._qbit: tuple[tuple[str, ...], ClientApi] | None = None
         self.setWindowTitle("TorrentLinker")
         self.resize(1200, 720)
 
@@ -248,11 +250,17 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
 
     def qbit(self) -> MappedQbit:
-        q = self.settings.qbit
-        key = (q.host, q.username, get_secret(QBIT_PASSWORD), get_secret(QBIT_API_KEY))
+        """The Torrent Client the user chose, qBittorrent or Deluge, through Path Mappings."""
+        s = self.settings
+        if s.client is TorrentClient.DELUGE:
+            key: tuple[str, ...] = (s.client, s.deluge.host, "", get_secret(DELUGE_PASSWORD))
+        else:
+            q = s.qbit
+            key = (s.client, q.host, q.username, get_secret(QBIT_PASSWORD))
+            key += (get_secret(QBIT_API_KEY),)
         if self._qbit is None or self._qbit[0] != key:
-            self._qbit = (key, QbitApi(*key))
-        return MappedQbit(self._qbit[1], PathMapper(self.settings.path_mappings))
+            self._qbit = (key, connect(s.client, *key[1:]))
+        return MappedQbit(self._qbit[1], PathMapper(s.path_mappings))
 
     def indexer(self) -> Indexer:
         """One Indexer instance, so every search shares the same rate limiter.
@@ -501,8 +509,7 @@ class MainWindow(QMainWindow):
                 found,
                 in_client,
                 view.active,
-                goal=options.goal,
-                max_seeders=options.max_seeders,
+                options=options,
             )
             downloads = catalogue_candidates(
                 store.catalogue(),
@@ -565,7 +572,7 @@ class MainWindow(QMainWindow):
                 + "\n"
                 + self.tr(
                     "Provisional estimates from cached metadata. Seeder counts update from "
-                    "qBittorrent after tracker responses."
+                    "your torrent client after tracker responses."
                 )
             )
         self.band.set_plan(plan.zen_added if plan.items else None)
@@ -578,7 +585,7 @@ class MainWindow(QMainWindow):
         payback = plan.payback_days
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle(self.tr("Send the Plan to qBittorrent"))
+        box.setWindowTitle(self.tr("Send the Plan to your torrent client"))
         box.setText(
             self.tr(
                 "{0} torrents · {1} Go to download · ≈ +{2} Zen/day · paid back in ≈ {3} "
@@ -692,7 +699,7 @@ class MainWindow(QMainWindow):
         left = (
             self.tr(
                 "Sending was interrupted: {0} torrents of this Plan are left. "
-                "Send to qBittorrent to continue."
+                "Send to the torrent client to continue."
             )
             if interrupted
             else self.tr("Saved Plan: {0} torrents left to send.")
@@ -728,7 +735,7 @@ class MainWindow(QMainWindow):
         )
         if not self.show_saved_plan():
             self.zen_tab.plan_view.show_plan(Plan())
-        lines = [self.tr("{0} torrents added to qBittorrent.").format(len(report.added))]
+        lines = [self.tr("{0} torrents added to your torrent client.").format(len(report.added))]
         if report.reseeded:
             lines.append(self.tr("{0} Reseeds started.").format(len(report.reseeded)))
         if report.stopped:
@@ -1303,7 +1310,7 @@ class MainWindow(QMainWindow):
             QMessageBox.Icon.Question,
             self.tr("Unpack and Reseed"),
             self.tr(
-                "{0} now seeds: qBittorrent verified every file. They are the contents of "
+                "{0} now seeds: your torrent client verified every file. They are the contents of "
                 "{1}, so the archive ({2}) is no longer needed.\n\nMove it to the trash?"
             ).format(folder.name, archive.name, human_size(archive.stat().st_size)),
             parent=self,

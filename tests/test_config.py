@@ -66,7 +66,9 @@ def test_plan_goal_and_both_limits_survive_a_save_and_load(tmp_path: Path) -> No
     from torrentlinker.zen import GB
 
     settings = Settings()
-    settings.plan_options = PlanOptions(PlanGoal.NOTE, 25 * GB, 100, max_seeders=10)
+    settings.plan_options = PlanOptions(
+        PlanGoal.NOTE, 25 * GB, 100, max_seeders=10, min_size=GB // 2, max_size=8 * GB
+    )
     settings.save(tmp_path / "settings.json")
 
     assert Settings.load(tmp_path / "settings.json").plan_options == settings.plan_options
@@ -125,3 +127,22 @@ def test_mappings_of_library_folders_from_0_2_move_to_the_shared_list(tmp_path: 
         Path("/mnt/nas/books"),
         Path("/home/me/stl"),
     ]
+
+
+def test_the_torrent_client_choice_survives_and_old_settings_mean_qbittorrent(
+    tmp_path: Path,
+) -> None:
+    from torrentlinker.domain import TorrentClient
+
+    path = tmp_path / "settings.json"
+    path.write_text('{"qbit": {"host": "http://nas:8080", "username": "me"}}')
+    assert Settings.load(path).client is TorrentClient.QBITTORRENT
+
+    s = Settings()
+    s.client = TorrentClient.DELUGE
+    s.deluge.host = "http://nas:8112"
+    s.save(path)
+
+    loaded = Settings.load(path)
+    assert loaded.client is TorrentClient.DELUGE
+    assert loaded.deluge.host == "http://nas:8112"

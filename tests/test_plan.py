@@ -102,6 +102,33 @@ def test_low_seeder_constraint_uses_the_current_swarm_and_includes_the_boundary(
 
 
 @pytest.mark.parametrize("goal", [PlanGoal.ZEN, PlanGoal.NOTE])
+@pytest.mark.parametrize("reseed", [False, True])
+@pytest.mark.parametrize(
+    "low,high,expected",
+    [
+        (0, 0, ["huge", "medium", "small"]),
+        (2, 0, ["huge", "medium"]),
+        (0, 4, ["medium", "small"]),
+        (4, 4, ["medium"]),
+        (5, 9, []),
+    ],
+)
+def test_torrent_size_range_includes_its_bounds_and_zero_means_unbounded(
+    goal: PlanGoal, reseed: bool, low: int, high: int, expected: list[str]
+) -> None:
+    candidates = [
+        cand("small", 1, reseed=reseed),
+        cand("medium", 4, reseed=reseed),
+        cand("huge", 40, reseed=reseed),
+    ]
+    options = PlanOptions(goal, min_size=low * GB, max_size=high * GB)
+
+    plan = make_plan(KEEPER, candidates, {"A": 100 * GB}, options=options)
+
+    assert sorted(names(plan)) == expected
+
+
+@pytest.mark.parametrize("goal", [PlanGoal.ZEN, PlanGoal.NOTE])
 def test_reseed_alternatives_are_filtered_before_choosing_the_best_match(
     tmp_path: Path, goal: PlanGoal
 ) -> None:
@@ -123,8 +150,8 @@ def test_reseed_alternatives_are_filtered_before_choosing_the_best_match(
         alternatives.append(CheckedCandidate(c, TorrentMeta(title, h, files, b""), full, full))
     found = [(entry, alternatives)]
 
-    assert reseed_candidates(KEEPER, found, set(), goal=goal)[0].title == "popular"
-    rows = reseed_candidates(KEEPER, found, set(), goal=goal, max_seeders=1)
+    assert reseed_candidates(KEEPER, found, set(), options=PlanOptions(goal))[0].title == "popular"
+    rows = reseed_candidates(KEEPER, found, set(), options=PlanOptions(goal, max_seeders=1))
     assert [r.title for r in rows] == ["rare"]
 
 

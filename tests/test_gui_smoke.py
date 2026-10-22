@@ -27,6 +27,42 @@ def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot) -> None:  
     assert dialog.tmdb_key.echoMode() == QLineEdit.EchoMode.Password
 
 
+def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path
+) -> None:
+    from torrentlinker.credentials import get_secret
+    from torrentlinker.deluge import DelugeApi
+    from torrentlinker.domain import TorrentClient
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.gui.settings_dialog import DELUGE_PASSWORD, SettingsDialog
+    from torrentlinker.qbit import QbitApi
+    from torrentlinker.store import Store
+
+    settings = Settings()
+    dialog = SettingsDialog(settings)
+    qtbot.addWidget(dialog)
+    assert dialog.client_forms.currentIndex() == 0  # qBittorrent, as before
+    assert isinstance(dialog._form_qbit(), QbitApi)
+
+    dialog.client.setCurrentIndex(dialog.client.findData(TorrentClient.DELUGE.value))
+    assert dialog.client_forms.currentWidget().isAncestorOf(dialog.deluge_host)
+    dialog.deluge_host.setText("http://nas:8112")
+    dialog.deluge_password.setText("secret")
+    assert isinstance(dialog._form_qbit(), DelugeApi)
+    dialog._save()
+
+    assert settings.client is TorrentClient.DELUGE
+    assert settings.deluge.host == "http://nas:8112"
+    assert get_secret(DELUGE_PASSWORD) == "secret"
+    window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    window.qbit()
+    assert window._qbit is not None and isinstance(window._qbit[1], DelugeApi)
+    settings.client = TorrentClient.QBITTORRENT
+    window.qbit()
+    assert isinstance(window._qbit[1], QbitApi)  # a new choice takes effect at once
+
+
 def test_content_kind_chosen_in_settings_comes_back_as_a_content_kind(qtbot) -> None:  # type: ignore[no-untyped-def]
     from torrentlinker.domain import ContentKind, LibraryFolder
     from torrentlinker.gui.settings_dialog import SettingsDialog
@@ -375,7 +411,7 @@ def test_the_plan_estimates_sending_and_downloading_times_from_a_speed_test(
     c = PlanCandidate("aa" * 20, "Book", 360 * GB // 1000, 4, 7000, tmp_path, 1)
     window._plan_made(Plan([PlanItem(c, 0.01)] * 1000, 10))
 
-    assert "Sending to qBittorrent: ≈ 1 h 08" in view.times.text()  # 1000 × 4.1 s
+    assert "Sending to the torrent client: ≈ 1 h 08" in view.times.text()  # 1000 × 4.1 s
     assert "test your speed" in view.times.text()
 
     monkeypatch.setattr(main_window, "measure_download_speed", lambda: 100_000_000.0)
@@ -942,10 +978,22 @@ def test_plan_controls_save_both_limits_and_change_the_actual_plan(qtbot, tmp_pa
     view.low_seeders.setChecked(False)
     assert not view.seeder_limit.isEnabled() and settings.plan_options.max_seeders is None
     assert len(window.plan_maker()().items) == 1
+    view.max_size.setValue(0.5)  # every test torrent is 1 GB
+    assert Settings.load(path).plan_options.max_size == GB // 2
+    assert not window.plan_maker()().items
+    view.min_size.setValue(2)  # above the maximum: the maximum follows
+    assert view.max_size.value() == 2
+    assert not window.plan_maker()().items
+    view.min_size.setValue(1)
+    assert settings.plan_options.min_size == GB and settings.plan_options.max_size == 2 * GB
+    assert len(window.plan_maker()().items) == 1
+    restored.set_options(Settings.load(path).plan_options)
+    assert restored.min_size.value() == 1 and restored.max_size.value() == 2
     view.busy(True)
     assert not view.goal.isEnabled() and not view.download_limit.isEnabled()
     assert not view.limit_torrents.isEnabled() and not view.torrent_limit.isEnabled()
     assert not view.low_seeders.isEnabled() and not view.seeder_limit.isEnabled()
+    assert not view.min_size.isEnabled() and not view.max_size.isEnabled()
 
 
 def test_plan_view_shows_notes_and_unused_disk_space_including_the_reserve(qtbot) -> None:  # type: ignore[no-untyped-def]

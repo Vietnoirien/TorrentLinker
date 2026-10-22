@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QStyle,
     QTableWidget,
     QTableWidgetItem,
@@ -34,9 +35,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.clients import connect
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
-from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent
+from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import WARNING, class_label
@@ -48,7 +50,7 @@ from torrentlinker.paths import (
     detect_mappings,
     unreachable_download_folders,
 )
-from torrentlinker.qbit import QbitApi, is_api_key
+from torrentlinker.qbit import ClientApi, is_api_key
 from torrentlinker.queries import default_categories
 from torrentlinker.zen import ZenClass, ZenProfile
 
@@ -56,6 +58,7 @@ log = logging.getLogger(__name__)
 
 QBIT_PASSWORD = "qbit-password"
 QBIT_API_KEY = "qbit-api-key"
+DELUGE_PASSWORD = "deluge-password"
 INDEXER_API_KEY = "indexer-api-key"
 # Up to 4 more keys of the same c411 account, each within its own limits (ADR-0008).
 EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
@@ -93,7 +96,7 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(
             self._page(
-                self._keyring_note(), self._qbit_box(), self._indexer_box(), self._tmdb_box()
+                self._keyring_note(), self._client_box(), self._indexer_box(), self._tmdb_box()
             ),
             self.tr("Connections"),
         )
@@ -102,7 +105,7 @@ class SettingsDialog(QDialog):
             self._page(self._search_box(), self._matching_box()), self.tr("Search && Matching")
         )
         self.tabs.addTab(self._page(self._downloads_box(), fill=True), self.tr("Download Folders"))
-        self.tabs.addTab(self._page(self._paths_box(), fill=True), self.tr("qBittorrent Paths"))
+        self.tabs.addTab(self._page(self._paths_box(), fill=True), self.tr("Client Paths"))
         self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
 
@@ -210,7 +213,7 @@ class SettingsDialog(QDialog):
         self.seed_hours.setSuffix(self.tr(" h"))
         self.seed_hours.setValue(z.seed_hours)
         self.seed_hours.setToolTip(
-            self.tr("Hours a day qBittorrent runs; under 30 minutes earns nothing")
+            self.tr("Hours a day your torrent client runs; under 30 minutes earns nothing")
         )
         form.addRow(self.tr("Seed hours per day"), self.seed_hours)
         self.torrent_cap = QSpinBox()
@@ -238,11 +241,65 @@ class SettingsDialog(QDialog):
             torrent_cap=self.torrent_cap.value(),
         )
 
-    # qBittorrent -----------------------------------------------------------
+    # Torrent client --------------------------------------------------------
 
-    def _qbit_box(self) -> QGroupBox:
-        box = QGroupBox(self.tr("qBittorrent"))
-        form = QFormLayout(box)
+    def _client_box(self) -> QGroupBox:
+        box = QGroupBox(self.tr("Torrent client"))
+        layout = QVBoxLayout(box)
+        self.client = QComboBox()
+        for client in TorrentClient:
+            self.client.addItem(client.display_name, client.value)
+        self.client.setCurrentIndex(self.client.findData(self.settings.client.value))
+        choice = QFormLayout()
+        choice.addRow(self.tr("Client"), self.client)
+        layout.addLayout(choice)
+        self.client_forms = QStackedWidget()
+        self.client_forms.addWidget(self._qbit_form())
+        self.client_forms.addWidget(self._deluge_form())
+        self.client_forms.setCurrentIndex(self.client.currentIndex())
+        self.client.currentIndexChanged.connect(self.client_forms.setCurrentIndex)
+        layout.addWidget(self.client_forms)
+        test = QPushButton(self.tr("Test connection"))
+        test.clicked.connect(self._test_qbit)
+        row = QHBoxLayout()
+        row.addWidget(test)
+        row.addStretch()
+        layout.addLayout(row)
+        hint = QLabel(
+            self.tr(
+                "Your torrent client in Docker, on a NAS or on another computer? Tell the app "
+                "how it sees your folders in the Client Paths tab."
+            )
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        return box
+
+    def _chosen_client(self) -> TorrentClient:
+        return TorrentClient(self.client.currentData())
+
+    def _deluge_form(self) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setContentsMargins(0, 0, 0, 0)
+        self.deluge_host = QLineEdit(self.settings.deluge.host)
+        self.deluge_password = self._secret_field(DELUGE_PASSWORD)
+        form.addRow(self.tr("Web UI address"), self.deluge_host)
+        form.addRow(self.tr("Web UI password"), self.deluge_password)
+        note = QLabel(
+            self.tr(
+                "Deluge 2. Turn on its Label plugin (Preferences → Plugins): TorrentLinker "
+                "labels the torrents it adds to follow their Verification."
+            )
+        )
+        note.setWordWrap(True)
+        form.addRow("", note)
+        return page
+
+    def _qbit_form(self) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setContentsMargins(0, 0, 0, 0)
         self.qbit_host = QLineEdit(self.settings.qbit.host)
         self.qbit_user = QLineEdit(self.settings.qbit.username)
         self.qbit_password = self._secret_field(QBIT_PASSWORD)
@@ -254,25 +311,18 @@ class SettingsDialog(QDialog):
                 "used instead of the username and password; leave it empty on older versions."
             )
         )
-        test = QPushButton(self.tr("Test connection"))
-        test.clicked.connect(self._test_qbit)
         form.addRow(self.tr("WebUI address"), self.qbit_host)
         form.addRow(self.tr("Username"), self.qbit_user)
         form.addRow(self.tr("Password"), self.qbit_password)
         form.addRow(self.tr("API key"), self.qbit_api_key)
-        form.addRow("", test)
-        hint = QLabel(
-            self.tr(
-                "qBittorrent in Docker, on a NAS or on another computer? Tell the app how it "
-                "sees your folders in the qBittorrent Paths tab."
-            )
-        )
-        hint.setWordWrap(True)
-        form.addRow("", hint)
-        return box
+        return page
 
-    def _form_qbit(self) -> QbitApi | None:
-        """qBittorrent as the form describes it, saved or not; None if the key is malformed."""
+    def _form_qbit(self) -> ClientApi | None:
+        """The torrent client as the form describes it, saved or not; None if the qBittorrent
+        API key is malformed."""
+        client = self._chosen_client()
+        if client is TorrentClient.DELUGE:
+            return connect(client, self.deluge_host.text(), "", self.deluge_password.text())
         key = self.qbit_api_key.text().strip()
         if key and not is_api_key(key):
             QMessageBox.warning(
@@ -281,17 +331,20 @@ class SettingsDialog(QDialog):
                 self.tr("An API key looks like qbt_ followed by 28 letters and digits."),
             )
             return None
-        return QbitApi(self.qbit_host.text(), self.qbit_user.text(), self.qbit_password.text(), key)
+        return connect(
+            client, self.qbit_host.text(), self.qbit_user.text(), self.qbit_password.text(), key
+        )
 
     def _test_qbit(self) -> None:
         if (api := self._form_qbit()) is None:
             return
+        name = self._chosen_client().display_name
         run_in_background(
             api.check,
             lambda v: QMessageBox.information(
-                self, self.tr("qBittorrent"), self.tr("Connected to qBittorrent {0}").format(v)
+                self, name, self.tr("Connected to {0} {1}").format(name, v)
             ),
-            lambda e: QMessageBox.warning(self, self.tr("qBittorrent"), str(e)),
+            lambda e: QMessageBox.warning(self, name, str(e)),
         )
 
     # Indexer ---------------------------------------------------------------
@@ -571,17 +624,17 @@ class SettingsDialog(QDialog):
 
     # Search ----------------------------------------------------------------
 
-    # qBittorrent Paths -----------------------------------------------------
+    # Client Paths ----------------------------------------------------------
 
     def _paths_box(self) -> QGroupBox:
-        box = QGroupBox(self.tr("qBittorrent in Docker, on a NAS or on another computer"))
+        box = QGroupBox(self.tr("Torrent client in Docker, on a NAS or on another computer"))
         layout = QVBoxLayout(box)
         intro = QLabel(
             self.tr(
-                "Fill this in only if qBittorrent sees your folders under other paths than "
-                "this computer does. For example, qBittorrent runs in Docker and sees /data, "
+                "Fill this in only if your torrent client sees your folders under other paths "
+                "than this computer does. For example, it runs in Docker and sees /data, "
                 "while this computer reaches the same files as /mnt/nas or Z:\\. Detect finds "
-                "the paths from qBittorrent's own torrents, then Check counts the torrents "
+                "the paths from the client's own torrents, then Check counts the torrents "
                 "each path leads to."
             )
         )
@@ -589,7 +642,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(intro)
         self.mappings = QTableWidget(0, 3)
         self.mappings.setHorizontalHeaderLabels(
-            [self.tr("On this computer"), self.tr("In qBittorrent"), self.tr("Check")]
+            [self.tr("On this computer"), self.tr("In the client"), self.tr("Check")]
         )
         header = self.mappings.horizontalHeader()
         header.setSectionResizeMode(COL_LOCAL, QHeaderView.ResizeMode.Stretch)
@@ -602,7 +655,7 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         add = QPushButton(self.tr("Add folder…"))
         add.setToolTip(
-            self.tr("Choose a folder on this computer, then type how qBittorrent sees it")
+            self.tr("Choose a folder on this computer, then type how your torrent client sees it")
         )
         add.clicked.connect(self._pick_mapping)
         remove = QPushButton(self.tr("Remove"))
@@ -610,14 +663,14 @@ class SettingsDialog(QDialog):
         self.detect_button = QPushButton(self.tr("Detect"))
         self.detect_button.setToolTip(
             self.tr(
-                "Look for qBittorrent's torrents in your Library and Download Folders and "
+                "Look for your torrent client's torrents in your Library and Download Folders and "
                 "the folders above them, and add the paths that lead there"
             )
         )
         self.detect_button.clicked.connect(self._detect_paths)
         self.check_button = QPushButton(self.tr("Check"))
         self.check_button.setToolTip(
-            self.tr("Count, for each path, the qBittorrent torrents whose folder is found here")
+            self.tr("Count, for each path, the client's torrents whose folder is found here")
         )
         self.check_button.clicked.connect(lambda: self._check_paths())
         row.addWidget(add)
@@ -691,7 +744,7 @@ class SettingsDialog(QDialog):
             self.paths_status.setText(
                 self.tr(
                     "Add your Library Folders or Download Folders first: Detect looks for "
-                    "qBittorrent's files in them."
+                    "your torrent client's files in them."
                 )
             )
             return
@@ -705,7 +758,9 @@ class SettingsDialog(QDialog):
 
             return detect_mappings(api.torrents(with_files=False), folders, files)
 
-        self._paths_busy(True, self.tr("Looking for qBittorrent's torrents on this computer…"))
+        self._paths_busy(
+            True, self.tr("Looking for your torrent client's torrents on this computer…")
+        )
         run_in_background(work, self._detected, self._paths_failed)
 
     def _detected(self, d: Detection) -> None:
@@ -735,8 +790,8 @@ class SettingsDialog(QDialog):
             lines.insert(
                 0,
                 self.tr(
-                    "No torrent of qBittorrent was found in your folders. Add the folder "
-                    "where this computer sees qBittorrent's downloads as a Download Folder "
+                    "None of your torrent client's torrents was found in your folders. Add "
+                    "the folder where this computer sees its downloads as a Download Folder "
                     "or Library Folder, then detect again; or add the path by hand."
                 ),
             )
@@ -806,9 +861,9 @@ class SettingsDialog(QDialog):
         if unreachable:
             lines.append(
                 self.tr(
-                    "qBittorrent's own download folder ({0}) does not exist on this computer, "
-                    "and no path above covers these Download Folders: {1}. qBittorrent "
-                    "probably cannot save into them."
+                    "Your torrent client's own download folder ({0}) does not exist on this "
+                    "computer, and no path above covers these Download Folders: {1}. The "
+                    "client probably cannot save into them."
                 ).format(default, ", ".join(map(str, unreachable)))
             )
         self._paths_busy(False)
@@ -817,7 +872,7 @@ class SettingsDialog(QDialog):
         self._set_status(self._status_lines + notes + warnings)
 
     def _paths_failed(self, error: Exception) -> None:
-        self._paths_busy(False, self.tr("Could not reach qBittorrent: {0}").format(error))
+        self._paths_busy(False, self.tr("Could not reach your torrent client: {0}").format(error))
 
     def _search_box(self) -> QGroupBox:
         box = QGroupBox(self.tr("Search"))
@@ -901,6 +956,7 @@ class SettingsDialog(QDialog):
         fields = {
             QBIT_PASSWORD: self.qbit_password.text(),
             QBIT_API_KEY: self.qbit_api_key.text().strip(),
+            DELUGE_PASSWORD: self.deluge_password.text(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
             **{
@@ -924,6 +980,8 @@ class SettingsDialog(QDialog):
         self._save_secrets()
         s = self.settings
         s.language = self.language.currentData()
+        s.client = self._chosen_client()
+        s.deluge.host = self.deluge_host.text().strip()
         s.qbit.host = self.qbit_host.text().strip()
         s.qbit.username = self.qbit_user.text().strip()
         s.indexer.url = self.indexer_url.text().strip()

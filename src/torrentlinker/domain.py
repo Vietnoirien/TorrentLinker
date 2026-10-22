@@ -22,12 +22,24 @@ class ContentKind(StrEnum):
         return self in (ContentKind.MOVIE, ContentKind.SERIES)
 
 
+class TorrentClient(StrEnum):
+    """The program that seeds: Reseeds and Plans are added to it (ADR-0009)."""
+
+    QBITTORRENT = "qbittorrent"
+    DELUGE = "deluge"
+
+    @property
+    def display_name(self) -> str:
+        return {"qbittorrent": "qBittorrent", "deluge": "Deluge"}[self.value]
+
+
 @dataclass(frozen=True)
 class PathMapping:
-    """Maps a path prefix as this app sees it to the same location as qBittorrent sees it.
+    """Maps a path prefix as this app sees it to the same location as the Torrent Client
+    sees it (`qbit`, named when qBittorrent was the only one).
 
-    One list of them applies to every path exchanged with qBittorrent: Library Folders,
-    Download Folders and Reseeds alike (ADR-0006).
+    One list of them applies to every path exchanged with the Torrent Client: Library
+    Folders, Download Folders and Reseeds alike (ADR-0006).
     """
 
     local: str
@@ -69,7 +81,7 @@ class ItemState(StrEnum):
 
 @dataclass(frozen=True)
 class Torrent:
-    """A torrent in qBittorrent, with paths in this app's view (after Path Mapping).
+    """A torrent in the Torrent Client, with paths in this app's view (after Path Mapping).
 
     `files` maps each file's path relative to `save_path` to its size.
     """

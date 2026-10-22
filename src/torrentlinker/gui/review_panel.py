@@ -128,7 +128,7 @@ class ReviewPanel(QWidget):
         actions.addStretch()
         self.reseed_button = QPushButton(self.tr("Reseed"))
         self.reseed_button.setToolTip(
-            self.tr("Add to qBittorrent against your files, verify, then seed")
+            self.tr("Add to your torrent client against your files, verify, then seed")
         )
         self.reseed_button.clicked.connect(self._reseed_selected)
         actions.addWidget(self.reseed_button)
@@ -168,7 +168,7 @@ class ReviewPanel(QWidget):
             return
         title = f"<b>{entry.item.path.name}</b> — {human_size(entry.item.size)}"
         if entry.state is ItemState.SEEDED:
-            title += "<br>" + self.tr("Already seeded by qBittorrent.")
+            title += "<br>" + self.tr("Already seeded by your torrent client.")
         elif partial:
             title += "<br>" + self.tr(
                 "Some of these files are already seeded: a Match would overlap that torrent."
@@ -423,7 +423,7 @@ class ReviewPanel(QWidget):
             self.tr(
                 "Unpack {0} into the new folder\n{1}?\n\n"
                 "It writes {2} in {3} files; {4} is free on that disk. Nothing is "
-                "overwritten.\n\nThe torrent is then added to qBittorrent against the "
+                "overwritten.\n\nThe torrent is then added to your torrent client against the "
                 "unpacked files, and verified before it seeds. Once it is verified, you are "
                 "offered to move the archive to the trash."
             ).format(
@@ -483,8 +483,8 @@ class ReviewPanel(QWidget):
             self.tr("Partial Match"),
             self.tr(
                 "You have {0} of this torrent. The {1} absent files will not be downloaded. "
-                "After Verification the torrent is left stopped: starting it in qBittorrent "
-                "would fetch the few pieces it shares with your files. Reseed?"
+                "After Verification the torrent is left stopped: starting it in your torrent "
+                "client would fetch the few pieces it shares with your files. Reseed?"
             ).format(f"{coverage:.0%}", missing),
         )
         return answer == QMessageBox.StandardButton.Yes
@@ -498,7 +498,7 @@ class ReviewPanel(QWidget):
             self,
             self.tr("Rename inside the torrent"),
             self.tr(
-                "These files will be renamed inside qBittorrent to match yours "
+                "These files will be renamed inside your torrent client to match yours "
                 "(your files are not touched):"
             )
             + "\n\n"
