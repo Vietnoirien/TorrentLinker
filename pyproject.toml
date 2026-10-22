@@ -16,6 +16,7 @@ dependencies = [
   "torf>=4.2",
   "keyring>=24",
   "numpy>=1.26",  # the 3D preview reads and decimates meshes
+  "mutagen>=1.47",  # audio tags for the Audio and Ebook uploads
 ]
 
 [project.optional-dependencies]

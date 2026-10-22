@@ -134,6 +134,8 @@ Common to almost every category: no RAR/ZIP/7z (exceptions: console and emulatio
 - A CD-Rip says `CD-Rip` in the title and holds `cover.jpg` (≥ 500×500) at the root, covers, a `.cue`, and an EAC `.log`; the description gives the catalogue number and a Discogs or MusicBrainz link.
 - Duplicate: same format and bitrate, or a lower quality where a higher exists; an album also in a discography is not one; FLAC has no quality-based duplicate rule.
 
+The app's reading of these rules (issue #36): formats are checked by extension (FLAC, ALAC and AAC share `.m4a`, told apart from the tags); bitrates are the tag reader's, an MP3 in VBR mode passes; a "one-track file" is an item with a single audio file, outside podcasts and radio; a CD-Rip is a lossless 16 bit 44.1 kHz release with a `.cue` or `.log`. The title templates keep c411's order; how the bit depth and sample rate are spelled (`FLAC.24bit.96kHz`, `MP3.320kbps`) is the app's choice, not read from the wiki.
+
 ### eBooks
 
 - Accepted: books, comics/BD/manga (whole volumes only; a BD pack holds every volume), press, audiobooks, sheet music, technical manuals, themed packs. French only.

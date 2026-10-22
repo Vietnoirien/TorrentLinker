@@ -95,6 +95,10 @@ SUBCATEGORY_LABELS = {
     16: QT_TRANSLATE_NOOP("Subcategory", "Press"),
     59: QT_TRANSLATE_NOOP("Subcategory", "Sheet music & tablature"),
     60: QT_TRANSLATE_NOOP("Subcategory", "Journals & technical manuals"),
+    17: QT_TRANSLATE_NOOP("Subcategory", "Karaoke"),
+    18: QT_TRANSLATE_NOOP("Subcategory", "Music"),
+    19: QT_TRANSLATE_NOOP("Subcategory", "Podcasts & radio"),
+    20: QT_TRANSLATE_NOOP("Subcategory", "Samples"),
 }
 
 
@@ -112,6 +116,20 @@ def refusal_text(r: Refusal) -> str:
             "Upload",
             "No accepted format (PDF, EPUB, MOBI, DjVu, CBR, CBZ, JPG/PNG, MP3, M4A/M4B, FLAC)",
         )
+    if r.problem is Problem.NO_AUDIO_FILE:
+        return QCoreApplication.translate("Upload", "No audio file (FLAC, MP3, M4A, WAV, OGG…)")
+    if r.problem is Problem.AUDIO_FORMAT:
+        return QCoreApplication.translate(
+            "Upload", "c411 does not accept these formats: {0}"
+        ).format(r.detail)
+    if r.problem is Problem.LOW_BITRATE:
+        return QCoreApplication.translate("Upload", "Bitrate too low: {0}").format(r.detail)
+    if r.problem is Problem.NEEDS_CUE:
+        return QCoreApplication.translate("Upload", "A single-file album needs its .cue sheet")
+    if r.problem is Problem.MIXED_AUDIO:
+        return QCoreApplication.translate(
+            "Upload", "One format and bitrate per album, found: {0}"
+        ).format(r.detail)
     return QCoreApplication.translate("Upload", "No file to upload")
 
 
@@ -130,6 +148,23 @@ def warning_text(w: UploadWarning) -> str:
         return QCoreApplication.translate("Upload", "A pack must hold whole volumes")
     if w.judgement is Judgement.EVERY_VOLUME:
         return QCoreApplication.translate("Upload", "A BD pack must hold every volume")
+    if w.judgement is Judgement.NO_TRANSCODE:
+        return QCoreApplication.translate(
+            "Upload", "No transcodes (MP3 to FLAC, 128 to 320 kbps, stereo to 5.1)"
+        )
+    if w.judgement is Judgement.SHORT_SINGLE:
+        return QCoreApplication.translate("Upload", "Singles are accepted from 20 minutes only")
+    if w.judgement is Judgement.DISCOGRAPHY:
+        return QCoreApplication.translate(
+            "Upload", "Discographies are accepted for inactive artists only"
+        )
+    if w.judgement is Judgement.CD_RIP_MISSING:
+        return QCoreApplication.translate("Upload", "A CD-Rip needs: {0}").format(w.detail)
+    if w.judgement is Judgement.CD_RIP_LINKS:
+        return QCoreApplication.translate(
+            "Upload",
+            "A CD-Rip's description gives the catalogue number and a Discogs or MusicBrainz link",
+        )
     return QCoreApplication.translate(
         "Upload", "c411 forbids files from independent creators who live off them"
     )
@@ -179,6 +214,7 @@ class UploadTab(QWidget):
         self._picks: Chosen = {}  # what the user chose, which the profile's suggestion yields to
         self._options_for: int | None = None  # the subcategory whose options are awaited
         self._options_state = ""  # what the Options box says while no selector shows
+        self._inspected: set[tuple[Path, int]] = set()  # items a profile has read, by category
 
         layout = QVBoxLayout(self)
         self.notice = QLabel()
@@ -428,7 +464,7 @@ class UploadTab(QWidget):
         profile = self._profile_of(entry)
         if profile is None or not is_archive(entry.item):
             return False
-        found = profile.refusals(entry.item, self.ignore())
+        found = profile.refusals(entry.item, self.ignore(), self._subcategory_of(entry))
         return bool(found) and all(r.problem is not Problem.NO_FILE for r in found)
 
     def why_not(self, entry: LibraryEntry) -> str | None:
@@ -447,9 +483,13 @@ class UploadTab(QWidget):
             return self.tr("c411 already has it: Reseed it from the Library")
         if self.needs_unpacking(entry):
             return None
-        if found := profile.refusals(entry.item, self.ignore()):
+        if found := profile.refusals(entry.item, self.ignore(), self._subcategory_of(entry)):
             return "; ".join(refusal_text(r) for r in found)
         return None
+
+    def _subcategory_of(self, entry: LibraryEntry) -> int | None:
+        """The subcategory the form shows for the selected item; the list knows none."""
+        return self.subcategory.currentData() if entry is self.entry else None
 
     def _fill(self) -> None:
         selected = self.entry.item.path if self.entry else None
@@ -588,6 +628,29 @@ class UploadTab(QWidget):
         self._regenerate()
         self._show_existing()
         self._show_model()
+        self._inspect()
+
+    def _inspect(self) -> None:
+        """Let the profile read what the files say (tags, MediaInfo) off the GUI thread,
+        then redo what depends on it. An archive not yet unpacked has nothing to read."""
+        profile, item = self.profile(), self.source_item()
+        if profile is None or item is None or not item.path.exists():
+            return
+        key = (item.path, profile.category)
+        if key in self._inspected:
+            return
+        self._inspected.add(key)
+        ignore = self.ignore()
+
+        def done(_: object) -> None:
+            if isValid(self) and self.source_item() is item and self.profile() is profile:
+                self._show_options()
+                self._regenerate()
+
+        def failed(error: Exception) -> None:
+            self._inspected.discard(key)  # selecting the item again retries
+
+        run_in_background(lambda: profile.inspect(item, ignore), done, failed)
 
     def _subcategory_changed(self) -> None:
         """Another subcategory has other options, and the old picks do not apply."""
@@ -856,7 +919,7 @@ class UploadTab(QWidget):
                 )
         self.files = []
         if profile is not None and item is not None and title:
-            if found := profile.refusals(item, self.ignore()):
+            if found := profile.refusals(item, self.ignore(), self.subcategory.currentData()):
                 problems += [refusal_text(r) for r in found]
             if " " in title or not title.isascii():
                 problems.append(

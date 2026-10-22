@@ -15,6 +15,8 @@ hiddenimports = (
     + collect_submodules("guessit")
     + collect_submodules("babelfish")
     + collect_submodules("rebulk")
+    # mutagen picks its format readers by file type (the Audio and Ebook uploads)
+    + collect_submodules("mutagen")
     # Imported only when a SOCKS proxy is set (httpx, and requests for qBittorrent)
     + collect_submodules("socksio")
     + ["socks", "sockshandler"]

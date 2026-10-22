@@ -441,7 +441,10 @@ class FilmProfile:
     def image_is_sheet(self, subcategory):  # type: ignore[no-untyped-def]
         return False
 
-    def refusals(self, item, ignore):  # type: ignore[no-untyped-def]
+    def inspect(self, item, ignore):  # type: ignore[no-untyped-def]
+        pass
+
+    def refusals(self, item, ignore, subcategory=None):  # type: ignore[no-untyped-def]
         return []
 
     def warnings(self, item, ignore, subcategory):  # type: ignore[no-untyped-def]
@@ -607,3 +610,38 @@ def test_the_3d_page_follows_the_selected_orphan_and_the_subcategory(qtbot, tmp_
     assert not view.model_panel.sheet_button.isHidden()  # a Pack gets its contact sheet
     assert view.model_panel.upload_folder() == tmp_path / "uploads" / view.name.text()
     assert "[img]…[/img]" in view.description.toPlainText()  # the image is added on c411
+
+
+def test_a_profile_reads_the_files_off_the_gui_thread_then_redoes_the_name(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    import threading
+
+    from torrentlinker.audio_tags import AudioTags, TagCache
+    from torrentlinker.gui import upload_view
+    from torrentlinker.upload import AudioProfile
+
+    readers: list[int] = []
+
+    def reader(path: Path) -> AudioTags:
+        readers.append(threading.get_ident())
+        return AudioTags(
+            "Daft Punk", "Discovery", "Intro", "2001", 1, 300.0, "MP3", 320, True, 44100, 0, 2
+        )
+
+    monkeypatch.setitem(upload_view.PROFILES, 3, AudioProfile(TagCache(reader)))
+    view, _, _ = tab(qtbot, tmp_path)
+    folder = LibraryFolder(tmp_path / "Music", 1, ContentKind.MUSIC)
+    album = folder.path / "Album"
+    album.mkdir(parents=True)
+    for n in (1, 2):
+        (album / f"{n}.mp3").write_bytes(b"x" * 100 * n)
+    entry = LibraryEntry(folder, scan_item(album), ItemState.ORPHAN)
+    view.set_entries([entry])
+    view.remember(entry, [])
+    view.items.selectRow(0)
+
+    qtbot.waitUntil(lambda: view.name.text().startswith("Daft.Punk.Discovery.2001"), timeout=5000)
+    assert readers and threading.get_ident() not in readers
+    assert view.name.text() == "Daft.Punk.Discovery.2001.MP3.320kbps-NOTAG"
+    assert view.subcategory.currentData() == 18

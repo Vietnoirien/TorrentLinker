@@ -19,6 +19,7 @@ from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
+from torrentlinker.audio_tags import TagCache
 from torrentlinker.catalogue_sync import ROOTS
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, SearchQuery
@@ -36,6 +37,8 @@ NOTAG = "NOTAG"
 IMAGE_PLACEHOLDER = "…"  # in [img][/img] until the image is uploaded on c411
 CATEGORY_3D = 10
 CATEGORY_EBOOK = 2
+CATEGORY_AUDIO = 3
+AUDIOBOOK_KBPS = 64  # an audiobook's minimum bitrate
 
 # c411's categories (GET /api/categories); Nulled and Adult get no profile.
 CATEGORIES = {
@@ -104,6 +107,13 @@ class SubcategoryEbook(IntEnum):
     MANUALS = 60
 
 
+class SubcategoryAudio(IntEnum):
+    KARAOKE = 17
+    MUSIC = 18
+    PODCAST = 19
+    SAMPLES = 20
+
+
 class UploadStopped(Exception):
     """The user stopped the Upload while its torrent was being made."""
 
@@ -123,6 +133,11 @@ class Problem(StrEnum):
     NO_3D_FILE = "no-3d-file"
     NO_EBOOK_FORMAT = "no-ebook-format"
     OPTION_MISSING = "option-missing"  # detail: the option's name
+    NO_AUDIO_FILE = "no-audio-file"
+    AUDIO_FORMAT = "audio-format"  # detail: the formats found that c411 refuses
+    LOW_BITRATE = "low-bitrate"  # detail: what is too low, and the minimum
+    NEEDS_CUE = "needs-cue"  # one audio file without a .cue
+    MIXED_AUDIO = "mixed-audio"  # detail: the formats or bitrates found
 
 
 @dataclass(frozen=True)
@@ -143,6 +158,11 @@ class Judgement(StrEnum):
     FEW_FORMATS = "few-formats"
     WHOLE_VOLUMES = "whole-volumes"
     EVERY_VOLUME = "every-volume"
+    NO_TRANSCODE = "no-transcode"
+    SHORT_SINGLE = "short-single"
+    DISCOGRAPHY = "discography"
+    CD_RIP_MISSING = "cd-rip-missing"  # detail: what a CD-Rip lacks
+    CD_RIP_LINKS = "cd-rip-links"
 
 
 @dataclass(frozen=True)
@@ -150,6 +170,7 @@ class UploadWarning:
     """A judgement rule: shown beside the Refusals, but the Draft can still be saved."""
 
     judgement: Judgement
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -175,7 +196,14 @@ class UploadProfile(Protocol):
     subcategories: tuple[Subcategory, ...]
     renders_models: bool  # the Upload tab shows its models and captures the description's image
 
-    def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]: ...
+    # `inspect` reads what the files say about themselves (tags, MediaInfo): slow, so the
+    # GUI runs it off its thread before it asks the other methods, which never touch the
+    # disk. Until it ran, a rule that needs the answers has nothing to say.
+
+    def inspect(self, item: LocalItem, ignore: IgnoreList) -> None: ...
+    def refusals(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int | None = None
+    ) -> list[Refusal]: ...
     def warnings(
         self, item: LocalItem, ignore: IgnoreList, subcategory: int
     ) -> list[UploadWarning]: ...
@@ -205,7 +233,12 @@ class Model3DProfile:
     )
     renders_models = True
 
-    def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]:
+    def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
+        """Nothing to read: a model's rules go by its file names."""
+
+    def refusals(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int | None = None
+    ) -> list[Refusal]:
         files = _content(item, ignore)
         if not files:
             return [Refusal(Problem.NO_FILE)]
@@ -262,8 +295,8 @@ class Model3DProfile:
 
 
 class EbookProfile:
-    """c411's Ebook category (docs/research/upload-rules.md). The audiobook bitrate rule
-    (64 kbps or more) needs a tag reader and is not checked yet."""
+    """c411's Ebook category (docs/research/upload-rules.md). An audiobook's bitrate (64
+    kbps or more) is read from its tags by `inspect`."""
 
     category: int = CATEGORY_EBOOK
     renders_models = False  # no model to render; the image is made by hand
@@ -278,10 +311,19 @@ class EbookProfile:
         Subcategory(SubcategoryEbook.MANUALS, "Journals & technical manuals"),
     )
 
+    def __init__(self, tags: TagCache | None = None) -> None:
+        self.tags = tags or TagCache()
+
     def image_is_sheet(self, subcategory: int) -> bool:
         return False
 
-    def refusals(self, item: LocalItem, ignore: IgnoreList) -> list[Refusal]:
+    def inspect(self, item: LocalItem, ignore: IgnoreList) -> None:
+        """Read the tags of the audiobook files."""
+        self.tags.inspect(item, [p for p in _content(item, ignore) if _ext(p) in AUDIO_FORMATS])
+
+    def refusals(
+        self, item: LocalItem, ignore: IgnoreList, subcategory: int | None = None
+    ) -> list[Refusal]:
         files = _content(item, ignore)
         if not files:
             return [Refusal(Problem.NO_FILE)]
@@ -291,6 +333,19 @@ class EbookProfile:
             found.append(Refusal(Problem.ARCHIVE, ", ".join(archives)))
         if not _formats_ebook(files):
             found.append(Refusal(Problem.NO_EBOOK_FORMAT))
+        slow = sorted(
+            {
+                f"{t.codec} {t.bitrate} kbps"
+                for _, t in self.tags.of(
+                    {p: s for p, s in files.items() if _ext(p) in AUDIO_FORMATS}
+                )
+                if not t.lossless and t.constant and t.bitrate < AUDIOBOOK_KBPS
+            }
+        )
+        if slow:
+            found.append(
+                Refusal(Problem.LOW_BITRATE, f"{', '.join(slow)} (minimum {AUDIOBOOK_KBPS})")
+            )
         return found
 
     def warnings(
@@ -360,10 +415,7 @@ class EbookProfile:
         return ExistingQuery(name_query(item))
 
 
-PROFILES: dict[int, UploadProfile] = {
-    CATEGORY_EBOOK: EbookProfile(),
-    CATEGORY_3D: Model3DProfile(),
-}
+PROFILES: dict[int, UploadProfile] = {}  # filled at the end of this module, by category id
 
 
 def category_name(category: int) -> str:
@@ -795,3 +847,15 @@ def _volume_range(files: dict[str, int]) -> str:
     if len(numbers) < 2:
         return ""
     return f"[T{numbers[0]:02d}.a.T{numbers[-1]:02d}]"
+
+
+# Profiles that need this module's types come last (see upload_audio's docstring).
+from torrentlinker.upload_audio import AudioProfile  # noqa: E402
+
+PROFILES.update(
+    {
+        CATEGORY_EBOOK: EbookProfile(),
+        CATEGORY_AUDIO: AudioProfile(),
+        CATEGORY_3D: Model3DProfile(),
+    }
+)
