@@ -94,14 +94,16 @@ def send_plan(
     fetch: Callable[[PlanCandidate], bytes],
     reseed: Callable[[PlanCandidate], None] | None = None,
     on_progress: Callable[[SendProgress], None] = lambda p: None,
+    on_outcome: Callable[[PlanCandidate, str, str], None] = lambda c, outcome, reason: None,
     stop: threading.Event | None = None,
     wait: Callable[[float], bool] | None = None,
     now: Callable[[], float] = time.time,
 ) -> SendReport:
     """Send every Plan item; one failing never stops the others.
 
-    `stop` ends sending before the next torrent, or during a wait. `wait(seconds)`
-    returns True when stopped meanwhile; it defaults to waiting on `stop`.
+    `on_outcome(candidate, outcome, reason)` follows each torrent: added, reseeded,
+    refused or failed. `stop` ends sending before the next torrent, or during a wait.
+    `wait(seconds)` returns True when stopped meanwhile; it defaults to waiting on `stop`.
     """
     report = SendReport()
     stop = stop or threading.Event()
@@ -146,19 +148,23 @@ def send_plan(
                     raise Refused("Reseeds are not handled here")
                 reseed(c)
                 report.reseeded.append(c.title)
+                on_outcome(c, "reseeded", "")
             else:
                 send_one(qbit, c, fetch_patiently(c))
                 report.added.append(c.title)
+                on_outcome(c, "added", "")
         except _Stopped:
             report.stopped = True
             break
         except Refused as e:
             report.refused.append((c.title, str(e)))
+            on_outcome(c, "refused", str(e))
         except KeyRefused as e:  # every torrent left would fail the same way
             report.failed.append((c.title, str(e)))
             report.stopped = True
             break
         except Exception as e:  # noqa: BLE001 - reported to the user
             report.failed.append((c.title, str(e) or type(e).__name__))
+            on_outcome(c, "failed", str(e) or type(e).__name__)
     progress("")
     return report

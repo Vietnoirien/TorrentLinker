@@ -67,6 +67,24 @@ CREATE TABLE IF NOT EXISTS catalogue_feed (
     count INTEGER NOT NULL DEFAULT 0,
     limited INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS plan_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    made_at REAL NOT NULL,
+    sending INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS plan_item (
+    position INTEGER PRIMARY KEY,
+    infohash TEXT NOT NULL,
+    title TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    seeders INTEGER NOT NULL,
+    category INTEGER,
+    folder TEXT NOT NULL,
+    zen REAL NOT NULL,
+    note REAL,
+    outcome TEXT,
+    reason TEXT
+);
 """
 
 
@@ -83,6 +101,34 @@ class CatalogueRow:
     details_url: str
     seen_at: float
     source: str = "indexer"
+
+
+@dataclass(frozen=True)
+class SavedPlanItem:
+    """A download of the saved Plan; `outcome` is None until it has been sent."""
+
+    infohash: str
+    title: str
+    size: int
+    seeders: int
+    category: int | None
+    folder: str
+    zen: float
+    note: float | None
+    outcome: str | None = None  # added, refused or failed
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class SavedPlan:
+    made_at: float
+    sending: bool  # a send was running when the app stopped
+    items: list[SavedPlanItem]
+
+    @property
+    def pending(self) -> list[SavedPlanItem]:
+        """Torrents still to send; a failed one is tried again, a refused one is final."""
+        return [i for i in self.items if i.outcome not in ("added", "refused")]
 
 
 @dataclass(frozen=True)
@@ -459,3 +505,62 @@ class Store:
                 " AND name NOT LIKE 'c411-latest:%' LIMIT 1"
             ).fetchone()
         return row is not None or feed is not None
+
+    # The saved Plan ---------------------------------------------------------
+
+    def save_plan(self, items: list[SavedPlanItem], made_at: float | None = None) -> None:
+        """Replace the saved Plan, so it survives a crash or a restart."""
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM plan_item")
+            self._db.execute("DELETE FROM plan_state")
+            if not items:
+                return
+            self._db.execute(
+                "INSERT INTO plan_state (id, made_at, sending) VALUES (1, ?, 0)",
+                (time.time() if made_at is None else made_at,),
+            )
+            self._db.executemany(
+                "INSERT INTO plan_item (position, infohash, title, size, seeders, category,"
+                " folder, zen, note, outcome, reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        n,
+                        i.infohash,
+                        i.title,
+                        i.size,
+                        i.seeders,
+                        i.category,
+                        i.folder,
+                        i.zen,
+                        i.note,
+                        i.outcome,
+                        i.reason,
+                    )
+                    for n, i in enumerate(items)
+                ],
+            )
+
+    def saved_plan(self) -> SavedPlan | None:
+        with self._lock:
+            state = self._db.execute("SELECT made_at, sending FROM plan_state").fetchone()
+            rows = self._db.execute(
+                "SELECT infohash, title, size, seeders, category, folder, zen, note, outcome,"
+                " reason FROM plan_item ORDER BY position"
+            ).fetchall()
+        if state is None:
+            return None
+        return SavedPlan(float(state[0]), bool(state[1]), [SavedPlanItem(*r) for r in rows])
+
+    def set_plan_sending(self, sending: bool) -> None:
+        with self._lock, self._db:
+            self._db.execute("UPDATE plan_state SET sending = ?", (int(sending),))
+
+    def mark_plan_item(self, infohash: str, outcome: str, reason: str = "") -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE plan_item SET outcome = ?, reason = ? WHERE infohash = ?",
+                (outcome, reason or None, infohash),
+            )
+
+    def clear_plan(self) -> None:
+        self.save_plan([])

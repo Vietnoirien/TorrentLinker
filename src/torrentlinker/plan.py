@@ -19,7 +19,7 @@ from torrentlinker.domain import ItemState
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.library import LibraryEntry
 from torrentlinker.review import CheckedCandidate
-from torrentlinker.store import CatalogueRow
+from torrentlinker.store import CatalogueRow, SavedPlan, SavedPlanItem
 from torrentlinker.zen import GB, ZenProfile, ZenTorrent, added_values, estimate, note, weight
 
 DEFAULT_MARGIN = 0.10  # share of each disk kept free
@@ -115,6 +115,39 @@ class Plan:
     def download_seconds(self, bytes_per_second: float) -> float:
         """Time for qBittorrent to download the Plan's data at this speed, at best."""
         return self.download_size / bytes_per_second
+
+
+def saved_items(plan: Plan) -> list[SavedPlanItem]:
+    """The Plan's downloads as saved; Reseeds depend on this session's searches."""
+    return [
+        SavedPlanItem(
+            c.infohash, c.title, c.size, c.seeders, c.category, str(c.folder), i.zen, i.note
+        )
+        for i in plan.items
+        if not (c := i.candidate).reseed and c.folder is not None
+    ]
+
+
+def restore_plan(saved: SavedPlan, rows: Mapping[str, CatalogueRow]) -> Plan:
+    """What is left to send of a saved Plan; a torrent gone from the Catalogue is dropped."""
+    items = [
+        PlanItem(
+            PlanCandidate(
+                i.infohash,
+                i.title,
+                i.size,
+                i.seeders,
+                i.category,
+                Path(i.folder),
+                source=rows[i.infohash],
+            ),
+            i.zen,
+            i.note,
+        )
+        for i in saved.pending
+        if i.infohash in rows
+    ]
+    return Plan(items, sum(i.zen for i in items))
 
 
 ORDERINGS: dict[str, Callable[[PlanCandidate, float], float]] = {

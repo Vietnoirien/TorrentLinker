@@ -67,6 +67,8 @@ from torrentlinker.plan import (
     disk_space,
     make_plan,
     reseed_candidates,
+    restore_plan,
+    saved_items,
 )
 from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import QbitApi
@@ -229,6 +231,7 @@ class MainWindow(QMainWindow):
         self.seeding_timer.setInterval(30_000)
         self.seeding_timer.timeout.connect(lambda: self.zen_tab.seeding_view.refresh(quiet=True))
         self.seeding_timer.start()
+        self.show_saved_plan(interrupted=bool((saved := store.saved_plan()) and saved.sending))
         if settings_path.exists():
             QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
             QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
@@ -285,6 +288,7 @@ class MainWindow(QMainWindow):
     def make_plan(self, then: Callable[[], None] | None = None) -> None:
         """Refresh new torrents in the Plan's categories, then make the Plan."""
         self._use_cached_plan = False
+        self.store.clear_plan()
         self.zen_tab.plan_view.begin()
         self.band.set_plan(None)
         if self.catalogue_runner is not None:
@@ -380,6 +384,7 @@ class MainWindow(QMainWindow):
     def _plan_options_changed(self, options: PlanOptions) -> None:
         self.settings.plan_options = options
         self.settings.save(self.settings_path)
+        self.store.clear_plan()
         self.zen_tab.plan_view.invalidate()
         self.band.set_plan(None)
 
@@ -448,6 +453,7 @@ class MainWindow(QMainWindow):
         return work
 
     def _plan_made(self, plan: Plan) -> None:
+        self.store.save_plan(saved_items(plan))
         self.zen_tab.plan_view.show_plan(plan)
         s = self.settings
         targets = plan_categories(s.plan_categories, s.download_folders, s.indexer_categories)
@@ -534,15 +540,21 @@ class MainWindow(QMainWindow):
             assert isinstance(c.source, CatalogueRow)
             return indexer.fetch_torrent(candidate(indexer, c.source), retry=False)
 
+        store = self.store
+
+        def record(c: PlanCandidate, outcome: str, reason: str) -> None:
+            store.mark_plan_item(c.infohash, outcome, reason)
+
         runner = SendRunner(
             lambda stop, progress: send_plan(
-                plan, qbit, fetch, reseeder, on_progress=progress, stop=stop
+                plan, qbit, fetch, reseeder, on_progress=progress, on_outcome=record, stop=stop
             )
         )
         runner.signals.progress.connect(self._send_progress)
         runner.signals.finished.connect(self._plan_sent)
         runner.signals.failed.connect(self._send_failed)
         self.send_runner = runner
+        store.set_plan_sending(True)
         log.info("Sending a Plan of %d torrents", len(plan.items))
         self._send_progress(SendProgress(0, len(plan.items), "", 0, 0, 0))
         runner.start()
@@ -557,12 +569,40 @@ class MainWindow(QMainWindow):
 
     def _send_ended(self) -> None:
         self.send_runner = None
+        self.store.set_plan_sending(False)
         self.zen_tab.plan_view.sending(None)
         self.band.set_sending(None)
 
     def _send_failed(self, error: Exception) -> None:
         self._send_ended()
+        if not self.show_saved_plan():
+            self.zen_tab.plan_view.show_plan(Plan())
         self.zen_tab.plan_view.failed(error)
+
+    def show_saved_plan(self, interrupted: bool = False) -> bool:
+        """Show what is left to send of the saved Plan; False if nothing is left."""
+        saved = self.store.saved_plan()
+        if saved is None:
+            return False
+        pending = saved.pending
+        rows = {r.infohash: r for r in self.store.catalogue([i.infohash for i in pending])}
+        plan = restore_plan(saved, rows)
+        if not plan.items:
+            self.store.clear_plan()
+            return False
+        view = self.zen_tab.plan_view
+        view.show_plan(plan)
+        left = (
+            self.tr(
+                "Sending was interrupted: {0} torrents of this Plan are left. "
+                "Send to qBittorrent to continue."
+            )
+            if interrupted
+            else self.tr("Saved Plan: {0} torrents left to send.")
+        )
+        view.summary.setText(view.summary.text() + "\n" + left.format(len(plan.items)))
+        self.band.set_plan(plan.zen_added)
+        return True
 
     def plan_reseeder(self) -> Callable[[PlanCandidate], None]:
         """Reseed rows run the normal Reseed flow, with Verification (ADR-0002)."""
@@ -589,15 +629,16 @@ class MainWindow(QMainWindow):
             len(report.failed),
             ", stopped" if report.stopped else "",
         )
-        self.zen_tab.plan_view.show_plan(Plan())
+        if not self.show_saved_plan():
+            self.zen_tab.plan_view.show_plan(Plan())
         lines = [self.tr("{0} torrents added to qBittorrent.").format(len(report.added))]
         if report.reseeded:
             lines.append(self.tr("{0} Reseeds started.").format(len(report.reseeded)))
         if report.stopped:
             lines.append(
                 self.tr(
-                    "Stopped after {0} of {1} torrents. Make a new Plan to continue: "
-                    "torrents already in qBittorrent are left out."
+                    "Stopped after {0} of {1} torrents. The rest of the Plan is saved: "
+                    "send it again to continue, even after restarting the app."
                 ).format(report.handled, total)
             )
         problems = [self.tr("Refused: {0} ({1})").format(t, why) for t, why in report.refused]

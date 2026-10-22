@@ -908,3 +908,102 @@ def test_a_refused_key_tells_the_user_where_to_fix_it(qtbot, tmp_path: Path) -> 
     text = window.zen_tab.plan_view.summary.text()
     assert "refused your API key (HTTP 401)" in text
     assert "Settings → Connections" in text and "torznab:read" in text
+
+
+def test_a_plan_interrupted_by_a_crash_comes_back_with_what_is_left(
+    qtbot,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+) -> None:
+    from torrentlinker.store import CatalogueRow, SavedPlanItem
+
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(
+        [CatalogueRow(h * 40, f"Book {h}", 1000, 2, 7020, f"u{h}", "", 0) for h in "ab"]
+    )
+    store.save_plan(
+        [SavedPlanItem(h * 40, f"Book {h}", 1000, 2, 7020, str(tmp_path), 0.1, None) for h in "ab"]
+    )
+    store.set_plan_sending(True)
+    store.mark_plan_item("a" * 40, "added")  # then the app crashed
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+
+    view = window.zen_tab.plan_view
+    assert view.plan is not None and [i.candidate.title for i in view.plan.items] == ["Book b"]
+    assert "Sending was interrupted: 1 torrents" in view.summary.text()
+    assert view.send_button.isEnabled()
+
+
+def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
+    qtbot,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from tests.fake_qbit import FakeQbit
+    from tests.torrents import make_torrent
+    from torrentlinker.plan import Plan, PlanCandidate, PlanItem
+    from torrentlinker.store import CatalogueRow
+    from torrentlinker.torrent_meta import read_torrent
+
+    torrents, rows = {}, []
+    for name in ("A", "B"):
+        src = tmp_path / "src" / name
+        src.mkdir(parents=True)
+        (src / "book.epub").write_bytes(name.encode() * 100)
+        data = make_torrent(src)
+        h = read_torrent(data).infohash
+        torrents[f"u{name}"] = data
+        rows.append(CatalogueRow(h, name, 100, 2, 7020, f"u{name}", "", 0))
+    store = Store(tmp_path / "s.db")
+    store.save_catalogue(rows)
+    plan = Plan(
+        [
+            PlanItem(
+                PlanCandidate(r.infohash, r.title, 100, 2, 7020, tmp_path / "dl", 1, source=r), 0.1
+            )
+            for r in rows
+        ],
+        0.2,
+    )
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+
+    class StoppingIndexer:
+        url, api_key = Settings().indexer.url, ""
+        stop_once = True
+
+        def fetch_torrent(self, c, retry=True):  # type: ignore[no-untyped-def]
+            if self.stop_once:  # the user stops while A is being sent
+                self.stop_once = False
+                window.send_runner.stop()  # type: ignore[union-attr]
+            return torrents[c.download_url]
+
+        def unredact(self, text: str) -> str:
+            return text
+
+    window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
+    window._indexer = StoppingIndexer()  # type: ignore[assignment]
+    window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
+    shown: list[str] = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box.text()))
+    window._plan_made(plan)
+
+    window.send_plan(plan)
+    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+
+    assert "The rest of the Plan is saved" in shown[0]
+    view = window.zen_tab.plan_view
+    assert [i.candidate.title for i in view.plan.items] == ["B"]  # type: ignore[union-attr]
+    saved = store.saved_plan()
+    assert saved is not None and not saved.sending and [i.title for i in saved.pending] == ["B"]
+
+    shown.clear()
+    window.send_plan(view.plan)  # type: ignore[arg-type]
+    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+
+    assert store.saved_plan() is None
+    assert view.plan is not None and not view.plan.items

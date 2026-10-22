@@ -378,3 +378,27 @@ def test_downloading_takes_the_plan_size_over_the_speed(tmp_path: Path) -> None:
     c = PlanCandidate("aa" * 20, "Film", 8 * GB, 3, 2000, tmp_path, 1)
 
     assert Plan([PlanItem(c, 0.1)]).download_seconds(100_000_000) == pytest.approx(80)
+
+
+def test_a_saved_plan_restores_only_what_is_left_to_send(tmp_path: Path) -> None:
+    from torrentlinker.plan import restore_plan, saved_items
+    from torrentlinker.store import SavedPlan
+
+    def row(h: str) -> CatalogueRow:
+        return CatalogueRow(h * 40, f"Book {h}", 1000, 2, 7020, f"https://c411/{h}", "", 0)
+
+    sent, left, gone = (
+        PlanCandidate(h * 40, f"Book {h}", 1000, 2, 7020, tmp_path, 1, source=row(h)) for h in "abc"
+    )
+    reseed = replace(sent, infohash="d" * 40, folder=None, reseed=True)
+    plan = Plan([PlanItem(c, 0.1) for c in (reseed, sent, left, gone)], 0.4)
+
+    items = saved_items(plan)
+    assert [i.title for i in items] == ["Book a", "Book b", "Book c"]  # no Reseed
+    items[0] = replace(items[0], outcome="added")
+    restored = restore_plan(SavedPlan(0.0, True, items), {"b" * 40: row("b"), "a" * 40: row("a")})
+
+    [item] = restored.items  # "a" was sent, "c" left the Catalogue
+    assert item.candidate.title == "Book b" and item.candidate.folder == tmp_path
+    assert item.candidate.source == row("b")
+    assert restored.zen_added == pytest.approx(0.1)

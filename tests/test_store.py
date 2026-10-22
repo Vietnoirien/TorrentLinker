@@ -56,3 +56,34 @@ def test_existing_feed_states_accept_persistent_sync_checkpoints(tmp_path: Path)
     checkpoint = replace(state, head_hashes=("a" * 40, "b" * 40))
     store.save_feed_state(checkpoint)
     assert Store(path).feed_state("live") == checkpoint
+
+
+def test_the_plan_and_what_was_sent_survive_a_restart(tmp_path: Path) -> None:
+    from torrentlinker.store import SavedPlanItem
+
+    items = [
+        SavedPlanItem(f"{c * 40}", f"Book {c}", 1000, 2, 7020, "/dl", 0.1, 3.5) for c in "abcd"
+    ]
+    store = Store(tmp_path / "s.db")
+    store.save_plan(items, made_at=1000.0)
+    store.set_plan_sending(True)
+    store.mark_plan_item("a" * 40, "added")
+    store.mark_plan_item("b" * 40, "refused", "already in qBittorrent")
+    store.mark_plan_item("c" * 40, "failed", "HTTP 500")
+
+    saved = Store(tmp_path / "s.db").saved_plan()
+
+    assert saved is not None and saved.sending and saved.made_at == 1000.0
+    assert [i.title for i in saved.pending] == ["Book c", "Book d"]  # failed ones are retried
+    assert saved.items[1].reason == "already in qBittorrent"
+
+
+def test_clearing_the_plan_leaves_nothing_saved(tmp_path: Path) -> None:
+    from torrentlinker.store import SavedPlanItem
+
+    store = Store(tmp_path / "s.db")
+    store.save_plan([SavedPlanItem("a" * 40, "Book", 1, 1, None, "/dl", 0.1, None)])
+
+    store.clear_plan()
+
+    assert store.saved_plan() is None

@@ -177,3 +177,19 @@ def test_a_refused_key_stops_sending_instead_of_failing_every_torrent(tmp_path: 
     assert fetched == ["A"]
     assert report.stopped
     assert [t for t, _ in report.failed] == ["A"]
+
+
+def test_each_torrent_outcome_is_reported_so_it_can_be_saved(tmp_path: Path) -> None:
+    plan, data = two_releases(tmp_path)
+    (tmp_path / "dl" / "B").mkdir(parents=True)
+    (tmp_path / "dl" / "B" / "film.mkv").write_bytes(b"mine")
+    outcomes: list[tuple[str, str]] = []
+
+    send_plan(
+        plan,
+        FakeQbit(),
+        lambda c: data[c.infohash],
+        on_outcome=lambda c, outcome, reason: outcomes.append((c.title, outcome)),
+    )
+
+    assert outcomes == [("A", "added"), ("B", "refused")]

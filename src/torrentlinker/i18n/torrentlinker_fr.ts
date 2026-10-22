@@ -154,93 +154,93 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../gui/main_window.py" line="111"/>
+        <location filename="../gui/main_window.py" line="113"/>
         <source>Main</source>
         <translation>Principal</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="112"/>
+        <location filename="../gui/main_window.py" line="114"/>
         <source>Scan</source>
         <translation>Analyser</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="114"/>
+        <location filename="../gui/main_window.py" line="116"/>
         <source>Rescan everything</source>
         <translation>Tout réanalyser</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="116"/>
+        <location filename="../gui/main_window.py" line="118"/>
         <source>Walk every file again, ignoring the scan cache (slower)</source>
         <translation>Relire chaque fichier sans le cache d’analyse (plus lent)</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="119"/>
+        <location filename="../gui/main_window.py" line="121"/>
         <source>Settings</source>
         <translation>Paramètres</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="121"/>
+        <location filename="../gui/main_window.py" line="123"/>
         <source>Search selected</source>
         <translation>Rechercher la sélection</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="123"/>
+        <location filename="../gui/main_window.py" line="125"/>
         <source>Search all Orphans</source>
         <translation>Rechercher tous les orphelins</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="125"/>
+        <location filename="../gui/main_window.py" line="127"/>
         <source>Cancel search</source>
         <translation>Annuler la recherche</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="159"/>
+        <location filename="../gui/main_window.py" line="161"/>
         <source>All states</source>
         <translation>Tous les états</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="165"/>
+        <location filename="../gui/main_window.py" line="167"/>
         <source>Show</source>
         <translation>Afficher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="187"/>
+        <location filename="../gui/main_window.py" line="189"/>
         <source>Zen</source>
         <translation>Zen</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="188"/>
+        <location filename="../gui/main_window.py" line="190"/>
         <source>Library</source>
         <translation>Bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="198"/>
+        <location filename="../gui/main_window.py" line="200"/>
         <source>Ready</source>
         <translation>Prêt</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="301"/>
-        <location filename="../gui/main_window.py" line="787"/>
+        <location filename="../gui/main_window.py" line="305"/>
+        <location filename="../gui/main_window.py" line="828"/>
         <source>Waiting for the Catalogue refresh to finish…</source>
         <translation>En attente de la fin de l’actualisation du Catalogue…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="327"/>
+        <location filename="../gui/main_window.py" line="331"/>
         <source>Fetching the Catalogue for the Plan…</source>
         <translation>Récupération du Catalogue pour le Plan…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="459"/>
+        <location filename="../gui/main_window.py" line="465"/>
         <source>Based on an incomplete Catalogue; older torrents may be missing.</source>
         <translation>Ce Plan repose sur un Catalogue incomplet ; des torrents plus anciens peuvent manquer.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="481"/>
+        <location filename="../gui/main_window.py" line="487"/>
         <source>Send the Plan to qBittorrent</source>
         <translation>Envoyer le Plan à qBittorrent</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="484"/>
+        <location filename="../gui/main_window.py" line="490"/>
         <source>{0} torrents · {1} Go to download · ≈ +{2} Zen/day · paid back in ≈ {3} days.
 Catalogue: {4}.
 
@@ -251,282 +251,292 @@ Catalogue : {4}.
 Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajouté à son Dossier de téléchargement. Un torrent dont des fichiers existent déjà à cet endroit est refusé.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="498"/>
+        <location filename="../gui/main_window.py" line="504"/>
         <source>Send</source>
         <translation>Envoyer</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="499"/>
+        <location filename="../gui/main_window.py" line="505"/>
         <source>Refresh first</source>
         <translation>Actualiser d&apos;abord</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="524"/>
+        <location filename="../gui/main_window.py" line="530"/>
         <source>Speed test</source>
         <translation>Test de débit</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="525"/>
+        <location filename="../gui/main_window.py" line="531"/>
         <source>The speed test failed: {0}</source>
         <translation>Le test de débit a échoué : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="593"/>
+        <location filename="../gui/main_window.py" line="597"/>
+        <source>Sending was interrupted: {0} torrents of this Plan are left. Send to qBittorrent to continue.</source>
+        <translation>L’envoi a été interrompu : il reste {0} torrents dans ce Plan. Envoyez-le à qBittorrent pour continuer.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="601"/>
+        <source>Saved Plan: {0} torrents left to send.</source>
+        <translation>Plan enregistré : {0} torrents restent à envoyer.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="634"/>
         <source>{0} torrents added to qBittorrent.</source>
         <translation>{0} torrents ajoutés à qBittorrent.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="595"/>
+        <location filename="../gui/main_window.py" line="636"/>
         <source>{0} Reseeds started.</source>
         <translation>{0} repartages lancés.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="599"/>
-        <source>Stopped after {0} of {1} torrents. Make a new Plan to continue: torrents already in qBittorrent are left out.</source>
-        <translation>Arrêté après {0} torrents sur {1}. Faites un nouveau Plan pour continuer : les torrents déjà dans qBittorrent en sont exclus.</translation>
-    </message>
-    <message>
-        <location filename="../gui/main_window.py" line="603"/>
+        <location filename="../gui/main_window.py" line="644"/>
         <source>Refused: {0} ({1})</source>
         <translation>Refusé : {0} ({1})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="604"/>
+        <location filename="../gui/main_window.py" line="645"/>
         <source>Failed: {0} ({1})</source>
         <translation>Échec : {0} ({1})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="606"/>
+        <location filename="../gui/main_window.py" line="647"/>
         <source>Plan sent</source>
         <translation>Plan envoyé</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="610"/>
+        <location filename="../gui/main_window.py" line="651"/>
         <source>{0} refused, {1} failed: see the details.</source>
         <translation>{0} refusés, {1} en échec : voir les détails.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="684"/>
+        <location filename="../gui/main_window.py" line="725"/>
         <source>The Catalogue is already being updated</source>
         <translation>Le Catalogue est déjà en cours de mise à jour</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="688"/>
+        <location filename="../gui/main_window.py" line="729"/>
         <source>Catalogue</source>
         <translation>Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="688"/>
+        <location filename="../gui/main_window.py" line="729"/>
         <source>Enter your Indexer API key in Settings first.</source>
         <translation>Saisissez d&apos;abord la clé d&apos;API de l&apos;Indexeur dans les Paramètres.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="723"/>
+        <location filename="../gui/main_window.py" line="764"/>
         <source>Pausing after the current page…</source>
         <translation>Pause après la page en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="748"/>
+        <location filename="../gui/main_window.py" line="789"/>
         <source>Importing Zen Lab metadata: {0} torrents (+{1})</source>
         <translation>Import des métadonnées Zen Lab : {0} torrents (+{1})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="763"/>
+        <location filename="../gui/main_window.py" line="804"/>
         <source>updating {0}, page {1} (+{2})</source>
         <translation>mise à jour de {0}, page {1} (+{2})</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="770"/>
+        <location filename="../gui/main_window.py" line="811"/>
         <source>Category {0}/{1}: {2} · {3} torrents in the Catalogue</source>
         <translation>Catégorie {0}/{1} : {2} · {3} torrents dans le Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="775"/>
+        <location filename="../gui/main_window.py" line="816"/>
         <source>Updating selected categories: {0} · {1} torrents in the Catalogue</source>
         <translation>Mise à jour des catégories sélectionnées : {0} · {1} torrents dans le Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="779"/>
+        <location filename="../gui/main_window.py" line="820"/>
         <source>Updating your categories: {0} · {1} torrents in the Catalogue</source>
         <translation>Mise à jour de vos catégories : {0} · {1} torrents dans le Catalogue</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="782"/>
+        <location filename="../gui/main_window.py" line="823"/>
         <source>Catalogue: {0}</source>
         <translation>Catalogue : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="791"/>
+        <location filename="../gui/main_window.py" line="832"/>
         <source>Fetching the Catalogue for the Plan: {0}</source>
         <translation>Récupération du Catalogue pour le Plan : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="798"/>
-        <location filename="../gui/main_window.py" line="820"/>
+        <location filename="../gui/main_window.py" line="839"/>
+        <location filename="../gui/main_window.py" line="861"/>
         <source>Catalogue update failed: {0}</source>
         <translation>Échec de la mise à jour du Catalogue : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="813"/>
+        <location filename="../gui/main_window.py" line="854"/>
         <source>Catalogue paused: +{0} torrents · {1} in total</source>
         <translation>Catalogue en pause : +{0} torrents · {1} au total</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="815"/>
+        <location filename="../gui/main_window.py" line="856"/>
         <source>Catalogue updated: +{0} torrents · {1} in total</source>
         <translation>Catalogue à jour : +{0} torrents · {1} au total</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="822"/>
-        <location filename="../gui/main_window.py" line="845"/>
+        <location filename="../gui/main_window.py" line="863"/>
+        <location filename="../gui/main_window.py" line="886"/>
         <source>Catalogue incomplete: the Indexer stopped paging.</source>
         <translation>Catalogue incomplet : l&apos;Indexeur a atteint sa limite de pagination.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="843"/>
+        <location filename="../gui/main_window.py" line="884"/>
         <source>whole-catalogue fetch paused</source>
         <translation>récupération du catalogue complet en pause</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="850"/>
+        <location filename="../gui/main_window.py" line="891"/>
         <source>Zen Lab snapshot imported; c411 data takes priority</source>
         <translation>Instantané Zen Lab importé ; les données c411 sont prioritaires</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="859"/>
+        <location filename="../gui/main_window.py" line="900"/>
         <source>not fetched yet</source>
         <translation>pas encore récupéré</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="861"/>
+        <location filename="../gui/main_window.py" line="902"/>
         <source>{0} min</source>
         <translation>{0} min</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="861"/>
+        <location filename="../gui/main_window.py" line="902"/>
         <source>{0} h</source>
         <translation>{0} h</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="861"/>
+        <location filename="../gui/main_window.py" line="902"/>
         <source>{0} d</source>
         <translation>{0} j</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="862"/>
+        <location filename="../gui/main_window.py" line="903"/>
         <source>{0} torrents, {1} old</source>
         <translation>{0} torrents, vieux de {1}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="936"/>
+        <location filename="../gui/main_window.py" line="977"/>
         <source>All Library Folders</source>
         <translation>Tous les dossiers de bibliothèque</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="975"/>
+        <location filename="../gui/main_window.py" line="1016"/>
         <source>No Orphans to search</source>
         <translation>Aucun orphelin à rechercher</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="995"/>
+        <location filename="../gui/main_window.py" line="1036"/>
         <source>Searching {0} Orphans…</source>
         <translation>Recherche de {0} orphelins…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1001"/>
+        <location filename="../gui/main_window.py" line="1042"/>
         <source>Cancelling after the current item…</source>
         <translation>Annulation après l’élément en cours…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="766"/>
-        <location filename="../gui/main_window.py" line="1014"/>
+        <location filename="../gui/main_window.py" line="807"/>
+        <location filename="../gui/main_window.py" line="1055"/>
         <source> · next request in {0} s</source>
         <translation> · prochaine requête dans {0} s</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="467"/>
+        <location filename="../gui/main_window.py" line="473"/>
         <source>Provisional estimates from cached metadata. Seeder counts update from qBittorrent after tracker responses.</source>
         <translation>Estimations provisoires à partir des données en cache. Le nombre de sources est actualisé via qBittorrent après les réponses du tracker.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1020"/>
+        <location filename="../gui/main_window.py" line="640"/>
+        <source>Stopped after {0} of {1} torrents. The rest of the Plan is saved: send it again to continue, even after restarting the app.</source>
+        <translation>Arrêté après {0} torrents sur {1}. Le reste du Plan est enregistré : envoyez-le de nouveau pour continuer, même après avoir redémarré l’application.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1061"/>
         <source>Searched {0}/{1}: {2}</source>
         <translation>Recherché {0}/{1} : {2}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1035"/>
+        <location filename="../gui/main_window.py" line="1076"/>
         <source>Full match found</source>
         <translation>Correspondance complète trouvée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1037"/>
+        <location filename="../gui/main_window.py" line="1078"/>
         <source>Partial match found</source>
         <translation>Correspondance partielle trouvée</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1039"/>
+        <location filename="../gui/main_window.py" line="1080"/>
         <source>No match</source>
         <translation>Aucune correspondance</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1040"/>
+        <location filename="../gui/main_window.py" line="1081"/>
         <source>No Candidates</source>
         <translation>Aucun candidat</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1044"/>
+        <location filename="../gui/main_window.py" line="1085"/>
         <source>Search failed: {0}</source>
         <translation>Échec de la recherche : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1050"/>
+        <location filename="../gui/main_window.py" line="1091"/>
         <source>Batch search finished: {0} searched</source>
         <translation>Recherche groupée terminée : {0} recherchés</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1058"/>
+        <location filename="../gui/main_window.py" line="1099"/>
         <source>Scanning…</source>
         <translation>Analyse…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1071"/>
+        <location filename="../gui/main_window.py" line="1112"/>
         <source>{0} Local Items</source>
         <translation>{0} éléments locaux</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1107"/>
-        <location filename="../gui/main_window.py" line="1108"/>
+        <location filename="../gui/main_window.py" line="1148"/>
+        <location filename="../gui/main_window.py" line="1149"/>
         <source>Scan failed</source>
         <translation>Échec de l’analyse</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1113"/>
-        <location filename="../gui/main_window.py" line="1141"/>
+        <location filename="../gui/main_window.py" line="1154"/>
+        <location filename="../gui/main_window.py" line="1182"/>
         <source>Verifying…</source>
         <translation>Vérification…</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1132"/>
+        <location filename="../gui/main_window.py" line="1173"/>
         <source>Reseeded</source>
         <translation>Repartagé</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1134"/>
+        <location filename="../gui/main_window.py" line="1175"/>
         <source>Verified, left stopped: some files are absent</source>
         <translation>Vérifié, laissé à l’arrêt : certains fichiers sont absents</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1136"/>
+        <location filename="../gui/main_window.py" line="1177"/>
         <source>Reseed undone: {0}</source>
         <translation>Repartage annulé : {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1138"/>
+        <location filename="../gui/main_window.py" line="1179"/>
         <source>Verification failed at {0}</source>
         <translation>Vérification échouée à {0}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="1149"/>
+        <location filename="../gui/main_window.py" line="1190"/>
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
     </message>
