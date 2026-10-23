@@ -49,6 +49,16 @@ class KeyRefused(Exception):
         self.scope = scope
 
 
+class TorrentUnavailable(Exception):
+    """The Indexer denies this torrent's download, rather than rejecting the API key."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Torrent not available for download (HTTP 403). "
+            "Check this torrent's availability on the website."
+        )
+
+
 MAX_KEYS = 5  # c411's limit per account
 # A request the user waits for gives up, rather than wait longer than this for c411.
 FOREGROUND_PATIENCE = 30.0  # seconds
@@ -474,6 +484,19 @@ class Indexer:
             if last.status_code == 429:
                 slot.resting[queue] = self._clock() + _retry_after(last)
                 continue
+            if last.status_code == 403 and queue == "downloads":
+                try:
+                    error = ET.fromstring(last.content)
+                except ET.ParseError:
+                    pass
+                else:
+                    # c411 uses 403 for unavailable torrents too, even with a valid key.
+                    if (
+                        error.tag == "error"
+                        and error.get("description", "").strip().casefold()
+                        == "torrent not available for download"
+                    ):
+                        raise TorrentUnavailable()
             if last.status_code in (401, 403):
                 raise KeyRefused(last.status_code, slot.number, scope)
             return self._checked(last)

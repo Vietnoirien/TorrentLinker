@@ -2,16 +2,16 @@
 
 TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings, plans which new torrents to download and seed, and prepares c411 uploads of what the tracker does not have yet. The interface is available in English and French.
 
-## Download 0.5.1
+## Download 0.5.2
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.1/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.1/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.2/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.2/TorrentLinker-x86_64.AppImage) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.1) for changes and assets.
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.2) for changes and assets.
 
-TorrentLinker checks GitHub for a newer stable release at startup and daily while running, reusing successful checks for 24 hours. A small, dismissible notice links to the release page when an update is available. Downloads and installation remain manual. The check uses your configured internet proxy, sends no account or torrent information, and stays silent when GitHub is unreachable.
+TorrentLinker checks GitHub for a newer stable release at startup and every 30 minutes while running, reusing successful checks for 30 minutes. A small, dismissible notice links to the release page when an update is available. Downloads and installation remain manual. The comparison uses the version the running window started with, even if a newer version is installed on disk. The check uses your configured internet proxy, sends no account or torrent information, and stays silent when GitHub is unreachable.
 
 ## Finding your way around
 

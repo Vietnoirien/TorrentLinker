@@ -14,7 +14,7 @@ from torrentlinker import net
 
 REPOSITORY = "https://github.com/Vietnoirien/TorrentLinker"
 LATEST_RELEASE = "https://api.github.com/repos/Vietnoirien/TorrentLinker/releases/latest"
-CHECK_INTERVAL = 24 * 60 * 60
+CHECK_INTERVAL = 30 * 60
 log = logging.getLogger(__name__)
 
 
@@ -44,10 +44,10 @@ class Release:
 
 
 def check_for_update(cache: Path, *, current: str | None = None) -> Release | None:
-    """Return a newer stable release, reusing successful checks for one day.
+    """Return a newer stable release, reusing successful checks for 30 minutes.
 
     Call from a worker. Network and cache failures are nonfatal; the next launch
-    or daily check retries them. No torrent or account information is sent.
+    or half-hourly check retries them. No torrent or account information is sent.
     """
     running = release_version(current if current is not None else installed_version())
     if running is None:

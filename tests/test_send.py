@@ -5,7 +5,7 @@ import pytest
 
 from tests.fake_qbit import FakeQbit
 from tests.torrents import make_torrent
-from torrentlinker.indexer import KeyRefused, RateLimited
+from torrentlinker.indexer import KeyRefused, RateLimited, TorrentUnavailable
 from torrentlinker.plan import Plan, PlanCandidate, PlanItem
 from torrentlinker.send import ZEN_TAG, Refused, SendProgress, send_one, send_plan
 from torrentlinker.torrent_meta import read_torrent
@@ -110,6 +110,22 @@ def test_progress_is_reported_for_each_torrent_and_at_the_end(tmp_path: Path) ->
 
     assert [(p.done, p.total, p.title) for p in seen] == [(0, 2, "A"), (1, 2, "B"), (2, 2, "")]
     assert seen[-1].added == 2
+
+
+def test_unavailable_torrent_does_not_stop_the_rest_of_the_plan(tmp_path: Path) -> None:
+    plan, data = two_releases(tmp_path)
+    client = FakeQbit()
+
+    def fetch(c: PlanCandidate) -> bytes:
+        if c.title == "A":
+            raise TorrentUnavailable()
+        return data[c.infohash]
+
+    report = send_plan(plan, client, fetch)
+    assert not report.stopped
+    assert report.added == ["B"]
+    assert report.failed == [("A", str(TorrentUnavailable()))]
+    assert len(client.downloads) == 1
 
 
 def test_when_the_indexer_limits_downloads_the_same_torrent_is_tried_again_later(

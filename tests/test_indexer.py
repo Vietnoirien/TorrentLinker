@@ -4,7 +4,14 @@ import httpx
 import pytest
 
 from tests.torznab_fixtures import CAPS_XML, SEARCH_XML
-from torrentlinker.indexer import Candidate, Indexer, KeyRefused, RateLimited, SearchQuery
+from torrentlinker.indexer import (
+    Candidate,
+    Indexer,
+    KeyRefused,
+    RateLimited,
+    SearchQuery,
+    TorrentUnavailable,
+)
 
 
 class FakeClock:
@@ -139,6 +146,23 @@ def test_other_http_errors_never_show_the_key_from_the_url() -> None:
 
     assert "apikey=K" not in str(failed.value)
     assert "500" in str(failed.value)
+
+
+def test_unavailable_torrent_is_not_reported_as_a_bad_key() -> None:
+    indexer = make_indexer(
+        lambda r: httpx.Response(
+            403,
+            text='<?xml version="1.0" encoding="UTF-8"?>'
+            '<error code="403" description="Torrent not available for download" />',
+            headers={"Content-Type": "application/xml; charset=utf-8"},
+        )
+    )
+    with pytest.raises(TorrentUnavailable) as denied:
+        indexer.fetch_torrent(Candidate("book", 1, "https://c411.example/dl/1?apikey=K"))
+    assert "Torrent not available for download" in str(denied.value)
+    assert not isinstance(denied.value, KeyRefused)
+    assert "refused the API key" not in str(denied.value)
+    assert "apikey=K" not in str(denied.value)
 
 
 def test_caps_lists_categories_and_supported_search_modes() -> None:

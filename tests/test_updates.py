@@ -65,7 +65,7 @@ def test_invalid_or_preview_releases_are_ignored(monkeypatch, tmp_path, payload)
     assert check_for_update(tmp_path / "release.json", current="0.4.0") is None
 
 
-def test_daily_cache_is_recompared_to_the_running_version(monkeypatch, tmp_path):
+def test_cache_is_recompared_to_the_running_version(monkeypatch, tmp_path):
     clock = [100000.0]
     monkeypatch.setattr(updates.time, "time", lambda: clock[0])
     calls = mock_release(monkeypatch, stable())
@@ -79,6 +79,21 @@ def test_daily_cache_is_recompared_to_the_running_version(monkeypatch, tmp_path)
     clock[0] += CHECK_INTERVAL
     check_for_update(cache, current="0.4.0")
     assert len(calls) == 2
+
+
+def test_new_release_is_found_after_thirty_minutes(monkeypatch, tmp_path):
+    clock = [100000.0]
+    monkeypatch.setattr(updates.time, "time", lambda: clock[0])
+    cache = tmp_path / "release.json"
+    mock_release(monkeypatch, stable("v0.5.0"))
+    assert check_for_update(cache, current="0.5.0") is None
+    calls = mock_release(monkeypatch, stable("v0.5.1"))
+    clock[0] += 1799
+    assert check_for_update(cache, current="0.5.0") is None
+    assert not calls
+    clock[0] += 1
+    assert check_for_update(cache, current="0.5.0") == Release("v0.5.1")
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize("status", [403, 404, 429, 500])
@@ -150,18 +165,23 @@ def test_main_window_checks_in_background(qtbot, tmp_path, monkeypatch):
 
     entered, release = threading.Event(), threading.Event()
     cache_paths = []
+    compared_versions = []
 
-    def check(cache):
+    def check(cache, *, current=None):
         cache_paths.append(cache)
+        compared_versions.append(current)
         entered.set()
         release.wait(5)
         return Release("v0.5.0")
 
     monkeypatch.setattr(main_window, "check_for_update", check)
+    monkeypatch.setattr(main_window, "installed_version", lambda: "0.5.0")
     window = main_window.MainWindow(
         Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db")
     )
     qtbot.addWidget(window)
+    # Installing an update on disk must not change the version of this running window.
+    monkeypatch.setattr(main_window, "installed_version", lambda: "0.5.1")
     try:
         window.check_for_updates()
         qtbot.waitUntil(entered.is_set)
@@ -173,3 +193,4 @@ def test_main_window_checks_in_background(qtbot, tmp_path, monkeypatch):
         release.set()
     qtbot.waitUntil(lambda: not window.update_notice.isHidden())
     assert cache_paths == [tmp_path / "release-check.json"]
+    assert compared_versions == ["0.5.0"]

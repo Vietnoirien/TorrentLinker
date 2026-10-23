@@ -141,7 +141,8 @@ class MainWindow(QMainWindow):
         self._qbit: tuple[tuple[str, ...], ClientApi, tuple[str | None, str | None]] | None = None
         self.apply_proxy()
         self._indexer_proxy = net.current()  # what the Indexer, once made, goes through
-        self.setWindowTitle(f"TorrentLinker {installed_version()}")
+        self.running_version = installed_version()
+        self.setWindowTitle(f"TorrentLinker {self.running_version}")
         self.resize(1280, 800)
 
         toolbar = QToolBar(self.tr("Library"), self)
@@ -373,7 +374,7 @@ class MainWindow(QMainWindow):
     def check_for_updates(self) -> None:
         cache = self.settings_path.parent / "release-check.json"
         run_in_background(
-            lambda: check_for_update(cache),
+            lambda: check_for_update(cache, current=self.running_version),
             self.update_notice.show_release,
             lambda error: log.debug("release check unavailable: %s", error),
         )
