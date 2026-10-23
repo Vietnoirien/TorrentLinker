@@ -1,9 +1,10 @@
 import pytest
+from PySide6.QtCore import QCoreApplication, QEvent
 
 from torrentlinker import i18n
 from torrentlinker.config import Settings
 from torrentlinker.gui.main_window import MainWindow
-from torrentlinker.gui.theme import apply_theme
+from torrentlinker.gui.theme import ThemeFollower, apply_theme
 from torrentlinker.store import Store
 
 
@@ -13,6 +14,9 @@ def test_small_window_keeps_every_workspace_action_reachable(
     qtbot, qapp, tmp_path, monkeypatch, language, size
 ):
     monkeypatch.setattr("keyring.get_password", lambda *args: None)
+    palette = qapp.palette()
+    stylesheet = qapp.styleSheet()
+    style = qapp.style().objectName()
     apply_theme(qapp, "dark")
     translators = i18n.install(qapp, language)
     try:
@@ -43,6 +47,13 @@ def test_small_window_keeps_every_workspace_action_reachable(
     finally:
         for translator in translators:
             qapp.removeTranslator(translator)
+        follower = qapp.findChild(ThemeFollower)
+        follower.stop()
+        follower.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qapp.setStyle(style)
+        qapp.setPalette(palette)
+        qapp.setStyleSheet(stylesheet)
 
 
 def test_initial_window_size_fits_available_screen(qtbot, qapp, tmp_path, monkeypatch):
