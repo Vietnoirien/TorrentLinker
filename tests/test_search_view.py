@@ -1,0 +1,226 @@
+from PySide6.QtCore import Qt
+
+from tests.fake_qbit import FakeQbit
+from tests.test_download_queue import setup_queue
+from torrentlinker.config import Settings
+from torrentlinker.download_queue import entries
+from torrentlinker.gui.search_view import SearchTab
+from torrentlinker.indexer import Candidate, Indexer
+from torrentlinker.store import Store
+
+
+def test_sorted_search_queues_the_selected_torrent_and_remembers_it(qtbot, tmp_path):
+    store = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    settings = Settings()
+    settings.download_folders.default = str(tmp_path)
+    view = SearchTab(store, settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    a = Candidate("A large", 1024**3, "https://example.test/a", 10, "a" * 40)
+    z = Candidate("Z small", 9 * 1024**2, "https://example.test/z", 2, "b" * 40)
+    view._show_results([a, z], indexer)
+    view.results.sortItems(1, Qt.SortOrder.AscendingOrder)
+    view.results.selectRow(0)
+    assert view.selected_results() == [z]
+    view.add_button.click()
+    assert [e.candidate.title for e in entries(store)] == [z.title]
+    view.add_button.click()
+    assert len(entries(store)) == 1
+    view.queue.selectRow(0)
+    view.remove.click()
+    assert entries(store) == []
+
+
+def test_search_runs_off_thread_with_category_and_fresh_paging(qtbot, tmp_path):
+    from torrentlinker.downloads import IndexerCategory
+
+    indexer = Indexer("https://example.test/api", "key")
+    calls = []
+
+    def search(query, cached=True):
+        calls.append((query, cached))
+        return [Candidate(str(n), n, "url" + str(n)) for n in range(100)]
+
+    indexer.search = search
+    settings = Settings(
+        indexer_categories={2000: IndexerCategory("Movies"), 2030: IndexerCategory("Film", 2000)}
+    )
+    view = SearchTab(Store(tmp_path / "state.db"), settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.query.setText("Ocean")
+    view.category.select_category(2030)
+    view.search_button.click()
+    qtbot.waitUntil(lambda: not view._searching)
+    assert calls[0][0].q == "Ocean" and calls[0][0].categories == (2030,)
+    assert calls[0][1] is False
+    view.next.click()
+    qtbot.waitUntil(lambda: len(calls) == 2 and not view._searching)
+    assert calls[1][0].offset == 100
+    assert view.previous.isEnabled()
+
+
+def test_publication_column_sorts_by_timestamp_and_queue_preserves_date(
+    qtbot, tmp_path, monkeypatch
+):
+    from PySide6.QtCore import QDateTime
+
+    from torrentlinker.indexer import publication_time
+
+    now = publication_time("2026-10-23T03:00:00Z")
+    monkeypatch.setattr("torrentlinker.gui.search_view.time.time", lambda: now)
+    store = Store(tmp_path / "dated.db")
+    indexer = Indexer("https://example.test/api", "key")
+    settings = Settings()
+    settings.download_folders.default = str(tmp_path)
+    view = SearchTab(store, settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.show()
+    old = Candidate("Old", 1, "old", published_at=publication_time("2026-10-22T23:30:00Z"))
+    new = Candidate("New", 1, "new", published_at=publication_time("2026-10-23T01:00:00Z"))
+    unknown = Candidate("Unknown", 1, "unknown")
+    view._show_results([old, new, unknown], indexer)
+    assert view.results.item(2, 7).text() == "–"
+    view.results.sortItems(7, Qt.SortOrder.DescendingOrder)
+    assert [view.results.item(i, 0).text() for i in range(3)] == ["New", "Old", "Unknown"]
+    assert new.published_at is not None
+    expected = QDateTime.fromMSecsSinceEpoch(round(new.published_at * 1000)).toLocalTime()
+    assert view.results.item(0, 7).text() == "2 hours"
+    assert view.results.item(1, 7).text() == "3 hours"
+    assert view.results.item(0, 7).toolTip() == expected.toString("yyyy-MM-dd HH:mm:ss t")
+    view.results.selectRow(0)
+    view.add_selected()
+    assert entries(store)[0].candidate.published_at == new.published_at
+    assert now is not None
+    now += 3600
+    view.refresh_ages()
+    assert view.results.item(0, 7).text() == "3 hours"
+    assert view.selected_results() == [new]
+    assert view.results.item(0, 7).data(Qt.ItemDataRole.UserRole) == new.published_at
+    view.results.sortItems(7, Qt.SortOrder.AscendingOrder)
+    assert [view.results.item(i, 0).text() for i in range(3)] == ["Unknown", "Old", "New"]
+
+
+def test_queue_worker_and_restart_recovery(qtbot, tmp_path):
+    store, indexer, client, c, data, folder = setup_queue(tmp_path)
+    key = entries(store)[0].key
+    store.download_outcome(key, "sending")
+    view = SearchTab(store, Settings(), lambda: indexer, lambda: client)
+    qtbot.addWidget(view)
+    assert entries(store)[0].status == "queued"
+    assert not client.downloads
+    view.start.click()
+    qtbot.waitUntil(lambda: view.runner is None)
+    assert client.downloads == [c.infohash]
+    assert entries(store)[0].status == "sent"
+    assert not view.start.isEnabled()
+    restored = SearchTab(store, Settings(), lambda: indexer, lambda: client)
+    qtbot.addWidget(restored)
+    assert restored.queue.item(0, 3).text() == "Sent to client"
+    assert not restored.start.isEnabled()
+    restored.show()
+    restored.view_queue.click()
+    assert restored.queue.isVisible()
+
+
+def test_search_zen_uses_profile_and_numeric_sort_and_website_uses_selected_identity(
+    qtbot, tmp_path, monkeypatch
+):
+    import httpx
+
+    from tests.test_torrent_search import fake_indexer
+    from torrentlinker.zen import ZenClass, ZenProfile, ZenTorrent, added_values, note
+
+    indexer = fake_indexer(lambda r: httpx.Response(200, json={}))
+    settings = Settings(zen=ZenProfile(zen_class=ZenClass.SWARM_KEEPER, seed_hours=12))
+    view = SearchTab(Store(tmp_path / "state.db"), settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    rows = [
+        Candidate("Large", 20 * 10**9, "download-a", 10, "a" * 40, categories=(2030,)),
+        Candidate("Small", 10**9, "download-b", 5, "b" * 40, categories=(2030,)),
+    ]
+    view._show_results(rows, indexer)
+    expected = added_values(
+        settings.zen, [ZenTorrent(c.size, c.seeders + 1, category=2030) for c in rows]
+    )
+    for i, _row in enumerate(rows):
+        assert view.results.item(i, 5).text() == f"≈ {expected[i]:.2f}"
+        expected_note = note(
+            settings.zen.zen_class, ZenTorrent(_row.size, _row.seeders + 1, category=2030)
+        )
+        assert view.results.item(i, 6).text() == f"≈ {expected_note:.2f}"
+        assert view.results.item(i, 6).data(Qt.ItemDataRole.UserRole) == expected_note
+    view.results.sortItems(5, Qt.SortOrder.AscendingOrder)
+    view.results.selectRow(0)
+    opened = []
+    monkeypatch.setattr(
+        "torrentlinker.gui.search_view.QDesktopServices.openUrl",
+        lambda url: opened.append(url.toString()),
+    )
+    view.website_button.click()
+    assert opened == ["https://c411.org/torrents/" + "b" * 40]
+    assert view.selected_results() == [rows[1]]
+    assert "Revival payouts are separate" in view.results.item(0, 5).toolTip()
+    view.results.sortItems(6, Qt.SortOrder.AscendingOrder)
+    view.results.clearSelection()
+    view.results.selectRow(0)
+    chosen_note = view.results.item(0, 6).text()
+    view.show_details()
+    assert f"Note: {chosen_note}" in view.browser.currentWidget().summary.text()
+
+
+def test_search_existing_seeds_keep_their_current_estimate_after_sorting(qtbot, tmp_path):
+    from types import SimpleNamespace
+
+    import httpx
+
+    from tests.test_torrent_search import fake_indexer
+    from torrentlinker.seeding import Seeding, SeedingRow
+    from torrentlinker.zen import ZenDay, ZenTorrent, note
+
+    indexer = fake_indexer(lambda r: httpx.Response(200, json={}))
+    view = SearchTab(Store(tmp_path / "state.db"), Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    a = Candidate("A", 10**9, "a", 1, "a" * 40)
+    b = Candidate("B", 2 * 10**9, "b", 2, "b" * 40)
+    view._show_results([a, b], indexer)
+    view.results.sortItems(0, Qt.SortOrder.DescendingOrder)
+    active = [ZenTorrent(10**9, 2, 180)]
+    view.set_seeding(Seeding([SeedingRow(SimpleNamespace(hash="a" * 40), 0.89)], ZenDay(), active))
+    assert view.results.item(1, 0).text() == "A"
+    assert view.results.item(1, 5).text() == "≈ 0.89"
+    assert "Already seeding" in view.results.item(1, 5).toolTip()
+    expected_note = note(view.settings.zen.zen_class, active[0])
+    assert view.results.item(1, 6).text() == f"≈ {expected_note:.2f}"
+
+
+def test_download_now_sends_only_open_torrent_and_keeps_others_queued(qtbot, tmp_path):
+    from torrentlinker.download_queue import enqueue
+
+    store, indexer, client, c, data, folder = setup_queue(tmp_path)
+    other = Candidate("Other", 100, "https://example.test/other", 1, "f" * 40)
+    enqueue(store, indexer, other, folder)
+    view = SearchTab(store, Settings(), lambda: indexer, lambda: client)
+    qtbot.addWidget(view)
+    message = view.download_candidate(c, indexer, str(folder), True)
+    assert "started" in message
+    qtbot.waitUntil(lambda: view.runner is None)
+    assert client.downloads == [c.infohash]
+    states = {entry.candidate.infohash: entry.status for entry in entries(store)}
+    assert states[c.infohash] == "sent" and states[other.infohash] == "queued"
+
+
+def test_add_from_details_does_not_start_queue_or_silently_change_folder(qtbot, tmp_path):
+    import pytest
+
+    store, indexer, client, c, data, folder = setup_queue(tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, lambda: client)
+    qtbot.addWidget(view)
+    assert view.download_candidate(c, indexer, str(folder), False) == "Already in the queue."
+    assert client.downloads == []
+    different = tmp_path / "other"
+    different.mkdir()
+    with pytest.raises(ValueError, match="already queued"):
+        view.download_candidate(c, indexer, str(different), True)
+    with pytest.raises(ValueError, match="accessible"):
+        view.download_candidate(c, indexer, "", False)
+    assert len(entries(store)) == 1 and entries(store)[0].folder == folder

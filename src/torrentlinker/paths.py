@@ -69,6 +69,10 @@ class MappedQbit:
         self._inner = inner
         self._mapper = mapper
 
+    @property
+    def supports_category_tags(self) -> bool:
+        return self._inner.supports_category_tags
+
     def _local(self, t: Torrent) -> Torrent:
         return replace(t, save_path=Path(self._mapper.to_local(str(t.save_path))))
 
@@ -108,6 +112,9 @@ class MappedQbit:
 
     def add_tags(self, hash: str, tags: list[str]) -> None:
         self._inner.add_tags(hash, tags)
+
+    def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
+        self._inner.add_tags_many(hashes, tags)
 
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         self._inner.remove_tags(hash, tags)

@@ -7,9 +7,11 @@ reaches the Indexer.
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from torrentlinker.category_tags import CategoryTagSync
 from torrentlinker.domain import Torrent
+from torrentlinker.downloads import IndexerCategory
 from torrentlinker.reseed import TAG
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.zen import (
@@ -26,6 +28,8 @@ from torrentlinker.zen import (
 class SeedingRow:
     torrent: Torrent
     zen: float | None  # None when the torrent is not seeding
+    category: int | None = None
+    provisional_category: bool = False
 
 
 @dataclass(frozen=True)
@@ -33,6 +37,8 @@ class Seeding:
     rows: list[SeedingRow]
     day: ZenDay
     active: list[ZenTorrent]  # the seeding torrents, as the Zen rules see them
+    categories: dict[int, IndexerCategory] = field(default_factory=dict)
+    tag_sync: CategoryTagSync | None = None
 
     @property
     def count(self) -> int:
@@ -88,11 +94,23 @@ def seeding(
     uploads: int = 0,
     *,
     catalogue: Mapping[str, CatalogueRow] = {},
+    categories: Mapping[int, IndexerCategory] = {},
 ) -> Seeding:
     """Every Indexer torrent in qBittorrent, with a Zen Estimate for those seeding."""
-    mine = indexer_torrents(torrents, indexer_url)
+    mine = indexer_torrents(torrents, indexer_url, catalogue)
     active = [t for t in mine if t.is_seeding]
     as_zen = [zen_torrent(t, catalogue.get(t.hash.lower())) for t in active]
     day = estimate(profile, as_zen, uploads)
     zen = dict(zip((t.hash for t in active), day.per_torrent, strict=True))
-    return Seeding([SeedingRow(t, zen.get(t.hash)) for t in mine], day, as_zen)
+    rows = []
+    for torrent in mine:
+        cached = catalogue.get(torrent.hash.lower())
+        rows.append(
+            SeedingRow(
+                torrent,
+                zen.get(torrent.hash),
+                cached.category if cached else None,
+                cached is not None and cached.source == "zen-lab",
+            )
+        )
+    return Seeding(rows, day, as_zen, dict(categories))

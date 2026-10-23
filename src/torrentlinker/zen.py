@@ -265,9 +265,11 @@ def compare_classes(
 
 
 def is_indexer_torrent(tracker: str, indexer_url: str) -> bool:
-    """Whether a torrent's tracker belongs to the Indexer's site (same domain)."""
+    """Same-site trackers, including c411's alternate announce host."""
     host = _host(tracker)
     site = ".".join(_host(indexer_url).split(".")[-2:])
+    if site == "c411.org" and host == "tk.c411.tw":
+        return True
     return bool(host and site) and (host == site or host.endswith("." + site))
 
 

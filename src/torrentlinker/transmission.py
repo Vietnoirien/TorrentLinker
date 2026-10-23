@@ -81,6 +81,8 @@ class TransmissionApi:
     several labels per torrent, which stand for the port's tags as they are.
     """
 
+    supports_category_tags = True
+
     def __init__(
         self, host: str, username: str = "", password: str = "", http: httpx.Client | None = None
     ) -> None:
@@ -261,6 +263,10 @@ class TransmissionApi:
         self._call(
             "torrent-set", ids=[hash], labels=[*current, *(t for t in tags if t not in current)]
         )
+
+    def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
+        for hash in hashes:
+            self.add_tags(hash, tags)
 
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         labels = [t for t in self._labels(hash) if t not in tags]

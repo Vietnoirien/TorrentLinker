@@ -1,7 +1,12 @@
 # PyInstaller spec: one-file .exe on Windows, one-dir build on Linux (wrapped into an AppImage).
 import sys
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+    copy_metadata,
+)
 
 windows = sys.platform == "win32"
 
@@ -9,6 +14,7 @@ datas = (
     collect_data_files("torrentlinker")
     + collect_data_files("guessit")
     + collect_data_files("babelfish")
+    + copy_metadata("torrentlinker")
 )
 hiddenimports = (
     collect_submodules("keyring.backends")

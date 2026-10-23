@@ -22,6 +22,9 @@ from torrentlinker.torrent_meta import read_torrent
 
 
 class Qbit(Protocol):
+    @property
+    def supports_category_tags(self) -> bool: ...
+
     def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
         """Torrents, optionally without their file lists (much faster)."""
         ...
@@ -56,6 +59,7 @@ class Qbit(Protocol):
         ...
 
     def add_tags(self, hash: str, tags: list[str]) -> None: ...
+    def add_tags_many(self, hashes: list[str], tags: list[str]) -> None: ...
     def remove_tags(self, hash: str, tags: list[str]) -> None: ...
 
 
@@ -139,6 +143,8 @@ class QbitApi:
     listing is 22 MB that a NAS takes 15 s to send, so listings that overlap at start-up
     timed out or were dropped. Listings wait for each other instead.
     """
+
+    supports_category_tags = True
 
     def __init__(self, host: str, username: str, password: str, api_key: str = "") -> None:
         client = qbittorrentapi.Client(
@@ -263,6 +269,9 @@ class QbitApi:
 
     def add_tags(self, hash: str, tags: list[str]) -> None:
         self._client.torrents_add_tags(tags=tags, torrent_hashes=hash)
+
+    def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
+        self._client.torrents_add_tags(tags=tags, torrent_hashes=hashes)
 
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         self._client.torrents_remove_tags(tags=tags, torrent_hashes=hash)

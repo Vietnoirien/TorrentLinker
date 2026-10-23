@@ -9,6 +9,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from typing import Any
 from urllib.parse import urlsplit
@@ -121,6 +123,21 @@ class Candidate:
     infohash: str | None = None
     details_url: str = ""
     categories: tuple[int, ...] = field(default=())
+    published_at: float | None = None  # UTC Unix timestamp, when supplied by the Indexer.
+
+
+def publication_time(value: str | None) -> float | None:
+    """Read c411 ISO dates and Torznab RSS pubDate without rejecting a result."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        try:
+            date = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            date = parsedate_to_datetime(value.strip())
+        return (date if date.tzinfo else date.replace(tzinfo=UTC)).timestamp()
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None
 
 
 _CAPS_MODES = {
@@ -342,6 +359,30 @@ class Indexer:
             )
         ).json()
 
+    def search_categories(self) -> dict[str, Any]:
+        """c411's native search tree; its IDs differ from Torznab categories."""
+        if not self.is_c411:
+            raise ValueError("Native search categories are only available on c411.org")
+        return self._request(
+            lambda key: (
+                "https://c411.org/api/categories",
+                None,
+                {"Authorization": f"Bearer {key}"},
+            )
+        ).json()
+
+    def search_filter_options(self, category: int) -> dict[str, Any]:
+        """Search facets for a root category, distinct from required Upload options."""
+        if not self.is_c411:
+            raise ValueError("Native search filters are only available on c411.org")
+        return self._request(
+            lambda key: (
+                f"https://c411.org/api/categories/{int(category)}/filter-options",
+                None,
+                {"Authorization": f"Bearer {key}"},
+            )
+        ).json()
+
     def by_tmdb(self, ids: dict[str, str]) -> list[Candidate]:
         """The releases c411 has of a TMDb id (`tmdbId`, `tmdbType` movie or tv)."""
         if not self.is_c411:
@@ -491,6 +532,7 @@ def _parse_items(xml: str) -> list[Candidate]:
                 infohash=(attrs.get("infohash", [""])[0].lower() or None),
                 details_url=item.findtext("link", "") or item.findtext("guid", ""),
                 categories=tuple(int(c) for c in attrs.get("category", []) if c.isdigit()),
+                published_at=publication_time(item.findtext("pubDate")),
             )
         )
     return candidates

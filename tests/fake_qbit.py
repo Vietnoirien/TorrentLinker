@@ -13,6 +13,8 @@ CHECKING = "checkingUP"
 
 @dataclass
 class FakeQbit:
+    supports_category_tags = True
+
     by_hash: dict[str, Torrent] = field(default_factory=dict)
     priorities: dict[str, dict[int, int]] = field(default_factory=dict)
     removed: list[tuple[str, bool]] = field(default_factory=list)
@@ -86,6 +88,10 @@ class FakeQbit:
     def add_tags(self, hash: str, tags: list[str]) -> None:
         t = self.by_hash[hash]
         self._set(hash, tags=t.tags | set(tags))
+
+    def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
+        for hash in hashes:
+            self.add_tags(hash, tags)
 
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         t = self.by_hash[hash]

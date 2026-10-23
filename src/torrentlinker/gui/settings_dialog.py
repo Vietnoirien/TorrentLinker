@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -43,6 +44,7 @@ from torrentlinker.credentials import TMDB_API_KEY, get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.errors import offer_whole_names
+from torrentlinker.gui.tables import style_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import WARNING, class_label
 from torrentlinker.indexer import Caps, Indexer
@@ -94,7 +96,7 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Settings"))
-        self.resize(820, 720)
+        self.resize(1020, 720)
         self.settings = settings
         self._loaded_secrets: dict[str, str] = {}
 
@@ -124,8 +126,25 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         outer = QVBoxLayout(self)
-        outer.addWidget(self.tabs)
+        self.tabs.tabBar().hide()
+        navigation = QListWidget()
+        navigation.setObjectName("navigation")
+        navigation.setAccessibleName(self.tr("Settings sections"))
+        navigation.setFixedWidth(210)
+        navigation.setWordWrap(True)
+        navigation.addItems(
+            [self.tabs.tabText(i).replace("&&", "&") for i in range(self.tabs.count())]
+        )
+        navigation.setCurrentRow(0)
+        navigation.currentRowChanged.connect(self.tabs.setCurrentIndex)
+        self.tabs.currentChanged.connect(navigation.setCurrentRow)
+        body = QHBoxLayout()
+        body.addWidget(navigation)
+        body.addWidget(self.tabs, 1)
+        outer.addLayout(body, 1)
         outer.addWidget(buttons)
+        for table in self.findChildren(QTableWidget):
+            style_table(table)
 
     @staticmethod
     def _page(*boxes: QWidget, fill: bool = False) -> QScrollArea:
@@ -181,6 +200,12 @@ class SettingsDialog(QDialog):
         self.language.setCurrentIndex(max(self.language.findData(self.settings.language), 0))
         self.language.setToolTip(self.tr("Takes effect after restarting the app"))
         form.addRow(self.tr("Language"), self.language)
+        self.theme = QComboBox()
+        self.theme.addItem(self.tr("System"), "auto")
+        self.theme.addItem(self.tr("Light"), "light")
+        self.theme.addItem(self.tr("Dark"), "dark")
+        self.theme.setCurrentIndex(max(self.theme.findData(self.settings.theme), 0))
+        form.addRow(self.tr("Theme"), self.theme)
         return box
 
     # Zen -------------------------------------------------------------------
@@ -543,7 +568,7 @@ class SettingsDialog(QDialog):
             [self.tr("Folder"), self.tr("Content Kind"), self.tr("Scan depth")]
         )
         self.folders.horizontalHeader().setSectionResizeMode(
-            COL_PATH, QHeaderView.ResizeMode.Stretch
+            COL_PATH, QHeaderView.ResizeMode.Interactive
         )
         for f in self.settings.library_folders:
             self._add_folder_row(f)
@@ -646,7 +671,7 @@ class SettingsDialog(QDialog):
         header = self.download_table.horizontalHeader()
         # Long merged labels (one id covering several c411 categories) are elided, with
         # the full label as tooltip, so the folder columns stay visible.
-        header.setSectionResizeMode(COL_CATEGORY, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(COL_CATEGORY, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(COL_FOLDER, QHeaderView.ResizeMode.Interactive)
         header.resizeSection(COL_FOLDER, 240)
         header.setSectionResizeMode(COL_RESOLVED, QHeaderView.ResizeMode.Interactive)
@@ -762,9 +787,9 @@ class SettingsDialog(QDialog):
             [self.tr("On this computer"), self.tr("In the client"), self.tr("Check")]
         )
         header = self.mappings.horizontalHeader()
-        header.setSectionResizeMode(COL_LOCAL, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(COL_QBIT, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(COL_LOCAL, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(COL_QBIT, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.Interactive)
         self.mappings.verticalHeader().setVisible(False)
         for m in self.settings.path_mappings:
             self._add_mapping_row(m)
@@ -1109,6 +1134,7 @@ class SettingsDialog(QDialog):
         s.proxy.username = self.proxy_user.text().strip()
         s.proxy.torrent_client = self.proxy_client.isChecked()
         s.language = self.language.currentData()
+        s.theme = self.theme.currentData()
         s.client = self._chosen_client()
         s.deluge.host = self.deluge_host.text().strip()
         s.transmission.host = self.transmission_host.text().strip()

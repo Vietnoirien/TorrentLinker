@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS search_cache (
     body TEXT NOT NULL,
     fetched_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS download_queue (
+    id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    reason TEXT NOT NULL DEFAULT '',
+    added_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS verification (
     hash TEXT PRIMARY KEY,
     item_path TEXT NOT NULL,
@@ -200,6 +207,32 @@ class Store:
         with self._lock, self._db:
             self._db.executescript(SCHEMA)
             self._migrate()
+
+    def enqueue_download(self, key: str, payload: dict[str, object]) -> bool:
+        """Payload URLs must already have credentials redacted by the Indexer."""
+        with self._lock, self._db:
+            cursor = self._db.execute(
+                "INSERT OR IGNORE INTO download_queue(id, payload, added_at) VALUES (?, ?, ?)",
+                (key, json.dumps(payload), time.time()),
+            )
+            return cursor.rowcount > 0
+
+    def queued_downloads(self) -> list[tuple[str, dict[str, object], str, str]]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, payload, status, reason FROM download_queue ORDER BY added_at, rowid"
+            ).fetchall()
+        return [(key, json.loads(payload), status, reason) for key, payload, status, reason in rows]
+
+    def download_outcome(self, key: str, status: str, reason: str = "") -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE download_queue SET status=?, reason=? WHERE id=?", (status, reason, key)
+            )
+
+    def remove_downloads(self, keys: list[str]) -> None:
+        with self._lock, self._db:
+            self._db.executemany("DELETE FROM download_queue WHERE id=?", [(key,) for key in keys])
 
     def _migrate(self) -> None:
         feed_columns = {r[1] for r in self._db.execute("PRAGMA table_info(catalogue_feed)")}

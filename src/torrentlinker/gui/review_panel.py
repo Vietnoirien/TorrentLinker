@@ -4,7 +4,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
@@ -51,12 +52,12 @@ GREEN, ORANGE, RED = QColor("#2e7d32"), QColor("#ef6c00"), QColor("#c62828")
 def _readonly_table(headers: list[str]) -> QTableWidget:
     table = QTableWidget(0, len(headers))
     table.setHorizontalHeaderLabels(headers)
-    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-    table.verticalHeader().setVisible(False)
+    sortable_table(table)
     return table
 
 
@@ -110,10 +111,13 @@ class ReviewPanel(QWidget):
         self.candidates = _readonly_table(
             [self.tr("Candidate"), self.tr("Size"), self.tr("Seeders"), self.tr("Match")]
         )
+        self.empty_state = EmptyState(
+            self.candidates, self.tr("Select a Local Item and search for Candidates.")
+        )
         self.candidates.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.candidates.itemSelectionChanged.connect(self._candidate_selected)
         self.files = _readonly_table([self.tr("Torrent file"), self.tr("Local file"), ""])
-        self.files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
 
         actions = QHBoxLayout()
         self.check_button = QPushButton(self.tr("Check files"))
@@ -139,6 +143,7 @@ class ReviewPanel(QWidget):
         self.reseed_button.setToolTip(
             self.tr("Add to your torrent client against your files, verify, then seed")
         )
+        self.reseed_button.setProperty("primary", True)
         self.reseed_button.clicked.connect(self._reseed_selected)
         actions.addWidget(self.reseed_button)
         self.action_row = actions
@@ -191,13 +196,19 @@ class ReviewPanel(QWidget):
         """The Candidate whose files are shown: the current one among the selection."""
         rows = self.selected_all()
         current = self.candidates.currentRow()
-        if 0 <= current < len(self.checked) and self.checked[current] in rows:
-            return self.checked[current]
+        cell = self.candidates.item(current, 0)
+        candidate = cell.data(Qt.ItemDataRole.UserRole) if cell else None
+        if candidate in rows:
+            return candidate
         return rows[0] if rows else None
 
     def selected_all(self) -> list[CheckedCandidate]:
         rows = sorted(i.row() for i in self.candidates.selectionModel().selectedRows())
-        return [self.checked[r] for r in rows]
+        return [
+            cell.data(Qt.ItemDataRole.UserRole)
+            for r in rows
+            if (cell := self.candidates.item(r, 0)) is not None
+        ]
 
     # Search ----------------------------------------------------------------
 
@@ -242,20 +253,35 @@ class ReviewPanel(QWidget):
         if not checked:
             self.title.setText(self.title.text() + "<br>" + self.tr("No Candidates found"))
         elif self.checked[0].match is not None:
-            self.candidates.selectRow(0)
+            self._select_candidate(self.checked[0])
+
+    def _select_candidate(self, candidate: CheckedCandidate) -> None:
+        for row in range(self.candidates.rowCount()):
+            cell = self.candidates.item(row, 0)
+            if cell is not None and cell.data(Qt.ItemDataRole.UserRole) is candidate:
+                self.candidates.selectRow(row)
+                return
 
     def _fill_candidates(self) -> None:
-        self.candidates.setRowCount(len(self.checked))
-        for r, v in enumerate(self.checked):
-            c = v.candidate
-            self.candidates.setItem(r, 0, QTableWidgetItem(c.title))
-            self.candidates.setItem(r, 1, QTableWidgetItem(human_size(c.size)))
-            self.candidates.setItem(r, 2, QTableWidgetItem(str(c.seeders)))
-            label, color = self._match_label(v)
-            cell = QTableWidgetItem(label)
-            if color:
-                cell.setForeground(color)
-            self.candidates.setItem(r, 3, cell)
+        with QSignalBlocker(self.candidates):
+            self.candidates.setSortingEnabled(False)
+            self.candidates.setRowCount(0)
+            self.candidates.setRowCount(len(self.checked))
+            for r, v in enumerate(self.checked):
+                c = v.candidate
+                title = QTableWidgetItem(c.title)
+                title.setData(Qt.ItemDataRole.UserRole, v)
+                title.setToolTip(c.title)
+                self.candidates.setItem(r, 0, title)
+                self.candidates.setItem(r, 1, NumberItem(human_size(c.size), c.size))
+                self.candidates.setItem(r, 2, NumberItem(str(c.seeders), c.seeders))
+                label, color = self._match_label(v)
+                cell = QTableWidgetItem(label)
+                if color:
+                    cell.setForeground(color)
+                self.candidates.setItem(r, 3, cell)
+            self.candidates.setSortingEnabled(True)
+        self._candidate_selected()
 
     def _match_label(self, v: CheckedCandidate) -> tuple[str, QColor | None]:
         if not v.compared:
@@ -288,6 +314,7 @@ class ReviewPanel(QWidget):
         cmp = v.comparison
         rows: list[tuple[str, str | None]] = list(cmp.pairs.items())
         rows += [(t, None) for t in cmp.unwanted]
+        self.files.setSortingEnabled(False)
         self.files.setRowCount(len(rows))
         for r, (t_path, local) in enumerate(sorted(rows)):
             self.files.setItem(r, 0, QTableWidgetItem(t_path))
@@ -305,6 +332,7 @@ class ReviewPanel(QWidget):
             cell = QTableWidgetItem(status)
             cell.setForeground(color)
             self.files.setItem(r, 2, cell)
+        self.files.setSortingEnabled(True)
 
     def _update_actions(self) -> None:
         v, chosen = self.selected(), self.selected_all()
@@ -365,7 +393,7 @@ class ReviewPanel(QWidget):
         self.cache[entry.item.path] = list(self.checked)
         self.candidates_checked.emit(entry, self.checked)
         self._fill_candidates()
-        self.candidates.selectRow(i)
+        self._select_candidate(new)
 
     def _reseed_selected(self) -> None:
         entry = self.entry

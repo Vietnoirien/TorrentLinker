@@ -200,8 +200,8 @@ def test_main_window_opens_on_the_zen_tab_and_shows_the_seeding_view(qtbot, tmp_
 
     assert window.tabs.currentWidget() is window.zen_tab
     assert window.tabs.tabText(1) == "Library"
-    assert window.zen_tab.seeding_view.table.rowCount() == 1
-    assert "≈" in window.zen_tab.seeding_view.table.item(0, 4).text()  # type: ignore[union-attr]
+    assert len(window.zen_tab.seeding_view.table.torrents) == 1
+    assert "≈" in window.zen_tab.seeding_view.table.torrents["h"].text(4)  # type: ignore[union-attr]
 
 
 def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
@@ -233,7 +233,7 @@ def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
     view = window.zen_tab.seeding_view
     view.show_seeding(window.seeding_loader()())
     before = view.seeding.day.total
-    assert view.table.item(0, 2).text() == "–"
+    assert view.table.torrents[row.infohash].text(2) == "–"
     assert store.catalogue()[0].seeders == 100
 
     window.zen_tab.plan_view.show_plan(Plan())
@@ -241,7 +241,7 @@ def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
     with qtbot.waitSignal(view.updated, timeout=5000):
         window.seeding_timer.timeout.emit()
 
-    assert view.table.item(0, 2).text() == "5"
+    assert view.table.torrents[row.infohash].text(2) == "5"
     assert view.seeding.day.total > before
     cached = store.catalogue()[0]
     assert cached.seeders == 4  # the current user is already one of the five seeders
@@ -720,7 +720,7 @@ def test_refreshing_a_long_seeding_list_again_is_quick(qtbot, tmp_path: Path) ->
     view.show_seeding(Seeding(rows, ZenDay([r.zen or 0 for r in rows]), []))
 
     assert time.monotonic() - started < 5  # replacing filled cells took over a minute
-    assert view.table.rowCount() == 1300
+    assert len(view.table.torrents) == 1300
 
 
 def test_plan_lists_reseeds_first_and_sends_them_through_verification(

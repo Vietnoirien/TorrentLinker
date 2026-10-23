@@ -71,6 +71,31 @@ def test_searches_are_spaced_by_c411s_documented_rate() -> None:
     assert gaps == [pytest.approx(0.5), pytest.approx(0.5)]  # 120 a minute
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["2026-10-23T10:00:00Z", "2026-10-23T12:00:00+02:00", "Fri, 23 Oct 2026 10:00:00 GMT"],
+)
+def test_publication_dates_preserve_timezone_and_survive_torznab_parsing(value):
+    from datetime import UTC, datetime
+
+    from torrentlinker.indexer import publication_time
+
+    expected = datetime(2026, 10, 23, 10, tzinfo=UTC).timestamp()
+    assert publication_time(value) == expected
+    xml = (
+        f"<rss><channel><item><title>Dated</title><pubDate>{value}</pubDate></item></channel></rss>"
+    )
+    candidate = make_indexer(lambda request: httpx.Response(200, text=xml)).search(SearchQuery())[0]
+    assert candidate.published_at == expected
+
+
+@pytest.mark.parametrize("value", [None, "", "invalid", "2026-13-40T10:00:00Z"])
+def test_invalid_publication_dates_are_unavailable(value):
+    from torrentlinker.indexer import publication_time
+
+    assert publication_time(value) is None
+
+
 def test_too_many_requests_is_retried_after_the_advertised_delay() -> None:
     clock = FakeClock()
     responses = [

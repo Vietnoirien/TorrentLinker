@@ -1,0 +1,127 @@
+# c411 category-specific search filters
+
+Checked on 2026-10-23 against the current first-party [listing client](https://c411.org/_nuxt/o7Qf9Ugw.js), [profile definitions](https://c411.org/_nuxt/sZ70szZm.js), and bounded live metadata requests. Requests used the configured c411 API key as a Bearer token. No torrent files were downloaded and no account settings were changed.
+
+## Implementation contract
+
+Use c411's native JSON listing for its advanced Search UI. Torznab category IDs collapse distinct native categories and cannot represent the website's full filter set. Keep Torznab search for other Indexers and existing Library reconciliation.
+
+Three read endpoints suffice:
+
+| Endpoint | Purpose | Live result |
+| --- | --- | --- |
+| [GET /api/categories](https://c411.org/api/categories) | Native category tree | 200 with Bearer; 401 anonymously |
+| [GET /api/categories/1/filter-options](https://c411.org/api/categories/1/filter-options) | Option groups for native root category 1 | 200 with Bearer; 401 anonymously |
+| [GET /api/torrents](https://c411.org/api/torrents) | Filtered, paginated torrent metadata | 200 with Bearer |
+
+`filter-options` takes the **root category ID**, whereas the existing upload `GET /api/categories/{subcategoryId}/options` takes a subcategory. These endpoints have different purposes. Root 10 search filter options returned an empty list despite the Upload UI having additional fields.
+
+The category response is `{ "data": [...] }`. Each root has `id`, `name`, `slug`, presentation properties, and `subcategories`. Each child has `id`, `categoryId`, `name`, and `slug`. Root and subcategory IDs occupy separate namespaces: root 1 and subcategory 1 both exist. Store a selection as a root plus optional child, not one ambiguous integer. The live response returned roots 1 Films & Vidéos, 2 Ebook, 3 Audio, 4 Applications, 5 Jeux Vidéo, 6 Emulation, 7 GPS, 9 Nulled, and 10 Imprimante 3D. It did not return root 8 for this account. Respect the fetched list rather than inventing missing categories.
+
+Example shape with a subset of the actual categories:
+
+```json
+{"data":[{"id":1,"name":"Films & Vidéos","slug":"films-videos","subcategories":[
+  {"id":6,"categoryId":1,"name":"Film","slug":"film"},
+  {"id":7,"categoryId":1,"name":"Série TV","slug":"serie-tv"}
+]}]}
+```
+
+The filter response has no upload-required flags and no per-subcategory visibility map:
+
+```json
+{"data":[{"id":5,"name":"Genre","slug":"genre","values":[
+  {"id":39,"value":"Action","slug":"action"},
+  {"id":40,"value":"Animalier","slug":"animalier"}
+]}]}
+```
+
+Every group allows a set of selected values in the website. Send selected **value IDs**, not group IDs, flattened into `options=39,40`. Preserve labels from the response and cache these public definitions by root category. Switching root clears selected subcategories and options; switching subcategories clears selected options. The website keeps video technical filters when switching between video subcategories.
+
+## Which filters to show
+
+The current listing client shows the root's fetched option groups regardless of selected child, with explicit video exceptions. Do not derive search filters from Upload's mandatory fields.
+
+| Selection | Filters from `/filter-options` |
+| --- | --- |
+| All categories | No category option groups or video technical filters |
+| Root 1 Films & Vidéos | `type`, `genre`; video language uses separate `lang` values |
+| Root 1, no child or a series child | Also `saison` and `episode` |
+| Root 2 Ebook | `format-audio`, `type-audio`, `langue-ebook`, `genre-audio-ebook`, `format-ebook`, `langue-bd`, `genre-ebook`, `style-litteraire`, `demographique` |
+| Root 10 Imprimante 3D | No groups in the observed response |
+| Other roots | Fetch and render the returned groups |
+
+The client identifies series children by slug `serie-tv`, `animation-serie`, `emission-tv`, or `serie-documentaire`. Season and episode are **option values**, not numeric `season` or `ep` query parameters. Example values include season group 7, `serie-integrale` value 118; episode group 6, `saison-complete` value 96, and `episode-01` value 97. Read their full available values from the endpoint. A straightforward multiselect works; the website adds shortcuts for full series, full seasons, and individual episodes.
+
+Year and uploader are available across categories. Year is release year, sent directly as `year`; the website input permits 1900 through 2100. Uploader is `uploader` with a 100-character input. Search text is `name`, limited to 200 characters in the client. Exclusivity and palliative filters are also global. These visibility rules come from the [listing client](https://c411.org/_nuxt/o7Qf9Ugw.js).
+
+## Video technical filters
+
+These choices are defined in the first-party JavaScript rather than returned by `filter-options`. Show them for native root 1. Values are comma-separated strings, with case and punctuation preserved.
+
+| API parameter | Values sent by the website |
+| --- | --- |
+| `resolution` | `2160p`, `1080p`, `720p`, `SD` |
+| `source` | `BluRay`, `Remux`, `BDMV`, `WEB-DL`, `WEBRip`, `DVDRip`, `HDTV`, `SDTV` |
+| `codec` | `H.265`, `H.264`, `H.263`, `H.262`, `AV1` |
+| `hdr` | `SDR`, `HDR10`, `HDR10+`, `DV`, `DV.HDR10`, `DV.HDR10+` |
+| `audioType` | `lossless`, `lossy` |
+| `channels` | `7.1`, `5.1`, `2.0`, `1.0` |
+| `profile` | `compatibility`, `pure`, `hc_optimized`, `optimization` |
+| `lang` | `MULTI`, `VFF`, `TRUEFRENCH`, `VOSTFR`, `VFQ`, `VF`, `MULTI.VF2`, `VF2` |
+
+The profile labels are Compatibilité, Home Cinéma Pure, Home Cinéma Optimisé, and Optimisation in the [profile definitions](https://c411.org/_nuxt/sZ70szZm.js). Let the server apply their matching rules; do not approximate them locally.
+
+Source requires care if copying the website's two-level control. UI `WEB` serializes as API `WEB-DL`. UI `BluRay` with no variant serializes as `BluRay,Remux,BDMV`. With variants selected, `Encode` becomes `BluRay`, `Remux` stays `Remux`, and `BDMV` stays `BDMV`. `variant` is a website URL parameter only; the API receives the expanded `source`. A desktop UI can instead expose those three API source choices individually with clear labels.
+
+The client offers `crew=true` for searching actors, directors and screenwriters. This is separate from the ordinary title search and is cleared when leaving video. The current screenshots did not request this toggle explicitly, but it is a supported additional filter.
+
+## Listing parameters and results
+
+The [listing client](https://c411.org/_nuxt/o7Qf9Ugw.js) sends `page`, `perPage`, `sortBy`, `sortOrder`, `category`, `subcat`, `name`, `year`, `uploader`, `options`, the video parameters above, `exclusive`, `palliative`, `palliativeTail`, and `crew`. `subcat` is comma-separated native child IDs. The website supports multiple children within the selected root. Its sort fields are `createdAt`, `seeders`, `leechers`, `size`, `completions`, `comments`, `name`, `category`, and `relevance` for text search. Sort order is `asc` or `desc`.
+
+Use `viewMode=flat` for selectable individual torrents. Two live requests verified:
+
+```text
+GET /api/torrents?page=1&perPage=2&viewMode=flat&category=1&subcat=6&resolution=1080p&sortBy=createdAt&sortOrder=desc
+GET /api/torrents?page=1&perPage=2&viewMode=flat&category=2&options=201&sortBy=createdAt&sortOrder=desc
+```
+
+Both returned 200 and **clamped `perPage` to 10**. The first returned Film rows whose `tech.resolution` was `1080p`, with `total=41789`, `page=1`, `perPage=10`, and `totalPages=1000`. The second returned Ebook Audio rows with `total=4092`, `perPage=10`, and `totalPages=410`. These changing counts are observations, not constants. The first result still has a 10,000-row window despite its larger total. Honor the returned page metadata and show an explicit limit when `totalPages * perPage < total`. Do not infer completeness from a short page or from the advertised total alone.
+
+Response shape, with invented identifying fields and representative actual types:
+
+```json
+{
+  "data": [{
+    "id": 1,
+    "infoHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "Example torrent",
+    "category": {"id": 1, "name": "Films & Vidéos", "slug": "films-videos"},
+    "subcategory": {"id": 6, "name": "Film", "slug": "film"},
+    "size": 1000000000,
+    "seeders": 10,
+    "leechers": 1,
+    "completions": 20,
+    "createdAt": "2026-10-23T10:00:00.000Z",
+    "isExclusive": false,
+    "isFreeleech": false,
+    "status": "approved",
+    "tech": {"resolution":"1080p","source":"WEB-DL","videoCodec":"H.265","hdrFormat":"SDR","audioCodec":"AAC","audioChannels":"2.0","languages":["VFF"],"season":null,"episode":null},
+    "palliativeSince": null,
+    "bountyZen": 0,
+    "palliativeCountdown": null
+  }],
+  "meta": {"total":41789,"totalTorrents":41789,"page":1,"perPage":10,"totalPages":1000,"palliativeMatches":0,"palliativeFallback":false,"palliativeCount":764}
+}
+```
+
+Rows can also include `description`, `language`, `quality`, `seasonEpisode`, `comments`, `uploader`, `hasNfo`, `contentStatus`, `isOwner`, `posterUrl`, `music`, and `media`. `tech` can be null, as observed for Ebook results. Metadata also includes global category and subcategory counts and total size. These category counts need not equal the filtered total. No download URL appeared in these rows; reuse TorrentLinker's existing validated hash-based c411 download URL builder.
+
+## Palliative search
+
+The website URL `palliative=true` becomes API `palliative=include`. The dedicated revival page uses `palliative=only`; see [palliative research](palliative.md). Normal text searches send `palliativeTail=true` when the toggle is off, so the website may append fallback revival matches. A desktop UI should label explicit modes such as Available, Include revival, and Revival only rather than assuming a Boolean means “only”. A row's `palliativeSince`, `bountyZen`, and `palliativeCountdown` describe this status. Do not infer it solely from zero seeders.
+
+## Local reference fixtures
+
+Public metadata snapshots from this investigation are at `/tmp/c411-search-categories.json`, `/tmp/c411-search-filter-options-1.json`, `/tmp/c411-search-filter-options-2.json`, and `/tmp/c411-search-filter-options-10.json`. Sanitized, shortened listing examples are `/tmp/c411-search-listing-0.json` and `/tmp/c411-search-listing-1.json`. They contain no API keys, private download URLs, uploader identity, descriptions, or original torrent names and hashes. Tests should use minimal synthetic fixtures with these shapes, rather than committing the whole live catalogue response.

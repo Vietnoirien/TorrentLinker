@@ -17,14 +17,16 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -32,6 +34,8 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.seeding_tree import SeedingTree
+from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.plan import Plan, PlanGoal, PlanOptions
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
@@ -54,29 +58,14 @@ def zen_text(value: float) -> str:
     return f"≈ {value:.2f}"
 
 
-class NumberItem(QTableWidgetItem):
-    """A cell that sorts by the number it holds, not by its text."""
-
-    def __init__(self, text: str, value: float) -> None:
-        super().__init__(text)
-        self.setData(Qt.ItemDataRole.UserRole, value)
-        self.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-    def __lt__(self, other: QTableWidgetItem) -> bool:
-        mine, theirs = self.data(Qt.ItemDataRole.UserRole), other.data(Qt.ItemDataRole.UserRole)
-        if isinstance(mine, int | float) and isinstance(theirs, int | float):
-            return mine < theirs
-        return super().__lt__(other)
-
-
 def readonly_table(headers: list[str]) -> QTableWidget:
     table = QTableWidget(0, len(headers))
     table.setHorizontalHeaderLabels(headers)
-    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-    table.verticalHeader().setVisible(False)
+    sortable_table(table)
     return table
 
 
@@ -113,28 +102,26 @@ class SeedingView(QWidget):
         self.refresh_button.clicked.connect(self.refresh)
         top.addWidget(self.refresh_button)
         layout.addLayout(top)
-        self.table = readonly_table(
-            [
-                self.tr("Torrent"),
-                self.tr("Size"),
-                self.tr("Seeders"),
-                self.tr("Seed age (days)"),
-                self.tr("≈ Zen/day"),
-            ]
-        )
-        age = self.table.horizontalHeaderItem(3)
-        if age:
-            age.setToolTip(
-                self.tr(
-                    "From your torrent client's seeding time: a lower bound of c411's count, which "
-                    "also includes time seeded before the torrent was added again."
-                )
-            )
-        self.table.horizontalHeader().setSortIndicator(4, Qt.SortOrder.DescendingOrder)
-        self.table.setSortingEnabled(True)
+        self.search = QLineEdit()
+        self.search.setAccessibleName(self.tr("Filter torrents or categories"))
+        self.search.setClearButtonEnabled(True)
+        layout.addWidget(self.search)
+        self.table = SeedingTree()
+        self.search.textChanged.connect(self.table.filter)
+        self.search.setPlaceholderText(self.tr("Filter torrents or categories…"))
+        self.expand_button = QPushButton(self.tr("Expand all"))
+        self.expand_button.clicked.connect(self.table.expandAll)
+        self.collapse_button = QPushButton(self.tr("Collapse all"))
+        self.collapse_button.clicked.connect(self.table.collapseAll)
+        top.insertWidget(1, self.expand_button)
+        top.insertWidget(2, self.collapse_button)
         layout.addWidget(self.table)
         self.total = QLabel()
         layout.addWidget(self.total)
+        self.tag_status = QLabel()
+        self.tag_status.setWordWrap(True)
+        self.tag_status.setProperty("role", "muted")
+        layout.addWidget(self.tag_status)
         self._show_total()
 
     def refresh(self, *, quiet: bool = False) -> None:
@@ -149,26 +136,32 @@ class SeedingView(QWidget):
     def show_seeding(self, view: Seeding) -> None:
         self.refresh_button.setEnabled(True)
         self.seeding = view
-        scrolled = self.table.verticalScrollBar().value()
-        clear_rows(self.table, len(view.rows))
-        for r, row in enumerate(view.rows):
-            t = row.torrent
-            days = t.seeding_time / 86400
-            self.table.setItem(r, 0, QTableWidgetItem(t.name))
-            self.table.setItem(r, 1, NumberItem(human_size(t.total_size), t.total_size))
-            self.table.setItem(
-                r,
-                2,
-                NumberItem(str(t.swarm_seeders) if t.swarm_seeders >= 0 else "–", t.swarm_seeders),
+        self.table.show_seeding(view)
+        report = view.tag_sync
+        self.tag_status.setToolTip("")
+        if report is None:
+            self.tag_status.clear()
+        elif not report.supported:
+            self.tag_status.setText(
+                self.tr(
+                    "Category tags: Deluge's single label is kept for Verification. "
+                    "The category tree is available here."
+                )
             )
-            self.table.setItem(r, 3, NumberItem(f"{days:.0f}", days))
-            zen = row.zen
-            cell = NumberItem(zen_text(zen) if zen is not None else "–", zen or -1.0)
-            if zen is None:
-                cell.setToolTip(self.tr("Not seeding: earns no Zen"))
-            self.table.setItem(r, 4, cell)
-        self.table.setSortingEnabled(True)
-        self.table.verticalScrollBar().setValue(scrolled)
+        elif report.failed:
+            self.tag_status.setText(
+                self.tr("Category tags: {0} updated, {1} failed; the next refresh retries.").format(
+                    report.updated, report.failed
+                )
+            )
+            self.tag_status.setToolTip("\n".join(report.errors))
+        else:
+            self.tag_status.setText(
+                self.tr(
+                    "Category tags: {0} updated, {1} already set, {2} without a known category."
+                ).format(report.updated, report.unchanged, report.unknown)
+            )
+            self.tag_status.setToolTip("")
         self._show_total()
         self.updated.emit(view)
 
@@ -422,6 +415,7 @@ class PlanView(QGroupBox):
         top.addWidget(self.categories_button)
         self._refresh_categories_label()
         self.make_button = QPushButton(self.tr("Make a Plan"))
+        self.make_button.setProperty("primary", True)
         self.make_button.clicked.connect(self.make_requested)
         top.addWidget(self.make_button)
         self.stop_fetch_button = QPushButton(self.tr("Stop fetching and plan now"))
@@ -488,6 +482,9 @@ class PlanView(QGroupBox):
             ]
         )
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+        self.empty_state = EmptyState(
+            self.table, self.tr("Make a Plan to see suggested torrents here.")
+        )
         # Plan order first: Reseeds, then downloads; a header click sorts.
         self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         self.table.setSortingEnabled(True)
@@ -660,7 +657,6 @@ class PlanView(QGroupBox):
         self.busy(False)
         self._show_times()
         clear_rows(self.table, len(plan.items))
-        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         for r, item in enumerate(plan.items):
             c = item.candidate
             size_text = self.tr("Reseed (0 Go)") if c.reseed else human_size(c.size)
@@ -682,6 +678,7 @@ class PlanView(QGroupBox):
                 (space.free, space.reserved, space.download, space.after_plan), 1
             ):
                 self.space_table.setItem(row, col, NumberItem(human_size(amount), amount))
+        self.space_table.setSortingEnabled(True)
         self.space_table.setVisible(bool(plan.disk_spaces))
         self.space_table.setFixedHeight(
             min(
@@ -857,12 +854,26 @@ class ZenTab(QWidget):
         self.seeding_view.updated.connect(self.comparison.show_seeding)
         self.catalogue = CatalogueBox()
         self.plan_view = PlanView()
-        split = QSplitter(Qt.Orientation.Vertical)
-        split.addWidget(self.seeding_view)
-        split.addWidget(self.plan_view)
-        layout.addWidget(split, 1)
-        layout.addWidget(self.comparison)
-        layout.addWidget(self.catalogue)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.pages = QTabWidget()
+        seeding_page = QWidget()
+        seeding_layout = QVBoxLayout(seeding_page)
+        seeding_layout.setContentsMargins(0, 0, 0, 0)
+        seeding_layout.addWidget(self.seeding_view, 1)
+        seeding_layout.addWidget(self.comparison)
+        catalogue_page = QWidget()
+        catalogue_layout = QVBoxLayout(catalogue_page)
+        catalogue_layout.setContentsMargins(0, 0, 0, 0)
+        catalogue_layout.addWidget(self.catalogue)
+        catalogue_layout.addStretch()
+        self.pages.addTab(seeding_page, self.tr("Seeding"))
+        plan_scroll = QScrollArea()
+        plan_scroll.setWidgetResizable(True)
+        plan_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        plan_scroll.setWidget(self.plan_view)
+        self.pages.addTab(plan_scroll, self.tr("Plan"))
+        self.pages.addTab(catalogue_page, self.tr("Catalogue"))
+        layout.addWidget(self.pages)
 
 
 KEYS_URL = "https://c411.org/user/integrations"
@@ -877,16 +888,18 @@ class ZenBand(QFrame):
 
     def __init__(self) -> None:
         super().__init__()
+        self.setObjectName("zenBand")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(8, 4, 8, 4)
+        outer.setContentsMargins(16, 12, 16, 12)
         row = QHBoxLayout()
         self.balance = QLabel()
         self.seeding = QLabel()
         self.plan = QLabel()
         self.catalogue = QLabel()
         for label in (self.balance, self.seeding, self.plan, self.catalogue):
-            row.addWidget(label)
+            label.setWordWrap(True)
+            row.addWidget(label, 1)
             row.addSpacing(16)
         row.addStretch()
         self.refresh_button = QPushButton(self.tr("Refresh profile"))
@@ -897,7 +910,7 @@ class ZenBand(QFrame):
         self.message = QLabel()
         self.message.setWordWrap(True)
         self.message.setOpenExternalLinks(True)
-        self.message.setStyleSheet(f"color: {WARNING.name()}")
+        self.message.setProperty("role", "error")
         self.message.hide()
         outer.addWidget(self.message)
         self.set_balance(None)

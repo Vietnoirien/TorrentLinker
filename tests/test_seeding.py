@@ -97,3 +97,15 @@ def test_qbit_adapter_keeps_unknown_counts_distinct_from_a_reported_zero(
     }
     qbit = QbitApi.__new__(QbitApi)
     assert qbit._torrent(data, with_files=False).swarm_seeders == expected
+
+
+def test_c411_alternate_tracker_films_are_counted_and_categorized(tmp_path):
+    store = Store(tmp_path / "s.db")
+    row = CatalogueRow("a" * 40, "Film", 4 * GB, 10, 2000, "u", "d", 123, "zen-lab")
+    store.save_catalogue([row])
+    film = torrent(row.infohash, "https://tk.c411.tw/announce/private")
+    cached = observe_swarm(store, [film], URL)
+    view = seeding(ZenProfile(), [film], URL, catalogue=cached)
+    assert len(view.rows) == 1
+    assert view.rows[0].category == 2000
+    assert view.count == 1

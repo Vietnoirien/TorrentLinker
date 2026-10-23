@@ -103,6 +103,8 @@ class LibraryModel(QAbstractTableModel):
         if not index.isValid():
             return None
         e = self.entries[index.row()]
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return str(e.item.path) if index.column() == 0 else self.data(index)
         if role == Qt.ItemDataRole.DisplayRole:
             return (
                 e.item.path.name,
@@ -127,14 +129,16 @@ class LibraryFilter(QSortFilterProxyModel):
         super().__init__()
         self.state: ItemState | None = None
         self.folder: Path | None = None
+        self.query = ""
+        self.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
 
-    def set_filters(self, state: ItemState | None, folder: Path | None) -> None:
+    def set_filters(self, state: ItemState | None, folder: Path | None, query: str = "") -> None:
         if hasattr(self, "beginFilterChange"):  # Qt >= 6.9
             self.beginFilterChange()
-            self.state, self.folder = state, folder
+            self.state, self.folder, self.query = state, folder, query.strip().casefold()
             self.endFilterChange()
         else:
-            self.state, self.folder = state, folder
+            self.state, self.folder, self.query = state, folder, query.strip().casefold()
             self.invalidateFilter()
 
     def filterAcceptsRow(
@@ -143,8 +147,10 @@ class LibraryFilter(QSortFilterProxyModel):
         model = self.sourceModel()
         assert isinstance(model, LibraryModel)
         e = model.entries[source_row]
-        return (self.state is None or e.state is self.state) and (
-            self.folder is None or e.folder.path == self.folder
+        return (
+            (self.state is None or e.state is self.state)
+            and (self.folder is None or e.folder.path == self.folder)
+            and (not self.query or self.query in e.item.path.name.casefold())
         )
 
     def lessThan(

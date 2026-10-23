@@ -97,6 +97,9 @@ class DelugeApi:
     daemon of its host list is connected. One session is shared by every thread.
     """
 
+    # A torrent has only one Label; category tags must not replace its existing label.
+    supports_category_tags = False
+
     def __init__(self, host: str, password: str, http: httpx.Client | None = None) -> None:
         base = host.strip().rstrip("/")
         if "//" not in base:
@@ -289,6 +292,10 @@ class DelugeApi:
         """One label holds one `a:b` tag: an added one replaces the torrent's own."""
         specific = any(":" in t for t in tags)
         self._label(hash, frozenset(tags) if specific else self._tags(hash) | set(tags))
+
+    def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
+        for hash in hashes:
+            self.add_tags(hash, tags)
 
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         # The Reseed flow removes a tag when Verification ends: a torrent left stopped

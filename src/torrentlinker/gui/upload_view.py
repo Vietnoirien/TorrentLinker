@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -45,6 +47,7 @@ from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.model_viewer import ModelPanel
 from torrentlinker.gui.settings_dialog import kind_label
+from torrentlinker.gui.tables import NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
@@ -436,11 +439,12 @@ class UploadTab(QWidget):
         self.items.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.items.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.items.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.items.verticalHeader().hide()
+        sortable_table(self.items)
         header = self.items.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(0, 240)
         for c in (1, 2):
-            header.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         header.resizeSection(3, 200)
         self.items.itemSelectionChanged.connect(self._item_selected)
@@ -486,11 +490,11 @@ class UploadTab(QWidget):
         right_layout.addWidget(self.options_box)
         self.problems = QLabel()
         self.problems.setWordWrap(True)
-        self.problems.setStyleSheet("color: #c0392b")
+        self.problems.setProperty("role", "error")
         right_layout.addWidget(self.problems)
         self.warnings = QLabel()  # judgement rules: amber, the Draft can still be saved
         self.warnings.setWordWrap(True)
-        self.warnings.setStyleSheet("color: #b9770e")
+        self.warnings.setProperty("role", "warning")
         right_layout.addWidget(self.warnings)
 
         # What c411 already has: information only, collapsible
@@ -517,11 +521,11 @@ class UploadTab(QWidget):
             [self.tr("In the torrent"), self.tr("Your file"), self.tr("Size")]
         )
         self.file_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.file_table.verticalHeader().hide()
+        sortable_table(self.file_table)
         fh = self.file_table.horizontalHeader()
-        fh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        fh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        fh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        fh.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        fh.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        fh.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
         self.pages.addTab(self.file_table, self.tr("Files"))
 
         description_page = QWidget()
@@ -576,15 +580,29 @@ class UploadTab(QWidget):
         actions.addWidget(self.stop_button)
         actions.addStretch()
         self.create_button = QPushButton()
+        self.create_button.setProperty("primary", True)
         self.create_button.clicked.connect(self.create_draft)
         actions.addWidget(self.create_button)
-        right_layout.addLayout(actions)
 
         main = QSplitter(Qt.Orientation.Horizontal)
         main.addWidget(left)
-        main.addWidget(right)
+        editor_scroll = QScrollArea()
+        editor_scroll.setWidgetResizable(True)
+        editor_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        editor_scroll.setWidget(right)
+        editor_scroll.setMinimumWidth(420)
+        editor = QWidget()
+        editor_layout = QVBoxLayout(editor)
+        editor_layout.setContentsMargins(8, 0, 0, 0)
+        editor_layout.addWidget(editor_scroll, 1)
+        editor_layout.addLayout(actions)
+        main.addWidget(editor)
+        main.setChildrenCollapsible(False)
+        main.setHandleWidth(2)
         main.setSizes([450, 750])
-        layout.addWidget(main, 1)
+        self.workspaces = QTabWidget()
+        self.workspaces.addTab(main, self.tr("Prepare Upload"))
+        layout.addWidget(self.workspaces, 1)
 
         drafts_box = QGroupBox(self.tr("Your c411 Drafts"))
         drafts_layout = QVBoxLayout(drafts_box)
@@ -593,10 +611,9 @@ class UploadTab(QWidget):
             [self.tr("Draft"), self.tr("Category"), self.tr("Modified")]
         )
         self.drafts.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.drafts.verticalHeader().hide()
-        self.drafts.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.drafts.setMaximumHeight(120)
-        drafts_layout.addWidget(self.drafts)
+        sortable_table(self.drafts)
+        self.drafts.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        drafts_layout.addWidget(self.drafts, 1)
         row = QHBoxLayout()
         self.drafts_status = QLabel()
         row.addWidget(self.drafts_status, 1)
@@ -607,7 +624,7 @@ class UploadTab(QWidget):
         open_page.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(C411_UPLOAD_PAGE)))
         row.addWidget(open_page)
         drafts_layout.addLayout(row)
-        layout.addWidget(drafts_box)
+        self.workspaces.addTab(drafts_box, self.tr("Drafts"))
 
         self._image_timer = QTimer(self)
         self._image_timer.setSingleShot(True)
@@ -644,10 +661,14 @@ class UploadTab(QWidget):
 
     def select(self, path: Path) -> None:
         """Show the Upload form for this Local Item, even if the filters hid it."""
+        self.workspaces.setCurrentIndex(0)
         if all(e.item.path != path for e in self.shown):
             self.kind_filter.setCurrentIndex(0)
             self.show_all.setChecked(True)
-        for r, e in enumerate(self.shown):
+        for r in range(self.items.rowCount()):
+            selected_cell = self.items.item(r, 0)
+            assert selected_cell is not None
+            e = selected_cell.data(Qt.ItemDataRole.UserRole)
             if e.item.path == path:
                 self.items.selectRow(r)
                 return
@@ -705,6 +726,8 @@ class UploadTab(QWidget):
         rows.sort(key=lambda r: (r[0], r[1]))
         self.shown = [e for _, _, e, _ in rows]
         self.items.blockSignals(True)
+        self.items.setSortingEnabled(False)
+        self.items.setRowCount(0)
         self.items.setRowCount(len(rows))
         for r, (_, _, e, reason) in enumerate(rows):
             status = reason or (
@@ -714,16 +737,22 @@ class UploadTab(QWidget):
             )
             cells = [e.item.path.name, kind_label(e.folder.kind), human_size(e.item.size), status]
             for c, text in enumerate(cells):
-                cell = QTableWidgetItem(text)
+                cell = NumberItem(text, e.item.size) if c == 2 else QTableWidgetItem(text)
+                if c == 0:
+                    cell.setData(Qt.ItemDataRole.UserRole, e)
                 cell.setToolTip(text)
                 if reason:
                     cell.setForeground(Qt.GlobalColor.gray)
                 self.items.setItem(r, c, cell)
+        self.items.setSortingEnabled(True)
         self.items.blockSignals(False)
         if selected is not None and selected not in {e.item.path for e in self.shown}:
             self.entry = None
             self._show_entry()
-        for r, e in enumerate(self.shown):
+        for r in range(self.items.rowCount()):
+            selected_cell = self.items.item(r, 0)
+            assert selected_cell is not None
+            e = selected_cell.data(Qt.ItemDataRole.UserRole)
             if e.item.path == selected:
                 self.items.selectRow(r)
         hidden = len(self.candidates()) - len(self.shown)
@@ -797,7 +826,8 @@ class UploadTab(QWidget):
 
     def _item_selected(self) -> None:
         rows = self.items.selectionModel().selectedRows()
-        entry = self.shown[rows[0].row()] if rows else None
+        cell = self.items.item(rows[0].row(), 0) if rows else None
+        entry = cell.data(Qt.ItemDataRole.UserRole) if cell else None
         if entry is self.entry:
             return
         self.entry = entry
@@ -1173,10 +1203,14 @@ class UploadTab(QWidget):
         )
 
     def _show_files(self) -> None:
+        self.file_table.setSortingEnabled(False)
+        self.file_table.setRowCount(0)
         self.file_table.setRowCount(len(self.files))
         for r, f in enumerate(self.files):
             for c, text in enumerate([f.torrent_path, f.local_path, human_size(f.size)]):
-                self.file_table.setItem(r, c, QTableWidgetItem(text))
+                cell = NumberItem(text, f.size) if c == 2 else QTableWidgetItem(text)
+                self.file_table.setItem(r, c, cell)
+        self.file_table.setSortingEnabled(True)
         self.pages.setTabText(0, self.tr("Files ({0})").format(len(self.files)))
 
     def _set_text(self, editor: QPlainTextEdit, text: str) -> None:
@@ -1477,6 +1511,8 @@ class UploadTab(QWidget):
         run_in_background(indexer.drafts, self._show_drafts, self._drafts_failed)
 
     def _show_drafts(self, drafts: list[dict[str, object]]) -> None:
+        self.drafts.setSortingEnabled(False)
+        self.drafts.setRowCount(0)
         self.drafts.setRowCount(len(drafts))
         for r, d in enumerate(drafts):
             category = d.get("subcategory") or d.get("category") or ""
@@ -1485,6 +1521,7 @@ class UploadTab(QWidget):
             modified = str(d.get("updatedAt") or "")[:16].replace("T", " ")
             for c, text in enumerate([str(d.get("name") or ""), str(category), modified]):
                 self.drafts.setItem(r, c, QTableWidgetItem(text))
+        self.drafts.setSortingEnabled(True)
         self.drafts_status.setText(self.tr("{0}/15 Drafts on c411").format(len(drafts)))
 
     def _drafts_failed(self, error: Exception) -> None:

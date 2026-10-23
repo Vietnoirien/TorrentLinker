@@ -11,7 +11,9 @@ from PySide6.QtWidgets import QApplication
 from torrentlinker import i18n
 from torrentlinker.config import Settings
 from torrentlinker.gui.main_window import MainWindow
+from torrentlinker.gui.theme import apply_theme
 from torrentlinker.store import Store
+from torrentlinker.updates import CHECK_INTERVAL, installed_version, release_version
 
 
 def data_dir() -> Path:
@@ -34,6 +36,7 @@ def smoke_checks() -> None:
     assert info.get("title") == "Amelie" and info.get("year") == 2001, info
     assert (Path(i18n.__file__).parent / "torrentlinker_fr.qm").exists()
     assert (Path(__file__).parent / "assets" / "icon.png").exists()
+    assert release_version(installed_version()) is not None, "missing application version metadata"
     print("smoke test OK")
 
 
@@ -77,6 +80,7 @@ def main() -> int:
     setup_logging(data_dir() / "torrentlinker.log")
     settings_path = data_dir() / "settings.json"
     settings = Settings.load(settings_path)
+    apply_theme(app, settings.theme)
     translators = i18n.install(app, i18n.pick_language(settings.language))  # noqa: F841
     store = Store(data_dir() / "state.db")
     window = MainWindow(settings, settings_path, store)
@@ -85,8 +89,14 @@ def main() -> int:
     if "--smoke-test" in sys.argv:  # used by CI on packaged builds
         smoke_checks()
         QTimer.singleShot(500, app.quit)
-    elif first_launch:
-        QTimer.singleShot(0, window.open_settings)  # enter connections and keys first
+    else:
+        update_timer = QTimer(window)
+        update_timer.setInterval(CHECK_INTERVAL * 1000)
+        update_timer.timeout.connect(window.check_for_updates)
+        update_timer.start()
+        QTimer.singleShot(1000, window.check_for_updates)
+        if first_launch:
+            QTimer.singleShot(0, window.open_settings)  # enter connections and keys first
     return app.exec()
 
 

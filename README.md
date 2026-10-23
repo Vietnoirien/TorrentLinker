@@ -2,14 +2,44 @@
 
 TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings, plans which new torrents to download and seed, and prepares c411 uploads of what the tracker does not have yet. The interface is available in English and French.
 
-## Download 0.4.0
+## Download 0.5.0
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.4.0/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.4.0/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.0/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.0/TorrentLinker-x86_64.AppImage) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.4.0) for changes and assets.
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.0) for changes and assets.
+
+TorrentLinker checks GitHub for a newer stable release at startup and daily while running, reusing successful checks for 24 hours. A small, dismissible notice links to the release page when an update is available. Downloads and installation remain manual. The check uses your configured internet proxy, sends no account or torrent information, and stays silent when GitHub is unreachable.
+
+## Finding your way around
+
+The 0.5.0 interface adds **Search** alongside **Zen**, **Library**, **Upload** and **Settings**. Zen separates **Seeding**, **Plan** and **Catalogue**; Upload separates preparing an Upload from reviewing your **Drafts**. **Settings → General → Theme** offers System, Light and Dark. System follows the desktop preference, including GNOME's explicit dark-mode setting; a saved theme change applies immediately.
+
+Click a results table's column header to sort, then click again to reverse it. Drag the divider between column headers to resize a column, or double-click it to fit its contents. Sizes, seeder counts and Zen estimates sort numerically. The Library and Seeding lists also have text filters. Library actions stay above the Library, with **Rescan everything** in the **Scan** menu. Use **Ctrl+1/2/3/4** to switch workspaces, **Ctrl+F** to focus Search or the Library filter, and **Ctrl+,** to open Settings.
+
+## Search and download queue
+
+In **Search**, enter a title and optionally choose a category from the expandable tree. Click an arrow to show subcategories, select a parent or child to filter, or choose **All categories** to clear the filter. Results come directly from your Indexer, with previous/next paging. Select one or more torrents, choose a Download Folder or leave it blank to use the category folders from Settings, then click **Add selected to queue**.
+
+For c411, the category tree and available search options come from its native API. Select a category to see its multi-select filters. Films & Vidéos adds resolution, source, HDR, codec, audio, channels, language and profile; series also offer season and episode choices. Year, uploader, exclusivity and sorting apply across categories. **Clear filters** resets the selection. Changing categories clears incompatible filters. Other Indexers keep their Torznab search.
+
+The revival selector offers available torrents, inclusion of **soins palliatifs**, or revival torrents only. Results identified by c411 as soins palliatifs carry a label; zero seeders alone does not establish that status. This is discovery support, not personal reward tracking. Previous/next paging keeps the submitted search criteria. If c411 exposes only part of a large result set, the app shows its accessible limit and asks you to narrow the filters.
+
+Search results include sortable **≈ Zen/day** and **≈ Note** previews for c411, also shown in torrent details. Note is the estimated contribution score for your Class, category, swarm and seed age. New torrents use your Zen Profile, planned seed hours and current seeding count, starting at zero seed age and including you in the swarm. Already seeded torrents keep their current estimate and seed age. Hover over the estimate to see its assumptions. Revival payouts remain separate.
+
+The **Age** column shows time since publication, such as **2 hours** or **3 days**, and refreshes every minute while Search is visible. Hover to see the exact local date and time, using c411's creation date or Torznab's publication date. Missing dates display as **–**. The header sorts the current page by the underlying timestamp; use **Newest** with ascending or descending order to sort the search across pages.
+
+Select a result and click **Open on website**, or double-click it to open its description, images, NFO and file list in a torrent tab. **Open in tabs** opens all selected results. Details load only when opened; no `.torrent` is downloaded. The NFO is plain text, and images load through the configured proxy without Indexer credentials. Descriptions are centered, with explicit text alignment preserved. Images up to 32 MiB are decoded within a pixel limit and scaled for display. Failed images show compact links; **Retry images** retries them without reloading the torrent metadata and respects a host's rate-limit cooldown. Unsupported details and unavailable images can still be viewed on the website.
+
+Each torrent tab also offers **Add to queue** and **Download now**, with an editable Download Folder. Download now sends only that torrent, leaving other queued items waiting. Both actions use the queue's duplicate and overwrite protections; a torrent already queued to a different folder must be removed before changing its destination.
+
+Torrent tabs stay open while you run other searches. Opening the same torrent switches to its existing tab. Drag tabs to reorder them, use **Open tabs** to jump to one, or close them with the × button, middle-click, **Ctrl+W**, or the tab's right-click menu. **Ctrl+Tab** and **Ctrl+Shift+Tab** switch tabs; **Ctrl+F** returns to the search field. Closing a tab does not remove or stop a queued download.
+
+On the main Search page, **Queue all tabs** adds the open torrent tabs and opens the queue without starting downloads. The **Download queue** button above the tabs stays accessible while browsing torrent details. **Download all tabs** queues and starts that set in one click, leaving unrelated queued torrents waiting. Each tab keeps its own Download Folder. All destinations are checked before queuing the batch; if one needs attention, that tab opens and an error appears above the tabs. Torrent tabs last for the current app session; the download queue persists across restarts.
+
+Open **Download queue** and click **Start queue** to send the selected torrents to your torrent client in order. The queue respects the Indexer's download limits and waits when asked. **Pause** stops further sends after the current request; downloads already started continue in the torrent client. Queue entries and outcomes survive restarts, and the queue waits for Start after reopening. Failed entries can be retried; sent entries can be cleared without removing torrents from the client. Existing client torrents and files at the destination are protected against duplicate downloads or overwrites.
 
 ## Set up
 
@@ -100,6 +130,12 @@ The Zen tab brings together c411's reported balance and TorrentLinker's earnings
 - Set Class, unlocked tree bonus, seed hours per day, and an overall torrent cap in **Settings → Zen**. Values supplied by c411 fill the Class and tree bonus automatically when profile access is available.
 
 Without profile permission, you can enter the Zen Profile by hand and use estimates and planning. The displayed balance comes from c411; projected earnings and payback are local estimates. The client's seed age is a lower bound when a torrent has been removed and added again.
+
+### Browse seeding torrents by category
+
+**Zen → Seeding** groups torrents under their Catalogue category and subcategory. Expand a branch to see its torrents, size and estimated Zen/day. Search matches both torrent names and category names. Sorting, resized columns, selection and collapsed branches survive refreshes. Torrents without a known category appear under **Unknown category**; broad snapshot categories stay at the parent level until confirmed.
+
+Each Seeding refresh also synchronizes category tags in qBittorrent and labels in Transmission, for example `torrentlinker:category:Books / Comics`. It adds missing tags and replaces only older tags in that namespace, preserving personal tags, Verification tags, download folders and the client's native category. Unknown category names are left untagged. Deluge's single label is preserved because it carries Verification state; its torrents still appear in the category tree. The Seeding view reports tag updates and failures.
 
 ## Make a Zen Plan
 

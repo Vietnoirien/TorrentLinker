@@ -77,7 +77,9 @@ def existing_targets(folder: Path, meta: TorrentMeta) -> list[Path]:
     return found
 
 
-def send_one(qbit: Qbit, candidate: PlanCandidate, data: bytes) -> str:
+def send_one(
+    qbit: Qbit, candidate: PlanCandidate, data: bytes, *, tags: list[str] | None = None
+) -> str:
     """Add one Plan torrent, started, into its Download Folder; return its hash."""
     if candidate.folder is None:
         raise Refused("no Download Folder")
@@ -87,7 +89,7 @@ def send_one(qbit: Qbit, candidate: PlanCandidate, data: bytes) -> str:
     if existing := existing_targets(candidate.folder, meta):
         raise Refused(f"would overwrite {existing[0]}")
     try:
-        return qbit.download(data, str(candidate.folder), [ZEN_TAG])
+        return qbit.download(data, str(candidate.folder), tags if tags is not None else [ZEN_TAG])
     except AlreadyInClient as e:  # added meanwhile, e.g. by a Reseed
         raise Refused(str(e)) from e
 

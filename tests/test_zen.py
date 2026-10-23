@@ -182,3 +182,11 @@ def test_added_values_match_the_estimate_of_one_more_torrent() -> None:
     values = added_values(TANKER, new, seeding)
 
     assert values == pytest.approx([torrent_zen(TANKER, t, seeding) for t in new])
+
+
+def test_alternate_c411_tracker_is_only_trusted_for_c411():
+    assert is_indexer_torrent("https://tk.c411.tw/announce/key", "https://c411.org/api/torznab")
+    assert not is_indexer_torrent(
+        "https://tk.c411.tw.attacker.test/announce", "https://c411.org/api"
+    )
+    assert not is_indexer_torrent("https://tk.c411.tw/announce", "https://another.test/api")

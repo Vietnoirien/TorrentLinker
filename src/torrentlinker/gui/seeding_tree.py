@@ -1,0 +1,196 @@
+"""The Seeding list grouped by the Indexer's category hierarchy."""
+
+from __future__ import annotations
+
+from PySide6.QtCore import QItemSelectionModel, Qt
+from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTreeWidget, QTreeWidgetItem
+
+from torrentlinker.category_tags import category_path
+from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.tables import EmptyState
+from torrentlinker.seeding import Seeding
+
+IDENTITY_ROLE = Qt.ItemDataRole.UserRole + 1
+SEARCH_ROLE = Qt.ItemDataRole.UserRole + 2
+
+
+class SeedingItem(QTreeWidgetItem):
+    def __lt__(self, other: QTreeWidgetItem) -> bool:
+        tree = self.treeWidget()
+        column = tree.sortColumn() if tree else 0
+        mine, theirs = (
+            self.data(column, Qt.ItemDataRole.UserRole),
+            other.data(column, Qt.ItemDataRole.UserRole),
+        )
+        if isinstance(mine, int | float) and isinstance(theirs, int | float):
+            return mine < theirs
+        return self.text(column).casefold() < other.text(column).casefold()
+
+    def number(self, column: int, text: str, value: float) -> None:
+        self.setText(column, text)
+        self.setData(column, Qt.ItemDataRole.UserRole, value)
+        self.setTextAlignment(column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+
+class SeedingTree(QTreeWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setColumnCount(5)
+        self.setHeaderLabels(
+            [
+                self.tr("Category / Torrent"),
+                self.tr("Size"),
+                self.tr("Seeders"),
+                self.tr("Seed age (days)"),
+                self.tr("≈ Zen/day"),
+            ]
+        )
+        self.setAccessibleName(self.tr("Seeding by category"))
+        self.setAlternatingRowColors(True)
+        self.setUniformRowHeights(True)
+        self.setIndentation(20)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        header = self.header()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(40)
+        header.setDefaultSectionSize(130)
+        header.resizeSection(0, 420)
+        self.setSortingEnabled(True)
+        self.sortItems(4, Qt.SortOrder.DescendingOrder)
+        self.groups: dict[tuple[int, ...], SeedingItem] = {}
+        self.torrents: dict[str, SeedingItem] = {}
+        self._query = ""
+        self._filter_expanded: dict[tuple[int, ...], bool] | None = None
+        self.empty_state = EmptyState(
+            self, self.tr("Refresh to see your seeding torrents and Zen estimates.")
+        )
+        self.headerItem().setToolTip(
+            3, self.tr("Your torrent client's recorded seeding time; c411 may count more.")
+        )
+
+    def show_seeding(self, view: Seeding) -> None:
+        expanded = {key: item.isExpanded() for key, item in self.groups.items()}
+        selected = {item.data(0, IDENTITY_ROLE) for item in self.selectedItems()}
+        current = self.currentItem()
+        current_id = current.data(0, IDENTITY_ROLE) if current else None
+        current_column = self.currentColumn()
+        scroll = self.verticalScrollBar().value()
+        self.setUpdatesEnabled(False)
+        self.setSortingEnabled(False)
+        self.clear()
+        self.groups = {}
+        self.torrents = {}
+        totals: dict[tuple[int, ...], list[float]] = {}
+        for row in view.rows:
+            path = category_path(row.category, view.categories)
+            keys = [path[:length] for length in range(1, len(path) + 1)] or [()]
+            parent = None
+            names = []
+            for key in keys:
+                info = view.categories.get(key[-1]) if key else None
+                name = (
+                    info.name
+                    if info
+                    else self.tr("Category {0}").format(key[-1])
+                    if key
+                    else self.tr("Unknown category")
+                )
+                names.append(name)
+                if key not in self.groups:
+                    item = SeedingItem([name])
+                    item.setData(0, IDENTITY_ROLE, "category:" + "/".join(map(str, key)))
+                    item.setData(0, SEARCH_ROLE, name.casefold())
+                    font = item.font(0)
+                    font.setBold(True)
+                    for col in (0, 1, 4):
+                        item.setFont(col, font)
+                    if parent is None:
+                        self.addTopLevelItem(item)
+                    else:
+                        parent.addChild(item)
+                    self.groups[key] = item
+                    totals[key] = [0, 0, 0]
+                parent = self.groups[key]
+                totals[key][0] += 1
+                totals[key][1] += row.torrent.total_size
+                totals[key][2] += row.zen or 0
+            assert parent is not None
+            torrent = row.torrent
+            item = SeedingItem([torrent.name])
+            item.setData(0, IDENTITY_ROLE, "torrent:" + torrent.hash)
+            item.setData(0, SEARCH_ROLE, " ".join([torrent.name, *names]).casefold())
+            item.number(1, human_size(torrent.total_size), torrent.total_size)
+            item.number(
+                2,
+                str(torrent.swarm_seeders) if torrent.swarm_seeders >= 0 else "–",
+                torrent.swarm_seeders,
+            )
+            days = torrent.seeding_time / 86400
+            item.number(3, f"{days:.0f}", days)
+            item.number(
+                4,
+                f"≈ {row.zen:.2f}" if row.zen is not None else "–",
+                row.zen if row.zen is not None else -1,
+            )
+            tooltip = " / ".join(names)
+            if row.provisional_category:
+                tooltip += "\n" + self.tr(
+                    "Category from the Catalogue snapshot; subcategory not confirmed."
+                )
+            item.setToolTip(0, torrent.name + "\n" + tooltip)
+            if row.zen is None:
+                item.setToolTip(4, self.tr("Not seeding: earns no Zen"))
+            parent.addChild(item)
+            self.torrents[torrent.hash] = item
+        for key, item in self.groups.items():
+            count, size, zen = totals[key]
+            item.setText(0, self.tr("{0} ({1})").format(item.text(0), int(count)))
+            item.number(1, human_size(size), size)
+            item.number(4, f"≈ {zen:.2f}", zen)
+            item.setToolTip(
+                0,
+                self.tr("{0} torrents; size and Zen/day include all subcategories.").format(
+                    int(count)
+                ),
+            )
+        self.setSortingEnabled(True)
+        for item in [*self.groups.values(), *self.torrents.values()]:
+            identity = item.data(0, IDENTITY_ROLE)
+            if identity == current_id:
+                self.setCurrentItem(
+                    item, current_column, QItemSelectionModel.SelectionFlag.NoUpdate
+                )
+            item.setSelected(identity in selected)
+        for key, item in self.groups.items():
+            item.setExpanded(expanded.get(key, True))
+        self.filter(self._query)
+        self.verticalScrollBar().setValue(scroll)
+        self.setUpdatesEnabled(True)
+        self.empty_state.update()
+
+    def filter(self, text: str) -> None:
+        query = text.strip().casefold()
+        if query and not self._query:
+            self._filter_expanded = {key: item.isExpanded() for key, item in self.groups.items()}
+        self._query = query
+        for item in self.torrents.values():
+            item.setHidden(bool(query and query not in item.data(0, SEARCH_ROLE)))
+        for key in sorted(self.groups, key=len, reverse=True):
+            item = self.groups[key]
+            visible = any(
+                child is not None and not child.isHidden()
+                for i in range(item.childCount())
+                for child in [item.child(i)]
+            )
+            item.setHidden(not visible)
+            if query and visible:
+                item.setExpanded(True)
+            elif not query and self._filter_expanded is not None:
+                item.setExpanded(self._filter_expanded.get(key, True))
+        if not query:
+            self._filter_expanded = None

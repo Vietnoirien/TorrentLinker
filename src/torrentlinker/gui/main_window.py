@@ -13,14 +13,21 @@ from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
+    QListWidget,
     QMainWindow,
+    QMenu,
     QMessageBox,
+    QPushButton,
     QSplitter,
     QTableView,
     QTabWidget,
+    QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -37,6 +44,7 @@ from torrentlinker.catalogue import (
     startup_categories,
 )
 from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
+from torrentlinker.category_tags import sync_category_tags
 from torrentlinker.clients import connect
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
@@ -47,6 +55,7 @@ from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
+from torrentlinker.gui.search_view import SearchTab
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
     ANNOUNCE_URL,
@@ -61,7 +70,10 @@ from torrentlinker.gui.settings_dialog import (
     choose_directory,
     extra_indexer_keys,
 )
+from torrentlinker.gui.tables import EmptyState, style_table
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.gui.theme import set_theme
+from torrentlinker.gui.update_notice import UpdateNotice
 from torrentlinker.gui.upload_view import UploadTab
 from torrentlinker.gui.zen_view import ZenBand, ZenTab
 from torrentlinker.indexer import Candidate, Indexer
@@ -112,6 +124,7 @@ from torrentlinker.send import SendProgress, SendReport, send_plan
 from torrentlinker.speedtest import measure_download_speed
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.tmdb import Tmdb
+from torrentlinker.updates import check_for_update, installed_version
 
 log = logging.getLogger(__name__)
 
@@ -128,10 +141,11 @@ class MainWindow(QMainWindow):
         self._qbit: tuple[tuple[str, ...], ClientApi, tuple[str | None, str | None]] | None = None
         self.apply_proxy()
         self._indexer_proxy = net.current()  # what the Indexer, once made, goes through
-        self.setWindowTitle("TorrentLinker")
-        self.resize(1200, 720)
+        self.setWindowTitle(f"TorrentLinker {installed_version()}")
+        self.resize(1280, 800)
 
-        toolbar = self.addToolBar(self.tr("Main"))
+        toolbar = QToolBar(self.tr("Library"), self)
+        toolbar.setMovable(False)
         self.scan_action = QAction(self.tr("Scan"), self)
         self.scan_action.triggered.connect(lambda: self.scan())
         self.rescan_action = QAction(self.tr("Rescan everything"), self)
@@ -148,14 +162,18 @@ class MainWindow(QMainWindow):
         self.cancel_action = QAction(self.tr("Cancel search"), self)
         self.cancel_action.triggered.connect(self.cancel_batch)
         self.cancel_action.setEnabled(False)
-        toolbar.addAction(self.scan_action)
-        toolbar.addAction(self.rescan_action)
+        scan_button = QToolButton()
+        scan_button.setDefaultAction(self.scan_action)
+        scan_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        scan_menu = QMenu(scan_button)
+        scan_menu.addAction(self.rescan_action)
+        scan_button.setMenu(scan_menu)
+        toolbar.addWidget(scan_button)
         toolbar.addSeparator()
         toolbar.addAction(self.batch_selected_action)
         toolbar.addAction(self.batch_all_action)
         toolbar.addAction(self.cancel_action)
-        toolbar.addSeparator()
-        toolbar.addAction(settings_action)
+
         self.batch: BatchRunner | None = None
         self.batch_text = ""
         self.countdown = QTimer(self)
@@ -167,16 +185,28 @@ class MainWindow(QMainWindow):
         self.library_proxy.setSourceModel(self.library_model)
         self.library_view = QTableView()
         self.library_view.setModel(self.library_proxy)
+        style_table(self.library_view)
+        self.library_view.setAccessibleName(self.tr("Library"))
+        self.library_empty = EmptyState(
+            self.library_view,
+            self.tr("No Local Items to show. Adjust the filters or scan your Library Folders."),
+        )
         self.library_view.setSortingEnabled(True)
+        self.library_view.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.library_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.library_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         header = self.library_view.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         header.resizeSection(3, 160)
         self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
 
+        self.library_search = QLineEdit()
+        self.library_search.setPlaceholderText(self.tr("Filter Local Items…"))
+        self.library_search.setAccessibleName(self.tr("Filter Local Items"))
+        self.library_search.setClearButtonEnabled(True)
+        self.library_search.textChanged.connect(self._apply_filters)
         filters = QHBoxLayout()
         self.state_filter = QComboBox()
         self.state_filter.addItem(self.tr("All states"), None)
@@ -185,7 +215,7 @@ class MainWindow(QMainWindow):
         self.folder_filter = QComboBox()
         self.state_filter.currentIndexChanged.connect(self._apply_filters)
         self.folder_filter.currentIndexChanged.connect(self._apply_filters)
-        filters.addWidget(QLabel(self.tr("Show")))
+        filters.addWidget(self.library_search, 2)
         filters.addWidget(self.state_filter)
         filters.addWidget(self.folder_filter, 1)
         library_pane = QWidget()
@@ -204,12 +234,19 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(library_pane)
         splitter.addWidget(self.review)
-        splitter.setSizes([600, 600])
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(2)
+        splitter.setSizes([660, 520])
         self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
         self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
-        self.tabs.addTab(splitter, self.tr("Library"))
+        library_page = QWidget()
+        library_page_layout = QVBoxLayout(library_page)
+        library_page_layout.setContentsMargins(0, 0, 0, 0)
+        library_page_layout.addWidget(toolbar)
+        library_page_layout.addWidget(splitter, 1)
+        self.tabs.addTab(library_page, self.tr("Library"))
         self.upload_tab = UploadTab(
             store,
             self.indexer,
@@ -224,15 +261,70 @@ class MainWindow(QMainWindow):
         self.upload_tab.upload_started.connect(self._reseed_started)
         self.upload_tab.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.tabs.addTab(self.upload_tab, self.tr("Upload"))
+        self.search_tab = SearchTab(store, settings, self.indexer, self.qbit)
+        self.tabs.addTab(self.search_tab, self.tr("Search"))
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.seeding_view.updated.connect(self.band.set_seeding)
+        self.zen_tab.seeding_view.updated.connect(self.search_tab.set_seeding)
+        self.tabs.tabBar().hide()
+        self.navigation = QListWidget()
+        self.navigation.setObjectName("navigation")
+        self.navigation.setAccessibleName(self.tr("Workspaces"))
+        self.navigation.addItems(
+            [self.tr("Zen"), self.tr("Library"), self.tr("Upload"), self.tr("Search")]
+        )
+        self.navigation.setCurrentRow(0)
+        self.navigation.currentRowChanged.connect(self.tabs.setCurrentIndex)
+        self.tabs.currentChanged.connect(self.navigation.setCurrentRow)
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(172)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(16, 24, 16, 16)
+        brand = QLabel("TorrentLinker")
+        brand.setProperty("role", "brand")
+        side.addWidget(brand)
+        side.addSpacing(24)
+        side.addWidget(self.navigation, 1)
+        settings_button = QPushButton(self.tr("Settings"))
+        settings_button.clicked.connect(self.open_settings)
+        side.addWidget(settings_button)
         central = QWidget()
-        central_layout = QVBoxLayout(central)
-        central_layout.setContentsMargins(0, 0, 0, 0)
+        shell = QHBoxLayout(central)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        shell.addWidget(sidebar)
+        content = QWidget()
+        central_layout = QVBoxLayout(content)
+        central_layout.setContentsMargins(24, 20, 24, 12)
+        central_layout.setSpacing(16)
+        self.page_title = QLabel()
+        self.page_title.setProperty("role", "heading")
+        self.page_description = QLabel()
+        self.page_description.setProperty("role", "muted")
+        self.page_description.setWordWrap(True)
+        central_layout.addWidget(self.page_title)
+        central_layout.addWidget(self.page_description)
+        self.update_notice = UpdateNotice()
+        central_layout.addWidget(self.update_notice)
         central_layout.addWidget(self.band)
-        central_layout.addWidget(self.tabs)
+        central_layout.addWidget(self.tabs, 1)
+        shell.addWidget(content, 1)
+        self.tabs.currentChanged.connect(self._workspace_changed)
+        self._workspace_changed(0)
         self.setCentralWidget(central)
+        settings_action.setShortcut("Ctrl+,")
+        self.addAction(settings_action)
+        for index in range(self.tabs.count()):
+            action = QAction(self.tabs.tabText(index), self)
+            action.setShortcut(f"Ctrl+{index + 1}")
+            action.triggered.connect(lambda checked=False, i=index: self.tabs.setCurrentIndex(i))
+            self.addAction(action)
+        find = QAction(self.tr("Filter Local Items"), self)
+        find.setShortcut("Ctrl+F")
+        find.triggered.connect(self._focus_search)
+        self.addAction(find)
         self.statusBar().showMessage(self.tr("Ready"))
 
         self._checking = False
@@ -277,6 +369,32 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self.refresh_categories(then=self.update_catalogue))
             if settings.library_folders:
                 QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
+
+    def check_for_updates(self) -> None:
+        cache = self.settings_path.parent / "release-check.json"
+        run_in_background(
+            lambda: check_for_update(cache),
+            self.update_notice.show_release,
+            lambda error: log.debug("release check unavailable: %s", error),
+        )
+
+    def _workspace_changed(self, index: int) -> None:
+        self.page_title.setText(self.tabs.tabText(index))
+        descriptions = [
+            self.tr("Track your earnings and plan what to seed next."),
+            self.tr("Find Orphans, compare Candidates and Reseed your files."),
+            self.tr("Prepare an Upload, then review and publish its Draft on c411."),
+            self.tr("Search torrents and queue the ones you want to download."),
+        ]
+        self.page_description.setText(descriptions[index])
+
+    def _focus_search(self) -> None:
+        if self.tabs.currentWidget() is self.search_tab:
+            self.search_tab.focus_search()
+            return
+        self.tabs.setCurrentIndex(1)
+        self.library_search.setFocus()
+        self.library_search.selectAll()
 
     def apply_proxy(self) -> None:
         """Make every connection from now on go through the proxy set in Settings."""
@@ -682,6 +800,8 @@ class MainWindow(QMainWindow):
         )
 
     def send_plan(self, plan: Plan) -> None:
+        self.tabs.setCurrentWidget(self.zen_tab)
+        self.zen_tab.pages.setCurrentIndex(1)
         if self.send_runner is not None:
             return
         qbit, indexer, reseeder = self.qbit(), self.indexer(), self.plan_reseeder()
@@ -829,6 +949,7 @@ class MainWindow(QMainWindow):
             if categories and categories != self.settings.indexer_categories:
                 log.info("Indexer categories updated: %d", len(categories))
                 self.settings.indexer_categories = categories
+                self.search_tab.refresh_categories()
                 self.settings.save(self.settings_path)
                 self.offer_plan_categories()
             if then is not None:
@@ -1064,6 +1185,7 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self.search_tab.stop()
         self.seeding_timer.stop()
         self._pending_plan = None
         if self.catalogue_runner is not None:
@@ -1076,12 +1198,24 @@ class MainWindow(QMainWindow):
         """Build on the GUI thread the work that reads the Seeding view from qBittorrent."""
         qbit, profile, url = self.qbit(), self.settings.zen, self.settings.indexer.url
         uploads = self.settings.uploads
+        categories = dict(self.settings.indexer_categories)
         store = self.store
 
         def work() -> Seeding:
             torrents = qbit.torrents(with_files=False)
             cached = observe_swarm(store, torrents, url)
-            return seeding(profile, torrents, url, uploads, catalogue=cached)
+            view = seeding(profile, torrents, url, uploads, catalogue=cached, categories=categories)
+            report = sync_category_tags(
+                qbit, ((r.torrent, r.category) for r in view.rows), categories
+            )
+            if report.updated or report.failed:
+                log.info(
+                    "Category tags: %d updated, %d failed, %d unknown",
+                    report.updated,
+                    report.failed,
+                    report.unknown,
+                )
+            return replace(view, tag_sync=report)
 
         return work
 
@@ -1129,6 +1263,9 @@ class MainWindow(QMainWindow):
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
             self.apply_proxy()
+            set_theme(self.settings.theme)
+            self.search_tab.refresh_categories()
+            self.search_tab.refresh_estimates()
             self._fill_folder_filter()
             self.offer_plan_categories()
             self.zen_tab.seeding_view.refresh()
@@ -1154,7 +1291,9 @@ class MainWindow(QMainWindow):
     def _apply_filters(self) -> None:
         state = self.state_filter.currentData()  # Qt hands enum data back as plain str
         self.library_proxy.set_filters(
-            ItemState(state) if state else None, self.folder_filter.currentData()
+            ItemState(state) if state else None,
+            self.folder_filter.currentData(),
+            self.library_search.text(),
         )
 
     def selected_entries(self) -> list[LibraryEntry]:
