@@ -71,6 +71,17 @@ def dragon_pack(tmp_path: Path) -> LocalItem:
     return scan_item(root)
 
 
+@pytest.mark.parametrize("packed", [False, True])
+def test_c411_publication_preserves_the_upload_infohash(tmp_path: Path, packed: bool) -> None:
+    item = dragon_pack(tmp_path) if packed else vise(tmp_path)
+    files = upload_files(item, "Test.NOTAG.STL", IGNORE)
+    torrent = torf.Torrent.read_stream(io.BytesIO(make_torrent(item, files, ANNOUNCE)))
+    original_hash = torrent.infohash
+    # Observed in the published desk-vise torrent: c411 inserts this source tag.
+    torrent.metainfo["info"]["source"] = "C411"
+    assert torrent.infohash == original_hash
+
+
 def test_a_release_name_has_dotted_words_without_accents_the_source_and_the_formats(
     tmp_path: Path,
 ) -> None:

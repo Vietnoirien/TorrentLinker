@@ -3655,6 +3655,22 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>UploadTab</name>
     <message>
+        <source>Host image…</source>
+        <translation>Héberger l’image…</translation>
+    </message>
+    <message>
+        <source>Open Postimages, upload your image, then paste its direct link here.</source>
+        <translation>Ouvrez Postimages, hébergez votre image, puis collez son lien direct ici.</translation>
+    </message>
+    <message>
+        <source>Filter Local Items…</source>
+        <translation>Filtrer les éléments locaux…</translation>
+    </message>
+    <message>
+        <source>No Local Items match your search and filters.</source>
+        <translation>Aucun élément local ne correspond à votre recherche et aux filtres.</translation>
+    </message>
+    <message>
         <location filename="../gui/upload_view.py" line="437"/>
         <source>Local Item</source>
         <translation>Élément local</translation>

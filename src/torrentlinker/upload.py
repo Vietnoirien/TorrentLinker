@@ -656,6 +656,8 @@ def make_torrent(
     else:
         info["files"] = [{"length": f.size, "path": f.torrent_path.split("/")[1:]} for f in files]
     info["private"] = 1
+    # c411 adds this on publication. Include it before seeding so the hash stays valid.
+    info["source"] = "C411"
     return bencode(
         {
             "announce": announce,

@@ -242,6 +242,10 @@ Missing metadata objects are sent as `null`. The browser authenticates with its 
 
 Tried with an API key holding `drafts:rw` on 2026-10-22: `POST /api/user/drafts` with the fields above (3D model, category 10, subcategory 51, `options` `{}`) answered `{"success":true,"message":"Brouillon créé","data":{"id":…}}`. `GET /api/user/drafts/{id}` returns the same fields plus `category`, `subcategory`, `createdAt`, `updatedAt`, `isAutosave`, and `torrentFile` / `nfoFile` as `{name, data}`; the stored .torrent was byte-identical to the one sent. The draft showed on c411's upload page with its category, torrent and NFO. Drafts unused for 30 days are deleted automatically.
 
+### Published torrent identity
+
+Checked on 2026-10-23 using the desk-vise 3MF upload and the site's downloaded `(1).torrent`: c411 adds `info.source = "C411"`. The original was already private. The name, piece hashes and announce URL were unchanged; the site also changed the top-level `announce-list`, which does not affect the info-hash. Adding the source tag to the original reproduced the published info-hash exactly. TorrentLinker now includes this tag when generating uploads, before saving the draft or starting seeding. Previously generated torrents still need the published copy.
+
 ### Category Options (`GET /api/categories/{subId}/options`)
 
 Read on 2026-10-22 with the main key (`Authorization: Bearer`, no special scope; the same `x-ratelimit-*` budget as the other JSON calls): `GET /api/categories` for the subcategory ids, then one options call for a subcategory of most categories, 8 requests in all. Recorded answers are in `tests/fixtures/c411_options_{6,14,18,51}.json`.

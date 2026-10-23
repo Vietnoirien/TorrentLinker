@@ -10,4 +10,6 @@ The torrent's name follows c411's naming rules, even when the Local Item's own n
 
 The announce URL holds the user's passkey and is stored in the system keyring like the API keys.
 
-Open: whether c411 changes the torrent when the draft is published (a source tag, its own announce URL), which would change its info hash and mean seeding c411's copy instead. c411's own upload checks and image upload accept only a logged-in browser, not an API key: the app applies the rules itself, and the user adds the description's image while reviewing the draft on c411 (docs/research/upload-rules.md).
+Publication was checked on 2026-10-23 with a real 3D Upload. c411 adds `info.source = "C411"`; the original was already private. Including this source tag when creating the torrent reproduces the published info-hash exactly, so the torrent added before publication remains valid afterward. File names and piece hashes are unchanged. Announce URLs are outside the info dictionary and do not affect the info-hash. Previously generated torrents need c411's published copy, mapped to the original files inside the Torrent Client.
+
+c411's own upload checks and image upload accept only a logged-in browser, not an API key. The app applies the rules itself. The user can add an image on c411 or provide an externally hosted image URL; the app includes that image in the Draft description while preserving edited text (docs/research/upload-rules.md).

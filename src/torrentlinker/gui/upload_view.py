@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 import shutil
 import threading
 from collections.abc import Callable
@@ -63,6 +64,7 @@ from torrentlinker.qbit import Qbit
 from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import Store
 from torrentlinker.upload import (
+    IMAGE_PLACEHOLDER,
     PROFILES,
     Judgement,
     PreparedUpload,
@@ -403,6 +405,7 @@ class UploadTab(QWidget):
         self._edited: set[str] = set()  # name, nfo, description: left alone once edited
         self._stop = threading.Event()
         self._image_url = ""  # the URL whose image the preview shows
+        self._description_image_url = ""  # last URL supplied through the image field
         self.option_types: list[OptionType] = []  # the subcategory's, once read
         self._option_widgets: dict[int, QComboBox | QListWidget] = {}
         self._picks: Chosen = {}  # what the user chose, which the profile's suggestion yields to
@@ -420,6 +423,12 @@ class UploadTab(QWidget):
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(self.tr("Filter Local Items…"))
+        self.search.setAccessibleName(self.tr("Filter Local Items…"))
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self._fill)
+        left_layout.addWidget(self.search)
         filters = QHBoxLayout()
         self.kind_filter = QComboBox()
         self.kind_filter.addItem(self.tr("All kinds"), None)
@@ -472,7 +481,17 @@ class UploadTab(QWidget):
         form.addRow(self.tr("Source"), self.source)
         form.addRow(self.tr("Subcategory"), self.subcategory)
         form.addRow(self.tr("Release name"), self.name)
-        form.addRow(self.tr("Image URL"), self.image_url)
+        image_row = QHBoxLayout()
+        image_row.addWidget(self.image_url, 1)
+        self.host_image = QPushButton(self.tr("Host image…"))
+        self.host_image.setToolTip(
+            self.tr("Open Postimages, upload your image, then paste its direct link here.")
+        )
+        self.host_image.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://postimages.org/"))
+        )
+        image_row.addWidget(self.host_image)
+        form.addRow(self.tr("Image URL"), image_row)
         right_layout.addLayout(form)
         self.options_box = QGroupBox(self.tr("Options"))
         options_layout = QVBoxLayout(self.options_box)
@@ -663,6 +682,7 @@ class UploadTab(QWidget):
         """Show the Upload form for this Local Item, even if the filters hid it."""
         self.workspaces.setCurrentIndex(0)
         if all(e.item.path != path for e in self.shown):
+            self.search.clear()
             self.kind_filter.setCurrentIndex(0)
             self.show_all.setChecked(True)
         for r in range(self.items.rowCount()):
@@ -715,9 +735,12 @@ class UploadTab(QWidget):
         selected = self.entry.item.path if self.entry else None
         kind = self.kind_filter.currentData()
         everything = self.show_all.isChecked()
+        query = self.search.text().strip().casefold()
         rows = []
         for e in self.candidates():
             if kind is not None and e.folder.kind is not kind:
+                continue
+            if query and query not in e.item.path.name.casefold():
                 continue
             reason = self.why_not(e)
             if reason and not everything:
@@ -760,6 +783,8 @@ class UploadTab(QWidget):
             self.notice.setText(
                 self.tr("Enter your Announce URL in Settings → Connections to make Uploads.")
             )
+        elif not self.shown and query:
+            self.notice.setText(self.tr("No Local Items match your search and filters."))
         elif not self.shown and not everything:
             self.notice.setText(
                 self.tr(
@@ -1236,7 +1261,28 @@ class UploadTab(QWidget):
     def _image_changed(self) -> None:
         if "description" not in self._edited:
             self._set_text(self.description, self._template())
+        else:
+            self._sync_description_image()
+        self._description_image_url = self.image_url.text().strip()
         self._image_timer.start()
+
+    def _sync_description_image(self) -> None:
+        """Update just the presentation image, preserving the user's description."""
+        url = self.image_url.text().strip()
+        text = self.description.toPlainText()
+        images = list(re.finditer(r"\[img\](.*?)\[/img\]", text, re.IGNORECASE | re.DOTALL))
+        if url and any(m.group(1).strip() == url for m in images):
+            return
+        replacement = f"[img]{url or IMAGE_PLACEHOLDER}[/img]"
+        for match in images:
+            if match.group(1).strip() in {self._description_image_url, IMAGE_PLACEHOLDER, ""}:
+                text = text[: match.start()] + replacement + text[match.end() :]
+                break
+        else:
+            if not url:
+                return
+            text = f"[center]{replacement}[/center]\n\n{text}"
+        self._set_text(self.description, text)
 
     def _load_image(self) -> None:
         url = self.image_url.text().strip()
@@ -1337,6 +1383,7 @@ class UploadTab(QWidget):
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
+        self._sync_description_image()
         request = UploadRequest(
             entry.item,
             self.name.text().strip(),

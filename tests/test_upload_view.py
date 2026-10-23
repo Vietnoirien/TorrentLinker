@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 from PySide6.QtCore import Qt
 
 from tests.fake_qbit import FakeQbit
@@ -228,6 +229,35 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     qtbot.waitUntil(lambda: view.drafts.rowCount() == 1, timeout=5000)
 
 
+@pytest.mark.parametrize("image_first", [False, True])
+def test_draft_keeps_the_image_with_a_custom_description(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch, image_first: bool
+) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
+    view, indexer, _ = tab(qtbot, tmp_path)
+    vise = model(tmp_path)
+    view.set_entries([vise])
+    view.remember(vise, [])
+    view.items.selectRow(0)
+    url = "https://i.example/desk-vise.png"
+    if image_first:
+        view.image_url.setText(url)
+    view.description.setPlainText("[center][b]My desk vise[/b][/center]")
+    if not image_first:
+        view.image_url.setText(url)
+    view._image_timer.stop()
+    qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
+    view.create_button.click()
+    qtbot.waitUntil(lambda: bool(indexer.saved), timeout=5000)
+    description = indexer.saved[0]["description"]
+    assert f"[img]{url}[/img]" in description
+    assert "[center][b]My desk vise[/b][/center]" in description
+    qtbot.waitUntil(lambda: view.drafts.rowCount() == 1, timeout=5000)
+
+
 def test_the_library_offers_an_upload_once_searched_without_a_match(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     from torrentlinker.config import Settings
     from torrentlinker.gui.main_window import MainWindow
@@ -294,10 +324,31 @@ def test_edits_to_the_description_survive_other_changes_until_reset(qtbot, tmp_p
     view.source.setText("Printables")
     assert view.description.toPlainText() == "[b]Mine[/b]"
     view.image_url.setText("https://i.example/v.png")
-    assert view.description.toPlainText() == "[b]Mine[/b]"
+    assert view.description.toPlainText() == (
+        "[center][img]https://i.example/v.png[/img][/center]\n\n[b]Mine[/b]"
+    )
 
     view._reset("description")
     assert "[img]https://i.example/v.png[/img]" in view.description.toPlainText()
+
+
+def test_image_changes_preserve_custom_text_and_other_images(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    view, _, _ = tab(qtbot, tmp_path)
+    vise = model(tmp_path)
+    view.set_entries([vise])
+    view.remember(vise, [])
+    view.items.selectRow(0)
+    text = "[center][img]…[/img][/center]\nMy vise\n[img]https://i.example/extra.png[/img]"
+    view.description.setPlainText(text)
+    view.image_url.setText("https://i.example/first.png")
+    assert view.description.toPlainText() == text.replace("…", "https://i.example/first.png")
+    view.image_url.setText("https://i.example/second.png")
+    assert view.description.toPlainText() == text.replace("…", "https://i.example/second.png")
+    view._sync_description_image()
+    assert view.description.toPlainText().count("second.png") == 1
+    view.image_url.clear()
+    assert view.description.toPlainText() == text
+    view._image_timer.stop()
 
 
 def test_an_archive_is_unpacked_next_to_it_then_its_folder_is_offered(  # type: ignore[no-untyped-def]

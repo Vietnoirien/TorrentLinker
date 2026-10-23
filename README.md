@@ -2,14 +2,14 @@
 
 TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings, plans which new torrents to download and seed, and prepares c411 uploads of what the tracker does not have yet. The interface is available in English and French.
 
-## Download 0.5.0
+## Download 0.5.1
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.0/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.0/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.1/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.1/TorrentLinker-x86_64.AppImage) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.0) for changes and assets.
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.1) for changes and assets.
 
 TorrentLinker checks GitHub for a newer stable release at startup and daily while running, reusing successful checks for 24 hours. A small, dismissible notice links to the release page when an update is available. Downloads and installation remain manual. The check uses your configured internet proxy, sends no account or torrent information, and stays silent when GitHub is unreachable.
 
@@ -94,9 +94,11 @@ Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-z
 
 The **Upload** tab lists Orphans from every Library Folder that a search found no Match for: c411 may not have them yet. Each is made for one c411 **category**, picked in the form: the Library Folder's Content Kind proposes it (3D models → Imprimante 3D; movies and series, ebooks, music and games propose theirs), and an item of kind *Other* asks you to choose. **Imprimante 3D**, **Ebook**, **Audio**, **Films & Vidéos**, **GPS**, **Emulation**, **Applications** and **Jeux Vidéo** can be uploaded so far; the other categories show "not supported yet" until their rules are added. Changing the category redoes the checks, subcategory, name, NFO and description. Enter your **Announce URL** (from your c411 profile) in **Settings → Connections**, and use a main API key with the **Brouillons d'upload** (`drafts:rw`) scope.
 
+Use the search bar above the Upload list to filter Local Items by filename. It works alongside the Content Kind and **Show all** filters.
+
 Selecting an item also searches c411 for what it **already has** of it (the item's title words, within its category) and lists the releases found, with size, seeders and a link, in a collapsible **Already on c411** box; "Nothing found on c411" when there are none. It is information only: Team Pending refuses duplicates, and the app does not decide them. Each item is searched once per session, only when you select it, through the same key budget as every search.
 
-For the chosen item, TorrentLinker checks c411's 3D rules: those a program can check (accepted formats, no archives) are red **Refusals** that stop the Draft, while those only you can judge (no files from independent creators who live off them, one coherent theme for a pack) are amber **Warnings** that leave the Draft available. It suggests a release name such as `Petit.Etau.De.Bureau.NOTAG.3MF` (dots between words, no accents, `NOTAG` when the source is unknown), makes a private torrent with c411's piece size and an NFO listing every file, and saves them as a Draft on c411. The torrent then joins your torrent client against your own files, renamed inside the client as a Reseed is, so your files keep their names; it seeds once Verification passes. Below the subcategory, the **Options** c411 asks for in that subcategory (language, genre, format…) show as selectors: a list to tick for several values, a drop-down for one, required ones marked with an asterisk. TorrentLinker reads them from c411 the first time a subcategory needs them, keeps them for a week (**Refresh options** reads them again), and a category's rules can pre-fill them; what you choose wins. A required option left empty blocks the Draft, and Imprimante 3D has none. Open c411's upload page, load the Draft, add the image the rules ask for (see below), and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
+For the chosen item, TorrentLinker checks c411's 3D rules: those a program can check (accepted formats, no archives) are red **Refusals** that stop the Draft, while those only you can judge (no files from independent creators who live off them, one coherent theme for a pack) are amber **Warnings** that leave the Draft available. It suggests a release name such as `Petit.Etau.De.Bureau.NOTAG.3MF` (dots between words, no accents, `NOTAG` when the source is unknown), makes a private torrent with c411's piece size and `source = C411` tag so its info-hash stays the same when published and an NFO listing every file, and saves them as a Draft on c411. The torrent then joins your torrent client against your own files, renamed inside the client as a Reseed is, so your files keep their names; it seeds once Verification passes. Below the subcategory, the **Options** c411 asks for in that subcategory (language, genre, format…) show as selectors: a list to tick for several values, a drop-down for one, required ones marked with an asterisk. TorrentLinker reads them from c411 the first time a subcategory needs them, keeps them for a week (**Refresh options** reads them again), and a category's rules can pre-fill them; what you choose wins. A required option left empty blocks the Draft, and Imprimante 3D has none. Open c411's upload page, load the Draft, add the image the rules ask for (see below), and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
 
 ### The image for the description
 
@@ -105,6 +107,8 @@ c411's image upload only accepts a logged-in browser, so TorrentLinker renders t
 - **Capture** saves the current view as a PNG at least 1000 px wide.
 - For a **Pack**, **Capture the Pack sheet** saves a grid of up to 9 models, each seen from the isometric angle with its file name below.
 - **Open the folder** shows the images, which are in `uploads/<release name>/` (never in your Library). Add the one you choose on c411's upload page while reviewing the Draft; the description keeps an `[img]…[/img]` placeholder for it.
+
+If you host the image elsewhere, paste its direct URL into **Image URL**. **Host image…** opens Postimages. The image is included in the Draft description even after you edit the text; changing the URL updates the image without resetting your presentation.
 
 STEP, GCODE, BLEND, F3D, SLDPRT and FCStd items show no preview and say so: make that image yourself. Rendering needs OpenGL; without it the view and captures are unavailable and the message says why.
 
