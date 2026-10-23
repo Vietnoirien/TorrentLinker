@@ -676,3 +676,70 @@ def test_a_plans_sending_time_shrinks_with_more_keys() -> None:
 
     assert sending_seconds(31, 1) == pytest.approx(61.5)  # the minute's limit, then the pace
     assert sending_seconds(1000, 5) < sending_seconds(1000, 1) / 9
+
+
+def test_unavailable_download_is_removed_from_catalogue_and_stays_out(tmp_path):
+    from dataclasses import replace
+
+    from torrentlinker.catalogue import candidate
+    from torrentlinker.store import CatalogueRow, Store
+
+    path = tmp_path / "catalogue.db"
+    store = Store(path)
+    missing = CatalogueRow(
+        "aa" * 20, "Unavailable", 100, 2, 7000, "https://c411.example/dl/1", "", 0
+    )
+    available = replace(missing, infohash="bb" * 20, title="Available")
+    store.save_catalogue([missing, available])
+    indexer = make_indexer(
+        lambda r: httpx.Response(
+            403, text='<error code="403" description="Torrent not available for download" />'
+        ),
+        cache=store,
+    )
+    with pytest.raises(TorrentUnavailable):
+        indexer.fetch_torrent(candidate(indexer, missing), retry=False)
+    assert store.catalogue() == [available]
+    assert store.catalogue_size() == 1
+
+    # Both direct metadata and the daily snapshot must respect the removal after restart.
+    restarted = Store(path)
+    for source in ("indexer", "zen-lab"):
+        restarted.save_catalogue([replace(missing, source=source)])
+        assert restarted.catalogue() == [available]
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_other_download_errors_do_not_remove_catalogue_torrents(tmp_path, status):
+    from torrentlinker.catalogue import candidate
+    from torrentlinker.store import CatalogueRow, Store
+
+    store = Store(tmp_path / "catalogue.db")
+    row = CatalogueRow("aa" * 20, "Book", 100, 2, 7000, "https://c411.example/dl/1", "", 0)
+    store.save_catalogue([row])
+    indexer = make_indexer(lambda r: httpx.Response(status), cache=store)
+    with pytest.raises((KeyRefused, RateLimited, httpx.HTTPStatusError)):
+        indexer.fetch_torrent(candidate(indexer, row), retry=False)
+    assert store.catalogue() == [row]
+    store.save_catalogue([row])
+    assert store.catalogue() == [row]
+
+
+def test_unavailable_search_download_is_excluded_before_catalogue_import(tmp_path):
+    from torrentlinker.store import CatalogueRow, Store
+
+    store = Store(tmp_path / "catalogue.db")
+    indexer = make_indexer(
+        lambda r: httpx.Response(
+            403, text='<error code="403" description="Torrent not available for download" />'
+        ),
+        cache=store,
+    )
+    selected = Candidate("Book", 100, "https://c411.example/dl/1", infohash="AA" * 20)
+    with pytest.raises(TorrentUnavailable):
+        indexer.fetch_torrent(selected)
+    store.save_catalogue(
+        [CatalogueRow("aa" * 20, "Book", 100, 2, 7000, selected.download_url, "", 0)]
+    )
+    assert store.catalogue_size() == 0
+    assert store.known_hashes(["aa" * 20]) == {"aa" * 20}

@@ -395,6 +395,12 @@ class ReviewPanel(QWidget):
         self._fill_candidates()
         self._select_candidate(new)
 
+    def reseed_archive(self, entry: LibraryEntry, checked: CheckedCandidate) -> None:
+        """Review a batch's archive Match through the normal unpack confirmation."""
+        self.set_entry(entry)
+        self._select_candidate(checked)
+        self._reseed_selected()
+
     def _reseed_selected(self) -> None:
         entry = self.entry
         chosen = [v for v in self.selected_all() if v.meta is not None and v.match is not None]

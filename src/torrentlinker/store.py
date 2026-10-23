@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS catalogue_crawl (
     complete INTEGER NOT NULL DEFAULT 0,
     updated_at REAL
 );
+CREATE TABLE IF NOT EXISTS unavailable_torrent (
+    infohash TEXT PRIMARY KEY,
+    seen_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS catalogue_feed (
     name TEXT PRIMARY KEY,
     next_page INTEGER NOT NULL DEFAULT 1,
@@ -402,10 +406,20 @@ class Store:
 
     # Catalogue --------------------------------------------------------------
 
+    def drop_unavailable_torrent(self, infohash: str) -> None:
+        """Remove an explicitly unavailable torrent and keep refreshes from restoring it."""
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO unavailable_torrent VALUES (?, ?)",
+                (infohash.lower(), time.time()),
+            )
+            self._db.execute("DELETE FROM catalogue WHERE infohash = ? COLLATE NOCASE", (infohash,))
+
     def save_catalogue(self, rows: list[CatalogueRow]) -> None:
         with self._lock, self._db:
             self._db.executemany(
-                "INSERT INTO catalogue VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO catalogue SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?"
+                " WHERE NOT EXISTS (SELECT 1 FROM unavailable_torrent WHERE infohash = lower(?))"
                 " ON CONFLICT(infohash) DO UPDATE SET"
                 " title=excluded.title, size=excluded.size, seeders=excluded.seeders,"
                 " category=excluded.category, download_url=excluded.download_url,"
@@ -423,6 +437,7 @@ class Store:
                         r.details_url,
                         r.seen_at,
                         r.source,
+                        r.infohash,
                     )
                     for r in rows
                 ],
@@ -438,6 +453,15 @@ class Store:
                     str(r[0])
                     for r in self._db.execute(
                         f"SELECT infohash FROM catalogue WHERE infohash IN ({marks})"
+                        + (" AND seen_at < ?" if seen_before is not None else ""),
+                        [*chunk, seen_before] if seen_before is not None else chunk,
+                    )
+                }
+                # Excluded torrents still count as seen when deciding where a crawl stops.
+                found |= {
+                    str(r[0])
+                    for r in self._db.execute(
+                        f"SELECT infohash FROM unavailable_torrent WHERE infohash IN ({marks})"
                         + (" AND seen_at < ?" if seen_before is not None else ""),
                         [*chunk, seen_before] if seen_before is not None else chunk,
                     )

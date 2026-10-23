@@ -291,9 +291,14 @@ class Indexer:
         if (data := self.cached_torrent(candidate)) is not None:
             return data
         url = candidate.download_url
-        data = self._request(
-            lambda key: (self._with_key(url, key), None, None), retry=retry, queue="downloads"
-        ).content
+        try:
+            data = self._request(
+                lambda key: (self._with_key(url, key), None, None), retry=retry, queue="downloads"
+            ).content
+        except TorrentUnavailable:
+            if self._cache and candidate.infohash:
+                self._cache.drop_unavailable_torrent(candidate.infohash)
+            raise
         if self._cache:
             self._cache.cache_torrent(self._torrent_key(candidate), data)
         return data

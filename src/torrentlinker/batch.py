@@ -16,9 +16,11 @@ def run_batch(
     on_searched: Callable[[int, int, LibraryEntry, list[R]], None],
     cancelled: Callable[[], bool],
     on_error: Callable[[LibraryEntry, Exception], None] = lambda e, err: None,
+    *,
+    orphans_only: bool = True,
 ) -> int:
     """Search every Orphan among `entries`; return how many were processed."""
-    queue = auto_searchable(entries)
+    queue = auto_searchable(entries) if orphans_only else list(entries)
     done = 0
     for i, entry in enumerate(queue, 1):
         if cancelled():

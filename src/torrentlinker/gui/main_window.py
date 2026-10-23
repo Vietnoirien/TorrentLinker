@@ -13,6 +13,7 @@ from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -54,6 +55,7 @@ from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
+from torrentlinker.gui.reseed_dialog import ReseedDialog
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.search_view import SearchTab
 from torrentlinker.gui.send_runner import SendRunner
@@ -103,6 +105,7 @@ from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import ClientApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import (
+    AlreadyInClient,
     Outcome,
     check_verifications,
     pending_verifications,
@@ -111,6 +114,7 @@ from torrentlinker.reseed import (
 from torrentlinker.review import (
     CheckedCandidate,
     candidate_key,
+    check_candidate,
     check_candidates,
     match_zen,
     remember_candidates,
@@ -160,6 +164,19 @@ class MainWindow(QMainWindow):
         self.batch_selected_action.triggered.connect(lambda: self.start_batch(selected_only=True))
         self.batch_all_action = QAction(self.tr("Search all Orphans"), self)
         self.batch_all_action.triggered.connect(lambda: self.start_batch(selected_only=False))
+        self.check_all_action = QAction(self.tr("Check all Candidates"), self)
+        self.check_all_action.setToolTip(
+            self.tr("Check every untested Candidate across the Library, including filtered items")
+        )
+        self.check_all_action.triggered.connect(lambda: self.start_library_batch("check"))
+        self.reseed_all_action = QAction(self.tr("Reseed all Full Matches"), self)
+        self.reseed_all_action.setToolTip(
+            self.tr(
+                "Reseed confirmed Full Matches across the Library; "
+                "archives need individual unpacking"
+            )
+        )
+        self.reseed_all_action.triggered.connect(lambda: self.start_library_batch("reseed"))
         self.cancel_action = QAction(self.tr("Cancel search"), self)
         self.cancel_action.triggered.connect(self.cancel_batch)
         self.cancel_action.setEnabled(False)
@@ -174,8 +191,15 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.batch_selected_action)
         toolbar.addAction(self.batch_all_action)
         toolbar.addAction(self.cancel_action)
+        match_toolbar = QToolBar(self.tr("Matches"), self)
+        match_toolbar.setMovable(False)
+        match_toolbar.addAction(self.check_all_action)
+        match_toolbar.addAction(self.reseed_all_action)
 
         self.batch: BatchRunner | None = None
+        self._batch_mode = "search"
+        self._batch_errors: list[str] = []
+        self._batch_reseeded = 0
         self.batch_text = ""
         self.countdown = QTimer(self)
         self.countdown.setInterval(250)
@@ -246,6 +270,7 @@ class MainWindow(QMainWindow):
         library_page_layout = QVBoxLayout(library_page)
         library_page_layout.setContentsMargins(0, 0, 0, 0)
         library_page_layout.addWidget(toolbar)
+        library_page_layout.addWidget(match_toolbar)
         library_page_layout.addWidget(splitter, 1)
         self.tabs.addTab(library_page, self.tr("Library"))
         self.upload_tab = UploadTab(
@@ -1337,12 +1362,121 @@ class MainWindow(QMainWindow):
             rejections = store.rejections(entry.item.path)
             return check_candidates(indexer, entry.item, found, rules, rejections)
 
-        self.batch = BatchRunner(entries, search)
+        self._batch_mode = "search"
+        self._begin_library_batch(BatchRunner(entries, search))
+        self.batch_text = self.tr("Searching {0} Orphans…").format(len(entries))
+
+    def start_library_batch(self, mode: str) -> None:
+        if self.batch is not None:
+            return
+        snapshots = {}
+        entries = []
+        archives: list[tuple[LibraryEntry, CheckedCandidate]] = []
+        for entry in self.library_model.entries:
+            if entry.state is ItemState.SEEDED:
+                continue
+            rejected = self.store.rejections(entry.item.path)
+            checked = [
+                v
+                for v in self.review.cache.get(entry.item.path, [])
+                if candidate_key(v.candidate) not in rejected
+            ]
+            if mode == "reseed":
+                archives.extend(
+                    (entry, v)
+                    for v in checked
+                    if v.meta is not None and v.match is not None and v.match.is_full and v.unpack
+                )
+            eligible = [
+                v
+                for v in checked
+                if (
+                    not v.compared
+                    if mode == "check"
+                    else v.meta is not None
+                    and v.match is not None
+                    and v.match.is_full
+                    and not v.unpack
+                )
+            ]
+            if eligible:
+                entries.append(entry)
+                snapshots[entry.item.path] = checked if mode == "check" else eligible
+        if archives:
+            dialog = ReseedDialog(archives, sum(len(v) for v in snapshots.values()), self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            if dialog.archive is not None:
+                self.review.reseed_archive(*dialog.archive)
+                return
+        if not entries:
+            self.statusBar().showMessage(
+                self.tr("No untested Candidates")
+                if mode == "check"
+                else self.tr("No Full Matches ready to reseed; archives need individual unpacking")
+            )
+            return
+        indexer = self.indexer() if mode == "check" else None
+        client = self.qbit() if mode == "reseed" else None
+        rules, store = self.match_rules(), self.store
+        seen: set[str] = set()
+
+        def work(entry: LibraryEntry) -> list[CheckedCandidate]:
+            result = list(snapshots[entry.item.path]) if mode == "check" else []
+            for i, value in enumerate(snapshots[entry.item.path]):
+                if runner.cancelled():
+                    break
+                if candidate_key(value.candidate) in store.rejections(entry.item.path):
+                    continue
+                try:
+                    if mode == "check":
+                        if not value.compared:
+                            assert indexer is not None
+                            result[i] = check_candidate(indexer, entry.item, value.candidate, rules)
+                    else:
+                        assert (
+                            client is not None
+                            and value.meta is not None
+                            and value.match is not None
+                        )
+                        infohash = value.meta.infohash.lower()
+                        if infohash in seen:
+                            continue
+                        start_reseed(
+                            client,
+                            store,
+                            entry.item,
+                            value.meta,
+                            value.match,
+                            candidate_key(value.candidate),
+                        )
+                        seen.add(infohash)
+                        result.append(value)
+                except AlreadyInClient:
+                    continue
+                except Exception as error:
+                    runner.signals.error.emit(
+                        entry, RuntimeError(f"{value.candidate.title}: {error_text(error)}")
+                    )
+            return result
+
+        runner = BatchRunner(entries, work, orphans_only=False)
+        self._batch_mode = mode
+        self._begin_library_batch(runner)
+        self.batch_text = (
+            self.tr("Checking Candidates for {0} Local Items…")
+            if mode == "check"
+            else self.tr("Reseeding Full Matches for {0} Local Items…")
+        ).format(len(entries))
+
+    def _begin_library_batch(self, runner: BatchRunner) -> None:
+        self.batch = runner
+        self._batch_errors = []
+        self._batch_reseeded = 0
         self.batch.signals.searched.connect(self._batch_result)
         self.batch.signals.error.connect(self._batch_error)
         self.batch.signals.finished.connect(self._batch_finished)
         self._set_batch_running(True)
-        self.batch_text = self.tr("Searching {0} Orphans…").format(len(entries))
         self.batch.start()
 
     def cancel_batch(self) -> None:
@@ -1353,6 +1487,12 @@ class MainWindow(QMainWindow):
     def _set_batch_running(self, running: bool) -> None:
         self.batch_selected_action.setEnabled(not running)
         self.batch_all_action.setEnabled(not running)
+        self.check_all_action.setEnabled(not running)
+        self.reseed_all_action.setEnabled(not running)
+        self.scan_action.setEnabled(not running)
+        self.rescan_action.setEnabled(not running)
+        self.review.setEnabled(not running)
+        self.cancel_action.setText(self.tr("Cancel batch") if running else self.tr("Cancel search"))
         self.cancel_action.setEnabled(running)
         if running:
             self.countdown.start()
@@ -1367,6 +1507,18 @@ class MainWindow(QMainWindow):
     def _batch_result(
         self, index: int, total: int, entry: LibraryEntry, checked: list[CheckedCandidate]
     ) -> None:
+        if self._batch_mode != "search":
+            self.batch_text = self.tr("Processed {0}/{1}: {2}").format(
+                index, total, entry.item.path.name
+            )
+            if self._batch_mode == "reseed":
+                self._batch_reseeded += len(checked)
+                if checked:
+                    self._reseed_started(entry.item.path)
+                return
+            self.review.remember(entry, checked)
+            self.library_model.set_status(entry.item.path, self._summary(checked))
+            return
         self.batch_text = self.tr("Searched {0}/{1}: {2}").format(
             index, total, entry.item.path.name
         )
@@ -1392,13 +1544,36 @@ class MainWindow(QMainWindow):
         return self.tr("No Candidates")
 
     def _batch_error(self, entry: LibraryEntry, error: Exception) -> None:
+        if self._batch_mode != "search":
+            self._batch_errors.append(f"{entry.item.path.name}: {error_text(error)}")
+            return
         self.library_model.set_status(
             entry.item.path, self.tr("Search failed: {0}").format(error_text(error))
         )
 
     def _batch_finished(self, done: int) -> None:
+        cancelled = self.batch is not None and self.batch.cancelled()
         self.batch = None
         self._set_batch_running(False)
+        if self._batch_mode != "search":
+            text = (
+                self.tr("{0} Reseeds started; verification continues").format(self._batch_reseeded)
+                if self._batch_mode == "reseed"
+                else self.tr("Candidates checked for {0} Local Items").format(done)
+            )
+            if cancelled:
+                text = self.tr("Batch cancelled. {0}").format(text)
+            self.statusBar().showMessage(text)
+            if self._batch_errors:
+                box = QMessageBox(
+                    QMessageBox.Icon.Warning, self.tr("Batch completed"), text, parent=self
+                )
+                box.setInformativeText(
+                    self.tr("{0} errors: see details.").format(len(self._batch_errors))
+                )
+                box.setDetailedText("\n".join(self._batch_errors))
+                box.exec()
+            return
         self.statusBar().showMessage(self.tr("Batch search finished: {0} searched").format(done))
 
     def scan(self, refresh: bool = False) -> None:

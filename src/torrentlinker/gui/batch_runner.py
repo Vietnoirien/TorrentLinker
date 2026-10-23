@@ -19,17 +19,25 @@ class BatchSignals(QObject):
 
 class BatchRunner(QRunnable):
     def __init__(
-        self, entries: list[LibraryEntry], search: Callable[[LibraryEntry], list[CheckedCandidate]]
+        self,
+        entries: list[LibraryEntry],
+        search: Callable[[LibraryEntry], list[CheckedCandidate]],
+        *,
+        orphans_only: bool = True,
     ) -> None:
         super().__init__()
         self.entries = entries
         self.search = search
+        self.orphans_only = orphans_only
         self.signals = BatchSignals()
         self._cancelled = False
         self.setAutoDelete(False)
 
     def cancel(self) -> None:
         self._cancelled = True
+
+    def cancelled(self) -> bool:
+        return self._cancelled
 
     def start(self) -> None:
         QThreadPool.globalInstance().start(self)
@@ -41,5 +49,6 @@ class BatchRunner(QRunnable):
             lambda i, n, e, r: self.signals.searched.emit(i, n, e, r),
             lambda: self._cancelled,
             lambda e, err: self.signals.error.emit(e, err),
+            orphans_only=self.orphans_only,
         )
         self.signals.finished.emit(done)
