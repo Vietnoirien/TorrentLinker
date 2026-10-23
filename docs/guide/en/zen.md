@@ -4,9 +4,9 @@
 
 In **Zen → Seeding**, expand categories to compare torrents. Category notes average all available torrent notes, including descendants. Use **Plan** to prepare new downloads.
 
-Screenshots use the French interface, dark theme and example data.
+Screenshots use the English interface, dark theme and example data.
 
-![Torrents en partage et notes par catégorie](../images/zen.png)
+![Seeding torrents and category notes](../images/en/zen.png)
 
 ## Zen integration
 
@@ -27,7 +27,7 @@ Each Seeding refresh also synchronizes category tags in qBittorrent and labels i
 
 ## Make a Zen Plan
 
-![Préparer un Plan Zen](../images/plan.png)
+![Prepare a Zen Plan](../images/en/plan.png)
 
 Choose categories, then configure the Plan:
 

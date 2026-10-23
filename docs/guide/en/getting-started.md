@@ -6,13 +6,13 @@
 
 Start by connecting your Indexer and torrent client, then add folders and choose a workflow.
 
-Screenshots use the French interface, dark theme and example data.
+Screenshots use the English interface, dark theme and example data.
 
 ## Installation
 
 Download the Windows or Linux file from the [latest release](https://github.com/Vietnoirien/TorrentLinker/releases/latest). On Windows, run `TorrentLinker.exe`. On Linux, allow execution in the AppImage file properties, then open it.
 
-![Accueil sans clé API](../images/bienvenue.png)
+![Welcome screen before configuring an API key](../images/en/bienvenue.png)
 
 ## Set up
 
@@ -27,11 +27,11 @@ On first launch, or when no Indexer API key is saved, a welcome message opens co
 4. Set Download Folders for the categories you want to plan, or choose a default folder. Categories without a resolved folder are excluded.
 5. If your torrent client runs in Docker, on a NAS or on another computer, set its paths in **Settings → Client Paths** (see below).
 
-![Paramètres de connexion](../images/connexions.png)
+![Connection settings](../images/en/connexions.png)
 
 ## Your torrent client in Docker, on a NAS or on another computer
 
-![Client path mappings](../images/chemins.png)
+![Client path mappings](../images/en/chemins.png)
 
 The client then sees your folders under other paths than this computer does. For example, a Docker container sees `/data`, while this computer reaches the same files as `/mnt/nas` or `Z:\`. TorrentLinker needs to know the correspondence to find the client's torrents in your folders, to Reseed, and to send a Plan's downloads where the client can write them.
 

@@ -4,9 +4,9 @@
 
 Find torrents matching your existing files and reseed them in **qBittorrent, Deluge or Transmission**. TorrentLinker searches a Torznab Indexer such as **c411**, then asks your torrent client to verify the files before seeding.
 
-![TorrentLinker: Zen estimates, categories and torrent notes](docs/guide/images/zen.png)
+![TorrentLinker: Zen estimates, categories and torrent notes](docs/guide/images/en/zen.png)
 
-*French interface, dark theme, example data.*
+*English interface, dark theme, example data.*
 
 ## What you can do
 

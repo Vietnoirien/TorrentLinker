@@ -7,9 +7,9 @@
 3. Add the direct URL of your hosted image.
 4. Prepare the Draft, then review and publish it on c411. The app does not publish automatically.
 
-Screenshots use the French interface, dark theme and example data.
+Screenshots use the English interface, dark theme and example data.
 
-![Préparer un brouillon d’upload](../images/upload.png)
+![Prepare an Upload Draft](../images/en/upload.png)
 
 ## Prepare a c411 Draft
 

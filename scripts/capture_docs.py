@@ -1,9 +1,11 @@
-"""Capture the real French Qt widgets with offline example data, without user settings.
+"""Capture real Qt widgets in French or English with offline example data.
 
 Run from the repository root: QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/capture_docs.py
+Add --language en for English screenshots. French is the default.
 Requires the development dependencies. No torrents are downloaded or sent to a client.
 """
 
+import argparse
 import socket
 import sys
 import time
@@ -57,18 +59,26 @@ FACETS = {
 }
 
 
-def capture(widget, name):
+def capture(widget, name, output):
     QTest.qWait(150)
-    if not widget.grab().save(str(OUTPUT / f"{name}.png")):
+    if not widget.grab().save(str(output / f"{name}.png")):
         raise RuntimeError(f"Could not save {name}")
 
 
 def main():
-    OUTPUT.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--language", choices=("fr", "en"), default="fr")
+    language = parser.parse_args().language
+    output = OUTPUT / "en" if language == "en" else OUTPUT
+    output.mkdir(parents=True, exist_ok=True)
+
+    def localize(french, english):
+        return english if language == "en" else french
+
     app = QApplication(sys.argv)
     app.setApplicationName("TorrentLinker")
     apply_theme(app, "dark")
-    translators = i18n.install(app, "fr")  # noqa: F841
+    translators = i18n.install(app, language)  # noqa: F841
     with ExitStack() as stack, TemporaryDirectory(prefix="tl-docs-") as temp:
         # Guard against accidental real credentials or network calls, including background tasks.
         stack.enter_context(patch("keyring.get_password", return_value=None))
@@ -80,8 +90,13 @@ def main():
         )
         root = Path(temp)
         folders = [
-            LibraryFolder(Path("/exemple/Films"), kind=ContentKind.MOVIE),
-            LibraryFolder(Path("/exemple/Modeles-3D"), kind=ContentKind.MODEL_3D),
+            LibraryFolder(
+                Path(localize("/exemple/Films", "/example/Movies")), kind=ContentKind.MOVIE
+            ),
+            LibraryFolder(
+                Path(localize("/exemple/Modeles-3D", "/example/3D-Models")),
+                kind=ContentKind.MODEL_3D,
+            ),
         ]
         categories = {
             2000: IndexerCategory("Films & Vidéos"),
@@ -90,7 +105,7 @@ def main():
             7010: IndexerCategory("Livres", 7000),
         }
         settings = Settings(
-            language="fr", theme="dark", library_folders=folders, indexer_categories=categories
+            language=language, theme="dark", library_folders=folders, indexer_categories=categories
         )
         window = MainWindow(settings, root / "settings.json", Store(root / "state.db"))
         window.resize(1440, 920)
@@ -111,7 +126,7 @@ def main():
                 dialog.grab(),
             )
             painter.end()
-            pixmap.save(str(OUTPUT / "bienvenue.png"))
+            pixmap.save(str(output / "bienvenue.png"))
             dialog.accept()
 
         QTimer.singleShot(150, welcome)
@@ -119,14 +134,23 @@ def main():
         window.setup_notice.hide()
         window.tabs.setEnabled(True)
         window.band.setEnabled(True)
-        window.statusBar().showMessage("Données d’exemple pour la documentation")
+        window.statusBar().showMessage(
+            localize(
+                "Données d’exemple pour la documentation", "Example data for the documentation"
+            )
+        )
         settings_dialog = SettingsDialog(settings, window)
         settings_dialog.resize(1120, 940)
         settings_dialog.show()
-        capture(settings_dialog, "connexions")
-        settings_dialog._add_mapping_row(PathMapping("/exemple/Films", "/data/Films"))
+        capture(settings_dialog, "connexions", output)
+        settings_dialog._add_mapping_row(
+            PathMapping(
+                localize("/exemple/Films", "/example/Movies"),
+                localize("/data/Films", "/data/Movies"),
+            )
+        )
         settings_dialog.tabs.setCurrentIndex(4)
-        capture(settings_dialog, "chemins")
+        capture(settings_dialog, "chemins", output)
         settings_dialog.reject()
 
         names = [
@@ -144,18 +168,22 @@ def main():
             for i, name in enumerate(names)
         ]
         window.library_model.set_entries(entries)
-        window.library_model.set_status(entries[1].item.path, "Correspondance complète trouvée")
-        window.library_model.set_status(entries[2].item.path, "2 candidats à vérifier")
+        window.library_model.set_status(
+            entries[1].item.path, localize("Correspondance complète trouvée", "Full match found")
+        )
+        window.library_model.set_status(
+            entries[2].item.path, localize("2 candidats à vérifier", "2 candidates to check")
+        )
         window.tabs.setCurrentIndex(1)
         window.findChild(QSplitter).setSizes([850, 350])
         for col, width in enumerate((300, 265, 90, 145, 90)):
             window.library_view.setColumnWidth(col, width)
-        capture(window, "bibliotheque")
+        capture(window, "bibliotheque", output)
         folder_dialog = LibraryFolderDialog(folders[0].path, window)
         folder_dialog.kind.setCurrentIndex(folder_dialog.kind.findData(ContentKind.MOVIE))
         folder_dialog.resize(540, 240)
         folder_dialog.show()
-        capture(folder_dialog, "ajouter-dossier")
+        capture(folder_dialog, "ajouter-dossier", output)
         folder_dialog.reject()
 
         rows = [
@@ -179,8 +207,8 @@ def main():
             SeedingRow(
                 Torrent(
                     "f" * 40,
-                    "Guide.de.modelisation.3D.epub",
-                    Path("/exemple/Livres"),
+                    localize("Guide.de.modelisation.3D.epub", "3D.Modelling.Guide.epub"),
+                    Path(localize("/exemple/Livres", "/example/Books")),
                     state="stalledUP",
                     swarm_seeders=9,
                     seeding_time=30 * 86400,
@@ -202,11 +230,11 @@ def main():
         window.zen_tab.seeding_view.table.expandAll()
         window.band.set_balance(120)
         window.band.set_seeding(view)
-        window.band.set_catalogue("données d’exemple")
+        window.band.set_catalogue(localize("données d’exemple", "example data"))
         window.tabs.setCurrentIndex(0)
-        capture(window, "zen")
+        capture(window, "zen", output)
         window.zen_tab.pages.setCurrentIndex(1)
-        capture(window, "plan")
+        capture(window, "plan", output)
         window.zen_tab.pages.setCurrentIndex(0)
 
         indexer = Indexer(
@@ -249,12 +277,17 @@ def main():
         search.results.selectRow(0)
         for column, width in enumerate((360, 90, 70, 135, 80, 85, 85, 90)):
             search.results.setColumnWidth(column, width)
-        capture(window, "recherche")
+        capture(window, "recherche", output)
         for candidate in candidates[:2]:
-            enqueue(window.store, indexer, candidate, Path("/exemple/Telechargements"))
+            enqueue(
+                window.store,
+                indexer,
+                candidate,
+                Path(localize("/exemple/Telechargements", "/example/Downloads")),
+            )
         search.refresh_queue()
         search.show_queue()
-        capture(window, "file")
+        capture(window, "file", output)
 
         upload = window.upload_tab
         # Populate a real 3D form without filesystem inspection or online category lookups.
@@ -263,19 +296,20 @@ def main():
         upload._show_model = lambda: None
         upload._show_existing = lambda: upload._render_existing([])
         item = LocalItem(
-            folders[1].path / "Support.de.telephone.stl", {"Support.de.telephone.stl": 4500000}
+            folders[1].path / localize("Support.de.telephone.stl", "Phone.Stand.stl"),
+            {localize("Support.de.telephone.stl", "Phone.Stand.stl"): 4500000},
         )
         entry = LibraryEntry(folders[1], item, ItemState.ORPHAN)
         upload.set_entries([entry])
         upload.remember(entry, [])
         upload.select(item.path)
         window.tabs.setCurrentIndex(2)
-        capture(window, "upload")
+        capture(window, "upload", output)
         window.hide()
         app.findChild(ThemeFollower).monitor.terminate()
         app.findChild(ThemeFollower).monitor.waitForFinished(1000)
 
-    print(f"Screenshots saved in {OUTPUT}")
+    print(f"Screenshots saved in {output}")
 
 
 if __name__ == "__main__":

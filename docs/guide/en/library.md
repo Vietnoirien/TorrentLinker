@@ -7,11 +7,11 @@
 3. Check the Candidates. A size match must still pass the torrent client’s hash Verification.
 4. Reseed Full Matches. The summary separates new additions from torrents already in the client.
 
-Screenshots use the French interface, dark theme and example data.
+Screenshots use the English interface, dark theme and example data.
 
-![Bibliothèque et actions de remise en seed](../images/bibliotheque.png)
+![Library and Reseed actions](../images/en/bibliotheque.png)
 
-![Ajouter un dossier à la Bibliothèque](../images/ajouter-dossier.png)
+![Add a Library Folder](../images/en/ajouter-dossier.png)
 
 ## Add folders and use batch actions
 

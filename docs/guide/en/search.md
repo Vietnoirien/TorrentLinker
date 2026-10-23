@@ -7,15 +7,15 @@
 3. Choose a download folder and add the torrent to the queue.
 4. ### Start and manage the queue
 
-![File de téléchargement](../images/file.png)
+![Download queue](../images/en/file.png)
 
 The queue also shows **≈ Zen/day** and **≈ Note** for each torrent. Click their headers to sort numerically. Estimates use the same calculation as search results and refresh when the Zen Profile or seeding torrents change. They remain available after restarting the app.
 
 Open **Download queue** and start it. **Download now** sends only the selected torrent immediately.
 
-Screenshots use the French interface, dark theme and example data.
+Screenshots use the English interface, dark theme and example data.
 
-![Recherche et filtres par catégorie](../images/recherche.png)
+![Search and category filters](../images/en/recherche.png)
 
 ## Search and download queue
 
