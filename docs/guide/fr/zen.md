@@ -1,0 +1,73 @@
+# Suivre le Zen et préparer un Plan
+
+[Documentation](../../README.md) · [English](../en/zen.md)
+
+Dans **Zen → En partage**, dépliez les catégories pour comparer vos torrents. La Note d’une catégorie est la moyenne des notes disponibles de tous ses torrents, sous-catégories comprises. Pour préparer de nouveaux téléchargements, utilisez **Plan**.
+
+Captures de l’interface française en thème sombre, avec des données d’exemple.
+
+![Torrents en partage et notes par catégorie](../images/zen.png)
+
+## Intégration Zen
+
+L’onglet Zen réunit le solde fourni par c411 et les estimations de TorrentLinker :
+
+- Lecture du Solde Zen, de la Classe, du bonus de progression débloqué et de l’autorisation de télécharger depuis votre profil c411. La clé API demande le droit `profile:read`, en plus des accès au catalogue et au téléchargement.
+- Estimation du Zen/jour pour chaque torrent en partage et pour les correspondances de la Bibliothèque, selon taille, seeders, durée de seed, catégorie, bonus de Classe et heures de seed quotidiennes configurées.
+- Comparaison entre Tanker, Swarm Keeper et Reuploader. Pour Reuploader, le calcul approximatif utilise le nombre d’uploads saisi dans l’onglet Zen.
+- Réglage de la Classe, du bonus de progression débloqué, des heures de seed et du plafond global de torrents dans **Paramètres → Zen**. La Classe et le bonus sont remplis depuis c411 lorsque le profil est accessible.
+
+Sans accès au profil, vous pouvez renseigner le Profil Zen manuellement et utiliser les estimations et Plans. Le solde affiché vient de c411 ; les gains prévus et le délai de rentabilisation sont des estimations locales. La durée de seed connue du client peut être inférieure à celle de c411 après suppression puis réajout d’un torrent.
+
+### Torrents en partage par catégorie
+
+**Zen → En partage** regroupe les torrents selon leur catégorie et sous-catégorie du Catalogue. Dépliez une branche pour voir les torrents, leur taille, leur estimation de Zen/jour et leur **≈ Note**. Les catégories affichent la moyenne arithmétique des Notes de tous leurs torrents, sous-catégories comprises ; les Notes indisponibles sont exclues. La recherche porte sur les noms de torrents et de catégories. Le tri, la largeur des colonnes, la sélection et les branches repliées sont conservés à l’actualisation. Les torrents sans catégorie connue apparaissent sous **Catégorie inconnue** ; les catégories générales issues du catalogue tiers restent au niveau parent tant qu’une sous-catégorie n’est pas confirmée.
+
+Chaque actualisation synchronise aussi les tags de catégorie dans qBittorrent et les labels dans Transmission, par exemple `torrentlinker:category:Books / Comics`. L’application ajoute les tags manquants et remplace uniquement les anciens tags de ce préfixe, sans modifier les tags personnels, ceux de vérification, les dossiers de téléchargement ni la catégorie native du client. Les catégories inconnues ne reçoivent pas de tag. Le label unique de Deluge est conservé, car il sert à suivre la vérification ; ses torrents figurent néanmoins dans l’arborescence. La vue indique les mises à jour et leurs éventuels échecs.
+
+## Préparer un Plan Zen
+
+![Préparer un Plan Zen](../images/plan.png)
+
+Choisissez les catégories, puis réglez le Plan :
+
+| Réglage | Effet |
+| --- | --- |
+| Optimiser pour **Zen/jour** | Essaie plusieurs ordres de sélection gloutonne et garde le Plan au gain de Zen estimé le plus élevé. |
+| Optimiser pour **Note** | Sélectionne d’abord les torrents aux meilleures Notes pour votre Classe. |
+| Limite de téléchargement | Taille totale maximale en Go décimaux. Zéro n’ajoute aucune limite. |
+| Limite de torrents | Nombre maximal facultatif de torrents ajoutés par ce Plan. |
+| Peu de seeders uniquement | Nombre maximal de seeders actuels, initialement 10, avant votre arrivée. |
+| Taille des torrents de… à… | Taille minimale et maximale par torrent, en Go décimaux. Zéro laisse la borne ouverte. S’applique aux téléchargements et remises en seed. |
+
+Les remises en seed sont prioritaires. Elles comptent dans la limite de torrents mais ne consomment pas de budget de téléchargement. Le plafond global et la réserve d’espace disque s’appliquent aussi. Les résultats indiquent la Note de chaque torrent, la Note moyenne pondérée par la taille, le gain de Zen estimé, le délai de rentabilisation et l’espace libre avant et après le Plan. Les dossiers situés sur un même disque physique sont comptés ensemble. Les options sont conservées après redémarrage.
+
+Le Plan exclut tout torrent déjà présent dans le client, quel que soit son tracker ou son état. Il exclut aussi les torrents du Catalogue dont les fichiers semblent déjà présents dans la Bibliothèque ou les dossiers de téléchargement, par exemple après suppression du torrent sans ses données. L’identification compare un Élément local ou l’un de ses fichiers à la taille du torrent, avec jusqu’à 64 Kio de moins pour un NFO ou une couverture, et exige une majorité de mots significatifs communs sans numéro de volume différent. Le résumé indique le nombre d’exclusions ; survolez-le pour les consulter. Cette étape n’effectue aucune requête. Seule une recherche dans la Bibliothèque confirme une correspondance à remettre en seed.
+
+Chaque Plan affiche deux durées estimées. L’**envoi** au client suit les limites c411 des `.torrent` : 30 par minute et par clé API, et environ 280 sur 20 minutes. Avec davantage de clés, l’envoi accélère : environ une heure pour 1 000 torrents avec une clé, sept minutes avec cinq. Le **téléchargement** des données est estimé en divisant la taille du Plan par votre débit. **Tester le débit** utilise anonymement le test public Cloudflare pendant environ huit secondes et mémorise le résultat. Cette durée est un minimum : les torrents peu seedés peuvent être plus lents. Lancez le test lorsque votre client torrent est au repos.
+
+L’envoi télécharge chaque `.torrent` directement depuis c411 et l’ajoute au dossier de téléchargement prévu. TorrentLinker refuse les téléchargements qui écraseraient des fichiers existants. Les remises en seed passent toujours par une vérification par hash.
+
+Une barre de progression indique les envois, ajouts, refus et échecs, avec le temps restant estimé. **Arrêter l’envoi** s’arrête après le torrent en cours. Si c411 limite les téléchargements avec une erreur HTTP 429, l’application attend puis retente le même torrent, avec un délai croissant jusqu’à 15 minutes, et affiche l’heure de la prochaine tentative.
+
+Le Plan et les résultats sont enregistrés au fil de l’envoi. Après un arrêt, une fermeture ou un plantage, seuls les torrents restant à envoyer reviennent ; les échecs sont retentés. Cliquez sur **Envoyer au client torrent** pour reprendre. Créer un nouveau Plan ou changer ses options remplace le Plan enregistré. Les remises en seed ne sont pas sauvegardées dans le Plan, mais passent toujours avant les téléchargements lors de l’envoi.
+
+### Actualisation du Catalogue et estimations provisoires
+
+Le premier Plan importe anonymement le catalogue public de métadonnées Zen Lab. Votre clé API et toutes les demandes de `.torrent` sont envoyées directement à c411.
+
+c411 autorise 1 200 recherches et requêtes de Catalogue par heure et par compte, toutes clés confondues, et limite les téléchargements de `.torrent` à 30 par minute et par clé. TorrentLinker sépare ces budgets : les recherches vont jusqu’à deux par seconde tant que le budget horaire le permet, puis ralentissent, même pendant l’envoi d’un Plan. Chaque clé reste limitée à 30 téléchargements par minute et environ 280 sur 20 minutes. Vos recherches, vérifications de fichiers et remises en seed passent avant les Plans et actualisations du Catalogue. Si c411 impose à toutes les clés une attente supérieure à une demi-minute, les actions interactives s’arrêtent et indiquent quand réessayer.
+
+Vous pouvez ajouter jusqu’à quatre clés du même compte dans **Paramètres → Connexions**, dans la section des clés API supplémentaires. Chacune apporte son quota de téléchargement ; les requêtes utilisent celle disponible le plus tôt. Voir [ADR-0008](../../adr/0008-several-c411-keys-each-within-its-own-limits.md) et les [mesures de limites](../../research/rate-limits.md).
+
+Au démarrage et lors de la préparation d’un Plan, c411 est parcouru du plus récent au plus ancien, jusqu’au repère de la dernière actualisation réussie, ou jusqu’à une page connue lors de la première actualisation. Le parcours historique et sa pagination mémorisée sont réservés à l’action explicite de récupération du Catalogue. Les actualisations interrompues conservent leur repère et recherchent les nouveautés à la reprise.
+
+Les Plans utilisent les métadonnées en cache et affichent des estimations provisoires. Aucun contrôle de métadonnées torrent par torrent n’est effectué auprès de c411 avant la préparation ou l’envoi. Le client torrent est interrogé toutes les 30 secondes pour actualiser la vue En partage à mesure que les trackers répondent. Les nombres de seeders connus mettent aussi à jour le Catalogue ; les valeurs inconnues conservent l’estimation en cache.
+
+Si une actualisation est déjà en cours, le Plan l’attend puis actualise ses catégories. Un échec d’actualisation arrête sa création. Vous pouvez interrompre la récupération et créer un Plan avec les données déjà disponibles.
+
+Le catalogue tiers fournit des catégories générales et sa fraîcheur en amont est inconnue. Ses entrées générales sont exclues d’une sélection de sous-catégorie tant que c411 n’a pas fourni une catégorie précise. Sélectionner la catégorie parente les inclut. L’actualisation des seeders ne lève pas cette incertitude. Ni les limites de pagination c411 ni ce catalogue tiers ne garantissent une couverture complète du tracker ; l’application indique les limites connues. Les valeurs de Zen restent des estimations.
+
+Voir [CONTEXT.md](../../../CONTEXT.md) pour le vocabulaire du projet et [docs/adr](../../adr) pour les décisions de conception.
+
+[Documentation](../../README.md) · [English](../en/zen.md)

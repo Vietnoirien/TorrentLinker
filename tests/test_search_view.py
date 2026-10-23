@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from PySide6.QtCore import Qt
 
 from tests.fake_qbit import FakeQbit
@@ -115,7 +117,7 @@ def test_queue_worker_and_restart_recovery(qtbot, tmp_path):
     assert not view.start.isEnabled()
     restored = SearchTab(store, Settings(), lambda: indexer, lambda: client)
     qtbot.addWidget(restored)
-    assert restored.queue.item(0, 3).text() == "Sent to client"
+    assert restored.queue.item(0, 5).text() == "Sent to client"
     assert not restored.start.isEnabled()
     restored.show()
     restored.view_queue.click()
@@ -224,3 +226,100 @@ def test_add_from_details_does_not_start_queue_or_silently_change_folder(qtbot, 
     with pytest.raises(ValueError, match="accessible"):
         view.download_candidate(c, indexer, "", False)
     assert len(entries(store)) == 1 and entries(store)[0].folder == folder
+
+
+def test_saved_queue_shows_zen_and_note_without_search_results(qtbot, tmp_path):
+    from torrentlinker.download_queue import enqueue
+    from torrentlinker.zen import ZenClass, ZenProfile, ZenTorrent, added_values, note
+
+    store = Store(tmp_path / "queue-estimates.db")
+    indexer = Indexer("https://c411.org/api", "key")
+    candidate = Candidate("Queued", 10**9, "download", 5, "a" * 40, categories=(2030,))
+    enqueue(store, indexer, candidate, tmp_path)
+    settings = Settings(zen=ZenProfile(zen_class=ZenClass.SWARM_KEEPER, seed_hours=12))
+    view = SearchTab(store, settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    torrent = ZenTorrent(candidate.size, candidate.seeders + 1, category=2030)
+    expected = added_values(settings.zen, [torrent])[0]
+    assert view.queue.horizontalHeaderItem(2).text() == "≈ Zen/day"
+    assert view.queue.item(0, 2).text() == f"≈ {expected:.2f}"
+    assert view.queue.item(0, 3).text() == f"≈ {note(settings.zen.zen_class, torrent):.2f}"
+    assert "Revival payouts are separate" in view.queue.item(0, 2).toolTip()
+    view._show_results([candidate], indexer)
+    for queue_column, result_column in ((2, 5), (3, 6)):
+        queued = view.queue.item(0, queue_column)
+        result = view.results.item(0, result_column)
+        assert queued.text() == result.text()
+        assert queued.toolTip() == result.toolTip()
+        assert queued.data(Qt.ItemDataRole.UserRole) == result.data(Qt.ItemDataRole.UserRole)
+
+
+def test_queue_estimates_refresh_with_profile_and_current_seeding_after_sorting(qtbot, tmp_path):
+    from types import SimpleNamespace
+
+    from torrentlinker.download_queue import enqueue
+    from torrentlinker.seeding import Seeding, SeedingRow
+    from torrentlinker.zen import ZenClass, ZenDay, ZenProfile, ZenTorrent, added_values, note
+
+    store = Store(tmp_path / "refresh-queue.db")
+    indexer = Indexer("https://c411.org/api", "key")
+    small = Candidate("Small", 10**9, "small", 40, "a" * 40, categories=(2030,))
+    large = Candidate("Large", 20 * 10**9, "large", 1, "b" * 40, categories=(2030,))
+    for candidate in (small, large):
+        enqueue(store, indexer, candidate, tmp_path)
+    settings = Settings(zen=ZenProfile(zen_class=ZenClass.SWARM_KEEPER))
+    view = SearchTab(store, settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue.sortItems(2, Qt.SortOrder.DescendingOrder)
+    assert view.queue.item(0, 0).text() == "Large"
+    view.queue.selectRow(0)
+    selected = view.selected_keys()
+    previous = view.queue.item(0, 2).data(Qt.ItemDataRole.UserRole)
+    settings.zen = replace(settings.zen, seed_hours=12)
+    view.refresh_estimates()
+    assert view.queue.item(0, 2).data(Qt.ItemDataRole.UserRole) == previous / 2
+    assert view.selected_keys() == selected
+    view.queue.sortItems(3, Qt.SortOrder.DescendingOrder)
+    assert view.queue.item(0, 0).text() == "Large"
+    # An already seeded torrent uses its observed swarm/age and current earnings.
+    active = ZenTorrent(small.size, 2, 180, category=2030)
+    view.set_seeding(
+        Seeding([SeedingRow(SimpleNamespace(hash=small.infohash), 0.89)], ZenDay(), [active])
+    )
+    rows = {view.queue.item(i, 0).text(): i for i in range(2)}
+    assert view.queue.item(rows["Small"], 2).text() == "≈ 0.89"
+    assert "Already seeding" in view.queue.item(rows["Small"], 2).toolTip()
+    assert view.queue.item(rows["Small"], 3).data(Qt.ItemDataRole.UserRole) == note(
+        settings.zen.zen_class, active
+    )
+    expected = added_values(
+        settings.zen, [ZenTorrent(large.size, large.seeders + 1, category=2030)], [active]
+    )[0]
+    assert view.queue.item(rows["Large"], 2).data(Qt.ItemDataRole.UserRole) == expected
+    assert "count unavailable" not in view.queue.item(rows["Large"], 2).toolTip()
+    assert view.selected_keys() == selected
+    view.refresh_queue()
+    assert view.selected_keys() == selected
+
+
+def test_queue_estimates_use_saved_origin_when_current_indexer_changes(qtbot, tmp_path):
+    from torrentlinker.download_queue import enqueue
+
+    store = Store(tmp_path / "origins.db")
+    c411 = Indexer("https://c411.org/api", "key")
+    other = Indexer("https://other.test/api", "key")
+    candidate = Candidate("C411", 10**9, "download", 3, "a" * 40)
+    foreign = Candidate("Other", 10**9, "other", 3, "b" * 40)
+    enqueue(store, c411, candidate, tmp_path)
+    enqueue(store, other, foreign, tmp_path)
+    view = SearchTab(store, Settings(), lambda: other, FakeQbit)
+    qtbot.addWidget(view)
+    view._show_results([foreign], other)
+    view.refresh_estimates()
+    view.queue.sortItems(2, Qt.SortOrder.DescendingOrder)
+    assert view.queue.item(0, 0).text() == "C411"
+    assert view.queue.item(0, 2).text().startswith("≈ ")
+    assert view.queue.item(0, 3).text().startswith("≈ ")
+    assert view.queue.item(1, 2).text() == "–"
+    assert view.queue.item(1, 3).text() == "–"
+    assert "available for c411" in view.queue.item(1, 2).toolTip()

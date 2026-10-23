@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableView,
     QTabWidget,
@@ -149,7 +150,8 @@ class MainWindow(QMainWindow):
         self._indexer_proxy = net.current()  # what the Indexer, once made, goes through
         self.running_version = installed_version()
         self.setWindowTitle(f"TorrentLinker {self.running_version}")
-        self.resize(1280, 800)
+        available = self.screen().availableGeometry()
+        self.resize(min(1280, available.width() - 40), min(800, available.height() - 60))
 
         toolbar = QToolBar(self.tr("Library"), self)
         toolbar.setMovable(False)
@@ -347,7 +349,13 @@ class MainWindow(QMainWindow):
         self.setup_notice.hide()
         central_layout.addWidget(self.setup_notice)
         central_layout.addWidget(self.band)
-        central_layout.addWidget(self.tabs, 1)
+        # A wide workspace must not impose its minimum size on the desktop window.
+        # Keep navigation and the status band visible; scroll only the workspace.
+        self.workspace_scroll = QScrollArea()
+        self.workspace_scroll.setWidgetResizable(True)
+        self.workspace_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.workspace_scroll.setWidget(self.tabs)
+        central_layout.addWidget(self.workspace_scroll, 1)
         shell.addWidget(content, 1)
         self.tabs.currentChanged.connect(self._workspace_changed)
         self._workspace_changed(0)
@@ -456,6 +464,8 @@ class MainWindow(QMainWindow):
         )
 
     def _workspace_changed(self, index: int) -> None:
+        self.workspace_scroll.horizontalScrollBar().setValue(0)
+        self.workspace_scroll.verticalScrollBar().setValue(0)
         self.page_title.setText(self.tabs.tabText(index))
         descriptions = [
             self.tr("Track your earnings and plan what to seed next."),

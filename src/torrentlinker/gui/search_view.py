@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from PySide6.QtCore import QDateTime, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QShowEvent
@@ -202,6 +203,8 @@ class SearchTab(QWidget):
             [
                 self.tr("Torrent"),
                 self.tr("Size"),
+                self.tr("≈ Zen/day"),
+                self.tr("≈ Note"),
                 self.tr("Download Folder"),
                 self.tr("Status"),
                 self.tr("Details"),
@@ -210,7 +213,7 @@ class SearchTab(QWidget):
         self.queue_empty = EmptyState(
             self.queue, self.tr("Your queue is empty. Add torrents from the search results.")
         )
-        for column, width in enumerate((330, 100, 230, 140, 230)):
+        for column, width in enumerate((330, 100, 100, 90, 230, 140, 230)):
             self.queue.setColumnWidth(column, width)
         queue_layout.addWidget(self.queue, 1)
         controls = QHBoxLayout()
@@ -428,8 +431,34 @@ class SearchTab(QWidget):
 
     def refresh_estimates(self) -> None:
         indexer = self._result_indexer
-        if indexer is None:
-            return
+        if indexer is not None:
+            self._refresh_table_estimates(
+                self.results,
+                {i: (candidate, indexer.is_c411) for i, candidate in enumerate(self._results)},
+                5,
+                6,
+            )
+        self._refresh_queue_estimates()
+
+    def _refresh_queue_estimates(self) -> None:
+        # Use each saved origin, before any search and after changing Indexers.
+        self._refresh_table_estimates(
+            self.queue,
+            {
+                entry.key: (entry.candidate, urlsplit(entry.indexer_url).hostname == "c411.org")
+                for entry in entries(self.store)
+            },
+            2,
+            3,
+        )
+
+    def _refresh_table_estimates(
+        self,
+        table: QTableWidget,
+        candidates: dict[int | str, tuple[Candidate, bool]],
+        zen_column: int,
+        note_column: int,
+    ) -> None:
         alongside = self._seeding.active if self._seeding else []
         current = (
             {row.torrent.hash.lower(): row.zen for row in self._seeding.rows if row.zen is not None}
@@ -448,22 +477,30 @@ class SearchTab(QWidget):
             if self._seeding
             else {}
         )
-        prospective = [
-            ZenTorrent(c.size, c.seeders + 1, category=c.categories[-1] if c.categories else None)
-            for c in self._results
-        ]
-        values = added_values(self.settings.zen, prospective, alongside)
-        self.results.setSortingEnabled(False)
-        for row in range(self.results.rowCount()):
-            title = self.results.item(row, 0)
+        prospective = {
+            identity: ZenTorrent(
+                c.size, c.seeders + 1, category=c.categories[-1] if c.categories else None
+            )
+            for identity, (c, _) in candidates.items()
+        }
+        values = dict(
+            zip(
+                candidates,
+                added_values(self.settings.zen, list(prospective.values()), alongside),
+                strict=True,
+            )
+        )
+        table.setSortingEnabled(False)
+        for row in range(table.rowCount()):
+            title = table.item(row, 0)
             if title is None:
                 continue
             identity = title.data(Qt.ItemDataRole.UserRole)
-            candidate = self._results[identity]
+            candidate, is_c411 = candidates[identity]
             existing = current.get((candidate.infohash or "").lower())
             value = existing if existing is not None else values[identity]
-            if not indexer.is_c411:
-                item = QTableWidgetItem("–")
+            if not is_c411:
+                item = NumberItem("–", float("-inf"))
                 tooltip = self.tr("Zen estimates are available for c411 torrents.")
             else:
                 item = NumberItem(f"≈ {value:.2f}", value)
@@ -483,25 +520,25 @@ class SearchTab(QWidget):
                         "Current seeding count unavailable; Class count bonus is provisional."
                     )
             item.setToolTip(tooltip)
-            self.results.setItem(row, 5, item)
+            table.setItem(row, zen_column, item)
             torrent_note = current_notes.get(
                 (candidate.infohash or "").lower(),
                 note(self.settings.zen.zen_class, prospective[identity]),
             )
             note_item = (
                 NumberItem(f"≈ {torrent_note:.2f}", torrent_note)
-                if indexer.is_c411
-                else QTableWidgetItem("–")
+                if is_c411
+                else NumberItem("–", float("-inf"))
             )
             note_item.setToolTip(
                 self.tr("Estimated contribution note for your Class, category, swarm and seed age.")
                 + "\n"
                 + tooltip
-                if indexer.is_c411
+                if is_c411
                 else tooltip
             )
-            self.results.setItem(row, 6, note_item)
-        self.results.setSortingEnabled(True)
+            table.setItem(row, note_column, note_item)
+        table.setSortingEnabled(True)
 
     def open_website(self) -> None:
         selected = self.selected_results()
@@ -753,15 +790,17 @@ class SearchTab(QWidget):
             self.queue.setItem(
                 row, 1, NumberItem(human_size(entry.candidate.size), entry.candidate.size)
             )
-            self.queue.setItem(row, 2, QTableWidgetItem(str(entry.folder)))
-            self.queue.setItem(row, 3, QTableWidgetItem(labels.get(entry.status, entry.status)))
-            self.queue.setItem(row, 4, QTableWidgetItem(entry.reason))
-            for column in range(5):
+            self.queue.setItem(row, 2, QTableWidgetItem())
+            self.queue.setItem(row, 3, QTableWidgetItem())
+            self.queue.setItem(row, 4, QTableWidgetItem(str(entry.folder)))
+            self.queue.setItem(row, 5, QTableWidgetItem(labels.get(entry.status, entry.status)))
+            self.queue.setItem(row, 6, QTableWidgetItem(entry.reason))
+            for column in range(7):
                 cell = self.queue.item(row, column)
                 assert cell is not None
                 cell.setSelected(entry.key in selected)
                 cell.setToolTip(cell.text())
-        self.queue.setSortingEnabled(True)
+        self._refresh_queue_estimates()
         self.queue.blockSignals(False)
         count = sum(e.status == "queued" for e in rows)
         self.pages.setTabText(1, self.tr("Download queue ({0})").format(count))
