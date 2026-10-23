@@ -1,211 +1,273 @@
 # TorrentLinker
 
-TorrentLinker finds files that are no longer seeded in qBittorrent, Deluge or Transmission, searches a Torznab Indexer such as c411, and reseeds matching torrents against the data already on disk. It also estimates your Zen earnings, plans which new torrents to download and seed, and prepares c411 uploads of what the tracker does not have yet. The interface is available in English and French.
+Français · [English](README.en.md)
 
-## Download 0.5.3
+TorrentLinker retrouve les fichiers qui ne sont plus partagés dans qBittorrent, Deluge ou Transmission, recherche des torrents correspondants auprès d’un indexeur Torznab comme c411 et les remet en seed à partir des données déjà présentes sur le disque. L’application estime aussi vos gains de Zen, prépare des plans de téléchargement et de seed, et crée des brouillons d’upload pour les contenus absents de c411. L’interface est disponible en français et en anglais.
 
-| Platform | Download |
+## Télécharger la version 0.5.4
+
+| Plateforme | Téléchargement |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.3/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.3/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.4/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.5.4/TorrentLinker-x86_64.AppImage) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.3) for changes and assets.
+Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Les changements et les fichiers à télécharger figurent dans les [notes de version](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.5.4).
 
-TorrentLinker checks GitHub for a newer stable release at startup and every 30 minutes while running, reusing successful checks for 30 minutes. A small, dismissible notice links to the release page when an update is available. Downloads and installation remain manual. The comparison uses the version the running window started with, even if a newer version is installed on disk. The check uses your configured internet proxy, sends no account or torrent information, and stays silent when GitHub is unreachable.
+TorrentLinker vérifie sur GitHub si une nouvelle version stable est disponible au démarrage, puis toutes les 30 minutes. Une vérification réussie reste en cache pendant 30 minutes. Un bandeau discret, que vous pouvez fermer, mène à la page de la nouvelle version. Le téléchargement et l’installation restent manuels. La comparaison utilise la version avec laquelle la fenêtre a démarré, même si une version plus récente est installée entre-temps. La vérification passe par votre proxy Internet, ne transmet aucune information sur votre compte ou vos torrents et reste silencieuse si GitHub est inaccessible.
 
-## Finding your way around
+## Se repérer dans l’interface
 
-The 0.5.0 interface adds **Search** alongside **Zen**, **Library**, **Upload** and **Settings**. Zen separates **Seeding**, **Plan** and **Catalogue**; Upload separates preparing an Upload from reviewing your **Drafts**. **Settings → General → Theme** offers System, Light and Dark. System follows the desktop preference, including GNOME's explicit dark-mode setting; a saved theme change applies immediately.
+Depuis la version 0.5.0, **Recherche** rejoint les espaces **Zen**, **Bibliothèque**, **Upload** et **Paramètres**. Zen sépare **En partage**, **Plan** et **Catalogue** ; Upload sépare la préparation d’un upload et les **Brouillons**. Dans **Paramètres → Général → Thème**, choisissez Système, Clair ou Sombre. Le mode Système suit les préférences du bureau, y compris le mode sombre explicite de GNOME. Le changement de thème s’applique dès l’enregistrement.
 
-Click a results table's column header to sort, then click again to reverse it. Drag the divider between column headers to resize a column, or double-click it to fit its contents. Sizes, seeder counts and Zen estimates sort numerically. The Library and Seeding lists also have text filters. Library actions stay above the Library, with **Rescan everything** in the **Scan** menu. Use **Ctrl+1/2/3/4** to switch workspaces, **Ctrl+F** to focus Search or the Library filter, and **Ctrl+,** to open Settings.
+Cliquez sur l’en-tête d’une colonne pour trier, puis une seconde fois pour inverser l’ordre. Faites glisser la séparation entre deux en-têtes pour redimensionner une colonne, ou double-cliquez pour l’ajuster au contenu. Les tailles, nombres de seeders et estimations de Zen se trient numériquement. La Bibliothèque et la liste des torrents en partage disposent aussi d’un filtre textuel. Les actions de la Bibliothèque restent au-dessus de la liste ; le menu **Analyser** contient l’analyse complète qui ignore le cache. **Ctrl+1/2/3/4** change d’espace, **Ctrl+F** place le curseur dans la recherche ou le filtre de la Bibliothèque, et **Ctrl+,** ouvre les Paramètres.
 
-In the Library, **Check all Candidates** checks every untested Candidate already found, including items hidden by filters, without repeating searches or successful checks. **Reseed all Full Matches** sends confirmed Full Matches through the usual hash Verification before seeding. Both actions run in the background with progress and **Cancel batch**; errors are collected so other Candidates can continue.
+Dans la Bibliothèque, **Ajouter un dossier…** permet de choisir un dossier, son **Type de contenu** et sa **Profondeur d’analyse**, sans ouvrir les Paramètres. La profondeur 1 considère chaque fichier ou dossier directement contenu comme un Élément local. Après enregistrement, la Bibliothèque est analysée et filtrée sur le nouveau dossier. Un dossier déjà enregistré n’est pas ajouté une seconde fois.
 
-If Full Matches are inside archives, a preflight lists their unpacked sizes. Choose **Unpack and reseed selected…** to review one archive’s destination and free space in the existing confirmation dialog, or **Reseed ready Matches** to process only files already on disk. Archives are never unpacked automatically by the batch.
+**Vérifier tous les Candidats** examine les Candidats encore non vérifiés, y compris ceux masqués par les filtres, sans relancer les recherches ni les vérifications réussies. **Remettre en seed toutes les correspondances complètes** ajoute les correspondances confirmées au client torrent, puis lance la vérification par hash avant le seed. Ces actions s’exécutent en arrière-plan, avec une progression et un bouton d’annulation. Les erreurs sont regroupées pour permettre au traitement de continuer. Les torrents déjà présents dans le client sont signalés et comptés séparément des nouvelles remises en seed.
 
-## Search and download queue
+Si des correspondances complètes se trouvent dans des archives, une fenêtre indique leur taille après décompression. Choisissez **Décompresser et remettre en seed la sélection…** pour vérifier la destination et l’espace disponible d’une archive, ou l’action de remise en seed des correspondances prêtes pour ne traiter que les fichiers déjà décompressés. Le traitement par lot ne décompresse jamais les archives automatiquement.
 
-In **Search**, enter a title and optionally choose a category from the expandable tree. Click an arrow to show subcategories, select a parent or child to filter, or choose **All categories** to clear the filter. Results come directly from your Indexer, with previous/next paging. Select one or more torrents, choose a Download Folder or leave it blank to use the category folders from Settings, then click **Add selected to queue**.
+## Recherche et file de téléchargement
 
-For c411, the category tree and available search options come from its native API. Select a category to see its multi-select filters. Films & Vidéos adds resolution, source, HDR, codec, audio, channels, language and profile; series also offer season and episode choices. Year, uploader, exclusivity and sorting apply across categories. **Clear filters** resets the selection. Changing categories clears incompatible filters. Other Indexers keep their Torznab search.
+Dans **Recherche**, saisissez un titre et choisissez éventuellement une catégorie dans l’arborescence. Cliquez sur une flèche pour afficher les sous-catégories, sélectionnez une catégorie parente ou une sous-catégorie pour filtrer, ou **Toutes les catégories** pour retirer ce filtre. Les résultats viennent directement de l’indexeur, avec des boutons de pagination. Sélectionnez un ou plusieurs torrents, choisissez un dossier de téléchargement ou laissez le champ vide pour utiliser les dossiers par catégorie des Paramètres, puis cliquez sur **Ajouter la sélection à la file**.
 
-The revival selector offers available torrents, inclusion of **soins palliatifs**, or revival torrents only. Results identified by c411 as soins palliatifs carry a label; zero seeders alone does not establish that status. This is discovery support, not personal reward tracking. Previous/next paging keeps the submitted search criteria. If c411 exposes only part of a large result set, the app shows its accessible limit and asks you to narrow the filters.
+Pour c411, les catégories et les options de recherche proviennent de son API native. Sélectionnez une catégorie pour afficher ses filtres à choix multiples. Films & Vidéos propose résolution, source, HDR, codec, audio, canaux, langue et profil ; les séries proposent aussi saison et épisode. L’année, l’uploader, l’exclusivité et le tri sont disponibles dans toutes les catégories. **Effacer les filtres** réinitialise la sélection. Changer de catégorie retire les filtres incompatibles. Les autres indexeurs conservent leur recherche Torznab.
 
-Search results include sortable **≈ Zen/day** and **≈ Note** previews for c411, also shown in torrent details. Note is the estimated contribution score for your Class, category, swarm and seed age. New torrents use your Zen Profile, planned seed hours and current seeding count, starting at zero seed age and including you in the swarm. Already seeded torrents keep their current estimate and seed age. Hover over the estimate to see its assumptions. Revival payouts remain separate.
+Le filtre de disponibilité permet d’afficher les torrents disponibles, d’inclure les **soins palliatifs**, ou de ne montrer que ces derniers. Les torrents que c411 identifie comme soins palliatifs portent une indication ; l’absence de seeders ne suffit pas à établir ce statut. Cette fonction aide à les trouver, mais ne suit pas vos récompenses personnelles de réanimation. La pagination conserve les critères soumis. Si c411 ne donne accès qu’à une partie d’un grand ensemble de résultats, l’application indique cette limite et invite à affiner les filtres.
 
-The **Age** column shows time since publication, such as **2 hours** or **3 days**, and refreshes every minute while Search is visible. Hover to see the exact local date and time, using c411's creation date or Torznab's publication date. Missing dates display as **–**. The header sorts the current page by the underlying timestamp; use **Newest** with ascending or descending order to sort the search across pages.
+Les résultats c411 affichent les colonnes triables **≈ Zen/jour** et **≈ Note**, également présentes dans les détails d’un torrent. La Note est le score de contribution estimé selon votre Classe, la catégorie, le nombre de seeders et la durée de seed. Pour un nouveau torrent, le calcul utilise votre Profil Zen, vos heures de seed prévues et votre nombre actuel de torrents en partage, avec une durée de seed initiale de zéro et votre présence dans le groupe de seeders. Les torrents déjà en partage conservent leur estimation et leur durée de seed actuelles. Survolez l’estimation pour en connaître les hypothèses. Les récompenses de réanimation restent distinctes.
 
-Select a result and click **Open on website**, or double-click it to open its description, images, NFO and file list in a torrent tab. **Open in tabs** opens all selected results. Details load only when opened; no `.torrent` is downloaded. The NFO is plain text, and images load through the configured proxy without Indexer credentials. Descriptions are centered, with explicit text alignment preserved. Images up to 32 MiB are decoded within a pixel limit and scaled for display. Failed images show compact links; **Retry images** retries them without reloading the torrent metadata and respects a host's rate-limit cooldown. Unsupported details and unavailable images can still be viewed on the website.
+La colonne **Âge** indique le temps écoulé depuis la publication, par exemple **2 heures** ou **3 jours**, et s’actualise chaque minute lorsque Recherche est visible. Survolez-la pour voir la date et l’heure locales exactes, issues de la date de création c411 ou de publication Torznab. Les dates absentes sont indiquées par **–**. L’en-tête trie la page courante selon l’horodatage réel ; utilisez **Plus récents** et l’ordre croissant ou décroissant pour trier la recherche sur l’ensemble des pages.
 
-Each torrent tab also offers **Add to queue** and **Download now**, with an editable Download Folder. Download now sends only that torrent, leaving other queued items waiting. Both actions use the queue's duplicate and overwrite protections; a torrent already queued to a different folder must be removed before changing its destination.
+Sélectionnez un résultat et cliquez sur **Ouvrir sur le site**, ou double-cliquez pour ouvrir sa description, ses images, son NFO et sa liste de fichiers dans un onglet. **Ouvrir dans des onglets** ouvre tous les résultats sélectionnés. Les détails ne sont chargés qu’à l’ouverture, sans téléchargement du `.torrent`. Le NFO est affiché en texte brut ; les images passent par le proxy configuré, sans identifiants de l’indexeur. Les descriptions sont centrées, tout en conservant les alignements explicitement définis. Les images jusqu’à 32 Mio sont décodées dans une limite de pixels et redimensionnées pour l’affichage. Les images indisponibles laissent place à des liens ; l’action de nouvelle tentative respecte le délai imposé par l’hébergeur et ne recharge pas les métadonnées du torrent. Les détails non pris en charge et les images manquantes restent consultables sur le site.
 
-Torrent tabs stay open while you run other searches. Opening the same torrent switches to its existing tab. Drag tabs to reorder them, use **Open tabs** to jump to one, or close them with the × button, middle-click, **Ctrl+W**, or the tab's right-click menu. **Ctrl+Tab** and **Ctrl+Shift+Tab** switch tabs; **Ctrl+F** returns to the search field. Closing a tab does not remove or stop a queued download.
+Chaque onglet de torrent propose aussi **Ajouter à la file** et **Télécharger maintenant**, avec un dossier de téléchargement modifiable. Télécharger maintenant envoie uniquement ce torrent au client et laisse les autres éléments de la file en attente. Les deux actions protègent contre les doublons et l’écrasement de fichiers. Pour changer la destination d’un torrent déjà dans la file, retirez-le d’abord de celle-ci.
 
-On the main Search page, **Queue all tabs** adds the open torrent tabs and opens the queue without starting downloads. The **Download queue** button above the tabs stays accessible while browsing torrent details. **Download all tabs** queues and starts that set in one click, leaving unrelated queued torrents waiting. Each tab keeps its own Download Folder. All destinations are checked before queuing the batch; if one needs attention, that tab opens and an error appears above the tabs. Torrent tabs last for the current app session; the download queue persists across restarts.
+Les onglets restent ouverts pendant vos recherches. Ouvrir à nouveau le même torrent sélectionne son onglet existant. Faites glisser les onglets pour les réordonner, utilisez la liste des onglets ouverts pour accéder à l’un d’eux, ou fermez-les avec ×, le clic du milieu, **Ctrl+W** ou leur menu contextuel. **Ctrl+Tab** et **Ctrl+Maj+Tab** passent d’un onglet à l’autre ; **Ctrl+F** revient au champ de recherche. Fermer un onglet ne retire ni n’arrête un téléchargement dans la file.
 
-Open **Download queue** and click **Start queue** to send the selected torrents to your torrent client in order. The queue respects the Indexer's download limits and waits when asked. **Pause** stops further sends after the current request; downloads already started continue in the torrent client. Queue entries and outcomes survive restarts, and the queue waits for Start after reopening. Failed entries can be retried; sent entries can be cleared without removing torrents from the client. Existing client torrents and files at the destination are protected against duplicate downloads or overwrites.
+Sur la page principale de Recherche, **Ajouter tous les onglets à la file** ajoute les torrents ouverts et affiche la file sans démarrer les téléchargements. Le bouton **File de téléchargement** reste accessible au-dessus des onglets. **Télécharger tous les onglets** ajoute et lance cet ensemble en un clic, en laissant les autres éléments de la file en attente. Chaque onglet conserve son dossier de téléchargement. Toutes les destinations sont vérifiées avant l’ajout du lot ; en cas de problème, l’onglet concerné s’ouvre et un message apparaît au-dessus des onglets. Les onglets durent le temps de la session ; la file est conservée après redémarrage.
 
-When c411 explicitly reports that a torrent is unavailable for download, TorrentLinker removes it from the local Catalogue and remembers its hash across restarts. Catalogue refreshes and snapshot imports cannot add it back, so future Plans stop proposing it. Authentication errors, rate limits and server errors do not remove torrents.
+Dans **File de téléchargement**, cliquez sur **Démarrer la file** pour envoyer les torrents au client dans l’ordre. La file respecte les limites de téléchargement de l’indexeur et attend lorsqu’il le demande. **Pause** interrompt les prochains envois après la requête en cours ; les téléchargements déjà lancés continuent dans le client torrent. La file et les résultats sont conservés après redémarrage, mais l’envoi attend votre action pour reprendre. Les échecs peuvent être retentés ; les éléments envoyés peuvent être retirés de la liste sans supprimer les torrents du client. Les torrents déjà présents et les fichiers à destination sont protégés contre les doublons et l’écrasement.
 
-## Set up
+Lorsque c411 indique explicitement qu’un torrent n’est pas disponible au téléchargement, TorrentLinker le retire du Catalogue local et mémorise son hash. Les actualisations et imports du Catalogue ne le réintroduisent pas, même après redémarrage : les prochains Plans ne le proposent plus. Les erreurs d’authentification, les limites de requêtes et les erreurs du serveur ne retirent aucun torrent.
 
-1. Enable your torrent client's Web UI:
-   - **qBittorrent**: **Tools → Options → Web UI**.
-   - **Transmission** 4.x: turn on remote access in **Preferences → Remote**. Reseeds need **Append .part to incomplete files' names** off, or Transmission would rename your own files during a check: TorrentLinker offers to turn it off for you. Transmission renames file and folder names in place only, so a Match that needs other folders (a flattened folder, for example) cannot be Reseeded with it (see [ADR-0010](docs/adr/0010-transmission-with-whole-file-names-and-in-place-renames.md)).
-   - **Deluge** 2.x: run its Web UI (`deluge-web`, port 8112 by default) connected to its daemon, and turn on the **Label** plugin in **Preferences → Plugins**. TorrentLinker labels the torrents it adds (`torrentlinker`, `torrentlinker-verifying`, `torrentlinker-partial`, `torrentlinker-zen`) to follow their Verification, as it tags them in qBittorrent.
-2. Open TorrentLinker's **Settings → Connections**, choose your **Client** and enter its connection, then the Indexer URL/API key (and your Announce URL, for Uploads). qBittorrent takes a username/password or a Web UI API key where available; Deluge takes its Web UI address and password; Transmission its remote address, and a username and password if you set them.
-3. Register Library Folders to find files you can Reseed.
-4. Set Download Folders for the categories you want to plan, or choose a default folder. Categories without a resolved folder are excluded.
-5. If your torrent client runs in Docker, on a NAS or on another computer, set its paths in **Settings → Client Paths** (see below).
+## Configuration initiale
 
-## Your torrent client in Docker, on a NAS or on another computer
+Au premier lancement, ou si aucune clé API d’indexeur n’est enregistrée, un message de bienvenue ouvre les Paramètres de connexion. Les chargements automatiques attendent la configuration. Après enregistrement de la clé, l’application charge vos données sans redémarrage. Si vous annulez ou enregistrez sans clé, elle reste en attente avec un lien vers les Paramètres.
 
-The client then sees your folders under other paths than this computer does. For example, a Docker container sees `/data`, while this computer reaches the same files as `/mnt/nas` or `Z:\`. TorrentLinker needs to know the correspondence to find the client's torrents in your folders, to Reseed, and to send a Plan's downloads where the client can write them.
+1. Activez l’interface Web de votre client torrent :
+   - **qBittorrent** : **Outils → Options → Interface Web**.
+   - **Transmission** 4.x : activez l’accès distant dans **Préférences → Distant**. L’ajout de `.part` aux noms des fichiers incomplets doit être désactivé pour les remises en seed, sinon Transmission renommerait vos fichiers pendant la vérification. TorrentLinker propose de désactiver cette option. Transmission ne sait renommer les fichiers et dossiers que sur place : une correspondance nécessitant une autre organisation des dossiers ne peut pas être remise en seed avec ce client. Voir [ADR-0010](docs/adr/0010-transmission-with-whole-file-names-and-in-place-renames.md).
+   - **Deluge** 2.x : lancez son interface Web (`deluge-web`, port 8112 par défaut), connectez-la à son daemon et activez le plugin **Label** dans **Préférences → Plugins**. TorrentLinker utilise les labels `torrentlinker`, `torrentlinker-verifying`, `torrentlinker-partial` et `torrentlinker-zen` pour suivre ses torrents, comme il utilise les tags de qBittorrent.
+2. Ouvrez **Paramètres → Connexions**, choisissez votre **Client** et renseignez sa connexion, puis l’URL et la clé API de l’indexeur. Ajoutez votre URL d’annonce pour les uploads. qBittorrent accepte un nom d’utilisateur et un mot de passe, ou une clé API d’interface Web lorsqu’elle est disponible. Deluge utilise l’adresse et le mot de passe de son interface Web. Transmission utilise son adresse distante et, si vous en avez défini, ses identifiants.
+3. Ajoutez vos dossiers depuis **Bibliothèque → Ajouter un dossier…**, ou dans les Paramètres, pour trouver les fichiers à remettre en seed.
+4. Définissez les dossiers de téléchargement des catégories à inclure dans les Plans, ou un dossier par défaut. Les catégories sans dossier résolu sont exclues.
+5. Si votre client fonctionne dans Docker, sur un NAS ou sur un autre ordinateur, configurez **Paramètres → Chemins du client**, comme expliqué ci-dessous.
 
-In **Settings → Client Paths**:
+## Client torrent dans Docker, sur un NAS ou sur un autre ordinateur
 
-1. Fill in the client connection and your Library or Download Folders first.
-2. Click **Detect**. TorrentLinker reads a few torrents of each folder the client uses and looks for their files, by name and size, in your folders and the folders above them. It adds the paths that lead there, for example `/mnt/nas` ↔ `/data`, and says how many torrents each one found.
-3. **Check** counts, for each path, the client's torrents whose folder exists on this computer. It also warns about Download Folders that the client probably cannot reach.
-4. Save.
+Le client voit alors vos dossiers sous des chemins différents. Par exemple, un conteneur Docker voit `/data`, alors que cet ordinateur accède aux mêmes fichiers par `/mnt/nas` ou `Z:\`. TorrentLinker doit connaître cette correspondance pour reconnaître les torrents existants, remettre les fichiers en seed et envoyer les téléchargements vers un dossier accessible au client.
 
-You can also add a path by hand with **Add folder…**: choose the folder on this computer, then type how the client sees it. One path covers everything below it, and the longest matching path wins. Typical cases:
+Dans **Paramètres → Chemins du client** :
 
-| Setup | On this computer | In the client |
+1. Renseignez d’abord la connexion au client et vos dossiers de Bibliothèque ou de téléchargement.
+2. Cliquez sur **Détecter**. TorrentLinker lit quelques torrents de chaque dossier utilisé par le client et recherche leurs fichiers par nom et taille dans vos dossiers et leurs dossiers parents. Il ajoute les correspondances trouvées, par exemple `/mnt/nas` ↔ `/data`, avec le nombre de torrents reconnus.
+3. **Vérifier** compte les torrents dont le dossier existe sur cet ordinateur pour chaque correspondance. L’application signale aussi les dossiers de téléchargement probablement inaccessibles au client.
+4. Enregistrez.
+
+Vous pouvez ajouter une correspondance manuellement avec **Ajouter un dossier…** : choisissez le dossier sur cet ordinateur, puis indiquez son chemin tel que le client le voit. Une correspondance couvre tous les sous-dossiers ; si plusieurs correspondent, la plus précise s’applique.
+
+| Installation | Sur cet ordinateur | Dans le client |
 | --- | --- | --- |
-| Docker on this computer, volume `-v /srv/media:/data` | `/srv/media` | `/data` |
-| Client on a NAS, share mounted on Linux | `/mnt/nas/media` | `/volume1/media` |
-| Client on a NAS, share mapped as a Windows drive | `Z:\` | `/volume1/media` |
-| Docker on a NAS, share mounted here | `/mnt/nas/media` | `/data` |
+| Docker local, volume `-v /srv/media:/data` | `/srv/media` | `/data` |
+| Client sur NAS, partage monté sous Linux | `/mnt/nas/media` | `/volume1/media` |
+| Client sur NAS, partage monté comme lecteur Windows | `Z:\` | `/volume1/media` |
+| Docker sur NAS, partage monté ici | `/mnt/nas/media` | `/data` |
 
-Detection and checks only talk to your torrent client.
+La détection et les vérifications communiquent uniquement avec votre client torrent.
 
 ## Proxy
 
-To reach the internet through a proxy, enter it in **Settings → Connections → Proxy**: `http://host:port`, `https://…`, `socks5://host:port`, or `socks5h://…` to resolve names through the proxy too, with a username and password if it needs them (the password stays in the system keyring). Every connection to c411, TMDb, the Zen Lab snapshot, images and the speed test then goes through it. Your torrent client is reached directly, as it usually runs on this computer or your network, unless you tick **Also for the torrent client**. **Test proxy** shows the address c411 sees. A new proxy applies as soon as you save.
+Pour accéder à Internet par un proxy, renseignez **Paramètres → Connexions → Proxy** : `http://host:port`, `https://…`, `socks5://host:port` ou `socks5h://…` pour résoudre aussi les noms de domaine via le proxy. Ajoutez ses identifiants si nécessaire ; le mot de passe reste dans le trousseau système. Les connexions à c411, TMDb, au catalogue Zen Lab, aux images et au test de débit passent alors par ce proxy. Le client torrent est contacté directement, car il se trouve généralement sur cet ordinateur ou sur le réseau local, sauf si vous cochez l’option qui lui applique également le proxy. **Tester le proxy** affiche l’adresse vue par c411. Le proxy s’applique dès l’enregistrement.
 
-## Reseed existing files
+## Remettre des fichiers existants en seed
 
-Scan the Library, then search the Orphans: Local Items that no c411 torrent in your torrent client covers. Files seeded only for other trackers are Orphans too, so you can cross-seed them on c411. A torrent counts as c411's by its tracker, by its infohash in the Catalogue (a torrent that has not announced yet may report none), or by TorrentLinker's tag; only these torrents' file lists are read. TorrentLinker compares each Candidate's file tree with the local files. Full Matches can be Reseeded without downloading their data. Partial Matches skip missing files and stay stopped after Verification.
+Analysez la Bibliothèque, puis recherchez les Orphelins : les Éléments locaux qu’aucun torrent c411 présent dans votre client ne couvre. Les fichiers partagés uniquement sur d’autres trackers restent des Orphelins et peuvent donc être proposés pour du cross-seed sur c411. Un torrent est reconnu comme appartenant à c411 par son tracker, son hash dans le Catalogue ou un tag TorrentLinker. Le hash aide notamment lorsqu’un torrent n’a pas encore annoncé et n’indique aucun tracker. Seules les listes de fichiers de ces torrents sont lues.
 
-Reseeds rename paths inside the torrent client, leaving local filenames and contents untouched. A hash check must pass before seeding starts. Verification failures remove the torrent from the client without deleting local files. Deluge resumes a stopped torrent while it checks it, so until a Reseed is started or its Verification ends TorrentLinker holds its download speed at 1 byte/s: nothing can be written into your files meanwhile (see [ADR-0009](docs/adr/0009-deluge-through-its-web-ui-with-labels-and-a-speed-guard.md)). Previous searches and rejections are remembered across restarts.
+TorrentLinker compare l’arborescence de chaque Candidat aux fichiers locaux. Les correspondances complètes peuvent être remises en seed sans retélécharger leurs données. Les correspondances partielles ignorent les fichiers absents et restent arrêtées après vérification.
+
+Les chemins sont renommés à l’intérieur du client torrent : les noms et le contenu de vos fichiers sur le disque restent intacts. Une vérification par hash doit réussir avant le démarrage du seed. En cas d’échec, le torrent est retiré du client sans supprimer les fichiers locaux. Deluge reprend un torrent arrêté pendant sa vérification ; TorrentLinker limite donc sa vitesse de téléchargement à 1 octet/s jusqu’à la fin de la vérification ou au démarrage de la remise en seed, pour protéger les fichiers. Voir [ADR-0009](docs/adr/0009-deluge-through-its-web-ui-with-labels-and-a-speed-guard.md). Les recherches précédentes et les rejets sont conservés après redémarrage.
 
 ### Archives
 
-A Local Item that is a .zip, .rar or .7z archive is also compared by what it holds, since torrents usually share the same files unpacked. A Candidate matching the archive's contents shows as **Full match inside the archive**. **Unpack and Reseed…** then unpacks it into a new folder next to the archive, after showing the size and the free space, and Reseeds the torrent against the unpacked files with the usual Verification. Nothing is overwritten. Once the client has verified every unpacked file and the torrent seeds, TorrentLinker offers to move the archive to the trash, or to keep it. Plans never unpack archives.
+Un Élément local au format `.zip`, `.rar` ou `.7z` est aussi comparé par son contenu, car les torrents partagent généralement les fichiers décompressés. Une correspondance affiche alors **Correspondance complète dans l’archive**. **Décompresser et repartager…** extrait les fichiers dans un nouveau dossier à côté de l’archive, après avoir indiqué la taille et l’espace libre, puis lance la remise en seed avec la vérification habituelle. Aucun fichier n’est écrasé. Une fois les fichiers vérifiés et le seed démarré, TorrentLinker propose de mettre l’archive à la corbeille ou de la conserver. Les Plans ne décompressent jamais d’archives.
 
-Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-zip.org/) (or unrar for rar); without it they are compared as plain files.
+Les archives ZIP ne demandent aucun outil supplémentaire. Les archives RAR et 7z nécessitent [7-Zip](https://www.7-zip.org/), ou unrar pour RAR ; sans cet outil, elles sont comparées comme de simples fichiers.
 
-## Upload 3D models as c411 Drafts
+## Préparer des uploads et brouillons c411
 
-The **Upload** tab lists Orphans from every Library Folder that a search found no Match for: c411 may not have them yet. Each is made for one c411 **category**, picked in the form: the Library Folder's Content Kind proposes it (3D models → Imprimante 3D; movies and series, ebooks, music and games propose theirs), and an item of kind *Other* asks you to choose. **Imprimante 3D**, **Ebook**, **Audio**, **Films & Vidéos**, **GPS**, **Emulation**, **Applications** and **Jeux Vidéo** can be uploaded so far; the other categories show "not supported yet" until their rules are added. Changing the category redoes the checks, subcategory, name, NFO and description. Enter your **Announce URL** (from your c411 profile) in **Settings → Connections**, and use a main API key with the **Brouillons d'upload** (`drafts:rw`) scope.
+L’onglet **Upload** affiche les Orphelins pour lesquels une recherche n’a trouvé aucune correspondance, dans tous vos dossiers de Bibliothèque. Ces contenus peuvent être absents de c411. Chaque upload appartient à une **catégorie** c411 choisie dans le formulaire. Le Type de contenu du dossier propose une catégorie : Modèles 3D → Imprimante 3D, Films et Séries → Films & Vidéos, etc. Pour le type Autre, choisissez-la vous-même. Les catégories **Imprimante 3D**, **Ebook**, **Audio**, **Films & Vidéos**, **GPS**, **Emulation**, **Applications** et **Jeux Vidéo** sont prises en charge. Les autres indiquent qu’elles ne le sont pas encore. Changer de catégorie recalcule les contrôles, la sous-catégorie, le nom, le NFO et la description.
 
-Use the search bar above the Upload list to filter Local Items by filename. It works alongside the Content Kind and **Show all** filters.
+Renseignez votre **URL d’annonce**, issue de votre profil c411, dans **Paramètres → Connexions**, et utilisez une clé API principale autorisée à gérer les **Brouillons d’upload** (`drafts:rw`). La barre de recherche au-dessus de la liste filtre les Éléments locaux par nom de fichier, en complément du Type de contenu et de **Tout afficher**.
 
-Selecting an item also searches c411 for what it **already has** of it (the item's title words, within its category) and lists the releases found, with size, seeders and a link, in a collapsible **Already on c411** box; "Nothing found on c411" when there are none. It is information only: Team Pending refuses duplicates, and the app does not decide them. Each item is searched once per session, only when you select it, through the same key budget as every search.
+Sélectionner un élément recherche aussi les releases que c411 possède déjà, à partir des mots de son titre et dans sa catégorie. Le bloc repliable **Déjà sur c411** affiche les résultats avec taille, seeders et lien, ou indique qu’aucun résultat n’a été trouvé. Ce résultat est informatif : Team Pending décide des doublons, pas l’application. Chaque élément n’est recherché qu’une fois par session, au moment de sa sélection, avec le même budget de requêtes que les autres recherches.
 
-For the chosen item, TorrentLinker checks c411's 3D rules: those a program can check (accepted formats, no archives) are red **Refusals** that stop the Draft, while those only you can judge (no files from independent creators who live off them, one coherent theme for a pack) are amber **Warnings** that leave the Draft available. It suggests a release name such as `Petit.Etau.De.Bureau.NOTAG.3MF` (dots between words, no accents, `NOTAG` when the source is unknown), makes a private torrent with c411's piece size and `source = C411` tag so its info-hash stays the same when published and an NFO listing every file, and saves them as a Draft on c411. The torrent then joins your torrent client against your own files, renamed inside the client as a Reseed is, so your files keep their names; it seeds once Verification passes. Below the subcategory, the **Options** c411 asks for in that subcategory (language, genre, format…) show as selectors: a list to tick for several values, a drop-down for one, required ones marked with an asterisk. TorrentLinker reads them from c411 the first time a subcategory needs them, keeps them for a week (**Refresh options** reads them again), and a category's rules can pre-fill them; what you choose wins. A required option left empty blocks the Draft, and Imprimante 3D has none. Open c411's upload page, load the Draft, add the image the rules ask for (see below), and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
+Pour la 3D, les règles vérifiables automatiquement, comme les formats acceptés et l’interdiction des archives, produisent des **Refus** rouges qui bloquent le brouillon. Les règles qui demandent votre jugement, comme l’interdiction des fichiers de créateurs indépendants qui en vivent ou la cohérence d’un pack, produisent des **Avertissements** orange sans bloquer le brouillon.
 
-### The image for the description
+L’application propose un nom comme `Petit.Etau.De.Bureau.NOTAG.3MF`, avec des points entre les mots, sans accents et avec `NOTAG` si la source est inconnue. Elle crée un torrent privé avec la taille de pièces attendue par c411 et le champ `source = C411`, afin de conserver le même info-hash après publication, ainsi qu’un NFO listant les fichiers. Le tout est enregistré comme brouillon sur c411. Le torrent est ajouté au client avec des chemins adaptés à vos fichiers, comme pour une remise en seed, et démarre une fois la vérification réussie.
 
-c411's image upload only accepts a logged-in browser, so TorrentLinker renders the model itself. The **3D view** page of the Upload tab shows the chosen item's model (STL, binary or ASCII; OBJ; 3MF) at an isometric angle, framed on its bounding box: drag to rotate, scroll to zoom, double-click or **Reset the view** to start over. A folder with several models offers each in a list. Big meshes are read off the interface thread and thinned for display only.
+Sous la sous-catégorie, les **Options** demandées par c411 apparaissent sous forme de listes à cocher ou de menus : langue, genre, format, etc. Les options obligatoires portent un astérisque. Elles sont chargées au premier usage de la sous-catégorie et conservées une semaine ; l’action d’actualisation les recharge. Les règles peuvent préremplir certaines valeurs, mais votre choix reste prioritaire. Une option obligatoire vide bloque le brouillon. Imprimante 3D n’en demande aucune.
 
-- **Capture** saves the current view as a PNG at least 1000 px wide.
-- For a **Pack**, **Capture the Pack sheet** saves a grid of up to 9 models, each seen from the isometric angle with its file name below.
-- **Open the folder** shows the images, which are in `uploads/<release name>/` (never in your Library). Add the one you choose on c411's upload page while reviewing the Draft; the description keeps an `[img]…[/img]` placeholder for it.
+Ouvrez la page d’upload de c411, chargez le brouillon, ajoutez l’image demandée et publiez-le sur le site. Voir [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) et le [résumé des règles](docs/research/upload-rules.md).
 
-If you host the image elsewhere, paste its direct URL into **Image URL**. **Host image…** opens Postimages. The image is included in the Draft description even after you edit the text; changing the URL updates the image without resetting your presentation.
+### Image de présentation
 
-STEP, GCODE, BLEND, F3D, SLDPRT and FCStd items show no preview and say so: make that image yourself. Rendering needs OpenGL; without it the view and captures are unavailable and the message says why.
+L’upload d’image de c411 nécessite une session de navigateur connectée. TorrentLinker peut produire l’image de vos modèles : la page **Vue 3D** affiche le modèle sélectionné, STL binaire ou ASCII, OBJ ou 3MF, sous un angle isométrique et cadré sur ses dimensions. Faites glisser pour tourner, utilisez la molette pour zoomer, puis double-cliquez ou réinitialisez la vue pour revenir au départ. Un dossier contenant plusieurs modèles propose une liste. Les gros maillages sont chargés en arrière-plan et simplifiés uniquement pour l’affichage.
 
-For **Ebook** (Livres, BDs, Comics, Manga, Presse, Audio, Partitions, Revues & Manuels), the subcategory defaults to BDs for CBR/CBZ or page-image folders, Audio for MP3/M4A/M4B/FLAC and Livres otherwise. Refusals: no file, archives (RAR/ZIP/7z), no accepted format (PDF, EPUB, MOBI, DjVu, CBR, CBZ, JPG/PNG, audiobooks). Warnings: French only, no duplicates, no more than two formats of a book, whole volumes in a BD/Comics/Manga pack (every volume for a BD). The name is `Titre.Auteur.FRENCH.EPUB-NOTAG` (title and author guessed from `Auteur - Titre`; the Source field is the team tag; a pack adds `[T01.a.T07]`; press is `Titre.Date.FRENCH.PDF-NOTAG`), and the file format and French language options are pre-filled. An audiobook under 64 kbps (read from its tags) is refused. Open c411's upload page, load the Draft, add the image the rules ask for, and publish it there. See [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) and the [rules summary](docs/research/upload-rules.md).
+- **Capturer** enregistre la vue courante en PNG, avec une largeur d’au moins 1 000 pixels.
+- Pour un **Pack**, la capture de planche produit une grille d’au plus neuf modèles, chacun en vue isométrique avec son nom de fichier.
+- **Ouvrir le dossier** affiche ces images, rangées dans `uploads/<release name>/`, jamais dans la Bibliothèque. Ajoutez celle de votre choix sur c411 en relisant le brouillon ; la description conserve un emplacement `[img]…[/img]`.
 
-For **Audio** (Karaoké, Musique, Podcast Radio, Samples), the subcategory defaults to Musique. TorrentLinker reads each file's tags (artist, album, year, titles, durations, codec, bitrate, sample rate, bit depth) with [mutagen](https://mutagen.readthedocs.io), off the GUI thread, when you select an item; the checks that need them appear a moment later. Refusals: no audio file, archives, formats c411 does not list (APE, Opus, AAC files…; FLAC, ALAC, WAV, WV, AIF, MP3, M4A, OGG, WMA and ISO are accepted), MP3 under 320 kbps constant bitrate (VBR accepted) and AAC under 256 (128 for podcasts and radio), a one-file album without a `.cue`, and formats or bitrates mixed in one album. Warnings: no transcodes, singles only from 20 minutes, discographies only for inactive artists, and for a CD-Rip (lossless 16 bit 44.1 kHz with a `.cue` or `.log`) what is missing among `cover.jpg` (500×500 or more), the `.cue` and the EAC `.log`, plus the catalogue number and Discogs or MusicBrainz link the description must give. The name is built from the tags and editable: music `Daft.Punk.Discovery.2001.FLAC.16bit.44.1kHz-NOTAG` (`CD-Rip` after the year for a CD-Rip, `MP3.320kbps` for a lossy one), podcast `Emission.2024.05.12.INTEGRALE.MP3.128kbps-NOTAG`, samples `Nom.2023.wav.1411kbps`. The NFO states artist, album, year, source, codec, bitrate or bit depth, sample rate, track count, size and the tracklist with durations; the format, source (CD) and type (Album or Discographie) options are pre-filled.
+Si vous hébergez l’image ailleurs, collez son lien direct dans **URL de l’image**. Le bouton d’hébergement ouvre Postimages. L’image est incluse dans la description du brouillon même après modification du texte ; changer l’URL remplace l’image sans réinitialiser la présentation.
 
-For **Films & Vidéos** (Animation, Animation Série, Concert, Documentaire, Série Documentaire, Émission TV, Film, Série TV, Spectacle, Sport, Vidéo-clips, Collection), the subcategory defaults to Film, or Série TV when the name has a season or episode. Each video is read with [MediaInfo](https://mediaarea.net/en/MediaInfo) (through `pymediainfo`, [ADR-0012](docs/adr/0012-mediainfo-through-pymediainfo.md)) off the GUI thread; where libmediainfo cannot be loaded, every video item is refused with a message to install it. With a TMDb key in Settings, the item is identified (an id in its name or `.nfo`, else a title search) and the release name carries TMDb's French title, the synopsis goes in the description, the Draft carries `tmdbData`, and the releases c411 already has are looked up by TMDb id. Refusals: archives, containers other than MKV, MP4, M4V, AVI, TS, M2TS or a disc (ISO, BDMV, VIDEO_TS), GPU encoders (NVENC, QSV, AMF), an encode under c411's minimum bitrate (not a WEB-DL or a remux), banned teams (Wawacity, kORE, RARBG…), no French audio and no full French subtitles, and a pack whose files differ in specs or team. Warnings: the French title, forbidden sources, WEB needing its VOD platform in the description, the MICKEY detag, missing episodes of a season, and the 28-slot duplicate rule (not computed: see the existing releases). The name follows c411's templates, from the file name and MediaInfo: `Le.Film.2020.VFF.1080p.BluRay.AC3.5.1.x264-TFA` (language, resolution, source, REMUX/BDMV/ISO, HDR, audio, video codec; `x264`/`x265` for encodes, `H264`/`H265` for a WEB-DL, `AVC`/`HEVC` for remuxes and discs; the team tag kept with its special characters dropped, `NOTAG` when none). The one video file of a folder is named exactly the release title inside the torrent. The NFO is MediaInfo's full text of each file (the first one only for a pack of more than ten), also sent as the Draft's `mediainfo`, and the language, quality, source and codec options are pre-filled where c411's values name them.
+STEP, GCODE, BLEND, F3D, SLDPRT et FCStd n’ont pas d’aperçu : préparez leur image vous-même. Le rendu nécessite OpenGL ; s’il est indisponible, la vue et les captures affichent la raison de leur indisponibilité.
 
-For **GPS** (Applications, Cartes, Divers) and **Emulation** (Émulateur, ROM/ISO), which no Content Kind proposes (pick the category in the form), the release name keeps spaces and accents where c411 allows them. GPS refuses an empty item, archives (RAR/ZIP/7z; install `.cab` and text files are fine) and downloader executables, warns that the version and activation must be stated and that alpha or early-access versions are banned, and suggests `Marque.Zone.Année.Support` (the support is the system its files run on). Emulation refuses archives unless the pack holds more than 50 files, a password-protected zip in such a pack (detected for zip only), a `.bin` without a `.cue` and a CloneCD image without its `.ccd`, `.img` and `.sub`; it warns about retro platforms only and about machines mixed in a pack (except MAME), and names a game `[SNES]Zelda [EU - MULTI] SFC` (console from the ROM extension, region and languages from the `(Europe) (Fr,En)` tags). Both have an NFO with the facts, a place for the install instructions in French, and every file listed.
+### Livres numériques
 
-For **Applications** (Autre, Formation, Linux, MacOS, Smartphone, Tablette, Windows), which no Content Kind proposes, the subcategory defaults from the files (`.exe`/`.msi` Windows, `.dmg`/`.pkg`/`.app` MacOS, `.deb`/`.rpm`/`.AppImage` Linux, `.apk`/`.ipa` Smartphone, else Autre) and the **release type** (keygen, crack, patch, installer or portable) is decided from the files and shown as a note you can override by editing the name. The decision table is TorrentLinker's own reading of c411's rules and is **not verified** against c411's wiki page (see [the rules summary](docs/research/upload-rules.md)). Refusals: archives (install `.cab` and text files are fine) and downloader executables. Warnings: the install note (not for a portable release), no alpha or early access, no IPTV software, an older version of the same generation is removed. The name is `Nom Version [OS Langue Type]` (`[OS] Nom Version Langue [EXT]` for a phone or tablet), and the NFO and description state the version, system, year, size, languages, activation and requirements, with a place for the install instructions in French.
+Pour **Ebook** — Livres, BDs, Comics, Manga, Presse, Audio, Partitions, Revues & Manuels — la sous-catégorie proposée est BDs pour les CBR/CBZ et dossiers d’images de pages, Audio pour les MP3/M4A/M4B/FLAC, et Livres sinon.
 
-For **Jeux Vidéo** (Autre, Linux, MacOS, Microsoft, Nintendo, Smartphone, Sony, Tablette, Windows, VR), proposed for the *game* kind, the subcategory defaults from the files (`.nsp`/`.xci` Nintendo, `.pkg` Sony, `.xex` Microsoft, `.apk` Smartphone, `.dmg` MacOS, `.AppImage` Linux, `.exe` Windows, VR when the name says so). For a PC game the **release type** (scene, repack, portable, GOG, DRM-free, preactivated) is decided from the files (crack files, `.iso`, `setup.exe` with `.bin` data, `steam_api`, GOG in the `.nfo`) and shown as a note; the decision table is TorrentLinker's own reading of c411's rules and is **not verified** against c411's wiki page ([rules summary](docs/research/upload-rules.md)). Refusals: archives (except console packs, one archive per game), downloader executables, and for a console, files outside its accepted containers. Warnings: one scene release plus one repack, one repacker release and one portable per scene release, one GOG version, one version per console game, the region (PAL/EU, NTSC/US, NTSC-J/JP, HK). Names keep spaces and accents: scene and repack names as they are, portable `Nom - 1.2 [Windows - FR - PORTABLE]`, GOG `Nom (4.04) [MULTI - Windows][GOG]`, VR prefixed `[VR]`, console `[Switch]Zelda [EU - FR] NSP` (PS4 and PS5 add `-CUSA…` or `-PPSA…`). A scene release's own `.nfo` is sent as the NFO (decoded from the DOS code page, so its bytes are not strictly unaltered); otherwise the NFO states the version, system, year, size, languages, region, crack or loader and requirements, with room for the install instructions in French. The language option is pre-filled from the name.
+Les refus couvrent l’absence de fichier, les archives RAR/ZIP/7z, l’absence de format accepté et les livres audio sous 64 kbit/s, débit lu dans leurs métadonnées. Les formats acceptés comprennent PDF, EPUB, MOBI, DjVu, CBR, CBZ, JPG/PNG et les formats de livres audio. Les avertissements rappellent le français uniquement, l’absence de doublons, deux formats maximum par livre et des tomes entiers dans les packs BD/Comics/Manga, avec tous les tomes pour une BD.
 
-## Zen integration
+Le nom suit `Titre.Auteur.FRENCH.EPUB-NOTAG`, avec titre et auteur déduits de `Auteur - Titre`. Le champ Source fournit le tag de team ; un pack ajoute `[T01.a.T07]`. La presse utilise `Titre.Date.FRENCH.PDF-NOTAG`. Le format et la langue française sont préremplis. Chargez le brouillon sur la page d’upload c411, ajoutez l’image et publiez. Voir [ADR-0011](docs/adr/0011-uploads-start-as-c411-drafts.md) et le [résumé des règles](docs/research/upload-rules.md).
 
-The Zen tab brings together c411's reported balance and TorrentLinker's earnings estimates:
+### Audio
 
-- Read your Zen Balance, Class, unlocked progression-tree bonus, and download eligibility from your c411 profile. The Indexer API key needs the `profile:read` scope for this, in addition to catalog/download access.
-- Estimate Zen/day for each torrent currently seeding in your torrent client and for Matches found in the Library, using size, seeders, seed age, category, Class bonuses, and the configured seed hours per day.
-- Compare Tanker, Swarm Keeper, and Reuploader. Reuploader estimates use the upload count entered in the Zen tab and are approximate.
-- Set Class, unlocked tree bonus, seed hours per day, and an overall torrent cap in **Settings → Zen**. Values supplied by c411 fill the Class and tree bonus automatically when profile access is available.
+Pour **Audio** — Karaoké, Musique, Podcast Radio, Samples — la sous-catégorie proposée est Musique. À la sélection d’un élément, [mutagen](https://mutagen.readthedocs.io) lit en arrière-plan artiste, album, année, titres, durées, codec, débit, fréquence et profondeur de bits. Les contrôles qui en dépendent apparaissent ensuite.
 
-Without profile permission, you can enter the Zen Profile by hand and use estimates and planning. The displayed balance comes from c411; projected earnings and payback are local estimates. The client's seed age is a lower bound when a torrent has been removed and added again.
+Les refus couvrent l’absence d’audio, les archives, les formats non listés par c411 comme APE, Opus ou les fichiers AAC, les MP3 sous 320 kbit/s constants — le VBR est accepté — et l’AAC sous 256 kbit/s, ou 128 pour podcasts et radio. Un album en un seul fichier sans `.cue`, ou mélangeant formats ou débits, est également refusé. FLAC, ALAC, WAV, WV, AIF, MP3, M4A, OGG, WMA et ISO sont acceptés.
 
-### Browse seeding torrents by category
+Les avertissements rappellent l’interdiction des transcodages, les singles à partir de 20 minutes et les discographies réservées aux artistes inactifs. Pour un CD-Rip lossless 16 bits/44,1 kHz accompagné d’un `.cue` ou `.log`, ils signalent les éléments manquants parmi `cover.jpg` d’au moins 500 × 500 pixels, le `.cue` et le journal EAC, ainsi que le numéro de catalogue et le lien Discogs ou MusicBrainz à fournir dans la description.
 
-**Zen → Seeding** groups torrents under their Catalogue category and subcategory. Expand a branch to see its torrents, size and estimated Zen/day. Search matches both torrent names and category names. Sorting, resized columns, selection and collapsed branches survive refreshes. Torrents without a known category appear under **Unknown category**; broad snapshot categories stay at the parent level until confirmed.
+Le nom issu des métadonnées reste modifiable : `Daft.Punk.Discovery.2001.FLAC.16bit.44.1kHz-NOTAG`, avec `CD-Rip` après l’année si nécessaire ou `MP3.320kbps` pour une version avec pertes. Les podcasts utilisent par exemple `Emission.2024.05.12.INTEGRALE.MP3.128kbps-NOTAG`, les samples `Nom.2023.wav.1411kbps`. Le NFO récapitule les caractéristiques, la taille et les pistes avec leurs durées. Les options de format, source CD et type Album ou Discographie sont préremplies.
 
-Each Seeding refresh also synchronizes category tags in qBittorrent and labels in Transmission, for example `torrentlinker:category:Books / Comics`. It adds missing tags and replaces only older tags in that namespace, preserving personal tags, Verification tags, download folders and the client's native category. Unknown category names are left untagged. Deluge's single label is preserved because it carries Verification state; its torrents still appear in the category tree. The Seeding view reports tag updates and failures.
+### Films et vidéos
 
-## Make a Zen Plan
+Pour **Films & Vidéos**, la sous-catégorie proposée est Film, ou Série TV si le nom contient une saison ou un épisode. Les sous-catégories prises en charge comprennent aussi Animation, Animation Série, Concert, Documentaire, Série Documentaire, Émission TV, Spectacle, Sport, Vidéo-clips et Collection.
 
-Choose categories, then configure the Plan:
+Chaque vidéo est analysée en arrière-plan avec [MediaInfo](https://mediaarea.net/en/MediaInfo), via `pymediainfo` ; voir [ADR-0012](docs/adr/0012-mediainfo-through-pymediainfo.md). Si libmediainfo ne peut pas être chargée, un message demande son installation et bloque l’upload vidéo. Avec une clé TMDb dans les Paramètres, l’identification utilise un identifiant dans le nom ou le `.nfo`, sinon une recherche par titre. Le titre français alimente le nom de release, le synopsis rejoint la description, le brouillon reçoit `tmdbData` et la recherche de releases existantes utilise l’identifiant TMDb.
 
-| Control | Effect |
+Les refus couvrent les archives, les conteneurs autres que MKV, MP4, M4V, AVI, TS, M2TS ou les disques ISO/BDMV/VIDEO_TS, les encodeurs GPU NVENC/QSV/AMF, les encodages sous le débit minimal c411 hors WEB-DL et remux, les teams interdites comme Wawacity, kORE ou RARBG, l’absence d’audio français et de sous-titres français complets, ainsi que les packs aux caractéristiques ou teams incohérentes.
+
+Les avertissements concernent le titre français, les sources interdites, la plateforme VOD à préciser pour le WEB, le détag MICKEY, les épisodes manquants et la règle des 28 emplacements de doublons. Cette dernière n’est pas calculée : consultez les releases existantes.
+
+Le nom suit les modèles c411, par exemple `Le.Film.2020.VFF.1080p.BluRay.AC3.5.1.x264-TFA`, à partir du nom de fichier et de MediaInfo : langue, résolution, source, REMUX/BDMV/ISO, HDR, audio et codec vidéo. Les encodages utilisent `x264`/`x265`, les WEB-DL `H264`/`H265`, les remux et disques `AVC`/`HEVC`. Le tag de team est conservé sans caractères spéciaux, ou remplacé par `NOTAG`. Lorsqu’un dossier contient une seule vidéo, son nom à l’intérieur du torrent reprend exactement le titre de la release. Le NFO contient le texte MediaInfo complet de chaque fichier, ou seulement du premier pour un pack de plus de dix fichiers. Il est aussi transmis dans le champ `mediainfo` du brouillon. Langue, qualité, source et codec sont préremplis lorsque les valeurs c411 le permettent.
+
+### GPS et émulation
+
+**GPS** — Applications, Cartes, Divers — et **Emulation** — Émulateur, ROM/ISO — se choisissent directement dans le formulaire : aucun Type de contenu ne les propose automatiquement. Les noms conservent espaces et accents là où c411 les autorise.
+
+GPS refuse les éléments vides, archives RAR/ZIP/7z et exécutables de téléchargement ; les `.cab` d’installation et fichiers texte restent acceptés. Les avertissements demandent la version et l’activation, et rappellent l’interdiction des versions alpha ou en accès anticipé. Le nom proposé suit `Marque.Zone.Année.Support`, le support étant le système visé.
+
+Emulation refuse les archives sauf dans un pack de plus de 50 fichiers, les ZIP protégés par mot de passe dans ces packs, les `.bin` sans `.cue` et les images CloneCD sans l’ensemble `.ccd`, `.img`, `.sub`. La protection par mot de passe n’est détectée que pour ZIP. Les avertissements concernent les plateformes rétro et le mélange de machines dans un pack, sauf MAME. Un jeu peut être nommé `[SNES]Zelda [EU - MULTI] SFC`, avec console déduite de l’extension et région/langues des indications `(Europe) (Fr,En)`.
+
+Les deux catégories produisent un NFO factuel, un emplacement pour les instructions d’installation en français et la liste complète des fichiers.
+
+### Applications
+
+**Applications** comprend Autre, Formation, Linux, MacOS, Smartphone, Tablette et Windows, sans sélection automatique par Type de contenu. La sous-catégorie est déduite des fichiers : `.exe`/`.msi` pour Windows, `.dmg`/`.pkg`/`.app` pour MacOS, `.deb`/`.rpm`/`.AppImage` pour Linux, `.apk`/`.ipa` pour Smartphone, Autre sinon.
+
+Le type de release — keygen, crack, patch, installation ou portable — est déduit des fichiers et affiché à titre indicatif ; vous pouvez le corriger en modifiant le nom. Cette table de décision est l’interprétation de TorrentLinker et **n’a pas été vérifiée contre le wiki c411**. Voir le [résumé des règles](docs/research/upload-rules.md).
+
+Les refus couvrent les archives et exécutables de téléchargement, mais acceptent les `.cab` d’installation et fichiers texte. Les avertissements concernent les instructions d’installation hors portable, l’interdiction des versions alpha, de l’accès anticipé et des logiciels IPTV, et le retrait d’une ancienne version de même génération. Le nom suit `Nom Version [OS Langue Type]`, ou `[OS] Nom Version Langue [EXT]` pour téléphone et tablette. Le NFO et la description précisent version, système, année, taille, langues, activation, prérequis et instructions d’installation en français.
+
+### Jeux vidéo
+
+**Jeux Vidéo** est proposé pour le Type de contenu Jeux et couvre Autre, Linux, MacOS, Microsoft, Nintendo, Smartphone, Sony, Tablette, Windows et VR. Les fichiers proposent la sous-catégorie : `.nsp`/`.xci` pour Nintendo, `.pkg` pour Sony, `.xex` pour Microsoft, `.apk` pour Smartphone, `.dmg` pour MacOS, `.AppImage` pour Linux, `.exe` pour Windows ; le nom peut indiquer la VR.
+
+Pour un jeu PC, les fichiers de crack, `.iso`, `setup.exe` avec données `.bin`, `steam_api` ou les mentions GOG du `.nfo` servent à proposer le type : scene, repack, portable, GOG, sans DRM ou préactivé. Cette décision reste indicative et **n’a pas été vérifiée contre le wiki c411**. Voir le [résumé des règles](docs/research/upload-rules.md).
+
+Les refus couvrent les archives, sauf packs console avec une archive par jeu, les exécutables de téléchargement et les fichiers console hors conteneurs acceptés. Les avertissements rappellent les limites de releases : une scene et un repack, une release par repacker et une portable par scene, une version GOG, une version par jeu console, avec sa région PAL/EU, NTSC/US, NTSC-J/JP ou HK.
+
+Les noms conservent espaces et accents : noms scene et repack inchangés, portable `Nom - 1.2 [Windows - FR - PORTABLE]`, GOG `Nom (4.04) [MULTI - Windows][GOG]`, préfixe `[VR]` pour la VR, console `[Switch]Zelda [EU - FR] NSP`, avec `-CUSA…` ou `-PPSA…` pour PS4 et PS5. Le `.nfo` d’origine d’une release scene est transmis après décodage de la page de caractères DOS, donc ses octets ne restent pas strictement identiques. Sinon, le NFO décrit version, système, année, taille, langues, région, crack ou loader, prérequis et instructions en français. La langue est préremplie d’après le nom.
+
+## Intégration Zen
+
+L’onglet Zen réunit le solde fourni par c411 et les estimations de TorrentLinker :
+
+- Lecture du Solde Zen, de la Classe, du bonus de progression débloqué et de l’autorisation de télécharger depuis votre profil c411. La clé API demande le droit `profile:read`, en plus des accès au catalogue et au téléchargement.
+- Estimation du Zen/jour pour chaque torrent en partage et pour les correspondances de la Bibliothèque, selon taille, seeders, durée de seed, catégorie, bonus de Classe et heures de seed quotidiennes configurées.
+- Comparaison entre Tanker, Swarm Keeper et Reuploader. Pour Reuploader, le calcul approximatif utilise le nombre d’uploads saisi dans l’onglet Zen.
+- Réglage de la Classe, du bonus de progression débloqué, des heures de seed et du plafond global de torrents dans **Paramètres → Zen**. La Classe et le bonus sont remplis depuis c411 lorsque le profil est accessible.
+
+Sans accès au profil, vous pouvez renseigner le Profil Zen manuellement et utiliser les estimations et Plans. Le solde affiché vient de c411 ; les gains prévus et le délai de rentabilisation sont des estimations locales. La durée de seed connue du client peut être inférieure à celle de c411 après suppression puis réajout d’un torrent.
+
+### Torrents en partage par catégorie
+
+**Zen → En partage** regroupe les torrents selon leur catégorie et sous-catégorie du Catalogue. Dépliez une branche pour voir les torrents, leur taille, leur estimation de Zen/jour et leur **≈ Note**. Les catégories affichent la moyenne arithmétique des Notes de tous leurs torrents, sous-catégories comprises ; les Notes indisponibles sont exclues. La recherche porte sur les noms de torrents et de catégories. Le tri, la largeur des colonnes, la sélection et les branches repliées sont conservés à l’actualisation. Les torrents sans catégorie connue apparaissent sous **Catégorie inconnue** ; les catégories générales issues du catalogue tiers restent au niveau parent tant qu’une sous-catégorie n’est pas confirmée.
+
+Chaque actualisation synchronise aussi les tags de catégorie dans qBittorrent et les labels dans Transmission, par exemple `torrentlinker:category:Books / Comics`. L’application ajoute les tags manquants et remplace uniquement les anciens tags de ce préfixe, sans modifier les tags personnels, ceux de vérification, les dossiers de téléchargement ni la catégorie native du client. Les catégories inconnues ne reçoivent pas de tag. Le label unique de Deluge est conservé, car il sert à suivre la vérification ; ses torrents figurent néanmoins dans l’arborescence. La vue indique les mises à jour et leurs éventuels échecs.
+
+## Préparer un Plan Zen
+
+Choisissez les catégories, puis réglez le Plan :
+
+| Réglage | Effet |
 | --- | --- |
-| Optimize for **Zen/day** | Tries several greedy orderings and keeps the Plan with the largest estimated Zen gain. |
-| Optimize for **Note** | Selects the highest-note torrents first for your Class. |
-| Download limit | Maximum total download size in decimal GB. Zero means no additional size limit. |
-| Limit torrents | Optional maximum number of torrents added by this Plan. |
-| Low seeders only | Optional maximum current seeder count, initially 10, before you join the swarm. |
-| Torrent size from … to | Optional minimum and maximum size of each torrent, in decimal GB. Zero leaves that side open. Applies to downloads and Reseeds. |
+| Optimiser pour **Zen/jour** | Essaie plusieurs ordres de sélection gloutonne et garde le Plan au gain de Zen estimé le plus élevé. |
+| Optimiser pour **Note** | Sélectionne d’abord les torrents aux meilleures Notes pour votre Classe. |
+| Limite de téléchargement | Taille totale maximale en Go décimaux. Zéro n’ajoute aucune limite. |
+| Limite de torrents | Nombre maximal facultatif de torrents ajoutés par ce Plan. |
+| Peu de seeders uniquement | Nombre maximal de seeders actuels, initialement 10, avant votre arrivée. |
+| Taille des torrents de… à… | Taille minimale et maximale par torrent, en Go décimaux. Zéro laisse la borne ouverte. S’applique aux téléchargements et remises en seed. |
 
-Reseeds come first. They count toward the torrent limit and consume no download budget. The overall torrent cap and disk-space reserve also apply. The results show each torrent's note, the size-weighted average note, estimated Zen gain and payback, and free disk space before and after the Plan. Download Folders sharing a physical disk are counted once. Plan options are saved across restarts.
+Les remises en seed sont prioritaires. Elles comptent dans la limite de torrents mais ne consomment pas de budget de téléchargement. Le plafond global et la réserve d’espace disque s’appliquent aussi. Les résultats indiquent la Note de chaque torrent, la Note moyenne pondérée par la taille, le gain de Zen estimé, le délai de rentabilisation et l’espace libre avant et après le Plan. Les dossiers situés sur un même disque physique sont comptés ensemble. Les options sont conservées après redémarrage.
 
-A Plan leaves out every torrent already in your torrent client, whatever its tracker or state. It also leaves out Catalogue torrents that seem to be in your Library or in the Plan's Download Folders already, such as files kept after their torrent left the client: a Local Item, or one of its files, of the torrent's size (or up to 64 KiB smaller, for an .nfo or cover) whose name shares most of its significant words, with no other volume number. The Plan says how many it left out; hover over its summary to see them. No request is made for this, so only a search in the Library confirms a Match, which you can then Reseed instead of downloading.
+Le Plan exclut tout torrent déjà présent dans le client, quel que soit son tracker ou son état. Il exclut aussi les torrents du Catalogue dont les fichiers semblent déjà présents dans la Bibliothèque ou les dossiers de téléchargement, par exemple après suppression du torrent sans ses données. L’identification compare un Élément local ou l’un de ses fichiers à la taille du torrent, avec jusqu’à 64 Kio de moins pour un NFO ou une couverture, et exige une majorité de mots significatifs communs sans numéro de volume différent. Le résumé indique le nombre d’exclusions ; survolez-le pour les consulter. Cette étape n’effectue aucune requête. Seule une recherche dans la Bibliothèque confirme une correspondance à remettre en seed.
 
-Each Plan shows two estimated times. **Sending** to the client follows c411's limit on `.torrent` downloads: 30 a minute per API key, and about 280 in 20 minutes, so more keys send faster (1,000 torrents take about an hour with one key, 7 minutes with five). **Downloading** the data is the Plan's size divided by your download speed. **Test speed** measures that speed for about 8 seconds with Cloudflare's public speed test, anonymously, and remembers it. The download time is a lower bound: torrents with few seeders download slower than your connection. Run the test while your torrent client is idle.
+Chaque Plan affiche deux durées estimées. L’**envoi** au client suit les limites c411 des `.torrent` : 30 par minute et par clé API, et environ 280 sur 20 minutes. Avec davantage de clés, l’envoi accélère : environ une heure pour 1 000 torrents avec une clé, sept minutes avec cinq. Le **téléchargement** des données est estimé en divisant la taille du Plan par votre débit. **Tester le débit** utilise anonymement le test public Cloudflare pendant environ huit secondes et mémorise le résultat. Cette durée est un minimum : les torrents peu seedés peuvent être plus lents. Lancez le test lorsque votre client torrent est au repos.
 
-Sending a Plan downloads each `.torrent` directly from c411 and adds it to its Download Folder. TorrentLinker refuses downloads that would overwrite existing files. Normal Reseeds still go through hash Verification.
+L’envoi télécharge chaque `.torrent` directement depuis c411 et l’ajoute au dossier de téléchargement prévu. TorrentLinker refuse les téléchargements qui écraseraient des fichiers existants. Les remises en seed passent toujours par une vérification par hash.
 
-A progress bar shows how many torrents have been sent, added, refused, or failed, with an estimate of the time left. **Stop sending** ends after the current torrent. If c411 refuses downloads (HTTP 429), sending waits and retries the same torrent, waiting longer each time up to 15 minutes, and shows the next try time.
+Une barre de progression indique les envois, ajouts, refus et échecs, avec le temps restant estimé. **Arrêter l’envoi** s’arrête après le torrent en cours. Si c411 limite les téléchargements avec une erreur HTTP 429, l’application attend puis retente le même torrent, avec un délai croissant jusqu’à 15 minutes, et affiche l’heure de la prochaine tentative.
 
-The Plan and each torrent's result are saved as sending goes. After you stop sending, close the app, or after a crash, the Plan comes back with only the torrents left to send; failed ones are tried again. Click **Send to the torrent client** to continue. Making a new Plan or changing its options replaces the saved one. Reseeds are not saved, but sending always starts with them.
+Le Plan et les résultats sont enregistrés au fil de l’envoi. Après un arrêt, une fermeture ou un plantage, seuls les torrents restant à envoyer reviennent ; les échecs sont retentés. Cliquez sur **Envoyer au client torrent** pour reprendre. Créer un nouveau Plan ou changer ses options remplace le Plan enregistré. Les remises en seed ne sont pas sauvegardées dans le Plan, mais passent toujours avant les téléchargements lors de l’envoi.
 
-### Catalog updates and provisional estimates
+### Actualisation du Catalogue et estimations provisoires
 
-The first Plan imports Zen Lab's public metadata snapshot anonymously. Your c411 API key and all `.torrent` requests go directly to c411.
+Le premier Plan importe anonymement le catalogue public de métadonnées Zen Lab. Votre clé API et toutes les demandes de `.torrent` sont envoyées directement à c411.
 
-c411 allows your account 1,200 searches and Catalogue requests an hour, whatever the key, and limits each key's `.torrent` downloads to 30 a minute. TorrentLinker keeps the two apart: searches go up to two a second while the hour's budget lasts, then slow down, even while a Plan is being sent; each key's downloads keep to 30 a minute and about 280 in 20 minutes. Your own searches, file checks and Reseeds always go before a Plan being sent or a Catalogue update. If c411 asks every key to wait more than half a minute, they stop at once and tell you when to try again, instead of hanging. You can add up to 4 more keys of the same c411 account in **Settings → Connections → More API keys**: each adds its own download allowance, and requests go to whichever is free soonest (see [ADR-0008](docs/adr/0008-several-c411-keys-each-within-its-own-limits.md)). See [the measurements](docs/research/rate-limits.md).
+c411 autorise 1 200 recherches et requêtes de Catalogue par heure et par compte, toutes clés confondues, et limite les téléchargements de `.torrent` à 30 par minute et par clé. TorrentLinker sépare ces budgets : les recherches vont jusqu’à deux par seconde tant que le budget horaire le permet, puis ralentissent, même pendant l’envoi d’un Plan. Chaque clé reste limitée à 30 téléchargements par minute et environ 280 sur 20 minutes. Vos recherches, vérifications de fichiers et remises en seed passent avant les Plans et actualisations du Catalogue. Si c411 impose à toutes les clés une attente supérieure à une demi-minute, les actions interactives s’arrêtent et indiquent quand réessayer.
 
-Planning and startup refresh c411 newest-first, stopping at the previous successful update's checkpoint, or an already known page on the first update. Historical scans and their saved page positions are reserved for the explicit Catalogue fetch action. Interrupted updates retain their checkpoint and check for new arrivals when resumed.
+Vous pouvez ajouter jusqu’à quatre clés du même compte dans **Paramètres → Connexions**, dans la section des clés API supplémentaires. Chacune apporte son quota de téléchargement ; les requêtes utilisent celle disponible le plus tôt. Voir [ADR-0008](docs/adr/0008-several-c411-keys-each-within-its-own-limits.md) et les [mesures de limites](docs/research/rate-limits.md).
 
-Plans use cached metadata and show provisional estimates. There are no per-torrent c411 metadata checks before planning or sending. The torrent client is read every 30 seconds to update Seeding estimates as tracker responses arrive. Its known swarm counts also update the local Catalogue for future Plans; unknown counts retain the cached estimate.
+Au démarrage et lors de la préparation d’un Plan, c411 est parcouru du plus récent au plus ancien, jusqu’au repère de la dernière actualisation réussie, ou jusqu’à une page connue lors de la première actualisation. Le parcours historique et sa pagination mémorisée sont réservés à l’action explicite de récupération du Catalogue. Les actualisations interrompues conservent leur repère et recherchent les nouveautés à la reprise.
 
-If another Catalogue refresh is running, the Plan waits for it and then refreshes its selected categories. A failed refresh stops Plan creation. You can stop fetching and make a Plan from the data already available.
+Les Plans utilisent les métadonnées en cache et affichent des estimations provisoires. Aucun contrôle de métadonnées torrent par torrent n’est effectué auprès de c411 avant la préparation ou l’envoi. Le client torrent est interrogé toutes les 30 secondes pour actualiser la vue En partage à mesure que les trackers répondent. Les nombres de seeders connus mettent aussi à jour le Catalogue ; les valeurs inconnues conservent l’estimation en cache.
 
-The snapshot has coarse categories and unknown upstream age. Broad entries are excluded from narrower subcategory selections until the local Catalogue has a specific category from c411. Selecting the parent category allows the broader set. Seeder updates from the client preserve that category uncertainty. c411's paging limits and the snapshot do not establish complete tracker coverage, and the app reports known limits. Zen values remain estimates.
+Si une actualisation est déjà en cours, le Plan l’attend puis actualise ses catégories. Un échec d’actualisation arrête sa création. Vous pouvez interrompre la récupération et créer un Plan avec les données déjà disponibles.
 
-See [CONTEXT.md](CONTEXT.md) for the vocabulary and [docs/adr](docs/adr) for the design decisions.
+Le catalogue tiers fournit des catégories générales et sa fraîcheur en amont est inconnue. Ses entrées générales sont exclues d’une sélection de sous-catégorie tant que c411 n’a pas fourni une catégorie précise. Sélectionner la catégorie parente les inclut. L’actualisation des seeders ne lève pas cette incertitude. Ni les limites de pagination c411 ni ce catalogue tiers ne garantissent une couverture complète du tracker ; l’application indique les limites connues. Les valeurs de Zen restent des estimations.
 
-## Where TorrentLinker keeps its data
+Voir [CONTEXT.md](CONTEXT.md) pour le vocabulaire du projet et [docs/adr](docs/adr) pour les décisions de conception.
 
-| System | Folder |
+## Emplacement des données
+
+| Système | Dossier |
 | --- | --- |
 | Linux | `~/.local/share/TorrentLinker/TorrentLinker/` |
-| Windows | `%APPDATA%\TorrentLinker\TorrentLinker\` (`C:\Users\<you>\AppData\Roaming\TorrentLinker\TorrentLinker\`) |
+| Windows | `%APPDATA%\TorrentLinker\TorrentLinker\`, soit `C:\Users\<vous>\AppData\Roaming\TorrentLinker\TorrentLinker\` |
 
-It holds:
+Ce dossier contient :
 
-- `torrents/`: every `.torrent` downloaded from c411, so none is requested twice, even after a restart or when a saved Plan is sent again. Files are named after a fingerprint of their download address, without your key. Deleting the folder is harmless: the files are fetched again when needed.
-- `uploads/`: the `.torrent` and `.nfo` of each Upload, as sent in its Draft, and a folder per Upload with the images captured for its description.
-- `state.db`: the Catalogue, remembered searches, Rejections, Verifications in progress, the saved Plan, the Uploads made and c411's Category Options.
-- `settings.json`: your settings. API keys and passwords are not in it: they stay in the system keyring.
-- `torrentlinker.log`: the log, useful when reporting a problem.
+- `torrents/` : tous les `.torrent` téléchargés, pour éviter de les demander deux fois, même après redémarrage ou reprise d’un Plan. Leur nom est une empreinte de l’adresse de téléchargement, sans votre clé. Supprimer ce dossier est sans danger : les fichiers seront récupérés à nouveau au besoin.
+- `uploads/` : les `.torrent` et `.nfo` de chaque upload, tels qu’envoyés dans le brouillon, et un dossier par upload pour ses captures d’images.
+- `state.db` : Catalogue, recherches mémorisées, rejets, vérifications en cours, Plan enregistré, uploads réalisés et options de catégories c411.
+- `settings.json` : vos paramètres. Les clés API et mots de passe restent dans le trousseau système, pas dans ce fichier.
+- `torrentlinker.log` : le journal, utile pour signaler un problème.
 
-Your torrent client keeps its own copy of every torrent added to it, in its own profile folder.
+Le client torrent conserve sa propre copie des torrents ajoutés dans son dossier de profil.
 
-## Development
+## Développement
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -e '.[dev]'
@@ -213,7 +275,7 @@ python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest
 ```
 
-Requires Python 3.11 or newer. Run the local checks with:
+Python 3.11 ou plus récent est nécessaire. Pour lancer les contrôles locaux :
 
 ```bash
 .venv/bin/ruff check src tests
@@ -222,9 +284,9 @@ Requires Python 3.11 or newer. Run the local checks with:
 QT_QPA_PLATFORM=offscreen .venv/bin/pytest -q
 ```
 
-## Translations
+## Traductions
 
-UI strings are English in the code; French lives in `src/torrentlinker/i18n/`. After changing UI text:
+Les textes de l’interface sont en anglais dans le code ; leur traduction française se trouve dans `src/torrentlinker/i18n/`. Après modification d’un texte :
 
 ```bash
 .venv/bin/pyside6-lupdate $(find src/torrentlinker -name "*.py") -ts src/torrentlinker/i18n/torrentlinker_fr.ts -no-obsolete
@@ -232,9 +294,9 @@ UI strings are English in the code; French lives in `src/torrentlinker/i18n/`. A
 .venv/bin/pyside6-lrelease src/torrentlinker/i18n/torrentlinker_fr.ts -qm src/torrentlinker/i18n/torrentlinker_fr.qm
 ```
 
-## Testing against real services
+## Tests avec des services réels
 
-Reseed against a real qBittorrent, using a throwaway localhost-only instance (never your own client):
+Pour tester une remise en seed avec qBittorrent, utilisez une instance temporaire accessible uniquement en local, jamais votre client habituel :
 
 ```bash
 python scripts/qbit_sandbox.py /tmp/qbt-sandbox
@@ -242,7 +304,7 @@ qbittorrent-nox --profile=/tmp/qbt-sandbox &
 TL_QBIT_SANDBOX=http://127.0.0.1:18080 .venv/bin/pytest tests/test_qbit_integration.py
 ```
 
-Reseed against a real Deluge in a throwaway Docker container that sees a temporary folder at the same path:
+Pour Deluge, utilisez un conteneur Docker temporaire qui voit un dossier temporaire sous le même chemin :
 
 ```bash
 data=$(mktemp -d)
@@ -252,11 +314,11 @@ TL_DELUGE_SANDBOX=http://127.0.0.1:18112 TL_DELUGE_DATA="$data" .venv/bin/pytest
 docker stop tl-deluge
 ```
 
-`tests/test_deluge_docker_paths.py` does the same with Deluge seeing the folder as `/data`, to test Path Mappings; its docstring has the commands.
+`tests/test_deluge_docker_paths.py` teste aussi les correspondances de chemins, avec un dossier vu comme `/data` dans Deluge. Sa docstring contient les commandes.
 
-Transmission works the same way, with `scripts/transmission_sandbox.py`, `tests/test_transmission_integration.py` and `tests/test_transmission_docker_paths.py`: their docstrings have the commands.
+Transmission suit le même principe avec `scripts/transmission_sandbox.py`, `tests/test_transmission_integration.py` et `tests/test_transmission_docker_paths.py`. Leurs docstrings donnent les commandes.
 
-Search c411 for a real file (enter the API key in Settings → Connections first):
+Pour rechercher un vrai fichier sur c411, renseignez d’abord votre clé API dans **Paramètres → Connexions** :
 
 ```bash
 TL_LIVE=1 .venv/bin/pytest tests/test_live.py -s

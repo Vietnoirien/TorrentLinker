@@ -109,3 +109,19 @@ def test_c411_alternate_tracker_films_are_counted_and_categorized(tmp_path):
     assert len(view.rows) == 1
     assert view.rows[0].category == 2000
     assert view.count == 1
+
+
+def test_seeding_notes_use_current_class_category_swarm_and_age():
+    from torrentlinker.seeding import zen_torrent
+    from torrentlinker.zen import note
+
+    row = CatalogueRow("a" * 40, "Torrent", 4 * GB, 100, 6000, "u", "d", 0)
+    active = replace(torrent(row.infohash, "https://tracker.c411.org/announce"), swarm_seeders=5)
+    stopped = replace(active, hash="b" * 40, state="stoppedUP")
+    for zen_class in (ZenClass.TANKER, ZenClass.SWARM_KEEPER):
+        view = seeding(ZenProfile(zen_class), [active, stopped], URL, catalogue={active.hash: row})
+        assert view.rows[0].note == note(zen_class, zen_torrent(active, row))
+        assert view.rows[1].note == note(zen_class, zen_torrent(stopped))
+        assert view.rows[1].zen is None
+    view = seeding(ZenProfile(ZenClass.REUPLOADER), [active], URL)
+    assert view.rows[0].note is None

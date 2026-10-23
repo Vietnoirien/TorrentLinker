@@ -35,7 +35,7 @@ class SeedingItem(QTreeWidgetItem):
 class SeedingTree(QTreeWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setColumnCount(5)
+        self.setColumnCount(6)
         self.setHeaderLabels(
             [
                 self.tr("Category / Torrent"),
@@ -43,6 +43,7 @@ class SeedingTree(QTreeWidget):
                 self.tr("Seeders"),
                 self.tr("Seed age (days)"),
                 self.tr("≈ Zen/day"),
+                self.tr("≈ Note"),
             ]
         )
         self.setAccessibleName(self.tr("Seeding by category"))
@@ -71,6 +72,14 @@ class SeedingTree(QTreeWidget):
         )
         self.headerItem().setToolTip(
             3, self.tr("Your torrent client's recorded seeding time; c411 may count more.")
+        )
+        self.headerItem().setToolTip(
+            5,
+            self.tr(
+                "Estimated contribution note for your Class, category, swarm and seed age. "
+                "Categories show the average across all their torrents and subcategories; "
+                "unavailable notes are excluded."
+            ),
         )
 
     def show_seeding(self, view: Seeding) -> None:
@@ -107,18 +116,21 @@ class SeedingTree(QTreeWidget):
                     item.setData(0, SEARCH_ROLE, name.casefold())
                     font = item.font(0)
                     font.setBold(True)
-                    for col in (0, 1, 4):
+                    for col in (0, 1, 4, 5):
                         item.setFont(col, font)
                     if parent is None:
                         self.addTopLevelItem(item)
                     else:
                         parent.addChild(item)
                     self.groups[key] = item
-                    totals[key] = [0, 0, 0]
+                    totals[key] = [0, 0, 0, 0, 0]
                 parent = self.groups[key]
                 totals[key][0] += 1
                 totals[key][1] += row.torrent.total_size
                 totals[key][2] += row.zen or 0
+                if row.note is not None:
+                    totals[key][3] += row.note
+                    totals[key][4] += 1
             assert parent is not None
             torrent = row.torrent
             item = SeedingItem([torrent.name])
@@ -137,6 +149,11 @@ class SeedingTree(QTreeWidget):
                 f"≈ {row.zen:.2f}" if row.zen is not None else "–",
                 row.zen if row.zen is not None else -1,
             )
+            item.number(
+                5,
+                f"≈ {row.note:.2f}" if row.note is not None else "–",
+                row.note if row.note is not None else -1,
+            )
             tooltip = " / ".join(names)
             if row.provisional_category:
                 tooltip += "\n" + self.tr(
@@ -148,10 +165,17 @@ class SeedingTree(QTreeWidget):
             parent.addChild(item)
             self.torrents[torrent.hash] = item
         for key, item in self.groups.items():
-            count, size, zen = totals[key]
+            count, size, zen, note_sum, note_count = totals[key]
             item.setText(0, self.tr("{0} ({1})").format(item.text(0), int(count)))
             item.number(1, human_size(size), size)
             item.number(4, f"≈ {zen:.2f}", zen)
+            average_note = note_sum / note_count if note_count else None
+            item.number(
+                5,
+                f"≈ {average_note:.2f}" if average_note is not None else "–",
+                average_note if average_note is not None else -1,
+            )
+            item.setToolTip(5, self.headerItem().toolTip(5))
             item.setToolTip(
                 0,
                 self.tr("{0} torrents; size and Zen/day include all subcategories.").format(

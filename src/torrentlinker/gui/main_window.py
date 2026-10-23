@@ -54,6 +54,7 @@ from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
 from torrentlinker.gui.errors import error_text
+from torrentlinker.gui.library_folder_dialog import LibraryFolderDialog
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
 from torrentlinker.gui.reseed_dialog import ReseedDialog
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
@@ -102,6 +103,7 @@ from torrentlinker.plan import (
     saved_items,
 )
 from torrentlinker.profile import ProfileClient, UserProfile
+from torrentlinker.qbit import AlreadyInClient as ClientAlreadyInClient
 from torrentlinker.qbit import ClientApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import (
@@ -151,6 +153,8 @@ class MainWindow(QMainWindow):
 
         toolbar = QToolBar(self.tr("Library"), self)
         toolbar.setMovable(False)
+        self.add_folder_action = QAction(self.tr("Add folder…"), self)
+        self.add_folder_action.triggered.connect(self.add_library_folder)
         self.scan_action = QAction(self.tr("Scan"), self)
         self.scan_action.triggered.connect(lambda: self.scan())
         self.rescan_action = QAction(self.tr("Rescan everything"), self)
@@ -187,6 +191,7 @@ class MainWindow(QMainWindow):
         scan_menu.addAction(self.rescan_action)
         scan_button.setMenu(scan_menu)
         toolbar.addWidget(scan_button)
+        toolbar.addAction(self.add_folder_action)
         toolbar.addSeparator()
         toolbar.addAction(self.batch_selected_action)
         toolbar.addAction(self.batch_all_action)
@@ -334,6 +339,13 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.page_description)
         self.update_notice = UpdateNotice()
         central_layout.addWidget(self.update_notice)
+        self.setup_notice = QLabel(
+            self.tr('Add your Indexer API key to get started. <a href="settings">Open settings</a>')
+        )
+        self.setup_notice.setWordWrap(True)
+        self.setup_notice.linkActivated.connect(lambda _link: self.open_settings())
+        self.setup_notice.hide()
+        central_layout.addWidget(self.setup_notice)
         central_layout.addWidget(self.band)
         central_layout.addWidget(self.tabs, 1)
         shell.addWidget(content, 1)
@@ -385,16 +397,55 @@ class MainWindow(QMainWindow):
         self.seeding_timer = QTimer(self)
         self.seeding_timer.setInterval(30_000)
         self.seeding_timer.timeout.connect(lambda: self.zen_tab.seeding_view.refresh(quiet=True))
-        self.seeding_timer.start()
+        self._startup_complete = False
         self.show_saved_plan(interrupted=bool((saved := store.saved_plan()) and saved.sending))
-        if settings_path.exists():
-            QTimer.singleShot(0, self.check_verifications)  # settle Reseeds from a past session
-            QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
-            QTimer.singleShot(0, self.refresh_profile)
-            QTimer.singleShot(0, self.upload_tab.refresh_drafts)
-            QTimer.singleShot(0, lambda: self.refresh_categories(then=self.update_catalogue))
-            if settings.library_folders:
-                QTimer.singleShot(0, self.scan)  # the Library as it was, with its last searches
+
+    def _has_indexer_key(self) -> bool:
+        return bool(self.settings.indexer.url.strip() and get_secret(INDEXER_API_KEY).strip())
+
+    def _await_setup(self) -> None:
+        self.setup_notice.show()
+        self.tabs.setEnabled(False)
+        self.band.setEnabled(False)
+        self.seeding_timer.stop()
+        self._startup_complete = False
+        self.statusBar().showMessage(self.tr("Finish connection setup in Settings to get started."))
+
+    def startup(self) -> None:
+        """Start only after configuration; constructing a window never contacts services."""
+        if self._startup_complete:
+            return
+        if not self.settings_path.exists() or not self._has_indexer_key():
+            self._await_setup()
+            QMessageBox.information(
+                self,
+                self.tr("Welcome to TorrentLinker"),
+                self.tr(
+                    "Let's set up your connection first. In Settings → Connections, enter "
+                    "your Indexer API key and configure your torrent client, then save. "
+                    "TorrentLinker will load your data when setup is complete."
+                ),
+            )
+            self.open_settings()
+            return
+        self._start_services()
+
+    def _start_services(self) -> None:
+        if self._startup_complete or not self._has_indexer_key():
+            return
+        self._startup_complete = True
+        self.setup_notice.hide()
+        self.tabs.setEnabled(True)
+        self.band.setEnabled(True)
+        self.statusBar().showMessage(self.tr("Ready"))
+        self.seeding_timer.start()
+        QTimer.singleShot(0, self.check_verifications)
+        QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
+        QTimer.singleShot(0, self.refresh_profile)
+        QTimer.singleShot(0, self.upload_tab.refresh_drafts)
+        QTimer.singleShot(0, lambda: self.refresh_categories(then=self.update_catalogue))
+        if self.settings.library_folders:
+            QTimer.singleShot(0, self.scan)
 
     def check_for_updates(self) -> None:
         cache = self.settings_path.parent / "release-check.json"
@@ -1283,6 +1334,39 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.upload_tab)
         self.upload_tab.select(entry.item.path)
 
+    def add_library_folder(self) -> None:
+        if not self.add_folder_action.isEnabled():
+            return
+        chosen = choose_directory(self, self.tr("Choose a Library Folder"))
+        if not chosen:
+            return
+        path = Path(chosen).expanduser()
+        if not path.is_dir():
+            QMessageBox.warning(self, self.tr("Library"), self.tr("Not a folder: {0}").format(path))
+            return
+        if any(f.path.resolve() == path.resolve() for f in self.settings.library_folders):
+            QMessageBox.information(
+                self, self.tr("Library"), self.tr("This folder is already in the Library.")
+            )
+            return
+        dialog = LibraryFolderDialog(path, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        folders = [*self.settings.library_folders, dialog.folder()]
+        try:
+            replace(self.settings, library_folders=folders).save(self.settings_path)
+        except OSError as error:
+            QMessageBox.warning(
+                self, self.tr("Library"), self.tr("Could not save the folder: {0}").format(error)
+            )
+            return
+        self.settings.library_folders = folders
+        self._fill_folder_filter()
+        self.library_search.clear()
+        self.state_filter.setCurrentIndex(0)
+        self.folder_filter.setCurrentIndex(self.folder_filter.findData(path))
+        self.scan()
+
     def open_settings(self) -> None:
         folders = list(self.settings.library_folders)
         if SettingsDialog(self.settings, self).exec():
@@ -1290,15 +1374,21 @@ class MainWindow(QMainWindow):
             log.info("settings written to %s", self.settings_path)
             self.apply_proxy()
             set_theme(self.settings.theme)
+            self._fill_folder_filter()
+            if not self._has_indexer_key():
+                self._await_setup()
+                return
             self.search_tab.refresh_categories()
             self.search_tab.refresh_estimates()
-            self._fill_folder_filter()
             self.offer_plan_categories()
-            self.zen_tab.seeding_view.refresh()
             self.upload_tab.set_entries(self.upload_tab.entries)  # the Announce URL
             self.zen_tab.plan_view.keys = 1 + len(extra_indexer_keys())
-            if self.settings.library_folders != folders:
-                self.scan()  # a new folder, depth or Content Kind changes every entry
+            if not self._startup_complete:
+                self._start_services()
+            else:
+                self.zen_tab.seeding_view.refresh()
+                if self.settings.library_folders != folders:
+                    self.scan()  # a new folder, depth or Content Kind changes every entry
         else:
             log.info("settings dialog cancelled")
 
@@ -1452,7 +1542,10 @@ class MainWindow(QMainWindow):
                         )
                         seen.add(infohash)
                         result.append(value)
-                except AlreadyInClient:
+                except (AlreadyInClient, ClientAlreadyInClient):
+                    assert value.meta is not None
+                    seen.add(value.meta.infohash.lower())
+                    runner.signals.already_present.emit(entry, value.meta.infohash)
                     continue
                 except Exception as error:
                     runner.signals.error.emit(
@@ -1473,7 +1566,9 @@ class MainWindow(QMainWindow):
         self.batch = runner
         self._batch_errors = []
         self._batch_reseeded = 0
+        self._batch_existing = 0
         self.batch.signals.searched.connect(self._batch_result)
+        self.batch.signals.already_present.connect(self._batch_already_present)
         self.batch.signals.error.connect(self._batch_error)
         self.batch.signals.finished.connect(self._batch_finished)
         self._set_batch_running(True)
@@ -1491,6 +1586,7 @@ class MainWindow(QMainWindow):
         self.reseed_all_action.setEnabled(not running)
         self.scan_action.setEnabled(not running)
         self.rescan_action.setEnabled(not running)
+        self.add_folder_action.setEnabled(not running)
         self.review.setEnabled(not running)
         self.cancel_action.setText(self.tr("Cancel batch") if running else self.tr("Cancel search"))
         self.cancel_action.setEnabled(running)
@@ -1551,13 +1647,22 @@ class MainWindow(QMainWindow):
             entry.item.path, self.tr("Search failed: {0}").format(error_text(error))
         )
 
+    def _batch_already_present(self, entry: LibraryEntry, infohash: str) -> None:
+        self._batch_existing += 1
+        if self.store.verification(infohash) is not None:
+            self._reseed_started(entry.item.path)
+        else:
+            self.library_model.set_status(entry.item.path, self.tr("Already in torrent client"))
+
     def _batch_finished(self, done: int) -> None:
         cancelled = self.batch is not None and self.batch.cancelled()
         self.batch = None
         self._set_batch_running(False)
         if self._batch_mode != "search":
             text = (
-                self.tr("{0} Reseeds started; verification continues").format(self._batch_reseeded)
+                self.tr("{0} Reseeds started; {1} already in torrent client").format(
+                    self._batch_reseeded, self._batch_existing
+                )
                 if self._batch_mode == "reseed"
                 else self.tr("Candidates checked for {0} Local Items").format(done)
             )
@@ -1582,6 +1687,7 @@ class MainWindow(QMainWindow):
             return
         self.scan_action.setEnabled(False)
         self.rescan_action.setEnabled(False)
+        self.add_folder_action.setEnabled(False)
         self.statusBar().showMessage(self.tr("Scanning…"))
         folders = list(self.settings.library_folders)
         qbit, ignore, store = self.qbit(), self.settings.matching.ignore, self.store
@@ -1599,6 +1705,7 @@ class MainWindow(QMainWindow):
         self.upload_tab.set_entries(entries)
         self.scan_action.setEnabled(True)
         self.rescan_action.setEnabled(True)
+        self.add_folder_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("{0} Local Items").format(len(entries)))
         self.restore_searches(entries)
 
@@ -1635,6 +1742,7 @@ class MainWindow(QMainWindow):
     def _scan_failed(self, error: Exception) -> None:
         self.scan_action.setEnabled(True)
         self.rescan_action.setEnabled(True)
+        self.add_folder_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("Scan failed"))
         QMessageBox.warning(self, self.tr("Scan failed"), str(error))
 

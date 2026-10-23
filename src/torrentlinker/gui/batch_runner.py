@@ -14,6 +14,7 @@ from torrentlinker.review import CheckedCandidate
 class BatchSignals(QObject):
     searched = Signal(int, int, object, object)  # index, total, entry, checked Candidates
     error = Signal(object, object)  # entry, exception
+    already_present = Signal(object, str)  # entry, torrent hash
     finished = Signal(int)
 
 

@@ -71,3 +71,36 @@ def test_refresh_keeps_selection_expansion_filter_sort_and_manual_widths(qtbot):
     tree.filter("")
     assert not tree.groups[(7000,)].isExpanded()
     assert not tree.torrents["c"].isHidden()
+
+
+def test_notes_sort_numerically_and_categories_average_torrents_not_subcategories(qtbot):
+    from dataclasses import replace
+
+    import pytest
+
+    tree = SeedingTree()
+    qtbot.addWidget(tree)
+    view = sample()
+    view = replace(
+        view,
+        rows=[
+            replace(row, note=value)
+            for row, value in zip(view.rows, [2.0, 10.0, 0.0, None], strict=True)
+        ],
+    )
+    tree.show_seeding(view)
+    assert tree.torrents["a"].text(5) == "≈ 2.00"
+    assert tree.groups[(7000, 7010)].text(5) == "≈ 6.00"
+    assert tree.groups[(7000,)].data(5, Qt.ItemDataRole.UserRole) == pytest.approx(4.0)
+    assert tree.groups[()].text(5) == "–"
+    tree.sortItems(5, Qt.SortOrder.AscendingOrder)
+    assert tree.groups[(7000, 7010)].child(0) is tree.torrents["a"]
+    tree.filter("Small")
+    assert tree.groups[(7000,)].text(5) == "≈ 4.00"
+    tree.show_seeding(
+        replace(
+            view,
+            rows=[replace(row, note=None) if row.torrent.hash == "b" else row for row in view.rows],
+        )
+    )
+    assert tree.groups[(7000,)].text(5) == "≈ 1.00"

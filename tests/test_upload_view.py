@@ -297,6 +297,9 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
     scans: list[bool] = []
     window.scan = lambda refresh=False: scans.append(refresh)  # type: ignore[method-assign]
     window.zen_tab.seeding_view.refresh = lambda quiet=False: None  # type: ignore[method-assign]
+    # This exercises editing folders after connection setup has already completed.
+    window._startup_complete = True
+    monkeypatch.setattr(window, "_has_indexer_key", lambda: True)
 
     class Dialog:
         def __init__(self, settings: Settings, parent: object) -> None:

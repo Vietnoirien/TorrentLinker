@@ -641,9 +641,13 @@ Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajo
         <translation>Traité {0}/{1} : {2}</translation>
     </message>
     <message>
+        <source>Already in torrent client</source>
+        <translation>Déjà présent dans le client torrent</translation>
+    </message>
+    <message>
         <location filename="../gui/main_window.py" line="1560"/>
-        <source>{0} Reseeds started; verification continues</source>
-        <translation>{0} remises en seed lancées ; la vérification continue</translation>
+        <source>{0} Reseeds started; {1} already in torrent client</source>
+        <translation>{0} remises en seed lancées ; {1} torrents déjà présents dans le client</translation>
     </message>
     <message>
         <location filename="../gui/main_window.py" line="1562"/>
@@ -797,6 +801,42 @@ La mettre à la corbeille ?</translation>
         <location filename="../gui/main_window.py" line="1724"/>
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
+    </message>
+    <message>
+        <source>Add folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
+        <source>Choose a Library Folder</source>
+        <translation>Choisir un dossier de Bibliothèque</translation>
+    </message>
+    <message>
+        <source>Not a folder: {0}</source>
+        <translation>Ce chemin n’est pas un dossier : {0}</translation>
+    </message>
+    <message>
+        <source>This folder is already in the Library.</source>
+        <translation>Ce dossier est déjà dans la Bibliothèque.</translation>
+    </message>
+    <message>
+        <source>Could not save the folder: {0}</source>
+        <translation>Impossible d’enregistrer le dossier : {0}</translation>
+    </message>
+    <message>
+        <source>Add your Indexer API key to get started. &lt;a href="settings"&gt;Open settings&lt;/a&gt;</source>
+        <translation>Ajoutez votre clé API d’indexeur pour commencer. &lt;a href="settings"&gt;Ouvrir les paramètres&lt;/a&gt;</translation>
+    </message>
+    <message>
+        <source>Finish connection setup in Settings to get started.</source>
+        <translation>Terminez la configuration de la connexion dans les Paramètres pour commencer.</translation>
+    </message>
+    <message>
+        <source>Welcome to TorrentLinker</source>
+        <translation>Bienvenue dans TorrentLinker</translation>
+    </message>
+    <message>
+        <source>Let's set up your connection first. In Settings → Connections, enter your Indexer API key and configure your torrent client, then save. TorrentLinker will load your data when setup is complete.</source>
+        <translation>Commençons par configurer votre connexion. Dans Paramètres → Connexions, renseignez votre clé API d’indexeur et configurez votre client torrent, puis enregistrez. TorrentLinker chargera vos données une fois la configuration terminée.</translation>
     </message>
 </context>
 <context>
@@ -2306,6 +2346,14 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <location filename="../gui/seeding_tree.py" line="157"/>
         <source>{0} torrents; size and Zen/day include all subcategories.</source>
         <translation>{0} torrents ; la taille et les Zen/jour incluent toutes les sous-catégories.</translation>
+    </message>
+    <message>
+        <source>≈ Note</source>
+        <translation>≈ Note</translation>
+    </message>
+    <message>
+        <source>Estimated contribution note for your Class, category, swarm and seed age. Categories show the average across all their torrents and subcategories; unavailable notes are excluded.</source>
+        <translation>Note de contribution estimée selon votre Classe, la catégorie, le nombre de seeders et la durée de seed. Les catégories affichent la moyenne de tous leurs torrents et sous-catégories ; les notes indisponibles sont exclues.</translation>
     </message>
 </context>
 <context>
@@ -4317,6 +4365,29 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <location filename="../gui/zen_view.py" line="875"/>
         <source>Catalogue</source>
         <translation>Catalogue</translation>
+    </message>
+</context>
+<context>
+    <name>LibraryFolderDialog</name>
+    <message>
+        <source>Add Library Folder</source>
+        <translation>Ajouter un dossier à la Bibliothèque</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>Content Kind</source>
+        <translation>Type de contenu</translation>
+    </message>
+    <message>
+        <source>Scan depth</source>
+        <translation>Profondeur d’analyse</translation>
+    </message>
+    <message>
+        <source>Depth 1 treats each file or folder directly inside as one Local Item.</source>
+        <translation>La profondeur 1 considère chaque fichier ou dossier directement contenu comme un Élément local.</translation>
     </message>
 </context>
 </TS>

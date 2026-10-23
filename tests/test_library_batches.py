@@ -191,3 +191,59 @@ def test_archive_preflight_can_cancel_or_send_only_ready_matches(qtbot, tmp_path
     finish(qtbot, window)
     assert client.rechecked == [checked.meta.infohash]
     assert not archived.unpack.item.path.exists()
+
+
+def test_reseed_check_reseed_preserves_finished_status_and_adds_new_matches(
+    qtbot, tmp_path, monkeypatch
+):
+    from torrentlinker.reseed import check_verifications, pending_verifications
+
+    window, client, entry, checked, _ = setup(qtbot, tmp_path, monkeypatch)
+    window.review.remember(entry, [checked])
+    window.reseed_all_action.trigger()
+    finish(qtbot, window)
+    client.finish_check(checked.meta.infohash, 1.0)
+    window._verified(
+        (check_verifications(client, window.store), pending_verifications(client, window.store))
+    )
+    assert not window.verify_timer.isActive()
+
+    path = tmp_path / "new-model.stl"
+    path.write_bytes(b"different model" * 100)
+    data = make_torrent(path)
+    meta = read_torrent(data)
+    new_entry = replace(entry, item=scan_item(path))
+    new_candidate = Candidate(
+        "New model", path.stat().st_size, "https://example.test/new", infohash=meta.infohash
+    )
+    window.library_model.set_entries([entry, new_entry])
+    window.review.remember(new_entry, [CheckedCandidate(new_candidate)])
+    monkeypatch.setattr(window, "indexer", lambda: SimpleNamespace(fetch_torrent=lambda c: data))
+    window.check_all_action.trigger()
+    finish(qtbot, window)
+    assert window.library_model.status[entry.item.path] == "Reseeded"
+    window.reseed_all_action.trigger()
+    finish(qtbot, window)
+    assert client.rechecked == [checked.meta.infohash, meta.infohash]
+    assert window._batch_reseeded == 1
+    assert window._batch_existing == 1
+    assert window.library_model.status[entry.item.path] == "Already in torrent client"
+    assert window.library_model.status[new_entry.item.path] == "Verifying…"
+
+
+def test_reseed_again_after_verification_does_not_claim_verification_continues(
+    qtbot, tmp_path, monkeypatch
+):
+    from torrentlinker.reseed import check_verifications
+
+    window, client, entry, checked, _ = setup(qtbot, tmp_path, monkeypatch)
+    window.review.remember(entry, [checked])
+    window.reseed_all_action.trigger()
+    finish(qtbot, window)
+    client.finish_check(checked.meta.infohash, 1.0)
+    window._verified((check_verifications(client, window.store), []))
+    window.reseed_all_action.trigger()
+    finish(qtbot, window)
+    assert "verification continues" not in window.statusBar().currentMessage()
+    assert "already" in window.statusBar().currentMessage().lower()
+    assert window.library_model.status[entry.item.path] == "Already in torrent client"

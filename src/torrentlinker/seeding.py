@@ -20,6 +20,7 @@ from torrentlinker.zen import (
     ZenTorrent,
     estimate,
     is_indexer_torrent,
+    note,
     seed_days,
 )
 
@@ -30,6 +31,7 @@ class SeedingRow:
     zen: float | None  # None when the torrent is not seeding
     category: int | None = None
     provisional_category: bool = False
+    note: float | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,9 @@ def seeding(
                 zen.get(torrent.hash),
                 cached.category if cached else None,
                 cached is not None and cached.source == "zen-lab",
+                note(profile.zen_class, zen_torrent(torrent, cached))
+                if profile.zen_class.paid_on_seeding
+                else None,
             )
         )
     return Seeding(rows, day, as_zen, dict(categories))
