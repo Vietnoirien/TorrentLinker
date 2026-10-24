@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTextBrowser,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -499,10 +500,25 @@ class UploadTab(QWidget):
         image_row.addWidget(self.host_image)
         form.addRow(self.tr("Image URL"), image_row)
         right_layout.addLayout(form)
-        self.options_box = QGroupBox(self.tr("Options"))
+        self.options_box = QGroupBox()
         options_layout = QVBoxLayout(self.options_box)
-        self.options_form = QFormLayout()
-        options_layout.addLayout(self.options_form)
+        self.options_toggle = QToolButton()
+        self.options_toggle.setText(self.tr("Options"))
+        self.options_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.options_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.options_toggle.setCheckable(True)
+        options_layout.addWidget(self.options_toggle, 0, Qt.AlignmentFlag.AlignLeft)
+        self.options_body = QWidget()
+        self.options_form = QFormLayout(self.options_body)
+        self.options_form.setContentsMargins(0, 0, 0, 0)
+        self.options_body.hide()
+        self.options_toggle.toggled.connect(self.options_body.setVisible)
+        self.options_toggle.toggled.connect(
+            lambda expanded: self.options_toggle.setArrowType(
+                Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+            )
+        )
+        options_layout.addWidget(self.options_body)
         status_row = QHBoxLayout()
         self.options_status = QLabel()
         self.options_status.setWordWrap(True)
@@ -1116,6 +1132,7 @@ class UploadTab(QWidget):
         none to show."""
         self._options_state = text
         self.options_status.setText(text)
+        self.options_status.setVisible(bool(text))
         self.options_refresh.setVisible(bool(text) and text != self.tr("Reading the options…"))
         self.options_box.setVisible(bool(text) or bool(self.option_types))
         self._name_changed()

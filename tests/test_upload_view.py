@@ -586,6 +586,36 @@ def test_a_required_option_left_empty_blocks_the_draft_until_the_user_chooses(  
     assert view.create_button.isEnabled()
 
 
+def test_options_collapse_keeps_choices_and_editor_space(  # type: ignore[no-untyped-def]
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    view, _, _ = film_tab(qtbot, tmp_path, monkeypatch)
+    view.resize(1200, 900)
+    view.show()
+    qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
+    assert view.options_body.isHidden()
+    assert not view.options_toggle.isChecked()
+    collapsed_height = view.options_box.sizeHint().height()
+
+    qtbot.mouseClick(view.options_toggle, Qt.MouseButton.LeftButton)
+    assert view.options_body.isVisible()
+    assert view.options_toggle.arrowType() == Qt.ArrowType.DownArrow
+    view._option_widgets[5].item(0).setCheckState(Qt.CheckState.Checked)
+    choices = view.chosen_options()
+    assert view.options_box.sizeHint().height() > collapsed_height + 100
+
+    view._show_options()  # rebuilding the fields keeps the user's expanded state and picks
+    assert view.options_body.isVisible()
+    assert view.chosen_options() == choices
+    qtbot.mouseClick(view.options_toggle, Qt.MouseButton.LeftButton)
+    assert view.options_body.isHidden()
+    assert view.options_toggle.arrowType() == Qt.ArrowType.RightArrow
+    assert view.chosen_options() == choices
+    view._show_options()
+    assert view.options_body.isHidden()
+    assert view.chosen_options() == choices
+
+
 def test_the_users_choice_wins_over_the_profile_and_is_sent_in_the_draft(  # type: ignore[no-untyped-def]
     qtbot, tmp_path: Path, monkeypatch
 ) -> None:
@@ -639,6 +669,8 @@ def test_options_that_cannot_be_read_say_so_and_block_the_draft(  # type: ignore
     )
     assert not view.option_types and not view.create_button.isEnabled()
     assert not view.options_refresh.isHidden()
+    assert not view.options_status.isHidden()  # failure/retry stay accessible when collapsed
+    assert view.options_body.isHidden()
 
 
 def test_3d_has_no_options_to_show_and_sends_none(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
