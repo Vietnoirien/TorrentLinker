@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS client_plan (
+    client_id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS search_cache (
     key TEXT PRIMARY KEY,
     body TEXT NOT NULL,
@@ -145,6 +151,7 @@ class SavedPlanItem:
     note: float | None
     outcome: str | None = None  # added, refused or failed
     reason: str | None = None
+    client_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -205,12 +212,24 @@ class Verification:
 class Store:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.client_id = "default"
         self.torrent_dir = path.parent / "torrents"
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.Lock()
         with self._lock, self._db:
             self._db.executescript(SCHEMA)
             self._migrate()
+
+    def for_client(self, identifier: str) -> Store:
+        """An immutable client scope sharing caches, SQLite connection and its lock."""
+        if not identifier or not identifier.replace("-", "").isalnum():
+            raise ValueError("Invalid Torrent Client profile ID.")
+        result = copy.copy(self)
+        result.client_id = identifier
+        return result
+
+    def _verification_key(self, hash: str) -> str:
+        return hash if self.client_id == "default" else f"{self.client_id}:{hash}"
 
     def enqueue_download(self, key: str, payload: dict[str, object]) -> bool:
         """Payload URLs must already have credentials redacted by the Indexer."""
@@ -264,6 +283,9 @@ class Store:
         plan_columns = {r[1] for r in self._db.execute("PRAGMA table_info(plan_state)")}
         if "zen_added" not in plan_columns:  # 0.2.3 saved Plans without it
             self._db.execute("ALTER TABLE plan_state ADD COLUMN zen_added REAL")
+        item_columns = {r[1] for r in self._db.execute("PRAGMA table_info(plan_item)")}
+        if "client_id" not in item_columns:
+            self._db.execute("ALTER TABLE plan_item ADD COLUMN client_id TEXT NOT NULL DEFAULT ''")
         columns = {r[1] for r in self._db.execute("PRAGMA table_info(verification)")}
         if "required_progress" not in columns:
             self._db.execute(
@@ -336,6 +358,7 @@ class Store:
         required_pieces: list[tuple[int, int]] | None = None,
         local_files: list[str] | None = None,
     ) -> None:
+        hash = self._verification_key(hash)
         pieces = json.dumps(required_pieces) if required_pieces is not None else None
         files = json.dumps(local_files or [])
         with self._lock, self._db:
@@ -349,15 +372,21 @@ class Store:
     def verification_hashes(self) -> list[str]:
         """Persisted Reseeds still waiting for client verification."""
         with self._lock:
-            return [str(row[0]) for row in self._db.execute("SELECT hash FROM verification")]
+            rows = [str(row[0]) for row in self._db.execute("SELECT hash FROM verification")]
+        if self.client_id == "default":
+            return [h for h in rows if ":" not in h]
+        prefix = self.client_id + ":"
+        return [h[len(prefix) :] for h in rows if h.startswith(prefix)]
 
     def mark_rechecked(self, hash: str) -> None:
+        hash = self._verification_key(hash)
         with self._lock, self._db:
             self._db.execute(
                 "UPDATE verification SET rechecked_at = ? WHERE hash = ?", (time.time(), hash)
             )
 
     def verification(self, hash: str) -> Verification | None:
+        hash = self._verification_key(hash)
         with self._lock:
             row = self._db.execute(
                 "SELECT item_path, candidate_key, rechecked_at, required_pieces, local_files"
@@ -372,6 +401,7 @@ class Store:
         return Verification(Path(row[0]), str(row[1]), rechecked, pieces, files)  # type: ignore[arg-type]
 
     def end_verification(self, hash: str) -> None:
+        hash = self._verification_key(hash)
         with self._lock, self._db:
             self._db.execute("DELETE FROM verification WHERE hash = ?", (hash,))
 
@@ -670,6 +700,10 @@ class Store:
         zen_added: float | None = None,
     ) -> None:
         """Replace the saved Plan, so it survives a crash or a restart."""
+        if self.client_id != "default":
+            plan = SavedPlan(time.time() if made_at is None else made_at, False, items, zen_added)
+            self._write_client_plan(plan if items else None)
+            return
         with self._lock, self._db:
             self._db.execute("DELETE FROM plan_item")
             self._db.execute("DELETE FROM plan_state")
@@ -681,7 +715,7 @@ class Store:
             )
             self._db.executemany(
                 "INSERT INTO plan_item (position, infohash, title, size, seeders, category,"
-                " folder, zen, note, outcome, reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " folder, zen, note, outcome, reason, client_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 [
                     (
                         n,
@@ -695,19 +729,39 @@ class Store:
                         i.note,
                         i.outcome,
                         i.reason,
+                        i.client_id,
                     )
                     for n, i in enumerate(items)
                 ],
             )
 
+    def _write_client_plan(self, plan: SavedPlan | None) -> None:
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM client_plan WHERE client_id=?", (self.client_id,))
+            if plan is not None:
+                self._db.execute(
+                    "INSERT INTO client_plan VALUES (?, ?)",
+                    (self.client_id, json.dumps(asdict(plan))),
+                )
+
     def saved_plan(self) -> SavedPlan | None:
+        if self.client_id != "default":
+            with self._lock:
+                row = self._db.execute(
+                    "SELECT payload FROM client_plan WHERE client_id=?", (self.client_id,)
+                ).fetchone()
+            if row is None:
+                return None
+            data = json.loads(row[0])
+            data["items"] = [SavedPlanItem(**i) for i in data["items"]]
+            return SavedPlan(**data)
         with self._lock:
             state = self._db.execute(
                 "SELECT made_at, sending, zen_added FROM plan_state"
             ).fetchone()
             rows = self._db.execute(
                 "SELECT infohash, title, size, seeders, category, folder, zen, note, outcome,"
-                " reason FROM plan_item ORDER BY position"
+                " reason, client_id FROM plan_item ORDER BY position"
             ).fetchall()
         if state is None:
             return None
@@ -716,10 +770,24 @@ class Store:
         )
 
     def set_plan_sending(self, sending: bool) -> None:
+        if self.client_id != "default":
+            if plan := self.saved_plan():
+                self._write_client_plan(replace(plan, sending=sending))
+            return
         with self._lock, self._db:
             self._db.execute("UPDATE plan_state SET sending = ?", (int(sending),))
 
     def mark_plan_item(self, infohash: str, outcome: str, reason: str = "") -> None:
+        if self.client_id != "default":
+            if plan := self.saved_plan():
+                items = [
+                    replace(i, outcome=outcome, reason=reason or None)
+                    if i.infohash == infohash
+                    else i
+                    for i in plan.items
+                ]
+                self._write_client_plan(replace(plan, items=items))
+            return
         with self._lock, self._db:
             self._db.execute(
                 "UPDATE plan_item SET outcome = ?, reason = ? WHERE infohash = ?",

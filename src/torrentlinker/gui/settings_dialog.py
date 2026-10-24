@@ -97,11 +97,18 @@ def kind_label(kind: ContentKind) -> str:
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        parent: QWidget | None = None,
+        *,
+        secret_values: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Settings"))
         self.resize(1020, 720)
         self.settings = settings
+        self._secret_values = secret_values
         self._loaded_secrets: dict[str, str] = {}
         self._folder_import_generation = 0
         self.finished.connect(self._cancel_folder_import)
@@ -178,7 +185,12 @@ class SettingsDialog(QDialog):
         return note
 
     def _secret_field(self, name: str) -> QLineEdit:
-        self._loaded_secrets[name] = get_secret(name)
+        key = self.settings.secret_name(name)
+        self._loaded_secrets[name] = (
+            self._secret_values[key]
+            if self._secret_values is not None and key in self._secret_values
+            else get_secret(key)
+        )
         field = QLineEdit(self._loaded_secrets[name])
         field.setEchoMode(QLineEdit.EchoMode.Password)
         reveal = field.addAction(
@@ -291,6 +303,8 @@ class SettingsDialog(QDialog):
             self.client.addItem(client.display_name, client.value)
         self.client.setCurrentIndex(self.client.findData(self.settings.client.value))
         choice = QFormLayout()
+        self.client_name = QLineEdit(self.settings.profile().name)
+        choice.addRow(self.tr("Client name"), self.client_name)
         choice.addRow(self.tr("Client"), self.client)
         layout.addLayout(choice)
         self.client_forms = QStackedWidget()
@@ -1212,7 +1226,11 @@ class SettingsDialog(QDialog):
         try:
             for name, value in fields.items():
                 if value != self._loaded_secrets.get(name):
-                    set_secret(name, value)
+                    key = self.settings.secret_name(name)
+                    if self._secret_values is not None:
+                        self._secret_values[key] = value
+                    else:
+                        set_secret(key, value)
         except KeyringError as e:
             log.warning("keyring write failed: %s", e)
             QMessageBox.warning(
@@ -1228,8 +1246,40 @@ class SettingsDialog(QDialog):
             self.tabs.setCurrentIndex(0)
             QMessageBox.warning(self, self.tr("Proxy"), str(e))
             return
+        if not self.client_name.text().strip() or len(self.client_name.text().strip()) > 100:
+            QMessageBox.warning(
+                self, self.tr("Client name"), self.tr("Enter a client name of 1 to 100 characters.")
+            )
+            return
+        from torrentlinker.client_profiles import pending_work
+        from torrentlinker.config import CLIENT_FIELDS
+
+        store = getattr(self.parent(), "store", None)
+        profile = self.settings.profile()
+        host = (
+            {
+                "qbit": self.qbit_host,
+                "deluge": self.deluge_host,
+                "transmission": self.transmission_host,
+                "utorrent": self.utorrent_host,
+            }[CLIENT_FIELDS[self._chosen_client()]]
+            .text()
+            .strip()
+        )
+        changed = profile.client != self._chosen_client() or profile.host != host
+        if changed and store is not None and pending_work(self.settings, store, profile.id):
+            QMessageBox.warning(
+                self,
+                self.tr("Client in use"),
+                self.tr(
+                    "Finish or remove this client's pending work before changing its connection. "
+                    "You can add another client instead."
+                ),
+            )
+            return
         self._save_secrets()
         s = self.settings
+        s.profile().name = self.client_name.text().strip()
         s.proxy.address = self.proxy_address.text().strip()
         s.proxy.username = self.proxy_user.text().strip()
         s.proxy.torrent_client = self.proxy_client.isChecked()

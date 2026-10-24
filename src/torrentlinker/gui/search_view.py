@@ -213,6 +213,7 @@ class SearchTab(QWidget):
                 self.tr("Download Folder"),
                 self.tr("Status"),
                 self.tr("Details"),
+                self.tr("Client"),
             ]
         )
         self.queue_empty = EmptyState(
@@ -800,7 +801,10 @@ class SearchTab(QWidget):
             self.queue.setItem(row, 4, QTableWidgetItem(str(entry.folder)))
             self.queue.setItem(row, 5, QTableWidgetItem(labels.get(entry.status, entry.status)))
             self.queue.setItem(row, 6, QTableWidgetItem(entry.reason))
-            for column in range(7):
+            self.queue.setItem(
+                row, 7, QTableWidgetItem(self.settings.profile(entry.client_id).name)
+            )
+            for column in range(8):
                 cell = self.queue.item(row, column)
                 assert cell is not None
                 cell.setSelected(entry.key in selected)

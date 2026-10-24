@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import threading
 from collections.abc import Callable
@@ -48,6 +49,8 @@ def http_url(value: str) -> str:
 
 
 class Connection(BaseModel):
+    client_id: str = ""
+    name: str = Field(default="", max_length=100)
     client: TorrentClient
     host: str = Field(max_length=2048)
     username: str = Field(default="", max_length=256)
@@ -82,6 +85,7 @@ class ProxySetup(BaseModel):
 
 
 class FolderRemoval(BaseModel):
+    client_id: str = ""
     local: str = Field(max_length=4096)
     purpose: Literal["library", "download"] = "library"
 
@@ -102,6 +106,8 @@ class Setup:
     ):
         self.path = directory / "settings.json"
         self.settings = Settings.load(self.path)
+        self.settings.ensure_profiles()
+        self._root: Setup | None = None
         self.marker = directory / "client.ready"
         self.configured = self.marker.exists()
         self.roots = tuple(p.resolve(strict=True) for p in roots)
@@ -117,12 +123,24 @@ class Setup:
         self.lock = threading.RLock()
         self._client: ClientApi | None = None
         self._indexer: Indexer | None = None
-        self.store = Store(directory / "catalogue.sqlite")
+        self.store = Store(directory / "catalogue.sqlite").for_client(
+            self.settings.active_client_id
+        )
         proxy = self.settings.proxy
         net.configure(
             net.proxy_url(proxy.address, proxy.username, self.secrets.get("proxy-password")),
             proxy.torrent_client,
         )
+
+    def for_client(self, identifier: str) -> Setup:
+        root = self._root or self
+        with root.lock:
+            result = copy.copy(root)
+            result._root = root
+            result.settings = root.settings.for_client(identifier)
+            result.store = root.store.for_client(identifier)
+            result._client = None
+            return result
 
     def client(self) -> ClientApi:
         with self.lock:
@@ -135,8 +153,10 @@ class Setup:
                     self.settings.client,
                     config.host,
                     getattr(config, "username", ""),
-                    self.secrets.get(name + "-password"),
-                    self.secrets.get("qbit-api-key") if name == "qbit" else "",
+                    self.secrets.get(self.settings.secret_name(name + "-password")),
+                    self.secrets.get(self.settings.secret_name("qbit-api-key"))
+                    if name == "qbit"
+                    else "",
                 )
             return self._client
 
@@ -154,12 +174,21 @@ class Setup:
             name = CLIENT_SETTINGS[self.settings.client]
             config = getattr(self.settings, name)
             return {
+                "client_id": self.settings.active_client_id,
+                "name": self.settings.profile().name,
+                "default_client_id": (self._root or self).settings.default_client_id,
+                "clients": [
+                    {"id": p.id, "name": p.name, "client": p.client, "enabled": p.enabled}
+                    for p in (self._root or self).settings.client_profiles
+                ],
                 "configured": self.configured,
                 "client": self.settings.client,
                 "host": config.host,
                 "username": getattr(config, "username", ""),
-                "has_password": bool(self.secrets.get(name + "-password")),
-                "has_api_key": bool(self.secrets.get("qbit-api-key")),
+                "has_password": bool(
+                    self.secrets.get(self.settings.secret_name(name + "-password"))
+                ),
+                "has_api_key": bool(self.secrets.get(self.settings.secret_name("qbit-api-key"))),
                 "indexer_url": self.settings.indexer.url,
                 "indexer_configured": bool(self.secrets.get("indexer-api-key")),
                 "storage_roots": [str(p) for p in self.roots],
@@ -182,12 +211,14 @@ class Setup:
         with self.lock:
             name = CLIENT_SETTINGS[body.client]
             password = (
-                body.password if body.password is not None else self.secrets.get(name + "-password")
+                body.password
+                if body.password is not None
+                else self.secrets.get(self.settings.secret_name(name + "-password"))
             )
             key = (
                 body.api_key
                 if body.api_key is not None
-                else self.secrets.get("qbit-api-key")
+                else self.secrets.get(self.settings.secret_name("qbit-api-key"))
                 if name == "qbit"
                 else ""
             )
@@ -221,9 +252,9 @@ class Setup:
             if save:
                 values = {}
                 if body.password is not None:
-                    values[name + "-password"] = body.password
+                    values[self.settings.secret_name(name + "-password")] = body.password
                 if body.api_key is not None and name == "qbit":
-                    values["qbit-api-key"] = body.api_key
+                    values[self.settings.secret_name("qbit-api-key")] = body.api_key
                 old = getattr(self.settings, CLIENT_SETTINGS[self.settings.client])
                 changed = (
                     self.settings.client != body.client
@@ -231,7 +262,11 @@ class Setup:
                     or getattr(old, "username", "")
                     != ("" if body.client is TorrentClient.DELUGE else body.username)
                 )
-                if changed and self.store.verification_hashes():
+                from torrentlinker.client_profiles import pending_work
+
+                if changed and pending_work(
+                    self.settings, self.store, self.settings.active_client_id
+                ):
                     raise ValueError(
                         "Finish pending Reseed Verifications before changing Torrent Clients."
                     )
@@ -252,9 +287,11 @@ class Setup:
                                 "Torrent Client changed. Queue this selection again.",
                             )
                     self.settings.path_mappings.clear()
-                    self.settings.library_folders.clear()
+
                     self.settings.download_folders.default = ""
                     self.settings.download_folders.by_category.clear()
+                if body.name.strip():
+                    self.settings.profile().name = body.name.strip()
                 self.settings.client = body.client
                 self.save()
                 self.marker.write_text("connected", encoding="utf-8")
@@ -488,6 +525,23 @@ class Setup:
             self.save()
 
     def save(self) -> None:
+        if self._root is not None:
+            with self.lock:
+                self.settings.capture_client()
+                root = self._root
+                root.settings.capture_client()
+                profile = copy.deepcopy(self.settings.profile())
+                root.settings.client_profiles = [
+                    profile if p.id == profile.id else p for p in root.settings.client_profiles
+                ]
+                # Shared account and Library settings belong to the workspace.
+                root.settings.library_folders = copy.deepcopy(self.settings.library_folders)
+                root.settings.zen = copy.deepcopy(self.settings.zen)
+                root.settings.indexer_categories = copy.deepcopy(self.settings.indexer_categories)
+                if root.settings.active_client_id == profile.id:
+                    root.settings = self.settings.for_client(profile.id)
+                root.save()
+            return
         temporary = self.path.with_suffix(".new")
         self.settings.save(temporary)
         temporary.replace(self.path)

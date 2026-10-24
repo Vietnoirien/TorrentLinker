@@ -11,6 +11,7 @@ ONLINE = "https://github.com/Vietnoirien/TorrentLinker/blob/main/docs/"
 GUIDES = (
     ("demarrage", "getting-started", "Installer et configurer", "Setup and connections"),
     ("web-docker", "web-docker", "Interface web et Docker", "Web UI and Docker"),
+    ("clients", "clients", "Plusieurs clients torrent", "Multiple Torrent Clients"),
     ("torrents", "torrents", "Gérer les torrents", "Manage torrents"),
     ("bibliotheque", "library", "Bibliothèque et reseed", "Library and reseeding"),
     ("recherche", "search", "Recherche et téléchargements", "Search and downloads"),

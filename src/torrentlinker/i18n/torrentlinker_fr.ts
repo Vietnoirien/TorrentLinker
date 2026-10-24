@@ -871,6 +871,30 @@ La mettre à la corbeille ?</translation>
         <source>Documentation</source>
         <translation>Documentation</translation>
     </message>
+    <message>
+        <source>All clients</source>
+        <translation>Tous les clients</translation>
+    </message>
+    <message>
+        <source>Target client</source>
+        <translation>Client cible</translation>
+    </message>
+    <message>
+        <source>Clients…</source>
+        <translation>Clients…</translation>
+    </message>
+    <message>
+        <source>Plan destinations…</source>
+        <translation>Destinations du Plan…</translation>
+    </message>
+    <message>
+        <source>Plan destinations: </source>
+        <translation>Destinations du Plan : </translation>
+    </message>
+    <message>
+        <source>Wait for the current operation before changing client.</source>
+        <translation>Attendez la fin de l’opération en cours avant de changer de client.</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -1362,6 +1386,10 @@ La mettre à la corbeille ?</translation>
         <location filename="../gui/zen_view.py" line="836"/>
         <source>{0} h {1:02d}</source>
         <translation>{0} h {1:02d}</translation>
+    </message>
+    <message>
+        <source>Client</source>
+        <translation>Client</translation>
     </message>
 </context>
 <context>
@@ -2308,6 +2336,10 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <translation>Mise en pause après la requête en cours…</translation>
     </message>
     <message><source>Open in Torrents</source><translation>Voir dans Torrents</translation></message>
+    <message>
+        <source>Client</source>
+        <translation>Client</translation>
+    </message>
 </context>
 <context>
     <name>SeedingTree</name>
@@ -3136,6 +3168,22 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
     <message><source>Folders imported. Save Settings to keep them.</source><translation>Dossiers importés. Enregistrez les paramètres pour les conserver.</translation></message>
     <message><source>Could not read client folders: {0}</source><translation>Impossible de lire les dossiers du client : {0}</translation></message>
     <message><source>Experimental: µTorrent Classic WebUI, not µTorrent Web. Enable WebUI in Preferences → Advanced → Web UI. Full Reseeds and Upload seeding are supported. If names differ, a confirmation lists the files that must be renamed on disk. Partial Matches are unavailable. Enable ‘Don't start the download automatically’ and choose a default folder in µTorrent. TorrentLinker checks the destination before starting each download. Only that folder and its subfolders can be used.</source><translation>Expérimental : WebUI de µTorrent Classic, pas µTorrent Web. Activez la WebUI dans Préférences → Avancé → Interface Web. Les remises en partage complètes et le partage des uploads sont pris en charge. Si les noms diffèrent, une confirmation affiche les fichiers à renommer sur le disque. Les correspondances partielles sont indisponibles. Activez « Ne pas démarrer le téléchargement automatiquement » et choisissez un dossier par défaut dans µTorrent. TorrentLinker vérifie la destination avant de démarrer chaque téléchargement. Seuls ce dossier et ses sous-dossiers sont utilisables.</translation></message>
+    <message>
+        <source>Client name</source>
+        <translation>Nom du client</translation>
+    </message>
+    <message>
+        <source>Enter a client name of 1 to 100 characters.</source>
+        <translation>Saisissez un nom de client de 1 à 100 caractères.</translation>
+    </message>
+    <message>
+        <source>Client in use</source>
+        <translation>Client utilisé</translation>
+    </message>
+    <message>
+        <source>Finish or remove this client's pending work before changing its connection. You can add another client instead.</source>
+        <translation>Terminez ou retirez les opérations en attente de ce client avant de modifier sa connexion. Vous pouvez ajouter un autre client.</translation>
+    </message>
 </context>
 <context>
     <name>Subcategory</name>
@@ -4988,6 +5036,151 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
         <location filename="../gui/documentation.py" line="141"/>
         <source>Guide unavailable. Use Open online to read it.</source>
         <translation>Guide indisponible. Utilisez Ouvrir en ligne pour le lire.</translation>
+    </message>
+</context>
+<context>
+    <name>ClientOverview</name>
+    <message>
+        <source>Filter torrents or clients…</source>
+        <translation>Filtrer les torrents ou les clients…</translation>
+    </message>
+    <message>
+        <source>Refresh all clients</source>
+        <translation>Actualiser tous les clients</translation>
+    </message>
+    <message>
+        <source>Torrent</source>
+        <translation>Torrent</translation>
+    </message>
+    <message>
+        <source>Client</source>
+        <translation>Client</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Seeders</source>
+        <translation>Seeders</translation>
+    </message>
+    <message>
+        <source>Peers</source>
+        <translation>Pairs</translation>
+    </message>
+    <message>
+        <source>≈ Zen/day</source>
+        <translation>≈ Zen/jour</translation>
+    </message>
+    <message>
+        <source>≈ Note</source>
+        <translation>≈ Note</translation>
+    </message>
+    <message>
+        <source>{0} torrent instances · {1} unique seeds · ≈ {2:.2f} Zen/day</source>
+        <translation>{0} torrents dans les clients · {1} seeds distincts · ≈ {2:.2f} Zen/jour</translation>
+    </message>
+    <message>
+        <source>Start</source>
+        <translation>Démarrer</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <source>Recheck</source>
+        <translation>Revérifier</translation>
+    </message>
+    <message>
+        <source>Remove torrent…</source>
+        <translation>Retirer le torrent…</translation>
+    </message>
+    <message>
+        <source>Delete torrent and files…</source>
+        <translation>Supprimer le torrent et les fichiers…</translation>
+    </message>
+    <message>
+        <source>Delete these torrents AND their files?</source>
+        <translation>Supprimer ces torrents ET leurs fichiers ?</translation>
+    </message>
+    <message>
+        <source>Remove these torrents, keeping their files?</source>
+        <translation>Retirer ces torrents en conservant leurs fichiers ?</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation>Confirmer</translation>
+    </message>
+    <message>
+        <source>Torrent action</source>
+        <translation>Action sur les torrents</translation>
+    </message>
+</context>
+<context>
+    <name>ClientProfilesDialog</name>
+    <message>
+        <source>Settings · Torrent clients</source>
+        <translation>Paramètres · Clients torrent</translation>
+    </message>
+    <message>
+        <source>Add client</source>
+        <translation>Ajouter un client</translation>
+    </message>
+    <message>
+        <source>Edit settings</source>
+        <translation>Modifier les paramètres</translation>
+    </message>
+    <message>
+        <source>Make default</source>
+        <translation>Définir par défaut</translation>
+    </message>
+    <message>
+        <source>Remove client</source>
+        <translation>Retirer ce client</translation>
+    </message>
+    <message>
+        <source> · Default</source>
+        <translation> · Par défaut</translation>
+    </message>
+    <message>
+        <source>Client name</source>
+        <translation>Nom du client</translation>
+    </message>
+    <message>
+        <source>Client in use</source>
+        <translation>Client utilisé</translation>
+    </message>
+    <message>
+        <source>Keep at least one client. Finish or remove its pending downloads, Plan and Verifications before removing it.</source>
+        <translation>Conservez au moins un client. Terminez ou retirez ses téléchargements, son Plan et ses vérifications en attente avant de le retirer.</translation>
+    </message>
+</context>
+<context>
+    <name>PlanClientsDialog</name>
+    <message>
+        <source>Plan destinations</source>
+        <translation>Destinations du Plan</translation>
+    </message>
+    <message>
+        <source>Select one client, or several for automatic distribution. A budget of 0 uses available space after the free-space margin.</source>
+        <translation>Sélectionnez un client, ou plusieurs pour une répartition automatique. Un budget de 0 utilise l’espace disponible après la marge de sécurité.</translation>
+    </message>
+    <message>
+        <source>Use</source>
+        <translation>Utiliser</translation>
+    </message>
+    <message>
+        <source>Client</source>
+        <translation>Client</translation>
+    </message>
+    <message>
+        <source>Budget · GiB</source>
+        <translation>Budget · Gio</translation>
     </message>
 </context>
 </TS>

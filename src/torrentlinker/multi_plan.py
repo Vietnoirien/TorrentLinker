@@ -1,0 +1,132 @@
+"""Plan downloads across selected clients without spending a shared disk twice."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from dataclasses import replace
+from pathlib import Path
+
+from torrentlinker.config import Settings
+from torrentlinker.domain import LibraryFolder, Torrent
+from torrentlinker.plan import (
+    Plan,
+    PlanCandidate,
+    catalogue_candidates,
+    disk_of,
+    disk_space,
+    make_plan,
+    on_disk,
+)
+from torrentlinker.qbit import Qbit
+from torrentlinker.scan import scan
+from torrentlinker.seeding import combined_seeding
+from torrentlinker.store import Store
+from torrentlinker.zen import note
+
+
+def distributed_plan(
+    settings: Settings,
+    store: Store,
+    clients: Mapping[str, Qbit],
+    budgets: Mapping[str, int],
+    validate_folder: Callable[[str, Path], None] = lambda identifier, folder: None,
+) -> Plan:
+    """Round-robin placement within client budgets, followed by the Zen selection engine.
+
+    Paths resolve to physical disks on the application host. A disk mounted for two
+    clients has one free-space budget. Every infohash gets at most one destination.
+    """
+    if not clients:
+        raise ValueError("Choose at least one Torrent Client.")
+    if any(value < 0 for value in budgets.values()):
+        raise ValueError("Client budgets cannot be negative.")
+    observed: list[Torrent] = []
+    for client in clients.values():
+        observed.extend(client.torrents(with_files=False))
+    hashes = {t.hash.lower() for t in observed}
+    rows = store.catalogue()
+    current = combined_seeding(
+        settings.zen,
+        observed,
+        settings.indexer.url,
+        catalogue={r.infohash: r for r in rows},
+    )
+    options = settings.plan_options
+    available: dict[str, list[PlanCandidate]] = {}
+    folders: set[Path] = set()
+    scanned = {}
+    excluded = {}
+    for identifier in clients:
+        scoped = settings.for_client(identifier)
+        candidates = catalogue_candidates(
+            rows,
+            scoped.download_folders,
+            settings.indexer_categories,
+            hashes,
+            disk_of,
+            set(settings.plan_categories) if settings.plan_categories is not None else None,
+        )
+        for folder in {c.folder for c in candidates if c.folder is not None}:
+            validate_folder(identifier, folder)
+            if not folder.is_dir():
+                raise ValueError(f"Download Folder is unavailable for {scoped.profile().name}.")
+            folders.add(folder)
+            if folder not in scanned:
+                scanned[folder] = scan(LibraryFolder(folder), store)
+        existing = on_disk(
+            candidates,
+            [
+                item
+                for folder in {c.folder for c in candidates}
+                if folder is not None
+                for item in scanned[folder]
+            ],
+        )
+        excluded.update({item.infohash: item for item in existing})
+        available[identifier] = [
+            replace(c, client_id=identifier)
+            for c in candidates
+            if c.infohash not in excluded and options.admits(c.size, c.seeders)
+        ]
+    spaces = disk_space(sorted(folders), settings.free_space_margin)
+    physical = {space.disk: space.available for space in spaces}
+    remaining = dict(physical)
+    client_remaining = {
+        identifier: budgets.get(identifier, 0) or sum(physical.values()) for identifier in clients
+    }
+    by_hash: dict[str, dict[str, PlanCandidate]] = {}
+    for identifier, candidates in available.items():
+        for item in candidates:
+            by_hash.setdefault(item.infohash, {})[identifier] = item
+    # Prefer smaller high-note torrents when reserving candidate placement.
+    ordered = sorted(
+        by_hash.values(),
+        key=lambda choices: (
+            -note(settings.zen.zen_class, next(iter(choices.values())).as_zen())
+            / max(1, next(iter(choices.values())).size)
+        ),
+    )
+    identifiers = list(clients)
+    assigned = []
+    cursor = 0
+    for choices in ordered:
+        for offset in range(len(identifiers)):
+            index = (cursor + offset) % len(identifiers)
+            identifier = identifiers[index]
+            candidate = choices.get(identifier)
+            if (
+                candidate is not None
+                and candidate.infohash not in excluded
+                and candidate.size <= client_remaining[identifier]
+                and candidate.size <= remaining.get(candidate.disk, 0)
+            ):
+                assigned.append(candidate)
+                client_remaining[identifier] -= candidate.size
+                remaining[candidate.disk] -= candidate.size
+                cursor = (index + 1) % len(identifiers)
+                break
+    slots = max(0, settings.zen.torrent_cap - current.count) if settings.zen.torrent_cap else None
+    result = make_plan(
+        settings.zen, assigned, physical, current.active, slots, options=options, disk_spaces=spaces
+    )
+    return replace(result, on_disk=tuple(excluded.values()))

@@ -35,6 +35,19 @@ UI strings are English in the code; French lives in `src/torrentlinker/i18n/`. A
 
 ## Testing against real services
 
+The multi-client suite starts two qBittorrent instances, Deluge and Transmission on an internal Docker network. It checks profile credentials, Path Mappings, Reseeds, Upload seeding, queue and Plan destinations, real file transfers through a local tracker, and Web API action isolation. It uses generated data and removes its containers and network afterwards.
+
+On Linux, cache the images once, then run:
+
+```bash
+docker pull qbittorrentofficial/qbittorrent-nox:5.2.4-1
+docker pull lscr.io/linuxserver/deluge:2.2.0
+docker pull lscr.io/linuxserver/transmission:4.1.3
+TL_MULTI_DOCKER=1 .venv/bin/pytest -s -q tests/test_multi_client_docker.py
+```
+
+The tests require Docker access. They do not use your configured clients or c411 API key. Each container has separate temporary storage and credentials. Web UI ports are not published. This suite does not cover µTorrent.
+
 Reseed against a real qBittorrent, using a throwaway localhost-only instance (never your own client):
 
 ```bash

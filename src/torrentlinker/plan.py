@@ -81,6 +81,8 @@ class PlanCandidate:
     reseed: bool = False
     source: object = field(default=None, compare=False)  # CatalogueRow, or the Reseed's data
 
+    client_id: str = ""
+
     @property
     def download_size(self) -> int:
         return 0 if self.reseed else self.size
@@ -212,7 +214,15 @@ def saved_items(plan: Plan) -> list[SavedPlanItem]:
     """The Plan's downloads as saved; Reseeds depend on this session's searches."""
     return [
         SavedPlanItem(
-            c.infohash, c.title, c.size, c.seeders, c.category, str(c.folder), i.zen, i.note
+            c.infohash,
+            c.title,
+            c.size,
+            c.seeders,
+            c.category,
+            str(c.folder),
+            i.zen,
+            i.note,
+            client_id=c.client_id,
         )
         for i in plan.items
         if not (c := i.candidate).reseed and c.folder is not None
@@ -231,6 +241,7 @@ def restore_plan(saved: SavedPlan, rows: Mapping[str, CatalogueRow]) -> Plan:
                 i.category,
                 Path(i.folder),
                 source=rows[i.infohash],
+                client_id=i.client_id,
             ),
             i.zen,
             i.note,

@@ -103,6 +103,7 @@ def send_plan(
     on_outcome: Callable[[PlanCandidate, str, str], None] = lambda c, outcome, reason: None,
     stop: threading.Event | None = None,
     wait: Callable[[float], bool] | None = None,
+    client_for: Callable[[str], Qbit] | None = None,
     now: Callable[[], float] = time.time,
 ) -> SendReport:
     """Send every Plan item; one failing never stops the others.
@@ -159,7 +160,8 @@ def send_plan(
                 zen_sent += item.zen
                 on_outcome(c, "reseeded", "")
             else:
-                send_one(qbit, c, fetch_patiently(c))
+                target = client_for(c.client_id) if client_for and c.client_id else qbit
+                send_one(target, c, fetch_patiently(c))
                 report.added.append(c.title)
                 zen_sent += item.zen
                 on_outcome(c, "added", "")

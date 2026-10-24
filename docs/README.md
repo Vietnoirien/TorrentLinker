@@ -12,6 +12,8 @@ Les guides et leurs captures sont aussi disponibles dans **Documentation**, just
 
 ## Aller plus loin
 
+- [Plusieurs clients torrent](guide/fr/clients.md) : profils nommés, dossiers et Plans répartis.
+
 - [Gérer les torrents](guide/fr/torrents.md) : trackers, catégories et commandes.
 - [Zen et Plans](guide/fr/zen.md) : notes, gains estimés, budget et choix des torrents.
 - [Préparer un upload c411](guide/fr/upload.md) : brouillons et images ; [règles par catégorie](guide/fr/upload-categories.md).
@@ -21,6 +23,8 @@ Les guides et leurs captures sont aussi disponibles dans **Documentation**, just
 Les captures montrent l’interface en français, en thème sombre, avec des données d’exemple. Ce sont des captures des composants de l’application, réalisées hors ligne ; elles ne contiennent aucun compte ni fichier personnel. Les décorations des fenêtres dépendent du système utilisé.
 
 ## English guides
+
+- [Multiple Torrent Clients](guide/en/clients.md)
 
 - [Setup and connections](guide/en/getting-started.md)
 - [Library and reseeding](guide/en/library.md)
@@ -59,3 +63,5 @@ Les captures de l’interface web utilisent également un client fictif et une c
 ```bash
 TL_WEB_BROWSER=1 TL_WEB_SCREENSHOTS=docs/guide/images/web .venv/bin/pytest tests/test_web_browser.py
 ```
+
+Les captures des profils et destinations de Plans se régénèrent hors ligne avec `QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/capture_client_profiles.py`.

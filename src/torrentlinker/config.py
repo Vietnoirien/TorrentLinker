@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import json
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -70,6 +72,37 @@ class MatchingSettings:
         return MatchRules(self.size_tolerance, self.min_partial_coverage, self.ignore)
 
 
+CLIENT_FIELDS = {
+    TorrentClient.QBITTORRENT: "qbit",
+    TorrentClient.DELUGE: "deluge",
+    TorrentClient.TRANSMISSION: "transmission",
+    TorrentClient.UTORRENT: "utorrent",
+}
+CLIENT_SECRET_NAMES = {
+    "qbit-password",
+    "qbit-api-key",
+    "deluge-password",
+    "transmission-password",
+    "utorrent-password",
+}
+
+
+@dataclass
+class ClientProfile:
+    id: str
+    name: str
+    client: TorrentClient = TorrentClient.QBITTORRENT
+    host: str = "http://localhost:8080"
+    username: str = "admin"
+    path_mappings: list[PathMapping] = field(default_factory=list)
+    download_folders: DownloadFolders = field(default_factory=DownloadFolders)
+    enabled: bool = True
+
+    def secret_name(self, name: str) -> str:
+        # The original profile keeps its existing OS keyring/deployment secrets.
+        return name if self.id == "default" else f"client-{self.id}-{name}"
+
+
 @dataclass
 class Settings:
     client: TorrentClient = TorrentClient.QBITTORRENT
@@ -102,9 +135,90 @@ class Settings:
     download_speed: float | None = None  # bytes/s from the last speed test
     download_speed_tested: str | None = None  # when, ISO 8601
 
+    client_profiles: list[ClientProfile] = field(default_factory=list)
+    active_client_id: str = "default"
+    default_client_id: str = "default"
+
+    def ensure_profiles(self) -> None:
+        if not self.client_profiles:
+            config = getattr(self, CLIENT_FIELDS[self.client])
+            self.client_profiles = [
+                ClientProfile(
+                    "default",
+                    self.client.display_name,
+                    self.client,
+                    config.host,
+                    getattr(config, "username", ""),
+                    copy.deepcopy(self.path_mappings),
+                    copy.deepcopy(self.download_folders),
+                )
+            ]
+            self.active_client_id = self.default_client_id = "default"
+
+    def profile(self, identifier: str | None = None) -> ClientProfile:
+        self.ensure_profiles()
+        target = identifier or self.active_client_id
+        for profile in self.client_profiles:
+            if profile.id == target:
+                return profile
+        raise ValueError("Torrent Client no longer exists. Choose another client.")
+
+    def capture_client(self) -> None:
+        profile = self.profile()
+        config = getattr(self, CLIENT_FIELDS[self.client])
+        profile.client = self.client
+        profile.host = config.host
+        profile.username = getattr(config, "username", "")
+        profile.path_mappings = copy.deepcopy(self.path_mappings)
+        profile.download_folders = copy.deepcopy(self.download_folders)
+
+    def select_client(self, identifier: str) -> None:
+        self.capture_client()
+        profile = self.profile(identifier)
+        if not profile.enabled:
+            raise ValueError("This Torrent Client is disabled.")
+        if identifier != self.active_client_id:
+            defaults = Settings()
+            for name in CLIENT_FIELDS.values():
+                setattr(self, name, copy.deepcopy(getattr(defaults, name)))
+        self.active_client_id = profile.id
+        self.client = profile.client
+        config = getattr(self, CLIENT_FIELDS[self.client])
+        config.host = profile.host
+        if hasattr(config, "username"):
+            config.username = profile.username
+        self.path_mappings = copy.deepcopy(profile.path_mappings)
+        self.download_folders = copy.deepcopy(profile.download_folders)
+
+    def for_client(self, identifier: str) -> Settings:
+        result = copy.deepcopy(self)
+        result.select_client(identifier)
+        return result
+
+    def add_client(
+        self, name: str, client: TorrentClient = TorrentClient.QBITTORRENT
+    ) -> ClientProfile:
+        self.ensure_profiles()
+        name = name.strip()
+        if not name or len(name) > 100:
+            raise ValueError("Enter a client name of 1 to 100 characters.")
+        defaults = getattr(Settings(), CLIENT_FIELDS[client])
+        profile = ClientProfile(
+            uuid.uuid4().hex, name, client, defaults.host, getattr(defaults, "username", "")
+        )
+        self.client_profiles.append(profile)
+        return profile
+
+    def secret_name(self, name: str) -> str:
+        return self.profile().secret_name(name) if name in CLIENT_SECRET_NAMES else name
+
     def save(self, path: Path) -> None:
+        self.capture_client()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
+            "client_profiles": [asdict(p) for p in self.client_profiles],
+            "active_client_id": self.active_client_id,
+            "default_client_id": self.default_client_id,
             "client": self.client.value,
             "qbit": asdict(self.qbit),
             "deluge": asdict(self.deluge),
@@ -142,7 +256,7 @@ class Settings:
         for f in data.get("library_folders", []):  # before 0.3, each folder had its own
             if f.get("mapping") and (old := PathMapping(**f["mapping"])) not in mappings:
                 mappings.append(old)
-        return cls(
+        result = cls(
             client=TorrentClient(data.get("client", TorrentClient.QBITTORRENT.value)),
             qbit=QbitSettings(**data.get("qbit", {})),
             deluge=DelugeSettings(**data.get("deluge", {})),
@@ -184,6 +298,32 @@ class Settings:
                 str(data.get("download_folders", {}).get("default", "")),
             ),
         )
+
+        profiles = []
+        for raw in data.get("client_profiles", []):
+            raw = dict(raw)
+            raw["client"] = TorrentClient(raw["client"])
+            raw["path_mappings"] = [PathMapping(**m) for m in raw.get("path_mappings", [])]
+            folders = raw.get("download_folders", {})
+            raw["download_folders"] = DownloadFolders(
+                {int(k): str(v) for k, v in folders.get("by_category", {}).items()},
+                str(folders.get("default", "")),
+            )
+            identifier = raw.get("id", "")
+            if not identifier or not identifier.replace("-", "").isalnum():
+                raise ValueError("Invalid Torrent Client profile ID.")
+            profiles.append(ClientProfile(**raw))
+        if profiles:
+            if len({p.id for p in profiles}) != len(profiles):
+                raise ValueError("Duplicate Torrent Client profile ID.")
+            result.client_profiles = profiles
+            result.active_client_id = str(data.get("active_client_id", "default"))
+            result.default_client_id = str(data.get("default_client_id", "default"))
+            result.profile(result.default_client_id)
+            result.profile(result.active_client_id)
+        else:
+            result.ensure_profiles()
+        return result
 
 
 def _folder_to_json(f: LibraryFolder) -> dict[str, object]:

@@ -30,11 +30,15 @@ class QueueEntry:
     indexer_url: str
     status: str = "queued"
     reason: str = ""
+    client_id: str = "default"
 
 
-def entries(store: Store) -> list[QueueEntry]:
+def entries(store: Store, *, all_clients: bool = False) -> list[QueueEntry]:
     result = []
     for key, payload, status, reason in store.queued_downloads():
+        client_id = str(payload.get("client_id", "default"))
+        if not all_clients and client_id != store.client_id:
+            continue
         raw = cast(dict[str, Any], payload["candidate"])
         candidate = Candidate(**{**raw, "categories": tuple(raw.get("categories", []))})
         result.append(
@@ -45,6 +49,7 @@ def entries(store: Store) -> list[QueueEntry]:
                 str(payload["indexer_url"]),
                 status,
                 reason,
+                client_id,
             )
         )
     return result
@@ -66,8 +71,16 @@ def enqueue(store: Store, indexer: Indexer, candidate: Candidate, folder: Path) 
         details_url=indexer.redact(candidate.details_url),
     )
     key = queue_key(indexer, clean)
+    if store.client_id != "default":
+        key = store.client_id + ":" + key
     return store.enqueue_download(
-        key, {"candidate": asdict(clean), "folder": str(folder), "indexer_url": indexer.url}
+        key,
+        {
+            "candidate": asdict(clean),
+            "folder": str(folder),
+            "indexer_url": indexer.url,
+            "client_id": store.client_id,
+        },
     )
 
 

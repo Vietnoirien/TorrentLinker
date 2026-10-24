@@ -483,6 +483,9 @@ class PlanView(QGroupBox):
                 self.tr("Download Folder"),
             ]
         )
+        self.client_names: dict[str, str] = {}
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderItem(6, QTableWidgetItem(self.tr("Client")))
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
         self.empty_state = EmptyState(
             self.table, self.tr("Make a Plan to see suggested torrents here.")
@@ -663,6 +666,9 @@ class PlanView(QGroupBox):
             c = item.candidate
             size_text = self.tr("Reseed (0 Go)") if c.reseed else human_size(c.size)
             self.table.setItem(r, 0, QTableWidgetItem(c.title))
+            self.table.setItem(
+                r, 6, QTableWidgetItem(self.client_names.get(c.client_id, c.client_id))
+            )
             self.table.setItem(r, 1, NumberItem(size_text, c.download_size))
             self.table.setItem(r, 2, NumberItem(str(c.seeders), c.seeders))
             self.table.setItem(

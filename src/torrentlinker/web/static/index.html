@@ -64,6 +64,8 @@
             <p class="eyebrow" id="connection-status">TORRENTLINKER WEB</p>
             <h1 id="page-title">Torrents</h1>
           </div>
+          <label><span data-i18n="targetClient">Target client</span>
+            <select id="target-client" aria-label="Target client"></select></label>
           <span id="work-status" class="badge" role="status"></span>
         </header>
         <section id="view-setup" class="view" hidden>
@@ -86,7 +88,14 @@
               Use an address reachable from this server. For a seedbox, paste
               the Web UI address supplied by your provider.
             </p>
+            <div class="toolbar">
+              <button id="add-client" type="button" data-i18n="addClient">Add client</button>
+              <button id="default-client" type="button" data-i18n="defaultClient">Make default</button>
+              <button id="remove-client" type="button" data-i18n="removeClient">Remove client</button>
+            </div>
             <form id="client-form">
+              <label><span data-i18n="clientName">Client name</span>
+              <input id="client-name" maxlength="100" required /></label>
               <div class="form-grid">
                 <label
                   ><span data-i18n="client">Torrent client</span
@@ -351,6 +360,10 @@
               Cached Zen and note estimates are provisional. Review the plan
               before adding torrents to the queue.
             </p>
+            <details><summary data-i18n="planDestinations">Plan destinations</summary>
+              <p data-i18n="planDestinationHelp">Choose one client or distribute across selected clients. Budget 0 uses available space.</p>
+              <div id="plan-clients" class="form-grid"></div>
+            </details>
             <div class="toolbar">
               <label
                 ><span data-i18n="maxTorrents">Maximum torrents</span

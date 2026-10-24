@@ -28,7 +28,12 @@ def test_offline_guides_links_history_language_and_images(qtbot):
     tab.language.setCurrentIndex(tab.language.findData("fr"))
     assert "Installer" in tab.browser.toPlainText()
     tab.filter.setText("torrents")
-    assert not tab.chapters.item(2).isHidden()
+    torrent_guide = next(
+        tab.chapters.item(i)
+        for i in range(tab.chapters.count())
+        if tab.chapters.item(i).text() == "Gérer les torrents"
+    )
+    assert not torrent_guide.isHidden()
     assert tab.chapters.item(0).isHidden()
 
 

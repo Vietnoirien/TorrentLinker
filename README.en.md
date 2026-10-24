@@ -10,6 +10,7 @@ Find torrents matching your existing files and reseed them in **qBittorrent, Del
 
 ## What you can do
 
+- **Named clients**: multiple connections, a combined overview and Plans distributed across selected clients.
 - **Library**: find files no longer seeded, search and check Candidates, then reseed matching torrents.
 - **Search**: filter torrents, explore details in tabs and prepare a download queue.
 - **Zen**: track estimated earnings and notes, then make a Plan within your space and budget.

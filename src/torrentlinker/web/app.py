@@ -31,6 +31,10 @@ from torrentlinker.web.setup import (
 )
 
 
+class ClientSelection(BaseModel):
+    client_id: str = ""
+
+
 class Announce(BaseModel):
     value: str = Field(max_length=4096)
 
@@ -74,19 +78,67 @@ def create_app(
     jobs = Jobs(directory, error_message)
     operations = Operations(service)
     confirmations = Confirmations(service)
+    client_operations: dict[str, Operations] = {}
+    client_confirmations: dict[str, Confirmations] = {}
+
+    def for_client(identifier: str = "") -> Operations:
+        identifier = identifier or service.settings.default_client_id
+        service.settings.profile(identifier)
+        if identifier == service.settings.active_client_id:
+            return operations
+        if identifier not in client_operations:
+            client_operations[identifier] = Operations(service.for_client(identifier))
+        target = client_operations[identifier]
+        target.setup.settings = service.settings.for_client(identifier)
+        return target
+
+    def consent(identifier: str) -> Confirmations:
+        target = for_client(identifier)
+        if target is operations:
+            return confirmations
+        if identifier not in client_confirmations:
+            client_confirmations[identifier] = Confirmations(target.setup)
+        return client_confirmations[identifier]
+
+    def reset_clients() -> None:
+        nonlocal operations, confirmations
+        operations = Operations(service)
+        confirmations = Confirmations(service)
+        client_operations.clear()
+        client_confirmations.clear()
 
     shutdown = threading.Event()
+    verification_cursor = 0
 
     def verify_loop() -> None:
+        nonlocal verification_cursor
         while not shutdown.wait(10):
             with jobs.lock:
-                if service.configured and not jobs.active() and service.store.verification_hashes():
-                    jobs.submit(
-                        "verify",
-                        lambda stop, progress: operations.run(
-                            JobRequest(kind="verify"), stop, progress
-                        ),
-                    )
+                if service.configured and not jobs.active():
+                    profiles = service.settings.client_profiles
+                    start = verification_cursor % len(profiles)
+                    for offset in range(len(profiles)):
+                        position = (start + offset) % len(profiles)
+                        profile = profiles[position]
+                        if (
+                            profile.enabled
+                            and service.store.for_client(profile.id).verification_hashes()
+                        ):
+                            target = for_client(profile.id)
+                            jobs.submit(
+                                "verify",
+                                lambda stop, progress, target=target: target.run(  # type: ignore[misc]
+                                    JobRequest(
+                                        kind="verify",
+                                        client_id=target.setup.settings.active_client_id,
+                                    ),
+                                    stop,
+                                    progress,
+                                ),
+                                client_id=profile.id,
+                            )
+                            verification_cursor = position + 1
+                            break
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -190,8 +242,8 @@ def create_app(
             raise HTTPException(404, "Image unavailable.") from error
 
     @app.get("/api/setup")
-    def setup() -> dict:
-        return service.snapshot()
+    def setup(client_id: str = "") -> dict:
+        return for_client(client_id).setup.snapshot()
 
     @app.exception_handler(ValueError)
     async def bad_input(request: Request, error: ValueError) -> JSONResponse:
@@ -210,16 +262,68 @@ def create_app(
 
     @app.post("/api/setup/test-client")
     def test_client(body: Connection) -> dict:
-        return service.test_client(body)
+        return for_client(body.client_id).setup.test_client(body)
 
     @app.post("/api/setup/client")
     def save_client(body: Connection) -> dict:
         nonlocal operations
         with jobs.lock:
             idle()
-            saved = service.test_client(body, save=True)
-            operations = Operations(service)
+            target = for_client(body.client_id)
+            old = target.setup.snapshot()
+            saved = target.setup.test_client(body, save=True)
+            if old["client"] != body.client or old["host"] != body.host:
+                target.rows.clear()
+                target.library.entries.clear()
             return saved
+
+    @app.post("/api/clients")
+    def add_client(body: Connection) -> dict:
+        with jobs.lock:
+            idle()
+            if not body.name.strip():
+                raise ValueError("Enter a name for this Torrent Client.")
+            profile = service.settings.add_client(body.name, body.client)
+            try:
+                target = service.for_client(profile.id)
+                result = target.test_client(body, save=True)
+                service.configured = True
+            except Exception:
+                service.settings.client_profiles.remove(profile)
+                raise
+            return {**result, "client_id": profile.id}
+
+    @app.post("/api/clients/default")
+    def default_client(body: ClientSelection) -> dict:
+        with jobs.lock:
+            idle()
+            service.settings.profile(body.client_id)
+            service.settings.default_client_id = body.client_id
+            service.save()
+        return {"ok": True}
+
+    @app.post("/api/clients/remove")
+    def remove_client(body: ClientSelection) -> dict:
+        from torrentlinker.client_profiles import pending_work
+
+        with jobs.lock:
+            idle()
+            profile = service.settings.profile(body.client_id)
+            if len(service.settings.client_profiles) == 1 or pending_work(
+                service.settings, service.store, profile.id
+            ):
+                raise ValueError("This client has pending work or is the only configured client.")
+            remaining = [p for p in service.settings.client_profiles if p.id != profile.id]
+            if service.settings.active_client_id == profile.id:
+                service.settings.select_client(remaining[0].id)
+                service.store = service.store.for_client(remaining[0].id)
+                service._client = None
+            service.settings.client_profiles = remaining
+            if service.settings.default_client_id == profile.id:
+                service.settings.default_client_id = remaining[0].id
+            service.save()
+            reset_clients()
+        return {"ok": True}
 
     @app.post("/api/setup/test-indexer")
     def test_indexer(body: IndexerConnection) -> dict:
@@ -229,7 +333,9 @@ def create_app(
     def save_indexer(body: IndexerConnection) -> dict:
         with jobs.lock:
             idle()
-            return service.test_indexer(body, save=True)
+            result = service.test_indexer(body, save=True)
+            reset_clients()
+            return result
 
     @app.get("/api/folders")
     def folders(path: str = "") -> dict:
@@ -237,39 +343,43 @@ def create_app(
 
     @app.post("/api/setup/test-folder")
     def test_folder(body: FolderSetup) -> dict:
-        return service.folder(body)
+        return for_client(body.client_id).setup.folder(body)
 
     @app.post("/api/setup/folder")
     def save_folder(body: FolderSetup) -> dict:
         with jobs.lock:
             idle()
-            result = service.folder(body, save=True)
-            operations.library.entries.clear()
+            target = for_client(body.client_id)
+            result = target.setup.folder(body, save=True)
+            target.library.entries.clear()
             return result
 
     @app.post("/api/setup/remove-folder")
     def remove_folder(body: FolderRemoval) -> dict:
         with jobs.lock:
             idle()
-            if service.store.verification_hashes():
+            target = for_client(body.client_id)
+            if target.setup.store.verification_hashes():
                 raise HTTPException(
                     409, "Finish pending Reseed Verifications before removing folders."
                 )
-            service.remove_folder(body)
-            operations.library.entries.clear()
+            target.setup.remove_folder(body)
+            target.library.entries.clear()
         return {"ok": True}
 
     @app.post("/api/setup/suggest-mappings")
-    def suggest_mappings() -> dict:
+    def suggest_mappings(body: ClientSelection) -> dict:
         with jobs.lock:
             idle()
-            return service.suggest_mappings()
+            return for_client(body.client_id).setup.suggest_mappings()
 
     @app.post("/api/setup/proxy")
     def save_proxy(body: ProxySetup) -> dict:
         with jobs.lock:
             idle()
-            return service.proxy(body)
+            result = service.proxy(body)
+            reset_clients()
+            return result
 
     @app.post("/api/setup/announce")
     def save_announce(body: Announce) -> dict:
@@ -294,14 +404,23 @@ def create_app(
 
     @app.get("/api/library")
     def library(
-        q: str = "", offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)
+        client_id: str = "",
+        q: str = "",
+        offset: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=200),
     ) -> dict:
-        rows = [r for r in operations.library.rows() if q.casefold() in r["name"].casefold()]
+        rows = [
+            r for r in for_client(client_id).library.rows() if q.casefold() in r["name"].casefold()
+        ]
         return {"rows": rows[offset : offset + limit], "total": len(rows)}
 
     @app.get("/api/queue")
-    def queue() -> list:
-        return operations.queue()
+    def queue(client_id: str = "") -> list:
+        if client_id == "all":
+            return [
+                row for p in service.settings.client_profiles for row in for_client(p.id).queue()
+            ]
+        return for_client(client_id).queue()
 
     @app.post("/api/queue/remove")
     def remove_queue(keys: list[str]) -> dict:
@@ -312,6 +431,7 @@ def create_app(
 
     @app.get("/api/torrents")
     def torrents(
+        client_id: str = "",
         q: str = "",
         sort: str = "name",
         descending: bool = False,
@@ -321,9 +441,31 @@ def create_app(
         state: str = "",
         category: str = "",
     ) -> dict:
+        targets = (
+            [for_client(p.id) for p in service.settings.client_profiles if p.enabled]
+            if client_id == "all"
+            else [for_client(client_id)]
+        )
+        from torrentlinker.seeding import combined_seeding
+
+        observed = [t for target in targets for t in target.observed]
+        combined = combined_seeding(
+            service.settings.zen,
+            observed,
+            service.settings.indexer.url,
+            catalogue={
+                r.infohash: r for r in service.store.catalogue([t.hash.lower() for t in observed])
+            },
+        )
+        combined_zen = {
+            "count": combined.count,
+            "daily": combined.day.total,
+            "paid": combined.day.paid,
+        }
+        all_rows = [r for target in targets for r in target.rows]
         rows = [
             r
-            for r in operations.rows
+            for r in all_rows
             if q.casefold() in r["name"].casefold()
             and (not tracker or tracker in r["trackers"])
             and (not state or r["status"] == state)
@@ -331,6 +473,7 @@ def create_app(
         ]
         if sort not in {
             "name",
+            "client_name",
             "status",
             "size",
             "progress",
@@ -353,32 +496,63 @@ def create_app(
         return {
             "rows": rows[offset : offset + limit],
             "total": len(rows),
-            "zen": operations.zen,
-            "trackers": sorted({h for r in operations.rows for h in r["trackers"] if h}),
-            "categories": sorted(
-                {" / ".join(c) for r in operations.rows for c in r["categories"] if c}
-            ),
+            "zen": combined_zen,
+            "client_errors": [
+                {"name": t.setup.settings.profile().name, "message": t.connection_error}
+                for t in targets
+                if t.connection_error
+            ],
+            "trackers": sorted({h for r in all_rows for h in r["trackers"] if h}),
+            "categories": sorted({" / ".join(c) for r in all_rows for c in r["categories"] if c}),
         }
 
     @app.post("/api/jobs", status_code=202)
     def start_job(body: JobRequest) -> dict:
         with jobs.lock:
-            operations.validate(body)
+            if body.client_id == "all":
+                if body.kind != "refresh":
+                    raise ValueError("Choose a target client before making changes.")
+                targets = [for_client(p.id) for p in service.settings.client_profiles if p.enabled]
+
+                def refresh_all(stop, progress):
+                    results = []
+                    for target in targets:
+                        try:
+                            result = target.run(body, stop, progress)
+                        except Exception as error:
+                            target.connection_error = error_message(error)
+                            result = {"error": target.connection_error}
+                        results.append(
+                            {"client_id": target.setup.settings.active_client_id, **result}
+                        )
+                    return results
+
+                return {"id": jobs.submit("refresh", refresh_all, client_id="all")}
+            body = body.model_copy(
+                update={"client_id": body.client_id or service.settings.default_client_id}
+            )
+            target = for_client(body.client_id)
+            target.validate(body)
             if (
                 body.kind == "manage"
                 and body.action in {"delete", "remove"}
-                and not confirmations.consume(body)
+                and not consent(body.client_id).consume(body)
             ):
                 raise HTTPException(409, "Review and confirm the selected torrents first.")
             identifier = jobs.submit(
-                body.kind, lambda stop, progress: operations.run(body, stop, progress)
+                body.kind,
+                lambda stop, progress: target.run(body, stop, progress),
+                client_id=body.client_id,
             )
         return {"id": identifier}
 
     @app.post("/api/confirm")
     def confirm(body: JobRequest) -> dict:
         with jobs.lock:
-            return confirmations.preview(body)
+            body = body.model_copy(
+                update={"client_id": body.client_id or service.settings.default_client_id}
+            )
+            return consent(body.client_id).preview(body)
 
     @app.get("/api/jobs")
     def list_jobs() -> list:

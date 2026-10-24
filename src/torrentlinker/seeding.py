@@ -89,6 +89,35 @@ def indexer_torrents(
     ]
 
 
+def combined_seeding(
+    profile: ZenProfile,
+    torrents: Iterable[Torrent],
+    indexer_url: str,
+    uploads: int = 0,
+    *,
+    catalogue: Mapping[str, CatalogueRow] = {},
+    categories: Mapping[int, IndexerCategory] = {},
+) -> Seeding:
+    """Count an account's hash once, preferring a copy that is still seeding.
+
+    Filter by Indexer before deduplication: a copy without its tracker or tags
+    must not hide the eligible copy on another client. Use the longest observed
+    seed age rather than adding ages from several instances.
+    """
+    unique: dict[str, Torrent] = {}
+    for torrent in indexer_torrents(torrents, indexer_url, catalogue):
+        previous = unique.get(torrent.hash.lower())
+        if previous is None or (torrent.is_seeding, torrent.progress, torrent.seeding_time) > (
+            previous.is_seeding,
+            previous.progress,
+            previous.seeding_time,
+        ):
+            unique[torrent.hash.lower()] = torrent
+    return seeding(
+        profile, unique.values(), indexer_url, uploads, catalogue=catalogue, categories=categories
+    )
+
+
 def seeding(
     profile: ZenProfile,
     torrents: Iterable[Torrent],

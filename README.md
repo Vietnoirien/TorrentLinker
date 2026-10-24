@@ -10,6 +10,7 @@ Retrouvez les torrents qui correspondent à vos fichiers et remettez-les en seed
 
 ## Ce que l’application permet
 
+- **Clients nommés** : plusieurs connexions, une vue commune et des Plans répartis entre les clients choisis.
 - **Bibliothèque** : repérer les fichiers qui ne sont plus partagés, rechercher et vérifier les correspondances, puis les remettre en seed.
 - **Recherche** : filtrer les torrents, consulter leurs détails dans des onglets et préparer une file de téléchargement.
 - **Zen** : suivre les gains estimés et les notes, puis préparer un Plan selon l’espace et le budget disponibles.

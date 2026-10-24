@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from torrentlinker.domain import Torrent
 from torrentlinker.download_queue import enqueue, entries, run_queue
 from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.seeding import observe_swarm, seeding
@@ -31,6 +32,9 @@ from torrentlinker.zen import ZenTorrent, note, torrent_zen
 
 
 class JobRequest(BaseModel):
+    client_id: str = Field(default="", max_length=64)
+    client_ids: list[str] = Field(default_factory=list, max_length=32)
+    client_budgets: dict[str, int] = Field(default_factory=dict, max_length=32)
     kind: Literal[
         "manage",
         "refresh",
@@ -78,6 +82,8 @@ class Operations:
         self.uploads = Uploads(setup, self.library)
         self.candidates: dict[str, Candidate] = {}
         self.rows: list[dict[str, Any]] = []
+        self.observed: list[Torrent] = []
+        self.connection_error = ""
         self.zen: dict[str, Any] = {}
 
     def validate(self, request: JobRequest) -> None:
@@ -86,19 +92,27 @@ class Operations:
         if request.kind == "reseed" and len(request.hashes) != 1:
             raise ValueError("Select one checked Candidate.")
         if request.kind in {"enqueue", "send-queue", "plan"}:
-            folder = self.setup.settings.download_folders.default
-            if not folder:
-                raise ValueError(
-                    "Configure and verify a mounted Download Folder in Settings first."
-                    " A seedbox API connection alone cannot check existing files."
-                )
-            self.setup.path_under_root(folder)
+            targets = (
+                [self.setup.for_client(identifier) for identifier in request.client_ids]
+                if request.kind == "plan" and request.client_ids
+                else [self.setup]
+            )
+            for target in targets:
+                folder = target.settings.download_folders.default
+                if not folder:
+                    raise ValueError(
+                        "Configure and verify a mounted Download Folder in Settings first."
+                        " A seedbox API connection alone cannot check existing files."
+                    )
+                target.path_under_root(folder)
         if request.kind == "manage" and not request.hashes:
             raise ValueError("Select at least one torrent.")
 
     def queue(self) -> list[dict[str, Any]]:
         return [
             {
+                "client_id": e.client_id,
+                "client_name": self.setup.settings.profile(e.client_id).name,
                 "key": e.key,
                 "title": e.candidate.title,
                 "hash": e.candidate.infohash,
@@ -156,8 +170,67 @@ class Operations:
 
             return update_catalogue(self.setup, stop, progress)
         if request.kind == "plan":
-            from torrentlinker.web.planning import plan
+            from torrentlinker.web.planning import catalogue as update_plan_catalogue
+            from torrentlinker.web.planning import catalogue_status, plan
 
+            if request.client_ids:
+                from dataclasses import replace
+
+                from torrentlinker.multi_plan import distributed_plan
+                from torrentlinker.plan import PlanOptions
+
+                targets = {
+                    identifier: self.setup.for_client(identifier)
+                    for identifier in dict.fromkeys(request.client_ids)
+                }
+                if not request.cached_only:
+                    update_plan_catalogue(self.setup, stop, progress)
+                if stop.is_set():
+                    return {
+                        "cancelled": True,
+                        "rows": [],
+                        "catalogue": catalogue_status(self.setup),
+                    }
+                settings = replace(
+                    self.setup.settings,
+                    plan_options=PlanOptions(
+                        max_download_bytes=request.maximum_bytes,
+                        max_torrents=request.maximum_torrents,
+                    ),
+                )
+
+                def validate(identifier, folder):
+                    target = targets[identifier]
+                    if folder != target.verified_download_folder():
+                        raise ValueError("Verify this client's Download Folder in Settings first.")
+                    Library(target).check_tree(folder, stop)
+
+                proposed = distributed_plan(
+                    settings,
+                    self.setup.store,
+                    {identifier: target.client() for identifier, target in targets.items()},
+                    request.client_budgets,
+                    validate,
+                )
+                return {
+                    "provisional": True,
+                    "catalogue": catalogue_status(self.setup),
+                    "zen": proposed.zen_added,
+                    "size": proposed.download_size,
+                    "rows": [
+                        {
+                            "hash": i.candidate.infohash,
+                            "title": i.candidate.title,
+                            "size": i.candidate.size,
+                            "seeders": i.candidate.seeders,
+                            "zen": i.zen,
+                            "note": i.note,
+                            "client_id": i.candidate.client_id,
+                            "folder": str(i.candidate.folder),
+                        }
+                        for i in proposed.items
+                    ],
+                }
             return plan(
                 self.setup,
                 self.library,
@@ -349,6 +422,8 @@ class Operations:
                 estimate = estimates.get(t.hash)
                 rows.append(
                     {
+                        "client_id": settings.active_client_id,
+                        "client_name": settings.profile().name,
                         "hash": t.hash,
                         "name": t.name,
                         "status": status(t),
@@ -369,6 +444,8 @@ class Operations:
                     }
                 )
             self.rows = rows
+            self.observed = torrents
+            self.connection_error = ""
             self.zen = {"count": view.count, "daily": view.day.total, "paid": view.day.paid}
             return {"count": len(rows), "zen": self.zen}
         if request.kind == "manage":

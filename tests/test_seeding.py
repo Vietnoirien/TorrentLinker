@@ -4,11 +4,30 @@ from pathlib import Path
 import pytest
 
 from torrentlinker.domain import Torrent
-from torrentlinker.seeding import observe_swarm, seeding
+from torrentlinker.seeding import combined_seeding, observe_swarm, seeding
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.zen import GB, ZenClass, ZenProfile
 
 URL = "https://c411.org/api/torznab"
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_combined_estimate_keeps_active_eligible_copy_without_adding_seed_ages(reverse):
+    active = torrent("same", "https://tracker.c411.org/announce/x", days=10)
+    copies = [
+        active,
+        replace(active, state="stoppedUP", seeding_time=100 * 86400),
+        replace(active, tracker="https://other.test/announce", seeding_time=200 * 86400),
+        replace(active, progress=0.5, state="downloading"),
+    ]
+    if reverse:
+        copies.reverse()
+    profile = ZenProfile(ZenClass.TANKER)
+    expected = seeding(profile, [active], URL)
+    combined = combined_seeding(profile, copies, URL)
+    assert combined.count == 1
+    assert combined.rows[0].torrent == active
+    assert combined.day.total == expected.day.total
 
 
 def torrent(name: str, tracker: str, state: str = "uploading", days: float = 90) -> Torrent:

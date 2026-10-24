@@ -3,6 +3,8 @@ const $ = (id) => document.getElementById(id);
 const state = {
   view: "torrents",
   setup: null,
+  clientId: "",
+  addingClient: false,
   offset: 0,
   sort: "name",
   descending: false,
@@ -19,6 +21,9 @@ const state = {
   localItem: "",
 };
 const french = {
+  targetClient: "Client cible", addClient: "Ajouter un client", defaultClient: "Définir par défaut",
+  removeClient: "Retirer ce client", clientName: "Nom du client", planDestinations: "Destinations du Plan",
+  planDestinationHelp: "Choisissez un client ou répartissez entre plusieurs clients. Budget 0 : espace disponible.",
   welcome: "Vos torrents, où qu’ils soient.",
   webPassword: "Mot de passe de l’interface web",
   signIn: "Se connecter",
@@ -142,6 +147,15 @@ async function guard(fn) {
   }
 }
 async function api(path, body) {
+  const scoped = ["setup", "torrents", "library", "queue"];
+  if (body === undefined && scoped.includes(path.split("?")[0]) && state.clientId) {
+    const id = state.clientId === "all" && path === "setup" ? state.setup?.default_client_id || "" : state.clientId;
+    path += (path.includes("?") ? "&" : "?") + "client_id=" + encodeURIComponent(id);
+  }
+  if (body !== undefined && (path === "jobs" || path === "confirm" || path.startsWith("setup/"))) {
+    body = {client_id: state.clientId === "all" ? state.setup?.default_client_id : state.clientId, ...body};
+    if (path === "jobs" && body.kind === "refresh") body.client_id = state.clientId;
+  }
   const response = await fetch(`api/${path}`, {
     method: body === undefined ? "GET" : "POST",
     credentials: "same-origin",
@@ -267,12 +281,26 @@ function step(name) {
 }
 async function refreshSetup() {
   state.setup = await api("setup");
+  if (!state.clientId) state.clientId = state.setup.client_id;
+  const selector = $("target-client");
+  selector.replaceChildren(new Option(say("All clients · overview", "Tous les clients · aperçu"), "all"),
+    ...state.setup.clients.map(p => new Option(p.name, p.id)));
+  selector.value = state.clientId;
+  $("client-name").value = state.setup.name;
+  $("plan-clients").replaceChildren(...state.setup.clients.filter(p => p.enabled).map(p => {
+    const row = element("label");
+    const check = document.createElement("input"); check.type = "checkbox";
+    check.dataset.clientId = p.id; check.checked = p.id === state.setup.client_id;
+    const budget = document.createElement("input"); budget.type = "number"; budget.min = "0"; budget.value = "0";
+    budget.dataset.budgetId = p.id; budget.setAttribute("aria-label", p.name + " · GiB");
+    row.append(check, document.createTextNode(p.name + " · GiB"), budget); return row;
+  }));
   $("client-kind").value = state.setup.client;
   $("client-host").value = state.setup.host;
   $("client-username").value = state.setup.username;
   $("indexer-url").value = state.setup.indexer_url;
   $("connection-status").textContent = state.setup.configured
-    ? `${state.setup.client.toUpperCase()} · ${new URL(state.setup.host).host}`
+    ? `${state.setup.name} · ${state.setup.client.toUpperCase()} · ${new URL(state.setup.host).host}`
     : "TORRENTLINKER WEB";
   $("saved-folders").replaceChildren(
     ...state.setup.folders.map((f) =>
@@ -348,6 +376,8 @@ function clientKind() {
 }
 function connection() {
   return {
+    ...(state.addingClient ? {password: $("client-password").value, api_key: $("client-key").value} : {}),
+    name: $("client-name").value.trim(),
     client: $("client-kind").value,
     host: $("client-host").value,
     username: $("client-username").value,
@@ -392,12 +422,14 @@ async function testClient(save = false) {
   $("client-result").textContent = say("Connecting…", "Connexion…");
   try {
     const result = await api(
-      `setup/${save ? "client" : "test-client"}`,
+      save && state.addingClient ? "clients" : `setup/${save ? "client" : "test-client"}`,
       connection(),
     );
     $("client-result").textContent = `✓ ${result.version}\n${result.warning}`;
     showFolders(result.folders);
     if (save) {
+      if (result.client_id) state.clientId = result.client_id;
+      state.addingClient = false;
       $("client-password").value = "";
       $("client-key").value = "";
       await refreshSetup();
@@ -493,6 +525,9 @@ async function navigate(view) {
     await searchOptions();
 }
 async function job(body, done) {
+  body = {client_id: state.clientId, ...body};
+  if (body.client_id === "all" && body.kind !== "refresh")
+    throw Error(say("Choose a target client first.", "Choisissez un client cible."));
   const r = await api("jobs", body);
   state.jobs.set(r.id, { body, done });
   $("work-status").textContent = say("Working…", "En cours…");
@@ -510,7 +545,7 @@ async function pollJobs() {
       state.jobs.delete(row.id);
       const full = await api(`jobs/${row.id}`);
       if (full.status === "completed") {
-        if (pending.done) await pending.done(full.result);
+        if (pending.done && (pending.body.client_id === state.clientId || pending.body.kind === "enqueue")) await pending.done(full.result);
       } else toast(full.error || say("Job cancelled", "Tâche annulée"));
     }
   }
@@ -523,12 +558,13 @@ async function loadJobs() {
   renderJobs(await api("jobs"));
 }
 function renderJobs(rows) {
+  const clientName = id => state.setup?.clients?.find(p => p.id === id)?.name || id;
   $("job-list").replaceChildren(
     ...rows.map((r) => {
       const card = element("div", undefined, "card job"),
         text = element("div");
       text.append(
-        element("strong", r.kind),
+        element("strong", `${r.kind} · ${clientName(r.client_id)}`),
         element("p", r.status),
         element("small", r.error || JSON.stringify(r.progress || {})),
       );
@@ -585,6 +621,7 @@ async function loadTorrents() {
     say("All categories", "Toutes les catégories"),
   );
   const labels = [
+    ["client_name", say("Client", "Client"), (v) => v.client_name],
     ["name", say("Torrent", "Torrent"), (v) => v.name],
     ["status", say("Status", "État"), (v) => v.status],
     ["progress", "%", (v) => (v.progress * 100).toFixed(1)],
@@ -609,17 +646,18 @@ async function loadTorrents() {
     state.selected,
   );
   $("torrent-count").textContent =
-    `${r.total} torrents · ${Math.floor(state.offset / 100) + 1}`;
+    `${r.total} torrents · ${Math.floor(state.offset / 100) + 1}` + (r.client_errors?.length ? " · " + r.client_errors.map(e => `${e.name}: ${e.message}`).join(" · ") : "");
   $("torrent-prev").disabled = !state.offset;
   $("torrent-next").disabled = state.offset + 100 >= r.total;
   $("zen-daily").textContent = num(r.zen.daily);
   $("zen-count").textContent = r.zen.count ?? "—";
 }
 async function manage(action) {
+  if (state.clientId === "all") throw Error(say("Choose a client to manage its torrents.", "Choisissez un client pour gérer ses torrents."));
   const hashes = [...state.selected];
   if (!hashes.length)
     throw Error(say("Select torrents first.", "Sélectionnez des torrents."));
-  const body = { kind: "manage", action, hashes };
+  const body = { kind: "manage", action, hashes, client_id: state.clientId };
   if (["delete", "remove"].includes(action)) {
     const preview = await api("confirm", body),
       content = $("dialog-content");
@@ -786,6 +824,7 @@ async function loadQueue() {
     rows,
     [
       { label: "Torrent", name: true, render: (r) => r.title },
+      { label: "Client", render: (r) => r.client_name },
       { label: say("Size", "Taille"), render: (r) => bytes(r.size) },
       { label: "≈ Zen / j", render: (r) => num(r.zen) },
       { label: "≈ Note", render: (r) => num(r.note) },
@@ -1022,7 +1061,16 @@ $("search-prev").onclick = () =>
 $("search-next").onclick = () => guard(() => search(state.searchPage + 1));
 $("queue-search").onclick = () =>
   guard(() => enqueue([...state.searchSelected]));
-$("queue-plan").onclick = () => guard(() => enqueue([...state.planSelected]));
+$("queue-plan").onclick = () => guard(async () => {
+  const grouped = new Map();
+  for (const row of state.planRows.filter(r => state.planSelected.has(r.hash))) {
+    const id = row.client_id || state.clientId;
+    if (!grouped.has(id)) grouped.set(id, []);
+    grouped.get(id).push(row.hash);
+  }
+  for (const [id, hashes] of grouped) await job({kind: "enqueue", hashes, client_id: id}, loadQueue);
+  await navigate("queue");
+});
 $("start-queue").onclick = () =>
   guard(() => job({ kind: "send-queue" }, loadQueue));
 $("remove-queue").onclick = () =>
@@ -1051,6 +1099,8 @@ $("plan").onclick = () =>
     job(
       {
         kind: "plan",
+        client_ids: [...$("plan-clients").querySelectorAll("input[data-client-id]:checked")].map(e => e.dataset.clientId),
+        client_budgets: Object.fromEntries([...$("plan-clients").querySelectorAll("input[data-budget-id]")].map(e => [e.dataset.budgetId, Math.round(Number(e.value) * 1024 ** 3)])),
         maximum_torrents: Number($("plan-count").value),
         maximum_bytes: Math.round(Number($("plan-budget").value) * 1024 ** 3),
         cached_only: $("plan-cached").checked,
@@ -1059,7 +1109,13 @@ $("plan").onclick = () =>
         showCatalogue(r.catalogue);
         state.planRows = r.rows;
         state.planSelected = new Set(r.rows.map((v) => v.hash));
-        table("plan-result", r.rows, searchColumns(), state.planSelected);
+        table("plan-result", r.rows, [...searchColumns(), {label: "Client", render: row => {
+          const select = document.createElement("select");
+          for (const p of state.setup.clients) select.add(new Option(p.name, p.id));
+          select.value = row.client_id || state.clientId;
+          select.onchange = () => { row.client_id = select.value; };
+          return select;
+        }}], state.planSelected);
       },
     ),
   );
@@ -1303,3 +1359,28 @@ $("guide-content").onclick = event => {
   event.preventDefault();
   guard(() => openGuide(link.dataset.guide, link.hash.slice(1)));
 };
+
+$("target-client").onchange = () => guard(async () => {
+  state.clientId = $("target-client").value;
+  state.addingClient = false;
+  $("client-password").value = ""; $("client-key").value = "";
+  state.selected.clear(); state.queueSelected.clear(); state.planSelected.clear();
+  state.offset = 0; state.libraryOffset = 0; state.localItem = "";
+  $("candidates").hidden = true; $("upload-editor").hidden = true;
+  await refreshSetup();
+  await navigate(state.clientId === "all" ? "torrents" : state.view);
+  if (state.setup.configured) await job({kind: "refresh"}, loadTorrents);
+});
+$("add-client").onclick = () => {
+  state.addingClient = true;
+  $("client-name").value = ""; $("client-host").value = "";
+  $("client-username").value = ""; $("client-password").value = ""; $("client-key").value = "";
+  $("client-name").focus();
+};
+$("default-client").onclick = () => guard(async () => {
+  await api("clients/default", {client_id: state.setup.client_id}); await refreshSetup();
+});
+$("remove-client").onclick = () => guard(async () => {
+  if (!confirm(say("Remove this client profile? Torrents and files will be kept.", "Retirer ce profil ? Les torrents et fichiers seront conservés."))) return;
+  await api("clients/remove", {client_id: state.setup.client_id}); state.clientId = ""; await refreshSetup();
+});

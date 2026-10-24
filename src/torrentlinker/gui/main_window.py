@@ -12,6 +12,7 @@ from PySide6.QtCore import QFile, QItemSelection, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFrame,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QTableView,
     QTabWidget,
     QToolBar,
@@ -146,9 +148,14 @@ log = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     def __init__(self, settings: Settings, settings_path: Path, store: Store) -> None:
         super().__init__()
+        settings.ensure_profiles()
+        store = store.for_client(settings.active_client_id)
         self.settings = settings
         self.settings_path = settings_path
         self.store = store
+        from torrentlinker.client_profiles import Connections
+
+        self._connections = Connections(get_secret)
         self._indexer: Indexer | None = None
         # Kept connections, with what they were made for, the proxy in use included.
         self._profile: tuple[tuple[object, ...], ProfileClient] | None = None
@@ -315,7 +322,20 @@ class MainWindow(QMainWindow):
         self.search_tab = SearchTab(store, settings, self.indexer, self.qbit)
         self.tabs.addTab(self.search_tab, self.tr("Search"))
         self.torrents_tab = TorrentsTab(self.qbit)
-        self.tabs.addTab(self.torrents_tab, self.tr("Torrents"))
+        from torrentlinker.gui.client_overview import ClientOverview
+
+        self.client_overview = ClientOverview(settings, store)
+        torrents_page = QWidget()
+        torrents_layout = QVBoxLayout(torrents_page)
+        torrents_layout.setContentsMargins(0, 0, 0, 0)
+        self.all_clients = QCheckBox(self.tr("All clients"))
+        torrents_layout.addWidget(self.all_clients)
+        self.torrent_stack = QStackedWidget()
+        self.torrent_stack.addWidget(self.torrents_tab)
+        self.torrent_stack.addWidget(self.client_overview)
+        torrents_layout.addWidget(self.torrent_stack)
+        self.all_clients.toggled.connect(self._show_all_clients)
+        self.tabs.addTab(torrents_page, self.tr("Torrents"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
@@ -386,7 +406,23 @@ class MainWindow(QMainWindow):
         self.page_description = QLabel()
         self.page_description.setProperty("role", "muted")
         self.page_description.setWordWrap(True)
-        central_layout.addWidget(self.page_title)
+        self.client_selector = QComboBox()
+        self.client_selector.setAccessibleName(self.tr("Target client"))
+        for profile in settings.client_profiles:
+            if profile.enabled:
+                self.client_selector.addItem(profile.name, profile.id)
+        self.client_selector.setCurrentIndex(
+            self.client_selector.findData(settings.active_client_id)
+        )
+        self.client_selector.currentIndexChanged.connect(self._select_client)
+        title_row = QHBoxLayout()
+        title_row.addWidget(self.page_title, 1)
+        title_row.addWidget(QLabel(self.tr("Target client")))
+        title_row.addWidget(self.client_selector)
+        clients_button = QPushButton(self.tr("Clients…"))
+        clients_button.clicked.connect(self.open_client_profiles)
+        title_row.addWidget(clients_button)
+        central_layout.addLayout(title_row)
         central_layout.addWidget(self.page_description)
         self.update_notice = UpdateNotice()
         central_layout.addWidget(self.update_notice)
@@ -426,6 +462,14 @@ class MainWindow(QMainWindow):
         self.catalogue_runner: CatalogueRunner | None = None
         self.send_runner: SendRunner | None = None
         self._crawl_position = [0, 0]  # category being crawled, of how many (worker writes)
+        self._plan_destinations = {settings.active_client_id: 0}
+        self.zen_tab.plan_view.client_names = {p.id: p.name for p in settings.client_profiles}
+        self.zen_tab.plan_view.client_names[""] = settings.profile().name
+        self.plan_targets_button = QPushButton(self.tr("Plan destinations…"))
+        self.plan_targets_button.clicked.connect(self._choose_plan_clients)
+        plan_layout = self.zen_tab.plan_view.layout()
+        assert isinstance(plan_layout, QVBoxLayout)
+        plan_layout.insertWidget(0, self.plan_targets_button)
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.plan_view.categories_changed.connect(self._plan_categories_changed)
         self.zen_tab.plan_view.set_options(self.settings.plan_options)
@@ -512,8 +556,13 @@ class MainWindow(QMainWindow):
             lambda error: log.debug("release check unavailable: %s", error),
         )
 
+    def _show_all_clients(self, checked: bool) -> None:
+        self.torrent_stack.setCurrentIndex(int(checked))
+        if checked:
+            self.client_overview.refresh()
+
     def open_torrents(self, hash: str = "") -> None:
-        self.tabs.setCurrentWidget(self.torrents_tab)
+        self.tabs.setCurrentIndex(4)
         self.torrents_tab.focus_torrent(hash)
 
     def _workspace_changed(self, index: int) -> None:
@@ -530,14 +579,12 @@ class MainWindow(QMainWindow):
         ]
         if 0 <= index < len(descriptions):
             self.page_description.setText(descriptions[index])
-        self.band.setVisible(
-            index < self.navigation.count() and self.tabs.currentWidget() is not self.torrents_tab
-        )
+        self.band.setVisible(index < self.navigation.count() and index != 4)
         self.page_title.setVisible(index < self.navigation.count())
         self.page_description.setVisible(index < self.navigation.count())
         policy = (
             QSizePolicy.Policy.Ignored
-            if index >= self.navigation.count() or self.tabs.currentWidget() is self.torrents_tab
+            if index >= self.navigation.count() or index == 4
             else QSizePolicy.Policy.Preferred
         )
         self.tabs.setSizePolicy(policy, policy)
@@ -632,17 +679,22 @@ class MainWindow(QMainWindow):
         """The Torrent Client the user chose, through Path Mappings."""
         s = self.settings
         if s.client is TorrentClient.DELUGE:
-            key: tuple[str, ...] = (s.client, s.deluge.host, "", get_secret(DELUGE_PASSWORD))
+            key: tuple[str, ...] = (
+                s.client,
+                s.deluge.host,
+                "",
+                get_secret(s.secret_name(DELUGE_PASSWORD)),
+            )
         elif s.client is TorrentClient.TRANSMISSION:
             t = s.transmission
-            key = (s.client, t.host, t.username, get_secret(TRANSMISSION_PASSWORD))
+            key = (s.client, t.host, t.username, get_secret(s.secret_name(TRANSMISSION_PASSWORD)))
         elif s.client is TorrentClient.UTORRENT:
             u = s.utorrent
-            key = (s.client, u.host, u.username, get_secret(UTORRENT_PASSWORD))
+            key = (s.client, u.host, u.username, get_secret(s.secret_name(UTORRENT_PASSWORD)))
         else:
             q = s.qbit
-            key = (s.client, q.host, q.username, get_secret(QBIT_PASSWORD))
-            key += (get_secret(QBIT_API_KEY),)
+            key = (s.client, q.host, q.username, get_secret(s.secret_name(QBIT_PASSWORD)))
+            key += (get_secret(s.secret_name(QBIT_API_KEY)),)
         if self._qbit is None or self._qbit[2] != net.current() or self._qbit[0] != key:
             self._qbit = (key, connect(s.client, *key[1:]), net.current())
         return MappedQbit(self._qbit[1], PathMapper(s.path_mappings))
@@ -859,9 +911,27 @@ class MainWindow(QMainWindow):
         self.zen_tab.plan_view.invalidate()
         self.band.set_plan(None)
 
+    def _choose_plan_clients(self) -> None:
+        from torrentlinker.gui.plan_clients import PlanClientsDialog
+
+        dialog = PlanClientsDialog(self.settings, self._plan_destinations, self)
+        if dialog.exec() and dialog.selected():
+            self._plan_destinations = dialog.selected()
+            names = [self.settings.profile(i).name for i in self._plan_destinations]
+            self.plan_targets_button.setText(self.tr("Plan destinations: ") + ", ".join(names))
+            self.zen_tab.plan_view.invalidate()
+
     def plan_maker(self) -> Callable[[], Plan]:
         """Build on the GUI thread the work that makes a Plan (no Indexer request)."""
         s = self.settings
+        if self._plan_destinations != {s.active_client_id: 0}:
+            from torrentlinker.client_profiles import Connections
+            from torrentlinker.multi_plan import distributed_plan
+
+            connections = Connections(get_secret)
+            clients = {i: connections.client(s, i) for i in self._plan_destinations}
+            budgets = dict(self._plan_destinations)
+            return lambda: distributed_plan(s, self.store, clients, budgets)
         qbit, store, profile, url = self.qbit(), self.store, s.zen, s.indexer.url
         folders, categories, margin = (
             s.download_folders,
@@ -1035,6 +1105,10 @@ class MainWindow(QMainWindow):
             return indexer.fetch_torrent(candidate(indexer, c.source), retry=False)
 
         store = self.store
+        from torrentlinker.client_profiles import Connections
+
+        connections = Connections(get_secret)
+        settings_snapshot = self.settings.for_client(self.settings.active_client_id)
 
         def record(c: PlanCandidate, outcome: str, reason: str) -> None:
             store.mark_plan_item(c.infohash, outcome, reason)
@@ -1042,7 +1116,14 @@ class MainWindow(QMainWindow):
         def work(stop: threading.Event, progress: Callable[[SendProgress], None]) -> SendReport:
             with indexer.background():  # the user's own searches and Reseeds go first
                 return send_plan(
-                    plan, qbit, fetch, reseeder, on_progress=progress, on_outcome=record, stop=stop
+                    plan,
+                    qbit,
+                    fetch,
+                    reseeder,
+                    on_progress=progress,
+                    on_outcome=record,
+                    stop=stop,
+                    client_for=lambda identifier: connections.client(settings_snapshot, identifier),
                 )
 
         runner = SendRunner(work)
@@ -1530,11 +1611,62 @@ class MainWindow(QMainWindow):
         self.folder_filter.setCurrentIndex(self.folder_filter.findData(path))
         self.scan()
 
+    def _select_client(self) -> None:
+        identifier = self.client_selector.currentData()
+        if identifier == self.settings.active_client_id:
+            return
+        from PySide6.QtCore import QThreadPool
+
+        if QThreadPool.globalInstance().activeThreadCount():
+            self.client_selector.blockSignals(True)
+            self.client_selector.setCurrentIndex(
+                self.client_selector.findData(self.settings.active_client_id)
+            )
+            self.client_selector.blockSignals(False)
+            self.statusBar().showMessage(
+                self.tr("Wait for the current operation before changing client."), 5000
+            )
+            return
+        self._replace_workspace(self.settings.for_client(identifier))
+
+    def _replace_workspace(self, settings: Settings) -> None:
+        settings.save(self.settings_path)
+        self.verify_timer.stop()
+        replacement = MainWindow(settings, self.settings_path, self.store)
+        replacement.restoreGeometry(self.saveGeometry())
+        replacement.tabs.setCurrentIndex(min(self.tabs.currentIndex(), 4))
+        replacement.show()
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is not None:
+            app.torrentlinker_window = replacement  # type: ignore[attr-defined]
+        self.close()
+        self.deleteLater()
+        QTimer.singleShot(0, replacement.startup)
+
+    def open_client_profiles(self) -> None:
+        from PySide6.QtCore import QThreadPool
+
+        if QThreadPool.globalInstance().activeThreadCount():
+            self.statusBar().showMessage(
+                self.tr("Wait for the current operation before changing client."), 5000
+            )
+            return
+        from torrentlinker.gui.client_profiles import ClientProfilesDialog
+
+        if ClientProfilesDialog(self.settings, self.store, self).exec():
+            self._replace_workspace(self.settings)
+
     def open_settings(self) -> None:
         folders = list(self.settings.library_folders)
         if SettingsDialog(self.settings, self).exec():
             self._lock_reading_room()
             self.torrents_tab.reset_connection()
+            self.settings.capture_client()
+            self.client_selector.setItemText(
+                self.client_selector.currentIndex(), self.settings.profile().name
+            )
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
             self.apply_proxy()
@@ -1923,10 +2055,29 @@ class MainWindow(QMainWindow):
         if self._checking:
             return
         self._checking = True
-        qbit, store = self.qbit(), self.store
+        targets = [
+            (self._connections.client(self.settings, p.id), self.store.for_client(p.id))
+            for p in self.settings.client_profiles
+            if p.enabled
+            and (
+                p.id == self.settings.active_client_id
+                or self.store.for_client(p.id).verification_hashes()
+            )
+        ]
 
         def work() -> tuple[list[Outcome], list[Path]]:
-            return check_verifications(qbit, store), pending_verifications(qbit, store)
+            outcomes: list[Outcome] = []
+            pending: list[Path] = []
+            for client, store in targets:
+                try:
+                    completed = check_verifications(client, store)
+                    waiting = pending_verifications(client, store)
+                    if store.client_id == self.settings.active_client_id:
+                        outcomes += completed
+                        pending += waiting
+                except Exception:
+                    log.warning("Verification unavailable for client %s", store.client_id)
+            return outcomes, pending
 
         run_in_background(work, self._verified, self._verify_error)
 
@@ -1946,7 +2097,11 @@ class MainWindow(QMainWindow):
         unpacked = [(o, self.store.take_unpacked(o.item_path)) for o in outcomes]
         for path in pending:
             self.library_model.set_status(path, self.tr("Verifying…"))
-        if pending:
+        if pending or any(
+            self.store.for_client(p.id).verification_hashes()
+            for p in self.settings.client_profiles
+            if p.enabled
+        ):
             self.verify_timer.start()
         else:
             self.verify_timer.stop()

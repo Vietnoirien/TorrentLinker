@@ -28,6 +28,10 @@ class Jobs:
                 "status TEXT, created REAL, progress TEXT, result TEXT, error "
                 "TEXT)"
             )
+            if "client_id" not in {r[1] for r in self.db.execute("PRAGMA table_info(jobs)")}:
+                self.db.execute(
+                    "ALTER TABLE jobs ADD COLUMN client_id TEXT NOT NULL DEFAULT 'default'"
+                )
             self.db.execute(
                 "UPDATE jobs SET status='interrupted', error='Server restarted. "
                 "Check the Torrent Client before retrying; no action was "
@@ -43,7 +47,11 @@ class Jobs:
             )
 
     def submit(
-        self, kind: str, work: Callable[[threading.Event, Callable[[Any], None]], Any]
+        self,
+        kind: str,
+        work: Callable[[threading.Event, Callable[[Any], None]], Any],
+        *,
+        client_id: str = "default",
     ) -> str:
         with self.lock:
             if self.closed:
@@ -51,7 +59,8 @@ class Jobs:
             if kind == "refresh":
                 pending = self.db.execute(
                     "SELECT id FROM jobs WHERE kind='refresh' AND status IN ('queued','running') "
-                    "ORDER BY created LIMIT 1"
+                    "AND client_id=? ORDER BY created LIMIT 1",
+                    (client_id,),
                 ).fetchone()
                 if pending is not None:
                     return str(pending[0])
@@ -64,8 +73,8 @@ class Jobs:
             stop = self.stops[identifier] = threading.Event()
             with self.db:
                 self.db.execute(
-                    "INSERT INTO jobs VALUES (?,?,'queued',?,'null','null','')",
-                    (identifier, kind, time.time()),
+                    "INSERT INTO jobs VALUES (?,?,'queued',?,'null','null','',?)",
+                    (identifier, kind, time.time(), client_id),
                 )
             with self.db:
                 self.db.execute(
@@ -123,7 +132,7 @@ class Jobs:
     def list(self) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.db.execute(
-                "SELECT id,kind,status,created,progress,error FROM jobs ORDER BY "
+                "SELECT id,kind,status,created,progress,error,client_id FROM jobs ORDER BY "
                 "created DESC LIMIT 100"
             ).fetchall()
         return [{**dict(r), "progress": json.loads(r["progress"])} for r in rows]

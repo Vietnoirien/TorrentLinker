@@ -134,6 +134,35 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             if screenshot:
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshot) / "torrents-small.png"))
+            # The second profile is independent of the existing form and default.
+            page.locator("[data-view=setup][data-i18n=settings]").click()
+            page.locator("[data-step=client]").click()
+            page.locator("#add-client").click()
+            page.locator("#client-name").fill("Remote Deluge")
+            page.locator("#client-kind").select_option("deluge")
+            page.locator("#client-host").fill("https://other-seedbox.example")
+            page.locator("#client-password").fill("second-password")
+            page.locator("#client-form button.primary").click()
+            expect(page.locator("#step-storage")).to_be_visible()
+            expect(page.locator("#target-client option:checked")).to_have_text("Remote Deluge")
+            page.locator("#target-client").select_option("default")
+            page.locator("[data-step=client]").click()
+            expect(page.locator("#client-kind")).to_have_value("qbittorrent")
+            expect(page.locator("#client-host")).to_have_value(
+                "https://seedbox.example/qbittorrent"
+            )
+            page.locator("#target-client").select_option("all")
+            expect(page.locator("#view-torrents")).to_be_visible()
+            expect(page.locator("#torrent-table")).to_contain_text("Remote Deluge")
+            page.locator("#target-client").select_option("default")
+            page.locator("[data-view=zen]").click()
+            expect(page.locator("#plan-clients")).to_contain_text("Remote Deluge")
+            if screenshot:
+                page.set_viewport_size({"width": 1100, "height": 850})
+                page.locator("#plan-clients").locator("..").locator("summary").click()
+                for language in ("en", "fr"):
+                    page.locator("#language").select_option(language)
+                    page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
             assert not errors, errors
             browser.close()
     finally:

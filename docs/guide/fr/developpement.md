@@ -35,6 +35,19 @@ Les textes de l’interface sont en anglais dans le code ; leur traduction fran�
 
 ## Tests avec des services réels
 
+La suite multiclient démarre deux instances qBittorrent, Deluge et Transmission sur un réseau Docker interne. Elle vérifie les identifiants des profils, les correspondances de chemins, le reseed, la mise en seed des uploads, les destinations des files et des Plans, le transfert réel de fichiers via un tracker local et l'isolation des actions de l'API web. Elle utilise des données générées et supprime ses conteneurs et son réseau à la fin.
+
+Sous Linux, téléchargez les images une première fois, puis lancez :
+
+```bash
+docker pull qbittorrentofficial/qbittorrent-nox:5.2.4-1
+docker pull lscr.io/linuxserver/deluge:2.2.0
+docker pull lscr.io/linuxserver/transmission:4.1.3
+TL_MULTI_DOCKER=1 .venv/bin/pytest -s -q tests/test_multi_client_docker.py
+```
+
+Ces tests nécessitent l'accès à Docker. Ils n'utilisent ni vos clients configurés ni votre clé API c411. Chaque conteneur dispose d'un stockage temporaire et d'identifiants séparés. Les ports des interfaces web ne sont pas publiés. Cette suite ne couvre pas µTorrent.
+
 Pour tester une remise en seed avec qBittorrent, utilisez une instance temporaire accessible uniquement en local, jamais votre client habituel :
 
 ```bash
