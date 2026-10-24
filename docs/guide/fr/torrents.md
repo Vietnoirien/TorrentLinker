@@ -1,5 +1,9 @@
 # Gérer les torrents
 
+![Gestion des torrents, trackers et catégories](../images/torrents.png)
+
+*Application de bureau, interface française, données d’exemple.*
+
 L'onglet **Torrents** affiche tous les torrents du client choisi dans les Paramètres. Il fonctionne avec qBittorrent, Deluge et Transmission, y compris sur une seedbox ou un serveur distant. L'affichage et les commandes ne nécessitent pas d'accéder aux fichiers depuis cet ordinateur.
 
 Dans l'arborescence, choisissez un tracker, puis une catégorie ou sous-catégorie. Le regroupement utilise le nom d'hôte des URL d'annonce, jamais vos tags personnels. Les chemins privés et les passkeys restent masqués. Un torrent associé à plusieurs trackers connus peut apparaître sous chacun ; les totaux et les commandes ne le comptent qu'une fois. Si le client ne fournit que le tracker courant, seul celui-ci apparaît.

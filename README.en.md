@@ -16,16 +16,16 @@ Find torrents matching your existing files and reseed them in **qBittorrent, Del
 - **Torrents**: manage downloads and seeding, grouped by tracker and category.
 - **Upload**: prepare files, a description and NFO for a c411 Draft that you review and publish on the website.
 
-With qBittorrent, Deluge and Transmission, reseeding does not rename existing files on disk. µTorrent Classic may require disk renames, with explicit confirmation. API keys and passwords stay in your system keyring. The interface supports French and English, with system, light and dark themes.
+With qBittorrent, Deluge and Transmission, reseeding does not rename existing files on disk. µTorrent Classic may require disk renames, with explicit confirmation. In the desktop app, API keys and passwords stay in your system keyring. The interface supports French and English, with system, light and dark themes.
 
-## Download 0.6.1
+## Download
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.6.1) for changes.
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases) for changes.
 
 ## Get started
 
@@ -37,10 +37,12 @@ The [illustrated setup guide](docs/guide/en/getting-started.md) covers connectio
 
 ## Guides and help
 
+Open **Documentation**, above Settings, to read the illustrated guides inside the app, even offline.
+
 [Torrents and client folders](docs/guide/en/torrents.md) · [Library](docs/guide/en/library.md) · [Search and downloads](docs/guide/en/search.md) · [Zen and Plans](docs/guide/en/zen.md) · [Uploads](docs/guide/en/upload.md)
 
 [All documentation](docs/README.md) · [Troubleshooting](docs/guide/en/data.md) · [Report an issue](https://github.com/Vietnoirien/TorrentLinker/issues) · [Contribute](docs/guide/en/development.md)
 
-## Web UI and Docker, in development for 0.7.0
+## Web UI and Docker
 
 A browser interface with guided setup is available from source for NAS and seedbox deployments. See the [Docker guide](docs/guide/en/web-docker.md) to build the image and configure storage access.

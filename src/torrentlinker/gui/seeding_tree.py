@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QItemSelectionModel, Qt
+from PySide6.QtCore import QItemSelectionModel, QSettings, QSignalBlocker, Qt
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTreeWidget, QTreeWidgetItem
 
 from torrentlinker.category_tags import category_path
@@ -33,7 +33,7 @@ class SeedingItem(QTreeWidgetItem):
 
 
 class SeedingTree(QTreeWidget):
-    def __init__(self) -> None:
+    def __init__(self, settings: QSettings | None = None) -> None:
         super().__init__()
         self.setColumnCount(6)
         self.setHeaderLabels(
@@ -66,7 +66,15 @@ class SeedingTree(QTreeWidget):
         self.groups: dict[tuple[int, ...], SeedingItem] = {}
         self.torrents: dict[str, SeedingItem] = {}
         self._query = ""
-        self._filter_expanded: dict[tuple[int, ...], bool] | None = None
+        self._settings = settings if settings is not None else QSettings()
+        saved = self._settings.value("zen/expanded_categories", [], type=list)
+        self._expanded: set[str] = (
+            {identity for identity in saved if isinstance(identity, str)}
+            if isinstance(saved, list)
+            else set()
+        )
+        self.itemExpanded.connect(self._remember_expansion)
+        self.itemCollapsed.connect(self._remember_expansion)
         self.empty_state = EmptyState(
             self, self.tr("Refresh to see your seeding torrents and Zen estimates.")
         )
@@ -82,8 +90,33 @@ class SeedingTree(QTreeWidget):
             ),
         )
 
+    def _save_expansion(self) -> None:
+        self._settings.setValue("zen/expanded_categories", sorted(self._expanded))
+        self._settings.sync()
+
+    def _remember_expansion(self, item: QTreeWidgetItem) -> None:
+        identity = item.data(0, IDENTITY_ROLE)
+        if not isinstance(identity, str) or not identity.startswith("category:"):
+            return
+        if item.isExpanded():
+            self._expanded.add(identity)
+        else:
+            self._expanded.discard(identity)
+        self._save_expansion()
+
+    def expandAll(self) -> None:
+        with QSignalBlocker(self):
+            super().expandAll()
+        self._expanded.update(item.data(0, IDENTITY_ROLE) for item in self.groups.values())
+        self._save_expansion()
+
+    def collapseAll(self) -> None:
+        with QSignalBlocker(self):
+            super().collapseAll()
+        self._expanded.clear()
+        self._save_expansion()
+
     def show_seeding(self, view: Seeding) -> None:
-        expanded = {key: item.isExpanded() for key, item in self.groups.items()}
         selected = {item.data(0, IDENTITY_ROLE) for item in self.selectedItems()}
         current = self.currentItem()
         current_id = current.data(0, IDENTITY_ROLE) if current else None
@@ -91,7 +124,8 @@ class SeedingTree(QTreeWidget):
         scroll = self.verticalScrollBar().value()
         self.setUpdatesEnabled(False)
         self.setSortingEnabled(False)
-        self.clear()
+        with QSignalBlocker(self):
+            self.clear()
         self.groups = {}
         self.torrents = {}
         totals: dict[tuple[int, ...], list[float]] = {}
@@ -183,15 +217,16 @@ class SeedingTree(QTreeWidget):
                 ),
             )
         self.setSortingEnabled(True)
-        for item in [*self.groups.values(), *self.torrents.values()]:
-            identity = item.data(0, IDENTITY_ROLE)
-            if identity == current_id:
-                self.setCurrentItem(
-                    item, current_column, QItemSelectionModel.SelectionFlag.NoUpdate
-                )
-            item.setSelected(identity in selected)
-        for key, item in self.groups.items():
-            item.setExpanded(expanded.get(key, True))
+        with QSignalBlocker(self):
+            for item in [*self.groups.values(), *self.torrents.values()]:
+                identity = item.data(0, IDENTITY_ROLE)
+                if identity == current_id:
+                    self.setCurrentItem(
+                        item, current_column, QItemSelectionModel.SelectionFlag.NoUpdate
+                    )
+                item.setSelected(identity in selected)
+            for item in self.groups.values():
+                item.setExpanded(item.data(0, IDENTITY_ROLE) in self._expanded)
         self.filter(self._query)
         self.verticalScrollBar().setValue(scroll)
         self.setUpdatesEnabled(True)
@@ -199,9 +234,12 @@ class SeedingTree(QTreeWidget):
 
     def filter(self, text: str) -> None:
         query = text.strip().casefold()
-        if query and not self._query:
-            self._filter_expanded = {key: item.isExpanded() for key, item in self.groups.items()}
         self._query = query
+        # Opening matching branches is temporary, not a change to the user's layout.
+        with QSignalBlocker(self):
+            self._filter_rows(query)
+
+    def _filter_rows(self, query: str) -> None:
         for item in self.torrents.values():
             item.setHidden(bool(query and query not in item.data(0, SEARCH_ROLE)))
         for key in sorted(self.groups, key=len, reverse=True):
@@ -214,7 +252,5 @@ class SeedingTree(QTreeWidget):
             item.setHidden(not visible)
             if query and visible:
                 item.setExpanded(True)
-            elif not query and self._filter_expanded is not None:
-                item.setExpanded(self._filter_expanded.get(key, True))
-        if not query:
-            self._filter_expanded = None
+            elif not query:
+                item.setExpanded(item.data(0, IDENTITY_ROLE) in self._expanded)

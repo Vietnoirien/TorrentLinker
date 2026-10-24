@@ -67,3 +67,11 @@ Click a results table's column header to sort, then click again to reverse it. D
 
 
 [Documentation](../../README.md) · [Français](../fr/demarrage.md)
+
+## Read guides inside the app
+
+Click **Documentation**, just above **Settings**. Find a guide in the list on the left and select it. Links between guides stay in the app; **Back** and **Forward** return to previous pages. The language selector offers French and English guides. **Open online** opens the repository version in your browser.
+
+![Built-in documentation in English](../images/en/documentation.png)
+
+Guides and screenshots ship with the app. Reading them requires no API key or torrent client connection. To run the Web UI on a NAS or seedbox, follow the [Web and Docker guide](web-docker.md).

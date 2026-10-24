@@ -1,6 +1,6 @@
 # Interface web et Docker
 
-Cette interface est en préparation pour 0.7.0. Les exécutables de la dernière version publiée restent disponibles dans le README. L'image se construit depuis les sources ; aucune image officielle publiée n'est nécessaire.
+Cette interface est disponible depuis les sources. Les exécutables de la dernière version publiée restent disponibles dans le README. L'image se construit depuis les sources ; aucune image officielle publiée n'est nécessaire.
 
 ## Démarrage
 
@@ -90,3 +90,15 @@ L'extraction d'archives et les renommages sur disque nécessaires à certains re
 Les paramètres permettent de retirer un dossier, même si son montage est déjà déconnecté. Les téléchargements et le planificateur revérifient un fichier seedé pour éviter de confondre un point de montage déconnecté avec un stockage vide.
 
 Créer un plan actualise les entrées récentes du catalogue. Les estimations Zen et les notes restent provisoires. Le statut indique les limites de pagination connues et la présence de données Zen Lab. Si l’actualisation est lente ou indisponible, arrêtez-la dans Activité, puis cochez **Utiliser le catalogue en cache sans actualiser** et recréez le plan.
+
+## Utiliser l’interface web au quotidien
+
+Une fois l’assistant terminé, **Torrents** affiche le client connecté. Filtrez la liste par tracker, catégorie ou état, puis sélectionnez les torrents à gérer. Les commandes demandent confirmation lorsque nécessaire. **Activité** suit leur progression et permet d’annuler une tâche encore en cours.
+
+![Gestion des torrents dans le navigateur](../images/web/torrents-fr.png)
+
+**Paramètres** permet de reprendre la configuration. À l’étape des dossiers, importez les chemins du client et associez-les aux dossiers accessibles au serveur. Si vous n’avez aucun montage, passez cette étape pour gérer les torrents à distance ; les fonctions nécessitant les fichiers restent indisponibles.
+
+![Configuration du stockage dans le navigateur](../images/web/storage-fr.png)
+
+**Documentation**, au-dessus des **Paramètres**, ouvre ces mêmes guides sans quitter l’interface. Choisissez un guide dans le sélecteur ; la flèche revient au guide précédent. Le sélecteur de langue de la barre latérale change aussi la langue des guides. Le lien **GitHub** ouvre leur version en ligne.

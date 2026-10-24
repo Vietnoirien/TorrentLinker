@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+import pytest
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QHeaderView
 
 from torrentlinker.domain import Torrent
@@ -8,6 +9,14 @@ from torrentlinker.downloads import IndexerCategory
 from torrentlinker.gui.seeding_tree import SeedingTree
 from torrentlinker.seeding import Seeding, SeedingRow
 from torrentlinker.zen import ZenDay
+
+
+@pytest.fixture(autouse=True)
+def isolated_preferences(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "torrentlinker.gui.seeding_tree.QSettings",
+        lambda: QSettings(str(tmp_path / "view.ini"), QSettings.Format.IniFormat),
+    )
 
 
 def sample():
@@ -104,3 +113,66 @@ def test_notes_sort_numerically_and_categories_average_torrents_not_subcategorie
         )
     )
     assert tree.groups[(7000,)].text(5) == "≈ 1.00"
+
+
+def test_categories_start_collapsed_and_user_layout_survives_restart(qtbot):
+    from dataclasses import replace
+
+    tree = SeedingTree()
+    qtbot.addWidget(tree)
+    tree.show_seeding(sample())
+    assert all(not item.isExpanded() for item in tree.groups.values())
+    tree.groups[(7000,)].setExpanded(True)
+    tree.groups[(7000, 7010)].setExpanded(True)
+    tree.groups[(7000,)].setExpanded(False)
+
+    reopened = SeedingTree()
+    qtbot.addWidget(reopened)
+    view = sample()
+    view = replace(view, categories={**view.categories, 7000: IndexerCategory("Livres")})
+    reopened.show_seeding(view)
+    assert not reopened.groups[(7000,)].isExpanded()
+    assert reopened.groups[(7000, 7010)].isExpanded()
+    reopened.groups[(7000,)].setExpanded(True)
+    reopened.show_seeding(view)
+    assert reopened.groups[(7000,)].isExpanded()
+    assert reopened.groups[(7000, 7010)].isExpanded()
+    assert not reopened.groups[()].isExpanded()
+
+
+def test_filter_and_refresh_do_not_persist_automatic_expansion(qtbot):
+    tree = SeedingTree()
+    qtbot.addWidget(tree)
+    tree.show_seeding(sample())
+    tree.groups[(7000,)].setExpanded(True)
+    tree.filter("small")
+    assert tree.groups[(7000, 7010)].isExpanded()
+    tree.show_seeding(sample())
+    assert tree.groups[(7000, 7010)].isExpanded()
+    reopened = SeedingTree()
+    qtbot.addWidget(reopened)
+    reopened.show_seeding(sample())
+    assert reopened.groups[(7000,)].isExpanded()
+    assert not reopened.groups[(7000, 7010)].isExpanded()
+    tree.filter("")
+    assert tree.groups[(7000,)].isExpanded()
+    assert not tree.groups[(7000, 7010)].isExpanded()
+
+
+def test_expand_and_collapse_all_are_remembered_after_restart(qtbot):
+    tree = SeedingTree()
+    qtbot.addWidget(tree)
+    tree.show_seeding(sample())
+    tree.expandAll()
+    reopened = SeedingTree()
+    qtbot.addWidget(reopened)
+    reopened.show_seeding(sample())
+    assert all(item.isExpanded() for item in reopened.groups.values())
+    reopened.filter("small")
+    reopened.collapseAll()
+    reopened.filter("")
+    assert all(not item.isExpanded() for item in reopened.groups.values())
+    restarted = SeedingTree()
+    qtbot.addWidget(restarted)
+    restarted.show_seeding(sample())
+    assert all(not item.isExpanded() for item in restarted.groups.values())

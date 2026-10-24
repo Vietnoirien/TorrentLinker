@@ -1,5 +1,6 @@
 # PyInstaller spec: one-file .exe on Windows, one-dir build on Linux (wrapped into an AppImage).
 import sys
+from pathlib import Path
 
 from PyInstaller.utils.hooks import (
     collect_data_files,
@@ -16,6 +17,13 @@ datas = (
     + collect_data_files("babelfish")
     + copy_metadata("torrentlinker")
 )
+docs = Path(SPECPATH).parent / "docs"
+datas += [(str(docs / "README.md"), "docs")]
+datas += [
+    (str(file), str(Path("docs") / file.parent.relative_to(docs)))
+    for file in (docs / "guide").rglob("*")
+    if file.suffix in {".md", ".png"}
+]
 hiddenimports = (
     collect_submodules("keyring.backends")
     + collect_submodules("guessit")

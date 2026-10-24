@@ -13,8 +13,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from torrentlinker import documentation
 from torrentlinker.clients import connect
 from torrentlinker.web.confirmations import Confirmations
+from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
 from torrentlinker.web.operations import JobRequest, Operations
 from torrentlinker.web.security import ServerSecrets, Sessions
@@ -165,6 +167,27 @@ def create_app(
         response = JSONResponse({"ok": True})
         response.delete_cookie("tl_session")
         return response
+
+    @app.get("/api/documentation")
+    def documentation_index(language: str = "en") -> list[dict[str, str]]:
+        return documentation.guides(language)
+
+    @app.get("/api/documentation/page/{name:path}")
+    def documentation_page(name: str) -> dict[str, str]:
+        try:
+            return {"html": render(name)}
+        except (ValueError, OSError) as error:
+            raise HTTPException(404, "Guide unavailable.") from error
+
+    @app.get("/api/documentation/file/{name:path}")
+    def documentation_file(name: str) -> FileResponse:
+        try:
+            path = documentation.document_path(name)
+            if path.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+                raise ValueError("Not an image.")
+            return FileResponse(path)
+        except (ValueError, OSError) as error:
+            raise HTTPException(404, "Image unavailable.") from error
 
     @app.get("/api/setup")
     def setup() -> dict:

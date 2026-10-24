@@ -1,5 +1,9 @@
 # Manage torrents
 
+![Torrent management, trackers and categories](../images/en/torrents.png)
+
+*Desktop application, English interface, example data.*
+
 The **Torrents** workspace lists all torrents from the Torrent Client selected in Settings. It supports qBittorrent, Deluge and Transmission, including hosted clients and seedboxes. Listing and controlling torrents does not require access to their files on this computer.
 
 Select a tracker in the tree, then a category or subcategory. Tracker groups come from announce URL hostnames, never personal tags. Private announce paths and passkeys are hidden. A torrent with several known trackers can appear under each of them; totals and actions count it once. When the client only supplies its current tracker, that is the tracker shown.

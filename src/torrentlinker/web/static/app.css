@@ -532,3 +532,16 @@ dialog .description img {
     }
   }
 }
+
+.guide-toolbar { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.guide-toolbar select { flex: 1; min-width: 0; max-width: 32rem; }
+.guide-content { max-width: 66rem; margin-inline: auto; padding: 1rem clamp(.5rem, 2vw, 2rem); line-height: 1.8; overflow-wrap: anywhere; }
+.guide-content img { display: block; width: auto; max-width: min(100%, 44rem); height: auto; border-radius: .5rem; margin: 2rem auto; }
+.guide-content pre { max-width: 100%; overflow: auto; padding: 1rem; background: var(--panel); }
+.guide-content table { display: block; overflow-x: auto; }
+.guide-content h2 { margin-top: 2rem; }
+
+.guide-content p { margin: 1rem 0 1.4rem; }
+.guide-content p:has(> img) { max-width: none; }
+.guide-content li { margin-block: .6rem; }
+.guide-content h1, .guide-content h2, .guide-content h3 { line-height: 1.35; margin-bottom: 1.2rem; }

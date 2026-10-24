@@ -16,16 +16,16 @@ Retrouvez les torrents qui correspondent à vos fichiers et remettez-les en seed
 - **Torrents** : gérer les téléchargements et le partage, avec une arborescence par tracker et catégorie.
 - **Upload** : préparer les fichiers, la description et le NFO d’un brouillon c411, à relire et publier sur le site.
 
-Avec qBittorrent, Deluge et Transmission, les fichiers existants ne sont pas renommés sur le disque. Avec µTorrent Classic, un renommage sur le disque peut être nécessaire et demande une confirmation explicite. Les clés API et mots de passe sont conservés dans le trousseau système. L’interface est disponible en français et en anglais, avec un thème système, clair ou sombre.
+Avec qBittorrent, Deluge et Transmission, les fichiers existants ne sont pas renommés sur le disque. Avec µTorrent Classic, un renommage sur le disque peut être nécessaire et demande une confirmation explicite. Sur l’application de bureau, les clés API et mots de passe sont conservés dans le trousseau système. L’interface est disponible en français et en anglais, avec un thème système, clair ou sombre.
 
-## Télécharger la version 0.6.1
+## Télécharger
 
 | Plateforme | Téléchargement |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases) |
 
-Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Consultez les [notes de version](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.6.1) pour les changements.
+Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Consultez les [notes de version](https://github.com/Vietnoirien/TorrentLinker/releases) pour les changements.
 
 ## Premiers pas
 
@@ -37,10 +37,12 @@ Le [guide de démarrage illustré](docs/guide/fr/demarrage.md) détaille la conf
 
 ## Guides et aide
 
+Le bouton **Documentation**, au-dessus des Paramètres, ouvre les guides illustrés dans l’application, même hors ligne.
+
 [Torrents et dossiers du client](docs/guide/fr/torrents.md) · [Bibliothèque](docs/guide/fr/bibliotheque.md) · [Recherche et téléchargements](docs/guide/fr/recherche.md) · [Zen et Plans](docs/guide/fr/zen.md) · [Uploads](docs/guide/fr/upload.md)
 
 [Documentation complète](docs/README.md) · [Dépannage](docs/guide/fr/donnees.md) · [Signaler un problème](https://github.com/Vietnoirien/TorrentLinker/issues) · [Contribuer](docs/guide/fr/developpement.md)
 
-## Interface web et Docker, en préparation pour 0.7.0
+## Interface web et Docker
 
 Une interface web avec assistant de configuration est disponible depuis les sources pour les NAS et seedboxes. Consultez le [guide Docker](docs/guide/fr/web-docker.md) pour construire l’image et vérifier l’accès aux dossiers.

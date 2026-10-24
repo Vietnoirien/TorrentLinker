@@ -25,6 +25,7 @@ def smoke_checks() -> None:
     the SOCKS support imported only once a SOCKS proxy is set."""
     import httpx
 
+    from torrentlinker import documentation
     from torrentlinker.domain import LocalItem
     from torrentlinker.queries import parse_name
 
@@ -37,6 +38,11 @@ def smoke_checks() -> None:
     assert (Path(i18n.__file__).parent / "torrentlinker_fr.qm").exists()
     assert (Path(__file__).parent / "assets" / "icon.png").exists()
     assert release_version(installed_version()) is not None, "missing application version metadata"
+    for language in ("fr", "en"):
+        for guide in documentation.guides(language):
+            assert documentation.document_path(guide["path"]).read_text(encoding="utf-8")
+    assert documentation.document_path("guide/images/zen.png").is_file()
+    assert documentation.document_path("guide/images/en/zen.png").is_file()
     print("smoke test OK")
 
 

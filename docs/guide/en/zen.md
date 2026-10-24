@@ -4,6 +4,8 @@
 
 In **Zen → Seeding**, expand categories to compare torrents. Category notes average all available torrent notes, including descendants. Use **Plan** to prepare new downloads.
 
+Categories start collapsed. Your expanded and collapsed branches are remembered across refreshes and app restarts, including **Expand all** and **Collapse all**. Filtering temporarily opens matching branches; clearing the filter restores your saved layout.
+
 Screenshots use the English interface, dark theme and example data.
 
 ![Seeding torrents and category notes](../images/en/zen.png)

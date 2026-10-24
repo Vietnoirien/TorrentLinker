@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libmediainfo0v5
 WORKDIR /app
 COPY pyproject.toml /app/
 COPY src /app/src
+COPY docs /app/docs
 RUN pip install --no-cache-dir '.[web]'
 USER torrentlinker
 VOLUME ["/config"]

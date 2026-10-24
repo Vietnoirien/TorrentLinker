@@ -41,6 +41,7 @@
           ><button data-view="jobs" data-i18n="activity">Activity</button>
         </nav>
         <div class="sidebar-bottom">
+          <button data-view="documentation">Documentation</button>
           <button data-view="setup" data-i18n="settings">Settings</button
           ><label
             ><span data-i18n="theme">Theme</span
@@ -510,6 +511,14 @@
             <div id="upload-files" class="table-wrap"></div>
             <div id="upload-result"></div>
           </div>
+        </section>
+        <section id="view-documentation" class="view" hidden>
+          <div class="guide-toolbar">
+            <button id="guide-back" disabled>←</button>
+            <select id="guide-select" aria-label="Guide"></select>
+            <a id="guide-online" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+          </div>
+          <article id="guide-content" class="guide-content"></article>
         </section>
         <section id="view-jobs" class="view" hidden>
           <p data-i18n="jobsHelp">

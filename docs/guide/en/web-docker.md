@@ -1,6 +1,6 @@
 # Web UI and Docker
 
-The Web UI is in development for 0.7.0. The README still links to the latest published desktop release. Build the Docker image from source; no published image is required.
+The Web UI is available from source. The README links to the latest published desktop release. Build the Docker image from source; no published image is required.
 
 ## Start the server
 
@@ -86,3 +86,15 @@ The server targets Linux and Linux NAS systems. Install the desktop from source 
 Archive extraction and µTorrent disk-renaming confirmations remain in the desktop application. Web Uploads support category rules, hosted images, descriptions, NFO, options and Draft creation. The desktop retains the 3D renderer. Publish Drafts on c411 after review. A prepared Upload can be seeded during the same server session; after a restart, inspect the Draft and use the desktop workflow if needed.
 
 Run API tests with `pytest tests/test_web_setup.py tests/test_web_jobs.py`. For the real browser flow, install `.[browser-test]`, run `playwright install chromium`, then `TL_WEB_BROWSER=1 pytest tests/test_web_browser.py`. Tests use fake clients and temporary media.
+
+## Use the Web UI day to day
+
+After setup, **Torrents** shows the connected client. Filter by tracker, category or state, then select the torrents to manage. Commands ask for confirmation when needed. **Activity** tracks progress and lets you cancel a running job.
+
+![Torrent management in the browser](../images/web/torrents-en.png)
+
+Open **Settings** to revisit setup. At the storage step, import client folders and map them to folders the server can access. Without a mount, skip this step to manage torrents remotely; features requiring file access remain unavailable.
+
+![Storage setup in the browser](../images/web/storage-en.png)
+
+**Documentation**, above **Settings**, opens these guides inside the Web UI. Choose a guide from the selector; the arrow returns to the previous guide. The sidebar language selector also changes the guides’ language. **GitHub** opens their online version.

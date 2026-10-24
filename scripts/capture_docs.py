@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import httpx
-from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import QPoint, QSettings, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplitter
@@ -89,6 +89,9 @@ def main():
             patch.object(socket.socket, "connect", side_effect=RuntimeError("offline capture"))
         )
         root = Path(temp)
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(root / "qt"))
+        QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.SystemScope, str(root / "qt"))
         folders = [
             LibraryFolder(
                 Path(localize("/exemple/Films", "/example/Movies")), kind=ContentKind.MOVIE
@@ -305,6 +308,33 @@ def main():
         upload.select(item.path)
         window.tabs.setCurrentIndex(2)
         capture(window, "upload", output)
+        manager = window.torrents_tab
+        manager.refresh = lambda: None
+        manager.set_seeding(view)
+        manager.model.update(
+            [
+                replace(
+                    row.torrent,
+                    trackers=("https://c411.org/announce/example",),
+                    connected_seeds=4,
+                    connected_peers=2,
+                )
+                for row in rows
+            ]
+        )
+        manager._group()
+        window.tabs.setCurrentWidget(manager)
+        QTest.qWait(150)
+        manager.tree.parentWidget().setSizes([260, 920])
+        manager.tree.expandAll()
+        manager.connection.setText(
+            localize("Connecté · données d’exemple", "Connected · example data")
+        )
+        manager.table.selectRow(0)
+        capture(window, "torrents", output)
+        window._open_documentation()
+        window.documentation_tab.open_guide(f"guide/{language}/torrents.md")
+        capture(window, "documentation", output)
         window.hide()
         app.findChild(ThemeFollower).monitor.terminate()
         app.findChild(ThemeFollower).monitor.waitForFinished(1000)

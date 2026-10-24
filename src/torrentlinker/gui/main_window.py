@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from torrentlinker import net
+from torrentlinker import i18n, net
 from torrentlinker.catalogue import (
     STARTUP_PAGES,
     CrawlProgress,
@@ -56,6 +56,7 @@ from torrentlinker.downloads import IndexerCategory
 from torrentlinker.ebooks import UNLOCK_COUNT, book_categories, book_roots, seeded_ebooks
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
+from torrentlinker.gui.documentation import DocumentationTab
 from torrentlinker.gui.ebook_reader import ReadingRoom
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_folder_dialog import LibraryFolderDialog
@@ -363,6 +364,11 @@ class MainWindow(QMainWindow):
         self.reader_button.hide()
         self.reader_button.clicked.connect(self._open_reading_room)
         side.addWidget(self.reader_button)
+        self.documentation_tab: DocumentationTab | None = None
+        self.documentation_button = QPushButton(self.tr("Documentation"))
+        self.documentation_button.setCheckable(True)
+        self.documentation_button.clicked.connect(self._open_documentation)
+        side.addWidget(self.documentation_button)
         settings_button = QPushButton(self.tr("Settings"))
         settings_button.clicked.connect(self.open_settings)
         side.addWidget(settings_button)
@@ -546,7 +552,13 @@ class MainWindow(QMainWindow):
                 # Keep the current row so Qt doesn't select row zero on focus
                 # and unexpectedly navigate away from the reading room.
                 self.navigation.clearSelection()
-        self.reader_button.setChecked(index >= self.navigation.count())
+        current = self.tabs.currentWidget()
+        self.reader_button.setChecked(
+            self.reading_room is not None and current is self.reading_room
+        )
+        self.documentation_button.setChecked(
+            self.documentation_tab is not None and current is self.documentation_tab
+        )
 
     def _update_reading_room(self, view: Seeding) -> None:
         if seeded_ebooks(view) < UNLOCK_COUNT:
@@ -572,6 +584,12 @@ class MainWindow(QMainWindow):
                 self.tabs.removeTab(index)
             self.reading_room.hide()
             self.reading_room.stop()
+
+    def _open_documentation(self) -> None:
+        if self.documentation_tab is None:
+            self.documentation_tab = DocumentationTab(i18n.pick_language(self.settings.language))
+            self.tabs.addTab(self.documentation_tab, self.tr("Documentation"))
+        self.tabs.setCurrentWidget(self.documentation_tab)
 
     def _open_reading_room(self) -> None:
         if not self._reader_unlocked or self._reader_view is None:

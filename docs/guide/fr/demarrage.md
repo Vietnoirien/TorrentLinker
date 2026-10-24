@@ -67,3 +67,11 @@ Cliquez sur l’en-tête d’une colonne pour trier, puis une seconde fois pour 
 
 
 [Documentation](../../README.md) · [English](../en/getting-started.md)
+
+## Consulter les guides dans l’application
+
+Cliquez sur **Documentation**, juste au-dessus des **Paramètres**. Recherchez un guide dans la liste de gauche, puis choisissez un chapitre. Les liens entre guides restent dans l’application ; **Précédent** et **Suivant** retrouvent vos lectures. Le sélecteur propose les guides français et anglais. **Ouvrir en ligne** ouvre la version du dépôt dans votre navigateur.
+
+![Documentation intégrée en français](../images/documentation.png)
+
+Les guides et leurs captures sont fournis avec l’application. Aucune clé API ni connexion à un client torrent n’est nécessaire pour les lire. Pour installer l’interface web sur un NAS ou une seedbox, suivez le [guide Web et Docker](web-docker.md).

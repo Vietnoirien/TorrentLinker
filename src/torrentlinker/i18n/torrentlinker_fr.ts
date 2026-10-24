@@ -867,6 +867,10 @@ La mettre à la corbeille ?</translation>
     <message><source>Open in Torrents</source><translation>Voir dans Torrents</translation></message>
     <message><source>Torrents</source><translation>Torrents</translation></message>
     <message><source>Manage downloads and seeds in your Torrent Client.</source><translation>Gérez les téléchargements et les partages de votre client torrent.</translation></message>
+    <message>
+        <source>Documentation</source>
+        <translation>Documentation</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -4946,6 +4950,44 @@ File contents stay unchanged. Existing destinations are never overwritten. The f
         <translation>µTorrent ne peut pas renommer les fichiers dans un torrent via sa WebUI. Pour partager ce torrent, TorrentLinker doit renommer sur le disque les fichiers ci-dessous. Cela peut casser d’autres torrents, lecteurs ou raccourcis utilisant les anciens chemins.
 
 Le contenu des fichiers reste inchangé. Une destination existante n’est jamais écrasée. Les fichiers sont vérifiés avant le renommage, puis dans µTorrent avant le partage. Si la préparation ou la vérification échoue, TorrentLinker restaure les anciens noms lorsque les fichiers sont inchangés et que ces noms sont encore disponibles.</translation>
+    </message>
+</context>
+<context>
+    <name>DocumentationTab</name>
+    <message>
+        <location filename="../gui/documentation.py" line="68"/>
+        <source>Documentation</source>
+        <translation>Documentation</translation>
+    </message>
+    <message>
+        <location filename="../gui/documentation.py" line="76"/>
+        <source>Guide language</source>
+        <translation>Langue du guide</translation>
+    </message>
+    <message>
+        <location filename="../gui/documentation.py" line="84"/>
+        <source>Find a guide…</source>
+        <translation>Rechercher un guide…</translation>
+    </message>
+    <message>
+        <location filename="../gui/documentation.py" line="93"/>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <location filename="../gui/documentation.py" line="94"/>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <location filename="../gui/documentation.py" line="95"/>
+        <source>Open online</source>
+        <translation>Ouvrir en ligne</translation>
+    </message>
+    <message>
+        <location filename="../gui/documentation.py" line="141"/>
+        <source>Guide unavailable. Use Open online to read it.</source>
+        <translation>Guide indisponible. Utilisez Ouvrir en ligne pour le lire.</translation>
     </message>
 </context>
 </TS>

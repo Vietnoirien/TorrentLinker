@@ -87,6 +87,10 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#client-form button.primary").click()
             expect(page.locator("#step-storage")).to_be_visible()
             expect(page.locator("#import-folders")).to_contain_text("/downloads")
+            if screenshot:
+                for lang in ("fr", "en"):
+                    page.locator("#language").select_option(lang)
+                    page.screenshot(path=str(Path(screenshot) / f"storage-{lang}.png"))
             page.locator("#step-storage [data-i18n=skipStorage]").click()
             page.locator("#step-indexer [data-i18n=skip]").click()
             expect(page.locator("#capabilities")).to_contain_text("Torrent management")
@@ -95,7 +99,36 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#torrent-table tbody input[type=checkbox]").check()
             page.locator("[data-action=pause]").click()
             expect(page.locator("#torrent-table")).to_contain_text("paused", timeout=10000)
+            if screenshot:
+                for lang in ("fr", "en"):
+                    page.locator("#language").select_option(lang)
+                    page.screenshot(path=str(Path(screenshot) / f"torrents-{lang}.png"))
+            page.locator("[data-view=documentation]").click()
+            expect(page.locator("#guide-content")).to_contain_text("Read guides inside the app")
+            page.locator("#guide-select").select_option("guide/en/torrents.md")
+            expect(page.locator("#guide-content h1")).to_have_text("Manage torrents")
+            page.wait_for_function(
+                "Array.from(document.querySelectorAll('#guide-content img'))"
+                ".every(i => i.complete && i.naturalWidth > 0)"
+            )
+            if screenshot:
+                page.screenshot(path=str(Path(screenshot) / "documentation-en.png"))
+            page.locator("#guide-back").click()
+            expect(page.locator("#guide-content")).to_contain_text("Read guides inside the app")
+            page.locator("#language").select_option("fr")
+            expect(page.locator("#guide-content")).to_contain_text("Consulter les guides")
+            if screenshot:
+                page.locator("#guide-select").select_option("guide/fr/torrents.md")
+                expect(page.locator("#guide-content h1")).to_have_text("Gérer les torrents")
+                page.wait_for_function(
+                    "Array.from(document.querySelectorAll('#guide-content img'))"
+                    ".every(i => i.complete && i.naturalWidth > 0)"
+                )
+                page.screenshot(path=str(Path(screenshot) / "documentation-fr.png"))
             page.set_viewport_size({"width": 600, "height": 800})
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            page.locator("#language").select_option("en")
+            page.locator("[data-view=torrents]").click()
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.locator("#theme").select_option("dark")
             if screenshot:

@@ -4,6 +4,8 @@
 
 Dans **Zen → En partage**, dépliez les catégories pour comparer vos torrents. La Note d’une catégorie est la moyenne des notes disponibles de tous ses torrents, sous-catégories comprises. Pour préparer de nouveaux téléchargements, utilisez **Plan**.
 
+Les catégories sont repliées au premier affichage. L’application mémorise les branches ouvertes et fermées après actualisation et redémarrage, y compris **Tout déplier** et **Tout replier**. Un filtre ouvre temporairement les branches correspondantes ; effacer le filtre restaure votre disposition.
+
 Captures de l’interface française en thème sombre, avec des données d’exemple.
 
 ![Torrents en partage et notes par catégorie](../images/zen.png)

@@ -2,6 +2,8 @@
 
 [Présentation et téléchargement](../README.md) · [English introduction](../README.en.md)
 
+Les guides et leurs captures sont aussi disponibles dans **Documentation**, juste au-dessus des **Paramètres**, sur le bureau et dans l’interface web. Le sélecteur de langue permet de passer du français à l’anglais. La copie embarquée correspond à votre installation et fonctionne sans accès Internet. **Ouvrir en ligne** donne accès à la documentation du dépôt.
+
 ## Commencer
 
 1. [Installer et configurer](guide/fr/demarrage.md) : première connexion, client torrent, dossiers, NAS, Docker et proxy.
@@ -10,7 +12,7 @@
 
 ## Aller plus loin
 
-- [Gérer les torrents](guide/fr/torrents.md) : trackers, catégories et commandes, en préparation pour 0.6.0.
+- [Gérer les torrents](guide/fr/torrents.md) : trackers, catégories et commandes.
 - [Zen et Plans](guide/fr/zen.md) : notes, gains estimés, budget et choix des torrents.
 - [Préparer un upload c411](guide/fr/upload.md) : brouillons et images ; [règles par catégorie](guide/fr/upload-categories.md).
 - [Données, mises à jour et dépannage](guide/fr/donnees.md).
@@ -23,7 +25,7 @@ Les captures montrent l’interface en français, en thème sombre, avec des don
 - [Setup and connections](guide/en/getting-started.md)
 - [Library and reseeding](guide/en/library.md)
 - [Search and download queue](guide/en/search.md)
-- [Torrent management](guide/en/torrents.md), in development for 0.6.0
+- [Torrent management](guide/en/torrents.md)
 - [Zen and Plans](guide/en/zen.md)
 - [Uploads and Drafts](guide/en/upload.md)
 - [Data and troubleshooting](guide/en/data.md)
@@ -48,6 +50,12 @@ Le script utilise des paramètres et une base temporaires, interdit les connexio
 
 Pour les captures en anglais, ajoutez `--language en` à cette commande. Elles sont enregistrées dans `docs/guide/images/en/`.
 
-## Web et Docker, en préparation pour 0.7.0
+## Web et Docker
 
 [Guide français](guide/fr/web-docker.md) · [English guide](guide/en/web-docker.md)
+
+Les captures de l’interface web utilisent également un client fictif et une configuration temporaire :
+
+```bash
+TL_WEB_BROWSER=1 TL_WEB_SCREENSHOTS=docs/guide/images/web .venv/bin/pytest tests/test_web_browser.py
+```

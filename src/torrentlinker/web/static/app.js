@@ -479,6 +479,7 @@ async function navigate(view) {
     await refreshSetup();
     step("client");
   }
+  if (view === "documentation") await loadGuides();
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
   if (view === "library") await loadLibrary();
@@ -980,6 +981,7 @@ function theme() {
 $("theme").onchange = theme;
 theme();
 $("language").onchange = () => {
+  if (state.view === "documentation") setTimeout(() => guard(loadGuides), 0);
   language = $("language").value;
   localStorage.setItem("tl-language", language);
   translate();
@@ -1267,3 +1269,37 @@ $("suggest-mappings").onclick = () =>
         ),
       );
   });
+
+const guideHistory = [];
+let currentGuide = "";
+async function loadGuides() {
+  const guides = await api(`documentation?language=${language}`);
+  $("guide-select").replaceChildren(...guides.map(g => new Option(g.title, g.path)));
+  guideHistory.length = 0;
+  currentGuide = "";
+  $("guide-back").title = say("Previous guide", "Guide précédent");
+  $("guide-back").setAttribute("aria-label", $("guide-back").title);
+  await openGuide(guides[0].path);
+}
+async function openGuide(path, fragment = "", remember = true) {
+  const result = await api(`documentation/page/${path.split("/").map(encodeURIComponent).join("/")}`);
+  if (remember && currentGuide && path !== currentGuide) guideHistory.push(currentGuide);
+  currentGuide = path;
+  $("guide-content").innerHTML = result.html;
+  $("guide-select").value = path;
+  $("guide-back").disabled = !guideHistory.length;
+  $("guide-online").href = `https://github.com/Vietnoirien/TorrentLinker/blob/main/docs/${path}`;
+  if (fragment) document.getElementById(decodeURIComponent(fragment))?.scrollIntoView();
+  else if (state.view === "documentation") window.scrollTo(0, 0);
+}
+$("guide-select").onchange = () => guard(() => openGuide($("guide-select").value));
+$("guide-back").onclick = () => {
+  const previous = guideHistory.pop();
+  if (previous) guard(() => openGuide(previous, "", false));
+};
+$("guide-content").onclick = event => {
+  const link = event.target.closest("a[data-guide]");
+  if (!link) return;
+  event.preventDefault();
+  guard(() => openGuide(link.dataset.guide, link.hash.slice(1)));
+};
