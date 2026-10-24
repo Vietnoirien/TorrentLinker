@@ -229,13 +229,13 @@ def test_chat_uses_shared_proposals_without_enabling_external_mcp(tmp_path):
         assert run.status_code == 202, run.text
         result = wait_run(browser, run.json()["id"])
         assert result["status"] == "awaiting_approval", result
-        assert count == 2
+        assert count == 1
         agents = browser.get("/api/agents").json()
         assert agents["enabled"] is False
         assert len(agents["proposals"]) == 1
         assert agents["proposals"][0]["status"] == "pending"
-        assert result["tokens"] == 30
-        assert "awaiting your approval" in result["messages"][-1]["content"]
+        assert result["tokens"] == 15
+        assert result["events"][0]["status"] == "waiting"
 
 
 def test_schedule_preview_run_now_pause_and_restart_are_persistent(tmp_path):
@@ -824,7 +824,7 @@ def test_due_task_runs_once_and_blocks_new_runs_while_approval_is_pending(tmp_pa
             assert not browser.post(
                 "/api/assistant/schedules/" + task["id"] + "/run", json={}
             ).is_success
-            assert calls == 2
+            assert calls == 1
 
 
 def test_crashed_run_is_visible_after_restart_and_never_replayed(tmp_path):
@@ -1097,6 +1097,11 @@ def test_long_discussion_compacts_and_keeps_action_receipts(tmp_path, kind):
         ).json()
         result = wait_run(browser, submitted["id"])
         assert result["status"] == "awaiting_approval", result["error"]
+        assert browser.post(
+            f"/api/assistant/jobs/{submitted['id']}/decisions/0", json={"approve": False}
+        ).is_success
+        result = wait_run(browser, submitted["id"])
+        assert result["status"] == "completed", result["error"]
         assert compacted
         assert result["compactions"] > 0
         assert result["calls"] == 9

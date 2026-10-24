@@ -5,9 +5,11 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPalette, QTextBlockFormat, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -24,7 +26,7 @@ class MessageText(QTextBrowser):
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setOpenLinks(False)
         self.setOpenExternalLinks(False)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.document().setDocumentMargin(0)
@@ -32,7 +34,11 @@ class MessageText(QTextBrowser):
         font.setPointSizeF(max(10.5, font.pointSizeF()))
         self.setFont(font)
         # Disable embedded HTML and all resource loading from model/user text.
-        self.document().setMarkdown(text, QTextDocument.MarkdownFeature.MarkdownNoHTML)
+        self.document().setMarkdown(
+            text,
+            QTextDocument.MarkdownFeature.MarkdownDialectGitHub
+            | QTextDocument.MarkdownFeature.MarkdownNoHTML,
+        )
         block = self.document().begin()
         while block.isValid():
             cursor = QTextCursor(block)
@@ -59,6 +65,8 @@ class MessageText(QTextBrowser):
 
 class ChatTranscript(QScrollArea):
     anchorClicked = Signal(QUrl)
+    decisionSubmitted = Signal(str, int, bool)
+    answerSubmitted = Signal(str, int, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -151,7 +159,14 @@ class ChatTranscript(QScrollArea):
                 role = QLabel(self.tr("You") if user else "Assistant")
                 role.setStyleSheet("font-weight: 600; color: #62bdb8; background: transparent;")
                 contents.addWidget(role)
-                contents.addWidget(MessageText(message["content"], card))
+                message_text = MessageText(message["content"], card)
+                message_text.setStyleSheet(
+                    message_text.styleSheet()
+                    + "QTextBrowser { color: "
+                    + ("#e8f1f4" if dark else "#172b33")
+                    + "; }"
+                )
+                contents.addWidget(message_text)
                 row.addWidget(card, 12)
                 if not user:
                     row.addStretch(1)
@@ -200,15 +215,82 @@ class ChatTranscript(QScrollArea):
                 )
                 dl.addWidget(link)
                 result = event.get("result", {})
-                if result.get("requires_owner_approval"):
-                    approval = QPushButton(self.tr("Review proposal"))
-                    approval.clicked.connect(
-                        lambda checked=False, identifier=result["id"]: self.anchorClicked.emit(
-                            QUrl("proposal:" + identifier)
+                if (
+                    event.get("status") == "waiting"
+                    and result.get("requires_owner_approval")
+                    and "decision" not in event
+                ):
+                    panel = QFrame()
+                    panel.setObjectName("approvalCard")
+                    box = QVBoxLayout(panel)
+                    box.addWidget(QLabel(self.tr("Action requires your approval")))
+                    review = event.get("review", {}).get(
+                        "operation", event.get("arguments", {}).get("operation", {})
+                    )
+                    for name, value in review.items():
+                        if value not in (None, "", [], {}, False):
+                            display = (
+                                "\n".join(map(str, value))
+                                if isinstance(value, list)
+                                else str(value)
+                            )
+                            label = QLabel(
+                                str(name).replace("_", " ").capitalize() + ": " + display
+                            )
+                            label.setTextFormat(Qt.TextFormat.PlainText)
+                            label.setWordWrap(True)
+                            box.addWidget(label)
+                    for title, approve in (
+                        (self.tr("Approve once"), True),
+                        (self.tr("Reject"), False),
+                    ):
+                        button = QPushButton(title)
+                        button.clicked.connect(
+                            lambda checked=False, r=run["id"], n=i, yes=approve: (
+                                self.decisionSubmitted.emit(r, n, yes)
+                            )
+                        )
+                        box.addWidget(button)
+                    layout.addWidget(panel)
+                if (
+                    event.get("status") == "waiting"
+                    and event.get("question")
+                    and "answer" not in event
+                ):
+                    panel = QFrame()
+                    panel.setObjectName("questionCard")
+                    box = QVBoxLayout(panel)
+                    label = QLabel(event["question"]["question"])
+                    label.setTextFormat(Qt.TextFormat.PlainText)
+                    label.setWordWrap(True)
+                    box.addWidget(label)
+                    options = QComboBox()
+                    options.addItem(self.tr("Choose an answer…"), "")
+                    for option in event["question"]["options"]:
+                        options.addItem(option, option)
+                    box.addWidget(options)
+                    custom = QLineEdit()
+                    custom.setPlaceholderText(self.tr("Or enter your own answer"))
+                    box.addWidget(custom)
+                    submit = QPushButton(self.tr("Submit answer"))
+                    submit.setEnabled(False)
+
+                    def enable_answer(_=None, button=submit, field=custom, choices=options):
+                        button.setEnabled(bool(field.text().strip() or choices.currentData()))
+
+                    custom.textChanged.connect(enable_answer)
+                    options.currentIndexChanged.connect(enable_answer)
+                    submit.clicked.connect(
+                        lambda checked=False, r=run["id"], n=i, field=custom, choices=options: (
+                            self.answerSubmitted.emit(
+                                r,
+                                n,
+                                field.text() if field.text().strip() else choices.currentData(),
+                            )
                         )
                     )
-                    # Approval never disappears behind the collapsed activity section.
-                    layout.addWidget(approval)
+                    box.addWidget(submit)
+                    layout.addWidget(panel)
 
             def expand(value, identifier=run["id"], panel=details, button=toggle):
                 panel.setVisible(value)

@@ -81,7 +81,7 @@ Open the local draft queue and review the sources, image, technical information 
 
 ## History and limits
 
-History keeps messages, tool calls, proposals, jobs and errors. Connections and schedules survive restarts.
+History keeps messages, tool calls, proposals, jobs and errors. Connections and schedules survive restarts. Questions, action approvals and temporary settings waits are also saved. Answer or decide directly in the chat and the same run continues automatically. Waiting does not consume its duration limit. Interrupted work is never replayed automatically.
 
 Interactive chats have no duration or model-call cutoff by default. You can set optional limits in Discussion settings; zero means no per-run limit. Stop remains available. Scheduled tasks retain defaults of five minutes and twelve calls. Cumulative token usage is displayed for information and does not stop the conversation. Each response requests at most 2,048 output tokens by default.
 
@@ -93,7 +93,9 @@ If the server is unavailable, the model is not loaded or metadata is missing, **
 
 TorrentLinker compacts the working context as it fills, keeping the current request and action receipts. Complete messages and tool results remain in History, and the assistant can retrieve archived details within the same discussion. Token usage depends on the provider's reporting and is not a billing cap.
 
-Messages appear in separate cards. Expand **Activity** below an exchange to inspect tool receipts and usage. Errors and requests to review proposals stay visible when Activity is closed.
+Messages appear in separate cards. Expand **Activity** below an exchange to inspect tool receipts and usage. Errors, questions and action approvals stay visible when Activity is closed. Approval cards show the action details with **Approve once** and **Reject**. Approval applies only to that proposal and is checked against current settings, permissions and budgets before execution. Expired or changed proposals need a fresh decision.
+
+For questions, select a suggested answer or type your own, then choose **Submit answer**. Selecting an option does not send it. An answer never grants action permission. Markdown tables render in chat; embedded HTML and external images are disabled.
 
 Discussions and tasks share a limit of 200 calls per model connection per UTC day. Connection tests are separate from this counter. One Assistant run executes at a time; up to ten can be queued or active. Downloads remain TorrentLinker jobs and continue in your torrent client.
 

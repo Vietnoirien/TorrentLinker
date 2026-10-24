@@ -571,3 +571,9 @@ dialog .description img {
 .assistant-dialog label { margin: .7rem 0; }
 .assistant-dialog fieldset { display: flex; flex-wrap: wrap; gap: .5rem; }
 @media (max-width: 700px) { .assistant-layout { grid-template-columns: 1fr; } .assistant-conversations { max-height: 150px; } .assistant-composer { flex-wrap: wrap; } }
+.assistant-markdown { overflow-x: auto; max-width: 100%; }
+.assistant-markdown table { border-collapse: collapse; min-width: max-content; margin: 12px 0; }
+.assistant-markdown th, .assistant-markdown td { border: 1px solid var(--border, #687782); padding: 8px 12px; text-align: left; }
+.assistant-decision dd { margin-bottom: 8px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.assistant-decision dt { font-weight: 600; }
+.assistant-question select, .assistant-question input { display: block; width: 100%; margin: 10px 0; }

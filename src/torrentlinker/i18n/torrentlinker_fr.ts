@@ -6266,6 +6266,14 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
         <source>Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.</source>
         <translation>Supprimer cette discussion et son historique ? Les propositions en attente seront rejetées. Les torrents et les fichiers seront conservés.</translation>
     </message>
+    <message>
+        <source>Awaiting your answer</source>
+        <translation>En attente de votre réponse</translation>
+    </message>
+    <message>
+        <source>Waiting for settings to finish updating</source>
+        <translation>Mise à jour des paramètres en cours</translation>
+    </message>
 </context>
 <context>
     <name>LocalDrafts</name>
@@ -6437,6 +6445,30 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
     <message>
         <source>Review proposal</source>
         <translation>Examiner la proposition</translation>
+    </message>
+    <message>
+        <source>Action requires your approval</source>
+        <translation>Action à approuver</translation>
+    </message>
+    <message>
+        <source>Approve once</source>
+        <translation>Approuver une fois</translation>
+    </message>
+    <message>
+        <source>Reject</source>
+        <translation>Refuser</translation>
+    </message>
+    <message>
+        <source>Choose an answer…</source>
+        <translation>Choisir une réponse…</translation>
+    </message>
+    <message>
+        <source>Or enter your own answer</source>
+        <translation>Ou saisir votre réponse</translation>
+    </message>
+    <message>
+        <source>Submit answer</source>
+        <translation>Envoyer la réponse</translation>
     </message>
 </context>
 </TS>

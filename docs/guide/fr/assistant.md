@@ -106,3 +106,9 @@ Demandez par exemple : « Choisis un film sans correspondance, vérifie son iden
 Les tâches automatisées s’arrêtent à la file locale. Ouvrez-la depuis Upload, corrigez la présentation et enregistrez-la. L’envoi à c411 nécessite toujours votre approbation, même en mode exécution. La publication finale reste manuelle sur le site.
 
 Utilisez **Supprimer la discussion** pour supprimer une discussion et son historique après confirmation. Les propositions en attente sont rejetées ; les torrents et les fichiers sont conservés. Arrêtez une discussion active et attendez la fin des actions envoyées avant de la supprimer. Les discussions des tâches automatisées ne peuvent pas être supprimées ainsi.
+
+Les questions, validations d'actions et attentes temporaires de paramètres sont enregistrées et conservées après redémarrage. Répondez ou décidez dans la discussion pour reprendre automatiquement la même exécution. Le temps d'attente ne compte pas dans sa durée limite.
+
+Les cartes d'action affichent les détails et proposent **Approuver une fois** ou **Refuser**. La validation ne concerne que cette proposition. Les paramètres, autorisations et budgets sont vérifiés avant l'action ; une proposition expirée nécessite une nouvelle validation.
+
+Pour une question, choisissez une suggestion ou saisissez votre réponse, puis cliquez sur **Envoyer la réponse**. Le choix seul n'envoie rien. Une réponse ne donne aucune autorisation d'action. Les tableaux Markdown s'affichent dans la discussion ; le HTML intégré et les images externes sont désactivés.

@@ -1,4 +1,4 @@
-/* Same owner APIs as desktop; model output is always rendered as text. */
+/* Same owner APIs as desktop; chat Markdown is rendered safely by the server. */
 let assistantView = "chat", assistantConversation = "", assistantRun = "", assistantSnapshot = null;
 let assistantRefreshBusy = false, assistantRenderKey = "", assistantLoadVersion = 0;
 const assistantDrafts = new Map();
@@ -133,12 +133,20 @@ async function aRefreshChat() {
     const position = transcript.scrollTop, bottom = position >= transcript.scrollHeight - transcript.clientHeight - 20;
     transcript.replaceChildren(...[...rows].reverse().map(aRunCard));
     transcript.scrollTop = bottom ? transcript.scrollHeight : position;
-    const active = rows.find(r => ["queued", "running"].includes(r.status));
+    const active = rows.find(r => ["queued", "running", "awaiting_approval", "awaiting_user", "waiting_settings"].includes(r.status));
     assistantRun = active?.id || rows[0]?.id || "";
     $("assistant-send").disabled = !!active || !$("assistant-model").value;
     $("assistant-model").disabled = !!active;
     $("assistant-chat-settings").disabled = !!active;
   } finally { assistantRefreshBusy = false; }
+}
+function aMarkdown(message) {
+  const content = element("div", undefined, "assistant-markdown");
+  // HTML comes only from the server's restricted Markdown renderer.
+  if (message.html) content.innerHTML = message.html;
+  else content.textContent = message.content;
+  for (const link of content.querySelectorAll("a")) link.rel = "noopener noreferrer";
+  return content;
 }
 const assistantExpandedActivity = new Set();
 function aRunCard(run) {
@@ -151,20 +159,46 @@ function aRunCard(run) {
   if (run.compactions) activity.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "muted"));
   for (const m of run.messages) {
     const block = element("div", undefined, `assistant-message ${m.role}`);
-    block.append(element("strong", m.role === "user" ? at("You", "Vous") : "Assistant"), element("p", m.content)); card.append(block);
+    block.append(element("strong", m.role === "user" ? at("You", "Vous") : "Assistant"), aMarkdown(m)); card.append(block);
   }
   if (run.error) card.append(element("p", run.error, "error"));
   for (const event of run.events) {
     const detail = element("details"), result = event.result || {};
     detail.append(element("summary", `${event.tool} · ${aStatus(event.status)}`), element("pre", JSON.stringify({arguments: event.arguments, result}, null, 2)));
-    if (result.requires_owner_approval && result.id) card.append(button(at("Review proposal", "Examiner la proposition"), () => aReview(result.id)));
+    const index = run.events.indexOf(event);
+    if (event.status === "waiting" && result.requires_owner_approval && result.id && !("decision" in event)) {
+      const panel = element("section", undefined, "assistant-decision card");
+      panel.append(element("h3", at("Action requires your approval", "Action à approuver")));
+      const operation = event.review?.operation || event.arguments?.operation || event.review || {};
+      const fields = element("dl");
+      for (const [name, value] of Object.entries(operation)) {
+        if (value === null || value === "" || value === false || JSON.stringify(value) === "[]" || JSON.stringify(value) === "{}") continue;
+        fields.append(element("dt", name.replaceAll("_", " ")), element("dd", Array.isArray(value) ? value.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join("\n") : typeof value === "object" ? JSON.stringify(value) : String(value)));
+      }
+      const decide = async approve => { await api(`assistant/jobs/${run.id}/decisions/${index}`, {approve}); await aRefreshChat(); };
+      panel.append(fields, button(at("Approve once", "Approuver une fois"), () => decide(true), "primary"), button(at("Reject", "Refuser"), () => decide(false)));
+      card.append(panel);
+    }
+    if (event.status === "waiting" && event.question && !("answer" in event)) {
+      const panel = element("section", undefined, "assistant-question card"), choices = element("select"), custom = element("input"), submit = button(at("Submit answer", "Envoyer la réponse"), async () => {
+        await api(`assistant/jobs/${run.id}/questions/${index}`, {answer: custom.value.trim() ? custom.value : choices.value}); await aRefreshChat();
+      }, "primary");
+      choices.append(new Option(at("Choose an answer…", "Choisir une réponse…"), ""));
+      for (const option of event.question.options) choices.append(new Option(option, option));
+      choices.setAttribute("aria-label", at("Suggested answers", "Réponses suggérées"));
+      custom.placeholder = at("Or enter your own answer", "Ou saisir votre réponse"); custom.maxLength = 16000;
+      submit.disabled = true;
+      const changed = () => { submit.disabled = !custom.value.trim() && !choices.value; };
+      choices.addEventListener("change", changed); custom.addEventListener("input", changed);
+      panel.append(element("h3", event.question.question), choices, custom, submit); card.append(panel);
+    }
     if (result.job_id) detail.append(button(at("Job progress", "Avancement de la tâche"), async () => {
       const job = await api(`jobs/${result.job_id}`); const pre = detail.querySelector("pre"); pre.textContent = JSON.stringify(job, null, 2);
     }));
     activity.append(detail);
   }
   card.append(activity);
-  if (["queued", "running"].includes(run.status)) card.append(element("p", at("Working…", "En cours…"), "assistant-working"), button(at("Stop", "Arrêter"), async () => { await api(`assistant/jobs/${run.id}/cancel`, {}); await aRefreshChat(); }));
+  if (["queued", "running", "awaiting_approval", "awaiting_user", "waiting_settings"].includes(run.status)) card.append(element("p", at("Working…", "En cours…"), "assistant-working"), button(at("Stop", "Arrêter"), async () => { await api(`assistant/jobs/${run.id}/cancel`, {}); await aRefreshChat(); }));
   return card;
 }
 async function aReview(id, completed = aRefreshChat) {
@@ -287,5 +321,5 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
 setInterval(() => { if (state.view === "assistant" && assistantView === "chat") guard(aRefreshChat); }, 1500);
 
 function aStatus(value) {
-  return ({queued: at("Queued", "En attente"), running: at("Running", "En cours"), completed: at("Completed", "Terminée"), failed: at("Failed", "Échec"), cancelled: at("Cancelled", "Annulée"), interrupted: at("Interrupted", "Interrompue"), awaiting_approval: at("Awaiting approval", "Validation requise"), finished: at("Finished", "Terminé")})[value] || value;
+  return ({queued: at("Queued", "En attente"), running: at("Running", "En cours"), completed: at("Completed", "Terminée"), failed: at("Failed", "Échec"), cancelled: at("Cancelled", "Annulée"), interrupted: at("Interrupted", "Interrompue"), awaiting_approval: at("Awaiting approval", "Validation requise"), awaiting_user: at("Awaiting your answer", "Réponse requise"), waiting_settings: at("Waiting for settings to finish updating", "Mise à jour des paramètres en cours"), finished: at("Finished", "Terminé")})[value] || value;
 }

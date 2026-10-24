@@ -69,3 +69,31 @@ class Message(BaseModel):
     model_config = ConfigDict(extra="forbid")
     conversation_id: str
     message: str = Field(min_length=1, max_length=16000)
+
+
+class Question(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(min_length=1, max_length=4000)
+    options: list[str] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def validate_question(self):
+        if not self.question.strip() or any(not x.strip() or len(x) > 500 for x in self.options):
+            raise ValueError("Provide a question and non-empty suggested answers.")
+        return self
+
+
+class UserAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answer: str = Field(min_length=1, max_length=16000)
+
+    @model_validator(mode="after")
+    def validate_answer(self):
+        if not self.answer.strip():
+            raise ValueError("Enter or select an answer before submitting.")
+        return self
+
+
+class Decision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approve: bool

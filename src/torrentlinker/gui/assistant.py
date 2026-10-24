@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTabWidget,
-    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -326,6 +325,8 @@ class AssistantTab(QWidget):
             "cancelled": self.tr("Cancelled"),
             "interrupted": self.tr("Interrupted"),
             "awaiting_approval": self.tr("Awaiting approval"),
+            "awaiting_user": self.tr("Awaiting your answer"),
+            "waiting_settings": self.tr("Waiting for settings to finish updating"),
             "finished": self.tr("Finished"),
         }.get(value, value)
 
@@ -376,6 +377,8 @@ class AssistantTab(QWidget):
         right = QWidget()
         rl = QVBoxLayout(right)
         self.transcript = ChatTranscript()
+        self.transcript.decisionSubmitted.connect(self.submit_decision)
+        self.transcript.answerSubmitted.connect(self.submit_answer)
         self.transcript.anchorClicked.connect(self.open_receipt)
         rl.addWidget(self.transcript, 1)
         self.prompt = ChatPrompt()
@@ -439,9 +442,10 @@ class AssistantTab(QWidget):
             task_buttons.addWidget(b)
         tl.addLayout(task_buttons)
         self.pages.addTab(tasks, self.tr("Automations"))
-        self.history = QTextBrowser()
-        self.history.setOpenLinks(False)
+        self.history = ChatTranscript()
         self.history.anchorClicked.connect(self.open_receipt)
+        self.history.decisionSubmitted.connect(self.submit_decision)
+        self.history.answerSubmitted.connect(self.submit_answer)
         self.pages.addTab(self.history, self.tr("History"))
         connections = QWidget()
         pl = QVBoxLayout(connections)
@@ -732,7 +736,15 @@ class AssistantTab(QWidget):
                 bar.setValue(bar.maximum() if bottom else position)
 
         QTimer.singleShot(0, self, restore_scroll)
-        active = next((r for r in rows if r["status"] in {"queued", "running"}), None)
+        active = next(
+            (
+                r
+                for r in rows
+                if r["status"]
+                in {"queued", "running", "awaiting_approval", "awaiting_user", "waiting_settings"}
+            ),
+            None,
+        )
         self.send.setEnabled(not active and bool(self.chat_model.currentData()))
         self.chat_model.setEnabled(not active)
         self.chat_settings.setEnabled(not active and bool(self.provider_data))
@@ -748,7 +760,7 @@ class AssistantTab(QWidget):
         )
         self.run_id = active["id"] if active else self.run_id
         if all_rows:
-            self.history.setHtml(self.render_transcript(all_rows))
+            self.history.set_runs(all_rows, self.status_text)
 
     def open_receipt(self, url):
         try:
@@ -783,6 +795,20 @@ class AssistantTab(QWidget):
             dialog.exec()
         except Exception as error:
             self.error(error)
+
+    def submit_decision(self, run, index, approve):
+        run_in_background(
+            lambda: self.service.decide(run, index, approve),
+            lambda _: self.refresh_run(),
+            self.error,
+        )
+
+    def submit_answer(self, run, index, answer):
+        run_in_background(
+            lambda: self.service.answer(run, index, answer),
+            lambda _: self.refresh_run(),
+            self.error,
+        )
 
     def review_dialog(self, identifier, review):
         dialog = QDialog(self)

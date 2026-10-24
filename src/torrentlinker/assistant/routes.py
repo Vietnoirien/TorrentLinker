@@ -1,6 +1,6 @@
 """Owner APIs share the application's cookie and CSRF protection."""
 
-from torrentlinker.assistant.models import Conversation, Message, Schedule
+from torrentlinker.assistant.models import Conversation, Decision, Message, Schedule, UserAnswer
 from torrentlinker.assistant.providers import Provider
 from torrentlinker.assistant.research import SearchSettings
 
@@ -70,15 +70,23 @@ def routes(app, assistant):
 
     @app.get("/api/assistant/jobs")
     def history(conversation_id: str = ""):
-        return assistant.history(conversation_id)
+        return assistant.history(conversation_id, rendered=True)
 
     @app.get("/api/assistant/jobs/{identifier}")
     def run(identifier: str):
-        return assistant.run(identifier)
+        return assistant.run(identifier, rendered=True)
 
     @app.post("/api/assistant/jobs/{identifier}/cancel")
     def cancel(identifier: str):
         return assistant.cancel(identifier)
+
+    @app.post("/api/assistant/jobs/{identifier}/questions/{event_index}")
+    def answer(identifier: str, event_index: int, body: UserAnswer):
+        return assistant.answer(identifier, event_index, body.answer)
+
+    @app.post("/api/assistant/jobs/{identifier}/decisions/{event_index}")
+    def decide(identifier: str, event_index: int, body: Decision):
+        return assistant.decide(identifier, event_index, body.approve)
 
     @app.post("/api/assistant/schedules/preview")
     def preview(body: Schedule):

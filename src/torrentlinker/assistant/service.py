@@ -49,6 +49,21 @@ class Assistant:
                 self.db.execute("ALTER TABLE runs ADD COLUMN compactions INTEGER DEFAULT 0")
             if "context" not in {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}:
                 self.db.execute("ALTER TABLE runs ADD COLUMN context TEXT DEFAULT '{}'")
+            if "checkpoint" not in {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}:
+                self.db.execute("ALTER TABLE runs ADD COLUMN checkpoint TEXT DEFAULT '{}'")
+            # A queued continuation has not started any tool yet.
+            for row in self.db.execute(
+                "SELECT id,checkpoint FROM runs WHERE status='queued'"
+            ).fetchall():
+                saved = json.loads(row["checkpoint"])
+                if saved.get("wait_status") in {
+                    "awaiting_user",
+                    "awaiting_approval",
+                    "waiting_settings",
+                }:
+                    self.db.execute(
+                        "UPDATE runs SET status=? WHERE id=?", (saved["wait_status"], row["id"])
+                    )
             self.db.execute(
                 "UPDATE runs SET status='interrupted', error=? "
                 "WHERE status IN ('queued','running')",
@@ -64,7 +79,9 @@ class Assistant:
         with self.lock, self.db:
             _, actor = self.conversation(identifier)
             if self.db.execute(
-                "SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')",
+                "SELECT 1 FROM runs WHERE conversation_id=? AND "
+                "status IN ('queued','running','awaiting_approval','awaiting_user',"
+                "'waiting_settings')",
                 (identifier,),
             ).fetchone():
                 raise ValueError("Stop the discussion before deleting it.")
@@ -148,6 +165,20 @@ class Assistant:
         with self.lock, self.db:
             if identifier:
                 previous = self.provider(identifier)
+                if (previous.kind, previous.url, previous.model) != (
+                    body.kind,
+                    body.url,
+                    body.model,
+                ):
+                    for row in self.db.execute(
+                        "SELECT DISTINCT conversations.body FROM conversations JOIN runs "
+                        "ON conversations.id=runs.conversation_id WHERE runs.status IN "
+                        "('queued','running','awaiting_user','awaiting_approval','waiting_settings')"
+                    ):
+                        if json.loads(row[0])["provider_id"] == identifier:
+                            raise ValueError(
+                                "Stop active discussions before changing their model connection."
+                            )
                 if previous.url != body.url and body.api_key is None:
                     self.secrets.update({"assistant:" + identifier: ""})
             identifier = identifier or uuid4().hex
@@ -207,7 +238,9 @@ class Assistant:
         with self.lock, self.db:
             _, actor = self.conversation(identifier)
             if self.db.execute(
-                "SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')",
+                "SELECT 1 FROM runs WHERE conversation_id=? AND "
+                "status IN ('queued','running','awaiting_approval','awaiting_user',"
+                "'waiting_settings')",
                 (identifier,),
             ).fetchone():
                 raise ValueError("Wait for this discussion to finish before changing its settings.")
@@ -262,13 +295,17 @@ class Assistant:
             if self.closed:
                 raise ValueError("Assistant is shutting down.")
             if self.db.execute(
-                "SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')",
+                "SELECT 1 FROM runs WHERE conversation_id=? AND "
+                "status IN ('queued','running','awaiting_approval','awaiting_user',"
+                "'waiting_settings')",
                 (identifier,),
             ).fetchone():
                 raise ValueError("This conversation is already running.")
             if (
                 self.db.execute(
-                    "SELECT count(*) FROM runs WHERE status IN ('queued','running')"
+                    "SELECT count(*) FROM runs WHERE "
+                    "status IN ('queued','running','awaiting_approval','awaiting_user',"
+                    "'waiting_settings')"
                 ).fetchone()[0]
                 >= 10
             ):
@@ -316,22 +353,27 @@ class Assistant:
             ) if fixed_kind else self.worker.submit(self._run, run, body, actor, stop)
             return {"id": run}
 
-    def run(self, identifier):
+    def run(self, identifier, *, rendered=False):
+        from torrentlinker.assistant.markdown import render
+
         with self.lock:
             row = self.db.execute("SELECT * FROM runs WHERE id=?", (identifier,)).fetchone()
             if row is None:
                 raise ValueError("Assistant run not found.")
             return {
-                **dict(row),
+                **{k: row[k] for k in row.keys() if k != "checkpoint"},
                 "context": json.loads(row["context"]),
-                "messages": json.loads(row["messages"]),
+                "messages": [
+                    {**m, "html": render(m["content"])} if rendered else m
+                    for m in json.loads(row["messages"])
+                ],
                 "events": json.loads(row["events"]),
             }
 
-    def history(self, conversation_id=""):
+    def history(self, conversation_id="", *, rendered=False):
         with self.lock:
             return [
-                self.run(r[0])
+                self.run(r[0], rendered=rendered)
                 for r in self.db.execute(
                     (
                         'SELECT id FROM runs WHERE (?="" OR conversation_id=?) ORDER BY '
@@ -369,10 +411,22 @@ class Assistant:
         }
 
     def cancel(self, identifier):
-        run = self.run(identifier)
-        if identifier in self.stops:
-            self.stops[identifier].set()
+        with self.lock:
+            run = self.run(identifier)
+            if identifier in self.stops:
+                self.stops[identifier].set()
+            if run["status"] in {
+                "queued",
+                "running",
+                "awaiting_approval",
+                "awaiting_user",
+                "waiting_settings",
+            }:
+                self.update_run(identifier, status="cancelled", checkpoint="{}")
         for event in run["events"]:
+            result = event.get("result", {})
+            if result.get("requires_owner_approval") and result.get("id"):
+                self.agent.reject(result["id"])
             job = event.get("result", {}).get("job_id")
             if job:
                 try:
@@ -396,9 +450,12 @@ class Assistant:
         from torrentlinker.assistant.providers import ContextTooLong, InvalidModelResponse
 
         started = time.monotonic()
-        transcript = self.run(identifier)["messages"]
-        events: list[dict[str, Any]] = []
-        tokens = calls_used = 0
+        saved = self.run(identifier)
+        checkpoint = self.checkpoint(identifier)
+        transcript = [{k: v for k, v in m.items() if k != "html"} for m in saved["messages"]]
+        events = saved["events"]
+        tokens, calls_used = saved["tokens"], saved["calls"]
+        started -= checkpoint.get("elapsed", 0)
         try:
             self.update_run(identifier, status="running")
             provider = self.provider(config.provider_id)
@@ -431,8 +488,8 @@ class Assistant:
                 "draft_id/revision; it always requires owner approval. It creates a c411 Draft, "
                 "never a published torrent. Do not seed an unsent Local Draft. "
                 "Use sourced metadata, cite URLs, do not invent technical file facts. "
-                "Proposals require owner review; report pending proposals and stop"
-                " when approval is needed. "
+                "Use ask_user when you need a choice or clarification. User answers never grant "
+                "action permission. Approval is handled separately by the application. "
                 "You cannot change permissions, budgets, provider settings or schedules. "
                 "Respect the requested language. Do not execute code or shell commands. "
             )
@@ -488,10 +545,36 @@ class Assistant:
                 for t in asyncio.run(self.mcp.list_tools())
             ]
             tools.append(HISTORY_TOOL)
+            tools.append(
+                {
+                    "name": "ask_user",
+                    "description": (
+                        "Ask the user a question and wait for an explicit answer. "
+                        "Answers do not grant action permission."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "question": {"type": "string", "minLength": 1, "maxLength": 4000},
+                            "options": {
+                                "type": "array",
+                                "items": {"type": "string", "minLength": 1, "maxLength": 500},
+                                "maxItems": 12,
+                            },
+                        },
+                        "required": ["question", "options"],
+                        "additionalProperties": False,
+                    },
+                }
+            )
+            if checkpoint:
+                messages = checkpoint["messages"]
+            pending_calls = checkpoint.get("calls", [])
+            results = checkpoint.get("results", [])
             research_names = {t["name"] for t in self.research.tools()} if config.web else set()
             if config.web:
                 tools.extend(self.research.tools())
-            while not config.max_calls or calls_used < config.max_calls:
+            while pending_calls or not config.max_calls or calls_used < config.max_calls:
                 if stop.is_set():
                     raise InterruptedError()
                 if config.max_seconds and time.monotonic() - started >= config.max_seconds:
@@ -499,51 +582,10 @@ class Assistant:
                         "Assistant run reached its duration limit. "
                         "Review progress before continuing."
                     )
-                self.agent.access.grant(actor)
-                budget = input_budget(provider, tools, output_tokens)
-                if encoded_size(messages) > budget:
-                    memory = compact_context(previous[-8:] + [self.run(identifier)], budget // 2)
-                    messages = [
-                        {"role": "system", "content": system},
-                        self.models.user(provider, memory),
-                    ]
-                    self.update_run(identifier, compactions=self.run(identifier)["compactions"] + 1)
-                for attempt in range(3):
-                    self.reserve_call(config.provider_id)
-                    message_count = len(messages)
-                    try:
-                        text, calls, used = self.models.turn(
-                            provider,
-                            key,
-                            messages,
-                            tools,
-                            output_tokens,
-                            max(1, min(60, config.max_seconds - (time.monotonic() - started)))
-                            if config.max_seconds
-                            else 60,
-                        )
-                        break
-                    except InvalidModelResponse as error:
-                        # Discard the entire invalid turn before any tool can execute.
-                        del messages[message_count:]
-                        if attempt == 2 or stop.is_set():
-                            raise ValueError(
-                                f"{error} Automatic recovery failed after three attempts. "
-                                "No actions from those responses were executed. Please retry."
-                            ) from None
-                        messages.append(
-                            self.models.user(
-                                provider,
-                                "Your previous response was incomplete or had invalid tool JSON. "
-                                "No tools from it were executed. Retry with a short response and "
-                                "complete JSON objects for tool arguments. "
-                                "Use fewer tool calls at once.",
-                            )
-                        )
-                    except ContextTooLong:
-                        if attempt == 2 or stop.is_set():
-                            raise
-                        budget = max(4000, budget // 2)
+                if not pending_calls:
+                    self.agent.access.grant(actor)
+                    budget = input_budget(provider, tools, output_tokens)
+                    if encoded_size(messages) > budget:
                         memory = compact_context(
                             previous[-8:] + [self.run(identifier)], budget // 2
                         )
@@ -554,56 +596,144 @@ class Assistant:
                         self.update_run(
                             identifier, compactions=self.run(identifier)["compactions"] + 1
                         )
-                calls_used += 1
-                tokens += used
-                if stop.is_set():
-                    raise InterruptedError()
-                if text:
-                    transcript.append(
-                        {
-                            "role": "assistant",
-                            "content": self.secrets.redact(text, public_urls=True),
-                        }
-                    )
-                self.update_run(
-                    identifier, calls=calls_used, tokens=tokens, messages=json.dumps(transcript)
-                )
-                if not calls:
-                    pending = any(
-                        e.get("result", {}).get("requires_owner_approval") for e in events
-                    )
+                    for attempt in range(3):
+                        self.reserve_call(config.provider_id)
+                        message_count = len(messages)
+                        try:
+                            text, calls, used = self.models.turn(
+                                provider,
+                                key,
+                                messages,
+                                tools,
+                                output_tokens,
+                                max(1, min(60, config.max_seconds - (time.monotonic() - started)))
+                                if config.max_seconds
+                                else 60,
+                            )
+                            break
+                        except InvalidModelResponse as error:
+                            # Discard the entire invalid turn before any tool can execute.
+                            del messages[message_count:]
+                            if attempt == 2 or stop.is_set():
+                                raise ValueError(
+                                    f"{error} Automatic recovery failed after three attempts. "
+                                    "No actions from those responses were executed. Please retry."
+                                ) from None
+                            messages.append(
+                                self.models.user(
+                                    provider,
+                                    "Your previous response was incomplete or had invalid "
+                                    "tool JSON. "
+                                    "No tools from it were executed. Retry with a short response "
+                                    "and "
+                                    "complete JSON objects for tool arguments. "
+                                    "Use fewer tool calls at once.",
+                                )
+                            )
+                        except ContextTooLong:
+                            if attempt == 2 or stop.is_set():
+                                raise
+                            budget = max(4000, budget // 2)
+                            memory = compact_context(
+                                previous[-8:] + [self.run(identifier)], budget // 2
+                            )
+                            messages = [
+                                {"role": "system", "content": system},
+                                self.models.user(provider, memory),
+                            ]
+                            self.update_run(
+                                identifier, compactions=self.run(identifier)["compactions"] + 1
+                            )
+                    calls_used += 1
+                    tokens += used
+                    if stop.is_set():
+                        raise InterruptedError()
+                    if text:
+                        transcript.append(
+                            {
+                                "role": "assistant",
+                                "content": self.secrets.redact(text, public_urls=True),
+                            }
+                        )
                     self.update_run(
-                        identifier, status="awaiting_approval" if pending else "completed"
+                        identifier, calls=calls_used, tokens=tokens, messages=json.dumps(transcript)
                     )
-                    return
-                if len(calls) > 12:
-                    raise ValueError("The model requested too many tools at once.")
-                results = []
-                for call in calls:
+                    if not calls:
+                        self.update_run(identifier, status="completed", checkpoint="{}")
+                        return
+                    if len(calls) > 12:
+                        raise ValueError("The model requested too many tools at once.")
+                    pending_calls, results = calls, []
+                for call_index in range(len(results), len(pending_calls)):
+                    call = pending_calls[call_index]
                     if stop.is_set() or (
                         config.max_seconds and time.monotonic() - started >= config.max_seconds
                     ):
                         raise InterruptedError()
-                    args = call["arguments"]
+                    args = dict(call["arguments"])
                     if "request_id" in args:
                         args["request_id"] = (
                             identifier
                             + ":"
                             + hashlib.sha256(str(args["request_id"]).encode()).hexdigest()[:32]
                         )
-                    event = {
+                    # Checkpoints only resume known waits. An interrupted in-flight call
+                    # remains interrupted on restart, never replayed speculatively.
+                    event_index = checkpoint.get("event_index")
+                    waiting = events[event_index] if event_index is not None else None
+                    if self.agent.suspended:
+                        self.save_wait(
+                            identifier,
+                            "waiting_settings",
+                            messages,
+                            pending_calls,
+                            results,
+                            events,
+                            event_index,
+                            time.monotonic() - started,
+                        )
+                        return
+                    event = waiting or {
                         "tool": call["name"],
                         "arguments": json.loads(
                             self.secrets.redact(json.dumps(args), public_urls=True)
                         ),
                         "status": "running",
                     }
-                    events.append(event)
+                    if waiting is None:
+                        events.append(event)
                     self.update_run(identifier, events=json.dumps(events))
                     try:
                         token = ACTOR.set(actor)
                         try:
-                            if call["name"] == "read_assistant_history":
+                            if waiting and waiting.get("question"):
+                                result = {"answer": waiting["answer"], "permission_granted": False}
+                            elif waiting and waiting.get("result", {}).get(
+                                "requires_owner_approval"
+                            ):
+                                proposal_id = waiting["result"]["id"]
+                                if waiting.get("decision") is True:
+                                    result = self.agent.execute(proposal_id, approved=True)
+                                else:
+                                    result = self.agent.proposal(proposal_id)
+                            elif call["name"] == "ask_user":
+                                from torrentlinker.assistant.models import Question
+
+                                question = Question.model_validate(args)
+                                event["question"] = question.model_dump()
+                                event["status"] = "waiting"
+                                self.save_wait(
+                                    identifier,
+                                    "awaiting_user",
+                                    messages,
+                                    pending_calls,
+                                    results,
+                                    events,
+                                    len(events) - 1,
+                                    time.monotonic() - started,
+                                )
+                                return
+                            elif call["name"] == "read_assistant_history":
                                 result = self.read_context_history(
                                     self.run(identifier)["conversation_id"], **args
                                 )
@@ -618,10 +748,54 @@ class Assistant:
                             ACTOR.reset(token)
                     except Exception as error:
                         result = {"error": self.secrets.redact(str(error))[:2000]}
+                        if (
+                            waiting
+                            and waiting.get("decision") is True
+                            and "Finish editing settings before" not in str(error)
+                        ):
+                            # Failed validation consumes this approval. A corrected
+                            # operation needs a fresh proposal and owner decision.
+                            self.agent.reject(waiting["result"]["id"])
                     result = json.loads(
                         self.secrets.redact(json.dumps(result, default=str), public_urls=True)
                     )
+                    if "Finish editing settings before" in str(result.get("error", "")):
+                        if waiting is None:
+                            events.remove(event)
+                        self.save_wait(
+                            identifier,
+                            "waiting_settings",
+                            messages,
+                            pending_calls,
+                            results,
+                            events,
+                            event_index,
+                            time.monotonic() - started,
+                        )
+                        return
                     event.update(status="finished", result=result)
+                    if result.get("requires_owner_approval"):
+                        try:
+                            event["review"] = json.loads(
+                                self.secrets.redact(
+                                    json.dumps(self.agent.review(result["id"]), default=str),
+                                    public_urls=True,
+                                )
+                            )
+                        except (ValueError, PermissionError) as error:
+                            event["review"] = {"error": str(error)}
+                        event["status"] = "waiting"
+                        self.save_wait(
+                            identifier,
+                            "awaiting_approval",
+                            messages,
+                            pending_calls,
+                            results,
+                            events,
+                            len(events) - 1,
+                            time.monotonic() - started,
+                        )
+                        return
                     self.update_run(identifier, events=json.dumps(events))
                     job_id = result.get("job_id")
                     if job_id:
@@ -645,6 +819,7 @@ class Assistant:
                             raise InterruptedError()
                         event["result"] = result
                         self.update_run(identifier, events=json.dumps(events))
+                    checkpoint = {}
                     encoded = json.dumps(result)
                     results.append(
                         (
@@ -659,6 +834,8 @@ class Assistant:
                         )
                     )
                 self.models.results(provider, messages, results)
+                pending_calls, results = [], []
+                self.update_run(identifier, checkpoint="{}")
             raise ValueError(
                 "Assistant run reached its model-call limit. Review its progress before continuing."
             )
@@ -677,6 +854,113 @@ class Assistant:
             self.update_run(identifier, status="failed", error=detail)
         finally:
             self.stops.pop(identifier, None)
+
+    def checkpoint(self, identifier):
+        with self.lock:
+            return json.loads(
+                self.db.execute("SELECT checkpoint FROM runs WHERE id=?", (identifier,)).fetchone()[
+                    0
+                ]
+            )
+
+    def save_wait(self, identifier, status, messages, calls, results, events, event_index, elapsed):
+        with self.lock:
+            if self.stops[identifier].is_set() and not self.closed:
+                raise InterruptedError()
+            self.update_run(
+                identifier,
+                status=status,
+                events=json.dumps(events),
+                checkpoint=json.dumps(
+                    {
+                        "messages": messages,
+                        "calls": calls,
+                        "results": results,
+                        "event_index": event_index,
+                        "elapsed": elapsed,
+                        "wait_status": status,
+                    }
+                ),
+            )
+
+    def answer(self, identifier, event_index, answer):
+        from torrentlinker.assistant.models import UserAnswer
+
+        answer = UserAnswer(answer=answer).answer
+        with self.lock:
+            run = self.run(identifier)
+            checkpoint = self.checkpoint(identifier)
+            if run["status"] != "awaiting_user" or checkpoint.get("event_index") != event_index:
+                raise ValueError("This question is no longer awaiting an answer.")
+            event = run["events"][event_index]
+            if "answer" in event:
+                raise ValueError("This question has already been answered.")
+            event["answer"] = self.secrets.redact(answer, public_urls=True)
+            self.update_run(identifier, events=json.dumps(run["events"]))
+        self.resume_waiting()
+        return {"submitted": True}
+
+    def decide(self, identifier, event_index, approve):
+        with self.lock:
+            run = self.run(identifier)
+            if self.checkpoint(identifier).get("event_index") != event_index:
+                raise ValueError("This action is no longer awaiting a decision.")
+            event = run["events"][event_index]
+            if not event.get("result", {}).get("requires_owner_approval"):
+                raise ValueError("This event is not an action approval.")
+            if "decision" in event:
+                return {"submitted": True}
+            if run["status"] not in {"awaiting_approval", "waiting_settings"}:
+                raise ValueError("This action is no longer awaiting a decision.")
+            proposal = event["result"]["id"]
+            if not approve:
+                self.agent.reject(proposal)
+            event["decision"] = approve
+            self.update_run(identifier, events=json.dumps(run["events"]))
+        self.resume_waiting()
+        return {"submitted": True}
+
+    def resume_waiting(self):
+        from threading import Event
+
+        with self.lock:
+            if self.closed:
+                return
+            waiting_ids = self.db.execute(
+                "SELECT id FROM runs WHERE status IN "
+                "('awaiting_user','awaiting_approval','waiting_settings')"
+            ).fetchall()
+            for row in waiting_ids:
+                run = self.run(row[0])
+                if run["id"] in self.stops or run["status"] not in {
+                    "awaiting_user",
+                    "awaiting_approval",
+                    "waiting_settings",
+                }:
+                    continue
+                checkpoint = self.checkpoint(run["id"])
+                if not checkpoint:
+                    continue  # Legacy waits have no safe continuation.
+                index = checkpoint.get("event_index")
+                if run["status"] == "waiting_settings":
+                    ready = not self.agent.suspended
+                elif run["status"] == "awaiting_user":
+                    ready = "answer" in run["events"][index]
+                else:
+                    try:
+                        ready = (
+                            "decision" in run["events"][index]
+                            or not self.agent.proposal(run["events"][index]["result"]["id"])[
+                                "requires_owner_approval"
+                            ]
+                        )
+                    except ValueError:
+                        ready = True
+                if ready:
+                    config, actor = self.conversation(run["conversation_id"])
+                    stop = self.stops[run["id"]] = Event()
+                    self.update_run(run["id"], status="queued")
+                    self.worker.submit(self._run, run["id"], config, actor, stop)
 
     def reserve_call(self, provider_id):
         from datetime import datetime
@@ -765,7 +1049,13 @@ class Assistant:
                 "SELECT * FROM runs WHERE schedule_id=? ORDER BY created DESC LIMIT 1",
                 (identifier,),
             ):
-                if r["status"] in {"queued", "running"}:
+                if r["status"] in {
+                    "queued",
+                    "running",
+                    "awaiting_approval",
+                    "awaiting_user",
+                    "waiting_settings",
+                }:
                     return True
                 actor = self.conversation(r["conversation_id"])[1]
                 with self.agent.access.lock:
@@ -823,7 +1113,8 @@ class Assistant:
     def scheduler_loop(self):
         import time
 
-        while not self.shutdown.wait(1):
+        while not self.shutdown.wait(0.25):
+            self.resume_waiting()
             for task in self.schedules():
                 if not task["enabled"] or task["next_at"] > time.time():
                     continue

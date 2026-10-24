@@ -108,6 +108,7 @@ class DesktopServer:
         self.thread: threading.Thread | None = None
         self.app: Any = None
         self.pending_settings = False
+        self.settings_edit_depth = 0
         self.port = port
         self.url = f"http://127.0.0.1:{port}/mcp/"
 
@@ -185,23 +186,29 @@ class DesktopServer:
         try:
             if self.service.jobs.active():
                 raise ValueError("Wait for agent jobs before changing settings.")
-            previous = self.service.suspended
+            self.settings_edit_depth += 1
             self.service.suspended = True
         finally:
             self.service.jobs.lock.release()
         try:
             yield
         finally:
-            self.service.suspended = previous
+            self.settings_edit_depth -= 1
+            self.service.suspended = bool(self.settings_edit_depth or self.pending_settings)
 
     def sync(self, settings: Settings) -> None:
         """GUI-thread refresh after profile, folder or Plan preferences change."""
-        if self.app is None or (self.setup.settings == settings and not self.pending_settings):
+        if self.app is None:
+            return
+        # These are the only owners of suspension. Repair a stale legacy flag
+        # without unlocking an active editor or a deferred settings update.
+        self.service.suspended = bool(self.settings_edit_depth or self.pending_settings)
+        if self.setup.settings == settings and not self.pending_settings:
             return
         if not self.service.jobs.lock.acquire(blocking=False):
             return
         try:
-            if self.service.suspended and not self.pending_settings:
+            if self.settings_edit_depth:
                 return
             if self.service.jobs.active():
                 self.service.suspended = True

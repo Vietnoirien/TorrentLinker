@@ -344,3 +344,29 @@ def test_desktop_agent_timer_does_not_wait_for_busy_job_lock(tmp_path):
     runtime.sync(settings)
     assert runtime.setup.settings.uploads == settings.uploads
     runtime.service.jobs.close()
+
+
+def test_settings_sync_recovers_stale_suspension_without_unlocking_editor(tmp_path):
+    from torrentlinker.agent.desktop import DesktopServer
+
+    settings = Settings()
+    runtime = DesktopServer(settings, tmp_path / "settings.json", Store(tmp_path / "state.db"))
+    runtime.app = create_app(
+        tmp_path,
+        password="test-password-long",
+        service_override=runtime.setup,
+        monitor_verifications=False,
+    )
+    try:
+        runtime.service.suspended = True
+        runtime.sync(settings)
+        assert not runtime.service.suspended
+        with runtime.editing_settings():
+            runtime.sync(settings)
+            assert runtime.service.suspended
+            with runtime.editing_settings():
+                assert runtime.settings_edit_depth == 2
+            assert runtime.service.suspended
+        assert not runtime.service.suspended
+    finally:
+        runtime.service.jobs.close()
