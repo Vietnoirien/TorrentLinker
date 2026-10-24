@@ -4704,6 +4704,14 @@ Tracker-reported seeders: {1}</source>
         <translation>Seeders connectés : {0}
 Seeders annoncés par le tracker : {1}</translation>
     </message>
+    <message>
+        <source>Connected seeders (swarm total). ? = unknown. Sorted by total when known.</source>
+        <translation>Seeders connectés (total de l'essaim). ? = inconnu. Tri par total lorsqu'il est connu.</translation>
+    </message>
+    <message>
+        <source>Connected peers (swarm total). ? = unknown. Sorted by total when known.</source>
+        <translation>Pairs connectés (total de l'essaim). ? = inconnu. Tri par total lorsqu'il est connu.</translation>
+    </message>
 </context>
 <context>
     <name>TorrentsTab</name>
@@ -5119,6 +5127,10 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
     <message>
         <source>Torrent action</source>
         <translation>Action sur les torrents</translation>
+    </message>
+    <message>
+        <source>Connected (swarm total). ? = unknown. Sorted by total when known.</source>
+        <translation>Connectés (total de l'essaim). ? = inconnu. Tri par total lorsqu'il est connu.</translation>
     </message>
 </context>
 <context>

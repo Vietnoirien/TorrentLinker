@@ -434,6 +434,8 @@ class Operations:
                         "ratio": t.ratio,
                         "seeds": t.connected_seeds,
                         "peers": t.connected_peers,
+                        "total_seeds": t.swarm_seeders,
+                        "total_peers": t.swarm_peers,
                         "folder": str(t.save_path),
                         "trackers": tracker_hosts(t),
                         "categories": torrent_categories(t, labels),

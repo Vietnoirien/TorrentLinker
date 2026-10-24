@@ -237,6 +237,7 @@ class UtorrentApi:
             tracker=trackers[0] if trackers else "",
             trackers=trackers,
             swarm_seeders=int(row[15]),
+            swarm_peers=max(int(row[13]), -1),
             size=int(row[3]),
             category=label,
             download_rate=int(row[9]),

@@ -39,6 +39,8 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     state="pausedUP" if self.paused else "uploading",
                     connected_seeds=3,
                     connected_peers=2,
+                    swarm_seeders=42,
+                    swarm_peers=13,
                 )
             ]
 
@@ -96,6 +98,8 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#capabilities")).to_contain_text("Torrent management")
             page.locator("#finish-setup").click()
             expect(page.locator("#torrent-table")).to_contain_text("Example book.epub")
+            expect(page.locator("#torrent-table")).to_contain_text("3 (42)")
+            expect(page.locator("#torrent-table")).to_contain_text("2 (13)")
             page.locator("#torrent-table tbody input[type=checkbox]").check()
             page.locator("[data-action=pause]").click()
             expect(page.locator("#torrent-table")).to_contain_text("paused", timeout=10000)

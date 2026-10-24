@@ -49,6 +49,8 @@ from torrentlinker.torrent_management import (
     ActionResult,
     category_labels,
     manage,
+    peer_count_order,
+    peer_count_text,
     safe_error,
     status,
     torrent_categories,
@@ -99,9 +101,13 @@ class TorrentModel(QAbstractTableModel):
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = 0) -> Any:
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.ToolTipRole:
             if section == 12:
-                return self.tr("Connected seeders")
+                return self.tr(
+                    "Connected seeders (swarm total). ? = unknown. Sorted by total when known."
+                )
             if section == 13:
-                return self.tr("Connected peers")
+                return self.tr(
+                    "Connected peers (swarm total). ? = unknown. Sorted by total when known."
+                )
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.headers[section]
         return None
@@ -128,6 +134,17 @@ class TorrentModel(QAbstractTableModel):
             return t.name
         if col == 1:
             return self.states[status(t)]
+        if col in (12, 13):
+            connected, total = (
+                (t.connected_seeds, t.swarm_seeders)
+                if col == 12
+                else (t.connected_peers, t.swarm_peers)
+            )
+            return (
+                peer_count_order(connected, total)
+                if role == SORT
+                else peer_count_text(connected, total)
+            )
         zen, note = self.estimates.get(t.hash, (None, None))
         values = (
             t.name,
@@ -183,7 +200,7 @@ class TorrentModel(QAbstractTableModel):
                     None,
                     None,
                     (old.connected_seeds, old.swarm_seeders),
-                    old.connected_peers,
+                    (old.connected_peers, old.swarm_peers),
                 )
                 after = (
                     new.name,
@@ -199,7 +216,7 @@ class TorrentModel(QAbstractTableModel):
                     None,
                     None,
                     (new.connected_seeds, new.swarm_seeders),
-                    new.connected_peers,
+                    (new.connected_peers, new.swarm_peers),
                 )
                 for col, (a, b) in enumerate(zip(before, after, strict=True)):
                     if a != b:

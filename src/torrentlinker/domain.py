@@ -113,6 +113,7 @@ class Torrent:
     eta: int = -1  # seconds, negative means unknown
     connected_seeds: int = 0
     connected_peers: int = 0
+    swarm_peers: int = -1  # tracker-reported incomplete peers; -1 = not yet known
 
     @property
     def total_size(self) -> int:

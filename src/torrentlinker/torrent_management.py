@@ -32,6 +32,14 @@ def tracker_group(host: str) -> str:
     return "c411.org" if host == "tk.c411.tw" else host
 
 
+def peer_count_text(connected: int, total: int) -> str:
+    return f"{connected if connected >= 0 else '?'} ({total if total >= 0 else '?'})"
+
+
+def peer_count_order(connected: int, total: int) -> int:
+    return total if total >= 0 else connected
+
+
 def tracker_groups(torrent: Torrent) -> tuple[str, ...]:
     return tuple(sorted({tracker_group(host) for host in tracker_hosts(torrent)}))
 

@@ -264,6 +264,7 @@ class QbitApi:
             connected_seeds=int(t.get("num_seeds", 0)),
             connected_peers=int(t.get("num_leechs", 0)),
             swarm_seeders=max(int(str(t.get("num_complete", -1))), -1),
+            swarm_peers=max(int(str(t.get("num_incomplete", -1))), -1),
             seeding_time=float(str(t.get("seeding_time", 0))),
             size=int(str(t.get("total_size", 0) or t.get("size", 0))),
         )

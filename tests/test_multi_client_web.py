@@ -183,3 +183,39 @@ def test_plan_validates_its_destinations_instead_of_the_selected_workspace(tmp_p
     operations.validate(JobRequest(kind="plan", client_ids=[remote.id]))
     with pytest.raises(ValueError, match="Download Folder"):
         operations.validate(JobRequest(kind="plan", client_ids=["default"]))
+
+
+def test_swarm_totals_reach_web_rows_and_numeric_sort(tmp_path):
+    class CountsClient(Client):
+        def torrents(self, **kwargs):
+            return [
+                Torrent("a" * 40, "A", Path("/data"), swarm_seeders=42, swarm_peers=3),
+                Torrent("b" * 40, "B", Path("/data"), swarm_seeders=100, swarm_peers=0),
+                Torrent("c" * 40, "C", Path("/data"), connected_seeds=7),
+            ]
+
+    app = create_app(
+        tmp_path, password="test-password-long", connector=lambda *args: CountsClient("test")
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        assert (
+            browser.post(
+                "/api/setup/client", json={"client": "qbittorrent", "host": "https://one.test"}
+            ).status_code
+            == 200
+        )
+        response = browser.post("/api/jobs", json={"kind": "refresh"})
+        assert finished(browser, response.json()["id"])["status"] == "completed"
+        rows = browser.get("/api/torrents?sort=seeds&descending=true").json()["rows"]
+        assert [r["name"] for r in rows] == ["B", "A", "C"]
+        assert (
+            rows[1]["seeds"],
+            rows[1]["total_seeds"],
+            rows[1]["peers"],
+            rows[1]["total_peers"],
+        ) == (0, 42, 0, 3)
+        assert rows[2]["total_seeds"] == -1
+        assert rows[0]["total_peers"] == 0
+        rows = browser.get("/api/torrents?sort=peers&descending=true").json()["rows"]
+        assert rows[0]["name"] == "A"

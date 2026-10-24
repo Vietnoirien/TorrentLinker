@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from torrentlinker import documentation
 from torrentlinker.clients import connect
-from torrentlinker.torrent_management import tracker_group
+from torrentlinker.torrent_management import peer_count_order, tracker_group
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
@@ -490,10 +490,16 @@ def create_app(
             "note",
         }:
             raise HTTPException(400, "Unknown sort column.")
+
+        def sort_value(row):
+            if sort in {"seeds", "peers"}:
+                return peer_count_order(row[sort], row.get("total_" + sort, -1))
+            return row[sort]
+
         rows.sort(
             key=lambda r: (
-                r[sort] is None,
-                r[sort].casefold() if isinstance(r[sort], str) else r[sort] or 0,
+                sort_value(r) is None,
+                sort_value(r).casefold() if isinstance(sort_value(r), str) else sort_value(r) or 0,
             ),
             reverse=descending,
         )

@@ -12,6 +12,8 @@ TorrentLinker category tags supply the category hierarchy. Known c411 categories
 
 Search names, filter by state or tag, and click column headers to sort. Drag header borders to resize columns. **Columns** lets you show additional fields or hide the tracker tree on a small screen. Zen/day and note are optional columns, populated from the latest Zen view where available; blank values mean unknown.
 
+**Seeders** and **Peers** display connected counts followed by the swarm total in parentheses. For example, `0 (42)` means no connected seeders and 42 reported in the swarm. `?` means the client has no count available, while `0` means a known zero. These columns sort numerically by the total when known, otherwise by the connected count. This also applies to the combined client view and the web interface.
+
 Select one or more torrents to **Start**, **Pause**, **Recheck** or **Remove** them. Removing asks for confirmation and keeps the downloaded files. Torrents undergoing TorrentLinker's Reseed verification are skipped so their verification can finish. The **Activity** panel reports each command's outcome; the table shows the actual state received from the client.
 
 To delete the downloaded files too, right-click the selected torrents and choose **Delete torrent and files…**. Review the torrent names and folders in the confirmation dialog before confirming. The client deletes files on its own machine, including a remote server or seedbox. Shared files may also be used by other torrents, and TorrentLinker cannot undo the deletion. Cancel is selected by default.

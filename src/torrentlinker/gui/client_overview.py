@@ -28,7 +28,13 @@ from torrentlinker.gui.tables import NumberItem, style_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.seeding import combined_seeding, seeding
 from torrentlinker.store import Store
-from torrentlinker.torrent_management import manage, safe_error, status
+from torrentlinker.torrent_management import (
+    manage,
+    peer_count_order,
+    peer_count_text,
+    safe_error,
+    status,
+)
 
 
 class ClientOverview(QWidget):
@@ -66,6 +72,12 @@ class ClientOverview(QWidget):
                 self.tr("≈ Note"),
             ]
         )
+        for column in (4, 5):
+            header = self.table.horizontalHeaderItem(column)
+            if header is not None:
+                header.setToolTip(
+                    self.tr("Connected (swarm total). ? = unknown. Sorted by total when known.")
+                )
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -152,9 +164,18 @@ class ClientOverview(QWidget):
             self.table.setItem(
                 row, 3, NumberItem(human_size(torrent.total_size), torrent.total_size)
             )
+            for column, connected, total in [
+                (4, torrent.connected_seeds, torrent.swarm_seeders),
+                (5, torrent.connected_peers, torrent.swarm_peers),
+            ]:
+                self.table.setItem(
+                    row,
+                    column,
+                    NumberItem(
+                        peer_count_text(connected, total), peer_count_order(connected, total)
+                    ),
+                )
             for column, value in [
-                (4, torrent.connected_seeds),
-                (5, torrent.connected_peers),
                 (6, estimate.zen if estimate else None),
                 (7, estimate.note if estimate else None),
             ]:
@@ -162,7 +183,7 @@ class ClientOverview(QWidget):
                     row,
                     column,
                     NumberItem(
-                        "–" if value is None else f"{value:.2f}" if column > 5 else str(value),
+                        "–" if value is None else f"{value:.2f}",
                         value or 0,
                     ),
                 )

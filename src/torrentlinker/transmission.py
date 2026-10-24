@@ -39,8 +39,7 @@ FIELDS = [
     "rateUpload",
     "uploadRatio",
     "eta",
-    "peersSendingToUs",
-    "peersGettingFromUs",
+    "peers",
 ]
 LOCAL_ERROR = 3  # Transmission's error kind for a problem with the data, not the tracker
 
@@ -201,6 +200,9 @@ class TransmissionApi:
         done = float(t.get("percentDone") or 0)  # of the wanted files, as qBittorrent's
         trackers = t.get("trackers") or []
         seeders = [int(s.get("seederCount", -1)) for s in t.get("trackerStats") or []]
+        leechers = [int(s.get("leecherCount", -1)) for s in t.get("trackerStats") or []]
+        peers = t.get("peers") or []
+        known_peers = isinstance(t.get("peers"), list) and all("progress" in p for p in peers)
         return Torrent(
             hash=str(t["hashString"]).lower(),
             name=str(t.get("name", "")),
@@ -211,6 +213,7 @@ class TransmissionApi:
             state=_state(int(t.get("status", 0)), done, int(t.get("error") or 0)),
             tracker=str(trackers[0].get("announce", "")) if trackers else "",
             swarm_seeders=max([*seeders, -1]),
+            swarm_peers=max([*leechers, -1]),
             seeding_time=float(t.get("secondsSeeding") or 0),
             size=int(t.get("totalSize") or 0),
             trackers=tuple(str(tr["announce"]) for tr in trackers if tr.get("announce")),
@@ -218,8 +221,8 @@ class TransmissionApi:
             upload_rate=int(t.get("rateUpload") or 0),
             ratio=float(t.get("uploadRatio") or 0),
             eta=int(t.get("eta", -1)),
-            connected_seeds=int(t.get("peersSendingToUs") or 0),
-            connected_peers=int(t.get("peersGettingFromUs") or 0),
+            connected_seeds=sum(p["progress"] >= 1 for p in peers) if known_peers else -1,
+            connected_peers=sum(p["progress"] < 1 for p in peers) if known_peers else -1,
         )
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:

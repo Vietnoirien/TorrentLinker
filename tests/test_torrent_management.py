@@ -100,6 +100,24 @@ def test_qbit_sync_tracks_all_announce_memberships_and_removals():
     assert tracker_hosts(api.torrents(with_files=False)[0]) == ("",)
 
 
+def test_qbit_swarm_counts_are_visible_without_connected_peers(qtbot):
+    api = QbitApi("http://127.0.0.1:1", "", "")
+    sync = Synced()
+    sync.answers = [
+        {
+            "rid": 1,
+            "full_update": True,
+            "torrents": {
+                "a": entry("Book", num_seeds=0, num_leechs=0, num_complete=42, num_incomplete=3)
+            },
+        }
+    ]
+    api._client = sync
+    tab, _ = make_tab(qtbot, a=api.torrents(with_files=False)[0])
+    assert tab.model.index(0, 12).data() == "0 (42)"
+    assert tab.model.index(0, 13).data() == "0 (3)"
+
+
 def test_actions_deduplicate_protect_verification_and_keep_files():
     client = FakeQbit(by_hash={"a": torrent(), "b": torrent("b", tags=frozenset({VERIFYING}))})
     results = manage(client, ["a", "a", "b", "gone"], "remove")
@@ -327,10 +345,10 @@ def test_connection_counts_sort_numerically_and_refresh(qtbot):
         a=torrent(connected_seeds=2, connected_peers=12, swarm_seeders=50),
         b=torrent("b", connected_seeds=10, connected_peers=3),
     )
-    assert tab.model.index(0, 12).data() == 2
-    assert tab.model.index(0, 13).data() == 12
+    assert tab.model.index(0, 12).data() == "2 (50)"
+    assert tab.model.index(0, 13).data() == "12 (?)"
     assert "50" in tab.model.index(0, 12).data(Qt.ItemDataRole.ToolTipRole)
-    for column, first in ((12, "b"), (13, "a")):
+    for column, first in ((12, "a"), (13, "a")):
         assert not tab.table.isColumnHidden(column)
         tab.table.sortByColumn(column, Qt.SortOrder.DescendingOrder)
         assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == first
@@ -340,7 +358,15 @@ def test_connection_counts_sort_numerically_and_refresh(qtbot):
     qtbot.waitUntil(lambda: not tab._loading)
     assert tab.selected()[0].hash == "a"
     assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == "b"
-    assert tab.model.index(0, 12).data() == 20
+    assert tab.model.index(0, 12).data() == "20 (50)"
+    changed = []
+    tab.model.dataChanged.connect(lambda left, right: changed.append(left.column()))
+    client.by_hash["a"] = replace(client.by_hash["a"], swarm_peers=30)
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab._loading)
+    assert 13 in changed
+    assert tab.model.index(0, 13).data() == "1 (30)"
+    assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == "a"
 
 
 def test_context_menu_targets_clicked_row_or_existing_multi_selection(qtbot, monkeypatch):

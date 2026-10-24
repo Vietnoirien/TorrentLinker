@@ -40,6 +40,7 @@ KEYS = [
     "tracker",
     "trackers",
     "total_seeds",
+    "total_peers",
     "seeding_time",
     "total_size",
     "download_payload_rate",
@@ -262,6 +263,7 @@ class DelugeApi:
             # The current tracker is only known once announced; a stopped torrent has none.
             tracker=str(s.get("tracker") or (trackers[0].get("url", "") if trackers else "")),
             swarm_seeders=max(int(s.get("total_seeds", -1)), -1),
+            swarm_peers=max(int(s.get("total_peers", -1)), -1),
             seeding_time=float(s.get("seeding_time") or 0),
             size=int(s.get("total_size") or 0),
             trackers=tuple(str(t["url"]) for t in trackers if t.get("url")),

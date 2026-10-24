@@ -229,6 +229,7 @@ function table(target, rows, columns, selection, key = "hash") {
   }
   for (const column of columns) {
     const cell = element("th");
+    if (column.title) cell.title = column.title;
     if (column.sort)
       cell.append(
         button(column.label, () => {
@@ -626,8 +627,8 @@ async function loadTorrents() {
     ["status", say("Status", "État"), (v) => v.status],
     ["progress", "%", (v) => (v.progress * 100).toFixed(1)],
     ["size", say("Size", "Taille"), (v) => bytes(v.size)],
-    ["seeds", "Seeds", (v) => v.seeds],
-    ["peers", "Peers", (v) => v.peers],
+    ["seeds", say("Seeds", "Seeders"), (v) => `${v.seeds >= 0 ? v.seeds : "?"} (${v.total_seeds >= 0 ? v.total_seeds : "?"})`],
+    ["peers", say("Peers", "Pairs"), (v) => `${v.peers >= 0 ? v.peers : "?"} (${v.total_peers >= 0 ? v.total_peers : "?"})`],
     ["download", "↓ / s", (v) => bytes(v.download)],
     ["upload", "↑ / s", (v) => bytes(v.upload)],
     ["ratio", "Ratio", (v) => num(v.ratio)],
@@ -640,6 +641,10 @@ async function loadTorrents() {
     labels.map(([key, label, render]) => ({
       label,
       render,
+      title: ["seeds", "peers"].includes(key) ? say(
+        "Connected (swarm total). ? = unknown. Sorted by total when known.",
+        "Connectés (total de l'essaim). ? = inconnu. Tri par total lorsqu'il est connu.",
+      ) : "",
       sort: key,
       name: key === "name",
     })),
