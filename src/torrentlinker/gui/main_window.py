@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import logging
 import threading
 import time
@@ -523,18 +524,31 @@ class MainWindow(QMainWindow):
             self.agent_runtime.start()
             AgentDialog(self.agent_runtime.service, self.agent_runtime.url, self).exec()
         except Exception as error:
+            from torrentlinker.torrent_management import safe_error
+
+            port = self.agent_runtime.port if self.agent_runtime else 8790
+            detail = (
+                self.agent_runtime.setup.secrets.redact(str(error))
+                if self.agent_runtime
+                else safe_error(error)
+            ) or type(error).__name__
+            log.error("Agent access startup failed (%s): %s", type(error).__name__, detail)
             if self.agent_runtime is not None and self.agent_runtime.app is None:
                 self.agent_runtime.close()
                 self.agent_runtime = None
+            if isinstance(error, OSError) and (
+                error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) == 10048
+            ):
+                message = self.tr(
+                    "Cannot start the local MCP server on port {0}. Check whether another "
+                    "TorrentLinker instance or another application is using it."
+                ).format(port)
+            else:
+                message = self.tr("Cannot open Agent access. See torrentlinker.log for details.")
             QMessageBox.warning(
                 self,
                 self.tr("Agent access"),
-                self.tr(
-                    "Cannot start the local MCP server on port 8790. Check whether another "
-                    "TorrentLinker instance is running."
-                )
-                + "\n"
-                + type(error).__name__,
+                message + "\n" + detail,
             )
 
     def start_saved_agent_access(self) -> None:

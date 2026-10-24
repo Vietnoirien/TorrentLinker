@@ -18,6 +18,43 @@ from torrentlinker.store import Store
 from torrentlinker.web.app import create_app
 
 
+def test_desktop_mcp_works_without_console_streams(tmp_path, monkeypatch):
+    from tests.test_agent_access import rpc
+    from torrentlinker.agent.access import Grant
+    from torrentlinker.agent.desktop import DesktopServer
+
+    runtime = DesktopServer(
+        Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"), port=0
+    )
+    with monkeypatch.context() as console:
+        console.setattr(sys, "stdout", None)
+        console.setattr(sys, "stderr", None)
+        try:
+            runtime.start()
+            with httpx.Client(
+                base_url=runtime.url.removesuffix("/mcp/"), trust_env=False
+            ) as client:
+                for _ in range(100):
+                    try:
+                        if client.get("/healthz", timeout=0.2).status_code == 200:
+                            break
+                    except httpx.TransportError:
+                        pass
+                    time.sleep(0.02)
+                else:
+                    raise AssertionError("Desktop MCP did not become ready")
+                grant = runtime.service.access.create(
+                    Grant(name="Windowed app", clients=["default"])
+                )
+                runtime.service.access.enable(True)
+                assert rpc(client, "invalid-token", "tools/list").status_code == 401
+                response = rpc(client, grant["token"], "tools/list")
+                assert response.status_code == 200
+                assert "overview" in {t["name"] for t in response.json()["result"]["tools"]}
+        finally:
+            runtime.close()
+
+
 def test_desktop_owner_can_revoke_and_default_to_proposals(qtbot, tmp_path):
     setup = DesktopSetup(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
     app = create_app(
@@ -190,10 +227,15 @@ def test_failed_server_start_does_not_block_ordinary_settings(qtbot, tmp_path):
 
     from torrentlinker.agent.desktop import DesktopServer, agent_settings_change
 
-    runtime = DesktopServer(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
     with socket.socket() as occupied:
-        occupied.bind(("127.0.0.1", 8790))
+        occupied.bind(("127.0.0.1", 0))
         occupied.listen()
+        runtime = DesktopServer(
+            Settings(),
+            tmp_path / "settings.json",
+            Store(tmp_path / "state.db"),
+            port=occupied.getsockname()[1],
+        )
         with pytest.raises(OSError):
             runtime.start()
     calls = []
@@ -204,7 +246,20 @@ def test_failed_server_start_does_not_block_ordinary_settings(qtbot, tmp_path):
 
     edit(SimpleNamespace(agent_runtime=runtime))
     assert calls == ["settings opened"]
-    runtime.close()
+    try:
+        runtime.start()  # the occupied port is now available; the same runtime can retry
+        with httpx.Client(trust_env=False) as client:
+            for _ in range(100):
+                try:
+                    if client.get(runtime.url.replace("/mcp/", "/healthz"), timeout=0.2).is_success:
+                        break
+                except httpx.TransportError:
+                    pass
+                time.sleep(0.02)
+            else:
+                raise AssertionError("Desktop MCP did not recover after the port was released")
+    finally:
+        runtime.close()
 
 
 def test_main_window_settings_stay_available_after_mcp_port_failure(qtbot, tmp_path, monkeypatch):
@@ -214,16 +269,45 @@ def test_main_window_settings_stay_available_after_mcp_port_failure(qtbot, tmp_p
         Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db")
     )
     qtbot.addWidget(window)
-    monkeypatch.setattr(main_window.QMessageBox, "warning", lambda *args: None)
+    messages = []
+    monkeypatch.setattr(main_window.QMessageBox, "warning", lambda *args: messages.append(args[2]))
     opened = []
     monkeypatch.setattr(main_window.SettingsDialog, "exec", lambda self: opened.append(True) or 0)
     with socket.socket() as occupied:
-        occupied.bind(("127.0.0.1", 8790))
+        occupied.bind(("127.0.0.1", 0))
         occupied.listen()
+        from torrentlinker.agent.desktop import DesktopServer
+
+        window.agent_runtime = DesktopServer(
+            window.settings, window.settings_path, window.store, port=occupied.getsockname()[1]
+        )
         window.open_agent_access()
+    assert "another TorrentLinker instance" in messages[0]
     assert window.agent_runtime is None
     window.open_settings()
     assert opened == [True]
+
+
+def test_agent_access_reports_non_port_startup_failure(qtbot, tmp_path, monkeypatch):
+    from torrentlinker.agent.desktop import DesktopServer
+    from torrentlinker.gui import main_window
+
+    window = main_window.MainWindow(
+        Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db")
+    )
+    qtbot.addWidget(window)
+    window.agent_runtime = DesktopServer(
+        window.settings, window.settings_path, window.store, port=0
+    )
+    (tmp_path / "agents.sqlite").write_bytes(b"not a SQLite database" * 100)
+    messages = []
+    monkeypatch.setattr(main_window.QMessageBox, "warning", lambda *args: messages.append(args[2]))
+
+    window.open_agent_access()
+
+    assert window.agent_runtime is None
+    assert "file is not a database" in messages[0]
+    assert "another TorrentLinker instance" not in messages[0]
 
 
 def test_desktop_agent_timer_does_not_wait_for_busy_job_lock(tmp_path):

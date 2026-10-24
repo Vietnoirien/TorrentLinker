@@ -43,7 +43,56 @@ def smoke_checks() -> None:
             assert documentation.document_path(guide["path"]).read_text(encoding="utf-8")
     assert documentation.document_path("guide/images/zen.png").is_file()
     assert documentation.document_path("guide/images/en/zen.png").is_file()
+    agent_smoke_checks()
     print("smoke test OK")
+
+
+def agent_smoke_checks() -> None:
+    """Start the bundled desktop MCP transport, including in Windows windowed builds."""
+    import tempfile
+    import time
+
+    import httpx
+
+    from torrentlinker.agent.access import Grant
+    from torrentlinker.agent.desktop import DesktopServer
+
+    with tempfile.TemporaryDirectory(prefix="torrentlinker-mcp-smoke-") as folder:
+        directory = Path(folder)
+        store = Store(directory / "state.db")
+        runtime = DesktopServer(Settings(), directory / "settings.json", store, port=0)
+        try:
+            runtime.start()
+            with httpx.Client(
+                base_url=runtime.url.removesuffix("/mcp/"), trust_env=False
+            ) as client:
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    try:
+                        if client.get("/healthz", timeout=0.2).status_code == 200:
+                            break
+                    except httpx.TransportError:
+                        pass
+                    time.sleep(0.05)
+                else:
+                    raise RuntimeError("The bundled desktop MCP server did not become ready.")
+                grant = runtime.service.access.create(Grant(name="Smoke test", clients=["default"]))
+                runtime.service.access.enable(True)
+                response = client.post(
+                    "/mcp/",
+                    headers={
+                        "Authorization": f"Bearer {grant['token']}",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+                )
+                assert response.status_code == 200, "Bundled MCP tool discovery failed"
+                assert "overview" in {t["name"] for t in response.json()["result"]["tools"]}
+        finally:
+            runtime.close()
+            if runtime.app is not None:
+                runtime.service.access.db.close()
+            store._db.close()  # release the temporary database before removal on Windows
 
 
 def setup_logging(path: Path) -> None:
@@ -53,7 +102,8 @@ def setup_logging(path: Path) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[logging.FileHandler(path, encoding="utf-8"), logging.StreamHandler()],
+        handlers=[logging.FileHandler(path, encoding="utf-8")]
+        + ([logging.StreamHandler()] if sys.stderr is not None else []),
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -92,7 +142,13 @@ def main() -> int:
     window = MainWindow(settings, settings_path, store)
     window.show()
     if "--smoke-test" in sys.argv:  # used by CI on packaged builds
-        smoke_checks()
+        try:
+            smoke_checks()
+        except Exception:
+            import logging
+
+            logging.getLogger("torrentlinker").exception("Packaged smoke test failed")
+            return 1  # no modal error dialog that could hang a headless build
         QTimer.singleShot(500, app.quit)
     else:
         update_timer = QTimer(window)

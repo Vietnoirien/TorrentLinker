@@ -94,14 +94,15 @@ class DesktopOperations(Operations):
 
 
 class DesktopServer:
-    def __init__(self, settings: Settings, path: Path, store: Store):
+    def __init__(self, settings: Settings, path: Path, store: Store, *, port: int = 8790):
         self.setup = DesktopSetup(settings, path, store)
         self.directory = path.parent
         self.server: Any = None
         self.thread: threading.Thread | None = None
         self.app: Any = None
         self.pending_settings = False
-        self.url = "http://127.0.0.1:8790/mcp/"
+        self.port = port
+        self.url = f"http://127.0.0.1:{port}/mcp/"
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -112,8 +113,9 @@ class DesktopServer:
 
         listener = socket.socket()
         try:
-            listener.bind(("127.0.0.1", 8790))
+            listener.bind(("127.0.0.1", self.port))
             listener.listen(128)
+            self.url = f"http://127.0.0.1:{listener.getsockname()[1]}/mcp/"
             self.app = create_app(
                 self.directory,
                 password=secrets.token_urlsafe(32),
@@ -121,12 +123,18 @@ class DesktopServer:
                 operation_factory=DesktopOperations,
                 monitor_verifications=False,
             )
+            # The Windows GUI executable has no stdout/stderr. Keep the desktop's
+            # file logging instead of Uvicorn's console formatter and handlers.
+            self.server = uvicorn.Server(
+                uvicorn.Config(self.app, access_log=False, log_level="warning", log_config=None)
+            )
         except Exception:
             listener.close()
+            if self.app is not None:
+                self.service.jobs.close()
+                self.service.access.db.close()
+                self.app = None
             raise
-        self.server = uvicorn.Server(
-            uvicorn.Config(self.app, access_log=False, log_level="warning")
-        )
         server = self.server
 
         def run():

@@ -900,8 +900,12 @@ La mettre à la corbeille ?</translation>
         <translation>Accès des agents</translation>
     </message>
     <message>
-        <source>Cannot start the local MCP server on port 8790. Check whether another TorrentLinker instance is running.</source>
-        <translation>Impossible de démarrer le serveur MCP local sur le port 8790. Vérifiez si une autre instance de TorrentLinker est ouverte.</translation>
+        <source>Cannot start the local MCP server on port {0}. Check whether another TorrentLinker instance or another application is using it.</source>
+        <translation>Impossible de démarrer le serveur MCP local sur le port {0}. Vérifiez si une autre instance de TorrentLinker ou une autre application l'utilise.</translation>
+    </message>
+    <message>
+        <source>Cannot open Agent access. See torrentlinker.log for details.</source>
+        <translation>Impossible d'ouvrir l'accès des agents. Consultez torrentlinker.log pour plus de détails.</translation>
     </message>
     <message>
         <source>Wait for agent jobs before changing settings.</source>
