@@ -22,7 +22,8 @@ from typing import Any
 import httpx
 
 from torrentlinker import net
-from torrentlinker.domain import Torrent
+from torrentlinker.client_folders import ClientFolder
+from torrentlinker.domain import Torrent, TorrentFile
 from torrentlinker.qbit import AlreadyInClient
 
 GUARD_SPEED = 0.001  # KiB/s, Deluge's unit: 1 byte/s; -1 is unlimited
@@ -41,6 +42,12 @@ KEYS = [
     "total_seeds",
     "seeding_time",
     "total_size",
+    "download_payload_rate",
+    "upload_payload_rate",
+    "ratio",
+    "eta",
+    "num_seeds",
+    "num_peers",
 ]
 SKIP, NORMAL = 0, 4  # Deluge file priorities
 
@@ -171,6 +178,33 @@ class DelugeApi:
         """Deluge's own download folder, as Deluge sees it."""
         return str(self._call("core.get_config_value", "download_location"))
 
+    def folder_settings(self) -> list[ClientFolder]:
+        config = self._call(
+            "core.get_config_values",
+            [
+                "download_location",
+                "move_completed",
+                "move_completed_path",
+            ],
+        )
+        rows = []
+        if config.get("download_location"):
+            rows.append(ClientFolder("", str(config["download_location"]), "default"))
+        if config.get("move_completed") and config.get("move_completed_path"):
+            rows.append(ClientFolder("", str(config["move_completed_path"]), "completed"))
+        if "Label" in (self._call("core.get_enabled_plugins") or []):
+            for label in sorted(self._call("label.get_labels") or []):
+                options = self._call("label.get_options", label)
+                if (
+                    options.get("apply_move_completed")
+                    and options.get("move_completed")
+                    and options.get("move_completed_path")
+                ):
+                    rows.append(
+                        ClientFolder(label, str(options["move_completed_path"]), "completed")
+                    )
+        return rows
+
     def _require_labels(self) -> None:
         if not self._labels:
             self._labels = "Label" in (self._call("core.get_enabled_plugins") or [])
@@ -195,13 +229,23 @@ class DelugeApi:
         found = self._call("core.get_torrents_status", where, keys) or {}
         return [self._torrent(h, s) for h, s in found.items()]
 
-    def torrent(self, hash: str) -> Torrent | None:
-        s = self._call("core.get_torrent_status", hash, [*KEYS, "files"])
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
+        s = self._call("core.get_torrent_status", hash, [*KEYS, "files"] if with_files else KEYS)
         return self._torrent(hash, s) if s else None
 
     def files(self, hash: str) -> dict[str, int]:
         found = self._call("core.get_torrent_status", hash, ["files"]).get("files") or []
         return {str(f["path"]): int(f["size"]) for f in found}
+
+    def file_listing(self, hash: str) -> list[TorrentFile]:
+        data = self._call("core.get_torrent_status", hash, ["files", "file_priorities"])
+        priorities = data.get("file_priorities") or []
+        result = []
+        for i, f in enumerate(data.get("files") or []):
+            index = int(f.get("index", i))
+            wanted = priorities[index] > 0 if index < len(priorities) else True
+            result.append(TorrentFile(index, str(f["path"]), int(f["size"]), wanted))
+        return result
 
     @staticmethod
     def _torrent(hash: str, s: dict[str, Any]) -> Torrent:
@@ -220,6 +264,14 @@ class DelugeApi:
             swarm_seeders=max(int(s.get("total_seeds", -1)), -1),
             seeding_time=float(s.get("seeding_time") or 0),
             size=int(s.get("total_size") or 0),
+            trackers=tuple(str(t["url"]) for t in trackers if t.get("url")),
+            category=str(s.get("label") or ""),
+            download_rate=int(s.get("download_payload_rate") or 0),
+            upload_rate=int(s.get("upload_payload_rate") or 0),
+            ratio=float(s.get("ratio") or 0),
+            eta=int(s.get("eta") or -1),
+            connected_seeds=int(s.get("num_seeds") or 0),
+            connected_peers=int(s.get("num_peers") or 0),
         )
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
@@ -279,6 +331,13 @@ class DelugeApi:
         if s.get("pieces") is None:
             return [2] * int(s.get("num_pieces") or 0)
         return [2 if p == 3 else 1 if p == 2 else 0 for p in s["pieces"]]
+
+    def pause(self, hash: str) -> None:
+        self._call("core.pause_torrent", [hash])
+
+    def resume(self, hash: str) -> None:
+        # Managing an existing torrent must preserve its personal speed limits.
+        self._call("core.resume_torrent", hash)
 
     def start(self, hash: str) -> None:
         self._lift_guard(hash)

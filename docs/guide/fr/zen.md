@@ -62,6 +62,8 @@ Vous pouvez ajouter jusqu’à quatre clés du même compte dans **Paramètres �
 
 Au démarrage et lors de la préparation d’un Plan, c411 est parcouru du plus récent au plus ancien, jusqu’au repère de la dernière actualisation réussie, ou jusqu’à une page connue lors de la première actualisation. Le parcours historique et sa pagination mémorisée sont réservés à l’action explicite de récupération du Catalogue. Les actualisations interrompues conservent leur repère et recherchent les nouveautés à la reprise.
 
+Un avertissement de limite de pagination signifie que l’Indexeur ne fournit plus les pages anciennes. Les torrents en cache restent disponibles pour les Plans ; relancer la récupération ne supprime pas cette limite du serveur. Une récupération en pause est différente : il reste du travail à reprendre.
+
 Les Plans utilisent les métadonnées en cache et affichent des estimations provisoires. Aucun contrôle de métadonnées torrent par torrent n’est effectué auprès de c411 avant la préparation ou l’envoi. Le client torrent est interrogé toutes les 30 secondes pour actualiser la vue En partage à mesure que les trackers répondent. Les nombres de seeders connus mettent aussi à jour le Catalogue ; les valeurs inconnues conservent l’estimation en cache.
 
 Si une actualisation est déjà en cours, le Plan l’attend puis actualise ses catégories. Un échec d’actualisation arrête sa création. Vous pouvez interrompre la récupération et créer un Plan avec les données déjà disponibles.

@@ -6,7 +6,8 @@ import html
 import re
 import shutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
@@ -43,6 +44,7 @@ from shiboken6 import isValid
 from torrentlinker import net
 from torrentlinker.archives import Unpacked, is_archive, unpack, unpacked
 from torrentlinker.bbcode import bbcode_to_html
+from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
@@ -379,9 +381,11 @@ class UploadTab(QWidget):
         announce: Callable[[], str],
         folder: Path,
         http: httpx.Client | None = None,
+        approve_disk_renames: RenameApproval | None = None,
     ) -> None:
         super().__init__()
         self.store = store
+        self.approve_disk_renames = approve_disk_renames
         self.indexer = indexer
         self.qbit = qbit
         self.ignore = ignore
@@ -390,6 +394,8 @@ class UploadTab(QWidget):
         self._http = http  # tests' own; otherwise one per image, through today's proxy
         self.entries: list[LibraryEntry] = []
         self.searched: dict[Path, list[CheckedCandidate]] = {}
+        self._refresh_depth = 0
+        self._refresh_pending = False
         # Orphans whose last search, kept by the Store, found no Candidate at all: known
         # at once after a restart, while the Library still compares the others.
         self._found_nothing: set[Path] = set()
@@ -673,6 +679,18 @@ class UploadTab(QWidget):
                 return
         self._fill()
 
+    @contextmanager
+    def defer_refresh(self) -> Iterator[None]:
+        """Restore a batch of searches before rebuilding the upload list once."""
+        self._refresh_depth += 1
+        try:
+            yield
+        finally:
+            self._refresh_depth -= 1
+            if self._refresh_depth == 0 and self._refresh_pending:
+                self._refresh_pending = False
+                self._fill()
+
     def remember(self, entry: LibraryEntry, checked: list[CheckedCandidate]) -> None:
         """An Orphan's latest search, from the Library."""
         self.searched[entry.item.path] = checked
@@ -732,6 +750,9 @@ class UploadTab(QWidget):
         return self.subcategory.currentData() if entry is self.entry else None
 
     def _fill(self) -> None:
+        if self._refresh_depth:
+            self._refresh_pending = True
+            return
         selected = self.entry.item.path if self.entry else None
         kind = self.kind_filter.currentData()
         everything = self.show_all.isChecked()
@@ -1505,7 +1526,13 @@ class UploadTab(QWidget):
     def _seed(self, entry: LibraryEntry, prepared: PreparedUpload) -> None:
         qbit, store = self.qbit(), self.store
         run_in_background(
-            lambda: seed_upload(qbit, store, entry.item, prepared),
+            lambda: seed_upload(
+                qbit,
+                store,
+                entry.item,
+                prepared,
+                approve_disk_renames=self.approve_disk_renames,
+            ),
             lambda _hash: self._seeding(entry, prepared),
             lambda e: self._seed_failed(entry, prepared, e),
         )

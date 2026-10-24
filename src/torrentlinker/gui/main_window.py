@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QFile, QItemSelection, Qt, QTimer
+from PySide6.QtCore import QFile, QItemSelection, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QTableView,
     QTabWidget,
@@ -52,11 +53,14 @@ from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, TorrentClient
 from torrentlinker.downloads import IndexerCategory
+from torrentlinker.ebooks import UNLOCK_COUNT, book_categories, book_roots, seeded_ebooks
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
+from torrentlinker.gui.ebook_reader import ReadingRoom
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_folder_dialog import LibraryFolderDialog
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
+from torrentlinker.gui.reseed_consent import ReseedConsent
 from torrentlinker.gui.reseed_dialog import ReseedDialog
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.search_view import SearchTab
@@ -70,6 +74,7 @@ from torrentlinker.gui.settings_dialog import (
     QBIT_PASSWORD,
     TMDB_API_KEY,
     TRANSMISSION_PASSWORD,
+    UTORRENT_PASSWORD,
     SettingsDialog,
     choose_directory,
     extra_indexer_keys,
@@ -77,6 +82,7 @@ from torrentlinker.gui.settings_dialog import (
 from torrentlinker.gui.tables import EmptyState, style_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.theme import set_theme
+from torrentlinker.gui.torrents_view import TorrentsTab
 from torrentlinker.gui.update_notice import UpdateNotice
 from torrentlinker.gui.upload_view import UploadTab
 from torrentlinker.gui.zen_view import ZenBand, ZenTab
@@ -202,6 +208,9 @@ class MainWindow(QMainWindow):
         match_toolbar.setMovable(False)
         match_toolbar.addAction(self.check_all_action)
         match_toolbar.addAction(self.reseed_all_action)
+        manage_action = QAction(self.tr("Open in Torrents"), self)
+        manage_action.triggered.connect(lambda: self.open_torrents())
+        match_toolbar.addAction(manage_action)
 
         self.batch: BatchRunner | None = None
         self._batch_mode = "search"
@@ -257,8 +266,15 @@ class MainWindow(QMainWindow):
         library_layout.addWidget(self.library_view)
         self._fill_folder_filter()
 
+        self.reseed_consent = ReseedConsent(self)
         self.review = ReviewPanel(
-            store, self.indexer, self.qbit, self.match_rules, self.searcher, self.default_query
+            store,
+            self.indexer,
+            self.qbit,
+            self.match_rules,
+            self.searcher,
+            self.default_query,
+            approve_disk_renames=self.reseed_consent.approve,
         )
         self.review.reseed_started.connect(self._reseed_started)
         self.review.unpacked.connect(lambda _folder: self.scan())  # show the new folder
@@ -287,6 +303,7 @@ class MainWindow(QMainWindow):
             lambda: self.settings.matching.ignore,
             lambda: get_secret(ANNOUNCE_URL),
             store.torrent_dir.parent / "uploads",
+            approve_disk_renames=self.reseed_consent.approve,
         )
         self.review.candidates_checked.connect(self.upload_tab.remember)
         self.review.upload_blocker = self.upload_tab.why_not
@@ -296,20 +313,38 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.upload_tab, self.tr("Upload"))
         self.search_tab = SearchTab(store, settings, self.indexer, self.qbit)
         self.tabs.addTab(self.search_tab, self.tr("Search"))
+        self.torrents_tab = TorrentsTab(self.qbit)
+        self.tabs.addTab(self.torrents_tab, self.tr("Torrents"))
+        self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.seeding_view.updated.connect(self.band.set_seeding)
         self.zen_tab.seeding_view.updated.connect(self.search_tab.set_seeding)
+        self.zen_tab.seeding_view.updated.connect(self.torrents_tab.set_seeding)
+        self.zen_tab.seeding_view.updated.connect(self._update_reading_room)
+        self.zen_tab.seeding_view.unavailable.connect(self._lock_reading_room)
+        self.reading_room: ReadingRoom | None = None
+        self._reader_view: Seeding | None = None
+        self._reader_unlocked = False
         self.tabs.tabBar().hide()
         self.navigation = QListWidget()
         self.navigation.setObjectName("navigation")
         self.navigation.setAccessibleName(self.tr("Workspaces"))
         self.navigation.addItems(
-            [self.tr("Zen"), self.tr("Library"), self.tr("Upload"), self.tr("Search")]
+            [
+                self.tr("Zen"),
+                self.tr("Library"),
+                self.tr("Upload"),
+                self.tr("Search"),
+                self.tr("Torrents"),
+            ]
         )
         self.navigation.setCurrentRow(0)
         self.navigation.currentRowChanged.connect(self.tabs.setCurrentIndex)
-        self.tabs.currentChanged.connect(self.navigation.setCurrentRow)
+        self.navigation.itemClicked.connect(
+            lambda item: self.tabs.setCurrentIndex(self.navigation.row(item))
+        )
+        self.tabs.currentChanged.connect(self._sync_navigation)
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(172)
@@ -320,6 +355,12 @@ class MainWindow(QMainWindow):
         side.addWidget(brand)
         side.addSpacing(24)
         side.addWidget(self.navigation, 1)
+        self.reader_button = QPushButton(self.tr("Reading room"))
+        self.reader_button.setCheckable(True)
+        self.reader_button.setObjectName("readingRoomButton")
+        self.reader_button.hide()
+        self.reader_button.clicked.connect(self._open_reading_room)
+        side.addWidget(self.reader_button)
         settings_button = QPushButton(self.tr("Settings"))
         settings_button.clicked.connect(self.open_settings)
         side.addWidget(settings_button)
@@ -463,6 +504,10 @@ class MainWindow(QMainWindow):
             lambda error: log.debug("release check unavailable: %s", error),
         )
 
+    def open_torrents(self, hash: str = "") -> None:
+        self.tabs.setCurrentWidget(self.torrents_tab)
+        self.torrents_tab.focus_torrent(hash)
+
     def _workspace_changed(self, index: int) -> None:
         self.workspace_scroll.horizontalScrollBar().setValue(0)
         self.workspace_scroll.verticalScrollBar().setValue(0)
@@ -472,10 +517,79 @@ class MainWindow(QMainWindow):
             self.tr("Find Orphans, compare Candidates and Reseed your files."),
             self.tr("Prepare an Upload, then review and publish its Draft on c411."),
             self.tr("Search torrents and queue the ones you want to download."),
+            self.tr("Manage downloads and seeds in your Torrent Client."),
+            self.tr("Ten thousand books kept alive. Take a moment to read one."),
         ]
-        self.page_description.setText(descriptions[index])
+        if 0 <= index < len(descriptions):
+            self.page_description.setText(descriptions[index])
+        self.band.setVisible(
+            index < self.navigation.count() and self.tabs.currentWidget() is not self.torrents_tab
+        )
+        self.page_title.setVisible(index < self.navigation.count())
+        self.page_description.setVisible(index < self.navigation.count())
+        policy = (
+            QSizePolicy.Policy.Ignored
+            if index >= self.navigation.count() or self.tabs.currentWidget() is self.torrents_tab
+            else QSizePolicy.Policy.Preferred
+        )
+        self.tabs.setSizePolicy(policy, policy)
+        if self.reading_room is not None and self.tabs.currentWidget() is self.reading_room:
+            self.reading_room.activate()
+
+    def _sync_navigation(self, index: int) -> None:
+        with QSignalBlocker(self.navigation):
+            if index < self.navigation.count():
+                self.navigation.setCurrentRow(index)
+            else:
+                # Keep the current row so Qt doesn't select row zero on focus
+                # and unexpectedly navigate away from the reading room.
+                self.navigation.clearSelection()
+        self.reader_button.setChecked(index >= self.navigation.count())
+
+    def _update_reading_room(self, view: Seeding) -> None:
+        if seeded_ebooks(view) < UNLOCK_COUNT:
+            self._lock_reading_room()
+            return
+        self._reader_unlocked = True
+        self._reader_view = view
+        self.reader_button.show()
+        if self.reading_room is not None:
+            self.reading_room.set_roots(
+                book_roots(self.settings, view), book_categories(self.settings, view)
+            )
+
+    def _lock_reading_room(self) -> None:
+        self._reader_unlocked = False
+        self._reader_view = None
+        self.reader_button.hide()
+        if self.reading_room is not None:
+            index = self.tabs.indexOf(self.reading_room)
+            if index >= 0:
+                if self.tabs.currentIndex() == index:
+                    self.tabs.setCurrentIndex(0)
+                self.tabs.removeTab(index)
+            self.reading_room.hide()
+            self.reading_room.stop()
+
+    def _open_reading_room(self) -> None:
+        if not self._reader_unlocked or self._reader_view is None:
+            return
+        if self.reading_room is None:
+            self.reading_room = ReadingRoom(self.settings_path.parent / "reading-progress.json")
+            self.reading_room.settings_requested.connect(self.open_settings)
+        self.reading_room.set_roots(
+            book_roots(self.settings, self._reader_view),
+            book_categories(self.settings, self._reader_view),
+        )
+        index = self.tabs.indexOf(self.reading_room)
+        if index < 0:
+            index = self.tabs.addTab(self.reading_room, self.tr("Reading room"))
+        self.tabs.setCurrentIndex(index)
 
     def _focus_search(self) -> None:
+        if self.reading_room is not None and self.tabs.currentWidget() is self.reading_room:
+            self.reading_room.filter.setFocus()
+            return
         if self.tabs.currentWidget() is self.search_tab:
             self.search_tab.focus_search()
             return
@@ -502,6 +616,9 @@ class MainWindow(QMainWindow):
         elif s.client is TorrentClient.TRANSMISSION:
             t = s.transmission
             key = (s.client, t.host, t.username, get_secret(TRANSMISSION_PASSWORD))
+        elif s.client is TorrentClient.UTORRENT:
+            u = s.utorrent
+            key = (s.client, u.host, u.username, get_secret(UTORRENT_PASSWORD))
         else:
             q = s.qbit
             key = (s.client, q.host, q.username, get_secret(QBIT_PASSWORD))
@@ -973,7 +1090,13 @@ class MainWindow(QMainWindow):
             v = c.source.checked
             assert v.meta is not None and v.match is not None
             start_reseed(
-                qbit, store, c.source.entry.item, v.meta, v.match, candidate_key(v.candidate)
+                qbit,
+                store,
+                c.source.entry.item,
+                v.meta,
+                v.match,
+                candidate_key(v.candidate),
+                approve_disk_renames=self.reseed_consent.approve,
             )
 
         return reseed
@@ -1227,7 +1350,10 @@ class MainWindow(QMainWindow):
         if error is not None:
             result = self.tr("Catalogue update failed: {0}").format(error_text(error))
         if self.store.limited_categories():
-            result += " · " + self.tr("Catalogue incomplete: the Indexer stopped paging.")
+            result += " · " + self.tr(
+                "Catalogue incomplete: the Indexer limited the available pages. "
+                "Cached torrents remain usable."
+            )
         self.statusBar().showMessage(result, 15000)
         then, self._after_catalogue = self._after_catalogue, None
         always, self._after_catalogue_always = self._after_catalogue_always, None
@@ -1250,7 +1376,11 @@ class MainWindow(QMainWindow):
             self.catalogue_age()
             + (" · " + self.tr("whole-catalogue fetch paused") if paused else "")
             + (
-                " · " + self.tr("Catalogue incomplete: the Indexer stopped paging.")
+                " · "
+                + self.tr(
+                    "Catalogue incomplete: the Indexer limited the available pages. "
+                    "Cached torrents remain usable."
+                )
                 if self.store.limited_categories()
                 else ""
             )
@@ -1272,6 +1402,9 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self.reseed_consent.cancel()
+        if self.reading_room is not None:
+            self.reading_room.stop()
         self.search_tab.stop()
         self.seeding_timer.stop()
         self._pending_plan = None
@@ -1380,6 +1513,8 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         folders = list(self.settings.library_folders)
         if SettingsDialog(self.settings, self).exec():
+            self._lock_reading_room()
+            self.torrents_tab.reset_connection()
             self.settings.save(self.settings_path)
             log.info("settings written to %s", self.settings_path)
             self.apply_proxy()
@@ -1549,6 +1684,7 @@ class MainWindow(QMainWindow):
                             value.meta,
                             value.match,
                             candidate_key(value.candidate),
+                            approve_disk_renames=self.reseed_consent.approve,
                         )
                         seen.add(infohash)
                         result.append(value)
@@ -1741,10 +1877,11 @@ class MainWindow(QMainWindow):
     def _searches_restored(
         self, restored: list[tuple[LibraryEntry, list[CheckedCandidate]]]
     ) -> None:
-        for entry, checked in restored:
-            if entry in self.library_model.entries:
-                self.review.remember(entry, checked)
-                self.library_model.set_status(entry.item.path, self._summary(checked))
+        with self.upload_tab.defer_refresh():
+            for entry, checked in restored:
+                if entry in self.library_model.entries:
+                    self.review.remember(entry, checked)
+                    self.library_model.set_status(entry.item.path, self._summary(checked))
 
     def _restore_failed(self, error: Exception) -> None:
         log.warning("could not restore previous searches: %s", error)
@@ -1796,6 +1933,8 @@ class MainWindow(QMainWindow):
         for outcome, archive in unpacked:
             if archive is not None and outcome.verified and outcome.started:
                 self.offer_archive_removal(outcome.item_path, archive)
+        if any(outcome.disk_renamed for outcome in outcomes):
+            self.scan()
 
     def offer_archive_removal(self, folder: Path, archive: Path) -> None:
         """After an unpacked archive's Reseed is verified, offer to put the archive in the

@@ -37,6 +37,12 @@ class TransmissionSettings:
 
 
 @dataclass
+class UtorrentSettings:
+    host: str = "http://localhost:8081/gui/"
+    username: str = "admin"
+
+
+@dataclass
 class IndexerSettings:
     url: str = "https://c411.org/api/torznab"
 
@@ -70,6 +76,7 @@ class Settings:
     qbit: QbitSettings = field(default_factory=QbitSettings)
     deluge: DelugeSettings = field(default_factory=DelugeSettings)
     transmission: TransmissionSettings = field(default_factory=TransmissionSettings)
+    utorrent: UtorrentSettings = field(default_factory=UtorrentSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
     proxy: ProxySettings = field(default_factory=ProxySettings)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
@@ -102,6 +109,7 @@ class Settings:
             "qbit": asdict(self.qbit),
             "deluge": asdict(self.deluge),
             "transmission": asdict(self.transmission),
+            "utorrent": asdict(self.utorrent),
             "indexer": asdict(self.indexer),
             "proxy": asdict(self.proxy),
             "matching": asdict(self.matching),
@@ -139,6 +147,7 @@ class Settings:
             qbit=QbitSettings(**data.get("qbit", {})),
             deluge=DelugeSettings(**data.get("deluge", {})),
             transmission=TransmissionSettings(**data.get("transmission", {})),
+            utorrent=UtorrentSettings(**data.get("utorrent", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
             proxy=ProxySettings(**data.get("proxy", {})),
             matching=MatchingSettings(**data.get("matching", {})),

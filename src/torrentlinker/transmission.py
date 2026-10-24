@@ -18,7 +18,8 @@ from typing import Any
 import httpx
 
 from torrentlinker import net
-from torrentlinker.domain import Torrent
+from torrentlinker.client_folders import ClientFolder
+from torrentlinker.domain import Torrent, TorrentFile
 from torrentlinker.qbit import AlreadyInClient
 
 SESSION_HEADER = "X-Transmission-Session-Id"
@@ -34,6 +35,12 @@ FIELDS = [
     "trackerStats",
     "secondsSeeding",
     "totalSize",
+    "rateDownload",
+    "rateUpload",
+    "uploadRatio",
+    "eta",
+    "peersSendingToUs",
+    "peersGettingFromUs",
 ]
 LOCAL_ERROR = 3  # Transmission's error kind for a problem with the data, not the tracker
 
@@ -134,6 +141,15 @@ class TransmissionApi:
         """Transmission's own download folder, as Transmission sees it."""
         return str(self._session_get("download-dir")["download-dir"])
 
+    def folder_settings(self) -> list[ClientFolder]:
+        config = self._session_get("download-dir", "incomplete-dir", "incomplete-dir-enabled")
+        rows = []
+        if config.get("download-dir"):
+            rows.append(ClientFolder("", str(config["download-dir"]), "default"))
+        if config.get("incomplete-dir-enabled") and config.get("incomplete-dir"):
+            rows.append(ClientFolder("", str(config["incomplete-dir"]), "incomplete"))
+        return rows
+
     def turn_off_partial_names(self) -> None:
         """Untick “Append .part to incomplete files' names”, for every torrent."""
         self._call("session-set", **{"rename-partial-files": False})
@@ -154,13 +170,25 @@ class TransmissionApi:
                 return []
         return self._get(ids, with_files)
 
-    def torrent(self, hash: str) -> Torrent | None:
-        found = self._get([hash], True)
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
+        found = self._get([hash], with_files)
         return found[0] if found else None
 
     def files(self, hash: str) -> dict[str, int]:
         found = self._call("torrent-get", ids=[hash], fields=["files"])["torrents"]
         return {str(f["name"]): int(f["length"]) for f in found[0]["files"]} if found else {}
+
+    def file_listing(self, hash: str) -> list[TorrentFile]:
+        found = self._call("torrent-get", ids=[hash], fields=["files", "wanted"])["torrents"]
+        if not found:
+            return []
+        wanted = found[0].get("wanted") or []
+        return [
+            TorrentFile(
+                i, str(f["name"]), int(f["length"]), bool(wanted[i]) if i < len(wanted) else True
+            )
+            for i, f in enumerate(found[0].get("files") or [])
+        ]
 
     def _get(self, ids: list[str] | None, with_files: bool) -> list[Torrent]:
         arguments: dict[str, Any] = {"fields": [*FIELDS, "files"] if with_files else FIELDS}
@@ -185,6 +213,13 @@ class TransmissionApi:
             swarm_seeders=max([*seeders, -1]),
             seeding_time=float(t.get("secondsSeeding") or 0),
             size=int(t.get("totalSize") or 0),
+            trackers=tuple(str(tr["announce"]) for tr in trackers if tr.get("announce")),
+            download_rate=int(t.get("rateDownload") or 0),
+            upload_rate=int(t.get("rateUpload") or 0),
+            ratio=float(t.get("uploadRatio") or 0),
+            eta=int(t.get("eta", -1)),
+            connected_seeds=int(t.get("peersSendingToUs") or 0),
+            connected_peers=int(t.get("peersGettingFromUs") or 0),
         )
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
@@ -250,6 +285,12 @@ class TransmissionApi:
         [t] = self._call("torrent-get", ids=[hash], fields=["pieces", "pieceCount"])["torrents"]
         bits = base64.b64decode(t["pieces"])
         return [2 if bits[i // 8] & (0x80 >> (i % 8)) else 0 for i in range(int(t["pieceCount"]))]
+
+    def pause(self, hash: str) -> None:
+        self._call("torrent-stop", ids=[hash])
+
+    def resume(self, hash: str) -> None:
+        self.start(hash)
 
     def start(self, hash: str) -> None:
         self._call("torrent-start", ids=[hash])

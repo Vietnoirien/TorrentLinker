@@ -646,3 +646,68 @@ def test_first_latest_update_does_not_stop_at_its_own_partially_fetched_pages(
     requested.clear()
     sync_catalogue(ix, Store(path), [7000])
     assert requested == [1]
+
+
+@pytest.mark.parametrize("capped", [False, True])
+def test_full_parent_fetch_finishes_old_child_crawl_states(tmp_path: Path, capped: bool) -> None:
+    from torrentlinker.store import CrawlState
+
+    store = Store(tmp_path / "s.db")
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    store.save_crawl_state(CrawlState(7020, next_offset=1))
+
+    def live(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": [live_item(i) for i in range(100)],
+                "meta": {
+                    "page": 1,
+                    "perPage": 100,
+                    "total": 101 if capped else 100,
+                    "totalPages": 1,
+                },
+            },
+        )
+
+    sync_catalogue(native_indexer(live), store, [7000], full=True)
+
+    assert not store.crawl_paused()
+    child = store.crawl_state(7020)
+    assert child.next_offset == 0
+    assert child.complete is not capped
+    assert child.limited is capped
+    assert store.catalogue_size() == 100
+
+    # A previously fetched parent uses its saved checkpoint, but must still
+    # repair legacy child markers on the next explicit fetch.
+    store.save_crawl_state(CrawlState(7020, next_offset=1))
+    sync_catalogue(native_indexer(live), Store(tmp_path / "s.db"), [7000], full=True)
+    assert not store.crawl_paused()
+    assert store.crawl_state(7020).limited is capped
+
+
+def test_parent_fetch_preserves_pending_categories_with_other_native_sources(
+    tmp_path: Path,
+) -> None:
+    from torrentlinker.store import CrawlState
+
+    store = Store(tmp_path / "s.db")
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    pending = CrawlState(4050, next_offset=1)
+    store.save_crawl_state(pending)
+    ix = native_indexer(
+        lambda r: httpx.Response(
+            200,
+            json={
+                "data": [],
+                "meta": {"page": 1, "perPage": 100, "total": 0, "totalPages": 0},
+            },
+        )
+    )
+
+    sync_catalogue(ix, store, [1000], full=True)
+
+    # 4050 also includes applications and GPS outside the fetched games categories.
+    assert store.crawl_state(4050) == pending
+    assert store.crawl_paused()

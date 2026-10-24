@@ -1,10 +1,11 @@
 """Reseed: add a Match to qBittorrent against the existing data, then verify it.
 
-The user's files are never written: the torrent is added stopped, checked, and only
+The torrent is added stopped, checked, and only
 started once Verification shows every piece is already there. A Match with absent
 files is left stopped after Verification, because starting it would fetch the pieces
 it shares with local files. A failed Verification removes the torrent (never its data)
-and records a Rejection. See ADR-0002.
+and records a Rejection. µTorrent may rename files on disk after explicit approval,
+with a recovery journal; other clients leave names untouched. See ADR-0002/0013.
 """
 
 from __future__ import annotations
@@ -16,6 +17,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from torrentlinker.disk_rename import (
+    RenameApproval,
+    apply_disk_renames,
+    journal_path,
+    keep_disk_renames,
+    owns_journal,
+    plan_disk_renames,
+    undo_disk_renames,
+    verify_local_data,
+)
 from torrentlinker.domain import LocalItem, Torrent
 from torrentlinker.matching import Match
 from torrentlinker.qbit import Qbit
@@ -48,6 +59,7 @@ class Outcome:
     progress: float
     started: bool = False
     problem: str | None = None  # something other than the data being wrong
+    disk_renamed: bool = False
 
 
 def start_reseed(
@@ -58,47 +70,73 @@ def start_reseed(
     match: Match,
     candidate_key: str,
     sleep: Callable[[float], None] = time.sleep,
+    *,
+    approve_disk_renames: RenameApproval | None = None,
 ) -> str:
     with _LOCK:
-        if qbit.torrent(meta.infohash) is not None:
-            raise AlreadyInClient(meta.name)
-        h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
-        absent = set(match.unwanted)
-        required = pieces_inside(meta, absent) if absent else None
-        local_files = sorted(match.pairs.values())
-        store.start_verification(h, item.path, candidate_key, required, local_files)
-        # qBittorrent re-applies its own list of file paths when a new torrent settles and
-        # when a check starts. A rename it has not taken in yet is then undone on disk,
-        # which moves the user's file back to the torrent's original path. So: rename only
-        # once the torrent has settled, and check only once qBittorrent lists the new paths.
-        _wait_for(lambda: _settled(qbit.torrent(h)), sleep, h, qbit, "the torrent to settle")
-        try:
-            for old, new in rename_plan(match, set(meta.files)):
-                qbit.rename_file(h, old, new)
-        except Exception as e:  # e.g. a client that cannot rename into other folders
-            qbit.remove(h)  # never deletes files
-            store.end_verification(h)
-            raise ReseedAborted(str(e) or type(e).__name__) from e
-        # Every local file at its own path; absent files may move along with a renamed
-        # folder (Transmission renames whole folders).
-        expected = set(match.pairs.values())
-        _wait_for(
-            lambda: expected <= _files(qbit.torrent(h)),
-            sleep,
-            h,
-            qbit,
-            "the torrent client to take in the renamed files",
-        )
-        if missing := _missing(item.save_path, local_files):
-            qbit.remove(h)  # never deletes files
-            store.end_verification(h)
-            raise ReseedAborted(f"Local files are no longer in place: {', '.join(missing)}")
-        if absent:
-            indexes = [i for i, path in enumerate(meta.files) if path in absent]
-            qbit.set_file_priority(h, indexes, 0)
-        qbit.recheck(h)
-        store.mark_rechecked(h)
-        return h
+        if getattr(qbit, "requires_disk_renames", False) and match.renames:
+            return _start_disk_reseed(
+                qbit, store, item, meta, match, candidate_key, sleep, approve_disk_renames
+            )
+        return _start_reseed(qbit, store, item, meta, match, candidate_key, sleep)
+
+
+def _start_reseed(
+    qbit: Qbit,
+    store: Store,
+    item: LocalItem,
+    meta: TorrentMeta,
+    match: Match,
+    candidate_key: str,
+    sleep: Callable[[float], None],
+    added: Callable[[], None] = lambda: None,
+) -> str:
+    # Some clients cannot rename or verify partial files. Let them refuse before
+    # adding anything and express the Match in their reported file-path layout.
+    # Ordinary clients use paths relative to the requested save folder; µTorrent
+    # uses paths relative to the content root for a multifile torrent.
+    prepare = getattr(qbit, "reseed_layout", None)
+    client_match = prepare(meta, match) if prepare else match
+    if qbit.torrent(meta.infohash) is not None:
+        raise AlreadyInClient(meta.name)
+    h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
+    added()
+    absent = set(match.unwanted)
+    required = pieces_inside(meta, absent) if absent else None
+    local_files = sorted(client_match.pairs.values())
+    store.start_verification(h, item.path, candidate_key, required, local_files)
+    # qBittorrent re-applies its own list of file paths when a new torrent settles and
+    # when a check starts. A rename it has not taken in yet is then undone on disk,
+    # which moves the user's file back to the torrent's original path. So: rename only
+    # once the torrent has settled, and check only once qBittorrent lists the new paths.
+    _wait_for(lambda: _settled(qbit.torrent(h)), sleep, h, qbit, "the torrent to settle")
+    try:
+        for old, new in rename_plan(client_match, set(meta.files)):
+            qbit.rename_file(h, old, new)
+    except Exception as e:  # e.g. a client that cannot rename into other folders
+        qbit.remove(h)  # never deletes files
+        store.end_verification(h)
+        raise ReseedAborted(str(e) or type(e).__name__) from e
+    # Every local file at its own path; absent files may move along with a renamed
+    # folder (Transmission renames whole folders).
+    expected = set(client_match.pairs.values())
+    _wait_for(
+        lambda: expected <= _files(qbit.torrent(h)),
+        sleep,
+        h,
+        qbit,
+        "the torrent client to take in the renamed files",
+    )
+    if missing := _missing(item.save_path, sorted(match.pairs.values())):
+        qbit.remove(h)  # never deletes files
+        store.end_verification(h)
+        raise ReseedAborted(f"Local files are no longer in place: {', '.join(missing)}")
+    if absent:
+        indexes = [i for i, path in enumerate(meta.files) if path in absent]
+        qbit.set_file_priority(h, indexes, 0)
+    qbit.recheck(h)
+    store.mark_rechecked(h)
+    return h
 
 
 SETTLED_STATES = ("stopped", "paused", "missingFiles", "error")
@@ -108,6 +146,80 @@ POLL_INTERVAL = 0.2
 
 class ReseedAborted(Exception):
     """qBittorrent did not reach a safe state; the torrent was removed, data untouched."""
+
+
+def _start_disk_reseed(
+    qbit: Qbit,
+    store: Store,
+    item: LocalItem,
+    meta: TorrentMeta,
+    match: Match,
+    candidate_key: str,
+    sleep: Callable[[float], None],
+    approve: RenameApproval | None,
+) -> str:
+    # Only µTorrent opts into this exception to ADR-0002, with explicit per-job
+    # approval. Missing files still cannot be verified through its WebUI.
+    identity = Match({p: p for p in match.pairs}, absent=match.unwanted)
+    prepare = getattr(qbit, "reseed_layout", None)
+    assert prepare is not None
+    prepare(meta, identity)
+    if qbit.torrent(meta.infohash) is not None:
+        raise AlreadyInClient(meta.name)
+    folder = store.torrent_dir.parent
+    if journal_path(folder, meta.infohash).exists():
+        raise ReseedAborted("A previous disk rename needs recovery before this torrent can retry")
+    plan = plan_disk_renames(item, meta, match)
+    if approve is None or not approve(plan):
+        raise ReseedAborted("Disk renaming cancelled. No files were renamed.")
+    verify_local_data(item, meta, match)
+    created = False
+
+    def added() -> None:
+        nonlocal created
+        created = True
+
+    try:
+        apply_disk_renames(folder, plan, getattr(qbit, "reseed_client_id", ""))
+        return _start_reseed(qbit, store, item, meta, identity, candidate_key, sleep, added)
+    except Exception:
+        # Stop using the renamed files before restoring their old names. If client
+        # removal fails, leave the journal for recovery rather than race the client.
+        if qbit.torrent(meta.infohash) is not None:
+            if not created:
+                raise ReseedAborted(
+                    "This torrent appeared in µTorrent during setup. The renamed files and "
+                    "recovery journal were kept; inspect the torrent before restoring names."
+                ) from None
+            qbit.remove(meta.infohash)
+        undo_disk_renames(folder, meta.infohash)
+        store.end_verification(meta.infohash)
+        raise
+
+
+def _recover_disk_renames(qbit: Qbit, store: Store) -> None:
+    if not getattr(qbit, "requires_disk_renames", False):
+        return
+    folder = store.torrent_dir.parent
+    for journal in (folder / "reseed-renames").glob("*.json"):
+        hash = journal.stem
+        if not owns_journal(folder, hash, getattr(qbit, "reseed_client_id", "")):
+            continue
+        torrent = qbit.torrent(hash)
+        if torrent is None:
+            undo_disk_renames(folder, hash)
+            store.end_verification(hash)
+        elif VERIFYING not in torrent.tags and torrent.progress >= 1:
+            # A crash between acceptance and journal cleanup must not undo seeding.
+            keep_disk_renames(folder, hash)
+            store.end_verification(hash)
+
+
+def _remove_reseed(qbit: Qbit, store: Store, hash: str) -> None:
+    qbit.remove(hash)
+    if owns_journal(store.torrent_dir.parent, hash, getattr(qbit, "reseed_client_id", "")):
+        undo_disk_renames(store.torrent_dir.parent, hash)
+    store.end_verification(hash)
 
 
 def _missing(save_path: Path, local_files: list[str]) -> list[str]:
@@ -151,21 +263,20 @@ def check_verifications(
 ) -> list[Outcome]:
     """Settle every finished Verification."""
     with _LOCK:
+        _recover_disk_renames(qbit, store)
         outcomes = []
         for t in qbit.torrents(tag=VERIFYING):
             record = store.verification(t.hash)
             if record is None or record.rechecked_at is None:
                 # A Reseed interrupted before its check was requested: undo it, the user
                 # can retry. (The lock rules out a Reseed still being set up.)
-                qbit.remove(t.hash)
-                store.end_verification(t.hash)
+                _remove_reseed(qbit, store, t.hash)
                 continue
             if t.state in CHECKING_STATES:
                 continue
             if missing := _missing(t.save_path, record.local_files):
                 # Never seed from files that are not where the user keeps them.
-                qbit.remove(t.hash)
-                store.end_verification(t.hash)
+                _remove_reseed(qbit, store, t.hash)
                 problem = f"Local files are no longer in place: {', '.join(missing)}"
                 log.error("%s (%s)", problem, record.item_path)
                 outcomes.append(Outcome(record.item_path, t.hash, False, 0.0, problem=problem))
@@ -174,8 +285,7 @@ def check_verifications(
             if verified:
                 outcomes.append(_accept(qbit, store, t.hash, record, progress))
             elif now() - record.rechecked_at >= RECHECK_GRACE:
-                qbit.remove(t.hash)
-                store.end_verification(t.hash)
+                _remove_reseed(qbit, store, t.hash)
                 store.reject(
                     record.item_path,
                     record.candidate_key,
@@ -202,8 +312,11 @@ def _accept(qbit: Qbit, store: Store, hash: str, record: Verification, progress:
     else:
         qbit.add_tags(hash, [PARTIAL])
     qbit.remove_tags(hash, [VERIFYING])
+    renamed = owns_journal(store.torrent_dir.parent, hash, getattr(qbit, "reseed_client_id", ""))
+    if renamed:
+        keep_disk_renames(store.torrent_dir.parent, hash)
     store.end_verification(hash)
-    return Outcome(record.item_path, hash, True, progress, started=complete)
+    return Outcome(record.item_path, hash, True, progress, started=complete, disk_renamed=renamed)
 
 
 def pending_verifications(qbit: Qbit, store: Store) -> list[Path]:

@@ -71,3 +71,16 @@ def test_the_text_output_shows_the_file_name_not_where_it_is() -> None:
     assert "Complete name" in f.text and "/tmp" not in f.text
     renamed = with_file_name(f.text, "Titre.mkv")
     assert "Complete name                            : Titre.mkv" in renamed
+
+
+def test_availability_does_not_reload_native_library_for_each_upload_row(monkeypatch):
+    from torrentlinker.media_info import available
+
+    calls = []
+    available.cache_clear()
+    monkeypatch.setattr(MediaInfo, "can_parse", lambda: calls.append(1) or True)
+    try:
+        assert all(available() for _ in range(100))
+        assert len(calls) == 1
+    finally:
+        available.cache_clear()

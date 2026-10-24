@@ -194,6 +194,7 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
         QFrame#estimateInfo {{ background: {panel}; border: 1px solid {border};
             border-radius: 7px; }}
         QFrame#estimateInfo QLabel {{ background: transparent; }}
+        QPushButton#readingRoomButton:checked {{ background: {selection}; color: {text}; }}
         QToolButton#estimateToggle {{ background: transparent; border: 0; padding: 3px;
             color: {muted}; }}
         QToolButton#estimateToggle:hover {{ color: {text}; }}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from torrentlinker.domain import Torrent
+from torrentlinker.domain import Torrent, TorrentFile
 from torrentlinker.torrent_meta import read_torrent
 
 CHECKING = "checkingUP"
@@ -37,11 +37,16 @@ class FakeQbit:
             if tag is None or tag in t.tags
         ]
 
-    def torrent(self, hash: str) -> Torrent | None:
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
         return self.by_hash.get(hash)
 
     def files(self, hash: str) -> dict[str, int]:
         return dict(self.by_hash[hash].files)
+
+    def file_listing(self, hash: str) -> list[TorrentFile]:
+        return [
+            TorrentFile(i, name, size) for i, (name, size) in enumerate(self.files(hash).items())
+        ]
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         meta = read_torrent(data)
@@ -76,6 +81,12 @@ class FakeQbit:
         self.calls.append("recheck")
         self.rechecked.append(hash)
         self._set(hash, state=CHECKING)
+
+    def pause(self, hash: str) -> None:
+        self._set(hash, state="stoppedUP")
+
+    def resume(self, hash: str) -> None:
+        self.start(hash)
 
     def start(self, hash: str) -> None:
         self.started.append(hash)
@@ -132,7 +143,7 @@ class RacyQbit(FakeQbit):
         self.known[h] = {p: p for p in self.by_hash[h].files}
         return h
 
-    def torrent(self, hash: str) -> Torrent | None:
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
         t = self.by_hash.get(hash)
         if t is None:
             return None

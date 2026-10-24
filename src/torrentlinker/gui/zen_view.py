@@ -85,6 +85,7 @@ class SeedingView(QWidget):
     """The user's Indexer torrents in qBittorrent, with a Zen Estimate each."""
 
     updated = Signal(object)  # Seeding
+    unavailable = Signal()
 
     def __init__(self, load: Callable[[], Callable[[], Seeding]]) -> None:
         super().__init__()
@@ -179,6 +180,7 @@ class SeedingView(QWidget):
         )
 
     def _failed(self, error: Exception) -> None:
+        self.unavailable.emit()
         self.refresh_button.setEnabled(True)
         self._show_total()
         if not self._quiet:

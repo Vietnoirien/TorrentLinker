@@ -21,6 +21,7 @@ from typing import Any, Protocol
 
 from torrentlinker.audio_tags import TagCache
 from torrentlinker.catalogue_sync import ROOTS
+from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.matching import IgnoreList, Match
@@ -875,11 +876,26 @@ def create_upload(
     return PreparedUpload(saved, meta, files)
 
 
-def seed_upload(qbit: Qbit, store: Store, item: LocalItem, prepared: PreparedUpload) -> str:
+def seed_upload(
+    qbit: Qbit,
+    store: Store,
+    item: LocalItem,
+    prepared: PreparedUpload,
+    *,
+    approve_disk_renames: RenameApproval | None = None,
+) -> str:
     """Add the Upload's torrent to the Torrent Client against the local files and verify
     it, as a Reseed: c411 refuses an upload whose uploader is not seeding."""
     key = f"upload:{prepared.meta.infohash}"
-    return start_reseed(qbit, store, item, prepared.meta, seed_match(prepared.files), key)
+    return start_reseed(
+        qbit,
+        store,
+        item,
+        prepared.meta,
+        seed_match(prepared.files),
+        key,
+        approve_disk_renames=approve_disk_renames,
+    )
 
 
 def bencode(value: Any) -> bytes:

@@ -38,12 +38,14 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker import net
+from torrentlinker.client_folders import ClientFolder
 from torrentlinker.clients import connect
 from torrentlinker.config import Settings
 from torrentlinker.credentials import TMDB_API_KEY, get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.gui.errors import offer_whole_names
+from torrentlinker.gui.folder_import import FolderImportDialog
 from torrentlinker.gui.tables import style_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.zen_view import WARNING, class_label
@@ -57,6 +59,7 @@ from torrentlinker.paths import (
 )
 from torrentlinker.qbit import ClientApi, is_api_key
 from torrentlinker.queries import default_categories
+from torrentlinker.torrent_management import safe_error
 from torrentlinker.zen import ZenClass, ZenProfile
 
 log = logging.getLogger(__name__)
@@ -65,6 +68,7 @@ QBIT_PASSWORD = "qbit-password"
 QBIT_API_KEY = "qbit-api-key"
 DELUGE_PASSWORD = "deluge-password"
 TRANSMISSION_PASSWORD = "transmission-password"
+UTORRENT_PASSWORD = "utorrent-password"
 INDEXER_API_KEY = "indexer-api-key"
 # Up to 4 more keys of the same c411 account, each within its own limits (ADR-0008).
 EXTRA_INDEXER_KEYS = tuple(f"indexer-api-key-{n}" for n in range(2, 6))
@@ -99,6 +103,8 @@ class SettingsDialog(QDialog):
         self.resize(1020, 720)
         self.settings = settings
         self._loaded_secrets: dict[str, str] = {}
+        self._folder_import_generation = 0
+        self.finished.connect(self._cancel_folder_import)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(
@@ -291,6 +297,7 @@ class SettingsDialog(QDialog):
         self.client_forms.addWidget(self._qbit_form())
         self.client_forms.addWidget(self._deluge_form())
         self.client_forms.addWidget(self._transmission_form())
+        self.client_forms.addWidget(self._utorrent_form())
         self.client_forms.setCurrentIndex(self.client.currentIndex())
         self.client.currentIndexChanged.connect(self.client_forms.setCurrentIndex)
         layout.addWidget(self.client_forms)
@@ -353,6 +360,31 @@ class SettingsDialog(QDialog):
         form.addRow("", note)
         return page
 
+    def _utorrent_form(self) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setContentsMargins(0, 0, 0, 0)
+        self.utorrent_host = QLineEdit(self.settings.utorrent.host)
+        self.utorrent_user = QLineEdit(self.settings.utorrent.username)
+        self.utorrent_password = self._secret_field(UTORRENT_PASSWORD)
+        form.addRow(self.tr("WebUI address"), self.utorrent_host)
+        form.addRow(self.tr("Username"), self.utorrent_user)
+        form.addRow(self.tr("Password"), self.utorrent_password)
+        note = QLabel(
+            self.tr(
+                "Experimental: µTorrent Classic WebUI, not µTorrent Web. Enable WebUI in "
+                "Preferences → Advanced → Web UI. Full Reseeds and Upload seeding are supported. "
+                "If names differ, a confirmation lists the files that must be renamed on disk. "
+                "Partial Matches are unavailable. Enable "
+                "‘Don't start the download automatically’ and choose a default folder in "
+                "µTorrent. TorrentLinker checks the destination before starting each download. "
+                "Only that folder and its subfolders can be used."
+            )
+        )
+        note.setWordWrap(True)
+        form.addRow("", note)
+        return page
+
     def _qbit_form(self) -> QWidget:
         page = QWidget()
         form = QFormLayout(page)
@@ -386,6 +418,13 @@ class SettingsDialog(QDialog):
                 self.transmission_host.text(),
                 self.transmission_user.text(),
                 self.transmission_password.text(),
+            )
+        if client is TorrentClient.UTORRENT:
+            return connect(
+                client,
+                self.utorrent_host.text(),
+                self.utorrent_user.text(),
+                self.utorrent_password.text(),
             )
         key = self.qbit_api_key.text().strip()
         if key and not is_api_key(key):
@@ -662,6 +701,13 @@ class SettingsDialog(QDialog):
         default_row.addWidget(self.default_download, 1)
         default_row.addWidget(browse)
         layout.addLayout(default_row)
+        self.import_folders = QPushButton(self.tr("Import folders from Torrent Client…"))
+        self.import_folders.clicked.connect(self._import_client_folders)
+        layout.addWidget(self.import_folders)
+        self.import_status = QLabel()
+        self.import_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.import_status.setWordWrap(True)
+        layout.addWidget(self.import_status)
 
         self._categories: dict[int, IndexerCategory] = dict(self.settings.indexer_categories)
         self.download_table = QTableWidget(0, 3)
@@ -693,6 +739,59 @@ class SettingsDialog(QDialog):
         row.addWidget(choose)
         layout.addLayout(row)
         return box
+
+    def _cancel_folder_import(self, *_: object) -> None:
+        self._folder_import_generation += 1
+
+    def _folder_connection(self) -> tuple[str, ...]:
+        return (
+            self._chosen_client().value,
+            self.qbit_host.text(),
+            self.deluge_host.text(),
+            self.transmission_host.text(),
+            self.utorrent_host.text(),
+        )
+
+    def _import_client_folders(self) -> None:
+        if (api := self._form_qbit()) is None:
+            return
+        self._folder_import_generation += 1
+        generation = self._folder_import_generation
+        connection = self._folder_connection()
+        self.import_folders.setEnabled(False)
+        self.import_status.setText(self.tr("Reading folder settings from the Torrent Client…"))
+
+        def done(rows: list[ClientFolder]) -> None:
+            if generation != self._folder_import_generation:
+                return
+            self.import_folders.setEnabled(True)
+            if connection != self._folder_connection():
+                self.import_status.setText(self.tr("The connection changed. Import folders again."))
+                return
+            if not rows:
+                self.import_status.setText(
+                    self.tr("The Torrent Client reported no folder settings.")
+                )
+                return
+            preview = FolderImportDialog(
+                rows, self._categories, self._read_download_folders(), self._read_mappings(), self
+            )
+            if preview.exec() == QDialog.DialogCode.Accepted and preview.result_folders is not None:
+                self.default_download.setText(preview.result_folders.default)
+                self._fill_download_table(preview.result_folders.by_category)
+                self.import_status.setText(self.tr("Folders imported. Save Settings to keep them."))
+            else:
+                self.import_status.setText("")
+
+        def failed(error: Exception) -> None:
+            if generation != self._folder_import_generation:
+                return
+            self.import_folders.setEnabled(True)
+            self.import_status.setText(
+                self.tr("Could not read client folders: {0}").format(safe_error(error))
+            )
+
+        run_in_background(api.folder_settings, done, failed)
 
     def _ordered_categories(self) -> list[int]:
         """Categories, each followed by its subcategories."""
@@ -1100,6 +1199,7 @@ class SettingsDialog(QDialog):
             QBIT_API_KEY: self.qbit_api_key.text().strip(),
             DELUGE_PASSWORD: self.deluge_password.text(),
             TRANSMISSION_PASSWORD: self.transmission_password.text(),
+            UTORRENT_PASSWORD: self.utorrent_password.text(),
             INDEXER_API_KEY: self.indexer_key.text().strip(),
             TMDB_API_KEY: self.tmdb_key.text().strip(),
             PROXY_PASSWORD: self.proxy_password.text(),
@@ -1139,6 +1239,8 @@ class SettingsDialog(QDialog):
         s.deluge.host = self.deluge_host.text().strip()
         s.transmission.host = self.transmission_host.text().strip()
         s.transmission.username = self.transmission_user.text().strip()
+        s.utorrent.host = self.utorrent_host.text().strip()
+        s.utorrent.username = self.utorrent_user.text().strip()
         s.qbit.host = self.qbit_host.text().strip()
         s.qbit.username = self.qbit_user.text().strip()
         s.indexer.url = self.indexer_url.text().strip()

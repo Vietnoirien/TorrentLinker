@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from torrentlinker.archives import ArchiveError, Unpacked, unpack, unpacked
+from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, Indexer, SearchMode
 from torrentlinker.matching import FileComparison, Match, MatchRules, compare, is_plausible, match
@@ -166,6 +167,8 @@ def unpack_and_reseed(
     checked: CheckedCandidate,
     rules: MatchRules,
     progress: Callable[[int, int], None] = lambda done, total: None,
+    *,
+    approve_disk_renames: RenameApproval | None = None,
 ) -> tuple[str, LocalItem]:
     """Unpack the archive into its new folder, then Reseed the torrent against it.
 
@@ -179,7 +182,15 @@ def unpack_and_reseed(
     if found is None:
         raise ArchiveError("the unpacked files do not match the torrent")
     key = candidate_key(checked.candidate)
-    h = start_reseed(qbit, store, local, checked.meta, found, key)
+    h = start_reseed(
+        qbit,
+        store,
+        local,
+        checked.meta,
+        found,
+        key,
+        approve_disk_renames=approve_disk_renames,
+    )
     # Once Verification passes, the user is offered to put the archive in the trash.
     store.remember_unpacked(local.path, checked.unpack.archive)
     return h, local

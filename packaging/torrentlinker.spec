@@ -31,7 +31,7 @@ hiddenimports = (
 )
 # libmediainfo, which pymediainfo's wheels carry (ADR-0012)
 binaries = collect_dynamic_libs("pymediainfo")
-excludes = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtPdf", "tkinter"]
+excludes = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "tkinter"]
 
 a = Analysis(
     ["launcher.py"],

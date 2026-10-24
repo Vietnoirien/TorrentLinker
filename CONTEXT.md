@@ -62,6 +62,7 @@ _Avoid_: Client (alone, when the Indexer's API client could be meant), qBit (out
 
 **Reseed**:
 Adding a Match to the Torrent Client pointed at the existing data, renaming inside the torrent so its paths line up with the local files, then verifying by hash check before seeding.
+For µTorrent Classic only, differing names require a per-torrent confirmation to rename files on disk. Other clients keep the existing files at their original paths. See ADR-0013.
 _Avoid_: Inject, cross-seed, relink
 
 **Verification**:

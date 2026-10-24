@@ -552,8 +552,8 @@ Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajo
     <message>
         <location filename="../gui/main_window.py" line="1169"/>
         <location filename="../gui/main_window.py" line="1192"/>
-        <source>Catalogue incomplete: the Indexer stopped paging.</source>
-        <translation>Catalogue incomplet : l&apos;Indexeur a atteint sa limite de pagination.</translation>
+        <source>Catalogue incomplete: the Indexer limited the available pages. Cached torrents remain usable.</source>
+        <translation>Catalogue incomplet : l&apos;Indexeur a limité les pages disponibles. Les torrents en cache restent utilisables.</translation>
     </message>
     <message>
         <location filename="../gui/main_window.py" line="1190"/>
@@ -838,6 +838,11 @@ La mettre à la corbeille ?</translation>
         <source>Let's set up your connection first. In Settings → Connections, enter your Indexer API key and configure your torrent client, then save. TorrentLinker will load your data when setup is complete.</source>
         <translation>Commençons par configurer votre connexion. Dans Paramètres → Connexions, renseignez votre clé API d’indexeur et configurez votre client torrent, puis enregistrez. TorrentLinker chargera vos données une fois la configuration terminée.</translation>
     </message>
+    <message><source>Reading room</source><translation>Salon de lecture</translation></message>
+    <message><source>Ten thousand books kept alive. Take a moment to read one.</source><translation>Dix mille livres partagés. Prenez le temps d’en lire un.</translation></message>
+    <message><source>Open in Torrents</source><translation>Voir dans Torrents</translation></message>
+    <message><source>Torrents</source><translation>Torrents</translation></message>
+    <message><source>Manage downloads and seeds in your Torrent Client.</source><translation>Gérez les téléchargements et les partages de votre client torrent.</translation></message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -2274,6 +2279,7 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Pausing after the current request…</source>
         <translation>Mise en pause après la requête en cours…</translation>
     </message>
+    <message><source>Open in Torrents</source><translation>Voir dans Torrents</translation></message>
 </context>
 <context>
     <name>SeedingTree</name>
@@ -3095,6 +3101,13 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Ignored Files</source>
         <translation>Fichiers ignorés</translation>
     </message>
+    <message><source>Import folders from Torrent Client…</source><translation>Importer les dossiers du client torrent…</translation></message>
+    <message><source>Reading folder settings from the Torrent Client…</source><translation>Lecture des dossiers configurés dans le client torrent…</translation></message>
+    <message><source>The connection changed. Import folders again.</source><translation>La connexion a changé. Relancez l’import des dossiers.</translation></message>
+    <message><source>The Torrent Client reported no folder settings.</source><translation>Le client torrent n’a fourni aucun dossier configuré.</translation></message>
+    <message><source>Folders imported. Save Settings to keep them.</source><translation>Dossiers importés. Enregistrez les paramètres pour les conserver.</translation></message>
+    <message><source>Could not read client folders: {0}</source><translation>Impossible de lire les dossiers du client : {0}</translation></message>
+    <message><source>Experimental: µTorrent Classic WebUI, not µTorrent Web. Enable WebUI in Preferences → Advanced → Web UI. Full Reseeds and Upload seeding are supported. If names differ, a confirmation lists the files that must be renamed on disk. Partial Matches are unavailable. Enable ‘Don't start the download automatically’ and choose a default folder in µTorrent. TorrentLinker checks the destination before starting each download. Only that folder and its subfolders can be used.</source><translation>Expérimental : WebUI de µTorrent Classic, pas µTorrent Web. Activez la WebUI dans Préférences → Avancé → Interface Web. Les remises en partage complètes et le partage des uploads sont pris en charge. Si les noms diffèrent, une confirmation affiche les fichiers à renommer sur le disque. Les correspondances partielles sont indisponibles. Activez « Ne pas démarrer le téléchargement automatiquement » et choisissez un dossier par défaut dans µTorrent. TorrentLinker vérifie la destination avant de démarrer chaque téléchargement. Seuls ce dossier et ses sous-dossiers sont utilisables.</translation></message>
 </context>
 <context>
     <name>Subcategory</name>
@@ -4388,6 +4401,485 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Depth 1 treats each file or folder directly inside as one Local Item.</source>
         <translation>La profondeur 1 considère chaque fichier ou dossier directement contenu comme un Élément local.</translation>
+    </message>
+</context>
+<context>
+    <name>BookReader</name>
+    <message>
+        <source>Choose a book from your library</source>
+        <translation>Choisissez un livre dans votre bibliothèque</translation>
+    </message>
+    <message>
+        <source>A quiet place for the books you keep alive.</source>
+        <translation>Un coin tranquille pour les livres que vous faites vivre.</translation>
+    </message>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Page or chapter</source>
+        <translation>Page ou chapitre</translation>
+    </message>
+    <message>
+        <source>Chapters</source>
+        <translation>Chapitres</translation>
+    </message>
+    <message>
+        <source>Zoom out</source>
+        <translation>Réduire</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Agrandir</translation>
+    </message>
+    <message>
+        <source>Opening book…</source>
+        <translation>Ouverture du livre…</translation>
+    </message>
+    <message>
+        <source>Unreadable or password-protected PDF</source>
+        <translation>PDF illisible ou protégé par un mot de passe</translation>
+    </message>
+    <message>
+        <source>This book has no readable pages</source>
+        <translation>Ce livre ne contient aucune page lisible</translation>
+    </message>
+    <message>
+        <source>of {0}</source>
+        <translation>sur {0}</translation>
+    </message>
+    <message>
+        <source>Loading page…</source>
+        <translation>Chargement de la page…</translation>
+    </message>
+    <message>
+        <source>This image could not be decoded</source>
+        <translation>Cette image n’a pas pu être décodée</translation>
+    </message>
+    <message>
+        <source>EPUB · chapter</source>
+        <translation>EPUB · chapitre</translation>
+    </message>
+    <message>
+        <source>Page</source>
+        <translation>Page</translation>
+    </message>
+    <message>
+        <source>Could not open this book: {0}</source>
+        <translation>Impossible d’ouvrir ce livre : {0}</translation>
+    </message>
+    <message>
+        <source>Reading position could not be saved</source>
+        <translation>La position de lecture n’a pas pu être enregistrée</translation>
+    </message>
+    <message><source>Bookshelf</source><translation>Livres</translation></message>
+    <message><source>Show or hide the bookshelf</source><translation>Afficher ou masquer la bibliothèque</translation></message>
+    <message><source>Page {0} / {1}</source><translation>Page {0} / {1}</translation></message>
+    <message><source>Pages {0}–{1}</source><translation>Pages {0}–{1}</translation></message>
+    <message><source>Chapter {0} / {1}</source><translation>Chapitre {0} / {1}</translation></message>
+</context>
+<context>
+    <name>ReadingRoom</name>
+    <message>
+        <source>Find a book…</source>
+        <translation>Rechercher un livre…</translation>
+    </message>
+    <message>
+        <source>Find a book</source>
+        <translation>Rechercher un livre</translation>
+    </message>
+    <message>
+        <source>Refresh library</source>
+        <translation>Actualiser la bibliothèque</translation>
+    </message>
+    <message>
+        <source>Ebook library</source>
+        <translation>Bibliothèque de livres</translation>
+    </message>
+    <message>
+        <source>Folders…</source>
+        <translation>Dossiers…</translation>
+    </message>
+    <message>
+        <source>Configure local folders…</source>
+        <translation>Configurer les dossiers locaux…</translation>
+    </message>
+    <message>
+        <source>Looking for local books…</source>
+        <translation>Recherche des livres locaux…</translation>
+    </message>
+    <message>
+        <source>{0} books</source>
+        <translation>{0} livres</translation>
+    </message>
+    <message>
+        <source>Books must be accessible on this computer. Check Library Folders and Client Paths in Settings.</source>
+        <translation>Les livres doivent être accessibles sur cet ordinateur. Vérifiez les dossiers de la Bibliothèque et les chemins du client dans les Paramètres.</translation>
+    </message>
+    <message>
+        <source>Could not scan the ebook folders. Check Settings.</source>
+        <translation>Impossible de parcourir les dossiers de livres. Vérifiez les Paramètres.</translation>
+    </message>
+    <message><source>Uncategorized</source><translation>Non classés</translation></message>
+    <message><source>Other / unspecified</source><translation>Autres / non précisés</translation></message>
+</context>
+<context>
+    <name>TorrentModel</name>
+    <message>
+        <source>Torrent</source>
+        <translation>Torrent</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>Progress</source>
+        <translation>Progression</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Download/s</source>
+        <translation>Réception/s</translation>
+    </message>
+    <message>
+        <source>Upload/s</source>
+        <translation>Envoi/s</translation>
+    </message>
+    <message>
+        <source>Ratio</source>
+        <translation>Ratio</translation>
+    </message>
+    <message>
+        <source>ETA</source>
+        <translation>Temps restant</translation>
+    </message>
+    <message>
+        <source>Category</source>
+        <translation>Catégorie</translation>
+    </message>
+    <message>
+        <source>Trackers</source>
+        <translation>Trackers</translation>
+    </message>
+    <message>
+        <source>≈ Zen/day</source>
+        <translation>≈ Zen/jour</translation>
+    </message>
+    <message>
+        <source>≈ Note</source>
+        <translation>≈ Note</translation>
+    </message>
+    <message>
+        <source>Downloading</source>
+        <translation>Téléchargement</translation>
+    </message>
+    <message>
+        <source>Seeding</source>
+        <translation>En partage</translation>
+    </message>
+    <message>
+        <source>Paused</source>
+        <translation>En pause</translation>
+    </message>
+    <message>
+        <source>Checking</source>
+        <translation>Vérification</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation>Erreur</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>{0} h {1} min</source>
+        <translation>{0} h {1} min</translation>
+    </message>
+</context>
+<context>
+    <name>TorrentsTab</name>
+    <message>
+        <source>Find a torrent…</source>
+        <translation>Rechercher un torrent…</translation>
+    </message>
+    <message>
+        <source>All states</source>
+        <translation>Tous les états</translation>
+    </message>
+    <message>
+        <source>All tags</source>
+        <translation>Tous les tags</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Actualiser</translation>
+    </message>
+    <message>
+        <source>Start</source>
+        <translation>Démarrer</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <source>Recheck</source>
+        <translation>Revérifier</translation>
+    </message>
+    <message>
+        <source>Remove…</source>
+        <translation>Retirer…</translation>
+    </message>
+    <message>
+        <source>Columns</source>
+        <translation>Colonnes</translation>
+    </message>
+    <message>
+        <source>Trackers and categories</source>
+        <translation>Trackers et catégories</translation>
+    </message>
+    <message>
+        <source>No torrents match these filters.</source>
+        <translation>Aucun torrent ne correspond à ces filtres.</translation>
+    </message>
+    <message>
+        <source>Information</source>
+        <translation>Informations</translation>
+    </message>
+    <message>
+        <source>File</source>
+        <translation>Fichier</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation>Télécharger</translation>
+    </message>
+    <message>
+        <source>Download selected files</source>
+        <translation>Télécharger les fichiers sélectionnés</translation>
+    </message>
+    <message>
+        <source>Skip selected files</source>
+        <translation>Ignorer les fichiers sélectionnés</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>Activity</source>
+        <translation>Activité</translation>
+    </message>
+    <message>
+        <source>Open this tab to connect to your Torrent Client.</source>
+        <translation>Ouvrez cet onglet pour vous connecter à votre client torrent.</translation>
+    </message>
+    <message>
+        <source>Connecting to the Torrent Client…</source>
+        <translation>Connexion au client torrent…</translation>
+    </message>
+    <message>
+        <source>Connected · {0} torrents · refresh every 5 seconds</source>
+        <translation>Connecté · {0} torrents · actualisation toutes les 5 secondes</translation>
+    </message>
+    <message>
+        <source>Connection failed; displayed data may be stale. {0}</source>
+        <translation>Connexion impossible ; les données affichées peuvent être anciennes. {0}</translation>
+    </message>
+    <message>
+        <source>All torrents</source>
+        <translation>Tous les torrents</translation>
+    </message>
+    <message>
+        <source>No tracker</source>
+        <translation>Sans tracker</translation>
+    </message>
+    <message>
+        <source>Other / unspecified</source>
+        <translation>Autres / non précisés</translation>
+    </message>
+    <message>
+        <source>{0} torrents selected.</source>
+        <translation>{0} torrents sélectionnés.</translation>
+    </message>
+    <message>
+        <source>Status: {0}</source>
+        <translation>État : {0}</translation>
+    </message>
+    <message>
+        <source>Download Folder: {0}</source>
+        <translation>Dossier de téléchargement : {0}</translation>
+    </message>
+    <message>
+        <source>Trackers: {0}</source>
+        <translation>Trackers : {0}</translation>
+    </message>
+    <message>
+        <source>Tags: {0}</source>
+        <translation>Tags : {0}</translation>
+    </message>
+    <message>
+        <source>Hash: {0}</source>
+        <translation>Hash : {0}</translation>
+    </message>
+    <message>
+        <source>Yes</source>
+        <translation>Oui</translation>
+    </message>
+    <message>
+        <source>Skipped</source>
+        <translation>Ignoré</translation>
+    </message>
+    <message>
+        <source>Could not load files: {0}</source>
+        <translation>Impossible de charger les fichiers : {0}</translation>
+    </message>
+    <message>
+        <source>Remove torrents</source>
+        <translation>Retirer des torrents</translation>
+    </message>
+    <message>
+        <source>Remove {0} selected torrents from the Torrent Client? Files will be kept.</source>
+        <translation>Retirer les {0} torrents sélectionnés du client torrent ? Les fichiers seront conservés.</translation>
+    </message>
+    <message>
+        <source>Sending commands to the Torrent Client…</source>
+        <translation>Envoi des commandes au client torrent…</translation>
+    </message>
+    <message>
+        <source>Command sent</source>
+        <translation>Commande envoyée</translation>
+    </message>
+    <message>
+        <source>Skipped: Reseed verification in progress</source>
+        <translation>Ignoré : vérification de remise en partage en cours</translation>
+    </message>
+    <message>
+        <source>Torrent no longer exists</source>
+        <translation>Ce torrent n’existe plus</translation>
+    </message>
+    <message>
+        <source>Failed</source>
+        <translation>Échec</translation>
+    </message>
+    <message><source>Tracker tree</source><translation>Arborescence des trackers</translation></message>
+    <message><source>Skip</source><translation>Ignorer</translation></message>
+</context>
+<context>
+    <name>FolderImportDialog</name>
+    <message>
+        <source>Import folders from Torrent Client</source>
+        <translation>Importer les dossiers du client torrent</translation>
+    </message>
+    <message>
+        <source>Choose where to use each folder. Existing Path Mappings are applied. Temporary folders are shown for reference. This copies folder paths only; it does not change client settings, labels or move-completed rules. Save Settings afterwards to keep your changes.</source>
+        <translation>Choisissez où utiliser chaque dossier. Les correspondances de chemins existantes sont appliquées. Les dossiers temporaires sont affichés à titre indicatif. Seuls les chemins sont copiés ; les réglages du client, ses étiquettes et ses règles de déplacement ne changent pas. Enregistrez ensuite les paramètres pour conserver vos modifications.</translation>
+    </message>
+    <message>
+        <source>Client setting</source>
+        <translation>Réglage du client</translation>
+    </message>
+    <message>
+        <source>Client path</source>
+        <translation>Chemin côté client</translation>
+    </message>
+    <message>
+        <source>TorrentLinker path</source>
+        <translation>Chemin côté TorrentLinker</translation>
+    </message>
+    <message>
+        <source>Use for</source>
+        <translation>Utiliser pour</translation>
+    </message>
+    <message>
+        <source>Current folder</source>
+        <translation>Dossier actuel</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>Par défaut</translation>
+    </message>
+    <message>
+        <source>Category</source>
+        <translation>Catégorie</translation>
+    </message>
+    <message>
+        <source>Completed downloads</source>
+        <translation>Téléchargements terminés</translation>
+    </message>
+    <message>
+        <source>Incomplete downloads</source>
+        <translation>Téléchargements incomplets</translation>
+    </message>
+    <message>
+        <source>Do not import</source>
+        <translation>Ne pas importer</translation>
+    </message>
+    <message>
+        <source>Default Download Folder</source>
+        <translation>Dossier de téléchargement par défaut</translation>
+    </message>
+    <message>
+        <source>Use selected folders</source>
+        <translation>Utiliser les dossiers sélectionnés</translation>
+    </message>
+    <message>
+        <source>Choose only one source folder for each destination.</source>
+        <translation>Choisissez un seul dossier source pour chaque destination.</translation>
+    </message>
+    <message>
+        <source>These Path Mappings do not lead back to the client folder. Cancel and correct Client Paths before importing.</source>
+        <translation>Ces correspondances ne permettent pas de retrouver le dossier côté client. Annulez et corrigez les chemins du client avant l’import.</translation>
+    </message>
+    <message>
+        <source>The client folder must be an absolute path.</source>
+        <translation>Le chemin du dossier côté client doit être absolu.</translation>
+    </message>
+    <message>
+        <source>{0} folders selected · {1} existing values will be replaced.</source>
+        <translation>{0} dossiers sélectionnés · {1} valeurs existantes seront remplacées.</translation>
+    </message>
+</context>
+<context>
+    <name>DiskRenameDialog</name>
+    <message>
+        <source>µTorrent: rename files on disk?</source>
+        <translation>µTorrent : renommer les fichiers sur le disque ?</translation>
+    </message>
+    <message>
+        <source>Current path</source>
+        <translation>Chemin actuel</translation>
+    </message>
+    <message>
+        <source>New path on disk</source>
+        <translation>Nouveau chemin sur le disque</translation>
+    </message>
+    <message>
+        <source>Rename files and reseed</source>
+        <translation>Renommer les fichiers et partager</translation>
+    </message>
+    <message>
+        <source>µTorrent cannot rename files inside a torrent through its WebUI. To seed this torrent, TorrentLinker must rename the files on disk listed below. This can break other torrents, readers or shortcuts using the old paths.
+
+File contents stay unchanged. Existing destinations are never overwritten. The files are checked before renaming and again in µTorrent before seeding. If setup or verification fails, TorrentLinker restores the old names when the files are unchanged and those names are still available.</source>
+        <translation>µTorrent ne peut pas renommer les fichiers dans un torrent via sa WebUI. Pour partager ce torrent, TorrentLinker doit renommer sur le disque les fichiers ci-dessous. Cela peut casser d’autres torrents, lecteurs ou raccourcis utilisant les anciens chemins.
+
+Le contenu des fichiers reste inchangé. Une destination existante n’est jamais écrasée. Les fichiers sont vérifiés avant le renommage, puis dans µTorrent avant le partage. Si la préparation ou la vérification échoue, TorrentLinker restaure les anciens noms lorsque les fichiers sont inchangés et que ces noms sont encore disponibles.</translation>
     </message>
 </context>
 </TS>

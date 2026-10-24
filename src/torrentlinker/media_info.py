@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -86,8 +87,9 @@ class MediaFacts:
         return "SD"
 
 
+@cache
 def available() -> bool:
-    """Whether libmediainfo can be loaded."""
+    """Probe the installed library once per process, not for every upload row."""
     try:
         return bool(MediaInfo.can_parse())
     except Exception:  # noqa: BLE001 - a broken install is "not available"

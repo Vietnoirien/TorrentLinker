@@ -17,7 +17,8 @@ from typing import Any, Protocol
 import qbittorrentapi
 
 from torrentlinker import net
-from torrentlinker.domain import Torrent
+from torrentlinker.client_folders import ClientFolder, qbit_folders
+from torrentlinker.domain import Torrent, TorrentFile
 from torrentlinker.torrent_meta import read_torrent
 
 
@@ -29,10 +30,12 @@ class Qbit(Protocol):
         """Torrents, optionally without their file lists (much faster)."""
         ...
 
-    def torrent(self, hash: str) -> Torrent | None: ...
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None: ...
     def files(self, hash: str) -> dict[str, int]:
         """The torrent's file paths, relative to its save path, and sizes."""
         ...
+
+    def file_listing(self, hash: str) -> list[TorrentFile]: ...
 
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         """Add stopped, with automatic management off and the original layout; return hash."""
@@ -53,6 +56,8 @@ class Qbit(Protocol):
         """Per piece: 0 missing, 1 downloading, 2 verified."""
         ...
 
+    def pause(self, hash: str) -> None: ...
+    def resume(self, hash: str) -> None: ...
     def start(self, hash: str) -> None: ...
     def remove(self, hash: str) -> None:
         """Remove the torrent from qBittorrent. Never deletes its files."""
@@ -65,6 +70,8 @@ class Qbit(Protocol):
 
 class ClientApi(Qbit, Protocol):
     """A Torrent Client as the app connects to it: QbitApi or DelugeApi."""
+
+    def folder_settings(self) -> list[ClientFolder]: ...
 
     def check(self) -> str:
         """Log in and return the client's version."""
@@ -157,6 +164,7 @@ class QbitApi:
         )
         self._client: Any = client if api_key else _SharedLogin(client)
         self._sync = threading.Lock()
+        self._trackers: dict[str, list[str]] = {}
         self._rid = 0
         self._known: dict[str, dict[str, Any]] = {}
 
@@ -168,6 +176,18 @@ class QbitApi:
     def default_save_path(self) -> str:
         """qBittorrent's own download folder, as qBittorrent sees it."""
         return str(self._client.app_default_save_path())
+
+    def folder_settings(self) -> list[ClientFolder]:
+        preferences = self._client.app_preferences()
+        default = str(preferences.get("save_path") or self.default_save_path())
+        rows = qbit_folders(
+            default,
+            self._client.torrents_categories(),
+            bool(preferences.get("subcategories_enabled", True)),
+        )
+        if preferences.get("temp_path_enabled") and preferences.get("temp_path"):
+            rows.append(ClientFolder("", str(preferences["temp_path"]), "incomplete"))
+        return rows
 
     def rotate_api_key(self) -> str:
         """Ask qBittorrent (5.2+) for a new API key, replacing any previous one."""
@@ -189,19 +209,40 @@ class QbitApi:
             )
             if data.get("full_update"):
                 self._known = {}
+                self._trackers = {}
             for h, changed in (data.get("torrents") or {}).items():
                 self._known.setdefault(h, {"hash": h}).update(changed)
             for h in data.get("torrents_removed") or []:
                 self._known.pop(h, None)
+            self._trackers.update(data.get("trackers") or {})
+            for url in data.get("trackers_removed") or []:
+                self._trackers.pop(url, None)
+            by_hash: dict[str, list[str]] = {}
+            for url, hashes in self._trackers.items():
+                for h in hashes:
+                    by_hash.setdefault(h, []).append(url)
+            for h, t in self._known.items():
+                t["tracker_urls"] = by_hash.get(h, [])
             self._rid = int(data.get("rid", 0))
             return [dict(t) for t in self._known.values()]
 
-    def torrent(self, hash: str) -> Torrent | None:
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
         found = self._client.torrents_info(torrent_hashes=hash)
-        return self._torrent(found[0]) if found else None
+        return self._torrent(found[0], with_files) if found else None
 
     def files(self, hash: str) -> dict[str, int]:
         return {f.name: int(f.size) for f in self._client.torrents_files(hash)}
+
+    def file_listing(self, hash: str) -> list[TorrentFile]:
+        return [
+            TorrentFile(
+                int(f.get("index", i)),
+                str(f["name"]),
+                int(f["size"]),
+                int(f.get("priority", 1)) > 0,
+            )
+            for i, f in enumerate(self._client.torrents_files(hash))
+        ]
 
     def _torrent(self, t: Mapping[str, Any], with_files: bool = True) -> Torrent:
         files = self.files(t["hash"]) if with_files else {}
@@ -214,6 +255,14 @@ class QbitApi:
             progress=float(t["progress"]),
             state=str(t["state"]),
             tracker=str(t.get("tracker", "")),
+            trackers=tuple(t.get("tracker_urls", ())),
+            category=str(t.get("category", "")),
+            download_rate=int(t.get("dlspeed", 0)),
+            upload_rate=int(t.get("upspeed", 0)),
+            ratio=float(t.get("ratio", 0)),
+            eta=int(t.get("eta", -1)),
+            connected_seeds=int(t.get("num_seeds", 0)),
+            connected_peers=int(t.get("num_leechs", 0)),
             swarm_seeders=max(int(str(t.get("num_complete", -1))), -1),
             seeding_time=float(str(t.get("seeding_time", 0))),
             size=int(str(t.get("total_size", 0) or t.get("size", 0))),
@@ -260,6 +309,12 @@ class QbitApi:
 
     def piece_states(self, hash: str) -> list[int]:
         return [int(s) for s in self._client.torrents_piece_states(torrent_hash=hash)]
+
+    def pause(self, hash: str) -> None:
+        self._client.torrents_stop(torrent_hashes=hash)
+
+    def resume(self, hash: str) -> None:
+        self.start(hash)
 
     def start(self, hash: str) -> None:
         self._client.torrents_start(torrent_hashes=hash)

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
@@ -77,6 +78,7 @@ class ReviewPanel(QWidget):
         rules: Callable[[], MatchRules],
         searcher: Callable[[], Searcher],
         default_query: Callable[[LibraryEntry], str],
+        approve_disk_renames: RenameApproval | None = None,
     ) -> None:
         super().__init__()
         self.store = store
@@ -85,6 +87,7 @@ class ReviewPanel(QWidget):
         self.rules = rules
         self.searcher = searcher
         self.default_query = default_query
+        self.approve_disk_renames = approve_disk_renames
         # Why the entry cannot be an Upload, None when it can; set by the window.
         self.upload_blocker: Callable[[LibraryEntry], str | None] = lambda e: ""
         self.entry: LibraryEntry | None = None
@@ -416,10 +419,14 @@ class ReviewPanel(QWidget):
             ):
                 return
         renames = {k: n for v in chosen if v.match for k, n in v.match.renames.items()}
-        if renames and not self._confirm_renames(renames):
+        qbit, store = self.qbit(), self.store
+        if (
+            renames
+            and not getattr(qbit, "requires_disk_renames", False)
+            and not self._confirm_renames(renames)
+        ):
             return
         self.reseed_button.setEnabled(False)
-        qbit, store = self.qbit(), self.store
 
         def work() -> tuple[list[str], list[str], Exception | None]:
             """Reseed each Match; one failing must not hide the ones already added."""
@@ -429,7 +436,17 @@ class ReviewPanel(QWidget):
                 assert v.meta is not None and v.match is not None
                 key = candidate_key(v.candidate)
                 try:
-                    hashes.append(start_reseed(qbit, store, entry.item, v.meta, v.match, key))
+                    hashes.append(
+                        start_reseed(
+                            qbit,
+                            store,
+                            entry.item,
+                            v.meta,
+                            v.match,
+                            key,
+                            approve_disk_renames=self.approve_disk_renames,
+                        )
+                    )
                 except PartialNamesOn as e:
                     return hashes, errors, e  # the user may let Transmission change, then retry
                 except Exception as e:  # noqa: BLE001 - reported to the user below
@@ -510,7 +527,12 @@ class ReviewPanel(QWidget):
 
         def work(report: Callable[[object], None]) -> tuple[str, LocalItem]:
             return unpack_and_reseed(
-                qbit, store, v, rules, lambda done, total: report((done, total))
+                qbit,
+                store,
+                v,
+                rules,
+                lambda done, total: report((done, total)),
+                approve_disk_renames=self.approve_disk_renames,
             )
 
         run_with_progress(

@@ -11,8 +11,10 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from torrentlinker.domain import PathMapping, Torrent
+from torrentlinker.domain import PathMapping, Torrent, TorrentFile
+from torrentlinker.matching import Match
 from torrentlinker.qbit import Qbit
+from torrentlinker.torrent_meta import TorrentMeta
 
 
 def _is_windows(path: str) -> bool:
@@ -73,21 +75,36 @@ class MappedQbit:
     def supports_category_tags(self) -> bool:
         return self._inner.supports_category_tags
 
+    @property
+    def requires_disk_renames(self) -> bool:
+        return bool(getattr(self._inner, "requires_disk_renames", False))
+
+    @property
+    def reseed_client_id(self) -> str:
+        return str(getattr(self._inner, "reseed_client_id", ""))
+
     def _local(self, t: Torrent) -> Torrent:
         return replace(t, save_path=Path(self._mapper.to_local(str(t.save_path))))
 
     def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
         return [self._local(t) for t in self._inner.torrents(tag=tag, with_files=with_files)]
 
-    def torrent(self, hash: str) -> Torrent | None:
-        t = self._inner.torrent(hash)
+    def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
+        t = self._inner.torrent(hash) if with_files else self._inner.torrent(hash, with_files=False)
         return self._local(t) if t else None
 
     def files(self, hash: str) -> dict[str, int]:
         return self._inner.files(hash)
 
+    def file_listing(self, hash: str) -> list[TorrentFile]:
+        return self._inner.file_listing(hash)
+
     def add(self, data: bytes, save_path: str, tags: list[str]) -> str:
         return self._inner.add(data, self._mapper.to_qbit(save_path), tags)
+
+    def reseed_layout(self, meta: TorrentMeta, match: Match) -> Match:
+        prepare = getattr(self._inner, "reseed_layout", None)
+        return prepare(meta, match) if prepare else match
 
     def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
         return self._inner.download(data, self._mapper.to_qbit(save_path), tags)
@@ -103,6 +120,12 @@ class MappedQbit:
 
     def piece_states(self, hash: str) -> list[int]:
         return self._inner.piece_states(hash)
+
+    def pause(self, hash: str) -> None:
+        self._inner.pause(hash)
+
+    def resume(self, hash: str) -> None:
+        self._inner.resume(hash)
 
     def start(self, hash: str) -> None:
         self._inner.start(hash)

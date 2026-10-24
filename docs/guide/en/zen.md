@@ -60,6 +60,8 @@ c411 allows your account 1,200 searches and Catalogue requests an hour, whatever
 
 Planning and startup refresh c411 newest-first, stopping at the previous successful update's checkpoint, or an already known page on the first update. Historical scans and their saved page positions are reserved for the explicit Catalogue fetch action. Interrupted updates retain their checkpoint and check for new arrivals when resumed.
 
+A paging-limit warning means the Indexer stopped exposing older pages. Cached torrents remain available for Plans; repeating the fetch does not remove the server limit. A paused fetch is different: it has unfinished work that can be resumed.
+
 Plans use cached metadata and show provisional estimates. There are no per-torrent c411 metadata checks before planning or sending. The torrent client is read every 30 seconds to update Seeding estimates as tracker responses arrive. Its known swarm counts also update the local Catalogue for future Plans; unknown counts retain the cached estimate.
 
 If another Catalogue refresh is running, the Plan waits for it and then refreshes its selected categories. A failed refresh stops Plan creation. You can stop fetching and make a Plan from the data already available.

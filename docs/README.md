@@ -10,6 +10,7 @@
 
 ## Aller plus loin
 
+- [Gérer les torrents](guide/fr/torrents.md) : trackers, catégories et commandes, en préparation pour 0.6.0.
 - [Zen et Plans](guide/fr/zen.md) : notes, gains estimés, budget et choix des torrents.
 - [Préparer un upload c411](guide/fr/upload.md) : brouillons et images ; [règles par catégorie](guide/fr/upload-categories.md).
 - [Données, mises à jour et dépannage](guide/fr/donnees.md).
@@ -22,6 +23,7 @@ Les captures montrent l’interface en français, en thème sombre, avec des don
 - [Setup and connections](guide/en/getting-started.md)
 - [Library and reseeding](guide/en/library.md)
 - [Search and download queue](guide/en/search.md)
+- [Torrent management](guide/en/torrents.md), in development for 0.6.0
 - [Zen and Plans](guide/en/zen.md)
 - [Uploads and Drafts](guide/en/upload.md)
 - [Data and troubleshooting](guide/en/data.md)

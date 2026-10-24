@@ -401,6 +401,20 @@ def sync_catalogue(
         log.warning("Zen Lab metadata unavailable: %s", error)
     filters = _filters(wanted)
     mapped = set(ROOTS.values()) | {c for subs in SUBCATS.values() for c in subs.values()}
+    # A full parent fetch also supersedes older child crawl markers. Only include
+    # a child when every native source for that Torznab category is covered:
+    # some IDs combine subcategories from several different native roots.
+    covered = dict(filters)
+    tracked = wanted | {
+        cat
+        for cat in mapped
+        if full
+        and all(
+            root in covered
+            and (not covered[root] or bool(children) and set(children).issubset(covered[root]))
+            for root, children in _filters({cat})
+        )
+    }
     if not full:
         for root, children in filters:
             if stop():
@@ -429,7 +443,7 @@ def sync_catalogue(
     limits: set[int] = set()
     history_filters = filters if full else []
     for root, _ in history_filters:
-        for cat in wanted & ({ROOTS[root]} | set(SUBCATS[root].values())):
+        for cat in tracked & ({ROOTS[root]} | set(SUBCATS[root].values())):
             pending[cat] = pending.get(cat, 0) + 1
     for cat in pending:
         store.save_crawl_state(replace(store.crawl_state(cat), complete=False, next_offset=1))
@@ -437,7 +451,7 @@ def sync_catalogue(
         if stop():
             return
         limited = _refresh_filter(indexer, store, root, children, stop=stop, progress=progress)
-        affected = wanted & ({ROOTS[root]} | set(SUBCATS[root].values()))
+        affected = tracked & ({ROOTS[root]} | set(SUBCATS[root].values()))
         for cat in affected:
             pending[cat] -= 1
             if limited:

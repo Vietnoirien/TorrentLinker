@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QDateTime, Qt, QTimer, QUrl
+from PySide6.QtCore import QDateTime, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -48,6 +48,8 @@ PAGE_SIZE = 100
 
 
 class SearchTab(QWidget):
+    manage_requested = Signal(str)
+
     def __init__(
         self,
         store: Store,
@@ -199,6 +201,9 @@ class SearchTab(QWidget):
         )
         hint.setWordWrap(True)
         queue_layout.addWidget(hint)
+        self.manage_button = QPushButton(self.tr("Open in Torrents"))
+        self.manage_button.clicked.connect(self._open_in_torrents)
+        queue_layout.addWidget(self.manage_button)
         self.queue = self._table(
             [
                 self.tr("Torrent"),
@@ -806,6 +811,17 @@ class SearchTab(QWidget):
         self.pages.setTabText(1, self.tr("Download queue ({0})").format(count))
         self.view_queue.setText(self.tr("Download queue ({0})").format(count))
         self._buttons()
+
+    def _open_in_torrents(self) -> None:
+        selected = self.queue.selectionModel().selectedRows()
+        hash = ""
+        if len(selected) == 1:
+            item = self.queue.item(selected[0].row(), 0)
+            key = item.data(Qt.ItemDataRole.UserRole) if item else None
+            entry = next((e for e in entries(self.store) if e.key == key), None)
+            if entry is not None:
+                hash = entry.candidate.infohash or ""
+        self.manage_requested.emit(hash)
 
     def start_queue(self, *, only: set[str] | None = None) -> bool:
         if self.runner:

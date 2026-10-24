@@ -127,3 +127,31 @@ def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, mon
     window.open_settings()
     qtbot.waitUntil(lambda: len(calls) == 6)
     assert window._startup_complete
+
+
+def test_restoring_searches_checks_upload_eligibility_once_per_item(qtbot, tmp_path, monkeypatch):
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.store import Store
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
+    qtbot.addWidget(window)
+    folder = LibraryFolder(tmp_path, 1, ContentKind.MOVIE)
+    entries = [
+        LibraryEntry(
+            folder, LocalItem(tmp_path / f"film{i}.mkv", {f"film{i}.mkv": 1}), ItemState.ORPHAN
+        )
+        for i in range(30)
+    ]
+    window.library_model.set_entries(entries)
+    window.upload_tab.set_entries(entries)
+    checked = []
+    monkeypatch.setattr(
+        window.upload_tab, "why_not", lambda entry: checked.append(entry) or "Not ready"
+    )
+    window._searches_restored([(entry, []) for entry in entries])
+    assert len(checked) == len(entries)
+    assert len(window.review.cache) == len(entries)
+    assert len(window.upload_tab.searched) == len(entries)

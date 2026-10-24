@@ -57,6 +57,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -65,4 +66,6 @@ jobs:
           files: |
             artifacts/linux/TorrentLinker-x86_64.AppImage
             artifacts/windows/TorrentLinker.exe
-          generate_release_notes: true
+          name: TorrentLinker ${{ github.ref_name }}
+          body_path: docs/releases/${{ github.ref_name }}.md
+          generate_release_notes: false

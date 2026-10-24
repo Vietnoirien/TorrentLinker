@@ -1,0 +1,692 @@
+"""Live Torrent Client workspace, with a tracker/category tree and explicit batch actions."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QPersistentModelIndex,
+    QSettings,
+    QSignalBlocker,
+    QSortFilterProxyModel,
+    Qt,
+    QTimer,
+)
+from PySide6.QtGui import QHideEvent, QShowEvent
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QSplitter,
+    QTableView,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from torrentlinker.domain import Torrent, TorrentFile
+from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table, style_table
+from torrentlinker.gui.tasks import run_in_background, run_with_progress
+from torrentlinker.qbit import Qbit
+from torrentlinker.seeding import Seeding
+from torrentlinker.torrent_management import (
+    ActionResult,
+    category_labels,
+    manage,
+    safe_error,
+    status,
+    torrent_categories,
+    tracker_hosts,
+)
+
+SORT = Qt.ItemDataRole.UserRole + 1
+
+
+class TorrentModel(QAbstractTableModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[Torrent] = []
+        self.categories: dict[str, str] = {}
+        self.estimates: dict[str, tuple[float | None, float | None]] = {}
+        self.headers = [
+            self.tr("Torrent"),
+            self.tr("Status"),
+            self.tr("Progress"),
+            self.tr("Size"),
+            self.tr("Download/s"),
+            self.tr("Upload/s"),
+            self.tr("Ratio"),
+            self.tr("ETA"),
+            self.tr("Category"),
+            self.tr("Trackers"),
+            self.tr("≈ Zen/day"),
+            self.tr("≈ Note"),
+        ]
+        self.states = {
+            "downloading": self.tr("Downloading"),
+            "seeding": self.tr("Seeding"),
+            "paused": self.tr("Paused"),
+            "checking": self.tr("Checking"),
+            "error": self.tr("Error"),
+            "other": self.tr("Other"),
+        }
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self.rows)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
+        return len(self.headers)
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = 0) -> Any:
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+            return self.headers[section]
+        return None
+
+    def data(
+        self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole
+    ) -> Any:
+        if not index.isValid():
+            return None
+        t, col = self.rows[index.row()], index.column()
+        if role == Qt.ItemDataRole.UserRole:
+            return t.hash
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return t.name if col == 0 else t.state if col == 1 else None
+        if role not in (Qt.ItemDataRole.DisplayRole, SORT):
+            return None
+        if col == 0:
+            return t.name
+        if col == 1:
+            return self.states[status(t)]
+        zen, note = self.estimates.get(t.hash, (None, None))
+        values = (
+            t.name,
+            self.states[status(t)],
+            t.progress,
+            t.total_size,
+            t.download_rate,
+            t.upload_rate,
+            t.ratio,
+            t.eta,
+            self.categories.get(t.hash, t.category),
+            ", ".join(h for h in tracker_hosts(t) if h) if col == 9 else "",
+            zen,
+            note,
+        )
+        value = values[col]
+        if role == SORT:
+            return value if value is not None else -1.0
+        if col == 2:
+            return f"{t.progress:.1%}"
+        if col in (3, 4, 5):
+            return human_size(int(value))  # type: ignore[arg-type]
+        if col in (6, 10, 11):
+            return f"{value:.2f}" if isinstance(value, int | float) and value >= 0 else "–"
+        if col == 7:
+            if t.eta < 0 or t.eta >= 8_640_000 or t.progress >= 1:
+                return "–"
+            return self.tr("{0} h {1} min").format(t.eta // 3600, (t.eta % 3600) // 60)
+        return value
+
+    def update(self, rows: list[Torrent]) -> None:
+        # Keep indexes and selections stable across the normal polling path.
+        incoming = {t.hash: t for t in rows}
+        if len(incoming) == len(self.rows) and all(t.hash in incoming for t in self.rows):
+            changed: dict[int, list[int]] = {}
+            for row, old in enumerate(self.rows):
+                new = incoming[old.hash]
+                if old == new:
+                    continue
+                before = (
+                    old.name,
+                    (old.state, old.tags),
+                    old.progress,
+                    old.total_size,
+                    old.download_rate,
+                    old.upload_rate,
+                    old.ratio,
+                    old.eta,
+                    old.category,
+                    (old.tracker, old.trackers),
+                )
+                after = (
+                    new.name,
+                    (new.state, new.tags),
+                    new.progress,
+                    new.total_size,
+                    new.download_rate,
+                    new.upload_rate,
+                    new.ratio,
+                    new.eta,
+                    new.category,
+                    (new.tracker, new.trackers),
+                )
+                for col, (a, b) in enumerate(zip(before, after, strict=True)):
+                    if a != b:
+                        changed.setdefault(col, []).append(row)
+            self.rows = [incoming[t.hash] for t in self.rows]
+            for col, indexes in changed.items():
+                self.dataChanged.emit(self.index(indexes[0], col), self.index(indexes[-1], col))
+        else:
+            self.beginResetModel()
+            self.rows = list(incoming.values())
+            self.endResetModel()
+
+
+class TorrentFilter(QSortFilterProxyModel):
+    def __init__(self, model: TorrentModel) -> None:
+        super().__init__()
+        self.setSourceModel(model)
+        self.source = model
+        self.query = ""
+        self.state = ""
+        self.tag = ""
+        self.path: tuple[str, ...] = ()
+        self.paths: dict[str, tuple[tuple[str, ...], ...]] = {}
+        self.setSortRole(SORT)
+        self.setFilterKeyColumn(-1)
+        self.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+
+    def filterAcceptsRow(self, row: int, parent: QModelIndex | QPersistentModelIndex) -> bool:
+        t = self.source.rows[row]
+        if self.query and self.query not in t.name.casefold():
+            return False
+        if self.state and status(t) != self.state:
+            return False
+        if self.tag and self.tag not in t.tags:
+            return False
+        return not self.path or any(
+            p[: len(self.path)] == self.path for p in self.paths.get(t.hash, ())
+        )
+
+
+class TorrentsTab(QWidget):
+    def __init__(self, client: Callable[[], Qbit]) -> None:
+        super().__init__()
+        self.client = client
+        self._loading = False
+        self._acting = False
+        self._generation = 0
+        self._detail_generation = 0
+        self._detail_hash = ""
+        self._file_hash = ""
+        self._known_categories: dict[str, tuple[str, ...]] = {}
+        self._category_by_hash: dict[str, tuple[str, ...]] = {}
+        self._tree_counts: dict[tuple[str, ...], int] = {}
+        self._focus_hash = ""
+        self.model = TorrentModel()
+        self.proxy = TorrentFilter(self.model)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        filters = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(self.tr("Find a torrent…"))
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self._filter)
+        filters.addWidget(self.search, 1)
+        self.states = QComboBox()
+        self.states.addItem(self.tr("All states"), "")
+        for key, label in self.model.states.items():
+            self.states.addItem(label, key)
+        self.states.currentIndexChanged.connect(self._filter)
+        filters.addWidget(self.states)
+        self.tags = QComboBox()
+        self.tags.setMinimumContentsLength(10)
+        self.tags.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.tags.addItem(self.tr("All tags"), "")
+        self.tags.currentIndexChanged.connect(self._filter)
+        filters.addWidget(self.tags)
+        self.refresh_button = QPushButton(self.tr("Refresh"))
+        self.refresh_button.clicked.connect(self.refresh)
+        filters.addWidget(self.refresh_button)
+        layout.addLayout(filters)
+        actions = QHBoxLayout()
+        self.buttons: list[QPushButton] = []
+        for text, action in [
+            (self.tr("Start"), "resume"),
+            (self.tr("Pause"), "pause"),
+            (self.tr("Recheck"), "recheck"),
+            (self.tr("Remove…"), "remove"),
+        ]:
+            button = QPushButton(text)
+            button.clicked.connect(lambda _=False, a=action: self.perform(a))
+            self.buttons.append(button)
+            actions.addWidget(button)
+        actions.addStretch()
+        self.columns = QPushButton(self.tr("Columns"))
+        columns = QMenu(self.columns)
+        self.columns.setMenu(columns)
+        actions.addWidget(self.columns)
+        layout.addLayout(actions)
+        split = QSplitter()
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setMinimumWidth(140)
+        self.tree.setUniformRowHeights(True)
+        self.tree.setAccessibleName(self.tr("Trackers and categories"))
+        self.tree.currentItemChanged.connect(self._filter)
+        tree_action = columns.addAction(self.tr("Tracker tree"))
+        tree_action.setCheckable(True)
+        tree_action.setChecked(True)
+        tree_action.toggled.connect(self.tree.setVisible)
+        split.addWidget(self.tree)
+        right = QSplitter(Qt.Orientation.Vertical)
+        self.table = QTableView()
+        self.table.setModel(self.proxy)
+        style_table(self.table)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSortingEnabled(True)
+        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        self.table.selectionModel().selectionChanged.connect(self._selection)
+        for i, width in enumerate([330, 115, 95, 100, 100, 100, 75, 115, 180, 160, 100, 85]):
+            self.table.setColumnWidth(i, width)
+            if i >= 10:
+                self.table.setColumnHidden(i, True)
+        saved = QSettings().value("torrents/header")
+        if saved is not None:
+            self.table.horizontalHeader().restoreState(saved)
+        for i, name in enumerate(self.model.headers):
+            column_action = columns.addAction(name)
+            column_action.setCheckable(True)
+            column_action.setChecked(not self.table.isColumnHidden(i))
+            column_action.setEnabled(i != 0)
+            column_action.toggled.connect(lambda checked, c=i: self._column(c, checked))
+        self.empty = EmptyState(self.table, self.tr("No torrents match these filters."))
+        right.addWidget(self.table)
+        self.details = QTabWidget()
+        self.overview = QPlainTextEdit()
+        self.overview.setReadOnly(True)
+        self.details.addTab(self.overview, self.tr("Information"))
+        file_page = QWidget()
+        file_layout = QVBoxLayout(file_page)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        self.files = QTableWidget(0, 3)
+        self.files.setHorizontalHeaderLabels(
+            [self.tr("File"), self.tr("Size"), self.tr("Download")]
+        )
+        sortable_table(self.files)
+        self.files.setColumnWidth(0, 500)
+        self.files.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.files.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        file_layout.addWidget(self.files)
+        file_buttons = QHBoxLayout()
+        for text, action in [
+            (self.tr("Download"), "want_files"),
+            (self.tr("Skip"), "skip_files"),
+        ]:
+            button = QPushButton(text)
+            button.clicked.connect(lambda _=False, a=action: self.perform(a))
+            self.buttons.append(button)
+            file_buttons.addWidget(button)
+        file_buttons.addStretch()
+        file_layout.addLayout(file_buttons)
+        self.details.addTab(file_page, self.tr("Files"))
+        self.activity = QPlainTextEdit()
+        self.activity.setReadOnly(True)
+        self.activity.setMaximumBlockCount(1000)
+        self.details.addTab(self.activity, self.tr("Activity"))
+        self.details.currentChanged.connect(self._load_files)
+        right.addWidget(self.details)
+        right.setSizes([500, 180])
+        split.addWidget(right)
+        split.setStretchFactor(1, 1)
+        split.setSizes([230, 1000])
+        layout.addWidget(split, 1)
+        self.connection = QLabel(self.tr("Open this tab to connect to your Torrent Client."))
+        self.connection.setTextFormat(Qt.TextFormat.PlainText)
+        self.connection.setWordWrap(True)
+        layout.addWidget(self.connection)
+        self.timer = QTimer(self)
+        self.timer.setInterval(5000)
+        self.timer.timeout.connect(self.refresh)
+        self._selection()
+
+    def _column(self, column: int, visible: bool) -> None:
+        self.table.setColumnHidden(column, not visible)
+        QSettings().setValue("torrents/header", self.table.horizontalHeader().saveState())
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self.timer.start()
+        self.refresh()
+
+    def hideEvent(self, event: QHideEvent) -> None:
+        self.timer.stop()
+        QSettings().setValue("torrents/header", self.table.horizontalHeader().saveState())
+        super().hideEvent(event)
+
+    def reset_connection(self) -> None:
+        self._generation += 1
+        self._loading = False
+        self._detail_generation += 1
+        self._detail_hash = self._file_hash = ""
+        self.model.update([])
+        self._tree_counts = {}
+        self.tree.clear()
+        self.overview.clear()
+        self.files.setRowCount(0)
+        if self.isVisible():
+            self.refresh()
+
+    def set_seeding(self, view: Seeding) -> None:
+        self._known_categories = category_labels(view.categories)
+        self._category_by_hash = {}
+        from torrentlinker.category_tags import category_path
+
+        for row in view.rows:
+            path = category_path(row.category, view.categories)
+            if path and all(cid in view.categories for cid in path):
+                self._category_by_hash[row.torrent.hash] = tuple(
+                    view.categories[cid].name for cid in path
+                )
+        self.model.estimates = {r.torrent.hash: (r.zen, r.note) for r in view.rows}
+        if self.model.rows:
+            self._group()
+            self.model.dataChanged.emit(
+                self.model.index(0, 8), self.model.index(len(self.model.rows) - 1, 11)
+            )
+
+    def refresh(self) -> None:
+        if self._loading or self._acting or not self.isVisible():
+            return
+        self._loading = True
+        generation = self._generation
+        self.refresh_button.setEnabled(False)
+        if not self.model.rows:
+            self.connection.setText(self.tr("Connecting to the Torrent Client…"))
+
+        def done(rows: list[Torrent]) -> None:
+            if generation != self._generation:
+                return
+            self._loading = False
+            self.refresh_button.setEnabled(True)
+            selected = {t.hash for t in self.selected()}
+            scroll = self.table.verticalScrollBar().value()
+            self.model.update(rows)
+            self._group()
+            current_tag = self.tags.currentData()
+            available = sorted({tag for t in rows for tag in t.tags})
+            if available != [self.tags.itemData(i) for i in range(1, self.tags.count())]:
+                with QSignalBlocker(self.tags):
+                    self.tags.clear()
+                    self.tags.addItem(self.tr("All tags"), "")
+                    for tag in available:
+                        self.tags.addItem(tag, tag)
+                    self.tags.setCurrentIndex(max(0, self.tags.findData(current_tag)))
+                self._filter()
+            self._restore_selection(selected)
+            self.table.verticalScrollBar().setValue(scroll)
+            self.connection.setText(
+                self.tr("Connected · {0} torrents · refresh every 5 seconds").format(len(rows))
+            )
+            self.timer.setInterval(5000)
+            self._selection()
+            if self._focus_hash:
+                self._restore_selection({self._focus_hash})
+                current = self.table.selectionModel().selectedRows()
+                if current:
+                    self.table.scrollTo(current[0])
+                    self._focus_hash = ""
+
+        def failed(error: Exception) -> None:
+            if generation != self._generation:
+                return
+            self._loading = False
+            self.refresh_button.setEnabled(True)
+            self.connection.setText(
+                self.tr("Connection failed; displayed data may be stale. {0}").format(
+                    safe_error(error)
+                )
+            )
+            self.timer.setInterval(30000)
+
+        run_in_background(lambda: self.client().torrents(with_files=False), done, failed)
+
+    def _group(self) -> None:
+        groups: dict[tuple[str, ...], set[str]] = {(): set()}
+        parents = {
+            path[:i] for path in self._known_categories.values() for i in range(1, len(path))
+        }
+        paths = {}
+        for t in self.model.rows:
+            categories = torrent_categories(t, self._known_categories)
+            if categories == ((),) and t.hash in self._category_by_hash:
+                categories = (self._category_by_hash[t.hash],)
+            leaves = tuple(
+                (host, *(cat + ("",) if cat in parents else cat or ("",)))
+                for host in tracker_hosts(t)
+                for cat in categories
+            )
+            paths[t.hash] = leaves
+            self.model.categories[t.hash] = "; ".join(" / ".join(c) for c in categories)
+            for leaf in leaves:
+                for size in range(len(leaf) + 1):
+                    groups.setdefault(leaf[:size], set()).add(t.hash)
+        paths_changed = self.proxy.paths != paths
+        self.proxy.paths = paths
+        counts = {key: len(hashes) for key, hashes in groups.items()}
+        if counts != self._tree_counts:
+            expanded = set()
+
+            def visit(item: QTreeWidgetItem | None) -> None:
+                if item is None:
+                    return
+                if item.isExpanded():
+                    expanded.add(item.data(0, Qt.ItemDataRole.UserRole))
+                for i in range(item.childCount()):
+                    visit(item.child(i))
+
+            if self.tree.topLevelItemCount():
+                visit(self.tree.topLevelItem(0))
+            current = self.proxy.path
+            with QSignalBlocker(self.tree):
+                self.tree.clear()
+                nodes = {}
+                for path in sorted(counts, key=lambda p: (len(p), p)):
+                    name = self.tr("All torrents") if not path else path[-1]
+                    if path and not name:
+                        name = (
+                            self.tr("No tracker")
+                            if len(path) == 1
+                            else self.tr("Other / unspecified")
+                        )
+                    item = QTreeWidgetItem([f"{name} ({counts[path]})"])
+                    item.setData(0, Qt.ItemDataRole.UserRole, path)
+                    nodes[path] = item
+                    if path:
+                        nodes[path[:-1]].addChild(item)
+                    else:
+                        self.tree.addTopLevelItem(item)
+                    item.setExpanded(not path or path in expanded)
+                self.tree.setCurrentItem(nodes.get(current, nodes[()]))
+            self._tree_counts = counts
+        if paths_changed:
+            self._filter()
+
+    def _filter(self, *_: Any) -> None:
+        self.proxy.query = self.search.text().strip().casefold()
+        self.proxy.state = self.states.currentData() or ""
+        self.proxy.tag = self.tags.currentData() or ""
+        item = self.tree.currentItem()
+        self.proxy.path = item.data(0, Qt.ItemDataRole.UserRole) if item else ()
+        self.proxy.invalidate()
+
+    def selected(self) -> list[Torrent]:
+        return [
+            self.model.rows[self.proxy.mapToSource(i).row()]
+            for i in self.table.selectionModel().selectedRows()
+        ]
+
+    def _restore_selection(self, hashes: set[str]) -> None:
+        from PySide6.QtCore import QItemSelection, QItemSelectionModel
+
+        selection = QItemSelection()
+        for row, t in enumerate(self.model.rows):
+            if t.hash in hashes:
+                index = self.proxy.mapFromSource(self.model.index(row, 0))
+                if index.isValid():
+                    selection.select(index, index)
+        self.table.selectionModel().select(
+            selection,
+            QItemSelectionModel.SelectionFlag.ClearAndSelect
+            | QItemSelectionModel.SelectionFlag.Rows,
+        )
+
+    def focus_torrent(self, hash: str = "") -> None:
+        self._focus_hash = hash
+        self.search.clear()
+        self.states.setCurrentIndex(0)
+        self.tags.setCurrentIndex(0)
+        if (root := self.tree.topLevelItem(0)) is not None:
+            self.tree.setCurrentItem(root)
+        self.refresh()
+
+    def _selection(self, *_: Any) -> None:
+        selected = self.selected()
+        for button in self.buttons:
+            button.setEnabled(bool(selected) and not self._acting)
+        if len(selected) != 1:
+            self._detail_hash = self._file_hash = ""
+            self._detail_generation += 1
+            self.files.setRowCount(0)
+            self.overview.setPlainText(self.tr("{0} torrents selected.").format(len(selected)))
+            return
+        t = selected[0]
+        hosts = ", ".join(h for h in tracker_hosts(t) if h) or self.tr("No tracker")
+        self.overview.setPlainText(
+            "\n".join(
+                [
+                    t.name,
+                    self.tr("Status: {0}").format(self.model.states[status(t)]),
+                    self.tr("Download Folder: {0}").format(t.save_path),
+                    self.tr("Trackers: {0}").format(hosts),
+                    self.tr("Tags: {0}").format(", ".join(sorted(t.tags))),
+                    self.tr("Hash: {0}").format(t.hash),
+                ]
+            )
+        )
+        if t.hash != self._detail_hash:
+            self._detail_hash = t.hash
+            self._file_hash = ""
+            self._detail_generation += 1
+            self.files.setRowCount(0)
+            self._load_files()
+
+    def _load_files(self, *_: Any) -> None:
+        if (
+            self.details.currentIndex() != 1
+            or not self._detail_hash
+            or self._file_hash == self._detail_hash
+        ):
+            return
+        hash, generation = self._detail_hash, self._detail_generation
+        self._file_hash = hash
+
+        def done(files: list[TorrentFile]) -> None:
+            if generation != self._detail_generation or hash != self._detail_hash:
+                return
+            self.files.setSortingEnabled(False)
+            self.files.setRowCount(len(files))
+            for index, file in enumerate(files):
+                item = QTableWidgetItem(file.name)
+                item.setData(Qt.ItemDataRole.UserRole, file.index)
+                self.files.setItem(index, 0, item)
+                self.files.setItem(index, 1, NumberItem(human_size(file.size), file.size))
+                self.files.setItem(
+                    index,
+                    2,
+                    QTableWidgetItem(self.tr("Yes") if file.wanted else self.tr("Skipped")),
+                )
+            self.files.setSortingEnabled(True)
+
+        def failed(error: Exception) -> None:
+            if generation == self._detail_generation:
+                self._file_hash = ""
+                self.connection.setText(
+                    self.tr("Could not load files: {0}").format(safe_error(error))
+                )
+
+        run_in_background(lambda: self.client().file_listing(hash), done, failed)
+
+    def perform(self, action: str) -> None:
+        selected = self.selected()
+        if not selected or self._acting:
+            return
+        indexes = []
+        if action.endswith("_files"):
+            if len(selected) != 1 or self._file_hash != selected[0].hash:
+                return
+            indexes = [
+                item.data(Qt.ItemDataRole.UserRole)
+                for i in self.files.selectionModel().selectedRows()
+                if (item := self.files.item(i.row(), 0)) is not None
+            ]
+            if not indexes:
+                return
+        if action == "remove":
+            answer = QMessageBox.question(
+                self,
+                self.tr("Remove torrents"),
+                self.tr(
+                    "Remove {0} selected torrents from the Torrent Client? Files will be kept."
+                ).format(len(selected)),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            client = self.client()
+        except Exception as error:
+            self.connection.setText(safe_error(error))
+            return
+        self._acting = True
+        self._selection()
+        self.connection.setText(self.tr("Sending commands to the Torrent Client…"))
+        self.details.setCurrentWidget(self.activity)
+
+        def progress(result: ActionResult) -> None:
+            message = {
+                "sent": self.tr("Command sent"),
+                "verifying": self.tr("Skipped: Reseed verification in progress"),
+                "missing": self.tr("Torrent no longer exists"),
+                "failed": self.tr("Failed"),
+            }[result.outcome]
+            self.activity.appendPlainText(f"{result.name}: {message} {result.detail}")
+
+        def done(results: list[ActionResult]) -> None:
+            self._file_hash = ""
+            self._acting = False
+            self._selection()
+            self.refresh()
+
+        def failed(error: Exception) -> None:
+            self._acting = False
+            self._selection()
+            self.connection.setText(safe_error(error))
+
+        run_with_progress(
+            lambda report: manage(
+                client, [t.hash for t in selected], action, report, file_indexes=indexes
+            ),
+            progress,
+            done,
+            failed,
+        )

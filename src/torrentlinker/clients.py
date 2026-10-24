@@ -6,6 +6,7 @@ from torrentlinker.deluge import DelugeApi
 from torrentlinker.domain import TorrentClient
 from torrentlinker.qbit import ClientApi, QbitApi
 from torrentlinker.transmission import TransmissionApi
+from torrentlinker.utorrent import UtorrentApi
 
 
 def connect(
@@ -16,4 +17,6 @@ def connect(
         return DelugeApi(host, password)
     if client is TorrentClient.TRANSMISSION:
         return TransmissionApi(host, username, password)
+    if client is TorrentClient.UTORRENT:
+        return UtorrentApi(host, username, password)
     return QbitApi(host, username, password, api_key)

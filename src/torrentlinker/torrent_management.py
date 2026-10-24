@@ -1,0 +1,123 @@
+"""Tracker grouping and explicit management of existing Torrent Client torrents."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from urllib.parse import urlsplit
+
+from torrentlinker import reseed
+from torrentlinker.category_tags import CATEGORY_TAG_PREFIX, category_path, category_tag
+from torrentlinker.domain import Torrent
+from torrentlinker.downloads import IndexerCategory
+from torrentlinker.qbit import Qbit
+
+
+def tracker_hosts(torrent: Torrent) -> tuple[str, ...]:
+    """Never expose announce paths, query strings or embedded credentials in the UI."""
+    hosts = set()
+    for url in (*torrent.trackers, torrent.tracker):
+        try:
+            parsed = urlsplit(url)
+            if parsed.scheme.lower() in {"http", "https", "udp", "ws", "wss"} and parsed.hostname:
+                hosts.add(parsed.hostname.lower().rstrip("."))
+        except ValueError:
+            continue
+    return tuple(sorted(hosts)) or ("",)
+
+
+def category_labels(categories: Mapping[int, IndexerCategory]) -> dict[str, tuple[str, ...]]:
+    # Category names themselves contain slashes. Resolve known paths as whole names.
+    result = {}
+    for cid in categories:
+        tag = category_tag(cid, categories)
+        if tag:
+            result[tag] = tuple(categories[p].name for p in category_path(cid, categories))
+    return result
+
+
+def torrent_categories(
+    torrent: Torrent, known: Mapping[str, tuple[str, ...]]
+) -> tuple[tuple[str, ...], ...]:
+    paths = set()
+    for tag in torrent.tags:
+        if tag.startswith(CATEGORY_TAG_PREFIX):
+            # Unknown taxonomy: retain the full label rather than inventing subcategories.
+            path = known.get(tag, (tag[len(CATEGORY_TAG_PREFIX) :].strip(),))
+            if any(path):
+                paths.add(path)
+    if not paths and torrent.category and not torrent.category.startswith("torrentlinker"):
+        paths.add(tuple(p.strip() for p in torrent.category.split("/") if p.strip()))
+    return tuple(sorted(paths)) or ((),)
+
+
+def status(torrent: Torrent) -> str:
+    state = torrent.state.lower()
+    if state in {"error", "missingfiles", "unknown"}:
+        return "error"
+    if "checking" in state:
+        return "checking"
+    if state.startswith(("paused", "stopped")):
+        return "paused"
+    if torrent.is_seeding:
+        return "seeding"
+    if torrent.progress < 1:
+        return "downloading"
+    return "other"
+
+
+def safe_error(error: Exception) -> str:
+    # HTTP exceptions often include a full request URL, including private announce keys.
+    return re.sub(r"(?:https?|udp|wss?)://[^\s<>\"']+", "[URL]", str(error)) or type(error).__name__
+
+
+@dataclass(frozen=True)
+class ActionResult:
+    hash: str
+    name: str
+    outcome: str  # sent, verifying, missing, failed
+    detail: str = ""
+
+
+def manage(
+    client: Qbit,
+    hashes: Sequence[str],
+    action: str,
+    progress: Callable[[ActionResult], None] = lambda _: None,
+    *,
+    file_indexes: Sequence[int] = (),
+) -> list[ActionResult]:
+    """Apply once per hash, rechecking Verification under the Reseed setup lock.
+
+    Removal always keeps data. File selection is explicit and never an empty API list
+    (which some clients interpret as every file).
+    """
+    if action not in {"resume", "pause", "recheck", "remove", "skip_files", "want_files"}:
+        raise ValueError("Unknown torrent action")
+    if action.endswith("_files") and not file_indexes:
+        return []
+    results = []
+    for hash in dict.fromkeys(hashes):
+        name = hash
+        try:
+            with reseed._LOCK:
+                torrent = client.torrent(hash, with_files=False)
+                if torrent is None:
+                    result = ActionResult(hash, name, "missing")
+                elif reseed.VERIFYING in torrent.tags:
+                    result = ActionResult(hash, torrent.name, "verifying")
+                else:
+                    name = torrent.name
+                    if action.endswith("_files"):
+                        client.set_file_priority(
+                            hash, list(file_indexes), 0 if action == "skip_files" else 1
+                        )
+                    else:
+                        getattr(client, action)(hash)
+                    result = ActionResult(hash, name, "sent")
+        except Exception as error:
+            result = ActionResult(hash, name, "failed", safe_error(error))
+        results.append(result)
+        progress(result)
+    return results
