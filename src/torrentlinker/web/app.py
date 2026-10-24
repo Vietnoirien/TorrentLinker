@@ -218,16 +218,14 @@ def create_app(
 
     @app.post("/api/setup/folder")
     def save_folder(body: FolderSetup) -> dict:
-        nonlocal operations
         with jobs.lock:
             idle()
             result = service.folder(body, save=True)
-            operations = Operations(service)
+            operations.library.entries.clear()
             return result
 
     @app.post("/api/setup/remove-folder")
     def remove_folder(body: FolderRemoval) -> dict:
-        nonlocal operations
         with jobs.lock:
             idle()
             if service.store.verification_hashes():
@@ -235,7 +233,7 @@ def create_app(
                     409, "Finish pending Reseed Verifications before removing folders."
                 )
             service.remove_folder(body)
-            operations = Operations(service)
+            operations.library.entries.clear()
         return {"ok": True}
 
     @app.post("/api/setup/suggest-mappings")

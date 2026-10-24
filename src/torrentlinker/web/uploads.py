@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from torrentlinker.options import category_options, options_body
+from torrentlinker.paths import PathMapper
 from torrentlinker.scan import scan_item
 from torrentlinker.torrent_details import web_url
 from torrentlinker.upload import (
@@ -42,7 +43,7 @@ class Uploads:
     def __init__(self, setup: Setup, library: Library):
         self.setup = setup
         self.library = library
-        self.prepared: dict[str, PreparedUpload] = {}
+        self.prepared: dict[str, tuple[PreparedUpload, str]] = {}
 
     def prepare(
         self, path: str, form: UploadForm, stop: threading.Event
@@ -132,7 +133,8 @@ class Uploads:
             report=lambda done, total: progress({"done": done, "total": total}),
             stopped=stop.is_set,
         )
-        self.prepared[prepared.meta.infohash] = prepared
+        client_path = PathMapper(self.setup.settings.path_mappings).to_qbit(str(request.item.path))
+        self.prepared[prepared.meta.infohash] = (prepared, client_path)
         return {
             "hash": prepared.meta.infohash,
             "title": prepared.saved.title,
@@ -143,9 +145,22 @@ class Uploads:
         }
 
     def seed(self, hash: str, stop: threading.Event) -> dict:
-        prepared = self.prepared.get(hash)
-        if prepared is None:
+        record = self.prepared.get(hash)
+        if record is None:
             raise ValueError("This prepared Upload is not available in this server session.")
+        prepared, client_path = record
+        if not any(
+            prepared.saved.item_path.is_relative_to(folder.path)
+            for folder in self.setup.settings.library_folders
+        ):
+            raise ValueError("This Upload's Library Folder was removed. Register it again first.")
+        current_path = PathMapper(self.setup.settings.path_mappings).to_qbit(
+            str(prepared.saved.item_path)
+        )
+        if current_path != client_path:
+            raise ValueError(
+                "This Upload's Path Mapping changed. Review its destination before seeding."
+            )
         self.library.check_tree(prepared.saved.item_path, stop)
         item = scan_item(prepared.saved.item_path)
         client = self.library.client()

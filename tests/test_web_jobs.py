@@ -486,3 +486,87 @@ def test_upload_preview_uses_local_profile_without_publishing(tmp_path: Path):
         assert preview["result"]["files"][0]["size"] == 27
         assert preview["result"]["warnings"]
         assert not preview["result"]["refusals"]
+
+
+def test_prepared_upload_survives_unrelated_folder_changes(tmp_path, monkeypatch):
+    import httpx
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker import net
+
+    class UploadClient(FakeQbit):
+        def check(self):
+            return "fake"
+
+        def folder_settings(self):
+            return []
+
+    def response(request):
+        if request.url.params.get("t") == "caps":
+            return httpx.Response(200, text="<caps><categories/></caps>")
+        if request.method == "POST":
+            return httpx.Response(200, json={"data": {"id": 123}})
+        return httpx.Response(200, json={"data": []})
+
+    monkeypatch.setattr(
+        net, "client", lambda **kwargs: httpx.Client(transport=httpx.MockTransport(response))
+    )
+    root = tmp_path / "media"
+    models, other = root / "models", root / "other"
+    models.mkdir(parents=True)
+    other.mkdir()
+    item = models / "Object.stl"
+    item.write_text("solid model\nendsolid model\n")
+    client = UploadClient()
+    with TestClient(
+        create_app(
+            tmp_path / "config",
+            password="test-password-long",
+            roots=(root,),
+            connector=lambda *args: client,
+        )
+    ) as browser:
+        login(browser)
+        browser.post(
+            "/api/setup/client", json={"client": "qbittorrent", "host": "https://box.example"}
+        )
+        assert (
+            browser.post(
+                "/api/setup/indexer",
+                json={"url": "https://c411.org/api/torznab", "api_key": "fake-key"},
+            ).status_code
+            == 200
+        )
+        browser.post("/api/setup/announce", json={"value": "https://c411.org/announce/fake"})
+        browser.post(
+            "/api/setup/folder",
+            json={"local": str(models), "client_path": "/models", "kind": "3d-model"},
+        )
+        job = browser.post("/api/jobs", json={"kind": "scan"}).json()
+        assert finished(browser, job["id"])["status"] == "completed"
+        job = browser.post(
+            "/api/jobs",
+            json={
+                "kind": "upload-draft",
+                "path": str(item),
+                "upload": {"image": "https://images.example/model.png", "reviewed": True},
+            },
+        ).json()
+        draft = finished(browser, job["id"])
+        assert draft["status"] == "completed", draft
+        assert (
+            browser.post(
+                "/api/setup/folder", json={"local": str(other), "client_path": "/other"}
+            ).status_code
+            == 200
+        )
+        assert (
+            browser.post("/api/setup/remove-folder", json={"local": str(other)}).status_code == 200
+        )
+        job = browser.post(
+            "/api/jobs", json={"kind": "upload-seed", "hashes": [draft["result"]["hash"]]}
+        ).json()
+        seeded = finished(browser, job["id"])
+        assert seeded["status"] == "completed", seeded
+        assert seeded["result"]["status"] == "verifying"
+        assert item.read_text() == "solid model\nendsolid model\n"
