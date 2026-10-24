@@ -486,7 +486,14 @@ class SettingsDialog(QDialog):
 
         def failed(e: Exception) -> None:
             if not offer_whole_names(self, e, then=self._test_qbit):
-                QMessageBox.warning(self, name, str(e))
+                QMessageBox.warning(
+                    self,
+                    name,
+                    self.tr(
+                        "Could not connect to {0}. Check that it is running, its Web UI is "
+                        "enabled, and the address and credentials are correct.\n\n{1}"
+                    ).format(name, html.escape(safe_error(e))),
+                )
 
         run_in_background(
             api.check,

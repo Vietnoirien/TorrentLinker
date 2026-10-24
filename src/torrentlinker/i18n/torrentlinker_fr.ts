@@ -3201,6 +3201,14 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <translation>Terminez ou retirez les opérations en attente de ce client avant de modifier sa connexion. Vous pouvez ajouter un autre client.</translation>
     </message>
     <message>
+        <source>Could not connect to {0}. Check that it is running, its Web UI is enabled, and the address and credentials are correct.
+
+{1}</source>
+        <translation>Connexion à {0} impossible. Vérifiez que le client est démarré, que son interface Web est activée et que l'adresse et les identifiants sont corrects.
+
+{1}</translation>
+    </message>
+    <message>
         <source>Connect an assistant, review its proposals and manage its permissions.</source>
         <translation>Connectez un assistant, examinez ses propositions et gérez ses permissions.</translation>
     </message>
