@@ -867,3 +867,44 @@ with TestClient(
         assert len(runs) == 1
         assert runs[0]["status"] == "interrupted"
         assert "nothing was replayed" in runs[0]["error"]
+
+
+def test_chat_defaults_and_settings_keep_existing_discussions_and_grants(tmp_path):
+    app = create_app(tmp_path, password="test-password-long")
+    with TestClient(app) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Local",
+                "kind": "ollama",
+                "model": "test",
+            },
+        ).json()
+        defaults = browser.get("/api/setup/assistant/chat").json()
+        assert defaults["provider_id"] == p["id"]
+        assert defaults["policy"]["mode"] == "propose"
+        chat = browser.post("/api/assistant/conversations", json=defaults).json()
+        before = browser.get("/api/agents").json()["connections"]
+        defaults["web"] = True
+        defaults["max_calls"] = 8
+        assert browser.put("/api/setup/assistant/chat", json=defaults).is_success
+        assert browser.get("/api/setup/assistant/chat").json()["web"] is True
+        assert browser.get("/api/assistant/conversations").json()[0]["web"] is False
+        defaults["name"] = "My films"
+        defaults["policy"]["mode"] = "execute"
+        defaults["policy"]["permissions"] = ["downloads"]
+        assert browser.put(f"/api/assistant/conversations/{chat['id']}", json=defaults).is_success
+        after = browser.get("/api/agents").json()["connections"]
+        assert [c["id"] for c in before] == [c["id"] for c in after]
+        assert after[-1]["permissions"] == ["downloads"]
+        chats = browser.get("/api/assistant/conversations").json()
+        assert len(chats) == 1
+        assert chats[0]["name"] == "My films"
+    app = create_app(tmp_path, password="test-password-long")
+    with TestClient(app) as browser:
+        login(browser)
+        saved = browser.get("/api/setup/assistant/chat").json()
+        assert saved["web"] is True
+        assert saved["max_calls"] == 8
+        assert saved["policy"]["mode"] == "propose"

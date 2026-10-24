@@ -97,7 +97,53 @@ class Assistant:
             self.provider(identifier), self.secrets.get("assistant:" + identifier)
         )
 
+    def chat_defaults(self):
+        from torrentlinker.assistant.models import Conversation
+
+        with self.lock:
+            row = self.db.execute("SELECT value FROM options WHERE key='chat_defaults'").fetchone()
+            if row:
+                return Conversation.model_validate_json(row[0])
+            providers = self.setup()["providers"]
+            return Conversation(
+                provider_id=providers[0]["id"] if providers else "",
+                policy={
+                    "name": "Discussion",
+                    "clients": [self.agent.setup.settings.default_client_id],
+                },
+            )
+
+    def save_chat_defaults(self, body):
+        self.validate_conversation(body)
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO options VALUES ('chat_defaults',?)",
+                (body.model_dump_json(),),
+            )
+        return body.model_dump()
+
+    def validate_conversation(self, body):
+        self.provider(body.provider_id)
+        for client_id in body.policy.clients:
+            self.agent.setup.settings.profile(client_id)
+
+    def update_conversation(self, identifier, body):
+        self.validate_conversation(body)
+        with self.lock, self.db:
+            _, actor = self.conversation(identifier)
+            if self.db.execute(
+                "SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')",
+                (identifier,),
+            ).fetchone():
+                raise ValueError("Wait for this discussion to finish before changing its settings.")
+            self.agent.access.update_internal(actor, body.policy)
+            self.db.execute(
+                "UPDATE conversations SET body=? WHERE id=?", (body.model_dump_json(), identifier)
+            )
+        return {"id": identifier, **body.model_dump()}
+
     def create_conversation(self, body, *, require_provider=True):
+        body = body.model_copy(update={"name": self.secrets.redact(body.name, public_urls=True)})
         if require_provider:
             self.provider(body.provider_id)
         for client_id in body.policy.clients:
@@ -135,9 +181,9 @@ class Assistant:
         import time
         from threading import Event
 
-        body, actor = self.conversation(identifier)
-        self.agent.access.grant(actor)
         with self.lock, self.db:
+            body, actor = self.conversation(identifier)
+            self.agent.access.grant(actor)
             if self.closed:
                 raise ValueError("Assistant is shutting down.")
             if self.db.execute(
@@ -152,6 +198,18 @@ class Assistant:
                 >= 10
             ):
                 raise ValueError("Too many Assistant tasks. Wait for current tasks to finish.")
+            if (
+                body.name == "Discussion"
+                and not self.db.execute(
+                    "SELECT 1 FROM runs WHERE conversation_id=?", (identifier,)
+                ).fetchone()
+            ):
+                title = self.secrets.redact(" ".join(message.split()), public_urls=True)[:100]
+                body.name = title or "Discussion"
+                self.db.execute(
+                    "UPDATE conversations SET body=? WHERE id=?",
+                    (body.model_dump_json(), identifier),
+                )
             run = uuid4().hex
             self.db.execute(
                 "INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?)",

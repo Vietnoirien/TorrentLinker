@@ -95,6 +95,17 @@ class Access:
                 raise PermissionError("Agent access is disabled or revoked.")
             return Grant.model_validate_json(row["body"])
 
+    def update_internal(self, identifier: str, grant: Grant) -> None:
+        """Edit owner-managed chat permissions without resetting its usage ledger."""
+        with self.lock, self.db:
+            if not identifier.startswith("assistant-"):
+                raise ValueError("Only internal Assistant permissions can be edited here.")
+            self.grant(identifier)
+            self.db.execute(
+                "UPDATE grants SET body=? WHERE id=?", (grant.model_dump_json(), identifier)
+            )
+        self.event(identifier, "permissions updated")
+
     def authenticate(self, token: str) -> str:
         with self.lock:
             row = self.db.execute(

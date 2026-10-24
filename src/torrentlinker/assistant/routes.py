@@ -28,6 +28,18 @@ def routes(app, assistant):
             assistant.provider(identifier), assistant.secrets.get("assistant:" + identifier)
         )
 
+    @app.get("/api/setup/assistant/chat")
+    def chat_defaults():
+        return assistant.chat_defaults()
+
+    @app.put("/api/setup/assistant/chat")
+    def save_chat_defaults(body: Conversation):
+        return assistant.save_chat_defaults(body)
+
+    @app.put("/api/assistant/conversations/{identifier}")
+    def edit_conversation(identifier: str, body: Conversation):
+        return assistant.update_conversation(identifier, body)
+
     @app.post("/api/assistant/conversations")
     def conversation(body: Conversation):
         return assistant.create_conversation(body)

@@ -37,29 +37,42 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path):
     )
     with TestClient(app) as browser:
         login(browser)
-        p = browser.post(
+        browser.post(
             "/api/setup/assistant/providers",
             json={"name": "Local test", "kind": "ollama", "model": "test"},
         ).json()
-        browser.post(
-            "/api/assistant/conversations",
-            json={
-                "name": "My Plan",
-                "provider_id": p["id"],
-                "policy": {"name": "Local test", "clients": ["default"]},
-            },
-        )
         widget = AssistantTab(lambda: app.state.assistant)
         qtbot.addWidget(widget)
         widget.resize(1000, 700)
         widget.show()
         widget.activate()
-        widget.conversations.setCurrentRow(0)
+        assert widget.send.isEnabled()
         widget.prompt.setPlainText("Help me build a Plan.")
         widget.send.click()
         qtbot.waitUntil(lambda: "Ready to prepare" in widget.transcript.toPlainText(), timeout=5000)
+        chats = browser.get("/api/assistant/conversations").json()
+        assert len(chats) == 1
+        assert chats[0]["name"] == "Help me build a Plan."
+        assert chats[0]["policy"]["mode"] == "propose"
         assert widget.send.isEnabled()
         assert widget.prompt.height() <= 115
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication, QPushButton
+
+        next(b for b in widget.findChildren(QPushButton) if b.text() == "New discussion").click()
+        assert QApplication.activeModalWidget() is None
+        assert widget.prompt.hasFocus()
+        assert widget.send.isEnabled()
+        assert len(browser.get("/api/assistant/conversations").json()) == 1
+        widget.prompt.setPlainText("Another task")
+        qtbot.keyClick(widget.prompt, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+        assert "\n" in widget.prompt.toPlainText()
+        assert len(browser.get("/api/assistant/conversations").json()) == 1
+        qtbot.keyClick(widget.prompt, Qt.Key.Key_Return)
+        qtbot.waitUntil(lambda: "Ready to prepare" in widget.transcript.toPlainText(), timeout=5000)
+        assert len(browser.get("/api/assistant/conversations").json()) == 2
+        widget.conversations.setCurrentRow(1)
+        assert "Help me build a Plan." in widget.transcript.toPlainText()
         widget.grab().save(str(tmp_path / "assistant-desktop.png"))
 
 
@@ -101,14 +114,34 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             expect(page.get_by_role("heading", name="Local test")).to_be_visible()
             page.get_by_role("button", name="Discussion", exact=True).click()
             page.get_by_role("button", name="New discussion", exact=True).click()
-            dialog = page.locator(".assistant-dialog")
-            dialog.get_by_label("Name", exact=True).fill("My Plan")
-            dialog.get_by_role("button", name="Save", exact=True).click()
+            expect(page.locator(".assistant-dialog")).to_have_count(0)
             page.locator("#assistant-prompt").fill("Help me build a Plan.")
-            page.locator("#assistant-send").click()
+            page.locator("#assistant-prompt").press("Enter")
             expect(page.locator("#assistant-transcript")).to_contain_text(
                 "Ready to prepare", timeout=10000
             )
+            page.locator("#assistant-prompt").fill("Keep this unfinished message")
+            page.get_by_role("button", name="Discussion settings", exact=True).click()
+            dialog = page.locator(".assistant-dialog")
+            dialog.get_by_label("Name", exact=True).fill("My films")
+            dialog.get_by_label("Allow public Web research", exact=True).check()
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            expect(page.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
+            expect(page.locator("#assistant-transcript")).to_contain_text("Ready to prepare")
+            page.get_by_role("button", name="New discussion", exact=True).click()
+            expect(page.locator(".assistant-dialog")).to_have_count(0)
+            page.get_by_role("button", name="Discussion settings", exact=True).click()
+            dialog = page.locator(".assistant-dialog")
+            expect(dialog.get_by_label("Allow public Web research", exact=True)).not_to_be_checked()
+            dialog.get_by_label("Allow public Web research", exact=True).check()
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            page.get_by_role("button", name="New discussion", exact=True).click()
+            page.get_by_role("button", name="Discussion settings", exact=True).click()
+            dialog = page.locator(".assistant-dialog")
+            expect(dialog.get_by_label("Allow public Web research", exact=True)).to_be_checked()
+            dialog.get_by_role("button", name="Cancel", exact=True).click()
+            page.get_by_role("button", name="My films", exact=True).click()
+            expect(page.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
             page.screenshot(path=str(tmp_path / "assistant-web.png"))
             page.get_by_role("button", name="Automations", exact=True).click()
             page.get_by_role("button", name="Create task", exact=True).click()

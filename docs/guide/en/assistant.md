@@ -31,7 +31,11 @@ Keys stay in TorrentLinker's secret store, using the system keyring on desktop. 
 
 ## Start a discussion
 
-In **Discussion → New discussion**, select the model and allowed Torrent Clients. **Proposals only** is the default. The Assistant can read data and prepare a Plan, while download and management actions wait for your approval.
+Open **Discussion** and type your message. **New discussion** opens an empty chat immediately; its title comes from your first message. Choose the model beside the message box. Press **Enter** to send, or **Shift+Enter** for a new line.
+
+**Discussion settings** lets you rename the chat and choose its clients, Web access, permissions and limits. Settings can change while the chat is idle, keeping its history and budget usage. Under **Connections → Chat defaults**, save the choices for future chats. These defaults do not change existing discussions or automations.
+
+**Proposals only** is the initial default. The Assistant can read data and prepare a Plan, while download and management actions wait for your approval.
 
 Try:
 

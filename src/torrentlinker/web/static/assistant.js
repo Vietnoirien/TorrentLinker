@@ -1,6 +1,7 @@
 /* Same owner APIs as desktop; model output is always rendered as text. */
 let assistantView = "chat", assistantConversation = "", assistantRun = "", assistantSnapshot = null;
-let assistantRefreshBusy = false, assistantRenderKey = "";
+let assistantRefreshBusy = false, assistantRenderKey = "", assistantLoadVersion = 0;
+const assistantDrafts = new Map();
 const at = (en, fr) => say(en, fr);
 const assistantRoot = () => $("view-assistant");
 function aField(form, label, value = "", type = "text", options = null) {
@@ -22,7 +23,10 @@ function aActions(dialog, form, save) {
   form.onsubmit = e => e.preventDefault(); form.append(footer);
 }
 async function loadAssistant() {
-  assistantSnapshot = await api("setup/assistant");
+  const version = ++assistantLoadVersion;
+  const setup = await api("setup/assistant");
+  if (version !== assistantLoadVersion) return;
+  assistantSnapshot = setup;
   const root = assistantRoot(); root.replaceChildren(); assistantRenderKey = "";
   const nav = element("div", undefined, "toolbar");
   for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["tasks", at("Automations", "Automatisations")], ["history", at("History", "Historique")], ["connections", at("Connections", "Connexions")]]) {
@@ -38,44 +42,96 @@ async function loadAssistant() {
     return;
   }
   const layout = element("div", undefined, "assistant-layout"), side = element("aside", undefined, "assistant-conversations"), main = element("div", undefined, "assistant-main");
-  side.append(button(at("New discussion", "Nouvelle discussion"), () => aTaskEditor(false), "primary"));
+  side.append(button(at("New discussion", "Nouvelle discussion"), async () => {
+    assistantConversation = ""; assistantRun = ""; assistantDrafts.delete("");
+    await loadAssistant(); $("assistant-prompt")?.focus();
+  }, "primary"));
   const conversations = await api("assistant/conversations");
+  if (version !== assistantLoadVersion) return;
   for (const c of conversations) side.append(button(c.name, async () => { assistantConversation = c.id; assistantRun = ""; await loadAssistant(); }, assistantConversation === c.id ? "active" : ""));
   layout.append(side, main); root.append(layout);
-  if (!assistantConversation) {
-    main.append(element("h2", at("What would you like to do?", "Que souhaitez-vous faire ?")), element("p", at("Prepare an Upload, build a Zen Plan or review your torrents. Start a discussion and choose its model and permissions.", "Préparez un Upload, créez un Plan Zen ou examinez vos torrents. Créez une discussion et choisissez son modèle et ses autorisations.")));
-    if (!assistantSnapshot.providers.length) main.append(button(at("Connect a model", "Connecter un modèle"), () => aProvider()));
-    return;
-  }
   const current = conversations.find(c => c.id === assistantConversation);
-  if (!current) { assistantConversation = ""; return loadAssistant(); }
-  main.append(element("p", `${current.name} · ${current.policy.mode === "propose" ? at("Proposals only", "Propositions uniquement") : at("Execute within limits", "Exécution dans les limites")} · ${current.policy.clients.map(id => state.setup.clients.find(c => c.id === id)?.name || id).join(", ")}`, "muted"));
+  if (assistantConversation && !current) { assistantConversation = ""; return loadAssistant(); }
+  const defaults = await api("setup/assistant/chat"), config = current || defaults;
+  if (version !== assistantLoadVersion) return;
+  main.append(element("p", `${current ? current.name + " · " : ""}${config.policy.mode === "propose" ? at("Proposals only", "Propositions uniquement") : at("Execute within limits", "Exécution dans les limites")}`, "muted"));
   const transcript = element("div", undefined, "assistant-transcript"); transcript.id = "assistant-transcript";
+  if (!current) {
+    const welcome = element("div", undefined, "assistant-welcome");
+    welcome.append(element("h2", at("What would you like to do?", "Que souhaitez-vous faire ?")), element("p", at("Prepare an Upload, build a Zen Plan or review your torrents.", "Préparez un Upload, créez un Plan Zen ou examinez vos torrents.")));
+    transcript.append(welcome);
+  }
   main.append(transcript);
   const form = element("form", undefined, "assistant-composer"), prompt = element("textarea");
   prompt.id = "assistant-prompt"; prompt.maxLength = 16000; prompt.rows = 3;
+  prompt.value = assistantDrafts.get(assistantConversation) || "";
+  prompt.oninput = () => assistantDrafts.set(assistantConversation, prompt.value);
   prompt.placeholder = at("Give a task or ask a question…", "Donnez une tâche ou posez une question…"); prompt.setAttribute("aria-label", at("Message", "Message"));
+  const controls = element("div", undefined, "toolbar assistant-chat-controls");
+  const model = element("select"); model.id = "assistant-model";
+  model.setAttribute("aria-label", at("Model connection", "Connexion au modèle"));
+  for (const p of assistantSnapshot.providers) { const o = element("option", `${p.name} · ${p.model}`); o.value = p.id; model.append(o); }
+  if ([...model.options].some(o => o.value === config.provider_id)) model.value = config.provider_id;
+  model.onchange = () => guard(async () => {
+    if (current) {
+      const {id, ...body} = current;
+      send.disabled = true; model.disabled = true; settings.disabled = true;
+      try { await api(`assistant/conversations/${id}`, {...body, provider_id: model.value}, "PUT"); current.provider_id = model.value; }
+      catch (e) { model.value = current.provider_id; throw e; }
+      finally { send.disabled = !model.value; model.disabled = false; settings.disabled = false; }
+    }
+  });
+  const settings = button(at("Discussion settings", "Paramètres de la discussion"), () => aTaskEditor(false, {...config, provider_id: model.value}, !current));
+  settings.id = "assistant-chat-settings";
   const send = element("button", at("Send", "Envoyer"), "primary"); send.type = "submit"; send.id = "assistant-send";
-  form.append(prompt, send, button(at("Stop", "Arrêter"), async () => { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); }));
-  prompt.onkeydown = e => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); form.requestSubmit(); } };
+  send.disabled = !model.value; settings.disabled = !model.value;
+  controls.append(model, settings, send, button(at("Stop", "Arrêter"), async () => { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); }));
+  form.append(prompt, controls);
+  if (!assistantSnapshot.providers.length) main.append(button(at("Connect a model", "Connecter un modèle"), async () => { assistantView = "connections"; await loadAssistant(); }));
+  prompt.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!send.disabled) form.requestSubmit(); } };
   form.onsubmit = e => { e.preventDefault(); guard(async () => {
-    if (!prompt.value.trim()) return;
-    const run = await api("assistant/jobs", {conversation_id: assistantConversation, message: prompt.value});
-    assistantRun = run.id; prompt.value = ""; await aRefreshChat();
+    if (!prompt.value.trim() || send.disabled) return;
+    send.disabled = true;
+    const origin = assistantConversation, message = prompt.value;
+    let identifier = origin;
+    try {
+      if (!identifier) {
+        const chat = await api("assistant/conversations", {...defaults, provider_id: model.value, name: "Discussion"});
+        identifier = chat.id;
+        assistantDrafts.set(identifier, message); assistantDrafts.delete("");
+      }
+      const run = await api("assistant/jobs", {conversation_id: identifier, message});
+      assistantDrafts.delete(identifier);
+      if (assistantConversation === origin) {
+        assistantConversation = identifier; assistantRun = run.id;
+        await loadAssistant(); $("assistant-prompt")?.focus();
+      }
+    } catch (e) {
+      if (assistantConversation === origin && identifier) {
+        assistantConversation = identifier; await loadAssistant();
+      }
+      throw e;
+    } finally { send.disabled = !model.value; }
   }); };
   main.append(form); await aRefreshChat();
 }
 async function aRefreshChat() {
   if (state.view !== "assistant" || assistantView !== "chat" || !assistantConversation || !$("assistant-transcript") || assistantRefreshBusy) return;
   assistantRefreshBusy = true;
+  const identifier = assistantConversation, transcript = $("assistant-transcript");
   try {
-    const rows = await api(`assistant/jobs?conversation_id=${encodeURIComponent(assistantConversation)}`);
+    const rows = await api(`assistant/jobs?conversation_id=${encodeURIComponent(identifier)}`);
+    if (assistantConversation !== identifier || $("assistant-transcript") !== transcript) return;
     const key = JSON.stringify(rows); if (key === assistantRenderKey) return;
     assistantRenderKey = key;
-    $("assistant-transcript").replaceChildren(...[...rows].reverse().map(aRunCard));
+    const position = transcript.scrollTop, bottom = position >= transcript.scrollHeight - transcript.clientHeight - 20;
+    transcript.replaceChildren(...[...rows].reverse().map(aRunCard));
+    transcript.scrollTop = bottom ? transcript.scrollHeight : position;
     const active = rows.find(r => ["queued", "running"].includes(r.status));
     assistantRun = active?.id || rows[0]?.id || "";
-    $("assistant-send").disabled = !!active;
+    $("assistant-send").disabled = !!active || !$("assistant-model").value;
+    $("assistant-model").disabled = !!active;
+    $("assistant-chat-settings").disabled = !!active;
   } finally { assistantRefreshBusy = false; }
 }
 function aRunCard(run) {
@@ -106,6 +162,7 @@ async function aReview(id, completed = aRefreshChat) {
 async function aConnections(root) {
   root.append(element("p", at("Credentials stay in TorrentLinker. Hosted providers receive your messages and tool results. Local connections never fall back to a hosted provider. Daily limit: 200 calls per connection, UTC.", "Les clés restent dans TorrentLinker. Les fournisseurs distants reçoivent vos messages et les résultats des outils. Aucune bascule automatique du local vers une API distante. Limite : 200 appels par connexion et par jour UTC."), "muted"));
   root.append(button(at("Add connection", "Ajouter une connexion"), () => aProvider(), "primary"));
+  root.append(button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aTaskEditor(false, await api("setup/assistant/chat"), true)));
   for (const p of assistantSnapshot.providers) {
     const card = element("div", undefined, "card"); card.append(element("h3", p.name), element("p", `${p.kind} · ${p.model} · ${p.url}`));
     card.append(button(at("Edit", "Modifier"), () => aProvider(p)), button(at("Test tool connection", "Tester les outils"), async () => {
@@ -152,9 +209,10 @@ async function aTasks(root) {
     }), button(at("Run now", "Exécuter maintenant"), async () => { await api(`assistant/schedules/${t.id}/run`, {}); assistantView = "history"; await loadAssistant(); })); root.append(card);
   }
 }
-function aTaskEditor(scheduled, existing = null) {
-  const {dialog, form} = aDialog(scheduled ? at("Scheduled task", "Tâche programmée") : at("New discussion", "Nouvelle discussion"));
+function aTaskEditor(scheduled, existing = null, defaults = false) {
+  const {dialog, form} = aDialog(scheduled ? at("Scheduled task", "Tâche programmée") : defaults ? at("Chat defaults", "Paramètres des nouvelles discussions") : at("Discussion settings", "Paramètres de la discussion"));
   const name = aField(form, at("Name", "Nom"), existing?.name || "");
+  if (defaults) name.parentElement.hidden = true;
   const provider = aField(form, at("Model connection", "Connexion au modèle"), existing?.provider_id || assistantSnapshot.providers[0]?.id || "", "", assistantSnapshot.providers.map(p => [p.id, `${p.name} · ${p.model}`]));
   const mode = aField(form, at("Action policy", "Politique d’action"), existing?.policy.mode || "propose", "", [["propose", at("Proposals only", "Propositions uniquement")], ["execute", at("Execute within limits", "Exécuter dans les limites")]]);
   const clients = element("fieldset"); clients.append(element("legend", at("Allowed Torrent Clients", "Clients torrent autorisés"))); form.append(clients);
@@ -183,12 +241,15 @@ function aTaskEditor(scheduled, existing = null) {
     frequency.onchange = () => { interval.parentElement.hidden = frequency.value !== "interval"; atTime.parentElement.hidden = frequency.value === "interval"; days.hidden = frequency.value !== "weekly"; timezone.parentElement.hidden = frequency.value === "interval"; }; frequency.onchange();
     kind.onchange = () => { provider.disabled = kind.value !== "model"; }; kind.onchange();
   }
-  const body = () => ({name: name.value, provider_id: provider.value, policy: {name: name.value, clients: clientInputs.filter(([, e]) => e.checked).map(([id]) => id), mode: mode.value, permissions: permissions.filter(([, e]) => e.checked && !e.disabled).map(([id]) => id), daily_bytes: Math.round(+bytes.value * 1024 ** 3), daily_torrents: +torrents.value, reserve_bytes: Math.round(+reserve.value * 1024 ** 3)}, web: web.checked, max_calls: +calls.value, max_seconds: +seconds.value, max_tokens: +tokens.value,
+  const body = () => ({name: name.value, provider_id: provider.value, policy: {name: name.value, clients: clientInputs.filter(([, e]) => e.checked).map(([id]) => id), mode: mode.value, permissions: permissions.filter(([, e]) => e.checked && !e.disabled).map(([id]) => id), daily_bytes: Math.round(+bytes.value * 1024 ** 3), daily_torrents: +torrents.value, reserve_bytes: Math.round(+reserve.value * 1024 ** 3)}, web: web.checked, max_output_tokens: existing?.max_output_tokens ?? 2048, max_calls: +calls.value, max_seconds: +seconds.value, max_tokens: +tokens.value,
     ...(scheduled ? {instruction: instruction.value, kind: kind.value, frequency: frequency.value, interval_minutes: +interval.value, at: atTime.value, timezone: timezone.value, weekdays: [...days.querySelectorAll("input:checked")].map(e => +e.value), enabled: enabled.checked} : {})});
   if (scheduled) form.append(button(at("Preview next run", "Voir la prochaine exécution"), async () => { const preview = await api("assistant/schedules/preview", body()); form.append(element("p", new Date(preview.next_at * 1000).toLocaleString())); }));
   aActions(dialog, form, async () => {
-    const result = await api(scheduled ? "assistant/schedules" + (existing ? `/${existing.id}` : "") : "assistant/conversations", body(), existing ? "PUT" : "POST");
-    if (!scheduled) { assistantConversation = result.id; assistantView = "chat"; }
+    if (scheduled) {
+      await api("assistant/schedules" + (existing ? `/${existing.id}` : ""), body(), existing ? "PUT" : "POST");
+    } else {
+      await api(defaults ? "setup/assistant/chat" : `assistant/conversations/${existing.id}`, body(), "PUT");
+    }
   });
 }
 setInterval(() => { if (state.view === "assistant" && assistantView === "chat") guard(aRefreshChat); }, 1500);

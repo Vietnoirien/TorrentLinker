@@ -5711,224 +5711,233 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
 <context>
     <name>AssistantEditor</name>
     <message>
-        <location filename="../gui/assistant.py" line="45"/>
+        <location filename="../gui/assistant.py" line="59"/>
         <source>Scheduled task</source>
         <translation>Tâche programmée</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="45"/>
         <source>New discussion</source>
-        <translation>Nouvelle discussion</translation>
+        <translation type="vanished">Nouvelle discussion</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="55"/>
-        <location filename="../gui/assistant.py" line="56"/>
+        <location filename="../gui/assistant.py" line="61"/>
+        <source>Chat defaults</source>
+        <translation>Paramètres des nouvelles discussions</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="63"/>
+        <source>Discussion settings</source>
+        <translation>Paramètres de la discussion</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="74"/>
+        <location filename="../gui/assistant.py" line="75"/>
         <source>Name</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="62"/>
+        <location filename="../gui/assistant.py" line="83"/>
         <source>Model connection</source>
         <translation>Connexion au modèle</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="65"/>
+        <location filename="../gui/assistant.py" line="86"/>
         <source>Proposals only</source>
         <translation>Propositions uniquement</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="66"/>
+        <location filename="../gui/assistant.py" line="87"/>
         <source>Execute within limits</source>
         <translation>Exécuter dans les limites</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="68"/>
+        <location filename="../gui/assistant.py" line="89"/>
         <source>Action policy</source>
         <translation>Politique d’action</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="80"/>
+        <location filename="../gui/assistant.py" line="101"/>
         <source>Allowed Torrent Clients</source>
         <translation>Clients torrent autorisés</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="81"/>
+        <location filename="../gui/assistant.py" line="102"/>
         <source>Allow public Web research</source>
         <translation>Autoriser la recherche sur le Web public</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="84"/>
+        <location filename="../gui/assistant.py" line="105"/>
         <source>Permissions and limits</source>
         <translation>Autorisations et limites</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="95"/>
+        <location filename="../gui/assistant.py" line="116"/>
         <source>Downloads</source>
         <translation>Téléchargements</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="96"/>
+        <location filename="../gui/assistant.py" line="117"/>
         <source>Torrent controls</source>
         <translation>Commandes des torrents</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="97"/>
+        <location filename="../gui/assistant.py" line="118"/>
         <source>Reseeds</source>
         <translation>Remises en seed</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="98"/>
+        <location filename="../gui/assistant.py" line="119"/>
         <source>Uploads</source>
         <translation>Uploads</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="108"/>
+        <location filename="../gui/assistant.py" line="129"/>
         <source>Downloads per day, GiB</source>
         <translation>Téléchargements par jour, Gio</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="114"/>
+        <location filename="../gui/assistant.py" line="135"/>
         <source>Torrents per day</source>
         <translation>Torrents par jour</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="118"/>
+        <location filename="../gui/assistant.py" line="139"/>
         <source>Keep free, GiB</source>
         <translation>Conserver libres, Gio</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="124"/>
+        <location filename="../gui/assistant.py" line="145"/>
         <source>Model calls per run</source>
         <translation>Appels au modèle par exécution</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="127"/>
+        <location filename="../gui/assistant.py" line="148"/>
         <source>Maximum duration, seconds</source>
         <translation>Durée maximale, secondes</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="130"/>
+        <location filename="../gui/assistant.py" line="151"/>
         <source>Token limit per run</source>
         <translation>Limite de tokens par exécution</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="136"/>
+        <location filename="../gui/assistant.py" line="157"/>
         <source>Instructions</source>
         <translation>Instructions</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="139"/>
+        <location filename="../gui/assistant.py" line="160"/>
         <source>Model task</source>
         <translation>Tâche avec modèle</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="140"/>
+        <location filename="../gui/assistant.py" line="161"/>
         <source>Refresh torrents (no model)</source>
         <translation>Actualiser les torrents (sans modèle)</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="141"/>
+        <location filename="../gui/assistant.py" line="162"/>
         <source>Refresh Catalogue (no model)</source>
         <translation>Actualiser le Catalogue (sans modèle)</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="149"/>
+        <location filename="../gui/assistant.py" line="170"/>
         <source>Task type</source>
         <translation>Type de tâche</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="152"/>
+        <location filename="../gui/assistant.py" line="173"/>
         <source>Every X minutes</source>
         <translation>Toutes les X minutes</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="153"/>
+        <location filename="../gui/assistant.py" line="174"/>
         <source>Daily</source>
         <translation>Quotidienne</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="154"/>
+        <location filename="../gui/assistant.py" line="175"/>
         <source>Weekly</source>
         <translation>Hebdomadaire</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="160"/>
+        <location filename="../gui/assistant.py" line="181"/>
         <source>Frequency</source>
         <translation>Fréquence</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="163"/>
+        <location filename="../gui/assistant.py" line="184"/>
         <source>Interval, minutes</source>
         <translation>Intervalle, minutes</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="176"/>
+        <location filename="../gui/assistant.py" line="197"/>
         <source>Mon</source>
         <translation>Lun</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="177"/>
+        <location filename="../gui/assistant.py" line="198"/>
         <source>Tue</source>
         <translation>Mar</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="178"/>
+        <location filename="../gui/assistant.py" line="199"/>
         <source>Wed</source>
         <translation>Mer</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="179"/>
+        <location filename="../gui/assistant.py" line="200"/>
         <source>Thu</source>
         <translation>Jeu</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="180"/>
+        <location filename="../gui/assistant.py" line="201"/>
         <source>Fri</source>
         <translation>Ven</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="181"/>
+        <location filename="../gui/assistant.py" line="202"/>
         <source>Sat</source>
         <translation>Sam</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="182"/>
+        <location filename="../gui/assistant.py" line="203"/>
         <source>Sun</source>
         <translation>Dim</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="189"/>
+        <location filename="../gui/assistant.py" line="210"/>
         <source>Time (HH:MM)</source>
         <translation>Heure (HH:MM)</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="190"/>
+        <location filename="../gui/assistant.py" line="211"/>
         <source>Timezone</source>
         <translation>Fuseau horaire</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="191"/>
+        <location filename="../gui/assistant.py" line="212"/>
         <source>Days</source>
         <translation>Jours</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="205"/>
+        <location filename="../gui/assistant.py" line="226"/>
         <source>Enable schedule</source>
         <translation>Activer la programmation</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="208"/>
+        <location filename="../gui/assistant.py" line="229"/>
         <source>Preview next run</source>
         <translation>Voir la prochaine exécution</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="268"/>
+        <location filename="../gui/assistant.py" line="290"/>
         <source>Next run</source>
         <translation>Prochaine exécution</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="272"/>
-        <location filename="../gui/assistant.py" line="285"/>
+        <location filename="../gui/assistant.py" line="294"/>
+        <location filename="../gui/assistant.py" line="308"/>
         <source>Assistant</source>
         <translation>Assistant</translation>
     </message>
@@ -5936,247 +5945,276 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
 <context>
     <name>AssistantTab</name>
     <message>
-        <location filename="../gui/assistant.py" line="291"/>
+        <location filename="../gui/assistant.py" line="314"/>
         <source>Queued</source>
         <translation>En attente</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="292"/>
+        <location filename="../gui/assistant.py" line="315"/>
         <source>Running</source>
         <translation>En cours</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="293"/>
+        <location filename="../gui/assistant.py" line="316"/>
         <source>Completed</source>
         <translation>Terminée</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="294"/>
+        <location filename="../gui/assistant.py" line="317"/>
         <source>Failed</source>
         <translation>Échec</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="295"/>
+        <location filename="../gui/assistant.py" line="318"/>
         <source>Cancelled</source>
         <translation>Annulée</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="296"/>
+        <location filename="../gui/assistant.py" line="319"/>
         <source>Interrupted</source>
         <translation>Interrompue</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="297"/>
+        <location filename="../gui/assistant.py" line="320"/>
         <source>Awaiting approval</source>
         <translation>Validation requise</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="298"/>
+        <location filename="../gui/assistant.py" line="321"/>
         <source>Finished</source>
         <translation>Terminé</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="314"/>
+        <location filename="../gui/assistant.py" line="338"/>
         <source>Connect a model to discuss tasks and create automations. Proposals are the default.</source>
         <translation>Connectez un modèle pour discuter de vos tâches et créer des automatisations. Le mode propositions est activé par défaut.</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="327"/>
+        <location filename="../gui/assistant.py" line="351"/>
+        <location filename="../gui/assistant.py" line="556"/>
         <source>New discussion</source>
         <translation>Nouvelle discussion</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="341"/>
+        <location filename="../gui/assistant.py" line="366"/>
         <source>Give a task or ask a question…</source>
         <translation>Donnez une tâche ou posez une question…</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="343"/>
+        <location filename="../gui/assistant.py" line="368"/>
         <source>Message</source>
         <translation>Message</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="346"/>
+        <location filename="../gui/assistant.py" line="370"/>
+        <source>Connect a model</source>
+        <translation>Connecter un modèle</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="382"/>
+        <source>Discussion settings</source>
+        <translation>Paramètres de la discussion</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="385"/>
         <source>Send</source>
         <translation>Envoyer</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="349"/>
+        <location filename="../gui/assistant.py" line="388"/>
         <source>Stop</source>
         <translation>Arrêter</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="357"/>
+        <location filename="../gui/assistant.py" line="396"/>
         <source>Discussion</source>
         <translation>Discussion</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="362"/>
+        <location filename="../gui/assistant.py" line="401"/>
         <source>Keep TorrentLinker open to run scheduled tasks. Missed intervals are combined into one run. Review interrupted runs before using Run now.</source>
         <translation>Gardez TorrentLinker ouvert pour exécuter les tâches programmées. Les échéances manquées sont regroupées en une exécution. Vérifiez les tâches interrompues avant de les relancer.</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="373"/>
+        <location filename="../gui/assistant.py" line="412"/>
         <source>Create task</source>
         <translation>Créer une tâche</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="374"/>
-        <location filename="../gui/assistant.py" line="403"/>
+        <location filename="../gui/assistant.py" line="413"/>
+        <location filename="../gui/assistant.py" line="442"/>
         <source>Edit</source>
         <translation>Modifier</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="375"/>
+        <location filename="../gui/assistant.py" line="414"/>
         <source>Pause / Enable</source>
         <translation>Suspendre / Activer</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="376"/>
+        <location filename="../gui/assistant.py" line="415"/>
         <source>Run now</source>
         <translation>Exécuter maintenant</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="382"/>
+        <location filename="../gui/assistant.py" line="421"/>
         <source>Automations</source>
         <translation>Automatisations</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="386"/>
+        <location filename="../gui/assistant.py" line="425"/>
         <source>History</source>
         <translation>Historique</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="391"/>
+        <location filename="../gui/assistant.py" line="430"/>
         <source>Hosted providers receive messages and tool results. No automatic fallback to a hosted model. Limit: 200 calls per connection per UTC day.</source>
         <translation>Les fournisseurs distants reçoivent les messages et les résultats des outils. Aucune bascule automatique vers un modèle distant. Limite : 200 appels par connexion et par jour UTC.</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="402"/>
+        <location filename="../gui/assistant.py" line="441"/>
         <source>Add connection</source>
         <translation>Ajouter une connexion</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="404"/>
+        <location filename="../gui/assistant.py" line="443"/>
         <source>Test tools</source>
         <translation>Tester les outils</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="405"/>
-        <location filename="../gui/assistant.py" line="758"/>
+        <location filename="../gui/assistant.py" line="444"/>
+        <location filename="../gui/assistant.py" line="888"/>
         <source>Web research</source>
         <translation>Recherche Web</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="411"/>
+        <location filename="../gui/assistant.py" line="445"/>
+        <source>Chat defaults</source>
+        <translation>Paramètres des nouvelles discussions</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="451"/>
         <source>Connections</source>
         <translation>Connexions</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="431"/>
-        <location filename="../gui/assistant.py" line="647"/>
+        <location filename="../gui/assistant.py" line="471"/>
+        <location filename="../gui/assistant.py" line="777"/>
         <source>Assistant</source>
         <translation>Assistant</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="451"/>
+        <location filename="../gui/assistant.py" line="491"/>
         <source>Paused</source>
         <translation>En pause</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="471"/>
+        <location filename="../gui/assistant.py" line="570"/>
+        <location filename="../gui/assistant.py" line="703"/>
         <source>Proposals only</source>
         <translation>Propositions uniquement</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="473"/>
+        <location filename="../gui/assistant.py" line="572"/>
+        <location filename="../gui/assistant.py" line="705"/>
         <source>Execute within limits</source>
         <translation>Exécuter dans les limites</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="531"/>
+        <location filename="../gui/assistant.py" line="641"/>
         <source>%1 calls · %2 tokens</source>
         <translation>%1 appels · %2 tokens</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="540"/>
+        <location filename="../gui/assistant.py" line="650"/>
         <source>You</source>
         <translation>Vous</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="557"/>
-        <location filename="../gui/assistant.py" line="617"/>
+        <location filename="../gui/assistant.py" line="667"/>
+        <location filename="../gui/assistant.py" line="747"/>
         <source>Review proposal</source>
         <translation>Examiner la proposition</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="600"/>
+        <location filename="../gui/assistant.py" line="687"/>
+        <source>What would you like to do?</source>
+        <translation>Que souhaitez-vous faire ?</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="689"/>
+        <source>Prepare an Upload, build a Zen Plan or review your torrents.</source>
+        <translation>Préparez un Upload, créez un Plan Zen ou examinez vos torrents.</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="730"/>
         <source>Job progress</source>
         <translation>Avancement de la tâche</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="625"/>
+        <location filename="../gui/assistant.py" line="755"/>
         <source>Approve this action</source>
         <translation>Approuver cette action</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="627"/>
+        <location filename="../gui/assistant.py" line="757"/>
         <source>Reject</source>
         <translation>Refuser</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="659"/>
+        <location filename="../gui/assistant.py" line="375"/>
+        <location filename="../gui/assistant.py" line="789"/>
         <source>Model connection</source>
         <translation>Connexion au modèle</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="672"/>
-        <location filename="../gui/assistant.py" line="771"/>
+        <location filename="../gui/assistant.py" line="802"/>
+        <location filename="../gui/assistant.py" line="901"/>
         <source>Leave blank to keep the saved key</source>
         <translation>Laisser vide pour conserver la clé</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="674"/>
+        <location filename="../gui/assistant.py" line="804"/>
         <source>Name</source>
         <translation>Nom</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="675"/>
+        <location filename="../gui/assistant.py" line="805"/>
         <source>Provider</source>
         <translation>Fournisseur</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="676"/>
+        <location filename="../gui/assistant.py" line="806"/>
         <source>Base URL</source>
         <translation>Adresse de base</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="677"/>
+        <location filename="../gui/assistant.py" line="807"/>
         <source>Model ID</source>
         <translation>Identifiant du modèle</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="678"/>
+        <location filename="../gui/assistant.py" line="808"/>
         <source>API key</source>
         <translation>Clé API</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="684"/>
+        <location filename="../gui/assistant.py" line="814"/>
         <source>Use an address reachable by TorrentLinker. In Docker, localhost is the container. Changing the address clears the saved key unless you enter a new one.</source>
         <translation>Utilisez une adresse accessible depuis TorrentLinker. Dans Docker, localhost désigne le conteneur. Changer l’adresse efface la clé enregistrée, sauf si vous en saisissez une nouvelle.</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="691"/>
+        <location filename="../gui/assistant.py" line="821"/>
         <source>List models</source>
         <translation>Lister les modèles</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="746"/>
+        <location filename="../gui/assistant.py" line="876"/>
         <source>Testing connection and tool round trip…</source>
         <translation>Test de la connexion et des appels d’outils…</translation>
     </message>
     <message>
-        <location filename="../gui/assistant.py" line="762"/>
+        <location filename="../gui/assistant.py" line="892"/>
         <source>Use Brave Search or SearXNG for search. Page reading and book metadata need no search key. Film metadata uses your TMDb key.</source>
         <translation>Utilisez Brave Search ou SearXNG pour la recherche. La lecture de pages et les métadonnées des livres ne nécessitent pas de clé de recherche. Les films utilisent votre clé TMDb.</translation>
     </message>

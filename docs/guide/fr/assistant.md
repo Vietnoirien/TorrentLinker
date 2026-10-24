@@ -31,7 +31,11 @@ Les clés sont conservées dans le coffre de secrets utilisé par TorrentLinker,
 
 ## Commencer une discussion
 
-Dans **Discussion → Nouvelle discussion**, choisissez le modèle et les clients torrent autorisés. Le mode **Propositions uniquement** est sélectionné par défaut. L'Assistant peut consulter les données et préparer un Plan, mais ses actions de téléchargement ou de gestion attendent votre validation.
+Ouvrez **Discussion** et écrivez votre message. **Nouvelle discussion** ouvre directement une conversation vide, nommée à partir de votre premier message. Choisissez le modèle près du champ de saisie. **Entrée** envoie le message ; **Maj+Entrée** ajoute une ligne.
+
+**Paramètres de la discussion** permet de renommer la conversation et de choisir les clients, l’accès au Web, les autorisations et les limites. Ces réglages sont modifiables hors exécution, sans perdre l’historique ni la consommation du budget. Dans **Connexions → Paramètres des nouvelles discussions**, enregistrez les choix à réutiliser pour les prochaines conversations. Ils ne modifient ni les discussions existantes ni les automatisations.
+
+Le mode **Propositions uniquement** est sélectionné au départ. L'Assistant peut consulter les données et préparer un Plan, mais ses actions de téléchargement ou de gestion attendent votre validation.
 
 Exemple de première demande :
 

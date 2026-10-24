@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -37,13 +37,32 @@ from torrentlinker.assistant.research import SearchSettings
 from torrentlinker.gui.tasks import run_in_background
 
 
+class ChatPrompt(QPlainTextEdit):
+    submitted = Signal()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
+            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        ):
+            self.submitted.emit()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
 class AssistantEditor(QDialog):
-    def __init__(self, service, *, task=False, initial=None, parent=None):
+    def __init__(self, service, *, task=False, initial=None, defaults=False, parent=None):
         super().__init__(parent)
-        self.service, self.task = service, task
+        self.service, self.task, self.defaults = service, task, defaults
         self.initial = initial or {}
-        self.setWindowTitle(self.tr("Scheduled task") if task else self.tr("New discussion"))
-        self.resize(620, 700)
+        self.setWindowTitle(
+            self.tr("Scheduled task")
+            if task
+            else self.tr("Chat defaults")
+            if defaults
+            else self.tr("Discussion settings")
+        )
+        self.resize(620, 700 if task else 440)
         layout = QVBoxLayout(self)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -54,6 +73,8 @@ class AssistantEditor(QDialog):
         self.name = QLineEdit(self.initial.get("name", ""))
         self.name.setAccessibleName(self.tr("Name"))
         form.addRow(self.tr("Name"), self.name)
+        if defaults:
+            form.setRowVisible(self.name, False)
         self.provider = QComboBox()
         for p in service.setup()["providers"]:
             self.provider.addItem(p["name"] + " · " + p["model"], p["id"])
@@ -232,6 +253,7 @@ class AssistantEditor(QDialog):
             name=self.name.text().strip(),
             provider_id=self.provider.currentData() or "",
             web=self.web.isChecked(),
+            max_output_tokens=self.initial.get("max_output_tokens", 2048),
             max_calls=self.calls.value(),
             max_seconds=self.seconds.value(),
             max_tokens=self.tokens.value(),
@@ -274,12 +296,13 @@ class AssistantEditor(QDialog):
     def save(self):
         try:
             value = self.value()
-            result = (
-                self.service.save_schedule(value, self.initial.get("id", ""))
-                if self.task
-                else self.service.create_conversation(value)
-            )
-            self.saved = result["id"]
+            if self.task:
+                result = self.service.save_schedule(value, self.initial.get("id", ""))
+            elif self.defaults:
+                result = self.service.save_chat_defaults(value)
+            else:
+                result = self.service.update_conversation(self.initial["id"], value)
+            self.saved = result.get("id", "")
             self.accept()
         except Exception as error:
             QMessageBox.warning(self, self.tr("Assistant"), str(error))
@@ -307,6 +330,7 @@ class AssistantTab(QWidget):
         self.render_key = ""
         self.task_data = []
         self.provider_data = []
+        self.drafts = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.notice = QLabel(
@@ -325,7 +349,7 @@ class AssistantTab(QWidget):
         left = QWidget()
         ll = QVBoxLayout(left)
         new = QPushButton(self.tr("New discussion"))
-        new.clicked.connect(lambda: self.edit(False))
+        new.clicked.connect(self.new_discussion)
         ll.addWidget(new)
         self.conversations = QListWidget()
         self.conversations.currentRowChanged.connect(self.select_conversation)
@@ -337,12 +361,27 @@ class AssistantTab(QWidget):
         self.transcript.setOpenLinks(False)
         self.transcript.anchorClicked.connect(self.open_receipt)
         rl.addWidget(self.transcript, 1)
-        self.prompt = QPlainTextEdit()
+        self.prompt = ChatPrompt()
+        self.prompt.submitted.connect(self.send_message)
         self.prompt.setPlaceholderText(self.tr("Give a task or ask a question…"))
         self.prompt.setMaximumHeight(115)
         self.prompt.setAccessibleName(self.tr("Message"))
         rl.addWidget(self.prompt)
+        self.connect_model = QPushButton(self.tr("Connect a model"))
+        self.connect_model.clicked.connect(lambda: self.pages.setCurrentIndex(3))
+        rl.addWidget(self.connect_model)
         controls = QHBoxLayout()
+        self.chat_model = QComboBox()
+        self.chat_model.setAccessibleName(self.tr("Model connection"))
+        self.chat_model.setMinimumWidth(120)
+        self.chat_model.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.chat_model.activated.connect(self.change_chat_model)
+        controls.addWidget(self.chat_model, 1)
+        self.chat_settings = QPushButton(self.tr("Discussion settings"))
+        self.chat_settings.clicked.connect(self.edit_chat_settings)
+        controls.addWidget(self.chat_settings)
         self.send = QPushButton(self.tr("Send"))
         self.send.clicked.connect(self.send_message)
         controls.addWidget(self.send)
@@ -403,6 +442,7 @@ class AssistantTab(QWidget):
             (self.tr("Edit"), self.edit_provider),
             (self.tr("Test tools"), self.test_provider),
             (self.tr("Web research"), self.research_editor),
+            (self.tr("Chat defaults"), lambda: self.edit_chat_settings(defaults=True)),
         ]:
             b = QPushButton(label)
             b.clicked.connect(action)
@@ -460,13 +500,72 @@ class AssistantTab(QWidget):
         for p in self.provider_data:
             self.providers.addItem(p["name"] + " · " + p["model"])
         self.providers.setCurrentRow(selected)
+        current = next((c for c in self.conversation_data if c["id"] == self.conversation_id), None)
+        chosen = (
+            current["provider_id"]
+            if current
+            else self.chat_model.currentData() or self.service.chat_defaults().provider_id
+        )
+        self.chat_model.blockSignals(True)
+        self.chat_model.clear()
+        for p in self.provider_data:
+            self.chat_model.addItem(p["name"] + " · " + p["model"], p["id"])
+        index = self.chat_model.findData(chosen)
+        if index >= 0:
+            self.chat_model.setCurrentIndex(index)
+        self.chat_model.blockSignals(False)
+        self.connect_model.setVisible(not self.provider_data)
         self.render_key = ""
         self.refresh_run()
+
+    def change_chat_model(self):
+        if self.service and self.conversation_id:
+            body, _ = self.service.conversation(self.conversation_id)
+            body.provider_id = self.chat_model.currentData() or ""
+            self.perform(lambda: self.service.update_conversation(self.conversation_id, body))
+            self.refresh()
+
+    def edit_chat_settings(self, *, defaults=False):
+        if not self.service:
+            return
+        defaults = defaults or not self.conversation_id
+        if defaults:
+            initial = self.service.chat_defaults().model_dump()
+            initial["provider_id"] = self.chat_model.currentData() or initial["provider_id"]
+        else:
+            body, _ = self.service.conversation(self.conversation_id)
+            initial = {"id": self.conversation_id, **body.model_dump()}
+        editor = AssistantEditor(self.service, initial=initial, defaults=defaults, parent=self)
+        if editor.exec():
+            if defaults and not self.conversation_id:
+                self.chat_model.setCurrentIndex(
+                    self.chat_model.findData(editor.provider.currentData())
+                )
+            self.refresh()
+
+    def new_discussion(self):
+        self.drafts[self.conversation_id] = self.prompt.toPlainText()
+        self.drafts.pop("", None)
+        self.conversation_id = ""
+        self.run_id = ""
+        self.prompt.clear()
+        self.conversations.setCurrentRow(-1)
+        self.chat_model.setCurrentIndex(
+            self.chat_model.findData(self.service.chat_defaults().provider_id)
+        )
+        self.notice.setText(self.tr("New discussion"))
+        self.render_key = ""
+        self.refresh_run()
+        self.prompt.setFocus()
 
     def select_conversation(self, row):
         if 0 <= row < len(self.conversation_data):
             conversation = self.conversation_data[row]
+            self.drafts[self.conversation_id] = self.prompt.toPlainText()
             self.conversation_id = conversation["id"]
+            self.chat_model.setCurrentIndex(self.chat_model.findData(conversation["provider_id"]))
+            self.prompt.setPlainText(self.drafts.get(self.conversation_id, ""))
+            self.run_id = ""
             policy = (
                 self.tr("Proposals only")
                 if conversation["policy"]["mode"] == "propose"
@@ -512,13 +611,24 @@ class AssistantTab(QWidget):
             self.perform(lambda: self.service.cancel(self.run_id))
 
     def send_message(self):
-        if self.conversation_id and self.prompt.toPlainText().strip():
-            result = self.perform(
-                lambda: self.service.start(self.conversation_id, self.prompt.toPlainText())
-            )
-            if result:
-                self.run_id = result["id"]
-                self.prompt.clear()
+        message = self.prompt.toPlainText().strip()
+        if not self.service or not self.send.isEnabled() or not message:
+            return
+
+        def submit():
+            if not self.conversation_id:
+                body = self.service.chat_defaults()
+                body.provider_id = self.chat_model.currentData() or ""
+                body.name = "Discussion"
+                self.conversation_id = self.service.create_conversation(body)["id"]
+            return self.service.start(self.conversation_id, message)
+
+        result = self.perform(submit)
+        if result:
+            self.run_id = result["id"]
+            self.drafts.pop(self.conversation_id, None)
+            self.drafts.pop("", None)
+            self.prompt.clear()
 
     def render_transcript(self, rows):
         parts = ["<style>p{line-height:1.6;}pre{white-space:pre-wrap;}a{color:#55bdb7;}</style>"]
@@ -570,10 +680,30 @@ class AssistantTab(QWidget):
         self.render_key = key
         bar = self.transcript.verticalScrollBar()
         position, bottom = bar.value(), bar.value() >= bar.maximum() - 10
-        self.transcript.setHtml(self.render_transcript(rows))
+        self.transcript.setHtml(
+            self.render_transcript(rows)
+            if rows
+            else "<h2>"
+            + self.tr("What would you like to do?")
+            + "</h2><p>"
+            + self.tr("Prepare an Upload, build a Zen Plan or review your torrents.")
+            + "</p>"
+        )
         bar.setValue(bar.maximum() if bottom else position)
         active = next((r for r in rows if r["status"] in {"queued", "running"}), None)
-        self.send.setEnabled(not active and bool(self.conversation_id))
+        self.send.setEnabled(not active and bool(self.chat_model.currentData()))
+        self.chat_model.setEnabled(not active)
+        self.chat_settings.setEnabled(not active and bool(self.provider_data))
+        body = (
+            self.service.conversation(self.conversation_id)[0]
+            if self.conversation_id
+            else self.service.chat_defaults()
+        )
+        self.notice.setText(
+            self.tr("Proposals only")
+            if body.policy.mode == "propose"
+            else self.tr("Execute within limits")
+        )
         self.run_id = active["id"] if active else self.run_id
         if all_rows:
             self.history.setHtml(self.render_transcript(all_rows))
