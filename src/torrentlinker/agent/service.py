@@ -19,6 +19,7 @@ from torrentlinker.web.setup import Setup
 
 READ_JOBS = {
     "refresh",
+    "select-torrents",
     "search",
     "scan",
     "check",
@@ -86,6 +87,7 @@ class AgentService:
                 if row["body"] != serialized:
                     raise ValueError("This request_id already belongs to a different operation.")
                 return self.proposal(row["id"])
+            self.validate_selection(actor, body)
             identifier = uuid4().hex
             with self.access.db:
                 self.access.db.execute(
@@ -132,6 +134,7 @@ class AgentService:
             if time.time() - row["created"] > 900 or row["fingerprint"] != self.fingerprint():
                 raise ValueError("Proposal expired or settings changed. Request a new proposal.")
             body = AgentRequest.model_validate_json(row["body"])
+            self.validate_selection(actor, body)
             target = self.target(actor, body.client_id)
             for client_id in body.client_ids:
                 self.target(actor, client_id)
@@ -169,9 +172,10 @@ class AgentService:
                         identifier,
                     )
                 try:
+                    self.validate_selection(actor, body)
                     return target.run(body, stop, progress)
                 except Exception:
-                    if body.kind == "refresh":
+                    if body.kind in {"refresh", "select-torrents"}:
                         target.connection_error = (
                             "Refresh failed. Cached estimates are unavailable."
                         )
@@ -191,6 +195,73 @@ class AgentService:
                 )
             self.access.event(actor, "approved" if approved else "submitted", identifier)
             return self.proposal(identifier)
+
+    def selection(self, actor: str, identifier: str) -> tuple[str, dict]:
+        """Resolve an immutable, connection-owned completed selection, not a caller's hashes."""
+        self.access.grant(actor)
+        with self.access.lock:
+            proposal = self.access.db.execute(
+                "SELECT * FROM proposals WHERE grant_id=? AND job_id=?", (actor, identifier)
+            ).fetchone()
+            if proposal is None:
+                raise ValueError("Selection not found for this connection.")
+            body = AgentRequest.model_validate_json(proposal["body"])
+            if body.kind != "select-torrents":
+                raise ValueError("Use a completed select_torrents job as the selection_id.")
+            self.target(actor, body.client_id)
+            result = self.jobs.get(identifier)
+            if result["status"] != "completed" or not isinstance(result["result"], dict):
+                raise ValueError("Wait for the selection job to complete successfully.")
+            snapshot = result["result"]
+            if (
+                time.time() - snapshot["snapshot_at"] > 900
+                or proposal["fingerprint"] != self.fingerprint()
+            ):
+                raise ValueError("Selection expired or settings changed. Select torrents again.")
+            return body.client_id, snapshot
+
+    def validate_selection(self, actor: str, body: AgentRequest) -> None:
+        if not body.selection_id:
+            return
+        client_id, snapshot = self.selection(actor, body.selection_id)
+        if (
+            body.kind != "manage"
+            or body.client_id != client_id
+            or body.hashes != [row["hash"] for row in snapshot["rows"]]
+            or body.selection.model_dump() != snapshot["criteria"]
+        ):
+            raise ValueError("The operation does not match the saved selection.")
+
+    def manage_selection(self, actor: str, request_id: str, selection_id: str, action: str) -> dict:
+        self.access.grant(actor)
+        with self.access.lock:
+            previous = self.access.db.execute(
+                "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
+            ).fetchone()
+            if previous:
+                body = AgentRequest.model_validate_json(previous["body"])
+                if (
+                    body.kind != "manage"
+                    or body.selection_id != selection_id
+                    or body.action != action
+                ):
+                    raise ValueError("This request_id already belongs to a different operation.")
+                return self.proposal(previous["id"])
+            client_id, snapshot = self.selection(actor, selection_id)
+            return self.request(
+                actor,
+                request_id,
+                AgentRequest.model_validate(
+                    {
+                        "kind": "manage",
+                        "client_id": client_id,
+                        "action": action,
+                        "hashes": [row["hash"] for row in snapshot["rows"]],
+                        "selection_id": selection_id,
+                        "selection": snapshot["criteria"],
+                    }
+                ),
+            )
 
     def release_storage(self, identifier: str) -> None:
         """Owner acknowledgement of an uncertain send; never refund daily spending."""

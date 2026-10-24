@@ -40,6 +40,56 @@ Les descriptions, NFO et résultats de recherche sont du contenu externe, pas de
 
 Chaque cible MCP doit actuellement avoir un Dossier de téléchargement par défaut, même si des dossiers par catégorie existent. Un dossier distant nécessite la correspondance de chemins et la vérification habituelles. La première version MCP utilise ce dossier par défaut pour les téléchargements mis en file.
 
+## Sélectionner beaucoup de torrents sans les compter soi-même
+
+L'outil `select_torrents` actualise le client choisi, filtre sa liste complète et calcule le
+classement, le nombre de torrents, leur taille totale et leur estimation actuelle de Zen/jour.
+Il ne se limite pas à la première page et ne modifie aucun torrent.
+
+Pour sélectionner jusqu'à 1 000 ebooks en seed, avec la Note la plus basse puis la taille
+la plus élevée à Note égale :
+
+```json
+{
+  "request_id": "examen-ebooks-1",
+  "client_id": "default",
+  "criteria": {
+    "category": "Ebook",
+    "status": "seeding",
+    "ranking": "lowest_note_largest_size",
+    "count": 1000
+  }
+}
+```
+
+Utilisez un identifiant de client renvoyé par `overview`. Consultez `job_status` jusqu'à la fin
+de la tâche. Le résumé indique `selected_count`, `eligible_count`, `shortfall` et les exclusions,
+indépendamment des pages affichées. Les classements Note/Zen excluent les mesures inconnues,
+les nombres de seeders manquants et les estimations de catégorie provisoires. Tous les
+classements excluent les torrents en cours de Vérification. Si seuls 700 torrents conviennent,
+le serveur en sélectionne 700 et signale qu'il en manque 300.
+
+Les autres classements sont `largest_size` et `lowest_zen_per_gib`. Une catégorie inclut ses
+sous-catégories ; une catégorie vide inclut toutes les catégories. Le filtre facultatif
+`tracker` prend un nom d'hôte, par exemple `c411.org`, et regroupe son miroir connu `tk.c411.tw`.
+Une sélection concerne un seul client.
+
+Après examen, appelez `manage_selection` avec le `selection_id` obtenu, un nouveau `request_id`
+stable et une action explicite : `pause`, `resume`, `recheck`, `remove` ou `delete`. Le serveur
+reprend les hashes enregistrés. L'assistant n'a pas à les recopier, les compter ou les trier.
+Les permissions et validations habituelles s'appliquent. Le retrait et la suppression demandent
+toujours votre confirmation. Le résultat donne le nombre d'actions réussies, ignorées ou échouées,
+ainsi que le détail par torrent.
+
+Une sélection expire après 15 minutes ou une modification des paramètres. Avant d'agir,
+TorrentLinker actualise à nouveau la liste. Si le classement sélectionne d'autres torrents,
+l'action échoue avant toute modification : il faut refaire et examiner la sélection.
+Un échec d'actualisation ne réutilise jamais les anciennes données en cache.
+
+Mettre en pause conserve les fichiers et ne libère **aucun espace disque**. La taille totale peut
+compter plusieurs fois des fichiers partagés. Le total de Zen est l'estimation actuelle des
+torrents sélectionnés, pas une prédiction exacte de la perte après évolution des bonus de Classe.
+
 ## Approuver et suivre les actions
 
 Ouvrez **Propositions et activité** sur le bureau ou **Accès des agents** sur le web. Vérifiez le client, l'opération et les torrents avant d'approuver. Le retrait et la suppression affichent aussi les noms et les dossiers. Une proposition refusée n'est pas exécutée. Une proposition en attente expire après 15 minutes ; une modification des paramètres l'invalide également.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any, Literal
@@ -24,6 +25,7 @@ from torrentlinker.torrent_management import (
     tracker_hosts,
 )
 from torrentlinker.torrent_search import native_search
+from torrentlinker.torrent_selection import SelectionCriteria, select_rows
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
 from torrentlinker.web.storage import DownloadClient
@@ -38,6 +40,7 @@ class JobRequest(BaseModel):
     kind: Literal[
         "manage",
         "refresh",
+        "select-torrents",
         "search",
         "enqueue",
         "send-queue",
@@ -61,6 +64,8 @@ class JobRequest(BaseModel):
     maximum_bytes: int = Field(default=0, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1000)
     cached_only: bool = False
+    selection: SelectionCriteria = Field(default_factory=SelectionCriteria)
+    selection_id: str = Field(default="", max_length=64)
     path: str = Field(default="", max_length=4096)
     query: str = Field(default="", max_length=500)
     page: int = Field(default=1, ge=1, le=10000)
@@ -406,7 +411,7 @@ class Operations:
                 "failed": [title for title, _ in report.failed],
                 "stopped": report.stopped,
             }
-        if request.kind == "refresh":
+        if request.kind in {"refresh", "select-torrents"}:
             torrents = self.setup.client().torrents(with_files=False)
             settings = self.setup.settings
             cached_rows = {
@@ -450,14 +455,27 @@ class Operations:
                         "zen": estimate.zen if estimate else None,
                         "note": estimate.note if estimate else None,
                         "provisional": estimate.provisional_category if estimate else False,
+                        "ranking_metrics_known": estimate is not None
+                        and (t.swarm_seeders >= 0 or t.hash.lower() in cached_rows),
                     }
                 )
             self.rows = rows
             self.observed = torrents
             self.connection_error = ""
             self.zen = {"count": view.count, "daily": view.day.total, "paid": view.day.paid}
+            if request.kind == "select-torrents":
+                return select_rows(rows, request.selection)
             return {"count": len(rows), "zen": self.zen}
         if request.kind == "manage":
+            if request.selection_id:
+                # Refresh and check the ranking inside the same desktop coordination scope.
+                # Never replace a missing or changed selection with different torrents.
+                Operations.run(
+                    self, JobRequest(kind="refresh", client_id=request.client_id), stop, progress
+                )
+                selected = select_rows(self.rows, request.selection)
+                if [row["hash"] for row in selected["rows"]] != request.hashes:
+                    raise ValueError("Torrent selection changed. Select and review it again.")
             result = []
             for hash in request.hashes:
                 if stop.is_set():
@@ -472,5 +490,13 @@ class Operations:
                     for r in results
                 ]
                 progress({"done": len(result), "total": len(request.hashes)})
+            if request.selection_id:
+                return {
+                    "rows": result,
+                    "requested_count": len(request.hashes),
+                    "attempted_count": len(result),
+                    "outcomes": dict(Counter(row["outcome"] for row in result)),
+                    "cancelled": stop.is_set(),
+                }
             return result
         raise ValueError("Unknown job.")

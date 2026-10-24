@@ -40,6 +40,51 @@ Search results, descriptions and NFOs are external content, not instructions to 
 
 A default Download Folder must currently be configured for each MCP download target, even if category folders already exist. Remote folders need the usual Path Mapping and file verification. The first MCP version uses this default folder for queued downloads.
 
+## Select many torrents without counting them yourself
+
+Use `select_torrents` for bulk management. TorrentLinker refreshes the chosen Torrent Client,
+filters its complete list and calculates the ranking, count, total size and current estimated
+Zen/day. It does not stop at the first page and does not change any torrents.
+
+For up to 1,000 seeding ebooks with the lowest Note, largest size first on equal Notes:
+
+```json
+{
+  "request_id": "review-ebooks-1",
+  "client_id": "default",
+  "criteria": {
+    "category": "Ebook",
+    "status": "seeding",
+    "ranking": "lowest_note_largest_size",
+    "count": 1000
+  }
+}
+```
+
+Use a client ID returned by `overview`. Poll `job_status` until completion. The summary reports
+`selected_count`, `eligible_count`, `shortfall` and exclusions independently of pagination.
+Note/Zen rankings exclude unknown metrics, missing seeder data and provisional category
+estimates. All rankings exclude torrents undergoing Verification. If only 700 qualify, the
+tool selects 700 and reports a shortfall of 300.
+
+Other rankings are `largest_size` and `lowest_zen_per_gib`. A category includes descendants;
+an empty category selects all categories. The optional `tracker` filter takes a hostname,
+such as `c411.org`, and groups its known mirror `tk.c411.tw`. Each selection targets one client.
+
+After review, call `manage_selection` with the returned `selection_id`, a new stable
+`request_id`, and an explicit `action`: `pause`, `resume`, `recheck`, `remove` or `delete`.
+The server retrieves the saved hashes. The assistant does not copy, count or sort them.
+Normal permissions and approvals apply, including mandatory approval for removal or deletion.
+The action job reports counts per outcome as well as individual results.
+
+Selections expire after 15 minutes or a settings change. Before acting, TorrentLinker refreshes
+the list again. If the ranking selects different torrents, the action fails before changing
+anything; create and review a new selection. Failed refreshes never reuse old cached data.
+
+Pausing keeps files and frees **no disk space**. Total size may count shared files more than
+once. The Zen total is the selected torrents' current estimate, not an exact prediction of the
+account's loss after Class bonuses change.
+
 ## Approve and monitor
 
 Open **Proposals and activity** on desktop, or the **Agent access** page on the web. Inspect the client, operation and selected hashes before approving. Torrent removal and deletion additionally show the torrent names and folders. Rejected proposals do not execute. A pending proposal expires after 15 minutes; changing settings also invalidates pending proposals.
