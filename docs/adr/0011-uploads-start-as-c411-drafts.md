@@ -13,3 +13,11 @@ The announce URL holds the user's passkey and is stored in the system keyring li
 Publication was checked on 2026-10-23 with a real 3D Upload. c411 adds `info.source = "C411"`; the original was already private. Including this source tag when creating the torrent reproduces the published info-hash exactly, so the torrent added before publication remains valid afterward. File names and piece hashes are unchanged. Announce URLs are outside the info dictionary and do not affect the info-hash. Previously generated torrents need c411's published copy, mapped to the original files inside the Torrent Client.
 
 c411's own upload checks and image upload accept only a logged-in browser, not an API key. The app applies the rules itself. The user can add an image on c411 or provide an externally hosted image URL; the app includes that image in the Draft description while preserving edited text (docs/research/upload-rules.md).
+
+## Local review queue, 0.10.0
+
+Uploads can now be saved as Local Drafts before creating a c411 Draft. The Local Draft Queue persists the form, file sizes and modification times, category fields and review findings for one Torrent Client. Saving requires neither an announce URL nor a remote upload, and does not hash files or start seeding.
+
+Desktop and web users can review, edit, remove or explicitly send a saved revision. Sending rechecks files and category requirements, creates the torrent and saves the c411 Draft. Editing increments the revision and invalidates older approvals. A changed local file requires saving and reviewing again. Sent records are retained; retrying the same completed revision does not send it twice. Failed or interrupted sends remain uncertain until the owner checks c411 and permits another attempt.
+
+MCP and built-in Assistant upload creation now saves locally. The legacy agent `upload-draft` action maps to `upload-queue`. `upload-send` always requires owner approval, including for execute-enabled connections. Scheduled upload tasks stop at local review. Publication still belongs to the user on c411. The existing manual direct-to-c411 action remains available.

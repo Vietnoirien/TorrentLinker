@@ -6,6 +6,7 @@
     <title>TorrentLinker</title>
     <link rel="stylesheet" href="static/app.css" />
     <script src="static/app.js" defer></script>
+    <script src="static/assistant.js" defer></script>
   </head>
   <body>
     <section id="login-screen" class="welcome">
@@ -38,7 +39,7 @@
           ><button data-view="queue" data-i18n="queue">Download queue</button
           ><button data-view="library" data-i18n="library">Library</button
           ><button data-view="upload">Upload</button
-          ><button data-view="jobs" data-i18n="activity">Activity</button>
+          ><button data-view="assistant">Assistant</button><button data-view="jobs" data-i18n="activity">Activity</button>
         </nav>
         <div class="sidebar-bottom">
           <button data-view="documentation">Documentation</button>
@@ -68,6 +69,7 @@
             <select id="target-client" aria-label="Target client"></select></label>
           <span id="work-status" class="badge" role="status"></span>
         </header>
+        <section id="view-assistant" class="view" hidden></section>
         <section id="view-setup" class="view" hidden>
           <p class="intro" data-i18n="setupIntro">
             Connect your client, check its folders, then add c411. You can
@@ -515,6 +517,13 @@
           </div>
         </section>
         <section id="view-upload" class="view" hidden>
+          <div class="card">
+            <h2 data-en="Local draft queue" data-fr="File des brouillons locaux">Local draft queue</h2>
+            <p data-en="Review locally before sending to c411. Automated tasks save here."
+               data-fr="Relisez ici avant l’envoi à c411. Les tâches automatiques enregistrent leurs brouillons dans cette file.">Review locally before sending to c411. Automated tasks save here.</p>
+            <button id="upload-queue-refresh" data-en="Refresh" data-fr="Actualiser">Refresh</button>
+            <div id="upload-local-queue" class="table-wrap"></div>
+          </div>
           <p id="upload-help">
             Choose a Local Item from the Library to prepare an Upload.
           </p>
@@ -549,7 +558,11 @@
               >
               <div class="actions">
                 <button id="upload-preview" type="button">Update preview</button
-                ><button class="primary">Save Draft on c411</button
+                ><button id="upload-save-local" type="button" class="primary"
+                  data-en="Save to local queue" data-fr="Enregistrer dans la file locale">Save to local queue</button
+                ><button id="upload-send-local" type="button" hidden
+                  data-en="Send saved draft to c411…" data-fr="Envoyer le brouillon enregistré à c411…">Send saved draft to c411…</button
+                ><button id="upload-send-direct">Save Draft on c411</button
                 ><a
                   href="https://postimages.org/"
                   target="_blank"

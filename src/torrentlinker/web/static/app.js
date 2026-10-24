@@ -122,6 +122,9 @@ const english = new Map();
 function translate() {
   document.documentElement.lang = language;
   $("language").value = language;
+  document.querySelectorAll("[data-en][data-fr]").forEach(el => {
+    el.textContent = language === "fr" ? el.dataset.fr : el.dataset.en;
+  });
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     if (!english.has(el)) english.set(el, el.textContent);
     el.textContent =
@@ -157,12 +160,12 @@ async function guard(fn) {
   }
 }
 async function api(path, body, method) {
-  const scoped = ["setup", "torrents", "library", "queue"];
+  const scoped = ["setup", "torrents", "library", "queue", "upload/queue"];
   if (body === undefined && scoped.includes(path.split("?")[0]) && state.clientId) {
     const id = state.clientId === "all" && path === "setup" ? state.setup?.default_client_id || "" : state.clientId;
     path += (path.includes("?") ? "&" : "?") + "client_id=" + encodeURIComponent(id);
   }
-  if (body !== undefined && (path === "jobs" || path === "confirm" || path.startsWith("setup/"))) {
+  if (body !== undefined && (path === "jobs" || path === "confirm" || (path.startsWith("setup/") && !path.startsWith("setup/assistant")))) {
     body = {client_id: state.clientId === "all" ? state.setup?.default_client_id : state.clientId, ...body};
     if (path === "jobs" && body.kind === "refresh") body.client_id = state.clientId;
   }
@@ -523,10 +526,12 @@ async function navigate(view) {
     step("client");
   }
   if (view === "agents") await loadAgents();
+  if (view === "assistant") await loadAssistant();
   if (view !== "agents") { $("agent-token").value = ""; $("agent-token-box").hidden = true; }
   if (view === "documentation") await loadGuides();
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
+  if (view === "upload") await loadUploadQueue();
   if (view === "library") await loadLibrary();
   if (view === "jobs") await loadJobs();
   if (view === "zen") await loadTorrents();
@@ -1178,8 +1183,10 @@ function uploadForm() {
     reviewed: $("upload-reviewed").checked,
   };
 }
-async function prepareUpload(row) {
+async function prepareUpload(row, saved = null) {
+  state.uploadDraft = saved;
   state.uploadPath = row.path;
+  $("upload-save-local").disabled = false;
   await navigate("upload");
   $("upload-editor").hidden = false;
   $("upload-help").textContent = row.name;
@@ -1198,18 +1205,32 @@ async function prepareUpload(row) {
   $("upload-subcategory").replaceChildren();
   $("upload-options").replaceChildren();
   $("upload-reviewed").checked = false;
+  $("upload-result").replaceChildren();
+  $("upload-send-direct").hidden = Boolean(saved);
+  $("upload-send-local").hidden = !saved;
+  if (saved) {
+    for (const [field, id] of Object.entries({title: "upload-title", description: "upload-description",
+      nfo: "upload-nfo", source: "upload-source", image: "upload-image", category: "upload-category"})) {
+      $(id).value = saved.form[field] ?? "";
+    }
+    $("upload-subcategory").append(new Option(String(saved.form.subcategory), saved.form.subcategory));
+    state.uploadSavedOptions = saved.form.options;
+  }
   await previewUpload();
 }
 async function previewUpload() {
+  const form = uploadForm();
+  if (state.uploadSavedOptions) { form.options = state.uploadSavedOptions; state.uploadSavedOptions = null; }
   await job(
-    { kind: "upload-preview", path: state.uploadPath, upload: uploadForm() },
+    { kind: "upload-preview", path: state.uploadPath, upload: form,
+      draft_id: state.uploadDraft?.id || "", revision: state.uploadDraft?.revision || 0 },
     (r) => {
       $("upload-category").value = r.category;
       $("upload-title").value = r.title;
       $("upload-description").value = r.description;
       $("upload-nfo").value = r.nfo;
       $("upload-subcategory").replaceChildren(
-        ...r.subcategories.map((s) => new Option(s.name, s.id)),
+        ...r.subcategories.map((s) => new Option(s.label || s.name, s.id)),
       );
       $("upload-subcategory").value = r.subcategory;
       $("upload-options").replaceChildren(
@@ -1251,6 +1272,66 @@ async function previewUpload() {
     },
   );
 }
+async function loadUploadQueue() {
+  const rows = await api("upload/queue");
+  table("upload-local-queue", rows, [
+    {label: say("Title", "Titre"), render: r => r.form.title},
+    {label: say("Status", "État"), render: r => ({queued: say("Awaiting review", "À relire"),
+      sending: say("Sending / check c411", "Envoi / vérifier c411"),
+      uncertain: say("Check c411 before retrying", "Vérifier c411 avant un nouvel essai"),
+      sent: say("Sent to c411", "Envoyé à c411")})[r.status] || r.status},
+    {label: say("Actions", "Actions"), render: r => {
+      const actions = element("div", "", "actions");
+      if (r.status === "queued") actions.append(button(say("Review / edit", "Relire / modifier"),
+        () => prepareUpload({path: r.path, name: r.form.title}, r)));
+      if (r.status !== "sending") actions.append(button(say("Remove locally", "Retirer localement"), async () => {
+        if (confirm(say("Remove only this local record? Files and c411 Drafts will be kept.",
+          "Retirer uniquement ce brouillon local ? Les fichiers et brouillons c411 seront conservés.")))
+          await job({kind: "upload-remove", draft_id: r.id, revision: r.revision}, loadUploadQueue);
+      }));
+      if (["sending", "uncertain"].includes(r.status)) actions.append(button(say("Allow retry…", "Autoriser un nouvel essai…"), async () => {
+        if (confirm(say("Check c411 and wait for any running send. Confirm that no Draft was created before allowing another attempt.",
+          "Vérifiez c411 et attendez la fin de tout envoi. Confirmez qu’aucun brouillon n’a été créé avant un nouvel essai.")))
+          await job({kind: "upload-reset", draft_id: r.id, revision: r.revision}, loadUploadQueue);
+      }));
+      return actions;
+    }},
+  ], null);
+}
+$("upload-queue-refresh").onclick = () => guard(loadUploadQueue);
+$("upload-save-local").onclick = () => guard(async () => {
+  await job({kind: "upload-queue", path: state.uploadPath, upload: uploadForm(),
+    draft_id: state.uploadDraft?.id || "", revision: state.uploadDraft?.revision || 0}, async r => {
+      state.uploadDraft = r;
+      $("upload-send-direct").hidden = true;
+      $("upload-send-local").hidden = false;
+      $("upload-reviewed").checked = false;
+      $("upload-description").value = r.form.description;
+      toast(say("Saved locally. Nothing sent to c411.", "Enregistré localement. Rien n’a été envoyé à c411."));
+      await loadUploadQueue();
+    });
+});
+$("upload-send-local").onclick = () => guard(async () => {
+  const saved = state.uploadDraft;
+  if (!saved || !$("upload-reviewed").checked) throw Error(say("Review the saved draft and check the confirmation box.",
+    "Relisez le brouillon enregistré et cochez la confirmation."));
+  const current = uploadForm();
+  for (const field of ["title", "description", "nfo", "source", "image", "category", "subcategory"])
+    if (current[field] !== saved.form[field]) throw Error(say("Save your changes locally before sending.", "Enregistrez vos modifications avant l’envoi."));
+  const canonicalOptions = values => JSON.stringify(Object.entries(values).filter(([,v]) => v.length)
+    .sort(([a], [b]) => Number(a)-Number(b)).map(([k,v]) => [String(k), [...v].sort((a,b) => a-b)]));
+  if (canonicalOptions(current.options) !== canonicalOptions(saved.form.options))
+    throw Error(say("Save your changes locally before sending.", "Enregistrez vos modifications avant l’envoi."));
+  if (!confirm(say("Send this saved revision to c411 as a Draft? It will not be published.",
+    "Envoyer cette version enregistrée à c411 comme brouillon ? Elle ne sera pas publiée."))) return;
+  await job({kind: "upload-send", draft_id: saved.id, revision: saved.revision}, async r => {
+    $("upload-result").replaceChildren(element("p", r.message), button(say("Seed prepared Upload", "Seeder l’upload préparé"),
+      () => job({kind: "upload-seed", hashes: [r.hash]}, () => toast(say("Verification started.", "Vérification lancée.")))));
+    $("upload-send-local").hidden = true;
+    $("upload-save-local").disabled = true;
+    await loadUploadQueue();
+  });
+});
 $("upload-preview").onclick = () => guard(previewUpload);
 $("upload-category").onchange = () => {
   $("upload-subcategory").replaceChildren();
@@ -1260,6 +1341,7 @@ $("upload-category").onchange = () => {
 $("upload-subcategory").onchange = () => guard(previewUpload);
 $("upload-form").onsubmit = (e) => {
   e.preventDefault();
+  if (state.uploadDraft) { $("upload-send-local").click(); return; }
   guard(async () => {
     if (!$("upload-reviewed").checked)
       throw Error(
@@ -1379,6 +1461,8 @@ $("guide-content").onclick = event => {
 
 $("target-client").onchange = () => guard(async () => {
   state.clientId = $("target-client").value;
+  state.uploadDraft = null;
+  state.uploadSavedOptions = null;
   state.addingClient = false;
   $("client-password").value = ""; $("client-key").value = "";
   state.selected.clear(); state.queueSelected.clear(); state.planSelected.clear();
@@ -1433,6 +1517,9 @@ async function loadAgents() {
     const details = element("pre", JSON.stringify(p.body, null, 2)); row.append(details);
     if (p.status === "pending") {
       row.append(button(say("Approve", "Approuver"), async () => {
+        if (["upload-send", "upload-reset", "upload-remove"].includes(p.body.kind)) {
+          await aReview(p.id, loadAgents); return;
+        }
         const destructive = p.body.kind === "manage" && ["remove", "delete"].includes(p.body.action);
         if (destructive) {
           const preview = await api(`agents/proposals/${p.id}/review`);

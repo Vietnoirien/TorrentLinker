@@ -52,7 +52,7 @@ class ServerSecrets:
                 else self.values.get(name, "")
             )
 
-    def redact(self, text: str) -> str:
+    def redact(self, text: str, *, public_urls: bool = False) -> str:
         from torrentlinker.torrent_management import safe_error
 
         if not text:
@@ -67,6 +67,10 @@ class ServerSecrets:
         for value in values:
             if value:
                 text = text.replace(value, "[secret]")
+        if public_urls:
+            from torrentlinker.assistant.privacy import safe_content
+
+            return safe_content(text)
         return safe_error(ValueError(text))
 
     def update(self, values: dict[str, str]) -> None:

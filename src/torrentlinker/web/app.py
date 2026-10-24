@@ -55,6 +55,7 @@ def create_app(
     service_override: Setup | None = None,
     operation_factory=Operations,
     monitor_verifications: bool = True,
+    assistant_transport=None,
 ) -> FastAPI:
     directory.mkdir(parents=True, exist_ok=True)
     sessions = Sessions(password)
@@ -151,6 +152,7 @@ def create_app(
         monitor = threading.Thread(target=verify_loop, daemon=True, name="verification-monitor")
         if monitor_verifications:
             monitor.start()
+        assistant.start_scheduler()
         try:
             async with mcp_server.session_manager.run():
                 yield
@@ -158,6 +160,7 @@ def create_app(
             shutdown.set()
             if monitor_verifications:
                 monitor.join(timeout=2)
+            assistant.close()
             jobs.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -173,6 +176,12 @@ def create_app(
     mcp_server, mcp_app = make_server(agent_service)
     app.mount("/mcp", mcp_app)
     owner_routes(app, agent_access, service, agent_service)
+    from torrentlinker.assistant.routes import routes as assistant_routes
+    from torrentlinker.assistant.service import Assistant
+
+    assistant = Assistant(directory, agent_service, mcp_server, assistant_transport)
+    assistant_routes(app, assistant)
+    app.state.assistant = assistant
     app.state.agent_service = agent_service
     app.state.reset_clients = reset_clients
 
@@ -424,6 +433,10 @@ def create_app(
         from torrentlinker.upload import PROFILES, category_name
 
         return [{"id": cid, "name": category_name(cid)} for cid in PROFILES]
+
+    @app.get("/api/upload/queue")
+    def upload_queue(client_id: str = "") -> list:
+        return for_client(client_id).setup.store.local_drafts()
 
     @app.get("/api/library")
     def library(

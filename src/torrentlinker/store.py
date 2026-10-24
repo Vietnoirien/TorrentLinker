@@ -7,10 +7,20 @@ import json
 import sqlite3
 import threading
 import time
+import uuid
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS local_draft (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    result TEXT NOT NULL DEFAULT '{}',
+    updated REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS client_plan (
     client_id TEXT PRIMARY KEY,
     payload TEXT NOT NULL
@@ -230,6 +240,91 @@ class Store:
 
     def _verification_key(self, hash: str) -> str:
         return hash if self.client_id == "default" else f"{self.client_id}:{hash}"
+
+    def local_drafts(self) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id,revision,status,payload,result,updated FROM local_draft "
+                "WHERE client_id=? ORDER BY updated DESC",
+                (self.client_id,),
+            ).fetchall()
+        return [
+            {
+                **json.loads(payload),
+                "id": key,
+                "client_id": self.client_id,
+                "revision": revision,
+                "status": status,
+                "result": json.loads(result),
+                "updated": updated,
+            }
+            for key, revision, status, payload, result, updated in rows
+        ]
+
+    def local_draft(self, identifier: str) -> dict:
+        for row in self.local_drafts():
+            if row["id"] == identifier:
+                return row
+        raise ValueError("Local Draft not found for this Torrent Client.")
+
+    def save_local_draft(self, payload: dict, identifier: str = "", revision: int = 0) -> dict:
+        key = identifier or uuid.uuid4().hex
+        with self._lock, self._db:
+            if identifier:
+                changed = self._db.execute(
+                    "UPDATE local_draft SET payload=?,revision=revision+1,updated=? "
+                    "WHERE id=? AND client_id=? AND revision=? AND status='queued'",
+                    (json.dumps(payload), time.time(), key, self.client_id, revision),
+                ).rowcount
+                if not changed:
+                    raise ValueError("Local Draft changed or was sent. Reload it before editing.")
+            else:
+                self._db.execute(
+                    "INSERT INTO local_draft(id,client_id,revision,status,payload,updated) "
+                    "VALUES(?,?,1,'queued',?,?)",
+                    (key, self.client_id, json.dumps(payload), time.time()),
+                )
+        return self.local_draft(key)
+
+    def claim_local_draft(self, identifier: str, revision: int) -> None:
+        with self._lock, self._db:
+            changed = self._db.execute(
+                "UPDATE local_draft SET status='sending',updated=? "
+                "WHERE id=? AND client_id=? AND revision=? AND status='queued'",
+                (time.time(), identifier, self.client_id, revision),
+            ).rowcount
+            if not changed:
+                raise ValueError("Local Draft changed or is already being sent. Reload it.")
+
+    def local_draft_outcome(self, identifier: str, status: str, result: dict) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE local_draft SET status=?,result=?,updated=? "
+                "WHERE id=? AND client_id=? AND status='sending'",
+                (status, json.dumps(result), time.time(), identifier, self.client_id),
+            )
+
+    def remove_local_draft(self, identifier: str, revision: int) -> None:
+        with self._lock, self._db:
+            changed = self._db.execute(
+                "DELETE FROM local_draft WHERE id=? AND client_id=? AND revision=? "
+                "AND status!='sending'",
+                (identifier, self.client_id, revision),
+            ).rowcount
+            if not changed:
+                raise ValueError("Local Draft changed or is being sent. Reload it.")
+
+    def reset_local_draft(self, identifier: str, revision: int) -> dict:
+        """Owner confirms checking c411 after an ambiguous failed/interrupted submission."""
+        with self._lock, self._db:
+            changed = self._db.execute(
+                "UPDATE local_draft SET status='queued',revision=revision+1,result='{}',updated=? "
+                "WHERE id=? AND client_id=? AND revision=? AND status IN ('sending','uncertain')",
+                (time.time(), identifier, self.client_id, revision),
+            ).rowcount
+            if not changed:
+                raise ValueError("Local Draft changed. Reload it.")
+        return self.local_draft(identifier)
 
     def enqueue_download(self, key: str, payload: dict[str, object]) -> bool:
         """Payload URLs must already have credentials redacted by the Indexer."""

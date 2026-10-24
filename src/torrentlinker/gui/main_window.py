@@ -344,6 +344,10 @@ class MainWindow(QMainWindow):
         torrents_layout.addWidget(self.torrent_stack)
         self.all_clients.toggled.connect(self._show_all_clients)
         self.tabs.addTab(torrents_page, self.tr("Torrents"))
+        from torrentlinker.gui.assistant import AssistantTab
+
+        self.assistant_tab = AssistantTab(self.assistant_service)
+        self.tabs.addTab(self.assistant_tab, self.tr("Assistant"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
@@ -368,6 +372,7 @@ class MainWindow(QMainWindow):
                 self.tr("Upload"),
                 self.tr("Search"),
                 self.tr("Torrents"),
+                self.tr("Assistant"),
             ]
         )
         self.navigation.setCurrentRow(0)
@@ -509,6 +514,19 @@ class MainWindow(QMainWindow):
         self._startup_complete = False
         self.show_saved_plan(interrupted=bool((saved := store.saved_plan()) and saved.sending))
 
+    def assistant_service(self):
+        from PySide6.QtWidgets import QApplication
+
+        from torrentlinker.agent.desktop import DesktopServer
+
+        if self.agent_runtime is None:
+            self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
+            app = QApplication.instance()
+            if app is not None:
+                app.aboutToQuit.connect(self.agent_runtime.close)
+        self.agent_runtime.start()
+        return self.agent_runtime.app.state.assistant
+
     def open_agent_access(self) -> None:
         try:
             from PySide6.QtWidgets import QApplication
@@ -557,7 +575,7 @@ class MainWindow(QMainWindow):
         from torrentlinker.agent.access import Access
 
         access = Access(self.settings_path.parent)
-        enabled = access.enabled
+        enabled = access.enabled or (self.settings_path.parent / "assistant.sqlite").exists()
         access.db.close()
         if enabled:
             try:
@@ -652,19 +670,22 @@ class MainWindow(QMainWindow):
             self.tr("Prepare an Upload, then review and publish its Draft on c411."),
             self.tr("Search torrents and queue the ones you want to download."),
             self.tr("Manage downloads and seeds in your Torrent Client."),
+            self.tr("Discuss tasks, review proposals and schedule automations."),
             self.tr("Ten thousand books kept alive. Take a moment to read one."),
         ]
         if 0 <= index < len(descriptions):
             self.page_description.setText(descriptions[index])
-        self.band.setVisible(index < self.navigation.count() and index != 4)
+        self.band.setVisible(index < self.navigation.count() and index not in {4, 5})
         self.page_title.setVisible(index < self.navigation.count())
         self.page_description.setVisible(index < self.navigation.count())
         policy = (
             QSizePolicy.Policy.Ignored
-            if index >= self.navigation.count() or index == 4
+            if index >= self.navigation.count() or index in {4, 5}
             else QSizePolicy.Policy.Preferred
         )
         self.tabs.setSizePolicy(policy, policy)
+        if self.tabs.currentWidget() is self.assistant_tab:
+            self.assistant_tab.activate()
         if self.reading_room is not None and self.tabs.currentWidget() is self.reading_room:
             self.reading_room.activate()
 
@@ -731,6 +752,9 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(index)
 
     def _focus_search(self) -> None:
+        if self.tabs.currentWidget() is self.assistant_tab:
+            self.assistant_tab.prompt.setFocus()
+            return
         if self.reading_room is not None and self.tabs.currentWidget() is self.reading_room:
             self.reading_room.filter.setFocus()
             return

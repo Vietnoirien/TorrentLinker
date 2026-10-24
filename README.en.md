@@ -10,6 +10,7 @@ Find torrents matching your existing files and reseed them in **qBittorrent, Del
 
 ## What you can do
 
+- **Built-in Assistant**: local or API models, chat, Web research and scheduled tasks. [Guide](docs/guide/en/assistant.md).
 - **MCP agents**: connect an assistant, prepare Plans and approve its actions. [Guide](docs/guide/en/agents.md).
 - **Named clients**: multiple connections, a combined overview and Plans distributed across selected clients.
 - **Library**: find files no longer seeded, search and check Candidates, then reseed matching torrents.

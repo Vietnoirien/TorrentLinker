@@ -1,0 +1,305 @@
+"""Explicit provider protocols. No implicit fallback or credential forwarding."""
+
+from __future__ import annotations
+
+import json
+from typing import Literal
+from urllib.parse import quote, urlsplit
+
+import httpx
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+PRESETS = {
+    "ollama": "http://localhost:11434/v1",
+    "lmstudio": "http://localhost:1234/v1",
+    "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta",
+    "mistral": "https://api.mistral.ai/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "compatible": "",
+}
+
+
+class Provider(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=100)
+    kind: Literal[
+        "ollama", "lmstudio", "openai", "anthropic", "gemini", "mistral", "openrouter", "compatible"
+    ]
+    url: str = Field(default="", max_length=2048)
+    model: str = Field(min_length=1, max_length=200)
+    api_key: str | None = Field(default=None, max_length=4096, exclude=True)
+
+    @model_validator(mode="after")
+    def endpoint(self):
+        self.url = (self.url or PRESETS[self.kind]).rstrip("/")
+        parsed = urlsplit(self.url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("Use an HTTP(S) base URL without credentials, query or fragment.")
+        return self
+
+
+class Models:
+    def __init__(self, transport=None):
+        self.transport = transport
+
+    def request(self, provider: Provider, key: str, path: str, body=None, timeout=60):
+        headers = {}
+        if key:
+            if provider.kind == "anthropic":
+                headers["x-api-key"] = key
+            elif provider.kind == "gemini":
+                headers["x-goog-api-key"] = key
+            else:
+                headers["Authorization"] = "Bearer " + key
+        if provider.kind == "anthropic":
+            headers["anthropic-version"] = "2023-06-01"
+        try:
+            with httpx.Client(
+                transport=self.transport, timeout=timeout, trust_env=False, follow_redirects=False
+            ) as client:
+                with client.stream(
+                    "POST" if body is not None else "GET",
+                    provider.url + path,
+                    headers=headers,
+                    json=body,
+                ) as response:
+                    if not response.is_success:
+                        raise ValueError(
+                            f"Model provider returned HTTP {response.status_code}. "
+                            "Check the endpoint, model, credentials and quota."
+                        )
+                    data = bytearray()
+                    for chunk in response.iter_bytes():
+                        data.extend(chunk)
+                        if len(data) > 2_000_000:
+                            raise ValueError("Model response exceeds the size limit.")
+                    return json.loads(data)
+        except (httpx.HTTPError, json.JSONDecodeError):
+            raise ValueError(
+                "Cannot reach the model provider or read its response. Check the "
+                "address and model server."
+            ) from None
+
+    def models(self, provider, key):
+        result = self.request(provider, key, "/models")
+        return [
+            r.get("id", r.get("name", "")).removeprefix("models/")
+            for r in result.get("data", result.get("models", []))
+        ][:500]
+
+    def turn(self, p, key, messages, tools, maximum=2048, timeout=60):
+        """Append native protocol messages, preserving reasoning/signatures between tool turns."""
+        specs = [{"type": "function", "function": t} for t in tools]
+        if p.kind == "openai":
+            body = {
+                "model": p.model,
+                "input": messages,
+                "store": False,
+                "max_output_tokens": maximum,
+                "tools": [{"type": "function", **t, "strict": False} for t in tools],
+            }
+            result = self.request(p, key, "/responses", body, timeout)
+            self.check_output(result)
+            blocks = result.get("output", [])
+            messages.extend(blocks)
+            text = "\n".join(
+                c.get("text", "")
+                for b in blocks
+                for c in b.get("content", [])
+                if c.get("type") == "output_text"
+            )
+            calls = [
+                {"id": b["call_id"], "name": b["name"], "arguments": b["arguments"]}
+                for b in blocks
+                if b.get("type") == "function_call"
+            ]
+            usage = result.get("usage", {}).get("total_tokens", 0)
+        elif p.kind == "anthropic":
+            body = {
+                "model": p.model,
+                "system": messages[0]["content"],
+                "messages": messages[1:],
+                "max_tokens": maximum,
+                "tools": [
+                    {
+                        "name": t["name"],
+                        "description": t["description"],
+                        "input_schema": t["parameters"],
+                    }
+                    for t in tools
+                ],
+            }
+            result = self.request(p, key, "/messages", body, timeout)
+            self.check_output(result)
+            blocks = result.get("content", [])
+            messages.append({"role": "assistant", "content": blocks})
+            text = "\n".join(b["text"] for b in blocks if b.get("type") == "text")
+            calls = [
+                {"id": b["id"], "name": b["name"], "arguments": b["input"]}
+                for b in blocks
+                if b.get("type") == "tool_use"
+            ]
+            u = result.get("usage", {})
+            usage = u.get("input_tokens", 0) + u.get("output_tokens", 0)
+        elif p.kind == "gemini":
+            body = {
+                "systemInstruction": {"parts": [{"text": messages[0]["content"]}]},
+                "contents": messages[1:],
+                "generationConfig": {"maxOutputTokens": maximum},
+                "tools": [
+                    {
+                        "functionDeclarations": [
+                            {
+                                "name": t["name"],
+                                "description": t["description"],
+                                "parametersJsonSchema": t["parameters"],
+                            }
+                            for t in tools
+                        ]
+                    }
+                ],
+            }  # parameters are JSON schemas
+            result = self.request(
+                p, key, "/models/" + quote(p.model, safe="") + ":generateContent", body, timeout
+            )
+            self.check_output(result)
+            content = result.get("candidates", [{}])[0].get(
+                "content", {"role": "model", "parts": []}
+            )
+            messages.append(content)
+            text = "\n".join(b.get("text", "") for b in content["parts"] if not b.get("thought"))
+            calls = [
+                {
+                    "id": str(i),
+                    "name": b["functionCall"]["name"],
+                    "arguments": b["functionCall"].get("args", {}),
+                }
+                for i, b in enumerate(content["parts"])
+                if "functionCall" in b
+            ]
+            usage = result.get("usageMetadata", {}).get("totalTokenCount", 0)
+        else:
+            body = {
+                "model": p.model,
+                "messages": messages,
+                "tools": specs,
+                "max_tokens": maximum,
+                "stream": False,
+            }
+            result = self.request(p, key, "/chat/completions", body, timeout)
+            self.check_output(result)
+            message = result["choices"][0]["message"]
+            messages.append(message)
+            text = message.get("content") or ""
+            calls = [{"id": b["id"], **b["function"]} for b in message.get("tool_calls", [])]
+            usage = result.get("usage", {}).get("total_tokens", 0)
+        for call in calls:
+            if isinstance(call["arguments"], str):
+                call["arguments"] = json.loads(call["arguments"])
+            if not isinstance(call["arguments"], dict):
+                raise ValueError("The model returned invalid tool arguments.")
+        return text, calls, usage
+
+    @staticmethod
+    def check_output(result):
+        if (
+            (result.get("incomplete_details") or {}).get("reason") == "max_output_tokens"
+            or result.get("stop_reason") == "max_tokens"
+            or any(c.get("finish_reason") == "length" for c in result.get("choices", []))
+            or any(c.get("finishReason") == "MAX_TOKENS" for c in result.get("candidates", []))
+        ):
+            raise ValueError(
+                "The model reached its output token limit. The response is incomplete. "
+                "Request a shorter answer or increase the per-response output budget."
+            )
+        if result.get("status") == "incomplete":
+            raise ValueError("The model provider returned an incomplete response. Please retry.")
+
+    @staticmethod
+    def user(p, text):
+        return (
+            {"role": "user", "parts": [{"text": text}]}
+            if p.kind == "gemini"
+            else {"role": "user", "content": text}
+        )
+
+    @staticmethod
+    def results(p, messages, results):
+        if p.kind == "anthropic":
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": c["id"], "content": json.dumps(r)}
+                        for c, r in results
+                    ],
+                }
+            )
+        elif p.kind == "gemini":
+            messages.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {"functionResponse": {"name": c["name"], "response": {"result": r}}}
+                        for c, r in results
+                    ],
+                }
+            )
+        elif p.kind == "openai":
+            messages.extend(
+                {"type": "function_call_output", "call_id": c["id"], "output": json.dumps(r)}
+                for c, r in results
+            )
+        else:
+            messages.extend(
+                {"role": "tool", "tool_call_id": c["id"], "content": json.dumps(r)}
+                for c, r in results
+            )
+
+    def test(self, p, key):
+        tools = [
+            {
+                "name": "connection_probe",
+                "description": "Test the connection by returning the supplied value.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                },
+            }
+        ]
+        messages = [
+            {"role": "system", "content": "You are testing a tool connection."},
+            self.user(
+                p,
+                "Call connection_probe with value torrentlinker. After its result, say Connected.",
+            ),
+        ]
+        _, calls, usage = self.turn(p, key, messages, tools, 512)
+        if (
+            len(calls) != 1
+            or calls[0]["name"] != "connection_probe"
+            or calls[0]["arguments"] != {"value": "torrentlinker"}
+        ):
+            raise ValueError(
+                "Connected, but the model did not make the expected tool call. "
+                "Choose a model with tool support."
+            )
+        self.results(p, messages, [(calls[0], {"value": "torrentlinker"})])
+        text, calls, used = self.turn(p, key, messages, tools, 512)
+        if calls or not text.strip():
+            raise ValueError("The model did not finish the tool round trip. Choose another model.")
+        return {
+            "tool_calling": True,
+            "tokens": usage + used,
+            "message": "Connection and tool round trip succeeded.",
+        }

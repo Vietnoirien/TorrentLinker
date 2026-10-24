@@ -284,6 +284,22 @@ class AgentDialog(QDialog):
             return
 
         def reviewed(preview):
+            if "local_draft" in preview:
+                dialog = QDialog(self)
+                dialog.setWindowTitle(self.tr("Approve proposal"))
+                dialog.resize(720, 520)
+                layout = QVBoxLayout(dialog)
+                text = QPlainTextEdit(json.dumps(preview, indent=2, ensure_ascii=False))
+                text.setReadOnly(True)
+                layout.addWidget(text)
+                buttons = QDialogButtonBox(
+                    QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+                )
+                buttons.accepted.connect(dialog.accept)
+                buttons.rejected.connect(dialog.reject)
+                layout.addWidget(buttons)
+                if dialog.exec() != QDialog.DialogCode.Accepted:
+                    return
             if "torrents" in preview:
                 text = (
                     preview["client"]

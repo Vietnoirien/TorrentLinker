@@ -59,7 +59,7 @@ def test_mcp_upload_draft_and_seeding_require_owner_approval(tmp_path, monkeypat
                 "operation": {**operation, "client_id": "default"},
             }
             proposal = call(browser, token, "propose_action", request)["structuredContent"]
-            if operation["kind"] in ("upload-draft", "upload-seed"):
+            if operation["kind"] in ("upload-draft", "upload-send", "upload-seed"):
                 assert proposal["requires_owner_approval"] is True
                 assert proposal["job_id"] == ""
                 approved = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")
@@ -90,6 +90,13 @@ def test_mcp_upload_draft_and_seeding_require_owner_approval(tmp_path, monkeypat
                 "path": str(item),
                 "upload": {"image": "https://images.example/model.png", "reviewed": True},
             },
+        ).json()
+        draft = finished(browser, job["id"])
+        assert draft["status"] == "completed", draft
+        local = draft["result"]
+        assert local["status"] == "queued"
+        job = submit(
+            {"kind": "upload-send", "draft_id": local["id"], "revision": local["revision"]}
         ).json()
         draft = finished(browser, job["id"])
         assert draft["status"] == "completed", draft

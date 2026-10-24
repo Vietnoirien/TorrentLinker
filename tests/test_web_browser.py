@@ -1,6 +1,7 @@
 """Opt-in real-browser tests against a temporary server and fake Torrent Client."""
 
 import os
+import re
 import socket
 import threading
 import time
@@ -194,3 +195,126 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch):
+    import httpx
+    import uvicorn
+    from fastapi.testclient import TestClient
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_upload_queue import UploadClient
+    from tests.test_web_jobs import finished, login
+    from torrentlinker.web.app import create_app
+
+    posted = []
+
+    def response(request):
+        if request.method == "POST":
+            posted.append(request)
+            return httpx.Response(200, json={"data": {"id": 321}})
+        if request.url.params.get("t") == "caps":
+            return httpx.Response(200, text="<caps><categories/></caps>")
+        return httpx.Response(200, json={"data": []})
+
+    monkeypatch.setattr(
+        "torrentlinker.net.client",
+        lambda **kw: httpx.Client(transport=httpx.MockTransport(response)),
+    )
+    root = tmp_path / "models"
+    root.mkdir()
+    item = root / "Cable holder.stl"
+    item.write_text("solid model\nendsolid model\n")
+
+    def application():
+        return create_app(
+            tmp_path / "config",
+            password="test-password-long",
+            roots=(root,),
+            connector=lambda *args: UploadClient(),
+        )
+
+    with TestClient(application()) as owner:
+        login(owner)
+        owner.post(
+            "/api/setup/client", json={"client": "qbittorrent", "host": "https://client.example"}
+        )
+        owner.post(
+            "/api/setup/folder",
+            json={"local": str(root), "client_path": "/models", "kind": "3d-model"},
+        )
+        owner.post(
+            "/api/setup/indexer",
+            json={"url": "https://c411.org/api/torznab", "api_key": "fake-key"},
+        )
+        owner.post("/api/setup/announce", json={"value": "https://c411.org/announce/fake"})
+        scan = owner.post("/api/jobs", json={"kind": "scan"}).json()
+        assert finished(owner, scan["id"])["status"] == "completed"
+        saved = owner.post(
+            "/api/jobs",
+            json={
+                "kind": "upload-queue",
+                "path": str(item),
+                "upload": {
+                    "title": "Cable.Holder.NOTAG.STL",
+                    "description": "[b]A small cable holder[/b]",
+                    "image": "https://images.example/holder.png",
+                },
+            },
+        ).json()
+        assert finished(owner, saved["id"])["status"] == "completed"
+    app = application()
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", log_config=None))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.02)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1000, "height": 780}, locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            page.locator('[data-view="upload"]').click()
+            expect(page.locator("#upload-local-queue")).to_contain_text("Cable.Holder.NOTAG.STL")
+            page.get_by_role("button", name="Review / edit").click()
+            expect(page.locator("#upload-description")).to_have_value(
+                re.compile("A small cable holder")
+            )
+            page.locator("#upload-description").fill("[b]Reviewed cable holder description[/b]")
+            page.locator("#upload-save-local").click()
+            expect(page.locator("#toast")).to_contain_text("Saved locally")
+            assert posted == []
+            assert not list((tmp_path / "config" / "uploads").glob("**/*.torrent"))
+            page.set_viewport_size({"width": 600, "height": 800})
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            screenshots = os.getenv("TL_WEB_SCREENSHOTS")
+            if screenshots:
+                target = Path(screenshots)
+                target.mkdir(parents=True, exist_ok=True)
+                for lang in ("en", "fr"):
+                    page.locator("#language").select_option(lang)
+                    page.screenshot(path=str(target / f"upload-queue-{lang}.png"), full_page=True)
+                page.locator("#language").select_option("en")
+            page.on("dialog", lambda dialog: dialog.accept())
+            page.locator("#upload-reviewed").check()
+            page.locator("#upload-send-local").click()
+            expect(page.locator("#upload-local-queue")).to_contain_text(
+                "Sent to c411", timeout=10000
+            )
+            assert len(posted) == 1
+            assert "Reviewed cable holder description" in posted[0].content.decode()
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(10)

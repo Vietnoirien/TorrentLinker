@@ -13,6 +13,7 @@ windows = sys.platform == "win32"
 
 datas = (
     collect_data_files("torrentlinker")
+    + collect_data_files("tzdata")
     + collect_data_files("guessit")
     + collect_data_files("babelfish")
     + copy_metadata("torrentlinker")

@@ -26,6 +26,7 @@ from torrentlinker.torrent_management import (
 )
 from torrentlinker.torrent_search import native_search
 from torrentlinker.torrent_selection import SelectionCriteria, select_rows
+from torrentlinker.upload_queue import reset_local
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
 from torrentlinker.web.storage import DownloadClient
@@ -53,6 +54,10 @@ class JobRequest(BaseModel):
         "search-options",
         "upload-preview",
         "upload-draft",
+        "upload-queue",
+        "upload-send",
+        "upload-remove",
+        "upload-reset",
         "upload-seed",
         "profile",
         "verify",
@@ -61,6 +66,8 @@ class JobRequest(BaseModel):
     hashes: list[str] = Field(default_factory=list, max_length=1000)
     confirmation: str = ""
     upload: UploadForm = Field(default_factory=UploadForm)
+    draft_id: str = Field(default="", max_length=64)
+    revision: int = Field(default=0, ge=0)
     maximum_bytes: int = Field(default=0, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1000)
     cached_only: bool = False
@@ -92,6 +99,12 @@ class Operations:
         self.zen: dict[str, Any] = {}
 
     def validate(self, request: JobRequest) -> None:
+        if request.kind in {"upload-send", "upload-remove", "upload-reset"} or (
+            request.kind in {"upload-queue", "upload-preview"} and request.draft_id
+        ):
+            record = self.setup.store.local_draft(request.draft_id)
+            if record["revision"] != request.revision:
+                raise ValueError("Local Draft changed. Reload and review the current revision.")
         if request.kind in {"scan", "check", "reseed"} and not self.setup.settings.library_folders:
             raise ValueError("Add a mounted Library Folder in Settings first.")
         if request.kind == "reseed" and len(request.hashes) != 1:
@@ -141,7 +154,24 @@ class Operations:
     ) -> Any:
         self.validate(request)
         if request.kind == "upload-preview":
-            return self.uploads.prepare(request.path, request.upload, stop)[1]
+            if request.draft_id:
+                record = self.setup.store.local_draft(request.draft_id)
+                if record["path"] != request.path:
+                    raise ValueError("A Local Draft cannot be moved to another Local Item.")
+            return self.uploads.prepare(
+                request.path, request.upload, stop, stored=bool(request.draft_id)
+            )[1]
+        if request.kind == "upload-queue":
+            return self.uploads.queue(
+                request.path, request.upload, stop, request.draft_id, request.revision
+            )
+        if request.kind == "upload-send":
+            return self.uploads.send(request.draft_id, request.revision, stop, progress)
+        if request.kind == "upload-remove":
+            self.setup.store.remove_local_draft(request.draft_id, request.revision)
+            return {"removed": request.draft_id}
+        if request.kind == "upload-reset":
+            return reset_local(self.setup.store, request.draft_id, request.revision)
         if request.kind == "upload-draft":
             return self.uploads.draft(request.path, request.upload, stop, progress)
         if request.kind == "upload-seed":

@@ -82,11 +82,17 @@ _Avoid_: Kind (a Content Kind is the Library's notion, not c411's)
 The choices c411 asks for beyond the category (language, genre, format…), listed per subcategory; some are required, some allow several values. An Upload's Draft carries the chosen ones.
 _Avoid_: Tags, metadata
 
+**Local Draft**:
+An editable Upload snapshot saved in TorrentLinker for review, scoped to one named Torrent Client. It contains the form, file snapshot and category checks. Saving it does not create a torrent or contact c411. Each edit creates a new revision.
+
+**Local Draft Queue**:
+The persistent collection of Local Drafts. Users review them here before explicitly sending a saved revision to c411. Automated Upload tasks stop here; an agent's send request always needs owner approval. Editing invalidates older send approvals. An uncertain send requires checking c411 before allowing another attempt.
+
 **Draft**:
 An Upload saved on c411 but not yet published; the user reviews and publishes it there.
 
 **Refusal**:
-A c411 rule a program can check (archives, formats, no file…): while an Orphan breaks one, its Draft cannot be saved.
+A c411 rule a program can check (archives, formats, no file…): while an Orphan breaks one, its Draft cannot be sent to c411. A Local Draft can still be saved for correction.
 
 **Warning**:
 A c411 rule only the uploader can judge (no independent creators' paid files, one theme per pack): shown in the Upload tab beside the Refusals, but the Draft can still be saved.

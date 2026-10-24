@@ -37,13 +37,20 @@ class KeyringSecrets(ServerSecrets):
     def update(self, values: dict[str, str]) -> None:
         for key, value in values.items():
             set_secret(key, value)
+            if value:
+                with self.lock:
+                    self.seen.add(value)
 
-    def redact(self, text: str) -> str:
+    def redact(self, text: str, *, public_urls: bool = False) -> str:
         if not text:
             return text
         with self.lock:
             for value in self.seen:
                 text = text.replace(value, "[secret]")
+        if public_urls:
+            from torrentlinker.assistant.privacy import safe_content
+
+            return safe_content(text)
         return safe_error(ValueError(text))
 
 
@@ -131,6 +138,7 @@ class DesktopServer:
         except Exception:
             listener.close()
             if self.app is not None:
+                self.app.state.assistant.close()
                 self.service.jobs.close()
                 self.service.access.db.close()
                 self.app = None
@@ -216,6 +224,10 @@ class DesktopServer:
         if self.server is not None:
             self.server.should_exit = True
         if self.app is not None:
+            assistant = self.app.state.assistant
+            assistant.shutdown.set()
+            for stop in list(assistant.stops.values()):
+                stop.set()
             for job in self.service.jobs.list():
                 if job["status"] in {"queued", "running"}:
                     self.service.jobs.cancel(job["id"])

@@ -545,3 +545,20 @@ dialog .description img {
 .guide-content p:has(> img) { max-width: none; }
 .guide-content li { margin-block: .6rem; }
 .guide-content h1, .guide-content h2, .guide-content h3 { line-height: 1.35; margin-bottom: 1.2rem; }
+
+/* Assistant: conversation space stays primary, advanced controls stay folded. */
+.assistant-layout { display: grid; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr); gap: 1.2rem; }
+.assistant-conversations { display: flex; flex-direction: column; gap: .5rem; max-height: 65vh; overflow: auto; }
+.assistant-conversations button { text-align: left; overflow-wrap: anywhere; }
+.assistant-main { min-width: 0; }
+.assistant-transcript { max-height: 60vh; overflow: auto; padding-right: .5rem; }
+.assistant-message { padding: .7rem 1rem; margin: .5rem 0; border-left: 3px solid var(--border); }
+.assistant-message.user { border-left-color: #2eaaa2; }
+.assistant-message p { white-space: pre-wrap; line-height: 1.65; overflow-wrap: anywhere; margin-bottom: 0; }
+.assistant-run pre, .assistant-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.assistant-composer { display: flex; gap: .6rem; align-items: end; margin-top: 1rem; }
+.assistant-composer textarea { flex: 1; min-width: 0; }
+.assistant-dialog { width: min(720px, 92vw); max-height: 88vh; overflow: auto; }
+.assistant-dialog label { margin: .7rem 0; }
+.assistant-dialog fieldset { display: flex; flex-wrap: wrap; gap: .5rem; }
+@media (max-width: 700px) { .assistant-layout { grid-template-columns: 1fr; } .assistant-conversations { max-height: 150px; } .assistant-composer { flex-wrap: wrap; } }

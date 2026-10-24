@@ -34,7 +34,10 @@ PERMISSIONS = {
     "send-queue": "downloads",
     "manage": "controls",
     "reseed": "reseed",
-    "upload-draft": "uploads",
+    "upload-queue": "uploads",
+    "upload-send": "uploads",
+    "upload-remove": "uploads",
+    "upload-reset": "uploads",
     "upload-seed": "uploads",
 }
 
@@ -70,6 +73,10 @@ class AgentService:
             raise ValueError(
                 "Supply a stable request_id of 1 to 100 characters; reuse it on retries."
             )
+        # Older prompts used upload-draft for a remote submission. Agent-created
+        # descriptions now always enter local review, even with execute permission.
+        if body.kind == "upload-draft":
+            body = body.model_copy(update={"kind": "upload-queue"})
         if body.confirmation or body.kind not in READ_JOBS | PERMISSIONS.keys():
             raise ValueError("This operation is not available through MCP.")
         target = self.target(actor, body.client_id)
@@ -102,6 +109,7 @@ class AgentService:
                 grant.mode == "execute"
                 and PERMISSIONS.get(body.kind) in grant.permissions
                 and not (body.kind == "manage" and body.action in {"delete", "remove"})
+                and body.kind not in {"upload-send", "upload-reset"}
             )
             if body.kind in READ_JOBS or automatic:
                 return self.execute(identifier, approved=False)
@@ -134,8 +142,11 @@ class AgentService:
             if time.time() - row["created"] > 900 or row["fingerprint"] != self.fingerprint():
                 raise ValueError("Proposal expired or settings changed. Request a new proposal.")
             body = AgentRequest.model_validate_json(row["body"])
+            if body.kind == "upload-draft":
+                body = body.model_copy(update={"kind": "upload-queue"})
             self.validate_selection(actor, body)
             target = self.target(actor, body.client_id)
+            target.validate(body)  # A changed Local Draft invalidates pending approval.
             for client_id in body.client_ids:
                 self.target(actor, client_id)
             if body.kind not in READ_JOBS and not approved:
@@ -143,6 +154,7 @@ class AgentService:
                     grant.mode != "execute"
                     or PERMISSIONS.get(body.kind) not in grant.permissions
                     or (body.kind == "manage" and body.action in {"remove", "delete"})
+                    or body.kind in {"upload-send", "upload-reset"}
                 ):
                     raise ValueError("Owner approval is required.")
             self.limits(identifier, actor, grant, target, body)
@@ -321,13 +333,23 @@ class AgentService:
             preview.pop("token")
             preview["client"] = target.setup.settings.profile().name
             return preview
+        if body.kind in {"upload-send", "upload-reset", "upload-remove"}:
+            target.validate(body)
+            return {
+                "operation": body.model_dump(),
+                "client": target.setup.settings.profile().name,
+                "local_draft": target.setup.store.local_draft(body.draft_id),
+            }
         return {"operation": body.model_dump()}
 
     def enable(self, enabled: bool) -> None:
         with self.access.lock:
             self.access.enable(enabled)
             if not enabled:
-                for row in self.access.db.execute("SELECT job_id FROM proposals WHERE job_id<>''"):
+                for row in self.access.db.execute(
+                    "SELECT job_id FROM proposals WHERE job_id<>'' AND grant_id NOT "
+                    "LIKE 'assistant-%'"
+                ):
                     try:
                         self.jobs.cancel(row[0])
                     except KeyError:

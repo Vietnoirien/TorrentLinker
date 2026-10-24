@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -807,3 +808,39 @@ def test_after_a_restart_a_persisted_search_without_candidates_is_ready(
     assert view.why_not(vise) is None
     assert view.why_not(other) is not None  # compared again by the Library first
     assert view.why_not(never) == "Search it first: c411 may already have it"
+
+
+def test_local_upload_queue_keeps_edited_description_without_remote_draft(qtbot, tmp_path):
+    view, indexer, qbit = tab(qtbot, tmp_path, announce="")
+    entry = model(tmp_path)
+    view.set_entries([entry])
+    view.show_all.setChecked(True)
+    view.items.selectRow(0)
+    qtbot.waitUntil(lambda: bool(view.files))
+    view.description.setPlainText("[b]Review this locally[/b]")
+    assert view.queue_button.isEnabled()
+    view.queue_button.click()
+    qtbot.waitUntil(lambda: view.local_drafts.record is not None, timeout=5000)
+    assert view.workspaces.currentWidget() is view.local_drafts
+    assert indexer.saved == []
+    assert view.local_drafts.record["status"] == "queued"
+    view.local_drafts.description.setPlainText("[b]Corrected locally[/b]")
+    view.local_drafts.save_button.click()
+    qtbot.waitUntil(lambda: not view.local_drafts.busy, timeout=5000)
+    assert view.store.local_drafts()[0]["form"]["description"] == "[b]Corrected locally[/b]"
+    assert view.store.local_drafts()[0]["revision"] == 2
+    assert indexer.saved == []
+    assert not list((tmp_path / "uploads").glob("*.torrent"))
+
+    screenshots = os.getenv("TL_UPLOAD_SCREENSHOTS")
+    if screenshots:
+        from PySide6.QtWidgets import QApplication
+
+        from torrentlinker.gui.theme import apply_theme
+
+        apply_theme(QApplication.instance(), "dark")
+        view.resize(1000, 650)
+        view.show()
+        qtbot.wait(150)
+        Path(screenshots).mkdir(parents=True, exist_ok=True)
+        assert view.grab().save(str(Path(screenshots) / "desktop-upload-queue.png"))

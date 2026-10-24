@@ -20,8 +20,9 @@ def test_gate_hides_room_below_threshold_and_closes_it_when_seeding_drops(qtbot,
     window.show()
     assert window.reader_button.isHidden()
     assert window.reading_room is None
+    ordinary_tabs = window.tabs.count()
     window._open_reading_room()
-    assert window.tabs.count() == 5
+    assert window.tabs.count() == ordinary_tabs
     window._update_reading_room(ebook_view(9999, tmp_path))
     assert window.reader_button.isHidden()
     window._update_reading_room(ebook_view(10000, tmp_path))
@@ -33,17 +34,17 @@ def test_gate_hides_room_below_threshold_and_closes_it_when_seeding_drops(qtbot,
     assert window.reader_button.isChecked()
     window._update_reading_room(ebook_view(9999, tmp_path))
     assert window.reader_button.isHidden()
-    assert window.tabs.count() == 5
+    assert window.tabs.count() == ordinary_tabs
     assert window.tabs.currentIndex() == 0
     window._open_reading_room()
-    assert window.tabs.count() == 5
+    assert window.tabs.count() == ordinary_tabs
     window._update_reading_room(ebook_view(10000, tmp_path))
     window._open_reading_room()
     qtbot.waitUntil(lambda: window.reading_room._scanned)
-    assert window.tabs.count() == 6
+    assert window.tabs.count() == ordinary_tabs + 1
     window.zen_tab.seeding_view.unavailable.emit()
     assert window.reader_button.isHidden()
-    assert window.tabs.count() == 5
+    assert window.tabs.count() == ordinary_tabs
 
 
 def test_epub_navigation_zoom_and_saved_reading_position(qtbot, tmp_path):

@@ -12,6 +12,7 @@ GUIDES = (
     ("demarrage", "getting-started", "Installer et configurer", "Setup and connections"),
     ("web-docker", "web-docker", "Interface web et Docker", "Web UI and Docker"),
     ("clients", "clients", "Plusieurs clients torrent", "Multiple Torrent Clients"),
+    ("assistant", "assistant", "Assistant et automatisations", "Assistant and automations"),
     ("agents", "agents", "Agents et accès MCP", "Agents and MCP access"),
     ("torrents", "torrents", "Gérer les torrents", "Manage torrents"),
     ("bibliotheque", "library", "Bibliothèque et reseed", "Library and reseeding"),

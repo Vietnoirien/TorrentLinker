@@ -73,8 +73,10 @@ class Access:
                 "INSERT OR REPLACE INTO config VALUES ('enabled', ?)", (json.dumps(value),)
             )
 
-    def create(self, grant: Grant) -> dict:
+    def create(self, grant: Grant, *, internal: bool = False) -> dict:
         identifier, token = secrets.token_hex(12), secrets.token_urlsafe(32)
+        if internal:
+            identifier = "assistant-" + identifier
         with self.lock, self.db:
             self.db.execute(
                 "INSERT INTO grants (id,digest,body) VALUES (?,?,?)",
@@ -85,7 +87,11 @@ class Access:
     def grant(self, identifier: str) -> Grant:
         with self.lock:
             row = self.db.execute("SELECT * FROM grants WHERE id=?", (identifier,)).fetchone()
-            if not self.enabled or row is None or row["revoked"]:
+            if (
+                row is None
+                or row["revoked"]
+                or (not identifier.startswith("assistant-") and not self.enabled)
+            ):
                 raise PermissionError("Agent access is disabled or revoked.")
             return Grant.model_validate_json(row["body"])
 
@@ -95,7 +101,7 @@ class Access:
                 "SELECT id FROM grants WHERE digest=?",
                 (hashlib.sha256(token.encode()).hexdigest(),),
             ).fetchone()
-            if not token or row is None:
+            if not token or row is None or row[0].startswith("assistant-"):
                 raise PermissionError("Invalid agent token.")
             self.grant(row[0])
             return str(row[0])

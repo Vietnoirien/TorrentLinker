@@ -1,6 +1,6 @@
 # Agents and MCP access
 
-Connect an MCP-compatible assistant to TorrentLinker to inspect torrents, search c411, prepare Plans and propose actions. TorrentLinker does not include an AI model or run a scheduled agent.
+Connect an MCP-compatible assistant to TorrentLinker to inspect torrents, search c411, prepare Plans and propose actions. For built-in model connections, chat and scheduled tasks, see [Assistant and automations](assistant.md).
 
 ## Connect an assistant
 
@@ -91,8 +91,22 @@ Open **Proposals and activity** on desktop, or the **Agent access** page on the 
 
 The assistant can follow its jobs and cancel further work. Cancellation does not undo downloads already sent to a Torrent Client. Stable request IDs prevent duplicate submissions after a network retry. Restarted, interrupted actions are not replayed automatically.
 
-You may choose **Execute permitted actions** and grant only the permissions you need. Removal and file deletion always require approval in TorrentLinker. Uploads create c411 Drafts; publication remains manual on c411. µTorrent/BitTorrent Classic operations requiring on-disk renames must use the desktop confirmation workflow.
+You may choose **Execute permitted actions** and grant only the permissions you need. Removal and file deletion always require approval in TorrentLinker. Upload preparation saves Local Drafts; sending a saved revision to c411 always requires approval. Publication remains manual on c411. µTorrent/BitTorrent Classic operations requiring on-disk renames must use the desktop confirmation workflow.
 
 Budgets are cumulative per connection and reset at UTC midnight. Failed or interrupted sends remain counted conservatively. Pending client downloads count against free space across clients sharing a physical disk. If an interrupted send cannot be reconciled, check the Torrent Client first and use **Release uncertain storage reservation**. This releases the storage hold, not the daily spending record.
 
 Revoke a connection to invalidate its token and cancel pending jobs. Disable agent access to block all agent connections. Keep using the normal app to inspect client state if an action was interrupted.
+
+
+## Manage the local upload queue
+
+Use `list_items` with `collection: "upload-queue"` and the chosen `client_id`. Each record includes its ID, revision, status, saved form, files and review findings. Use pagination to inspect the queue.
+
+Submit these operations through `propose_action`, with a fresh stable `request_id` for each intended change:
+
+- `upload-queue`: save a new local draft using `path` and `upload`. To edit, also include `draft_id` and its current `revision`, with the complete updated form.
+- `upload-send`: request sending that `draft_id` and `revision` to c411. This always creates a proposal for owner approval, even with execution and upload permissions.
+- `upload-remove`: remove the local record using its ID and revision. Files and c411 Drafts remain untouched.
+- `upload-reset`: after an uncertain send, request permission to retry. Owner approval is required after checking c411. Reload the record for its new revision before sending.
+
+Poll `job_status` for the saved result. Editing invalidates pending sends for earlier revisions. The legacy agent `upload-draft` action also saves locally. An automation should finish after `upload-queue`; it must not request remote sending unless the owner asks. `upload-seed` is available only after an upload was actually sent and prepared.

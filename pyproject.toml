@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torrentlinker"
-version = "0.9.2"
+version = "0.10.0"
 description = "Reconcile local files with private-tracker torrents and reseed them in qBittorrent, Deluge or Transmission"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,6 +17,7 @@ dependencies = [
   "numpy>=1.26",  # the 3D preview reads and decimates meshes
   "pymediainfo>=6.1",  # MediaInfo of videos, for the Films & Vidéos upload (ADR-0012)
   "mutagen>=1.47",  # audio tags for the Audio and Ebook uploads
+  "tzdata>=2024.1",  # IANA timezones for Assistant schedules, including Windows
 ]
 
 [project.optional-dependencies]

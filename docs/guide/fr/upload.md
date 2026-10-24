@@ -5,11 +5,26 @@
 1. Dans la Bibliothèque, recherchez les correspondances de votre élément. Les Orphelins sans résultat apparaissent dans **Upload**.
 2. Choisissez l’élément et sa catégorie. Relisez les refus et avertissements, le nom, les fichiers, le NFO et la description.
 3. Ajoutez l’URL directe de votre image hébergée.
-4. Préparez le brouillon, puis ouvrez-le sur c411 pour le relire et le publier. L’application ne publie pas automatiquement.
+4. Enregistrez dans la file locale et relisez la présentation. Envoyez le brouillon à c411 lorsque tout est prêt, puis publiez-le vous-même sur le site.
 
 Captures de l’interface française en thème sombre, avec des données d’exemple.
 
 ![Préparer un brouillon d’upload](../images/upload.png)
+
+## Relire dans la file de brouillons locaux
+
+Cliquez sur **Enregistrer dans la file locale** pour conserver votre travail dans TorrentLinker. Sur ordinateur, ouvrez **File de brouillons locaux**. Sur le web, la file se trouve en haut de la page Upload. Sélectionnez un brouillon pour vérifier ses fichiers, sa description et son NFO, modifier la présentation et enregistrer vos corrections localement.
+
+Les brouillons survivent aux redémarrages et appartiennent au client torrent sélectionné. Ils restent sur l’ordinateur ou le serveur qui exécute TorrentLinker. L’enregistrement ne crée pas de `.torrent`, n’envoie rien à c411 et ne lance aucun seed. Vous pouvez conserver un brouillon incomplet, sans URL d’annonce, puis le corriger plus tard.
+
+Quand tout est prêt, enregistrez vos corrections et choisissez **Envoyer à c411…**. Le formulaire web demande aussi de cocher la case de relecture. TorrentLinker contrôle la révision enregistrée, les fichiers actuels, les options obligatoires, l’image hébergée, la description et le NFO. L’envoi nécessite votre URL d’annonce et les accès aux brouillons c411. Si les fichiers ont changé, enregistrez et relisez à nouveau.
+
+Sur ordinateur, un envoi réussi poursuit le parcours habituel de vérification et de mise en seed. Sur le web et via MCP, la mise en seed est une action distincte. La publication finale reste manuelle sur c411.
+
+Supprimer un brouillon local efface uniquement son entrée dans la file. Vos fichiers et un éventuel brouillon c411 restent intacts. Si un envoi échoue ou est interrompu, vérifiez c411 avant d’autoriser une nouvelle tentative. L’application ne répète pas automatiquement un envoi dont le résultat est incertain.
+
+Les tâches d’upload automatisées enregistrent leur travail ici pour relecture. MCP peut lister, modifier et supprimer ces brouillons, mais l’envoi exige toujours votre approbation de la révision enregistrée. Une modification invalide une ancienne approbation. Voir [Agents et accès MCP](agents.md).
+
 
 ## Préparer des uploads et brouillons c411
 

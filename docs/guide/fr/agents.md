@@ -1,6 +1,6 @@
 # Agents et accès MCP
 
-Connectez un assistant compatible MCP à TorrentLinker pour consulter vos torrents, rechercher sur c411, préparer des Plans et proposer des actions. TorrentLinker ne contient pas de modèle d'IA et ne lance pas d'agent programmé.
+Connectez un assistant compatible MCP à TorrentLinker pour consulter vos torrents, rechercher sur c411, préparer des Plans et proposer des actions. Pour les connexions directes aux modèles, la discussion et les tâches programmées, consultez [Assistant et automatisations](assistant.md).
 
 ## Connecter un assistant
 
@@ -96,8 +96,22 @@ Ouvrez **Propositions et activité** sur le bureau ou **Accès des agents** sur 
 
 L'assistant peut suivre ses tâches et annuler la suite du travail. L'annulation ne retire pas les téléchargements déjà envoyés au client torrent. Un identifiant de requête stable évite de soumettre deux fois la même action après une coupure. Les tâches interrompues au redémarrage ne sont pas relancées automatiquement.
 
-Vous pouvez choisir **Exécuter les actions autorisées** et limiter les permissions. Le retrait d'un torrent et la suppression de ses fichiers demandent toujours votre approbation dans TorrentLinker. Les uploads créent des brouillons ; leur publication reste manuelle sur c411. Les opérations µTorrent/BitTorrent Classic nécessitant un renommage sur disque passent par la confirmation de l'application de bureau.
+Vous pouvez choisir **Exécuter les actions autorisées** et limiter les permissions. Le retrait d'un torrent et la suppression de ses fichiers demandent toujours votre approbation dans TorrentLinker. La préparation des uploads enregistre des brouillons locaux. Leur envoi à c411 exige toujours votre approbation. La publication reste manuelle sur le site. Les opérations µTorrent/BitTorrent Classic nécessitant un renommage sur disque passent par la confirmation de l'application de bureau.
 
 Les budgets se cumulent par connexion et repartent à zéro à minuit UTC. Les envois échoués ou interrompus restent comptés par prudence. Les téléchargements incomplets réduisent l'espace disponible, y compris entre clients partageant un disque. Si un envoi interrompu reste incertain, vérifiez d'abord le client torrent puis utilisez **Libérer la réserve disque incertaine**. Le budget quotidien reste débité.
 
 Révoquez une connexion pour invalider son jeton et annuler ses tâches en attente. Désactivez l'accès pour bloquer toutes les connexions d'agents. En cas d'interruption, vérifiez aussi l'état dans le client torrent.
+
+
+## Gérer la file locale d’uploads
+
+Appelez `list_items` avec `collection: "upload-queue"` et le `client_id` choisi. Chaque entrée fournit son identifiant, sa révision, son état, le formulaire enregistré, les fichiers et les résultats des contrôles. La liste est paginée.
+
+Soumettez ces opérations via `propose_action`, avec un nouveau `request_id` stable pour chaque modification voulue :
+
+- `upload-queue` : enregistrer un nouveau brouillon local avec `path` et `upload`. Pour modifier une entrée, ajoutez `draft_id` et sa `revision` actuelle, ainsi que le formulaire complet corrigé.
+- `upload-send` : demander l’envoi de ce `draft_id` et de cette `revision` à c411. L’approbation du propriétaire est toujours requise, même si la connexion peut exécuter des actions et gérer les uploads.
+- `upload-remove` : supprimer l’entrée locale avec son identifiant et sa révision. Les fichiers et les brouillons c411 restent intacts.
+- `upload-reset` : après un envoi incertain, demander une nouvelle tentative. Le propriétaire doit vérifier c411 puis approuver. Rechargez l’entrée pour obtenir sa nouvelle révision avant l’envoi.
+
+Suivez le résultat avec `job_status`. Toute modification invalide les propositions d’envoi d’une ancienne révision. L’ancienne action agent `upload-draft` enregistre elle aussi localement. Une automatisation doit s’arrêter après `upload-queue` ; elle ne doit demander l’envoi au site que si le propriétaire le demande. `upload-seed` nécessite un upload réellement envoyé et préparé.

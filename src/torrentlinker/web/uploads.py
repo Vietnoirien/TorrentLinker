@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -23,6 +24,7 @@ from torrentlinker.upload import (
     seed_upload,
     upload_files,
 )
+from torrentlinker.upload_queue import edited_form, save_local, send_local, sent_result
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
 
@@ -46,12 +48,25 @@ class Uploads:
         self.prepared: dict[str, tuple[PreparedUpload, str]] = {}
 
     def prepare(
-        self, path: str, form: UploadForm, stop: threading.Event
+        self, path: str, form: UploadForm, stop: threading.Event, *, stored: bool = False
     ) -> tuple[UploadRequest, dict[str, Any]]:
-        entry = self.library.entry(path)
-        self.library.check_tree(entry.item.path, stop)
-        item = scan_item(entry.item.path)
-        cid = form.category or default_category(entry.folder.kind)
+        if stored:
+            folder = next(
+                (
+                    f
+                    for f in self.setup.settings.library_folders
+                    if Path(path).is_relative_to(f.path)
+                ),
+                None,
+            )
+            if folder is None:
+                raise ValueError("This Local Draft's Library Folder was removed.")
+            content_kind = folder.kind
+        else:
+            content_kind = self.library.entry(path).folder.kind
+        self.library.check_tree(Path(path), stop)
+        item = scan_item(Path(path))
+        cid = form.category or default_category(content_kind)
         profile = PROFILES.get(cid) if cid is not None else None
         if profile is None:
             raise ValueError("Choose a supported Upload Category.")
@@ -69,7 +84,11 @@ class Uploads:
             if self.setup.secrets.get("indexer-api-key")
             else []
         )
-        chosen = form.options or profile.suggested_options(item, ignore, types)
+        chosen = (
+            form.options
+            if stored
+            else (form.options or profile.suggested_options(item, ignore, types))
+        )
         for kind in types:
             values = chosen.get(kind.id, [])
             if len(values) > (100 if kind.multiple else 1) or not set(values).issubset(
@@ -111,6 +130,79 @@ class Uploads:
             ],
         }
         return request, preview
+
+    def queue(
+        self,
+        path: str,
+        form: UploadForm,
+        stop: threading.Event,
+        identifier: str = "",
+        revision: int = 0,
+    ) -> dict:
+        if identifier:
+            record = self.setup.store.local_draft(identifier)
+            if record["path"] != path:
+                raise ValueError("A Local Draft cannot be moved to another Local Item.")
+            form = UploadForm.model_validate(edited_form(record["form"], form.model_dump()))
+        request, preview = self.prepare(path, form, stop, stored=bool(identifier))
+        values = form.model_dump()
+        values.update(
+            {
+                key: preview[key]
+                for key in ("title", "category", "subcategory", "nfo", "description")
+            }
+        )
+        values["options"] = preview["chosen"]
+        return save_local(
+            self.setup.store,
+            request,
+            values,
+            identifier=identifier,
+            revision=revision,
+            review={"warnings": preview["warnings"], "refusals": preview["refusals"]},
+        )
+
+    def send(
+        self, identifier: str, revision: int, stop: threading.Event, progress: Callable[[Any], None]
+    ) -> dict:
+        record = self.setup.store.local_draft(identifier)
+        if record["revision"] != revision:
+            raise ValueError("Local Draft changed. Review the current revision before sending.")
+        if record["status"] == "sent":
+            return record["result"]
+        form = UploadForm.model_validate({**record["form"], "reviewed": True})
+        request, preview = self.prepare(record["path"], form, stop, stored=True)
+        request = replace(request, extra=record.get("extra", request.extra))
+        if (
+            preview["refusals"]
+            or not web_url(form.image)
+            or not form.description.strip()
+            or not form.nfo.strip()
+        ):
+            raise ValueError("Resolve the Upload refusals and add a hosted image before sending.")
+        if not self.setup.secrets.get("announce-url"):
+            raise ValueError("Set your Announce URL before sending to c411.")
+        indexer = self.setup.indexer()
+        directory = self.setup.path.parent / "uploads"
+        directory.mkdir(exist_ok=True)
+        prepared = send_local(
+            self.setup.store,
+            identifier,
+            revision,
+            request,
+            lambda: create_upload(
+                request,
+                self.setup.secrets.get("announce-url"),
+                directory,
+                indexer.save_draft,
+                self.setup.store,
+                report=lambda done, total: progress({"done": done, "total": total}),
+                stopped=stop.is_set,
+            ),
+        )
+        client_path = PathMapper(self.setup.settings.path_mappings).to_qbit(str(request.item.path))
+        self.prepared[prepared.meta.infohash] = (prepared, client_path)
+        return sent_result(prepared)
 
     def draft(
         self, path: str, form: UploadForm, stop: threading.Event, progress: Callable[[Any], None]

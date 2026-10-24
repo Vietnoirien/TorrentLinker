@@ -1,0 +1,187 @@
+[
+  {
+    "id": "film",
+    "category": "Films & Vidéos / Film",
+    "facts": "Titre français fourni par l'utilisateur : Bienvenue à Gattaca. Titre original : Gattaca. Année : 1997. Source Sony réellement consultée : https://www.sonypictures.com/movies/gattaca . Extrait : Ethan Hawke, Uma Thurman, Alan Arkin and Jude Law star in this sci-fi thriller. Vincent assumes the identity of a member of the genetic elite to pursue his goal of traveling into space. A week before his mission, a murder marks Vincent as a suspect. A relentless investigator pursues him and his colleague begins to suspect his deception. Sony propose une édition commerciale 4K UHD, mais aucun fichier local n'est fourni. Réalisateur et durée non vérifiés. URL de l'affiche validée par l'outil, pas une garantie de disponibilité donnée par Sony : https://www.sonypictures.com/sites/default/files/styles/max_860x460/public/chameleon/title-movie/230663_GATTACA_1400x2100_English.jpg?itok=QqOMiKVR",
+    "instructions": "Fiche film : conserve l'année et les quatre acteurs vérifiés. Synopsis français de 60 à 90 mots, sans spoiler ajouté. Sélection génétique ne signifie pas génie. Ne donne pas de sexe à l'enquêteur. Sépare les informations sur l'œuvre des propriétés du fichier. Affiche en [img], source Sony en [url]. Ne transforme pas l'offre commerciale 4K en résolution du fichier. Réalisateur, durée et données techniques inconnues vont dans la liste à compléter.",
+    "required": [
+      "Gattaca",
+      "1997",
+      "Ethan Hawke",
+      "Uma Thurman",
+      "Alan Arkin",
+      "Jude Law",
+      "[img]",
+      "[/img]"
+    ],
+    "forbidden": [
+      "naturally",
+      "Jerrome",
+      "enquêtrice",
+      "génies génétiquement"
+    ]
+  },
+  {
+    "id": "series",
+    "category": "Films & Vidéos / Série TV",
+    "facts": "Jeu de données fictif : Les Veilleurs du quai, saison 2, épisodes 01, 02 et 04 uniquement, sortie 2024. Trois gardiens surveillent un port et enquêtent sur des signaux radio inconnus. Analyse des trois fichiers : MKV, 1920x1080, H.264, audio français AAC, aucun sous-titre, taille totale 2.4 GiB. Épisode 03 absent. Casting, durée, origine WEB/Blu-ray et image non renseignés.",
+    "instructions": "Présente une série et la liste exacte des épisodes inclus. Mets clairement en évidence le pack incomplet et l'épisode 03 absent, sans prétendre à une saison complète. Ne déduis pas une variante VFF/TRUEFRENCH de la seule langue française. Sépare résumé de la série, contenu du pack et technique. N'invente ni casting ni provenance WEB/Blu-ray.",
+    "required": [
+      "Les Veilleurs du quai",
+      "01",
+      "02",
+      "03",
+      "04",
+      "incomplet",
+      "H.264",
+      "AAC"
+    ],
+    "forbidden": [
+      "saison complète disponible",
+      "TRUEFRENCH",
+      "VFF"
+    ]
+  },
+  {
+    "id": "ebook",
+    "category": "Ebook / Livres",
+    "facts": "Jeu de données fictif : Les Cartes du vent, autrice Camille Derval, français, éditeur Atelier du Nord, édition 2023. Une cartographe retrouve des relevés anciens qui la conduisent à explorer une île oubliée. Un fichier EPUB, 3.2 MiB. Aucun ISBN, nombre de pages, couverture ou information DRM fourni.",
+    "instructions": "Fiche bibliographique, présentation sans dénouement, puis format/langue/taille. Distingue autrice et éditeur. Une pagination EPUB peut varier selon la liseuse : n'invente pas un nombre de pages. N'ajoute ni ISBN, ni absence de DRM, ni version audio. Indique ces inconnues seulement dans les points à compléter si utiles.",
+    "required": [
+      "Les Cartes du vent",
+      "Camille Derval",
+      "Atelier du Nord",
+      "2023",
+      "EPUB",
+      "3.2"
+    ],
+    "forbidden": [
+      "sans DRM",
+      "978-",
+      "ISBN : 978"
+    ]
+  },
+  {
+    "id": "audio",
+    "category": "Audio / Musique",
+    "facts": "Jeu de données fictif : album Rivages, groupe Les Marées, 2022, musique instrumentale acoustique. Pistes : 01 Aube (03:12), 02 Estuaire (04:08), 03 Retour (02:40). Analyse : FLAC, 16 bits, 44.1 kHz, stéréo, 68 MiB. Source CD/vinyle inconnue. Aucune pochette ou maison de disques fournie.",
+    "instructions": "Présente l'album et une tracklist exacte dans l'ordre avec les durées. Fiche audio avec format, profondeur, fréquence, canaux, taille. N'appelle pas du 16 bits/44.1 kHz de la haute résolution et n'invente pas un rip CD, un label ou une pochette.",
+    "required": [
+      "Rivages",
+      "Les Marées",
+      "Aube",
+      "Estuaire",
+      "Retour",
+      "03:12",
+      "04:08",
+      "02:40",
+      "FLAC",
+      "44.1"
+    ],
+    "forbidden": [
+      "Hi-Res",
+      "rip CD",
+      "24 bits"
+    ]
+  },
+  {
+    "id": "applications",
+    "category": "Applications / Linux",
+    "facts": "Jeu de données fictif : Atelier Notes version 1.4.2, logiciel libre de prise de notes hors ligne, licence MIT. Archive Linux x86_64 AppImage, 86 MiB. Fonctionnalités documentées : notes Markdown, recherche locale, export texte. Aucune synchronisation, exigence mémoire, signature, somme SHA256 ni validation antivirus fournie.",
+    "instructions": "Décris usage, version, plateforme/architecture, fonctions attestées, contenu et licence. N'invente pas de compatibilité Windows/macOS, synchronisation cloud, configuration minimale ou analyse antivirus. Pas de commandes d'installation non documentées. Ne prétends pas à une sécurité vérifiée.",
+    "required": [
+      "Atelier Notes",
+      "1.4.2",
+      "Linux",
+      "x86_64",
+      "AppImage",
+      "MIT"
+    ],
+    "forbidden": [
+      "100% sûr",
+      "100 % sûr",
+      "sans virus",
+      "crack",
+      "Windows 11"
+    ]
+  },
+  {
+    "id": "games",
+    "category": "Jeux Vidéo / PC",
+    "facts": "Jeu de données fictif : Le Jardin des rouages, version 0.8, jeu de puzzle solo développé par Studio Verre. Démo Windows x86_64, interface française, 420 MiB, cinq niveaux. Pas de multijoueur, aucun DLC. Configuration minimale, manette, voix et DRM non documentés.",
+    "instructions": "Présente le gameplay sans inventer de scénario, puis édition/démo, cinq niveaux, plateforme, langue d'interface et taille. Distingue interface et doublage. N'annonce pas une version complète, un DLC, du multijoueur, un crack ou une compatibilité manette sans preuve.",
+    "required": [
+      "Le Jardin des rouages",
+      "Studio Verre",
+      "0.8",
+      "démo",
+      "Windows",
+      "420"
+    ],
+    "forbidden": [
+      "jeu complet",
+      "crack inclus",
+      "doublage français",
+      "manette compatible"
+    ]
+  },
+  {
+    "id": "emulation",
+    "category": "Émulation / Homebrew",
+    "facts": "Jeu de données fictif : Orbite pixel, jeu homebrew original pour Game Boy, version 1.1, auteur Nacre, licence CC0. Une ROM .gb de 32 KiB, texte anglais. Contrôler une sonde dans un labyrinthe. Aucun BIOS inclus et aucun émulateur testé. Pas un dump d'un jeu commercial.",
+    "instructions": "Présente le homebrew original, plateforme cible, version/auteur/licence, langue et contenu exact. Distingue ROM et BIOS. N'invente pas une liste d'émulateurs compatibles, de réglages, de provenance commerciale ou de test matériel. Compatibilité à vérifier dans les points à compléter.",
+    "required": [
+      "Orbite pixel",
+      "Game Boy",
+      "1.1",
+      "Nacre",
+      "CC0",
+      ".gb",
+      "32"
+    ],
+    "forbidden": [
+      "compatible avec tous",
+      "testé sur RetroArch"
+    ]
+  },
+  {
+    "id": "gps",
+    "category": "GPS / Cartes",
+    "facts": "Jeu de données fictif : Carte pédestre du Val des pins, jeu cartographique de démonstration, date des données 2025-06-15. Zone couverte : commune fictive du Val des pins uniquement. Trois fichiers GeoJSON, EPSG:4326, 12 MiB, données CC0. Aucune compatibilité appareil/app, routage, guidage vocal ou actualisation garantie. Ces données fictives ne doivent pas être utilisées pour naviguer.",
+    "instructions": "Fiche cartographique : couverture limitée, date exacte, format, projection, licence et contenu. Mettre en évidence le caractère fictif de démonstration et l'absence d'usage de navigation. N'invente pas une couverture nationale, du routage ou une compatibilité Garmin/TomTom. Conserve la date des données distincte de la date de publication du torrent.",
+    "required": [
+      "Val des pins",
+      "2025-06-15|15 juin 2025",
+      "GeoJSON",
+      "EPSG:4326",
+      "CC0",
+      "ficti",
+      "12 MiB"
+    ],
+    "forbidden": [
+      "compatible Garmin",
+      "compatible TomTom",
+      "France entière"
+    ]
+  },
+  {
+    "id": "3d",
+    "category": "Imprimante 3D / Objets",
+    "facts": "Jeu de données fictif : Support de câbles de bureau, création originale de l'utilisateur, licence CC BY 4.0. Un fichier 3MF, 1.8 MiB. Objet destiné à ranger quatre câbles sur un bureau. Dimensions, matériau, supports, remplissage, buse et temps d'impression non mesurés. Aucun test d'impression ni image fournis.",
+    "instructions": "Présente l'usage concret et le contenu, format et licence. Sépare propriétés connues et paramètres d'impression à choisir/vérifier. N'invente pas de dimensions, PLA, supports inutiles, pourcentage de remplissage ou temps d'impression. Ne dis pas prêt à imprimer ni testé. Mentionne l'attribution requise par la licence indiquée.",
+    "required": [
+      "Support de câbles de bureau",
+      "3MF",
+      "1.8",
+      "CC BY 4.0",
+      "attribution"
+    ],
+    "forbidden": [
+      "sans supports",
+      "20 %",
+      "20%",
+      "PLA",
+      "prêt à imprimer"
+    ]
+  }
+]

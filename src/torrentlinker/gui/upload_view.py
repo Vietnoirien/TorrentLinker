@@ -8,6 +8,7 @@ import shutil
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -49,6 +50,7 @@ from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.local_drafts import LocalDrafts
 from torrentlinker.gui.model_viewer import ModelPanel
 from torrentlinker.gui.settings_dialog import kind_label
 from torrentlinker.gui.tables import NumberItem, sortable_table
@@ -65,7 +67,9 @@ from torrentlinker.options import (
 )
 from torrentlinker.qbit import Qbit
 from torrentlinker.review import CheckedCandidate
+from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
+from torrentlinker.torrent_details import web_url
 from torrentlinker.upload import (
     IMAGE_PLACEHOLDER,
     PROFILES,
@@ -86,6 +90,8 @@ from torrentlinker.upload import (
     seed_upload,
     upload_files,
 )
+from torrentlinker.upload_queue import edited_form, save_local, send_local
+from torrentlinker.web.uploads import UploadForm
 
 C411_UPLOAD_PAGE = "https://c411.org/upload"
 IMAGE_MAX_BYTES = 10_000_000
@@ -620,6 +626,9 @@ class UploadTab(QWidget):
         self.stop_button.hide()
         actions.addWidget(self.stop_button)
         actions.addStretch()
+        self.queue_button = QPushButton(self.tr("Save to local queue"))
+        self.queue_button.clicked.connect(self.queue_draft)
+        actions.addWidget(self.queue_button)
         self.create_button = QPushButton()
         self.create_button.setProperty("primary", True)
         self.create_button.clicked.connect(self.create_draft)
@@ -644,6 +653,10 @@ class UploadTab(QWidget):
         self.workspaces = QTabWidget()
         self.workspaces.addTab(main, self.tr("Prepare Upload"))
         layout.addWidget(self.workspaces, 1)
+
+        self.local_drafts = LocalDrafts(store, self._edit_local_draft, self._send_local_draft)
+        self.local_drafts.sent.connect(self._local_draft_sent)
+        self.workspaces.addTab(self.local_drafts, self.tr("Local draft queue"))
 
         drafts_box = QGroupBox(self.tr("Your c411 Drafts"))
         drafts_layout = QVBoxLayout(drafts_box)
@@ -1386,6 +1399,13 @@ class UploadTab(QWidget):
             )
         )
         title = self.name.text().strip()
+        self.queue_button.setEnabled(
+            entry is not None
+            and bool(self.files)
+            and not archive
+            and bool(title)
+            and not self.progress.isVisible()
+        )
         ready = (
             entry is not None
             and self.why_not(entry) is None
@@ -1402,6 +1422,135 @@ class UploadTab(QWidget):
             and not self.progress.isVisible()
         )
         self.create_button.setEnabled(ready)
+
+    def queue_draft(self) -> None:
+        entry, profile = self.entry, self.profile()
+        if entry is None or profile is None or not self.files:
+            return
+        self._sync_description_image()
+        form = UploadForm(
+            category=profile.category,
+            subcategory=self.subcategory.currentData(),
+            source=self.source.text(),
+            image=self.image_url.text().strip(),
+            title=self.name.text().strip(),
+            description=self.description.toPlainText(),
+            nfo=self.nfo.toPlainText(),
+            options=self.chosen_options(),
+        ).model_dump()
+        record = {"path": str(entry.item.path), "form": form, "id": "", "revision": 0}
+        self.queue_button.setEnabled(False)
+
+        def saved(value):
+            self.local_drafts.record = value
+            self.local_drafts.load()
+            self.local_drafts.refresh()
+            self.workspaces.setCurrentWidget(self.local_drafts)
+            self.local_drafts.status.setText(self.tr("Saved locally. Nothing sent to c411."))
+            self._update_actions()
+
+        def failed(error):
+            self._update_actions()
+            QMessageBox.warning(self, self.tr("Local draft queue"), error_text(error))
+
+        run_in_background(lambda: self._edit_local_draft(record, form), saved, failed)
+
+    def _local_request(
+        self, record: dict, form: dict, *, sending=False
+    ) -> tuple[UploadRequest, list]:
+        values = UploadForm.model_validate(form)
+        if not any(str(e.item.path) == record["path"] for e in self.entries):
+            raise ValueError("Scan the Library containing this Local Draft first.")
+        item = scan_item(Path(record["path"]))
+        profile = PROFILES.get(values.category) if values.category is not None else None
+        if profile is None or values.subcategory not in {s.id for s in profile.subcategories}:
+            raise ValueError("Choose a supported Upload Category and subcategory.")
+        title = values.title
+        if not title or title in {".", ".."} or any(c in title for c in "/\\\x00"):
+            raise ValueError("Use a release name without directory separators.")
+        if values.image and not web_url(values.image):
+            raise ValueError("Use a direct HTTP(S) image link.")
+        ignore = self.ignore()
+        profile.inspect(item, ignore)
+        files = upload_files(item, title, ignore, profile.media_extensions)
+        types = (
+            category_options(self.store, self.indexer().category_options, values.subcategory)
+            if sending
+            else []
+        )
+        for kind in types:
+            selected = values.options.get(kind.id, [])
+            if len(selected) > (100 if kind.multiple else 1) or not set(selected).issubset(
+                {v.id for v in kind.values}
+            ):
+                raise ValueError("Invalid category option.")
+        description = values.description
+        if values.image and values.image not in description:
+            description = f"[center][img]{values.image}[/img][/center]\n" + description
+        request = UploadRequest(
+            item,
+            title,
+            files,
+            values.nfo,
+            description,
+            profile.category,
+            values.subcategory,
+            options_body(types, values.options),
+            profile.draft_fields(item, ignore, files),
+        )
+        refusals = profile.refusals(item, ignore, values.subcategory) + missing_options(
+            types, values.options
+        )
+        return request, refusals
+
+    def _edit_local_draft(self, record: dict, form: dict) -> dict:
+        form = edited_form(record.get("form", {}), form)
+        request, refusals = self._local_request(record, form)
+        profile = PROFILES[request.category]
+        return save_local(
+            self.store,
+            request,
+            {**form, "description": request.description},
+            identifier=record["id"],
+            revision=record["revision"],
+            review={
+                "refusals": [refusal_text(r) for r in refusals],
+                "warnings": [
+                    warning_text(w)
+                    for w in profile.warnings(request.item, self.ignore(), request.subcategory)
+                ],
+            },
+        )
+
+    def _send_local_draft(self, record: dict) -> PreparedUpload:
+        # Use the persisted revision, never an editor's unsaved text or agent-supplied form.
+        current = self.store.local_draft(record["id"])
+        request, refusals = self._local_request(current, current["form"], sending=True)
+        request = replace(request, extra=current.get("extra", request.extra))
+        if (
+            refusals
+            or not web_url(current["form"].get("image", ""))
+            or not request.description.strip()
+            or not request.nfo.strip()
+        ):
+            raise ValueError("Resolve the Upload refusals and add a hosted image before sending.")
+        announce, indexer = self.announce(), self.indexer()
+        if not announce:
+            raise ValueError("Set your Announce URL before sending to c411.")
+        return send_local(
+            self.store,
+            record["id"],
+            record["revision"],
+            request,
+            lambda: create_upload(request, announce, self.folder, indexer.save_draft, self.store),
+        )
+
+    def _local_draft_sent(self, prepared: PreparedUpload) -> None:
+        self.local_drafts.refresh()
+        entry = next((e for e in self.entries if e.item.path == prepared.saved.item_path), None)
+        if entry is not None:
+            self._start_progress()
+            self._drafted(entry, prepared)
 
     def create_draft(self) -> None:
         entry, profile = self.entry, self.profile()

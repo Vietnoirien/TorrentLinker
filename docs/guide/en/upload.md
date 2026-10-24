@@ -5,11 +5,26 @@
 1. Search the Library item for matches. Orphans with no results appear in **Upload**.
 2. Select the item and category. Review refusals, warnings, name, files, NFO and description.
 3. Add the direct URL of your hosted image.
-4. Prepare the Draft, then review and publish it on c411. The app does not publish automatically.
+4. Save to the local queue and review the presentation. Send it to c411 when ready, then publish it there yourself.
 
 Screenshots use the English interface, dark theme and example data.
 
 ![Prepare an Upload Draft](../images/en/upload.png)
+
+## Review in the local draft queue
+
+Click **Save to local queue** to keep work in TorrentLinker. Open **Local draft queue** on desktop, or the queue at the top of the web Upload page. Select a draft to inspect its files, description and NFO, edit the presentation, and save your changes locally.
+
+Local drafts survive restarts and belong to the selected Torrent Client. They stay on the computer or server running TorrentLinker. Saving does not create a `.torrent`, send anything to c411 or start seeding. You can save an incomplete draft without an Announce URL and correct it later.
+
+When ready, save your changes and choose **Send to c411…**. The web form also asks you to check the review box. TorrentLinker checks the saved revision, current files, required category options, hosted image, description and NFO. Sending needs your Announce URL and c411 draft credentials. If files changed since review, save and review again.
+
+The desktop follows its usual verification and seeding workflow after a successful send. Web and MCP offer seeding as a separate action. Final publication remains manual on c411.
+
+Removing a local draft removes only the queue record. It leaves your files and any c411 Draft untouched. If a send fails or is interrupted, check c411 before **Allow retry after checking c411**. The app does not automatically repeat an uncertain send.
+
+Automated Upload tasks save here for review. MCP can list, edit and remove local drafts, but sending always requires approval of the saved revision. An edit invalidates an older approval. See [Agents and MCP access](agents.md).
+
 
 ## Prepare a c411 Draft
 
