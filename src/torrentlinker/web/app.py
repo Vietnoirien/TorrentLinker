@@ -21,6 +21,7 @@ from torrentlinker.web.security import ServerSecrets, Sessions
 from torrentlinker.web.setup import (
     Connection,
     Connector,
+    FolderRemoval,
     FolderSetup,
     IndexerConnection,
     ProxySetup,
@@ -217,9 +218,25 @@ def create_app(
 
     @app.post("/api/setup/folder")
     def save_folder(body: FolderSetup) -> dict:
+        nonlocal operations
         with jobs.lock:
             idle()
-            return service.folder(body, save=True)
+            result = service.folder(body, save=True)
+            operations = Operations(service)
+            return result
+
+    @app.post("/api/setup/remove-folder")
+    def remove_folder(body: FolderRemoval) -> dict:
+        nonlocal operations
+        with jobs.lock:
+            idle()
+            if service.store.verification_hashes():
+                raise HTTPException(
+                    409, "Finish pending Reseed Verifications before removing folders."
+                )
+            service.remove_folder(body)
+            operations = Operations(service)
+        return {"ok": True}
 
     @app.post("/api/setup/suggest-mappings")
     def suggest_mappings() -> dict:

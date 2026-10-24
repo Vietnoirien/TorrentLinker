@@ -347,7 +347,8 @@
             <h2 data-i18n="planner">Planner</h2>
             <p data-i18n="planHelp">
               Build a proposal using the catalogue and verified mounted storage.
-              Review it before adding torrents to the queue.
+              Cached Zen and note estimates are provisional. Review the plan
+              before adding torrents to the queue.
             </p>
             <div class="toolbar">
               <label
@@ -372,6 +373,13 @@
                 Build plan
               </button>
             </div>
+            <label
+              ><input id="plan-cached" type="checkbox" /><span
+                data-i18n="cachedPlan"
+                >Use cached catalogue without refreshing</span
+              ></label
+            >
+            <p id="catalogue-status" role="status"></p>
             <div id="plan-result" class="table-wrap"></div>
             <button id="queue-plan" data-i18n="queueSelected">
               Queue selected

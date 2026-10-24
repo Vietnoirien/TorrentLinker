@@ -69,7 +69,7 @@ Après un arrêt brutal du serveur, une tâche inachevée est marquée interromp
 
 Les identifiants saisis dans l'interface sont chiffrés dans `credentials.enc`. La clé de chiffrement `credentials.key` est dans le même volume : protégez le volume et sauvegardez les deux fichiers ensemble. Le chiffrement ne protège pas contre quelqu'un qui peut lire tout le volume. L'application de bureau continue d'utiliser le trousseau système.
 
-Les fichiers secrets Docker sont pris en charge avec `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE` et `TL_ANNOUNCE_URL_FILE`. Leur contenu n'est pas renvoyé au navigateur.
+Les fichiers secrets Docker sont pris en charge avec `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE` , `TL_ANNOUNCE_URL_FILE` et `TL_PROXY_PASSWORD_FILE`. Leur contenu n'est pas renvoyé au navigateur.
 
 ## Sans Docker
 
@@ -84,3 +84,9 @@ Le serveur vise Linux et les NAS Linux. Pour installer l'interface de bureau dep
 ## Limites de cette première interface
 
 L'extraction d'archives et les renommages sur disque nécessaires à certains reseeds µTorrent restent dans l'application de bureau. L'éditeur web prépare les descriptions, NFO, options de catégorie, images hébergées et brouillons ; la prévisualisation 3D reste dans l'application de bureau. La publication finale d'un brouillon se fait sur c411. Un Upload préparé peut être envoyé au client depuis la même session serveur ; après un redémarrage, vérifiez d'abord le brouillon et utilisez l'application de bureau si nécessaire.
+
+## Corriger les dossiers et utiliser le cache
+
+Les paramètres permettent de retirer un dossier, même si son montage est déjà déconnecté. Les téléchargements et le planificateur revérifient un fichier seedé pour éviter de confondre un point de montage déconnecté avec un stockage vide.
+
+Créer un plan actualise les entrées récentes du catalogue. Les estimations Zen et les notes restent provisoires. Le statut indique les limites de pagination connues et la présence de données Zen Lab. Si l’actualisation est lente ou indisponible, arrêtez-la dans Activité, puis cochez **Utiliser le catalogue en cache sans actualiser** et recréez le plan.

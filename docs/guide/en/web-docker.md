@@ -49,11 +49,17 @@ The folder browser lists server directories within configured storage roots. Web
 
 For a hosted seedbox, use the provider's HTTPS URL, including any URL prefix. Without a mount, management, Zen and Search remain available. Scan, comparison, Upload preparation, safe downloads and planning require access to the seedbox's actual files. Mount its storage on the host first, then use the same Compose override. TorrentLinker does not mount SSHFS/NFS/SMB shares automatically.
 
+Remove an old folder from Settings before disconnecting its storage. Folder removal remains possible if the mount is already unavailable. Download and Plan jobs recheck a seeded sample so an empty disconnected mountpoint cannot masquerade as empty storage.
+
 Entering a path does not provide access. Missing storage is never treated as empty, and container free space is never substituted for seedbox capacity.
 
 ## Client addresses
 
 Containers on one Docker network can use service names, such as `http://qbittorrent:8080`. Docker Desktop provides `host.docker.internal` for host services. Native Linux Docker Engine may need `extra_hosts: ["host.docker.internal:host-gateway"]`. The service must listen on a reachable interface and its firewall must allow the connection. `localhost` always means the TorrentLinker container in this deployment.
+
+## Catalogue and plans
+
+Building a Plan refreshes recent catalogue entries first. Zen and note estimates remain provisional. Catalogue status reports known paging limits and snapshot provenance. If a refresh is slow or unavailable, stop it in Activity, then enable **Use cached catalogue without refreshing** and build again.
 
 ## Persistence and recovery
 
@@ -63,7 +69,7 @@ After an abrupt restart, unfinished jobs are marked interrupted and are not repl
 
 UI-entered credentials are encrypted in `credentials.enc`. Back up it and `credentials.key` together and protect the configuration volume. Someone who can read both files can decrypt the credentials. Desktop credentials still use the operating system keyring.
 
-Secret-file overrides: `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE`, `TL_ANNOUNCE_URL_FILE`. Credentials never appear in setup API responses.
+Secret-file overrides: `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE`, `TL_ANNOUNCE_URL_FILE`, `TL_PROXY_PASSWORD_FILE`. Credentials never appear in setup API responses.
 
 ## Run without Docker
 

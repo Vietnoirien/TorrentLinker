@@ -6,7 +6,7 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
@@ -81,10 +81,13 @@ class ProxySetup(BaseModel):
         return value
 
 
-class FolderSetup(BaseModel):
+class FolderRemoval(BaseModel):
     local: str = Field(max_length=4096)
-    client_path: str = Field(max_length=4096)
     purpose: Literal["library", "download"] = "library"
+
+
+class FolderSetup(FolderRemoval):
+    client_path: str = Field(max_length=4096)
     kind: ContentKind = ContentKind.OTHER
     depth: int = Field(default=1, ge=0, le=10)
 
@@ -388,20 +391,36 @@ class Setup:
             with os.scandir(local) as entries:
                 next(entries, None)
             mapper = PathMapper([PathMapping(str(local), body.client_path)])
+            remote_type = (
+                PureWindowsPath
+                if "\\" in body.client_path or body.client_path[1:2] == ":"
+                else PurePosixPath
+            )
+            remote_root = remote_type(body.client_path)
+            if not remote_root.is_absolute() or ".." in remote_root.parts:
+                raise ValueError("Use an absolute client folder without parent traversal.")
             sample = None
             attempts = 0
             for torrent in self.client().torrents(with_files=False):
-                mapped = mapper.to_local(str(torrent.save_path))
-                if mapped == str(torrent.save_path) and not Path(mapped).is_relative_to(local):
+                try:
+                    relative = remote_type(str(torrent.save_path)).relative_to(remote_root)
+                except ValueError:
                     continue
+                if ".." in relative.parts:
+                    continue
+                mapped = local.joinpath(*relative.parts)
                 if attempts >= 10:
                     break
                 attempts += 1
                 files = self.client().files(torrent.hash)
                 for rel, size in sorted(files.items(), key=lambda f: f[1], reverse=True)[:3]:
                     try:
-                        file = self.path_under_root(str(Path(mapped) / rel), directory=False)
-                        if file.is_file() and file.stat().st_size == size:
+                        file = self.path_under_root(str(mapped / rel), directory=False)
+                        if (
+                            file.is_relative_to(local)
+                            and file.is_file()
+                            and file.stat().st_size == size
+                        ):
                             sample = {
                                 "local": str(file),
                                 "client": mapper.to_qbit(str(file)),
@@ -454,6 +473,19 @@ class Setup:
                 "Check the storage mount and test the mapping again in Settings."
             )
         return local
+
+    def remove_folder(self, body: FolderRemoval) -> None:
+        # Do not resolve this path: removing a disconnected mount must still work.
+        with self.lock:
+            if body.purpose == "library":
+                self.settings.library_folders = [
+                    folder
+                    for folder in self.settings.library_folders
+                    if str(folder.path) != body.local
+                ]
+            elif self.settings.download_folders.default == body.local:
+                self.settings.download_folders.default = ""
+            self.save()
 
     def save(self) -> None:
         temporary = self.path.with_suffix(".new")

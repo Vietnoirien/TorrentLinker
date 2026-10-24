@@ -141,6 +141,17 @@ def test_changing_seedbox_invalidates_paths_and_pending_jobs_block_connection_ch
         )
         assert response.status_code == 200, response.text
         assert response.json()["sample"]["client"] == "/downloads/book.epub"
+        # A local-looking save path must not validate an unrelated remote prefix.
+        Client.torrents = lambda self, **kwargs: [Torrent("a" * 40, "book", root)]
+        bad = browser.post(
+            "/api/setup/folder",
+            json={
+                "local": str(root),
+                "client_path": "/wrong-unmounted-location",
+                "purpose": "download",
+            },
+        )
+        assert bad.status_code == 400, bad.text
         connection["host"] = "https://two.example"
         browser.post("/api/setup/client", json=connection)
         assert browser.get("/api/setup").json()["download_folder"] == ""
@@ -154,6 +165,39 @@ def test_web_shell_has_guided_setup_and_no_external_asset_dependencies(tmp_path:
         assert "setup" in response.text
         assert "frame-ancestors" in response.headers["content-security-policy"]
         assert browser.get("/static/app.js").status_code == 200
+
+
+def test_user_can_remove_a_library_folder_even_after_its_mount_disappears(tmp_path):
+    from tests.test_web_jobs import Client, login
+
+    class EmptyClient(Client):
+        def files(self, hash):
+            return {}
+
+    root = tmp_path / "media"
+    root.mkdir()
+    with TestClient(
+        create_app(
+            tmp_path / "config",
+            password="test-password-long",
+            roots=(root,),
+            connector=lambda *args: EmptyClient(),
+        )
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        assert (
+            browser.post(
+                "/api/setup/folder", json={"local": str(root), "client_path": "/remote"}
+            ).status_code
+            == 200
+        )
+        root.rmdir()
+        removed = browser.post(
+            "/api/setup/remove-folder", json={"local": str(root), "purpose": "library"}
+        )
+        assert removed.status_code == 200, removed.text
+        assert browser.get("/api/setup").json()["folders"] == []
 
 
 def test_reverse_proxy_prefix_cannot_bypass_authentication(tmp_path: Path):

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from torrentlinker.download_queue import enqueue, entries, run_queue
 from torrentlinker.indexer import Candidate, SearchQuery
-from torrentlinker.seeding import seeding
+from torrentlinker.seeding import observe_swarm, seeding
 from torrentlinker.store import CatalogueRow
 from torrentlinker.torrent_details import website_url
 from torrentlinker.torrent_management import (
@@ -56,6 +56,7 @@ class JobRequest(BaseModel):
     upload: UploadForm = Field(default_factory=UploadForm)
     maximum_bytes: int = Field(default=0, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1000)
+    cached_only: bool = False
     path: str = Field(default="", max_length=4096)
     query: str = Field(default="", max_length=500)
     page: int = Field(default=1, ge=1, le=10000)
@@ -158,7 +159,13 @@ class Operations:
             from torrentlinker.web.planning import plan
 
             return plan(
-                self.setup, self.library, request.maximum_bytes, request.maximum_torrents, stop
+                self.setup,
+                self.library,
+                request.maximum_bytes,
+                request.maximum_torrents,
+                stop,
+                progress,
+                cached_only=request.cached_only,
             )
         if request.kind == "details":
             from torrentlinker.torrent_details import parse_details, preview_html
@@ -326,6 +333,7 @@ class Operations:
                 r.infohash: r
                 for r in self.setup.store.catalogue([t.hash.lower() for t in torrents])
             }
+            cached_rows.update(observe_swarm(self.setup.store, torrents, settings.indexer.url))
             view = seeding(
                 settings.zen,
                 torrents,
@@ -357,10 +365,11 @@ class Operations:
                         "tags": sorted(t.tags),
                         "zen": estimate.zen if estimate else None,
                         "note": estimate.note if estimate else None,
+                        "provisional": estimate.provisional_category if estimate else False,
                     }
                 )
             self.rows = rows
-            self.zen = {"count": view.count, "daily": sum(r.zen or 0 for r in view.rows)}
+            self.zen = {"count": view.count, "daily": view.day.total, "paid": view.day.paid}
             return {"count": len(rows), "zen": self.zen}
         if request.kind == "manage":
             result = []

@@ -7,7 +7,8 @@ from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
-from torrentlinker.catalogue_sync import sync_catalogue
+from torrentlinker.catalogue import plan_categories
+from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
 from torrentlinker.domain import LibraryFolder
 from torrentlinker.plan import (
     PlanOptions,
@@ -23,6 +24,18 @@ from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
 
 
+def catalogue_status(setup: Setup) -> dict:
+    store = setup.store
+    snapshot = store.feed_state(SNAPSHOT_NAME)
+    return {
+        "count": store.catalogue_size(),
+        "updated_at": store.catalogue_updated_at(),
+        "limited_categories": sorted(store.limited_categories()),
+        "paused": store.crawl_paused(),
+        "snapshot_imported_at": snapshot.updated_at,
+    }
+
+
 def catalogue(setup: Setup, stop: threading.Event, progress: Callable[[Any], None]) -> dict:
     sync_catalogue(
         setup.indexer(),
@@ -34,16 +47,38 @@ def catalogue(setup: Setup, stop: threading.Event, progress: Callable[[Any], Non
         progress=lambda p: progress(asdict(p)),
         categories=setup.settings.indexer_categories,
     )
-    return {"count": setup.store.catalogue_size()}
+    return catalogue_status(setup)
 
 
 def plan(
-    setup: Setup, library: Library, maximum_bytes: int, maximum_torrents: int, stop: threading.Event
+    setup: Setup,
+    library: Library,
+    maximum_bytes: int,
+    maximum_torrents: int,
+    stop: threading.Event,
+    progress: Callable[[Any], None],
+    *,
+    cached_only: bool = False,
 ) -> dict:
     folder = setup.verified_download_folder()
     library.check_tree(folder, stop)
-    torrents = setup.client().torrents(with_files=False)
     settings = setup.settings
+    if not cached_only:
+        sync_catalogue(
+            setup.indexer(),
+            setup.store,
+            plan_categories(
+                settings.indexer_categories, settings.download_folders, settings.indexer_categories
+            ),
+            bootstrap=True,
+            max_pages=10,
+            stop=stop.is_set,
+            progress=lambda p: progress(asdict(p)),
+            categories=settings.indexer_categories,
+        )
+    if stop.is_set():
+        return {"cancelled": True, "catalogue": catalogue_status(setup)}
+    torrents = setup.client().torrents(with_files=False)
     cached = {r.infohash: r for r in setup.store.catalogue()}
     current = seeding(settings.zen, torrents, settings.indexer.url, catalogue=cached)
     candidates = catalogue_candidates(
@@ -68,6 +103,8 @@ def plan(
         disk_spaces=spaces,
     )
     return {
+        "provisional": True,
+        "catalogue": catalogue_status(setup),
         "rows": [
             {
                 "hash": i.candidate.infohash,

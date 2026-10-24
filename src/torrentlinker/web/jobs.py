@@ -48,6 +48,13 @@ class Jobs:
         with self.lock:
             if self.closed:
                 raise ValueError("Server is shutting down.")
+            if kind == "refresh":
+                pending = self.db.execute(
+                    "SELECT id FROM jobs WHERE kind='refresh' AND status IN ('queued','running') "
+                    "ORDER BY created LIMIT 1"
+                ).fetchone()
+                if pending is not None:
+                    return str(pending[0])
             count = self.db.execute(
                 "SELECT count(*) FROM jobs WHERE status IN ('queued','running')"
             ).fetchone()[0]

@@ -76,6 +76,74 @@ def test_job_survives_browser_logout_and_is_visible_after_server_restart(tmp_pat
     assert client.paused == ["a" * 40]
 
 
+def _leave_interrupted_job(directory, pipe):
+    """Abrupt process exit during a client call; deliberately no graceful shutdown."""
+    import os
+
+    client = Client()
+    with TestClient(
+        create_app(directory, password="test-password-long", connector=lambda *args: client)
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        created = browser.post(
+            "/api/jobs", json={"kind": "manage", "action": "pause", "hashes": ["a" * 40]}
+        )
+        assert client.started.wait(2)
+        pipe.send(created.json()["id"])
+        pipe.close()
+        os._exit(0)
+
+
+def test_abrupt_restart_records_interruption_without_replaying_mutation(tmp_path):
+    import multiprocessing
+
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(target=_leave_interrupted_job, args=(tmp_path, sender))
+    process.start()
+    try:
+        assert receiver.poll(10)
+        identifier = receiver.recv()
+        process.join(10)
+        assert process.exitcode == 0
+        client = Client()
+        client.release.set()
+        with TestClient(
+            create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+        ) as browser:
+            login(browser)
+            recovered = browser.get(f"/api/jobs/{identifier}").json()
+            assert recovered["status"] == "interrupted"
+            assert "no action was replayed" in recovered["error"]
+        assert client.paused == []
+    finally:
+        if process.is_alive():
+            process.kill()
+            process.join()
+        receiver.close()
+        sender.close()
+
+
+def test_browser_sessions_share_pending_refresh(tmp_path):
+    client = Client()
+    with TestClient(
+        create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        blocking = browser.post("/api/jobs", json={"kind": "manage", "hashes": ["a" * 40]}).json()
+        try:
+            assert client.started.wait(2)
+            first = browser.post("/api/jobs", json={"kind": "refresh"}).json()
+            login(browser)
+            second = browser.post("/api/jobs", json={"kind": "refresh"}).json()
+            assert first["id"] == second["id"]
+        finally:
+            client.release.set()
+        assert finished(browser, blocking["id"])["status"] == "completed"
+
+
 def test_delete_requires_a_single_use_confirmation_bound_to_selected_torrents(tmp_path: Path):
     class DeletingClient(Client):
         def remove(self, hash, *, delete_files=False):
@@ -309,7 +377,9 @@ def test_selected_download_uses_verified_client_path_and_survives_queue_reload(
         if request.url.path == "/file":
             return httpx.Response(200, content=data)
         if request.url.params.get("t") == "caps":
-            return httpx.Response(200, text="<caps><categories/></caps>")
+            return httpx.Response(
+                200, text='<caps><categories><category id="7000" name="Ebook"/></categories></caps>'
+            )
         return httpx.Response(
             200,
             text=(
@@ -318,6 +388,7 @@ def test_selected_download_uses_verified_client_path_and_survives_queue_reload(
                 "<link>https://tracker.example/file?apikey=private-key</link>"
                 '<enclosure url="https://tracker.example/file?apikey=private-key"/>'
                 f'<torznab:attr name="infohash" value="{meta.infohash}"/>'
+                '<torznab:attr name="category" value="7000"/>'
                 '<torznab:attr name="seeders" value="4"/></item></channel></rss>'
             ),
         )
@@ -356,6 +427,12 @@ def test_selected_download_uses_verified_client_path_and_survives_queue_reload(
             ).status_code
             == 200
         )
+        job = browser.post("/api/jobs", json={"kind": "plan"}).json()
+        planned = finished(browser, job["id"])
+        assert planned["status"] == "completed", planned
+        assert planned["result"]["provisional"] is True
+        assert planned["result"]["rows"][0]["hash"] == meta.infohash
+        assert planned["result"]["catalogue"]["count"] == 1
         job = browser.post("/api/jobs", json={"kind": "search", "query": "Film"}).json()
         assert finished(browser, job["id"])["status"] == "completed"
         job = browser.post("/api/jobs", json={"kind": "enqueue", "hashes": [meta.infohash]}).json()

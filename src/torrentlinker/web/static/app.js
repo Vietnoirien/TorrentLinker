@@ -84,7 +84,8 @@ const french = {
   seeding: "Torrents en seed",
   planner: "Planificateur",
   planHelp:
-    "Créez une proposition à partir du catalogue et du stockage vérifié. Relisez-la avant d’ajouter les torrents à la file.",
+    "Créez une proposition à partir du catalogue et du stockage vérifié. Les estimations Zen et les notes issues du cache sont provisoires. Relisez le plan avant l’ajout à la file.",
+  cachedPlan: "Utiliser le catalogue en cache sans actualiser",
   maxTorrents: "Nombre maximal de torrents",
   maxGiB: "Budget de téléchargement, Gio",
   updateCatalogue: "Actualiser le catalogue",
@@ -275,13 +276,14 @@ async function refreshSetup() {
     : "TORRENTLINKER WEB";
   $("saved-folders").replaceChildren(
     ...state.setup.folders.map((f) =>
-      element("p", `${f.local} · ${f.kind} · ${f.depth}`),
+      savedFolder(f.local, "library", `${f.local} · ${f.kind} · ${f.depth}`),
     ),
   );
   if (state.setup.download_folder)
     $("saved-folders").append(
-      element(
-        "p",
+      savedFolder(
+        state.setup.download_folder,
+        "download",
         `${say("Downloads", "Téléchargements")} · ${state.setup.download_folder}`,
       ),
     );
@@ -290,6 +292,17 @@ async function refreshSetup() {
   $("proxy-client").checked = state.setup.proxy.torrent_client;
   clientKind();
   renderCapabilities();
+}
+function savedFolder(local, purpose, label) {
+  const row = element("div", undefined, "toolbar");
+  row.append(
+    element("span", label),
+    button(say("Remove folder", "Retirer ce dossier"), async () => {
+      await api("setup/remove-folder", { local, purpose });
+      await refreshSetup();
+    }),
+  );
+  return row;
 }
 function renderCapabilities() {
   if (!state.setup) return;
@@ -580,8 +593,8 @@ async function loadTorrents() {
     ["download", "↓ / s", (v) => bytes(v.download)],
     ["upload", "↑ / s", (v) => bytes(v.upload)],
     ["ratio", "Ratio", (v) => num(v.ratio)],
-    ["zen", "≈ Zen / j", (v) => num(v.zen)],
-    ["note", "≈ Note", (v) => num(v.note)],
+    ["zen", "≈ Zen / j", (v) => num(v.zen) + (v.provisional ? " *" : "")],
+    ["note", "≈ Note", (v) => num(v.note) + (v.provisional ? " *" : "")],
   ];
   table(
     "torrent-table",
@@ -734,6 +747,36 @@ async function enqueue(hashes) {
     );
     await navigate("queue");
   });
+}
+function showCatalogue(r) {
+  const parts = [
+    `${r.count} torrents`,
+    say(
+      "Coverage is not guaranteed complete.",
+      "La couverture complète n’est pas garantie.",
+    ),
+  ];
+  if (r.updated_at)
+    parts.push(`${say("Updated", "Actualisé")} · ${age(r.updated_at)}`);
+  if (r.limited_categories.length)
+    parts.push(
+      say(
+        "Indexer paging limit reached.",
+        "Limite de pagination de l’indexeur atteinte.",
+      ),
+    );
+  if (r.paused)
+    parts.push(
+      say("Historical fetch paused.", "Récupération de l’historique en pause."),
+    );
+  if (r.snapshot_imported_at)
+    parts.push(
+      say(
+        "Includes Zen Lab baseline metadata; direct c411 data takes priority.",
+        "Inclut les métadonnées de base Zen Lab ; les données c411 sont prioritaires.",
+      ),
+    );
+  $("catalogue-status").textContent = parts.join(" · ");
 }
 async function loadQueue() {
   const rows = await api("queue");
@@ -1000,7 +1043,7 @@ $("library-next").onclick = () => {
   guard(loadLibrary);
 };
 $("catalogue").onclick = () =>
-  guard(() => job({ kind: "catalogue" }, (r) => toast(`${r.count} torrents`)));
+  guard(() => job({ kind: "catalogue" }, showCatalogue));
 $("plan").onclick = () =>
   guard(() =>
     job(
@@ -1008,8 +1051,10 @@ $("plan").onclick = () =>
         kind: "plan",
         maximum_torrents: Number($("plan-count").value),
         maximum_bytes: Math.round(Number($("plan-budget").value) * 1024 ** 3),
+        cached_only: $("plan-cached").checked,
       },
       (r) => {
+        showCatalogue(r.catalogue);
         state.planRows = r.rows;
         state.planSelected = new Set(r.rows.map((v) => v.hash));
         table("plan-result", r.rows, searchColumns(), state.planSelected);
