@@ -28,6 +28,39 @@ class Client:
         self.paused.append(hash)
 
 
+def test_tracker_filter_groups_c411_mirror_and_keeps_actual_hosts(tmp_path):
+    class MirrorClient(Client):
+        def torrents(self, **kwargs):
+            return [
+                Torrent("a" * 40, "Main", Path("/data"), tracker="https://c411.org/announce/key"),
+                Torrent(
+                    "b" * 40, "Mirror", Path("/data"), tracker="https://tk.c411.tw/announce/key"
+                ),
+                Torrent("c" * 40, "Other", Path("/data"), tracker="https://other.test/announce"),
+            ]
+
+    app = create_app(
+        tmp_path, password="test-password-long", connector=lambda *args: MirrorClient("test")
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        assert (
+            browser.post(
+                "/api/setup/client", json={"client": "qbittorrent", "host": "https://one.test"}
+            ).status_code
+            == 200
+        )
+        response = browser.post("/api/jobs", json={"kind": "refresh"})
+        assert finished(browser, response.json()["id"])["status"] == "completed"
+        data = browser.get("/api/torrents", params={"tracker": "c411.org"}).json()
+        assert data["trackers"] == ["c411.org", "other.test"]
+        assert {row["name"] for row in data["rows"]} == {"Main", "Mirror"}
+        assert next(row for row in data["rows"] if row["name"] == "Mirror")["trackers"] == [
+            "tk.c411.tw"
+        ]
+        assert browser.get("/api/torrents", params={"tracker": "tk.c411.tw"}).json()["total"] == 2
+
+
 def test_two_same_engine_clients_use_separate_secrets_and_actions(tmp_path):
     clients = {"https://one.test": Client("Local book"), "https://two.test": Client("Remote book")}
     connections = []

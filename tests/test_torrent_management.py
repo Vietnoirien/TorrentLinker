@@ -18,6 +18,7 @@ from torrentlinker.torrent_management import (
     safe_error,
     status,
     torrent_categories,
+    tracker_groups,
     tracker_hosts,
 )
 
@@ -62,6 +63,20 @@ def test_category_names_with_slashes_remain_real_taxonomy_nodes():
     )
     assert torrent_categories(torrent(category="Media/Books"), {}) == (("Media", "Books"),)
     assert torrent_categories(torrent(tags=frozenset({"my-books"})), {}) == ((),)
+
+
+def test_mirror_grouping_preserves_announce_hosts_and_unrelated_trackers():
+    t = torrent(
+        trackers=(
+            "https://c411.org/announce/private",
+            "https://TK.C411.TW./announce/private",
+            "https://tk.c411.tw.attacker.test/announce",
+            "https://elsewhere.example/announce",
+        )
+    )
+    assert tracker_groups(t) == ("c411.org", "elsewhere.example", "tk.c411.tw.attacker.test")
+    assert "tk.c411.tw" in tracker_hosts(t)
+    assert tracker_groups(torrent(tags=frozenset({"c411"}))) == ("",)
 
 
 def test_qbit_sync_tracks_all_announce_memberships_and_removals():
@@ -148,6 +163,23 @@ def test_tree_counts_deduplicate_and_filters_combine(qtbot):
     assert tab.proxy.rowCount() == 1
     tab.tags.setCurrentIndex(tab.tags.findData("personal"))
     assert tab.proxy.rowCount() == 0
+
+
+def test_c411_mirror_shares_tree_branch_and_category_counts(qtbot):
+    tab, _ = make_tab(
+        qtbot,
+        a=torrent(
+            trackers=("https://c411.org/announce/private", "https://tk.c411.tw/announce/private"),
+            category="Ebook/Books",
+        ),
+        b=torrent("b", tracker="https://tk.c411.tw/announce/private", category="Ebook/Books"),
+    )
+    root = tab.tree.topLevelItem(0)
+    assert root.childCount() == 1
+    assert tab._tree_counts[("c411.org",)] == 2
+    assert tab._tree_counts[("c411.org", "Ebook", "Books")] == 2
+    tab.tree.setCurrentItem(root.child(0))
+    assert tab.proxy.rowCount() == 2
 
 
 def test_refresh_keeps_selection_sort_and_updated_values(qtbot):

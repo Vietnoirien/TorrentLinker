@@ -27,6 +27,15 @@ def tracker_hosts(torrent: Torrent) -> tuple[str, ...]:
     return tuple(sorted(hosts)) or ("",)
 
 
+def tracker_group(host: str) -> str:
+    """Group the known c411 mirror without merging unrelated tracker domains."""
+    return "c411.org" if host == "tk.c411.tw" else host
+
+
+def tracker_groups(torrent: Torrent) -> tuple[str, ...]:
+    return tuple(sorted({tracker_group(host) for host in tracker_hosts(torrent)}))
+
+
 def category_labels(categories: Mapping[int, IndexerCategory]) -> dict[str, tuple[str, ...]]:
     # Category names themselves contain slashes. Resolve known paths as whole names.
     result = {}

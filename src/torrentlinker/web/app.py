@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from torrentlinker import documentation
 from torrentlinker.clients import connect
+from torrentlinker.torrent_management import tracker_group
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
@@ -467,7 +468,10 @@ def create_app(
             r
             for r in all_rows
             if q.casefold() in r["name"].casefold()
-            and (not tracker or tracker in r["trackers"])
+            and (
+                not tracker
+                or any(tracker_group(tracker) == tracker_group(host) for host in r["trackers"])
+            )
             and (not state or r["status"] == state)
             and (not category or any(category == " / ".join(c) for c in r["categories"]))
         ]
@@ -502,7 +506,7 @@ def create_app(
                 for t in targets
                 if t.connection_error
             ],
-            "trackers": sorted({h for r in all_rows for h in r["trackers"] if h}),
+            "trackers": sorted({tracker_group(h) for r in all_rows for h in r["trackers"] if h}),
             "categories": sorted({" / ".join(c) for r in all_rows for c in r["categories"] if c}),
         }
 

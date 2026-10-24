@@ -52,6 +52,7 @@ from torrentlinker.torrent_management import (
     safe_error,
     status,
     torrent_categories,
+    tracker_groups,
     tracker_hosts,
 )
 
@@ -519,7 +520,7 @@ class TorrentsTab(QWidget):
                 categories = (self._category_by_hash[t.hash],)
             leaves = tuple(
                 (host, *(cat + ("",) if cat in parents else cat or ("",)))
-                for host in tracker_hosts(t)
+                for host in tracker_groups(t)
                 for cat in categories
             )
             paths[t.hash] = leaves
