@@ -15,6 +15,8 @@ Captures de l’interface française en thème sombre, avec des données d’exe
 
 ## Ajouter des dossiers et utiliser les actions par lot
 
+La colonne **≈ Zen/jour** affiche l'estimation actuelle de Zen pour les torrents associés aux éléments en seed ou partiellement en seed. Pour les orphelins, elle indique l'estimation du meilleur candidat vérifié. Les torrents en pause comptent pour zéro ; les estimations indisponibles restent vides. Si un torrent couvre plusieurs éléments locaux, son estimation apparaît sur chacun : il ne faut donc pas additionner cette colonne pour calculer le total de la bibliothèque.
+
 Dans la Bibliothèque, **Ajouter un dossier…** permet de choisir un dossier, son **Type de contenu** et sa **Profondeur d’analyse**, sans ouvrir les Paramètres. La profondeur 1 considère chaque fichier ou dossier directement contenu comme un Élément local. Après enregistrement, la Bibliothèque est analysée et filtrée sur le nouveau dossier. Un dossier déjà enregistré n’est pas ajouté une seconde fois.
 
 **Vérifier tous les Candidats** examine les Candidats encore non vérifiés, y compris ceux masqués par les filtres, sans relancer les recherches ni les vérifications réussies. **Remettre en seed toutes les correspondances complètes** ajoute les correspondances confirmées au client torrent, puis lance la vérification par hash avant le seed. Ces actions s’exécutent en arrière-plan, avec une progression et un bouton d’annulation. Les erreurs sont regroupées pour permettre au traitement de continuer. Les torrents déjà présents dans le client sont signalés et comptés séparément des nouvelles remises en seed.

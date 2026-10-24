@@ -430,8 +430,8 @@ class UtorrentApi:
     def start(self, hash: str) -> None:
         self.resume(hash)
 
-    def remove(self, hash: str) -> None:
-        self._action("remove", hash)  # NEVER removedata / removedatatorrent
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        self._action("removedata" if delete_files else "remove", hash)
         self._props.pop(hash.lower(), None)
 
     @staticmethod

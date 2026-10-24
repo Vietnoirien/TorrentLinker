@@ -10,10 +10,39 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import KeyRefused, RateLimited
+from torrentlinker.library import LibraryReadTimeout
 from torrentlinker.transmission import PartialNamesOn
 
 
 def error_text(error: Exception) -> str:
+    if isinstance(error, LibraryReadTimeout):
+        if error.operation == "folder":
+            return QCoreApplication.translate(
+                "Errors",
+                "Reading the Library Folder timed out: {0}\n\n"
+                "Check that the drive or network share is available, then scan again. "
+                "The previous Library list has been kept.",
+            ).format(error.target)
+        if error.operation == "files":
+            message = QCoreApplication.translate(
+                "Errors",
+                "The Torrent Client timed out while reading the files of “{0}” after two attempts.",
+            ).format(error.target)
+        else:
+            message = QCoreApplication.translate(
+                "Errors",
+                "The Torrent Client timed out while reading its torrent list after two attempts.",
+            )
+        return (
+            message
+            + "\n\n"
+            + QCoreApplication.translate(
+                "Errors",
+                "Check the Torrent Client connection in Settings and try again "
+                "when it is responsive. "
+                "The previous Library list has been kept to avoid marking seeded files as Orphans.",
+            )
+        )
     if isinstance(error, KeyRefused) and error.scope == "drafts:rw":
         return QCoreApplication.translate(
             "Errors",

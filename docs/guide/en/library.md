@@ -15,6 +15,8 @@ Screenshots use the English interface, dark theme and example data.
 
 ## Add folders and use batch actions
 
+The **≈ Zen/day** column shows the current estimate from Zen for torrents linked to Seeded or Partially Seeded Items. For Orphans, it shows the estimate for the best checked Match. Paused torrents contribute zero; unavailable estimates stay blank. If one torrent covers several Local Items, its estimate appears on each, so this column should not be summed as a library-wide total.
+
 In the Library, **Add folder…** lets you choose a folder, its Content Kind and scan depth without opening Settings. Depth 1 treats each immediate file or folder as one Local Item. Saving scans the Library and selects the new folder in its filter; a folder already registered is not added twice.
 
 In the Library, **Check all Candidates** checks every untested Candidate already found, including items hidden by filters, without repeating searches or successful checks. **Reseed all Full Matches** sends confirmed Full Matches through the usual hash Verification before seeding. Both actions run in the background with progress and **Cancel batch**; errors are collected so other Candidates can continue. Torrents already in the client are labelled and counted separately from new Reseeds.

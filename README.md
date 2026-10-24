@@ -18,14 +18,14 @@ Retrouvez les torrents qui correspondent à vos fichiers et remettez-les en seed
 
 Avec qBittorrent, Deluge et Transmission, les fichiers existants ne sont pas renommés sur le disque. Avec µTorrent Classic, un renommage sur le disque peut être nécessaire et demande une confirmation explicite. Les clés API et mots de passe sont conservés dans le trousseau système. L’interface est disponible en français et en anglais, avec un thème système, clair ou sombre.
 
-## Télécharger la version 0.6.0
+## Télécharger la version 0.6.1
 
 | Plateforme | Téléchargement |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.0/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.0/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker-x86_64.AppImage) |
 
-Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Consultez les [notes de version](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.6.0) pour les changements.
+Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Consultez les [notes de version](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.6.1) pour les changements.
 
 ## Premiers pas
 

@@ -90,10 +90,10 @@ def manage(
 ) -> list[ActionResult]:
     """Apply once per hash, rechecking Verification under the Reseed setup lock.
 
-    Removal always keeps data. File selection is explicit and never an empty API list
+    Only the explicit delete action removes data. File selection is never an empty API list
     (which some clients interpret as every file).
     """
-    if action not in {"resume", "pause", "recheck", "remove", "skip_files", "want_files"}:
+    if action not in {"resume", "pause", "recheck", "remove", "delete", "skip_files", "want_files"}:
         raise ValueError("Unknown torrent action")
     if action.endswith("_files") and not file_indexes:
         return []
@@ -113,6 +113,8 @@ def manage(
                         client.set_file_priority(
                             hash, list(file_indexes), 0 if action == "skip_files" else 1
                         )
+                    elif action == "delete":
+                        client.remove(hash, delete_files=True)
                     else:
                         getattr(client, action)(hash)
                     result = ActionResult(hash, name, "sent")

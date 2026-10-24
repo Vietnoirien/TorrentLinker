@@ -295,9 +295,9 @@ class TransmissionApi:
     def start(self, hash: str) -> None:
         self._call("torrent-start", ids=[hash])
 
-    def remove(self, hash: str) -> None:
-        """Remove the torrent from Transmission. Never deletes its files."""
-        self._call("torrent-remove", ids=[hash], **{"delete-local-data": False})
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        """Remove a torrent; data deletion requires an explicit request."""
+        self._call("torrent-remove", ids=[hash], **{"delete-local-data": delete_files})
 
     def add_tags(self, hash: str, tags: list[str]) -> None:
         current = self._labels(hash)

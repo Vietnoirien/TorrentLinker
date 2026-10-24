@@ -181,6 +181,26 @@ Turn off “Append .part to incomplete files&apos; names” in Transmission? It 
 
 Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmission ? Cela s’applique à tous ses torrents. Vos fichiers restent tels quels dans les deux cas.</translation>
     </message>
+    <message>
+        <source>Reading the Library Folder timed out: {0}
+
+Check that the drive or network share is available, then scan again. The previous Library list has been kept.</source>
+        <translation>Le délai de lecture du dossier de bibliothèque a été dépassé : {0}
+
+Vérifiez que le disque ou le partage réseau est accessible, puis relancez l’analyse. La liste précédente de la bibliothèque a été conservée.</translation>
+    </message>
+    <message>
+        <source>The Torrent Client timed out while reading the files of “{0}” after two attempts.</source>
+        <translation>Le client torrent n’a pas répondu à temps lors de la lecture des fichiers de « {0} », après deux tentatives.</translation>
+    </message>
+    <message>
+        <source>The Torrent Client timed out while reading its torrent list after two attempts.</source>
+        <translation>Le client torrent n’a pas répondu à temps lors de la lecture de sa liste de torrents, après deux tentatives.</translation>
+    </message>
+    <message>
+        <source>Check the Torrent Client connection in Settings and try again when it is responsive. The previous Library list has been kept to avoid marking seeded files as Orphans.</source>
+        <translation>Vérifiez la connexion au client torrent dans les paramètres et réessayez lorsqu’il répond. La liste précédente de la bibliothèque a été conservée pour éviter de marquer comme orphelins des fichiers déjà en seed.</translation>
+    </message>
 </context>
 <context>
     <name>LibraryModel</name>
@@ -223,6 +243,10 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
         <location filename="../gui/library_model.py" line="51"/>
         <source>≈ Zen/day</source>
         <translation>≈ Zen/jour</translation>
+    </message>
+    <message>
+        <source>Current Zen/day estimate for the linked torrents, as shown in Zen. A torrent shared by several Local Items appears on each item. Paused torrents contribute zero; a blank value means unavailable.</source>
+        <translation>Estimation actuelle de Zen/jour des torrents associés, identique à celle de Zen. Un torrent partagé par plusieurs éléments locaux apparaît sur chacun. Les torrents en pause comptent pour zéro ; une valeur vide signifie que l’estimation est indisponible.</translation>
     </message>
 </context>
 <context>
@@ -4606,6 +4630,28 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>{0} h {1} min</source>
         <translation>{0} h {1} min</translation>
     </message>
+    <message>
+        <source>Seeders</source>
+        <translation>Seeders</translation>
+    </message>
+    <message>
+        <source>Peers</source>
+        <translation>Pairs</translation>
+    </message>
+    <message>
+        <source>Connected seeders</source>
+        <translation>Seeders connectés</translation>
+    </message>
+    <message>
+        <source>Connected peers</source>
+        <translation>Pairs connectés</translation>
+    </message>
+    <message>
+        <source>Connected seeders: {0}
+Tracker-reported seeders: {1}</source>
+        <translation>Seeders connectés : {0}
+Seeders annoncés par le tracker : {1}</translation>
+    </message>
 </context>
 <context>
     <name>TorrentsTab</name>
@@ -4779,6 +4825,26 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     </message>
     <message><source>Tracker tree</source><translation>Arborescence des trackers</translation></message>
     <message><source>Skip</source><translation>Ignorer</translation></message>
+    <message>
+        <source>Delete torrent and files…</source>
+        <translation>Supprimer le torrent et les fichiers…</translation>
+    </message>
+    <message>
+        <source>Delete “{0}” and its downloaded files?</source>
+        <translation>Supprimer « {0} » et ses fichiers téléchargés ?</translation>
+    </message>
+    <message>
+        <source>Delete torrent and files</source>
+        <translation>Supprimer le torrent et les fichiers</translation>
+    </message>
+    <message>
+        <source>Delete {0} selected torrents and their downloaded files?</source>
+        <translation>Supprimer les {0} torrents sélectionnés et leurs fichiers téléchargés ?</translation>
+    </message>
+    <message>
+        <source>The Torrent Client will delete the files on its disk, including on a remote server or seedbox. Files shared with other torrents may also be lost. This cannot be undone in TorrentLinker.</source>
+        <translation>Le client torrent supprimera les fichiers sur son disque, y compris sur un serveur distant ou une seedbox. Les fichiers partagés avec d’autres torrents peuvent également être perdus. Cette action ne peut pas être annulée dans TorrentLinker.</translation>
+    </message>
 </context>
 <context>
     <name>FolderImportDialog</name>

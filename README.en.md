@@ -18,14 +18,14 @@ Find torrents matching your existing files and reseed them in **qBittorrent, Del
 
 With qBittorrent, Deluge and Transmission, reseeding does not rename existing files on disk. µTorrent Classic may require disk renames, with explicit confirmation. API keys and passwords stay in your system keyring. The interface supports French and English, with system, light and dark themes.
 
-## Download 0.6.0
+## Download 0.6.1
 
 | Platform | Download |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.0/TorrentLinker.exe) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.0/TorrentLinker-x86_64.AppImage) |
+| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker.exe) |
+| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases/download/v0.6.1/TorrentLinker-x86_64.AppImage) |
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.6.0) for changes.
+On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.6.1) for changes.
 
 ## Get started
 

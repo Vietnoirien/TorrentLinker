@@ -10,6 +10,8 @@ Recherchez un nom, filtrez par état ou tag et cliquez sur les en-têtes pour tr
 
 Sélectionnez un ou plusieurs torrents pour les **Démarrer**, les mettre en **Pause**, les **Revérifier** ou les **Retirer**. Le retrait demande confirmation et conserve les fichiers téléchargés. Les torrents en cours de vérification de remise en partage par TorrentLinker sont ignorés pour laisser cette vérification se terminer. Le panneau **Activité** indique le résultat de chaque commande ; le tableau affiche l'état réel reçu du client.
 
+Pour supprimer aussi les fichiers téléchargés, faites un clic droit sur les torrents sélectionnés et choisissez **Supprimer le torrent et les fichiers…**. Vérifiez les noms et les dossiers dans la boîte de confirmation. Le client supprime les fichiers sur sa propre machine, y compris sur un serveur distant ou une seedbox. Des fichiers partagés peuvent servir à d'autres torrents, et TorrentLinker ne peut pas annuler la suppression. Le bouton Annuler est sélectionné par défaut.
+
 Sélectionnez un seul torrent pour consulter ses informations. Le panneau **Fichiers** se charge à la demande et permet de choisir les fichiers à télécharger ou à ignorer. Il ne renomme et ne déplace aucun fichier. La liste s'actualise toutes les cinq secondes lorsque l'onglet est visible, puis moins souvent en cas d'erreur de connexion. Un onglet masqué ne lance pas d'actualisation périodique.
 
 Depuis la file de Recherche ou la Bibliothèque, **Voir dans Torrents** permet de suivre les téléchargements et les remises en partage. Dans Recherche, sélectionner une seule entrée ouvre ce torrent si son hash est connu.

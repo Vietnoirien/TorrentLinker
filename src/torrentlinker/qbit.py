@@ -59,8 +59,8 @@ class Qbit(Protocol):
     def pause(self, hash: str) -> None: ...
     def resume(self, hash: str) -> None: ...
     def start(self, hash: str) -> None: ...
-    def remove(self, hash: str) -> None:
-        """Remove the torrent from qBittorrent. Never deletes its files."""
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        """Remove a torrent, keeping its files unless deletion is explicitly requested."""
         ...
 
     def add_tags(self, hash: str, tags: list[str]) -> None: ...
@@ -319,8 +319,8 @@ class QbitApi:
     def start(self, hash: str) -> None:
         self._client.torrents_start(torrent_hashes=hash)
 
-    def remove(self, hash: str) -> None:
-        self._client.torrents_delete(delete_files=False, torrent_hashes=hash)
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        self._client.torrents_delete(delete_files=delete_files, torrent_hashes=hash)
 
     def add_tags(self, hash: str, tags: list[str]) -> None:
         self._client.torrents_add_tags(tags=tags, torrent_hashes=hash)

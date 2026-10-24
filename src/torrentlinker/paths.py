@@ -130,8 +130,8 @@ class MappedQbit:
     def start(self, hash: str) -> None:
         self._inner.start(hash)
 
-    def remove(self, hash: str) -> None:
-        self._inner.remove(hash)
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        self._inner.remove(hash, delete_files=delete_files)
 
     def add_tags(self, hash: str, tags: list[str]) -> None:
         self._inner.add_tags(hash, tags)

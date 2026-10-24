@@ -1,7 +1,8 @@
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+import pytest
+from PySide6.QtCore import QPoint, QSettings, Qt
 
 from tests.fake_qbit import FakeQbit
 from tests.test_qbit_unit import Synced, entry
@@ -19,6 +20,13 @@ from torrentlinker.torrent_management import (
     torrent_categories,
     tracker_hosts,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_table_settings(tmp_path, monkeypatch):
+    settings = QSettings(str(tmp_path / "table.ini"), QSettings.Format.IniFormat)
+    monkeypatch.setattr("torrentlinker.gui.torrents_view.QSettings", lambda: settings)
+    return settings
 
 
 def torrent(hash="a", **kwargs):
@@ -279,3 +287,161 @@ def test_parent_only_tags_have_unspecified_subcategory(qtbot):
     tab._known_categories = category_labels(cats)
     tab._group()
     assert tab._tree_counts[("tracker", "Ebook", "")] == 1
+
+
+def test_connection_counts_sort_numerically_and_refresh(qtbot):
+    tab, client = make_tab(
+        qtbot,
+        a=torrent(connected_seeds=2, connected_peers=12, swarm_seeders=50),
+        b=torrent("b", connected_seeds=10, connected_peers=3),
+    )
+    assert tab.model.index(0, 12).data() == 2
+    assert tab.model.index(0, 13).data() == 12
+    assert "50" in tab.model.index(0, 12).data(Qt.ItemDataRole.ToolTipRole)
+    for column, first in ((12, "b"), (13, "a")):
+        assert not tab.table.isColumnHidden(column)
+        tab.table.sortByColumn(column, Qt.SortOrder.DescendingOrder)
+        assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == first
+    tab._restore_selection({"a"})
+    client.by_hash["a"] = replace(client.by_hash["a"], connected_peers=1, connected_seeds=20)
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab._loading)
+    assert tab.selected()[0].hash == "a"
+    assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == "b"
+    assert tab.model.index(0, 12).data() == 20
+
+
+def test_context_menu_targets_clicked_row_or_existing_multi_selection(qtbot, monkeypatch):
+    tab, _ = make_tab(qtbot, a=torrent(), b=torrent("b"), c=torrent("c"))
+    commands = []
+    monkeypatch.setattr(tab, "perform", lambda action: commands.append((action, tab.selected())))
+    tab._restore_selection({"a", "b"})
+    tab._context_menu(tab.table.visualRect(tab.proxy.index(0, 0)).center())
+    assert {t.hash for t in tab.selected()} == {"a", "b"}
+    tab.context_menu.actions()[1].trigger()
+    assert commands[0][0] == "pause"
+    assert {t.hash for t in commands[0][1]} == {"a", "b"}
+    tab.context_menu.hide()
+    tab._context_menu(tab.table.visualRect(tab.proxy.index(2, 0)).center())
+    assert [t.hash for t in tab.selected()] == ["c"]
+    tab.context_menu.hide()
+    tab._context_menu(QPoint(5, tab.table.viewport().height() - 1))
+    assert not tab.context_menu.isVisible()
+    tab._acting = True
+    tab._context_menu(tab.table.visualRect(tab.proxy.index(2, 0)).center())
+    assert all(not a.isEnabled() for a in tab.context_menu.actions() if not a.isSeparator())
+
+
+def test_context_remove_keeps_confirmation(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    tab, client = make_tab(qtbot, a=torrent())
+    tab.table.selectRow(0)
+    remove = next(a for a in tab.context_menu.actions() if a.text() == "Remove…")
+    remove.trigger()
+    assert client.removed == []
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+    remove.trigger()
+    qtbot.waitUntil(lambda: not tab._acting)
+    assert client.removed == [("a", False)]
+
+
+def test_old_column_preferences_survive_and_new_columns_stay_configurable(
+    qtbot, isolated_table_settings
+):
+    from PySide6.QtGui import QStandardItemModel
+    from PySide6.QtWidgets import QTableView
+
+    old = QTableView()
+    qtbot.addWidget(old)
+    old.setModel(QStandardItemModel(0, 12, old))
+    old.setColumnWidth(0, 280)
+    old.setColumnHidden(8, True)
+    isolated_table_settings.setValue("torrents/header", old.horizontalHeader().saveState())
+    tab, _ = make_tab(qtbot, a=torrent())
+    header = tab.table.horizontalHeader()
+    assert tab.table.columnWidth(0) == 280
+    assert tab.table.isColumnHidden(8)
+    assert header.visualIndex(12) == header.visualIndex(5) + 1
+    assert header.visualIndex(13) == header.visualIndex(12) + 1
+    tab._column(12, False)
+    tab.hide()
+    reopened, _ = make_tab(qtbot, a=torrent())
+    assert reopened.table.isColumnHidden(12)
+    assert not reopened.table.isColumnHidden(13)
+    reopened.resize(2000, 720)
+    qtbot.waitUntil(lambda: reopened.width() == 2000)
+    assert reopened.search.width() <= 420
+
+
+def test_explicit_delete_removes_data_once_and_protects_verifying_torrents():
+    client = FakeQbit(by_hash={"a": torrent(), "b": torrent("b", tags=frozenset({VERIFYING}))})
+    results = manage(client, ["a", "a", "b", "gone"], "delete")
+    assert [r.outcome for r in results] == ["sent", "verifying", "missing"]
+    assert client.removed == [("a", True)]
+    assert "b" in client.by_hash
+
+
+def test_delete_dialog_defaults_to_cancel_and_names_all_selected_torrents(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    tab, client = make_tab(qtbot, a=torrent(), b=torrent("b"))
+    tab._restore_selection({"a", "b"})
+    seen = []
+
+    def cancel(box):
+        assert box.defaultButton() == box.button(QMessageBox.StandardButton.Cancel)
+        assert box.escapeButton() == box.button(QMessageBox.StandardButton.Cancel)
+        assert "2" in box.text()
+        assert "remote server or seedbox" in box.informativeText()
+        assert "shared with other torrents" in box.informativeText()
+        assert "Torrent a" in box.detailedText()
+        assert "Torrent b" in box.detailedText()
+        assert "/seedbox/downloads" in box.detailedText()
+        seen.append(True)
+        return QMessageBox.StandardButton.Cancel
+
+    monkeypatch.setattr(QMessageBox, "exec", cancel)
+    delete = tab.context_menu.actions()[-1]
+    assert delete.text() == "Delete torrent and files…"
+    delete.trigger()
+    assert seen == [True]
+    assert client.removed == []
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.StandardButton.Yes)
+    delete.trigger()
+    qtbot.waitUntil(lambda: not tab._acting)
+    assert sorted(client.removed) == [("a", True), ("b", True)]
+
+
+@pytest.mark.parametrize("delete_files", [False, True])
+def test_all_client_adapters_send_explicit_data_deletion_flag(delete_files):
+    from unittest.mock import Mock
+
+    from torrentlinker.deluge import DelugeApi
+    from torrentlinker.paths import MappedQbit, PathMapper
+    from torrentlinker.transmission import TransmissionApi
+    from torrentlinker.utorrent import UtorrentApi
+
+    qbit = QbitApi("http://127.0.0.1:1", "", "")
+    qbit._client = Mock()
+    qbit.remove("a", delete_files=delete_files)
+    qbit._client.torrents_delete.assert_called_once_with(
+        delete_files=delete_files, torrent_hashes="a"
+    )
+    deluge = DelugeApi("http://127.0.0.1:1", "")
+    deluge._call = Mock()
+    deluge.remove("a", delete_files=delete_files)
+    deluge._call.assert_called_once_with("core.remove_torrent", "a", delete_files)
+    transmission = TransmissionApi("http://127.0.0.1:1", "", "")
+    transmission._call = Mock()
+    transmission.remove("a", delete_files=delete_files)
+    transmission._call.assert_called_once_with(
+        "torrent-remove", ids=["a"], **{"delete-local-data": delete_files}
+    )
+    utorrent = UtorrentApi("http://127.0.0.1:1", "", "")
+    utorrent._action = Mock()
+    utorrent.remove("a", delete_files=delete_files)
+    utorrent._action.assert_called_once_with("removedata" if delete_files else "remove", "a")
+    client = FakeQbit(by_hash={"a": torrent()})
+    MappedQbit(client, PathMapper([])).remove("a", delete_files=delete_files)
+    assert client.removed == [("a", delete_files)]

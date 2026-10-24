@@ -7,8 +7,10 @@ from typing import Any
 
 from PySide6.QtCore import (
     QAbstractTableModel,
+    QItemSelectionModel,
     QModelIndex,
     QPersistentModelIndex,
+    QPoint,
     QSettings,
     QSignalBlocker,
     QSortFilterProxyModel,
@@ -75,6 +77,8 @@ class TorrentModel(QAbstractTableModel):
             self.tr("Trackers"),
             self.tr("≈ Zen/day"),
             self.tr("≈ Note"),
+            self.tr("Seeders"),
+            self.tr("Peers"),
         ]
         self.states = {
             "downloading": self.tr("Downloading"),
@@ -92,6 +96,11 @@ class TorrentModel(QAbstractTableModel):
         return len(self.headers)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = 0) -> Any:
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.ToolTipRole:
+            if section == 12:
+                return self.tr("Connected seeders")
+            if section == 13:
+                return self.tr("Connected peers")
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self.headers[section]
         return None
@@ -105,6 +114,12 @@ class TorrentModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.UserRole:
             return t.hash
         if role == Qt.ItemDataRole.ToolTipRole:
+            if col == 12 and t.swarm_seeders >= 0:
+                return self.tr("Connected seeders: {0}\nTracker-reported seeders: {1}").format(
+                    t.connected_seeds, t.swarm_seeders
+                )
+            if col in (12, 13):
+                return self.headerData(col, Qt.Orientation.Horizontal, role)
             return t.name if col == 0 else t.state if col == 1 else None
         if role not in (Qt.ItemDataRole.DisplayRole, SORT):
             return None
@@ -126,6 +141,8 @@ class TorrentModel(QAbstractTableModel):
             ", ".join(h for h in tracker_hosts(t) if h) if col == 9 else "",
             zen,
             note,
+            t.connected_seeds,
+            t.connected_peers,
         )
         value = values[col]
         if role == SORT:
@@ -162,6 +179,10 @@ class TorrentModel(QAbstractTableModel):
                     old.eta,
                     old.category,
                     (old.tracker, old.trackers),
+                    None,
+                    None,
+                    (old.connected_seeds, old.swarm_seeders),
+                    old.connected_peers,
                 )
                 after = (
                     new.name,
@@ -174,6 +195,10 @@ class TorrentModel(QAbstractTableModel):
                     new.eta,
                     new.category,
                     (new.tracker, new.trackers),
+                    None,
+                    None,
+                    (new.connected_seeds, new.swarm_seeders),
+                    new.connected_peers,
                 )
                 for col, (a, b) in enumerate(zip(before, after, strict=True)):
                     if a != b:
@@ -236,6 +261,7 @@ class TorrentsTab(QWidget):
         self.search = QLineEdit()
         self.search.setPlaceholderText(self.tr("Find a torrent…"))
         self.search.setClearButtonEnabled(True)
+        self.search.setMaximumWidth(420)
         self.search.textChanged.connect(self._filter)
         filters.addWidget(self.search, 1)
         self.states = QComboBox()
@@ -252,12 +278,14 @@ class TorrentsTab(QWidget):
         self.tags.addItem(self.tr("All tags"), "")
         self.tags.currentIndexChanged.connect(self._filter)
         filters.addWidget(self.tags)
+        filters.addStretch()
         self.refresh_button = QPushButton(self.tr("Refresh"))
         self.refresh_button.clicked.connect(self.refresh)
         filters.addWidget(self.refresh_button)
         layout.addLayout(filters)
         actions = QHBoxLayout()
         self.buttons: list[QPushButton] = []
+        self.context_menu = QMenu(self)
         for text, action in [
             (self.tr("Start"), "resume"),
             (self.tr("Pause"), "pause"),
@@ -268,6 +296,12 @@ class TorrentsTab(QWidget):
             button.clicked.connect(lambda _=False, a=action: self.perform(a))
             self.buttons.append(button)
             actions.addWidget(button)
+            if action == "remove":
+                self.context_menu.addSeparator()
+            menu_action = self.context_menu.addAction(text)
+            menu_action.triggered.connect(lambda _=False, a=action: self.perform(a))
+        delete_action = self.context_menu.addAction(self.tr("Delete torrent and files…"))
+        delete_action.triggered.connect(lambda: self.perform("delete"))
         actions.addStretch()
         self.columns = QPushButton(self.tr("Columns"))
         columns = QMenu(self.columns)
@@ -295,13 +329,27 @@ class TorrentsTab(QWidget):
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.table.selectionModel().selectionChanged.connect(self._selection)
-        for i, width in enumerate([330, 115, 95, 100, 100, 100, 75, 115, 180, 160, 100, 85]):
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._context_menu)
+        for i, width in enumerate(
+            [330, 115, 95, 100, 100, 100, 75, 115, 180, 160, 100, 85, 85, 85]
+        ):
             self.table.setColumnWidth(i, width)
-            if i >= 10:
+            if i in (10, 11):
                 self.table.setColumnHidden(i, True)
-        saved = QSettings().value("torrents/header")
+        # Keep existing logical column IDs so older saved widths and visibility survive.
+        settings = QSettings()
+        saved = settings.value("torrents/header")
         if saved is not None:
             self.table.horizontalHeader().restoreState(saved)
+        if not settings.value("torrents/connection_columns", False, type=bool):
+            header = self.table.horizontalHeader()
+            for offset, column in enumerate((12, 13)):
+                header.moveSection(header.visualIndex(column), header.visualIndex(5) + 1 + offset)
+                self.table.setColumnHidden(column, False)
+                self.table.setColumnWidth(column, 85)
+            settings.setValue("torrents/header", header.saveState())
+            settings.setValue("torrents/connection_columns", True)
         for i, name in enumerate(self.model.headers):
             column_action = columns.addAction(name)
             column_action.setCheckable(True)
@@ -534,8 +582,21 @@ class TorrentsTab(QWidget):
             for i in self.table.selectionModel().selectedRows()
         ]
 
+    def _context_menu(self, position: QPoint) -> None:
+        index = self.table.indexAt(position)
+        if not index.isValid():
+            return
+        if not self.table.selectionModel().isRowSelected(index.row(), QModelIndex()):
+            self.table.selectionModel().setCurrentIndex(
+                index,
+                QItemSelectionModel.SelectionFlag.ClearAndSelect
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        self._selection()
+        self.context_menu.popup(self.table.viewport().mapToGlobal(position))
+
     def _restore_selection(self, hashes: set[str]) -> None:
-        from PySide6.QtCore import QItemSelection, QItemSelectionModel
+        from PySide6.QtCore import QItemSelection
 
         selection = QItemSelection()
         for row, t in enumerate(self.model.rows):
@@ -562,6 +623,9 @@ class TorrentsTab(QWidget):
         selected = self.selected()
         for button in self.buttons:
             button.setEnabled(bool(selected) and not self._acting)
+        for action in self.context_menu.actions():
+            if not action.isSeparator():
+                action.setEnabled(bool(selected) and not self._acting)
         if len(selected) != 1:
             self._detail_hash = self._file_hash = ""
             self._detail_generation += 1
@@ -625,9 +689,37 @@ class TorrentsTab(QWidget):
 
         run_in_background(lambda: self.client().file_listing(hash), done, failed)
 
+    def _confirm_delete(self, selected: list[Torrent]) -> bool:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(self.tr("Delete torrent and files"))
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(
+            self.tr("Delete “{0}” and its downloaded files?").format(selected[0].name)
+            if len(selected) == 1
+            else self.tr("Delete {0} selected torrents and their downloaded files?").format(
+                len(selected)
+            )
+        )
+        box.setInformativeText(
+            self.tr(
+                "The Torrent Client will delete the files on its disk, including on a remote "
+                "server or seedbox. Files shared with other torrents may also be lost. "
+                "This cannot be undone in TorrentLinker."
+            )
+        )
+        box.setDetailedText("\n\n".join(f"{t.name}\n{t.save_path}" for t in selected))
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+        box.button(QMessageBox.StandardButton.Yes).setText(self.tr("Delete torrent and files"))
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        box.setEscapeButton(QMessageBox.StandardButton.Cancel)
+        return box.exec() == QMessageBox.StandardButton.Yes
+
     def perform(self, action: str) -> None:
         selected = self.selected()
         if not selected or self._acting:
+            return
+        if action == "delete" and not self._confirm_delete(selected):
             return
         indexes = []
         if action.endswith("_files"):

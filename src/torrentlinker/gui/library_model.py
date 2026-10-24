@@ -16,6 +16,7 @@ from PySide6.QtGui import QColor
 
 from torrentlinker.domain import ItemState
 from torrentlinker.library import LibraryEntry
+from torrentlinker.seeding import Seeding
 
 STATE_LABELS = {
     ItemState.SEEDED: QT_TRANSLATE_NOOP("LibraryModel", "Seeded"),
@@ -57,6 +58,7 @@ class LibraryModel(QAbstractTableModel):
         self.entries: list[LibraryEntry] = []
         self.status: dict[Path, str] = {}
         self.zen: dict[Path, float] = {}  # Zen Estimate of an Orphan's best Match
+        self.seeding_zen: dict[str, float] = {}
 
     def set_entries(self, entries: list[LibraryEntry]) -> None:
         self.beginResetModel()
@@ -85,8 +87,20 @@ class LibraryModel(QAbstractTableModel):
                 self.dataChanged.emit(i, i)
 
     def zen_of(self, entry: LibraryEntry) -> float | None:
-        """Only Orphans show a Zen Estimate: a Seeded Item already earns its Zen."""
-        return self.zen.get(entry.item.path) if entry.state is ItemState.ORPHAN else None
+        if entry.state is ItemState.ORPHAN:
+            return self.zen.get(entry.item.path)
+        if entry.torrent_hashes and entry.torrent_hashes <= self.seeding_zen.keys():
+            return sum(self.seeding_zen[hash] for hash in sorted(entry.torrent_hashes))
+        return None
+
+    def set_seeding(self, view: Seeding | None) -> None:
+        self.seeding_zen = (
+            {row.torrent.hash.lower(): row.zen or 0.0 for row in view.rows} if view else {}
+        )
+        if self.entries:
+            self.dataChanged.emit(
+                self.index(0, self.ZEN_COLUMN), self.index(len(self.entries) - 1, self.ZEN_COLUMN)
+            )
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self.entries)
@@ -104,6 +118,12 @@ class LibraryModel(QAbstractTableModel):
             return None
         e = self.entries[index.row()]
         if role == Qt.ItemDataRole.ToolTipRole:
+            if index.column() == self.ZEN_COLUMN and e.state is not ItemState.ORPHAN:
+                return self.tr(
+                    "Current Zen/day estimate for the linked torrents, as shown in Zen. "
+                    "A torrent shared by several Local Items appears on each item. "
+                    "Paused torrents contribute zero; a blank value means unavailable."
+                )
             return str(e.item.path) if index.column() == 0 else self.data(index)
         if role == Qt.ItemDataRole.DisplayRole:
             return (

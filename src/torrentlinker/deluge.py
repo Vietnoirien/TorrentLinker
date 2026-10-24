@@ -343,9 +343,9 @@ class DelugeApi:
         self._lift_guard(hash)
         self._call("core.resume_torrent", hash)
 
-    def remove(self, hash: str) -> None:
-        """Remove the torrent from Deluge. Never deletes its files."""
-        self._call("core.remove_torrent", hash, False)
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        """Remove a torrent; data deletion requires an explicit request."""
+        self._call("core.remove_torrent", hash, delete_files)
 
     def add_tags(self, hash: str, tags: list[str]) -> None:
         """One label holds one `a:b` tag: an added one replaces the torrent's own."""

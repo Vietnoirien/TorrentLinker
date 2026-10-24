@@ -92,8 +92,8 @@ class FakeQbit:
         self.started.append(hash)
         self._set(hash, state="uploading")
 
-    def remove(self, hash: str) -> None:
-        self.removed.append((hash, False))
+    def remove(self, hash: str, *, delete_files: bool = False) -> None:
+        self.removed.append((hash, delete_files))
         del self.by_hash[hash]
 
     def add_tags(self, hash: str, tags: list[str]) -> None:

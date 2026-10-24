@@ -321,6 +321,8 @@ class MainWindow(QMainWindow):
         self.zen_tab.seeding_view.updated.connect(self.band.set_seeding)
         self.zen_tab.seeding_view.updated.connect(self.search_tab.set_seeding)
         self.zen_tab.seeding_view.updated.connect(self.torrents_tab.set_seeding)
+        self.zen_tab.seeding_view.updated.connect(self.library_model.set_seeding)
+        self.zen_tab.seeding_view.unavailable.connect(lambda: self.library_model.set_seeding(None))
         self.zen_tab.seeding_view.updated.connect(self._update_reading_room)
         self.zen_tab.seeding_view.unavailable.connect(self._lock_reading_room)
         self.reading_room: ReadingRoom | None = None
@@ -1891,7 +1893,7 @@ class MainWindow(QMainWindow):
         self.rescan_action.setEnabled(True)
         self.add_folder_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("Scan failed"))
-        QMessageBox.warning(self, self.tr("Scan failed"), str(error))
+        QMessageBox.warning(self, self.tr("Scan failed"), error_text(error))
 
     # Verification ----------------------------------------------------------
 
