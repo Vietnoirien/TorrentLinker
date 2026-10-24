@@ -143,11 +143,22 @@ class AssistantEditor(QDialog):
             1000000,
         )
         self.calls = self.number(
-            af, self.tr("Model calls per run"), self.initial.get("max_calls", 12), 1, 40
+            af,
+            self.tr("Model calls per run"),
+            self.initial.get("max_calls", 12 if task else 0),
+            1 if task else 0,
+            40 if task else 200,
         )
         self.seconds = self.number(
-            af, self.tr("Maximum duration, seconds"), self.initial.get("max_seconds", 300), 10, 1800
+            af,
+            self.tr("Maximum duration, seconds"),
+            self.initial.get("max_seconds", 300 if task else 0),
+            10 if task else 0,
+            1800,
         )
+        if not task:
+            self.calls.setSpecialValueText(self.tr("No limit"))
+            self.seconds.setSpecialValueText(self.tr("No limit"))
         form.addRow(advanced)
         if task:
             self.instruction = QPlainTextEdit(self.initial.get("instruction", ""))
@@ -349,6 +360,9 @@ class AssistantTab(QWidget):
         new = QPushButton(self.tr("New discussion"))
         new.clicked.connect(self.new_discussion)
         ll.addWidget(new)
+        delete = QPushButton(self.tr("Delete discussion"))
+        delete.clicked.connect(self.delete_discussion)
+        ll.addWidget(delete)
         self.conversations = QListWidget()
         self.conversations.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.conversations.setTextElideMode(Qt.TextElideMode.ElideRight)
@@ -549,6 +563,30 @@ class AssistantTab(QWidget):
                 )
             self.refresh()
 
+    def delete_discussion(self):
+        if not self.service or not self.conversation_id:
+            return
+        if (
+            QMessageBox.question(
+                self,
+                self.tr("Delete discussion"),
+                self.tr(
+                    "Delete this discussion and its history? Pending proposals will be rejected. "
+                    "Torrents and files will not be removed."
+                ),
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+        try:
+            identifier = self.conversation_id
+            self.service.delete_conversation(identifier)
+            self.new_discussion()
+            self.drafts.pop(identifier, None)
+            self.refresh()
+        except Exception as error:
+            self.error(error)
+
     def new_discussion(self):
         self.drafts[self.conversation_id] = self.prompt.toPlainText()
         self.drafts.pop("", None)
@@ -686,6 +724,7 @@ class AssistantTab(QWidget):
         self.render_key = key
         bar = self.transcript.verticalScrollBar()
         position, bottom = bar.value(), bar.value() >= bar.maximum() - 10
+        self.transcript.follow_bottom = bottom
         self.transcript.set_runs(rows, self.status_text)
 
         def restore_scroll():

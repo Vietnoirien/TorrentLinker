@@ -56,6 +56,10 @@ def routes(app, assistant):
     def conversation(body: Conversation):
         return assistant.create_conversation(body)
 
+    @app.delete("/api/assistant/conversations/{identifier}")
+    def delete_conversation(identifier: str):
+        return assistant.delete_conversation(identifier)
+
     @app.get("/api/assistant/conversations")
     def conversations():
         return assistant.conversations()

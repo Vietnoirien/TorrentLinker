@@ -1329,3 +1329,216 @@ def test_model_can_read_full_archived_message_in_pages(tmp_path):
         assert result["status"] == "completed", result["error"]
         assert json.loads(collected)["content"] == original
         assert len(result["events"]) == 2
+
+
+def test_chat_can_finish_after_more_than_twelve_calls_then_be_deleted(tmp_path):
+    count = 0
+
+    def provider(request):
+        nonlocal count
+        count += 1
+        message = {"role": "assistant", "content": "Working."}
+        if count <= 13:
+            message["tool_calls"] = [
+                {
+                    "id": str(count),
+                    "type": "function",
+                    "function": {"name": "overview", "arguments": "{}"},
+                }
+            ]
+        else:
+            message["content"] = "Finished the task."
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local", "kind": "ollama", "model": "test"},
+        ).json()
+        c = browser.post(
+            "/api/assistant/conversations",
+            json={"provider_id": p["id"], "policy": {"name": "Read", "clients": ["default"]}},
+        ).json()
+        r = browser.post(
+            "/api/assistant/jobs", json={"conversation_id": c["id"], "message": "Finish the task."}
+        ).json()
+        result = wait_run(browser, r["id"])
+        assert result["status"] == "completed", result["error"]
+        assert result["calls"] == 14
+        deleted = browser.delete("/api/assistant/conversations/" + c["id"])
+        assert deleted.is_success, deleted.text
+        assert browser.get("/api/assistant/conversations").json() == []
+        assert browser.get("/api/assistant/jobs").json() == []
+
+
+def test_scheduled_discussion_cannot_be_deleted(tmp_path):
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        login(browser)
+        task = browser.post(
+            "/api/assistant/schedules",
+            json={
+                "name": "Refresh",
+                "instruction": "Refresh",
+                "kind": "refresh",
+                "policy": {"name": "Read", "clients": ["default"]},
+            },
+        )
+        assert task.is_success, task.text
+        chat = browser.get("/api/assistant/conversations").json()[0]
+        assert chat["max_calls"] == 12
+        assert chat["max_seconds"] == 300
+        result = browser.delete("/api/assistant/conversations/" + chat["id"])
+        assert result.status_code == 400
+        assert "automated task" in result.text
+        assert len(browser.get("/api/assistant/conversations").json()) == 1
+
+
+def test_existing_chat_default_limits_are_migrated_once(tmp_path):
+    import sqlite3
+
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Local",
+                "kind": "ollama",
+                "model": "test",
+            },
+        ).json()
+        ids = []
+        for calls in (12, 8):
+            chat = browser.post(
+                "/api/assistant/conversations",
+                json={
+                    "provider_id": p["id"],
+                    "max_calls": calls,
+                    "max_seconds": 300,
+                    "policy": {"name": "Read", "clients": ["default"]},
+                },
+            ).json()
+            ids.append(chat["id"])
+    # Model an installation whose database predates the chat-limit migration.
+    with sqlite3.connect(tmp_path / "assistant.sqlite") as db:
+        db.execute("DELETE FROM options WHERE key='chat_limits_v2'")
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        login(browser)
+        chats = {c["id"]: c for c in browser.get("/api/assistant/conversations").json()}
+        assert chats[ids[0]]["max_calls"] == 0
+        assert chats[ids[1]]["max_calls"] == 8
+        assert all(c["max_seconds"] == 0 for c in chats.values())
+
+
+def test_cannot_delete_active_discussion(tmp_path):
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+
+    def provider(request):
+        entered.set()
+        release.wait(5)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Done.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Local",
+                "kind": "ollama",
+                "model": "test",
+            },
+        ).json()
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={
+                "provider_id": p["id"],
+                "policy": {"name": "Read", "clients": ["default"]},
+            },
+        ).json()
+        run = browser.post(
+            "/api/assistant/jobs",
+            json={
+                "conversation_id": chat["id"],
+                "message": "Hello",
+            },
+        ).json()
+        try:
+            assert entered.wait(3)
+            result = browser.delete("/api/assistant/conversations/" + chat["id"])
+            assert result.status_code == 400
+            assert "Stop the discussion" in result.text
+        finally:
+            release.set()
+        assert wait_run(browser, run["id"])["status"] == "completed"
+
+
+def test_chat_recovers_malformed_tool_arguments_without_executing_them(tmp_path):
+    count = 0
+
+    def provider(request):
+        nonlocal count
+        count += 1
+        if count == 1:
+            message = {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "bad",
+                        "type": "function",
+                        "function": {"name": "overview", "arguments": '{"query": "unfinished'},
+                    }
+                ],
+            }
+        else:
+            message = {"role": "assistant", "content": "Recovered."}
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local", "kind": "ollama", "model": "test"},
+        ).json()
+        c = browser.post(
+            "/api/assistant/conversations",
+            json={"provider_id": p["id"], "policy": {"name": "Read", "clients": ["default"]}},
+        ).json()
+        run = browser.post(
+            "/api/assistant/jobs", json={"conversation_id": c["id"], "message": "Check my library"}
+        ).json()
+        result = wait_run(browser, run["id"])
+        assert result["status"] == "completed", result["error"]
+        assert count == 2
+        assert result["events"] == []

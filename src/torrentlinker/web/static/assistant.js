@@ -51,6 +51,12 @@ async function loadAssistant() {
   for (const c of conversations) side.append(button(c.name, async () => { assistantConversation = c.id; assistantRun = ""; await loadAssistant(); }, assistantConversation === c.id ? "active" : ""));
   layout.append(side, main); root.append(layout);
   const current = conversations.find(c => c.id === assistantConversation);
+  if (current) side.append(button(at("Delete discussion", "Supprimer la discussion"), async () => {
+    if (!confirm(at("Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.", "Supprimer cette discussion et son historique ? Les propositions en attente seront refusées. Les torrents et fichiers ne seront pas supprimés."))) return;
+    await api(`assistant/conversations/${current.id}`, undefined, "DELETE");
+    assistantDrafts.delete(current.id); assistantConversation = ""; assistantRun = "";
+    await loadAssistant();
+  }));
   if (assistantConversation && !current) { assistantConversation = ""; return loadAssistant(); }
   const defaults = await api("setup/assistant/chat"), config = current || defaults;
   if (version !== assistantLoadVersion) return;
@@ -249,8 +255,9 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
   const bytes = aField(details, at("Downloads per day, GiB", "Téléchargements par jour, Gio"), (existing?.policy.daily_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
   const torrents = aField(details, at("Torrents per day", "Torrents par jour"), existing?.policy.daily_torrents ?? 20, "number");
   const reserve = aField(details, at("Keep free, GiB", "Conserver libres, Gio"), (existing?.policy.reserve_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
-  const calls = aField(details, at("Maximum model calls per run", "Appels au modèle par exécution"), existing?.max_calls ?? 12, "number");
-  const seconds = aField(details, at("Maximum duration, seconds", "Durée maximale, secondes"), existing?.max_seconds ?? 300, "number");
+  const calls = aField(details, at("Maximum model calls per run", "Appels au modèle par exécution"), existing?.max_calls ?? (scheduled ? 12 : 0), "number");
+  const seconds = aField(details, at("Maximum duration, seconds", "Durée maximale, secondes"), existing?.max_seconds ?? (scheduled ? 300 : 0), "number");
+  if (!scheduled) details.append(element("p", at("Set calls or duration to 0 for no per-run limit. Stop remains available.", "Indiquez 0 pour ne pas limiter les appels ou la durée. Le bouton Arrêter reste disponible.")));
   const web = aField(form, at("Allow public Web research", "Autoriser la recherche sur le Web public"), existing?.web || false, "checkbox");
   let instruction, kind, frequency, interval, atTime, timezone, days, enabled;
   if (scheduled) {

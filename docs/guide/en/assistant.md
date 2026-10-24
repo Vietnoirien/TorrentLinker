@@ -83,7 +83,7 @@ Open the local draft queue and review the sources, image, technical information 
 
 History keeps messages, tool calls, proposals, jobs and errors. Connections and schedules survive restarts.
 
-Each run has duration and model-call limits, by default five minutes and twelve calls. Cumulative token usage is displayed for information and does not stop the conversation. Each response requests at most 2,048 output tokens by default.
+Interactive chats have no duration or model-call cutoff by default. You can set optional limits in Discussion settings; zero means no per-run limit. Stop remains available. Scheduled tasks retain defaults of five minutes and twelve calls. Cumulative token usage is displayed for information and does not stop the conversation. Each response requests at most 2,048 output tokens by default.
 
 **Detect context automatically** is enabled for new connections. Before each task, TorrentLinker reads the selected model's reported limit. Use **Check context** in the connection editor to see the detected value without starting a chat. This does not load models or change server settings.
 
@@ -98,3 +98,5 @@ Messages appear in separate cards. Expand **Activity** below an exchange to insp
 Discussions and tasks share a limit of 200 calls per model connection per UTC day. Connection tests are separate from this counter. One Assistant run executes at a time; up to ten can be queued or active. Downloads remain TorrentLinker jobs and continue in your torrent client.
 
 External assistants can still use [MCP access](agents.md). The built-in Assistant needs neither external MCP access enabled nor a copied token.
+
+Use **Delete discussion** to remove a chat and its history after confirmation. Pending proposals are rejected; torrents and files are kept. Stop an active discussion and wait for submitted actions to finish before deleting it. Automated-task discussions cannot be deleted this way.

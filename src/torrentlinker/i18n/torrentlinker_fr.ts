@@ -5941,6 +5941,10 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
         <source>Assistant</source>
         <translation>Assistant</translation>
     </message>
+    <message>
+        <source>No limit</source>
+        <translation>Sans limite</translation>
+    </message>
 </context>
 <context>
     <name>AssistantTab</name>
@@ -6253,6 +6257,14 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
         <location filename="../gui/assistant.py" line="892"/>
         <source>Use Brave Search or SearXNG for search. Page reading and book metadata need no search key. Film metadata uses your TMDb key.</source>
         <translation>Utilisez Brave Search ou SearXNG pour la recherche. La lecture de pages et les métadonnées des livres ne nécessitent pas de clé de recherche. Les films utilisent votre clé TMDb.</translation>
+    </message>
+    <message>
+        <source>Delete discussion</source>
+        <translation>Supprimer la discussion</translation>
+    </message>
+    <message>
+        <source>Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.</source>
+        <translation>Supprimer cette discussion et son historique ? Les propositions en attente seront rejetées. Les torrents et les fichiers seront conservés.</translation>
     </message>
 </context>
 <context>

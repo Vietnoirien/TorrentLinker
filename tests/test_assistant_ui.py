@@ -33,7 +33,7 @@ def provider(request):
     )
 
 
-def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path):
+def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkeypatch):
     from torrentlinker.gui.assistant import AssistantTab
 
     app = create_app(
@@ -86,6 +86,13 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path):
         widget.conversations.setCurrentRow(1)
         assert "Help me build a Plan." in widget.transcript.toPlainText()
         widget.grab().save(str(tmp_path / "assistant-desktop.png"))
+        from PySide6.QtWidgets import QMessageBox
+
+        monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
+        next(b for b in widget.findChildren(QPushButton) if b.text() == "Delete discussion").click()
+        assert len(browser.get("/api/assistant/conversations").json()) == 1
+        assert not widget.conversation_id
+        assert "Help me build a Plan." not in widget.transcript.toPlainText()
 
 
 @pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
@@ -167,6 +174,11 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             page.get_by_role("button", name="My films", exact=True).click()
             expect(page.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
             page.screenshot(path=str(tmp_path / "assistant-web.png"))
+            page.once("dialog", lambda dialog: dialog.accept())
+            page.get_by_role("button", name="Delete discussion", exact=True).click()
+            expect(page.get_by_role("button", name="My films", exact=True)).to_have_count(0)
+            expect(page.locator(".assistant-message.user")).to_have_count(0)
+
             page.get_by_role("button", name="Automations", exact=True).click()
             page.get_by_role("button", name="Create task", exact=True).click()
             dialog = page.locator(".assistant-dialog")
@@ -235,3 +247,29 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
         assert result["context_window"] == 65536
         assert result["source"] == "manual"
         widget.close()
+
+
+def test_chat_follows_messages_after_layout_settles(qtbot, tmp_path):
+    from torrentlinker.gui.assistant import AssistantTab
+
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local", "kind": "ollama", "model": "test"},
+        )
+        widget = AssistantTab(lambda: app.state.assistant)
+        qtbot.addWidget(widget)
+        widget.resize(800, 600)
+        widget.show()
+        widget.activate()
+        for i in range(4):
+            widget.prompt.setPlainText(f"Message {i} with many lines.\n\n" * 20)
+            widget.send.click()
+            qtbot.waitUntil(lambda: widget.send.isEnabled(), timeout=5000)
+            qtbot.wait(150)
+            bar = widget.transcript.verticalScrollBar()
+            assert bar.maximum() - bar.value() <= 10

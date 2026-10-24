@@ -58,6 +58,69 @@ class Assistant:
                 ),
             )
 
+        self.migrate_chat_limits()
+
+    def delete_conversation(self, identifier):
+        with self.lock, self.db:
+            _, actor = self.conversation(identifier)
+            if self.db.execute(
+                "SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')",
+                (identifier,),
+            ).fetchone():
+                raise ValueError("Stop the discussion before deleting it.")
+            if self.db.execute(
+                "SELECT 1 FROM schedules WHERE conversation_id=?", (identifier,)
+            ).fetchone():
+                raise ValueError("This discussion belongs to an automated task.")
+            with self.agent.access.lock, self.agent.access.db:
+                for row in self.agent.access.db.execute(
+                    "SELECT job_id FROM proposals WHERE grant_id=?", (actor,)
+                ):
+                    if not row[0]:
+                        continue
+                    try:
+                        status = self.agent.jobs.get(row[0])["status"]
+                    except KeyError:
+                        continue
+                    if status in {"queued", "running"}:
+                        raise ValueError(
+                            "Wait for submitted actions to finish before deleting this discussion."
+                        )
+                self.agent.access.db.execute(
+                    "UPDATE proposals SET status='rejected' WHERE grant_id=? AND status='pending'",
+                    (actor,),
+                )
+                self.agent.access.revoke(actor)
+            self.db.execute("DELETE FROM runs WHERE conversation_id=?", (identifier,))
+            self.db.execute("DELETE FROM conversations WHERE id=?", (identifier,))
+        return {"deleted": True}
+
+    def migrate_chat_limits(self):
+        with self.lock, self.db:
+            if self.db.execute("SELECT 1 FROM options WHERE key='chat_limits_v2'").fetchone():
+                return
+            for row in self.db.execute(
+                "SELECT id,body FROM conversations WHERE id NOT IN "
+                "(SELECT conversation_id FROM schedules WHERE conversation_id IS NOT NULL)"
+            ).fetchall():
+                body = json.loads(row["body"])
+                for field, old in (("max_calls", 12), ("max_seconds", 300)):
+                    if body.get(field, old) == old:
+                        body[field] = 0
+                self.db.execute(
+                    "UPDATE conversations SET body=? WHERE id=?", (json.dumps(body), row["id"])
+                )
+            row = self.db.execute("SELECT value FROM options WHERE key='chat_defaults'").fetchone()
+            if row:
+                body = json.loads(row[0])
+                for field, old in (("max_calls", 12), ("max_seconds", 300)):
+                    if body.get(field, old) == old:
+                        body[field] = 0
+                self.db.execute(
+                    "UPDATE options SET value=? WHERE key='chat_defaults'", (json.dumps(body),)
+                )
+            self.db.execute("INSERT INTO options VALUES ('chat_limits_v2','1')")
+
     def setup(self):
         with self.lock:
             return {
@@ -330,7 +393,7 @@ class Assistant:
             encoded_size,
             input_budget,
         )
-        from torrentlinker.assistant.providers import ContextTooLong
+        from torrentlinker.assistant.providers import ContextTooLong, InvalidModelResponse
 
         started = time.monotonic()
         transcript = self.run(identifier)["messages"]
@@ -428,10 +491,10 @@ class Assistant:
             research_names = {t["name"] for t in self.research.tools()} if config.web else set()
             if config.web:
                 tools.extend(self.research.tools())
-            for _ in range(config.max_calls):
+            while not config.max_calls or calls_used < config.max_calls:
                 if stop.is_set():
                     raise InterruptedError()
-                if time.monotonic() - started >= config.max_seconds:
+                if config.max_seconds and time.monotonic() - started >= config.max_seconds:
                     raise ValueError(
                         "Assistant run reached its duration limit. "
                         "Review progress before continuing."
@@ -447,6 +510,7 @@ class Assistant:
                     self.update_run(identifier, compactions=self.run(identifier)["compactions"] + 1)
                 for attempt in range(3):
                     self.reserve_call(config.provider_id)
+                    message_count = len(messages)
                     try:
                         text, calls, used = self.models.turn(
                             provider,
@@ -454,9 +518,28 @@ class Assistant:
                             messages,
                             tools,
                             output_tokens,
-                            max(1, min(60, config.max_seconds - (time.monotonic() - started))),
+                            max(1, min(60, config.max_seconds - (time.monotonic() - started)))
+                            if config.max_seconds
+                            else 60,
                         )
                         break
+                    except InvalidModelResponse as error:
+                        # Discard the entire invalid turn before any tool can execute.
+                        del messages[message_count:]
+                        if attempt == 2 or stop.is_set():
+                            raise ValueError(
+                                f"{error} Automatic recovery failed after three attempts. "
+                                "No actions from those responses were executed. Please retry."
+                            ) from None
+                        messages.append(
+                            self.models.user(
+                                provider,
+                                "Your previous response was incomplete or had invalid tool JSON. "
+                                "No tools from it were executed. Retry with a short response and "
+                                "complete JSON objects for tool arguments. "
+                                "Use fewer tool calls at once.",
+                            )
+                        )
                     except ContextTooLong:
                         if attempt == 2 or stop.is_set():
                             raise
@@ -497,7 +580,9 @@ class Assistant:
                     raise ValueError("The model requested too many tools at once.")
                 results = []
                 for call in calls:
-                    if stop.is_set() or time.monotonic() - started >= config.max_seconds:
+                    if stop.is_set() or (
+                        config.max_seconds and time.monotonic() - started >= config.max_seconds
+                    ):
                         raise InterruptedError()
                     args = call["arguments"]
                     if "request_id" in args:
@@ -545,7 +630,10 @@ class Assistant:
                             if job["status"] not in {"queued", "running"}:
                                 result = {**result, "job": job}
                                 break
-                            if time.monotonic() - started >= config.max_seconds:
+                            if (
+                                config.max_seconds
+                                and time.monotonic() - started >= config.max_seconds
+                            ):
                                 result = {
                                     **result,
                                     "job": job,
@@ -769,7 +857,7 @@ class Assistant:
                 if stop.is_set():
                     self.update_run(identifier, status="cancelled")
                     return
-                if time.monotonic() - started >= config.max_seconds:
+                if config.max_seconds and time.monotonic() - started >= config.max_seconds:
                     raise ValueError("Task reached its runtime limit.")
                 result = self.agent.request(
                     actor,
@@ -791,7 +879,7 @@ class Assistant:
                         self.agent.jobs.cancel(job_id)
                         self.update_run(identifier, status="cancelled")
                         return
-                    if time.monotonic() - started >= config.max_seconds:
+                    if config.max_seconds and time.monotonic() - started >= config.max_seconds:
                         self.agent.jobs.cancel(job_id)
                         raise ValueError("Task reached its runtime limit.")
                     job = self.agent.job(actor, job_id)

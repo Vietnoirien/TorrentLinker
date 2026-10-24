@@ -68,6 +68,20 @@ class ChatTranscript(QScrollArea):
         self.setStyleSheet("ChatTranscript { border: none; background: transparent; }")
         self.expanded = set()
         self.plain_text = ""
+        self.follow_bottom = True
+        self.verticalScrollBar().rangeChanged.connect(self.follow_layout)
+        self.verticalScrollBar().sliderMoved.connect(self.user_scrolled)
+
+    def user_scrolled(self, value):
+        self.follow_bottom = value >= self.verticalScrollBar().maximum() - 10
+
+    def wheelEvent(self, event):
+        super().wheelEvent(event)
+        self.user_scrolled(self.verticalScrollBar().value())
+
+    def follow_layout(self, minimum, maximum):
+        if self.follow_bottom:
+            self.verticalScrollBar().setValue(maximum)
 
     def toPlainText(self):
         return self.plain_text

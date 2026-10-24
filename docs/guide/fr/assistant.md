@@ -83,7 +83,7 @@ Vérifiez les sources, l'image, les informations techniques et les règles de ca
 
 L'historique conserve les messages, appels d'outils, propositions, tâches et erreurs. Les connexions et programmations persistent après un redémarrage.
 
-Chaque exécution dispose de limites de durée et d'appels au modèle : cinq minutes et douze appels par défaut. Le cumul de tokens reste affiché à titre informatif et n'arrête plus la discussion. Chaque réponse demande au plus 2 048 tokens de sortie par défaut.
+Les discussions ne sont plus limitées par défaut en durée ni en nombre d'appels. Vous pouvez définir des limites dans les paramètres de discussion ; zéro signifie aucune limite par exécution. Le bouton Arrêter reste disponible. Les tâches automatisées conservent leurs limites de cinq minutes et douze appels par défaut. Le cumul de tokens reste affiché à titre informatif et n'arrête plus la discussion. Chaque réponse demande au plus 2 048 tokens de sortie par défaut.
 
 **Détecter automatiquement le contexte** est activé pour les nouvelles connexions. Avant chaque tâche, TorrentLinker lit la limite communiquée pour le modèle sélectionné. Cliquez sur **Vérifier le contexte** dans la connexion pour voir la valeur détectée sans lancer de discussion. Cette vérification ne charge pas de modèle et ne modifie pas le serveur.
 
@@ -104,3 +104,5 @@ Les assistants externes restent accessibles via le [guide MCP](agents.md). L'Ass
 Demandez par exemple : « Choisis un film sans correspondance, vérifie son identité, trouve un synopsis et une image avec leurs sources, puis enregistre la présentation dans la file de brouillons locaux pour ma relecture. Ne l’envoie pas à c411. »
 
 Les tâches automatisées s’arrêtent à la file locale. Ouvrez-la depuis Upload, corrigez la présentation et enregistrez-la. L’envoi à c411 nécessite toujours votre approbation, même en mode exécution. La publication finale reste manuelle sur le site.
+
+Utilisez **Supprimer la discussion** pour supprimer une discussion et son historique après confirmation. Les propositions en attente sont rejetées ; les torrents et les fichiers sont conservés. Arrêtez une discussion active et attendez la fin des actions envoyées avant de la supprimer. Les discussions des tâches automatisées ne peuvent pas être supprimées ainsi.

@@ -21,6 +21,10 @@ PRESETS = {
 }
 
 
+class InvalidModelResponse(ValueError):
+    """Response cannot be used; no tools from this turn may execute."""
+
+
 class Provider(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=100)
@@ -244,9 +248,14 @@ class Models:
             usage = result.get("usage", {}).get("total_tokens", 0)
         for call in calls:
             if isinstance(call["arguments"], str):
-                call["arguments"] = json.loads(call["arguments"])
+                try:
+                    call["arguments"] = json.loads(call["arguments"])
+                except json.JSONDecodeError as error:
+                    raise InvalidModelResponse(
+                        "The model returned malformed tool arguments."
+                    ) from error
             if not isinstance(call["arguments"], dict):
-                raise ValueError("The model returned invalid tool arguments.")
+                raise InvalidModelResponse("The model returned invalid tool arguments.")
         return text, calls, usage
 
     @staticmethod
@@ -257,12 +266,14 @@ class Models:
             or any(c.get("finish_reason") == "length" for c in result.get("choices", []))
             or any(c.get("finishReason") == "MAX_TOKENS" for c in result.get("candidates", []))
         ):
-            raise ValueError(
+            raise InvalidModelResponse(
                 "The model reached its output token limit. The response is incomplete. "
                 "Request a shorter answer or increase the per-response output budget."
             )
         if result.get("status") == "incomplete":
-            raise ValueError("The model provider returned an incomplete response. Please retry.")
+            raise InvalidModelResponse(
+                "The model provider returned an incomplete response. Please retry."
+            )
 
     @staticmethod
     def user(p, text):

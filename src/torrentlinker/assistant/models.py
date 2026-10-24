@@ -15,14 +15,16 @@ class Conversation(BaseModel):
     provider_id: str = ""
     policy: Grant
     web: bool = False
-    max_calls: int = Field(default=12, ge=1, le=40)
+    max_calls: int = Field(default=0, ge=0, le=200)
     max_output_tokens: int = Field(default=2048, ge=128, le=8192)
     # Accepted when reading older settings; cumulative usage is no longer a cutoff.
     max_tokens: int | None = Field(default=None, exclude=True)
-    max_seconds: int = Field(default=300, ge=10, le=1800)
+    max_seconds: int = Field(default=0, ge=0, le=1800)
 
 
 class Schedule(Conversation):
+    max_calls: int = Field(default=12, ge=1, le=40)
+    max_seconds: int = Field(default=300, ge=10, le=1800)
     instruction: str = Field(min_length=1, max_length=16000)
     enabled: bool = False
     kind: Literal["model", "refresh", "catalogue"] = "model"
