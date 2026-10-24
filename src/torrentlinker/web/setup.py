@@ -1,0 +1,461 @@
+"""Guided setup: connection tests, folder discovery and explicit storage access."""
+
+from __future__ import annotations
+
+import os
+import threading
+from collections.abc import Callable
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any, Literal
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, Field, field_validator
+
+from torrentlinker import net
+from torrentlinker.clients import connect
+from torrentlinker.config import ProxySettings, Settings
+from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, TorrentClient
+from torrentlinker.indexer import Indexer
+from torrentlinker.paths import PathMapper
+from torrentlinker.qbit import ClientApi
+from torrentlinker.store import Store
+from torrentlinker.web.security import ServerSecrets
+
+Connector = Callable[..., ClientApi]
+CLIENT_SETTINGS = {
+    "qbittorrent": "qbit",
+    "deluge": "deluge",
+    "transmission": "transmission",
+    "utorrent": "utorrent",
+}
+
+
+def http_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("Use an HTTP(S) address without credentials, query or fragment.")
+    if parsed.port is not None and not 1 <= parsed.port <= 65535:
+        raise ValueError("Invalid port.")
+    return value.rstrip("/")
+
+
+class Connection(BaseModel):
+    client: TorrentClient
+    host: str = Field(max_length=2048)
+    username: str = Field(default="", max_length=256)
+    password: str | None = Field(default=None, max_length=4096)
+    api_key: str | None = Field(default=None, max_length=4096)
+
+    _host = field_validator("host")(http_url)
+
+
+class IndexerConnection(BaseModel):
+    url: str = "https://c411.org/api/torznab"
+    api_key: str | None = Field(default=None, max_length=4096)
+
+    _url = field_validator("url")(http_url)
+
+
+class ProxySetup(BaseModel):
+    address: str = Field(default="", max_length=2048)
+    username: str = Field(default="", max_length=256)
+    password: str | None = Field(default=None, max_length=4096)
+    torrent_client: bool = False
+
+    @field_validator("address")
+    @classmethod
+    def valid_address(cls, value: str) -> str:
+        if value:
+            parsed = urlsplit(value)
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise ValueError("Enter proxy credentials in their separate fields.")
+            net.proxy_url(value)
+        return value
+
+
+class FolderSetup(BaseModel):
+    local: str = Field(max_length=4096)
+    client_path: str = Field(max_length=4096)
+    purpose: Literal["library", "download"] = "library"
+    kind: ContentKind = ContentKind.OTHER
+    depth: int = Field(default=1, ge=0, le=10)
+
+
+class Setup:
+    def __init__(
+        self,
+        directory: Path,
+        roots: tuple[Path, ...],
+        secrets: ServerSecrets,
+        connector: Connector = connect,
+    ):
+        self.path = directory / "settings.json"
+        self.settings = Settings.load(self.path)
+        self.marker = directory / "client.ready"
+        self.configured = self.marker.exists()
+        self.roots = tuple(p.resolve(strict=True) for p in roots)
+        if any(
+            not p.is_dir()
+            or directory.resolve().is_relative_to(p)
+            or p.is_relative_to(directory.resolve())
+            for p in self.roots
+        ):
+            raise ValueError("Storage roots must be directories separate from configuration.")
+        self.secrets = secrets
+        self.connector = connector
+        self.lock = threading.RLock()
+        self._client: ClientApi | None = None
+        self._indexer: Indexer | None = None
+        self.store = Store(directory / "catalogue.sqlite")
+        proxy = self.settings.proxy
+        net.configure(
+            net.proxy_url(proxy.address, proxy.username, self.secrets.get("proxy-password")),
+            proxy.torrent_client,
+        )
+
+    def client(self) -> ClientApi:
+        with self.lock:
+            if not self.configured:
+                raise ValueError("Connect your Torrent Client in Settings first.")
+            if self._client is None:
+                name = CLIENT_SETTINGS[self.settings.client]
+                config = getattr(self.settings, name)
+                self._client = self.connector(
+                    self.settings.client,
+                    config.host,
+                    getattr(config, "username", ""),
+                    self.secrets.get(name + "-password"),
+                    self.secrets.get("qbit-api-key") if name == "qbit" else "",
+                )
+            return self._client
+
+    def indexer(self) -> Indexer:
+        with self.lock:
+            if self._indexer is None:
+                key = self.secrets.get("indexer-api-key")
+                if not key:
+                    raise ValueError("Add your c411 API key in Settings first.")
+                self._indexer = Indexer(self.settings.indexer.url, key, cache=self.store)
+            return self._indexer
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            name = CLIENT_SETTINGS[self.settings.client]
+            config = getattr(self.settings, name)
+            return {
+                "configured": self.configured,
+                "client": self.settings.client,
+                "host": config.host,
+                "username": getattr(config, "username", ""),
+                "has_password": bool(self.secrets.get(name + "-password")),
+                "has_api_key": bool(self.secrets.get("qbit-api-key")),
+                "indexer_url": self.settings.indexer.url,
+                "indexer_configured": bool(self.secrets.get("indexer-api-key")),
+                "storage_roots": [str(p) for p in self.roots],
+                "folders": [
+                    {"local": str(f.path), "depth": f.depth, "kind": f.kind}
+                    for f in self.settings.library_folders
+                ],
+                "download_folder": self.settings.download_folders.default,
+                "mappings": [asdict(m) for m in self.settings.path_mappings],
+                "capabilities": {
+                    "manage": self.configured,
+                    "scan": bool(self.settings.library_folders),
+                    "download": bool(self.settings.download_folders.default),
+                },
+                "managed_secrets": list(self.secrets.files),
+                "proxy": asdict(self.settings.proxy),
+            }
+
+    def test_client(self, body: Connection, *, save: bool = False) -> dict[str, Any]:
+        with self.lock:
+            name = CLIENT_SETTINGS[body.client]
+            password = (
+                body.password if body.password is not None else self.secrets.get(name + "-password")
+            )
+            key = (
+                body.api_key
+                if body.api_key is not None
+                else self.secrets.get("qbit-api-key")
+                if name == "qbit"
+                else ""
+            )
+            try:
+                client = self.connector(body.client, body.host, body.username, password, key)
+                version = client.check()
+            except Exception as error:
+                if any(
+                    word in str(error).lower()
+                    for word in ("password", "unauthorized", "forbidden", "login", "401", "403")
+                ):
+                    raise ValueError(
+                        "Authentication failed. Check the username, password or client API key."
+                    ) from None
+                raise ValueError(
+                    "Cannot connect from this server. Check the address, port, TLS "
+                    "certificate and proxy settings."
+                ) from None
+            # Folder discovery is helpful, but optional on restricted hosted services.
+            try:
+                folders = [asdict(f) for f in client.folder_settings()]
+                warning = ""
+            except Exception:
+                folders, warning = (
+                    [],
+                    (
+                        "Connected. This service did not provide folder settings; enter "
+                        "the folder manually."
+                    ),
+                )
+            if save:
+                values = {}
+                if body.password is not None:
+                    values[name + "-password"] = body.password
+                if body.api_key is not None and name == "qbit":
+                    values["qbit-api-key"] = body.api_key
+                old = getattr(self.settings, CLIENT_SETTINGS[self.settings.client])
+                changed = (
+                    self.settings.client != body.client
+                    or old.host != body.host
+                    or getattr(old, "username", "")
+                    != ("" if body.client is TorrentClient.DELUGE else body.username)
+                )
+                if changed and self.store.verification_hashes():
+                    raise ValueError(
+                        "Finish pending Reseed Verifications before changing Torrent Clients."
+                    )
+                self.secrets.update(values)
+                config = getattr(self.settings, name)
+                config.host = body.host
+                if hasattr(config, "username"):
+                    config.username = body.username
+                # Paths from one server must never silently target another server.
+                if changed:
+                    from torrentlinker.download_queue import entries
+
+                    for entry in entries(self.store):
+                        if entry.status in {"queued", "sending"}:
+                            self.store.download_outcome(
+                                entry.key,
+                                "refused",
+                                "Torrent Client changed. Queue this selection again.",
+                            )
+                    self.settings.path_mappings.clear()
+                    self.settings.library_folders.clear()
+                    self.settings.download_folders.default = ""
+                    self.settings.download_folders.by_category.clear()
+                self.settings.client = body.client
+                self.save()
+                self.marker.write_text("connected", encoding="utf-8")
+                self.configured = True
+                self._client = client
+            return {"version": version, "folders": folders, "warning": warning}
+
+    def test_indexer(self, body: IndexerConnection, *, save: bool = False) -> dict[str, Any]:
+        with self.lock:
+            if (
+                save
+                and self.secrets.get("indexer-api-key")
+                and body.url != self.settings.indexer.url
+                and self.store.catalogue_size()
+            ):
+                raise ValueError(
+                    "Use a separate configuration directory for a different Indexer "
+                    "with an existing catalogue."
+                )
+            key = body.api_key if body.api_key is not None else self.secrets.get("indexer-api-key")
+            if not key:
+                raise ValueError("Enter your c411 API key.")
+            indexer = Indexer(body.url, key, cache=self.store)
+            try:
+                caps = indexer.caps()
+            except Exception:
+                raise ValueError(
+                    "Indexer test failed. Check its address and API key; c411 needs "
+                    "torznab:read permission."
+                ) from None
+            if save:
+                if body.api_key is not None:
+                    self.secrets.update({"indexer-api-key": key})
+                self.settings.indexer.url = body.url
+                from torrentlinker.downloads import IndexerCategory
+
+                self.settings.indexer_categories = {
+                    k: IndexerCategory(v, caps.parents.get(k)) for k, v in caps.categories.items()
+                }
+                self.save()
+                self._indexer = indexer
+            return {"ok": True, "categories": len(caps.categories)}
+
+    def suggest_mappings(self) -> dict[str, Any]:
+        from torrentlinker.paths import detect_mappings
+
+        def is_file(path: Path, size: int) -> bool:
+            try:
+                resolved = self.path_under_root(str(path), directory=False)
+                return resolved.is_file() and resolved.stat().st_size == size
+            except (ValueError, OSError):
+                return False
+
+        client = self.client()
+        selected = []
+        paths: dict[str, int] = {}
+        for torrent in client.torrents(with_files=False):
+            path = str(torrent.save_path)
+            if path not in paths and len(paths) >= 32:
+                continue
+            if paths.get(path, 0) >= 3:
+                continue
+            paths[path] = paths.get(path, 0) + 1
+            selected.append(torrent)
+        found = detect_mappings(
+            selected, self.roots, files=lambda t: client.files(t.hash), is_file=is_file
+        )
+        suggestions = []
+        for suggestion in found.suggestions:
+            try:
+                self.path_under_root(suggestion.mapping.local)
+                suggestions.append(asdict(suggestion))
+            except (ValueError, OSError):
+                pass
+        return {
+            "suggestions": suggestions,
+            "same_paths": found.same_paths,
+            "not_found": found.not_found,
+        }
+
+    def proxy(self, body: ProxySetup) -> dict[str, Any]:
+        with self.lock:
+            password = (
+                body.password if body.password is not None else self.secrets.get("proxy-password")
+            )
+            url = net.proxy_url(body.address, body.username, password)
+            if body.password is not None:
+                self.secrets.update({"proxy-password": password})
+            self.settings.proxy = ProxySettings(body.address, body.username, body.torrent_client)
+            self.save()
+            net.configure(url, body.torrent_client)
+            self._client = None
+            self._indexer = None
+            return {"ok": True}
+
+    def path_under_root(self, value: str, *, directory: bool = True) -> Path:
+        path = Path(value)
+        if not path.is_absolute():
+            raise ValueError("Choose an absolute folder visible to this server.")
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError:
+            raise ValueError(
+                "The folder is unavailable. Check the storage mount and permissions."
+            ) from None
+        if not any(resolved.is_relative_to(root) for root in self.roots):
+            raise ValueError("This path is outside the configured storage roots.")
+        if directory and not resolved.is_dir():
+            raise ValueError("Choose a directory.")
+        return resolved
+
+    def browse(self, value: str) -> dict[str, Any]:
+        if not value:
+            return {"path": "", "parent": "", "folders": [str(r) for r in self.roots]}
+        path = self.path_under_root(value)
+        children = []
+        for child in path.iterdir():
+            try:
+                resolved = self.path_under_root(str(child))
+            except (ValueError, OSError):
+                continue
+            children.append(str(resolved))
+        parent = str(path.parent) if any(path.parent.is_relative_to(r) for r in self.roots) else ""
+        return {"path": str(path), "parent": parent, "folders": sorted(set(children))[:1000]}
+
+    def folder(self, body: FolderSetup, *, save: bool = False) -> dict[str, Any]:
+        with self.lock:
+            local = self.path_under_root(body.local)
+            if not body.client_path.startswith(("/", "\\\\")) and not (
+                len(body.client_path) > 2 and body.client_path[1] == ":"
+            ):
+                raise ValueError("Enter the absolute folder used by your Torrent Client.")
+            # Verify directory enumeration, not just existence.
+            with os.scandir(local) as entries:
+                next(entries, None)
+            mapper = PathMapper([PathMapping(str(local), body.client_path)])
+            sample = None
+            attempts = 0
+            for torrent in self.client().torrents(with_files=False):
+                mapped = mapper.to_local(str(torrent.save_path))
+                if mapped == str(torrent.save_path) and not Path(mapped).is_relative_to(local):
+                    continue
+                if attempts >= 10:
+                    break
+                attempts += 1
+                files = self.client().files(torrent.hash)
+                for rel, size in sorted(files.items(), key=lambda f: f[1], reverse=True)[:3]:
+                    try:
+                        file = self.path_under_root(str(Path(mapped) / rel), directory=False)
+                        if file.is_file() and file.stat().st_size == size:
+                            sample = {
+                                "local": str(file),
+                                "client": mapper.to_qbit(str(file)),
+                                "size": size,
+                            }
+                            break
+                    except (ValueError, OSError):
+                        continue
+                if sample:
+                    break
+            if save:
+                if body.purpose == "download" and sample is None:
+                    raise ValueError(
+                        "No existing torrent file confirms this mapping. Verify a seeded "
+                        "sample before enabling downloads."
+                    )
+                self.settings.path_mappings = [
+                    m
+                    for m in self.settings.path_mappings
+                    if m.local != str(local) and m.qbit != body.client_path
+                ]
+                self.settings.path_mappings.append(PathMapping(str(local), body.client_path))
+                if body.purpose == "library":
+                    self.settings.library_folders = [
+                        f for f in self.settings.library_folders if f.path != local
+                    ]
+                    self.settings.library_folders.append(
+                        LibraryFolder(local, body.depth, body.kind)
+                    )
+                else:
+                    self.settings.download_folders.default = str(local)
+                self.save()
+            return {
+                "readable": True,
+                "sample": sample,
+                "local": str(local),
+                "client": body.client_path,
+                "warning": ""
+                if sample
+                else "Folder readable, but no matching torrent file confirms the mapping yet.",
+            }
+
+    def verified_download_folder(self) -> Path:
+        local = self.path_under_root(self.settings.download_folders.default)
+        client_path = PathMapper(self.settings.path_mappings).to_qbit(str(local))
+        checked = self.folder(FolderSetup(local=str(local), client_path=client_path))
+        if checked["sample"] is None:
+            raise ValueError(
+                "The Download Folder mapping no longer matches a seeded file. "
+                "Check the storage mount and test the mapping again in Settings."
+            )
+        return local
+
+    def save(self) -> None:
+        temporary = self.path.with_suffix(".new")
+        self.settings.save(temporary)
+        temporary.replace(self.path)

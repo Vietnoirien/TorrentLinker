@@ -346,6 +346,11 @@ class Store:
                 (hash, str(item_path), candidate_key, pieces, files),
             )
 
+    def verification_hashes(self) -> list[str]:
+        """Persisted Reseeds still waiting for client verification."""
+        with self._lock:
+            return [str(row[0]) for row in self._db.execute("SELECT hash FROM verification")]
+
     def mark_rechecked(self, hash: str) -> None:
         with self._lock, self._db:
             self._db.execute(

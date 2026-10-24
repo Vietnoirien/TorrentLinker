@@ -1,0 +1,86 @@
+# Interface web et Docker
+
+Cette interface est en préparation pour 0.7.0. Les exécutables de la dernière version publiée restent disponibles dans le README. L'image se construit depuis les sources ; aucune image officielle publiée n'est nécessaire.
+
+## Démarrage
+
+Depuis la racine du dépôt, créez le fichier de mot de passe. Choisissez au moins 12 caractères. La commande suivante masque la saisie et crée un fichier privé :
+
+```bash
+python3 - <<'PY'
+import getpass, os
+password = getpass.getpass('Mot de passe de l’interface web : ')
+if len(password) < 12:
+    raise SystemExit('Il faut au moins 12 caractères.')
+fd = os.open('deploy/web-password.txt', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'w') as output:
+    output.write(password)
+PY
+docker compose up -d --build
+```
+
+Ouvrez `http://localhost:8787` et saisissez ce mot de passe. Le serveur est accessible uniquement depuis la machine hôte par défaut. Pour un accès sur le réseau local, définissez `TL_BIND_ADDRESS` avec l'adresse LAN de l'hôte. Pour l'accès distant, utilisez un reverse proxy HTTPS et `TL_SECURE_COOKIE=1` ; n'exposez pas directement un port HTTP sur Internet.
+
+L'image utilise l'UID/GID 1000 par défaut. Si vos fichiers appartiennent à un autre compte, définissez `TL_UID` et `TL_GID` avant de construire l'image et adaptez les droits du volume de configuration déjà créé. Ne changez pas les droits de tous vos médias pour résoudre un simple problème de montage.
+
+## Assistant de configuration
+
+![Assistant de connexion en français](../images/web/setup-fr.png)
+
+1. Choisissez qBittorrent, Deluge, Transmission ou µTorrent. Indiquez son adresse, testez la connexion, puis enregistrez-la. Deluge utilise le mot de passe de son interface Web.
+2. Les dossiers fournis par le client sont proposés. Vous pouvez continuer sans accès aux fichiers pour gérer une seedbox à distance.
+3. Ajoutez votre clé c411 ou choisissez de la configurer plus tard. La recherche nécessite `torznab:read` ; le profil Zen nécessite `profile:read`.
+4. L'écran final indique les fonctions configurées. Les paramètres restent accessibles à tout moment.
+
+Le bouton de test ne remplace pas votre configuration enregistrée. Les mots de passe laissés vides conservent la valeur enregistrée. Les clés configurées par fichier secret se modifient dans ce fichier, pas dans l'interface. Le proxy est dans les paramètres avancés ; il peut s'appliquer aux services Internet seuls ou également au client torrent.
+
+## NAS et dossiers partagés
+
+Montez vos médias en plus du volume de configuration :
+
+```bash
+TL_MEDIA_PATH=/srv/media docker compose \
+  -f compose.yaml -f deploy/compose.storage.yaml up -d --build
+```
+
+Le dossier doit déjà exister. TorrentLinker le voit sous `/data`. Si votre client voit les mêmes fichiers sous `/downloads`, l'assistant permet de relier `/data` à `/downloads`. Utilisez **Detect matching folders** pour obtenir des suggestions, ou sélectionnez les deux chemins. Une vérification compare le nom et la taille d'un fichier déjà présent dans le client. Les téléchargements et le planificateur nécessitent un exemple vérifié pour ce dossier.
+
+Le montage de l'exemple est en lecture seule : le client torrent, et non TorrentLinker, écrit les nouveaux téléchargements. Une demande explicite de suppression de fichiers agit également dans le client et n'est donc pas bloquée par le montage en lecture seule de TorrentLinker.
+
+Les dossiers proposés par **Parcourir** appartiennent au serveur. Les chemins sortant des racines déclarées sont refusés. Les analyses web refusent les arbres contenant des liens symboliques ; choisissez directement le dossier réel.
+
+## Seedbox hébergée
+
+Utilisez l'adresse HTTPS et les identifiants fournis par l'hébergeur, en conservant le préfixe de chemin éventuel. **localhost** dans un conteneur désigne ce conteneur, pas votre navigateur ni le serveur de la seedbox.
+
+Sans montage, vous pouvez gérer les torrents, suivre les estimations Zen et rechercher sur c411. Pour analyser, comparer, préparer un Upload, télécharger avec protection contre les écrasements ou planifier selon l'espace disponible, montez le stockage de la seedbox sur l'hôte, puis utilisez le même exemple Compose. TorrentLinker ne crée pas automatiquement de montage SSHFS/NFS/SMB.
+
+Un chemin saisi ne rend pas les fichiers accessibles. Si le dossier n'est pas monté, TorrentLinker affiche ce qui manque et refuse l'opération concernée. Il ne prend pas l'espace libre du conteneur pour celui de la seedbox.
+
+## Clients sur le même hôte
+
+Deux services Docker sur un même réseau peuvent utiliser un nom de service, par exemple `http://qbittorrent:8080`. Pour un client exécuté sur l'hôte Docker Desktop, utilisez `host.docker.internal`. Avec Docker Engine sous Linux, une configuration `extra_hosts: ["host.docker.internal:host-gateway"]` peut être nécessaire. Le service doit écouter sur une interface accessible et le pare-feu doit autoriser la connexion.
+
+## Données et tâches
+
+Le volume `torrentlinker_config` conserve les paramètres, le catalogue, la file, l'historique des tâches et les vérifications. Fermer un onglet ne les arrête pas. **Activité** permet de suivre et d'arrêter les tâches ; l'arrêt intervient au prochain point d'interruption, pas au milieu d'une commande déjà envoyée.
+
+Après un arrêt brutal du serveur, une tâche inachevée est marquée interrompue. Vérifiez son résultat dans le client torrent avant de la relancer. Les vérifications de Reseed enregistrées reprennent leur suivi. Un envoi incertain reste visible dans la file ; il n'est pas renvoyé automatiquement.
+
+Les identifiants saisis dans l'interface sont chiffrés dans `credentials.enc`. La clé de chiffrement `credentials.key` est dans le même volume : protégez le volume et sauvegardez les deux fichiers ensemble. Le chiffrement ne protège pas contre quelqu'un qui peut lire tout le volume. L'application de bureau continue d'utiliser le trousseau système.
+
+Les fichiers secrets Docker sont pris en charge avec `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE` et `TL_ANNOUNCE_URL_FILE`. Leur contenu n'est pas renvoyé au navigateur.
+
+## Sans Docker
+
+```bash
+pip install '.[web]'
+torrentlinker serve --config ./torrentlinker-data \
+  --password-file ./deploy/web-password.txt --root /chemin/des/medias
+```
+
+Le serveur vise Linux et les NAS Linux. Pour installer l'interface de bureau depuis les sources, utilisez `pip install '.[desktop]'`. Un seul processus serveur peut utiliser un dossier de configuration. Pour un reverse proxy sous `/torrentlinker`, définissez `TL_ROOT_PATH=/torrentlinker`, retirez ce préfixe en amont et ouvrez l'URL avec son slash final.
+
+## Limites de cette première interface
+
+L'extraction d'archives et les renommages sur disque nécessaires à certains reseeds µTorrent restent dans l'application de bureau. L'éditeur web prépare les descriptions, NFO, options de catégorie, images hébergées et brouillons ; la prévisualisation 3D reste dans l'application de bureau. La publication finale d'un brouillon se fait sur c411. Un Upload préparé peut être envoyé au client depuis la même session serveur ; après un redémarrage, vérifiez d'abord le brouillon et utilisez l'application de bureau si nécessaire.

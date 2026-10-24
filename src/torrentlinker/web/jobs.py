@@ -1,0 +1,136 @@
+"""Persistent job history with one application-owned worker, independent of HTTP sessions."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+import time
+import uuid
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any
+
+
+class Jobs:
+    def __init__(self, directory: Path, error_message: Callable[[Exception], str] | None = None):
+        self.error_message = error_message or (lambda error: type(error).__name__)
+        self.lock = threading.RLock()
+        self.db = sqlite3.connect(directory / "jobs.sqlite", check_same_thread=False)
+        self.db.row_factory = sqlite3.Row
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="torrentlinker")
+        self.stops: dict[str, threading.Event] = {}
+        self.closed = False
+        with self.db:
+            self.db.execute(
+                "CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, kind TEXT, "
+                "status TEXT, created REAL, progress TEXT, result TEXT, error "
+                "TEXT)"
+            )
+            self.db.execute(
+                "UPDATE jobs SET status='interrupted', error='Server restarted. "
+                "Check the Torrent Client before retrying; no action was "
+                "replayed.' WHERE status IN ('queued','running')"
+            )
+
+    def active(self) -> bool:
+        with self.lock:
+            return bool(
+                self.db.execute(
+                    "SELECT 1 FROM jobs WHERE status IN ('queued','running') LIMIT 1"
+                ).fetchone()
+            )
+
+    def submit(
+        self, kind: str, work: Callable[[threading.Event, Callable[[Any], None]], Any]
+    ) -> str:
+        with self.lock:
+            if self.closed:
+                raise ValueError("Server is shutting down.")
+            count = self.db.execute(
+                "SELECT count(*) FROM jobs WHERE status IN ('queued','running')"
+            ).fetchone()[0]
+            if count >= 20:
+                raise ValueError("Too many pending jobs. Wait for the current work to finish.")
+            identifier = uuid.uuid4().hex
+            stop = self.stops[identifier] = threading.Event()
+            with self.db:
+                self.db.execute(
+                    "INSERT INTO jobs VALUES (?,?,'queued',?,'null','null','')",
+                    (identifier, kind, time.time()),
+                )
+            with self.db:
+                self.db.execute(
+                    "DELETE FROM jobs WHERE status NOT IN ('queued','running') AND id "
+                    "NOT IN (SELECT id FROM jobs ORDER BY created DESC LIMIT 200)"
+                )
+            self.executor.submit(self._run, identifier, stop, work)
+            return identifier
+
+    def _run(self, identifier: str, stop: threading.Event, work: Callable) -> None:
+        if stop.is_set():
+            self._update(identifier, status="cancelled")
+            with self.lock:
+                self.stops.pop(identifier, None)
+            return
+        self._update(identifier, status="running")
+        try:
+            result = work(
+                stop, lambda progress: self._update(identifier, progress=json.dumps(progress))
+            )
+        except Exception as error:
+            # Never persist raw network exception text, which may include credentials.
+            self._update(
+                identifier,
+                status="failed",
+                error=self.error_message(error),
+            )
+        else:
+            self._update(
+                identifier,
+                status="cancelled" if stop.is_set() else "completed",
+                result=json.dumps(result),
+            )
+        finally:
+            with self.lock:
+                self.stops.pop(identifier, None)
+
+    def _update(self, identifier: str, **values: Any) -> None:
+        with self.lock, self.db:
+            self.db.execute(
+                "UPDATE jobs SET " + ",".join(f"{k}=?" for k in values) + " WHERE id=?",
+                (*values.values(), identifier),
+            )
+
+    def get(self, identifier: str) -> dict[str, Any]:
+        with self.lock:
+            row = self.db.execute("SELECT * FROM jobs WHERE id=?", (identifier,)).fetchone()
+        if row is None:
+            raise KeyError(identifier)
+        result = dict(row)
+        for key in ("progress", "result"):
+            result[key] = json.loads(result[key])
+        return result
+
+    def list(self) -> list[dict[str, Any]]:
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT id,kind,status,created,progress,error FROM jobs ORDER BY "
+                "created DESC LIMIT 100"
+            ).fetchall()
+        return [{**dict(r), "progress": json.loads(r["progress"])} for r in rows]
+
+    def cancel(self, identifier: str) -> None:
+        self.get(identifier)
+        with self.lock:
+            if identifier in self.stops:
+                self.stops[identifier].set()
+
+    def close(self) -> None:
+        with self.lock:
+            self.closed = True
+            for stop in self.stops.values():
+                stop.set()
+        self.executor.shutdown(wait=True)
+        self.db.close()

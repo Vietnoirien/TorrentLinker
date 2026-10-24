@@ -1,0 +1,28 @@
+# Start with: docker compose up -d --build
+# Create deploy/web-password.txt first; never commit it.
+services:
+  torrentlinker:
+    build:
+      context: .
+      args:
+        TL_UID: ${TL_UID:-1000}
+        TL_GID: ${TL_GID:-1000}
+    ports:
+      - "${TL_BIND_ADDRESS:-127.0.0.1}:8787:8787"
+    environment:
+      TL_WEB_PASSWORD_FILE: /run/secrets/web_password
+      TL_SECURE_COOKIE: ${TL_SECURE_COOKIE:-0}
+      TL_ROOT_PATH: ${TL_ROOT_PATH:-}
+    secrets:
+      - web_password
+    volumes:
+      - torrentlinker_config:/config
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+secrets:
+  web_password:
+    file: ./deploy/web-password.txt
+volumes:
+  torrentlinker_config:

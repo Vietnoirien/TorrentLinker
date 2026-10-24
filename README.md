@@ -40,3 +40,7 @@ Le [guide de démarrage illustré](docs/guide/fr/demarrage.md) détaille la conf
 [Torrents et dossiers du client](docs/guide/fr/torrents.md) · [Bibliothèque](docs/guide/fr/bibliotheque.md) · [Recherche et téléchargements](docs/guide/fr/recherche.md) · [Zen et Plans](docs/guide/fr/zen.md) · [Uploads](docs/guide/fr/upload.md)
 
 [Documentation complète](docs/README.md) · [Dépannage](docs/guide/fr/donnees.md) · [Signaler un problème](https://github.com/Vietnoirien/TorrentLinker/issues) · [Contribuer](docs/guide/fr/developpement.md)
+
+## Interface web et Docker, en préparation pour 0.7.0
+
+Une interface web avec assistant de configuration est disponible depuis les sources pour les NAS et seedboxes. Consultez le [guide Docker](docs/guide/fr/web-docker.md) pour construire l’image et vérifier l’accès aux dossiers.

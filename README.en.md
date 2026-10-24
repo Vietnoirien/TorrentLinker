@@ -40,3 +40,7 @@ The [illustrated setup guide](docs/guide/en/getting-started.md) covers connectio
 [Torrents and client folders](docs/guide/en/torrents.md) · [Library](docs/guide/en/library.md) · [Search and downloads](docs/guide/en/search.md) · [Zen and Plans](docs/guide/en/zen.md) · [Uploads](docs/guide/en/upload.md)
 
 [All documentation](docs/README.md) · [Troubleshooting](docs/guide/en/data.md) · [Report an issue](https://github.com/Vietnoirien/TorrentLinker/issues) · [Contribute](docs/guide/en/development.md)
+
+## Web UI and Docker, in development for 0.7.0
+
+A browser interface with guided setup is available from source for NAS and seedbox deployments. See the [Docker guide](docs/guide/en/web-docker.md) to build the image and configure storage access.

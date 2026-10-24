@@ -47,3 +47,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/capture_docs.py
 Le script utilise des paramètres et une base temporaires, interdit les connexions réseau et remplace l’accès au trousseau. Il enregistre les PNG dans `docs/guide/images/`. Les autres données de l’application ne sont pas modifiées.
 
 Pour les captures en anglais, ajoutez `--language en` à cette commande. Elles sont enregistrées dans `docs/guide/images/en/`.
+
+## Web et Docker, en préparation pour 0.7.0
+
+[Guide français](guide/fr/web-docker.md) · [English guide](guide/en/web-docker.md)

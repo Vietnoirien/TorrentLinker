@@ -1,0 +1,13 @@
+# Add mounted storage for either a NAS or an already-mounted seedbox share:
+# TL_MEDIA_PATH=/srv/media docker compose -f compose.yaml -f deploy/compose.storage.yaml up -d --build
+services:
+  torrentlinker:
+    environment:
+      TL_STORAGE_ROOTS: /data
+    volumes:
+      - type: bind
+        source: ${TL_MEDIA_PATH:?Set TL_MEDIA_PATH to an existing media directory}
+        target: /data
+        read_only: true
+        bind:
+          create_host_path: false

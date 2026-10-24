@@ -8,7 +8,6 @@ version = "0.6.1"
 description = "Reconcile local files with private-tracker torrents and reseed them in qBittorrent, Deluge or Transmission"
 requires-python = ">=3.11"
 dependencies = [
-  "PySide6>=6.6",
   "qbittorrent-api>=2026.10",
   "httpx[socks]>=0.27",
   "requests[socks]",  # SOCKS proxies for qBittorrent's adapter
@@ -21,17 +20,23 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-qt>=4.4", "ruff>=0.5", "mypy>=1.10"]
-package = ["pyinstaller>=6.10", "pillow>=10"]  # pillow converts the icon on Windows
+desktop = ["PySide6>=6.6"]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "cryptography>=43"]
+dev = ["torrentlinker[desktop,web]", "pytest>=8", "pytest-qt>=4.4", "ruff>=0.5", "mypy>=1.10"]
+browser-test = ["playwright>=1.50"]
+package = ["torrentlinker[desktop]", "pyinstaller>=6.10", "pillow>=10"]  # pillow converts the icon on Windows
 
 [project.gui-scripts]
-torrentlinker = "torrentlinker.app:main"
+torrentlinker = "torrentlinker.cli:main"
+
+[project.scripts]
+torrentlinker-web = "torrentlinker.web.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-torrentlinker = ["i18n/*.qm", "assets/*.png", "gui/*.qml"]
+torrentlinker = ["i18n/*.qm", "assets/*.png", "gui/*.qml", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

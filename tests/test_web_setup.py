@@ -1,0 +1,230 @@
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from torrentlinker.web.app import create_app
+
+
+def test_settings_require_login_and_mutations_require_browser_header(tmp_path: Path):
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        assert browser.get("/api/setup").status_code == 401
+        assert (
+            browser.post("/api/login", json={"password": "test-password-long"}).status_code == 403
+        )
+        headers = {"X-TorrentLinker": "1"}
+        assert (
+            browser.post("/api/login", json={"password": "wrong"}, headers=headers).status_code
+            == 401
+        )
+        assert (
+            browser.post(
+                "/api/login", json={"password": "test-password-long"}, headers=headers
+            ).status_code
+            == 200
+        )
+        setup = browser.get("/api/setup").json()
+        assert setup["configured"] is False
+        assert setup["storage_roots"] == []
+        assert "HttpOnly" in browser.cookies.get("tl_session", "") or browser.cookies.get(
+            "tl_session"
+        )
+
+
+def test_setup_tests_connection_imports_folders_and_keeps_secrets_private(tmp_path: Path):
+    from torrentlinker.client_folders import ClientFolder
+
+    class Seedbox:
+        def check(self):
+            return "qBittorrent test"
+
+        def folder_settings(self):
+            return [ClientFolder("", "/downloads", "default")]
+
+    seen = []
+
+    def connect(kind, host, username, password, api_key=""):
+        seen.append((host, password))
+        return Seedbox()
+
+    with TestClient(
+        create_app(tmp_path, password="test-password-long", connector=connect)
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        connection = {
+            "client": "qbittorrent",
+            "host": "https://box.example/qbit",
+            "username": "owner",
+            "password": "private-client-password",
+        }
+        result = browser.post("/api/setup/test-client", json=connection)
+        assert result.status_code == 200, result.text
+        assert result.json()["folders"][0]["path"] == "/downloads"
+        assert browser.get("/api/setup").json()["configured"] is False
+        saved = browser.post("/api/setup/client", json=connection)
+        assert saved.status_code == 200, saved.text
+        settings = browser.get("/api/setup")
+        assert settings.json()["configured"] is True
+        assert settings.json()["capabilities"]["manage"] is True
+        assert settings.json()["capabilities"]["scan"] is False
+        assert "private-client-password" not in settings.text
+        assert seen[-1] == ("https://box.example/qbit", "private-client-password")
+    assert "private-client-password" not in (tmp_path / "settings.json").read_text()
+    assert b"private-client-password" not in (tmp_path / "credentials.enc").read_bytes()
+    with TestClient(
+        create_app(tmp_path, password="test-password-long", connector=connect)
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        assert browser.get("/api/setup").json()["configured"] is True
+        connection.pop("password")
+        assert browser.post("/api/setup/test-client", json=connection).status_code == 200
+        assert seen[-1][1] == "private-client-password"
+
+
+def test_folder_browser_cannot_escape_mounted_roots(tmp_path: Path):
+    root = tmp_path / "media"
+    root.mkdir()
+    (root / "Books").mkdir()
+    outside = tmp_path / "private"
+    outside.mkdir()
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+    with TestClient(
+        create_app(tmp_path / "config", password="test-password-long", roots=(root,))
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        folders = browser.get("/api/folders", params={"path": str(root)}).json()
+        assert folders["folders"] == [str(root / "Books")]
+        assert browser.get("/api/folders", params={"path": str(root / "escape")}).status_code == 400
+        assert browser.get("/api/folders", params={"path": str(root / "..")}).status_code == 400
+
+
+def test_changing_seedbox_invalidates_paths_and_pending_jobs_block_connection_changes(
+    tmp_path: Path,
+):
+    from torrentlinker.client_folders import ClientFolder
+    from torrentlinker.domain import Torrent
+
+    root = tmp_path / "media"
+    root.mkdir()
+    (root / "book.epub").write_bytes(b"book")
+
+    class Client:
+        def check(self):
+            return "test"
+
+        def folder_settings(self):
+            return [ClientFolder("", "/downloads", "default")]
+
+        def torrents(self, **kwargs):
+            return [Torrent("a" * 40, "book", Path("/downloads"))]
+
+        def files(self, hash):
+            return {"book.epub": 4}
+
+    with TestClient(
+        create_app(
+            tmp_path / "config",
+            password="test-password-long",
+            roots=(root,),
+            connector=lambda *args: Client(),
+        )
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        connection = {"client": "qbittorrent", "host": "https://one.example"}
+        browser.post("/api/setup/client", json=connection)
+        response = browser.post(
+            "/api/setup/folder",
+            json={"local": str(root), "client_path": "/downloads", "purpose": "download"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["sample"]["client"] == "/downloads/book.epub"
+        connection["host"] = "https://two.example"
+        browser.post("/api/setup/client", json=connection)
+        assert browser.get("/api/setup").json()["download_folder"] == ""
+
+
+def test_web_shell_has_guided_setup_and_no_external_asset_dependencies(tmp_path: Path):
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        response = browser.get("/")
+        assert response.status_code == 200
+        assert "app.js" in response.text
+        assert "setup" in response.text
+        assert "frame-ancestors" in response.headers["content-security-policy"]
+        assert browser.get("/static/app.js").status_code == 200
+
+
+def test_reverse_proxy_prefix_cannot_bypass_authentication(tmp_path: Path):
+    with TestClient(
+        create_app(tmp_path, password="test-password-long"), root_path="/tl"
+    ) as browser:
+        assert browser.get("/tl/api/setup").status_code == 401
+        browser.headers["X-TorrentLinker"] = "1"
+        assert (
+            browser.post("/tl/api/login", json={"password": "test-password-long"}).status_code
+            == 200
+        )
+        assert browser.get("/tl/api/setup").status_code == 200
+        assert browser.get("/tl/static/app.js").status_code == 200
+
+
+def test_proxy_setup_keeps_password_out_of_settings_and_can_be_disabled(tmp_path: Path):
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        response = browser.post(
+            "/api/setup/proxy",
+            json={
+                "address": "socks5://proxy.example:1080",
+                "username": "owner",
+                "password": "proxy-private",
+                "torrent_client": False,
+            },
+        )
+        assert response.status_code == 200, response.text
+        setup = browser.get("/api/setup")
+        assert setup.json()["proxy"]["address"] == "socks5://proxy.example:1080"
+        assert "proxy-private" not in setup.text
+        assert browser.post("/api/setup/proxy", json={"address": ""}).status_code == 200
+        assert browser.get("/api/setup").json()["proxy"]["address"] == ""
+
+
+def test_suggested_mapping_uses_only_allowed_storage_roots(tmp_path: Path):
+    from torrentlinker.domain import Torrent
+
+    root = tmp_path / "media"
+    root.mkdir()
+    (root / "book.epub").write_bytes(b"book")
+
+    class Client:
+        def check(self):
+            return "test"
+
+        def folder_settings(self):
+            return []
+
+        def torrents(self, **kwargs):
+            return [Torrent("a" * 40, "book", Path("/downloads"))]
+
+        def files(self, hash):
+            return {"book.epub": 4}
+
+    with TestClient(
+        create_app(
+            tmp_path / "config",
+            password="test-password-long",
+            roots=(root,),
+            connector=lambda *args: Client(),
+        )
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        response = browser.post("/api/setup/suggest-mappings", json={})
+        assert response.status_code == 200
+        assert response.json()["suggestions"][0]["mapping"] == {
+            "local": str(root),
+            "qbit": "/downloads",
+        }
