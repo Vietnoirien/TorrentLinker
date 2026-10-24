@@ -10,6 +10,13 @@ from fastapi.testclient import TestClient
 from torrentlinker.web.app import create_app
 
 
+def generation_transport(handler):
+    """Generation-only fixture servers do not expose context metadata."""
+    return httpx.MockTransport(
+        lambda request: httpx.Response(404) if request.method == "GET" else handler(request)
+    )
+
+
 def login(browser):
     browser.headers["X-TorrentLinker"] = "1"
     assert browser.post("/api/login", json={"password": "test-password-long"}).is_success
@@ -59,7 +66,9 @@ def test_truncated_presentation_is_not_reported_as_completed(tmp_path, kind, res
     app = create_app(
         tmp_path,
         password="test-password-long",
-        assistant_transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response)),
+        assistant_transport=generation_transport(
+            lambda request: httpx.Response(200, json=response)
+        ),
     )
     with TestClient(app) as browser:
         login(browser)
@@ -120,7 +129,7 @@ def test_provider_setup_keeps_key_private_and_checks_real_tool_round_trip(tmp_pa
         )
 
     app = create_app(
-        tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
+        tmp_path, password="test-password-long", assistant_transport=generation_transport(provider)
     )
     with TestClient(app) as browser:
         assert browser.get("/api/setup/assistant").status_code == 401
@@ -196,7 +205,7 @@ def test_chat_uses_shared_proposals_without_enabling_external_mcp(tmp_path):
         create_app(
             tmp_path,
             password="test-password-long",
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
     ) as browser:
         login(browser)
@@ -239,7 +248,7 @@ def test_schedule_preview_run_now_pause_and_restart_are_persistent(tmp_path):
         return create_app(
             tmp_path,
             password="test-password-long",
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
 
     with TestClient(app()) as browser:
@@ -309,7 +318,7 @@ def test_research_is_opt_in_and_rejects_private_network_urls(tmp_path):
         create_app(
             tmp_path,
             password="test-password-long",
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
     ) as browser:
         login(browser)
@@ -379,7 +388,7 @@ def test_owner_can_stop_run_without_submitting_late_model_actions(tmp_path):
         create_app(
             tmp_path,
             password="test-password-long",
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
     ) as browser:
         login(browser)
@@ -515,7 +524,7 @@ def test_native_provider_tool_round_trips_preserve_protocol_blocks(tmp_path):
             create_app(
                 tmp_path / kind,
                 password="test-password-long",
-                assistant_transport=httpx.MockTransport(provider),
+                assistant_transport=generation_transport(provider),
             )
         ) as browser:
             login(browser)
@@ -632,7 +641,7 @@ def test_public_source_links_survive_chat_but_secrets_and_announce_urls_do_not(t
         create_app(
             tmp_path,
             password="test-password-long",
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
     ) as browser:
         login(browser)
@@ -717,7 +726,7 @@ def test_chat_waits_for_application_job_without_spending_polling_model_calls(tmp
             tmp_path,
             password="test-password-long",
             connector=lambda *args: Client(),
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
     ) as browser:
         login(browser)
@@ -779,7 +788,7 @@ def test_due_task_runs_once_and_blocks_new_runs_while_approval_is_pending(tmp_pa
         create_app(
             tmp_path,
             password="test-password-long",
-            assistant_transport=httpx.MockTransport(provider),
+            assistant_transport=generation_transport(provider),
         )
     ) as browser:
         login(browser)
@@ -842,7 +851,9 @@ with TestClient(
     create_app(
         Path(sys.argv[1]),
         password="test-password-long",
-        assistant_transport=httpx.MockTransport(provider),
+        assistant_transport=httpx.MockTransport(
+            lambda r: httpx.Response(404) if r.method == "GET" else provider(r)
+        ),
     )
 ) as b:
     b.headers["X-TorrentLinker"] = "1"
@@ -908,3 +919,413 @@ def test_chat_defaults_and_settings_keep_existing_discussions_and_grants(tmp_pat
         assert saved["web"] is True
         assert saved["max_calls"] == 8
         assert saved["policy"]["mode"] == "propose"
+
+
+def test_cumulative_usage_does_not_stop_a_discussion(tmp_path):
+    count = 0
+
+    def provider(request):
+        nonlocal count
+        count += 1
+        message = {"role": "assistant", "content": "Ready to continue the search."}
+        if count == 1:
+            message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "overview",
+                        "type": "function",
+                        "function": {
+                            "name": "overview",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            }
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": message}],
+                "usage": {"total_tokens": 60800},
+            },
+        )
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Local",
+                "kind": "ollama",
+                "model": "test",
+            },
+        ).json()
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={
+                "provider_id": p["id"],
+                "policy": {"name": "Read", "clients": ["default"]},
+                "max_tokens": 60000,
+            },
+        ).json()
+        submitted = browser.post(
+            "/api/assistant/jobs",
+            json={
+                "conversation_id": chat["id"],
+                "message": "Continue checking my films.",
+            },
+        ).json()
+        result = wait_run(browser, submitted["id"])
+        assert result["status"] == "completed", result["error"]
+        assert result["calls"] == 2
+        assert result["tokens"] == 121600
+
+
+@pytest.mark.parametrize("kind", ["compatible", "openai", "anthropic", "gemini"])
+def test_long_discussion_compacts_and_keeps_action_receipts(tmp_path, kind):
+    count = 0
+    compacted = False
+    task = "Check my films. Do not start downloads."
+    long_note = "Reviewing existing films and their different release names. " * 400
+
+    def provider(request):
+        nonlocal count, compacted
+        count += 1
+        body = json.loads(request.content)
+        encoded = json.dumps(body)
+        if "Compacted conversation" in encoded:
+            compacted = True
+            assert task in encoded
+            assert "requires_owner_approval" in encoded
+            assert "request_id" in encoded
+        args = (
+            {
+                "request_id": "pause-one",
+                "operation": {
+                    "kind": "manage",
+                    "client_id": "default",
+                    "action": "pause",
+                    "hashes": ["a" * 40],
+                },
+            }
+            if count == 1
+            else {}
+        )
+        name = "propose_action" if count == 1 else "overview"
+        text = long_note if count <= 8 else "Review the pending proposal."
+        call_id = f"call-{count}"
+        if kind == "openai":
+            output = [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": text}],
+                }
+            ]
+            if count <= 8:
+                output.append(
+                    {
+                        "type": "function_call",
+                        "call_id": call_id,
+                        "name": name,
+                        "arguments": json.dumps(args),
+                    }
+                )
+            data = {"output": output, "usage": {"total_tokens": 15000}}
+        elif kind == "anthropic":
+            output = [{"type": "text", "text": text}]
+            if count <= 8:
+                output.append({"type": "tool_use", "id": call_id, "name": name, "input": args})
+            data = {"content": output, "usage": {"input_tokens": 10000, "output_tokens": 5000}}
+        elif kind == "gemini":
+            parts = [{"text": text}]
+            if count <= 8:
+                parts.append(
+                    {"functionCall": {"name": name, "args": args}, "thoughtSignature": "signature"}
+                )
+            data = {
+                "candidates": [{"content": {"role": "model", "parts": parts}}],
+                "usageMetadata": {"totalTokenCount": 15000},
+            }
+        else:
+            message = {"role": "assistant", "content": text}
+            if count <= 8:
+                message["tool_calls"] = [
+                    {
+                        "id": call_id,
+                        "type": "function",
+                        "function": {"name": name, "arguments": json.dumps(args)},
+                    }
+                ]
+            data = {"choices": [{"message": message}], "usage": {"total_tokens": 15000}}
+        return httpx.Response(200, json=data)
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Local",
+                "kind": kind,
+                "model": "test",
+                "url": "http://localhost:1234/v1",
+            },
+        ).json()
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={
+                "provider_id": p["id"],
+                "max_output_tokens": 8192,
+                "policy": {"name": "Read", "clients": ["default"]},
+            },
+        ).json()
+        submitted = browser.post(
+            "/api/assistant/jobs", json={"conversation_id": chat["id"], "message": task}
+        ).json()
+        result = wait_run(browser, submitted["id"])
+        assert result["status"] == "awaiting_approval", result["error"]
+        assert compacted
+        assert result["compactions"] > 0
+        assert result["calls"] == 9
+        assert result["tokens"] == 135000
+        assert len(result["events"]) == 8
+        assert result["messages"][1]["content"].rstrip() == long_note.rstrip()
+        assert len(browser.get("/api/agents").json()["proposals"]) == 1
+
+
+def test_compacted_history_is_readable_only_within_the_discussion(tmp_path):
+    calls = 0
+    other = ""
+    archive = ""
+
+    def provider(request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            message = {"role": "assistant", "content": "Private to the other discussion."}
+        elif calls in (2, 3):
+            body = json.loads(request.content)
+            if calls == 3:
+                assert "another discussion" in body["messages"][-1]["content"]
+                # The current run ID is supplied by its own archived proposal context.
+                return httpx.Response(
+                    200,
+                    json={
+                        "choices": [
+                            {
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "Foreign history was refused.",
+                                }
+                            }
+                        ]
+                    },
+                )
+            message = {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "history",
+                        "type": "function",
+                        "function": {
+                            "name": "read_assistant_history",
+                            "arguments": json.dumps(
+                                {"run_id": other, "section": "messages", "index": 0}
+                            ),
+                        },
+                    }
+                ],
+            }
+        else:
+            message = {"role": "assistant", "content": "Finished."}
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local", "kind": "ollama", "model": "test"},
+        ).json()
+
+        def chat():
+            return browser.post(
+                "/api/assistant/conversations",
+                json={"provider_id": p["id"], "policy": {"name": "Read", "clients": ["default"]}},
+            ).json()["id"]
+
+        first, second = chat(), chat()
+        other = browser.post(
+            "/api/assistant/jobs", json={"conversation_id": first, "message": "Private request."}
+        ).json()["id"]
+        assert wait_run(browser, other)["status"] == "completed"
+        archive = browser.post(
+            "/api/assistant/jobs",
+            json={"conversation_id": second, "message": "Read the wrong history."},
+        ).json()["id"]
+        result = wait_run(browser, archive)
+        assert result["status"] == "completed", result["error"]
+        assert "another discussion" in result["events"][0]["result"]["error"]
+        assert "Private request" not in json.dumps(result)
+
+
+def test_provider_context_rejection_compacts_and_recovers(tmp_path):
+    count = 0
+
+    def provider(request):
+        nonlocal count
+        count += 1
+        if count == 1:
+            return httpx.Response(400, json={"error": {"code": "context_length_exceeded"}})
+        body = json.loads(request.content)
+        assert "Compacted conversation" in json.dumps(body)
+        assert "Prepare my next Plan" in json.dumps(body)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Recovered without repeating any actions.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local", "kind": "ollama", "model": "test"},
+        ).json()
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={"provider_id": p["id"], "policy": {"name": "Read", "clients": ["default"]}},
+        ).json()
+        run = browser.post(
+            "/api/assistant/jobs",
+            json={"conversation_id": chat["id"], "message": "Prepare my next Plan"},
+        ).json()
+        result = wait_run(browser, run["id"])
+        assert result["status"] == "completed", result["error"]
+        assert result["compactions"] == 1
+        assert count == 2
+
+
+def test_model_can_read_full_archived_message_in_pages(tmp_path):
+    previous_run = ""
+    collected = ""
+    original = "Detailed previous request. " * 400
+
+    def provider(request):
+        nonlocal collected
+        body = json.loads(request.content)
+        last = body["messages"][-1]
+        if not previous_run:
+            return httpx.Response(
+                200, json={"choices": [{"message": {"role": "assistant", "content": "Recorded."}}]}
+            )
+        offset = 0
+        if last["role"] == "tool":
+            result = json.loads(last["content"])
+            collected += result["text"]
+            offset = result["next_offset"]
+            if offset is None:
+                return httpx.Response(
+                    200,
+                    json={
+                        "choices": [
+                            {
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "Read the complete record.",
+                                }
+                            }
+                        ]
+                    },
+                )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": f"read-{offset}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "read_assistant_history",
+                                        "arguments": json.dumps(
+                                            {
+                                                "run_id": previous_run,
+                                                "section": "messages",
+                                                "index": 0,
+                                                "offset": offset,
+                                            }
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+
+    with TestClient(
+        create_app(
+            tmp_path,
+            password="test-password-long",
+            assistant_transport=generation_transport(provider),
+        )
+    ) as browser:
+        login(browser)
+        p = browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local", "kind": "ollama", "model": "test"},
+        ).json()
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={"provider_id": p["id"], "policy": {"name": "Read", "clients": ["default"]}},
+        ).json()
+        first = browser.post(
+            "/api/assistant/jobs", json={"conversation_id": chat["id"], "message": original}
+        ).json()
+        assert wait_run(browser, first["id"])["status"] == "completed"
+        previous_run = first["id"]
+        second = browser.post(
+            "/api/assistant/jobs",
+            json={"conversation_id": chat["id"], "message": "Read my earlier request."},
+        ).json()
+        result = wait_run(browser, second["id"])
+        assert result["status"] == "completed", result["error"]
+        assert json.loads(collected)["content"] == original
+        assert len(result["events"]) == 2

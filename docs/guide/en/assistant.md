@@ -83,7 +83,17 @@ Open the local draft queue and review the sources, image, technical information 
 
 History keeps messages, tool calls, proposals, jobs and errors. Connections and schedules survive restarts.
 
-Each run has duration, model-call and token limits. Defaults are five minutes, twelve calls and 60,000 tokens, requesting at most 2,048 tokens per response. Token totals depend on usage reported by the provider and are not an exact billing cap. A call may cross the threshold before its usage is known.
+Each run has duration and model-call limits, by default five minutes and twelve calls. Cumulative token usage is displayed for information and does not stop the conversation. Each response requests at most 2,048 output tokens by default.
+
+**Detect context automatically** is enabled for new connections. Before each task, TorrentLinker reads the selected model's reported limit. Use **Check context** in the connection editor to see the detected value without starting a chat. This does not load models or change server settings.
+
+Detection supports the active configuration in [Ollama](https://docs.ollama.com/api/ps), [LM Studio](https://lmstudio.ai/docs/developer/rest/list), [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) and compatible servers that expose `max_model_len`, such as vLLM. OpenRouter and Gemini expose provider model limits. A model's advertised training capacity is not used as a substitute for its loaded configuration.
+
+If the server is unavailable, the model is not loaded or metadata is missing, **Context window (tokens)** supplies the fallback, initially 32,768. Disable automatic detection to use that value manually. Existing custom values are kept as manual overrides. For example, a server configured for 262,144 tokens can report that capacity even if another model on the same server uses less.
+
+TorrentLinker compacts the working context as it fills, keeping the current request and action receipts. Complete messages and tool results remain in History, and the assistant can retrieve archived details within the same discussion. Token usage depends on the provider's reporting and is not a billing cap.
+
+Messages appear in separate cards. Expand **Activity** below an exchange to inspect tool receipts and usage. Errors and requests to review proposals stay visible when Activity is closed.
 
 Discussions and tasks share a limit of 200 calls per model connection per UTC day. Connection tests are separate from this counter. One Assistant run executes at a time; up to ten can be queued or active. Downloads remain TorrentLinker jobs and continue in your torrent client.
 

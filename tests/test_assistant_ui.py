@@ -14,6 +14,10 @@ from torrentlinker.web.app import create_app
 
 
 def provider(request):
+    if request.method == "GET":
+        return httpx.Response(
+            200, json={"models": [{"name": "test:latest", "context_length": 262144}]}
+        )
     return httpx.Response(
         200,
         json={
@@ -56,6 +60,14 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path):
         assert chats[0]["policy"]["mode"] == "propose"
         assert widget.send.isEnabled()
         assert widget.prompt.height() <= 115
+        from PySide6.QtWidgets import QFrame, QToolButton
+
+        assert len(widget.transcript.findChildren(QFrame, "chatMessage")) == 2
+        activity = widget.transcript.findChild(QToolButton)
+        assert not activity.isChecked()
+        activity.click()
+        assert activity.isChecked()
+
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QApplication, QPushButton
 
@@ -110,6 +122,13 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             dialog = page.locator(".assistant-dialog")
             dialog.get_by_label("Name", exact=True).fill("Local test")
             dialog.get_by_label("Model ID", exact=True).fill("test")
+            expect(dialog.get_by_label("Detect context automatically")).to_be_checked()
+            dialog.get_by_role("button", name="Check context", exact=True).click()
+            expect(dialog).to_contain_text("262,144 tokens")
+            dialog.get_by_label("Detect context automatically").uncheck()
+            dialog.get_by_label("Context window (tokens)", exact=True).fill("65536")
+            dialog.get_by_role("button", name="Check context", exact=True).click()
+            expect(dialog).to_contain_text("Manual context: 65,536 tokens")
             dialog.get_by_role("button", name="Save", exact=True).click()
             expect(page.get_by_role("heading", name="Local test")).to_be_visible()
             page.get_by_role("button", name="Discussion", exact=True).click()
@@ -120,6 +139,11 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             expect(page.locator("#assistant-transcript")).to_contain_text(
                 "Ready to prepare", timeout=10000
             )
+            expect(page.locator(".assistant-message.user")).to_have_count(1)
+            activity = page.locator(".assistant-activity")
+            expect(activity).not_to_have_attribute("open", "")
+            activity.locator("summary").first.click()
+            expect(activity).to_have_attribute("open", "")
             page.locator("#assistant-prompt").fill("Keep this unfinished message")
             page.get_by_role("button", name="Discussion settings", exact=True).click()
             dialog = page.locator(".assistant-dialog")
@@ -159,3 +183,55 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
         server.should_exit = True
         thread.join(10)
         listener.close()
+
+
+def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import (
+        QApplication,
+        QCheckBox,
+        QDialogButtonBox,
+        QLabel,
+        QPushButton,
+        QSpinBox,
+    )
+
+    from torrentlinker.gui.assistant import AssistantTab
+
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        saved = browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local test", "kind": "ollama", "model": "test"},
+        ).json()
+        widget = AssistantTab(lambda: app.state.assistant)
+        qtbot.addWidget(widget)
+        widget.show()
+        widget.activate()
+
+        def configure():
+            dialog = QApplication.activeModalWidget()
+            automatic = dialog.findChild(QCheckBox)
+            assert automatic.isChecked()
+            check = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Check context")
+            check.click()
+            qtbot.waitUntil(
+                lambda: any(
+                    "262144 tokens" in label.text() for label in dialog.findChildren(QLabel)
+                ),
+                timeout=5000,
+            )
+            dialog.grab().save(str(tmp_path / "context-editor.png"))
+            automatic.setChecked(False)
+            dialog.findChild(QSpinBox).setValue(65536)
+            dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
+
+        QTimer.singleShot(0, configure)
+        widget.provider_editor(saved)
+        result = browser.get(f"/api/setup/assistant/providers/{saved['id']}/context").json()
+        assert result["context_window"] == 65536
+        assert result["source"] == "manual"
+        widget.close()

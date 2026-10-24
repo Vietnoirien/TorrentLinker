@@ -29,7 +29,17 @@ class Provider(BaseModel):
     ]
     url: str = Field(default="", max_length=2048)
     model: str = Field(min_length=1, max_length=200)
+    context_window: int = Field(default=32768, ge=512, le=2000000)
+    context_auto: bool = True
     api_key: str | None = Field(default=None, max_length=4096, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_manual_context(cls, value):
+        if isinstance(value, dict) and "context_auto" not in value:
+            if value.get("context_window", 32768) != 32768:
+                value = {**value, "context_auto": False}
+        return value
 
     @model_validator(mode="after")
     def endpoint(self):
@@ -45,6 +55,10 @@ class Provider(BaseModel):
         ):
             raise ValueError("Use an HTTP(S) base URL without credentials, query or fragment.")
         return self
+
+
+class ContextTooLong(ValueError):
+    """The provider rejected the input context before running tools."""
 
 
 class Models:
@@ -73,6 +87,27 @@ class Models:
                     json=body,
                 ) as response:
                     if not response.is_success:
+                        if response.status_code in {400, 413, 422}:
+                            detail = bytearray()
+                            for chunk in response.iter_bytes():
+                                detail.extend(chunk[: 65536 - len(detail)])
+                                if len(detail) >= 65536:
+                                    break
+                            reason = detail.decode("utf-8", errors="replace").lower()
+                            if any(
+                                marker in reason
+                                for marker in (
+                                    "context_length_exceeded",
+                                    "maximum context length",
+                                    "context window",
+                                    "prompt is too long",
+                                    "input is too long",
+                                )
+                            ):
+                                raise ContextTooLong(
+                                    "The model context is full. "
+                                    "Check its configured context window."
+                                )
                         raise ValueError(
                             f"Model provider returned HTTP {response.status_code}. "
                             "Check the endpoint, model, credentials and quota."
@@ -88,6 +123,11 @@ class Models:
                 "Cannot reach the model provider or read its response. Check the "
                 "address and model server."
             ) from None
+
+    def context(self, provider, key):
+        from torrentlinker.assistant.discovery import discover_context
+
+        return discover_context(self, provider, key)
 
     def models(self, provider, key):
         result = self.request(provider, key, "/models")

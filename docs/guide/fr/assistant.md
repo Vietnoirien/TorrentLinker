@@ -83,7 +83,17 @@ Vérifiez les sources, l'image, les informations techniques et les règles de ca
 
 L'historique conserve les messages, appels d'outils, propositions, tâches et erreurs. Les connexions et programmations persistent après un redémarrage.
 
-Chaque exécution dispose de limites de durée, d'appels au modèle et de tokens. Par défaut : cinq minutes, douze appels et 60 000 tokens, avec au plus 2 048 tokens demandés par réponse. Le total de tokens dépend des données d'usage renvoyées par le fournisseur ; il ne constitue pas un plafond de facturation exact. Un appel peut franchir le seuil avant que son usage soit connu.
+Chaque exécution dispose de limites de durée et d'appels au modèle : cinq minutes et douze appels par défaut. Le cumul de tokens reste affiché à titre informatif et n'arrête plus la discussion. Chaque réponse demande au plus 2 048 tokens de sortie par défaut.
+
+**Détecter automatiquement le contexte** est activé pour les nouvelles connexions. Avant chaque tâche, TorrentLinker lit la limite communiquée pour le modèle sélectionné. Cliquez sur **Vérifier le contexte** dans la connexion pour voir la valeur détectée sans lancer de discussion. Cette vérification ne charge pas de modèle et ne modifie pas le serveur.
+
+La détection reconnaît la configuration active d'[Ollama](https://docs.ollama.com/api/ps), [LM Studio](https://lmstudio.ai/docs/developer/rest/list), [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) et des serveurs compatibles qui exposent `max_model_len`, comme vLLM. OpenRouter et Gemini communiquent les limites de leurs modèles. La capacité théorique d'entraînement ne remplace pas la configuration du modèle chargé.
+
+Si le serveur est indisponible, le modèle non chargé ou les métadonnées absentes, **Fenêtre de contexte (tokens)** fournit la valeur de repli, initialement 32 768. Désactivez la détection pour utiliser cette valeur manuellement. Les anciennes valeurs personnalisées sont conservées comme réglages manuels.
+
+TorrentLinker compacte le contexte de travail lorsqu'il se remplit, en conservant la demande courante et les reçus d'actions. Les messages et résultats complets restent dans l'Historique ; l'assistant peut relire les détails archivés de la même discussion. Le compteur dépend des données d'usage du fournisseur et ne constitue pas un plafond de facturation.
+
+Les messages sont présentés dans des cartes séparées. Dépliez **Activité** sous un échange pour consulter les reçus des outils et la consommation. Les erreurs et les demandes de validation restent visibles quand l'activité est repliée.
 
 Les discussions et tâches partagent une limite de 200 appels par connexion de modèle et par jour UTC. Les tests de connexion sont distincts de ce compteur. Un seul travail de l'Assistant s'exécute à la fois ; jusqu'à dix peuvent être en attente ou en cours. Les téléchargements restent des tâches de TorrentLinker et continuent dans votre client torrent.
 

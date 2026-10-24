@@ -552,15 +552,21 @@ dialog .description img {
 .assistant-conversations button { text-align: left; overflow-wrap: anywhere; }
 .assistant-main { min-width: 0; display: flex; flex-direction: column; min-height: 65vh; }
 .assistant-transcript { flex: 1; min-height: 180px; max-height: 60vh; overflow: auto; padding-right: .5rem; }
-.assistant-message { padding: .7rem 1rem; margin: .5rem 0; border-left: 3px solid var(--border); }
-.assistant-message.user { border-left-color: #2eaaa2; }
+.assistant-run { max-width: 900px; margin: 0 auto 1.8rem; }
+.assistant-message { padding: 1rem 1.25rem; margin: 1rem 0; border: 1px solid var(--line); border-radius: 16px; max-width: 92%; background: var(--panel); }
+.assistant-message.user { margin-left: auto; background: color-mix(in srgb, #2eaaa2 18%, var(--panel)); }
+.assistant-message strong { color: var(--accent); font-size: .85rem; }
+.assistant-activity { margin: .8rem .4rem; color: var(--muted); }
+.assistant-activity summary { cursor: pointer; padding: .5rem; }
+.assistant-working { color: var(--accent); }
+.assistant-run > .error { padding: 1rem; border: 1px solid currentColor; border-radius: 12px; }
 .assistant-message p { white-space: pre-wrap; line-height: 1.65; overflow-wrap: anywhere; margin-bottom: 0; }
 .assistant-run pre, .assistant-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
 .assistant-composer { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; }
 .assistant-welcome { text-align: center; padding: 4rem 1rem; }
 .assistant-chat-controls { flex-wrap: wrap; width: 100%; }
 .assistant-chat-controls select { max-width: 340px; min-width: 120px; flex: 1; }
-.assistant-composer textarea { width: 100%; min-width: 0; resize: vertical; }
+.assistant-composer textarea { width: 100%; min-width: 0; resize: vertical; border-radius: 14px; padding: 1rem; min-height: 90px; }
 .assistant-dialog { width: min(720px, 92vw); max-height: 88vh; overflow: auto; }
 .assistant-dialog label { margin: .7rem 0; }
 .assistant-dialog fieldset { display: flex; flex-wrap: wrap; gap: .5rem; }

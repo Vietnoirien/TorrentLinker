@@ -134,9 +134,15 @@ async function aRefreshChat() {
     $("assistant-chat-settings").disabled = !!active;
   } finally { assistantRefreshBusy = false; }
 }
+const assistantExpandedActivity = new Set();
 function aRunCard(run) {
-  const card = element("article", undefined, "assistant-run card");
-  card.append(element("p", `${new Date(run.created * 1000).toLocaleString()} · ${aStatus(run.status)} · ${run.calls} ${at("calls", "appels")} · ${run.tokens} tokens`, "muted"));
+  const card = element("article", undefined, "assistant-run");
+  const activity = element("details", undefined, "assistant-activity");
+  activity.open = assistantExpandedActivity.has(run.id);
+  activity.addEventListener("toggle", () => { if (activity.isConnected) activity.open ? assistantExpandedActivity.add(run.id) : assistantExpandedActivity.delete(run.id); });
+  activity.append(element("summary", `${at("Activity", "Activité")} · ${run.events.length} · ${aStatus(run.status)}`));
+  activity.append(element("p", `${new Date(run.created * 1000).toLocaleString()} · ${run.calls} ${at("calls", "appels")} · ${run.tokens} tokens`, "muted"));
+  if (run.compactions) activity.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "muted"));
   for (const m of run.messages) {
     const block = element("div", undefined, `assistant-message ${m.role}`);
     block.append(element("strong", m.role === "user" ? at("You", "Vous") : "Assistant"), element("p", m.content)); card.append(block);
@@ -145,13 +151,14 @@ function aRunCard(run) {
   for (const event of run.events) {
     const detail = element("details"), result = event.result || {};
     detail.append(element("summary", `${event.tool} · ${aStatus(event.status)}`), element("pre", JSON.stringify({arguments: event.arguments, result}, null, 2)));
-    if (result.requires_owner_approval && result.id) detail.append(button(at("Review proposal", "Examiner la proposition"), () => aReview(result.id)));
+    if (result.requires_owner_approval && result.id) card.append(button(at("Review proposal", "Examiner la proposition"), () => aReview(result.id)));
     if (result.job_id) detail.append(button(at("Job progress", "Avancement de la tâche"), async () => {
       const job = await api(`jobs/${result.job_id}`); const pre = detail.querySelector("pre"); pre.textContent = JSON.stringify(job, null, 2);
     }));
-    card.append(detail);
+    activity.append(detail);
   }
-  if (["queued", "running"].includes(run.status)) card.append(button(at("Stop", "Arrêter"), async () => { await api(`assistant/jobs/${run.id}/cancel`, {}); await aRefreshChat(); }));
+  card.append(activity);
+  if (["queued", "running"].includes(run.status)) card.append(element("p", at("Working…", "En cours…"), "assistant-working"), button(at("Stop", "Arrêter"), async () => { await api(`assistant/jobs/${run.id}/cancel`, {}); await aRefreshChat(); }));
   return card;
 }
 async function aReview(id, completed = aRefreshChat) {
@@ -182,8 +189,27 @@ function aProvider(existing = null) {
   const name = aField(form, at("Name", "Nom"), existing?.name || ""), kind = aField(form, at("Provider", "Fournisseur"), existing?.kind || "ollama", "", Object.keys(assistantSnapshot.presets).map(k => [k, k]));
   const url = aField(form, at("Base URL", "Adresse de base"), existing?.url || assistantSnapshot.presets.ollama, "url");
   const model = aField(form, at("Model ID", "Identifiant du modèle"), existing?.model || "");
+  const contextAuto = aField(form, at("Detect context automatically", "Détecter automatiquement le contexte"), existing?.context_auto ?? true, "checkbox");
+  const contextWindow = aField(form, at("Context window (tokens)", "Fenêtre de contexte (tokens)"), existing?.context_window ?? 32768, "number");
+  contextWindow.min = 512; contextWindow.max = 2000000;
   const key = aField(form, at("API key", "Clé API"), "", "password"); key.autocomplete = "new-password";
   key.placeholder = at("Leave blank to keep the saved key", "Laisser vide pour conserver la clé");
+  form.append(element("p", at("Detection runs before each task. The configured value is a fallback when metadata is unavailable. Disable detection for a manual override.", "La détection s’effectue avant chaque tâche. La valeur configurée sert de repli si les métadonnées sont indisponibles. Désactivez la détection pour utiliser une valeur manuelle."), "muted"));
+  const contextStatus = element("p", "", "muted");
+  const contextBody = () => ({name: name.value || "Discovery", kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, ...(key.value ? {api_key: key.value} : {})});
+  const checkContext = button(at("Check context", "Vérifier le contexte"), async () => {
+    const snapshot = JSON.stringify(contextBody());
+    checkContext.disabled = true;
+    contextStatus.textContent = at("Checking server context…", "Vérification du contexte du serveur…");
+    try {
+      const result = await api(existing ? `setup/assistant/providers/${existing.id}/context` : "setup/assistant/context", contextBody());
+      if (!dialog.isConnected || snapshot !== JSON.stringify(contextBody())) return;
+      const source = {server: at("Server context", "Contexte du serveur"), provider: at("Provider context", "Contexte du fournisseur"), manual: at("Manual context", "Contexte manuel"), fallback: at("Not reported. Fallback", "Non communiqué. Valeur de repli")};
+      contextStatus.textContent = `${source[result.source]}: ${result.context_window.toLocaleString()} tokens`;
+    } finally { checkContext.disabled = false; }
+  });
+  for (const input of [kind, url, model, key, contextWindow, contextAuto]) input.addEventListener("input", () => { contextStatus.textContent = ""; });
+  form.append(checkContext, contextStatus);
   form.append(element("p", at("Use an address reachable by TorrentLinker. In Docker, localhost is the container, not your PC. Changing the endpoint clears the saved key unless you supply a new one.", "Utilisez une adresse accessible depuis TorrentLinker. Dans Docker, localhost désigne le conteneur, pas votre PC. Changer l’adresse efface la clé enregistrée, sauf si vous en fournissez une nouvelle."), "muted"));
   kind.onchange = () => { url.value = assistantSnapshot.presets[kind.value]; };
   form.append(button(at("List models", "Lister les modèles"), async () => {
@@ -195,7 +221,7 @@ function aProvider(existing = null) {
     form.append(list); model.setAttribute("list", list.id); if (!model.value && models.length) model.value = models[0];
   }));
   aActions(dialog, form, async () => {
-    await api("setup/assistant/providers" + (existing ? `/${existing.id}` : ""), {name: name.value, kind: kind.value, url: url.value, model: model.value, ...(key.value ? {api_key: key.value} : {})}, existing ? "PUT" : "POST");
+    await api("setup/assistant/providers" + (existing ? `/${existing.id}` : ""), {name: name.value, kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, ...(key.value ? {api_key: key.value} : {})}, existing ? "PUT" : "POST");
   });
 }
 async function aTasks(root) {
@@ -225,7 +251,6 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
   const reserve = aField(details, at("Keep free, GiB", "Conserver libres, Gio"), (existing?.policy.reserve_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
   const calls = aField(details, at("Maximum model calls per run", "Appels au modèle par exécution"), existing?.max_calls ?? 12, "number");
   const seconds = aField(details, at("Maximum duration, seconds", "Durée maximale, secondes"), existing?.max_seconds ?? 300, "number");
-  const tokens = aField(details, at("Token limit per run", "Limite de tokens par exécution"), existing?.max_tokens ?? 60000, "number");
   const web = aField(form, at("Allow public Web research", "Autoriser la recherche sur le Web public"), existing?.web || false, "checkbox");
   let instruction, kind, frequency, interval, atTime, timezone, days, enabled;
   if (scheduled) {
@@ -241,7 +266,7 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
     frequency.onchange = () => { interval.parentElement.hidden = frequency.value !== "interval"; atTime.parentElement.hidden = frequency.value === "interval"; days.hidden = frequency.value !== "weekly"; timezone.parentElement.hidden = frequency.value === "interval"; }; frequency.onchange();
     kind.onchange = () => { provider.disabled = kind.value !== "model"; }; kind.onchange();
   }
-  const body = () => ({name: name.value, provider_id: provider.value, policy: {name: name.value, clients: clientInputs.filter(([, e]) => e.checked).map(([id]) => id), mode: mode.value, permissions: permissions.filter(([, e]) => e.checked && !e.disabled).map(([id]) => id), daily_bytes: Math.round(+bytes.value * 1024 ** 3), daily_torrents: +torrents.value, reserve_bytes: Math.round(+reserve.value * 1024 ** 3)}, web: web.checked, max_output_tokens: existing?.max_output_tokens ?? 2048, max_calls: +calls.value, max_seconds: +seconds.value, max_tokens: +tokens.value,
+  const body = () => ({name: name.value, provider_id: provider.value, policy: {name: name.value, clients: clientInputs.filter(([, e]) => e.checked).map(([id]) => id), mode: mode.value, permissions: permissions.filter(([, e]) => e.checked && !e.disabled).map(([id]) => id), daily_bytes: Math.round(+bytes.value * 1024 ** 3), daily_torrents: +torrents.value, reserve_bytes: Math.round(+reserve.value * 1024 ** 3)}, web: web.checked, max_output_tokens: existing?.max_output_tokens ?? 2048, max_calls: +calls.value, max_seconds: +seconds.value,
     ...(scheduled ? {instruction: instruction.value, kind: kind.value, frequency: frequency.value, interval_minutes: +interval.value, at: atTime.value, timezone: timezone.value, weekdays: [...days.querySelectorAll("input:checked")].map(e => +e.value), enabled: enabled.checked} : {})});
   if (scheduled) form.append(button(at("Preview next run", "Voir la prochaine exécution"), async () => { const preview = await api("assistant/schedules/preview", body()); form.append(element("p", new Date(preview.next_at * 1000).toLocaleString())); }));
   aActions(dialog, form, async () => {

@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 from torrentlinker.assistant.models import Conversation, Schedule
 from torrentlinker.assistant.providers import PRESETS, Provider
 from torrentlinker.assistant.research import SearchSettings
+from torrentlinker.gui.chat_transcript import ChatTranscript
 from torrentlinker.gui.tasks import run_in_background
 
 
@@ -147,9 +148,6 @@ class AssistantEditor(QDialog):
         self.seconds = self.number(
             af, self.tr("Maximum duration, seconds"), self.initial.get("max_seconds", 300), 10, 1800
         )
-        self.tokens = self.number(
-            af, self.tr("Token limit per run"), self.initial.get("max_tokens", 60000), 1024, 500000
-        )
         form.addRow(advanced)
         if task:
             self.instruction = QPlainTextEdit(self.initial.get("instruction", ""))
@@ -256,7 +254,6 @@ class AssistantEditor(QDialog):
             max_output_tokens=self.initial.get("max_output_tokens", 2048),
             max_calls=self.calls.value(),
             max_seconds=self.seconds.value(),
-            max_tokens=self.tokens.value(),
             policy=dict(
                 name=self.name.text().strip(),
                 clients=[v for v, c in self.clients if c.isChecked()],
@@ -347,24 +344,32 @@ class AssistantTab(QWidget):
         cl = QVBoxLayout(chat)
         splitter = QSplitter()
         left = QWidget()
+        left.setMaximumWidth(280)
         ll = QVBoxLayout(left)
         new = QPushButton(self.tr("New discussion"))
         new.clicked.connect(self.new_discussion)
         ll.addWidget(new)
         self.conversations = QListWidget()
+        self.conversations.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.conversations.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.conversations.setStyleSheet(
+            "QListWidget { border: none; } "
+            "QListWidget::item { padding: 12px 8px; border-radius: 7px; }"
+        )
         self.conversations.currentRowChanged.connect(self.select_conversation)
         ll.addWidget(self.conversations)
         splitter.addWidget(left)
         right = QWidget()
         rl = QVBoxLayout(right)
-        self.transcript = QTextBrowser()
-        self.transcript.setOpenLinks(False)
+        self.transcript = ChatTranscript()
         self.transcript.anchorClicked.connect(self.open_receipt)
         rl.addWidget(self.transcript, 1)
         self.prompt = ChatPrompt()
         self.prompt.submitted.connect(self.send_message)
         self.prompt.setPlaceholderText(self.tr("Give a task or ask a question…"))
-        self.prompt.setMaximumHeight(115)
+        self.prompt.setMaximumHeight(96)
+        self.prompt.setMinimumHeight(72)
+        self.prompt.setStyleSheet("QPlainTextEdit { border-radius: 12px; padding: 12px; }")
         self.prompt.setAccessibleName(self.tr("Message"))
         rl.addWidget(self.prompt)
         self.connect_model = QPushButton(self.tr("Connect a model"))
@@ -378,6 +383,7 @@ class AssistantTab(QWidget):
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.chat_model.activated.connect(self.change_chat_model)
+        self.chat_model.setMaximumWidth(380)
         controls.addWidget(self.chat_model, 1)
         self.chat_settings = QPushButton(self.tr("Discussion settings"))
         self.chat_settings.clicked.connect(self.edit_chat_settings)
@@ -680,16 +686,13 @@ class AssistantTab(QWidget):
         self.render_key = key
         bar = self.transcript.verticalScrollBar()
         position, bottom = bar.value(), bar.value() >= bar.maximum() - 10
-        self.transcript.setHtml(
-            self.render_transcript(rows)
-            if rows
-            else "<h2>"
-            + self.tr("What would you like to do?")
-            + "</h2><p>"
-            + self.tr("Prepare an Upload, build a Zen Plan or review your torrents.")
-            + "</p>"
-        )
-        bar.setValue(bar.maximum() if bottom else position)
+        self.transcript.set_runs(rows, self.status_text)
+
+        def restore_scroll():
+            if self.render_key == key:
+                bar.setValue(bar.maximum() if bottom else position)
+
+        QTimer.singleShot(0, self, restore_scroll)
         active = next((r for r in rows if r["status"] in {"queued", "running"}), None)
         self.send.setEnabled(not active and bool(self.chat_model.currentData()))
         self.chat_model.setEnabled(not active)
@@ -797,6 +800,11 @@ class AssistantTab(QWidget):
         model = QComboBox()
         model.setEditable(True)
         model.setEditText(existing.get("model", ""))
+        context_window = QSpinBox()
+        context_window.setRange(512, 2000000)
+        context_window.setValue(existing.get("context_window", 32768))
+        context_auto = QCheckBox(self.tr("Detect context automatically"))
+        context_auto.setChecked(existing.get("context_auto", True))
         key = QLineEdit()
         key.setEchoMode(QLineEdit.EchoMode.Password)
         key.setPlaceholderText(self.tr("Leave blank to keep the saved key"))
@@ -805,9 +813,87 @@ class AssistantTab(QWidget):
             (self.tr("Provider"), kind),
             (self.tr("Base URL"), address),
             (self.tr("Model ID"), model),
+            ("", context_auto),
+            (self.tr("Context window (tokens)"), context_window),
             (self.tr("API key"), key),
         ]:
             form.addRow(label, widget)
+        context_hint = QLabel(
+            self.tr(
+                "Automatic detection runs before each task. The value above is used "
+                "when the server does not report its limit. Disable detection to use it manually."
+            )
+        )
+        context_hint.setWordWrap(True)
+        form.addRow(context_hint)
+        context_status = QLabel()
+        context_status.setWordWrap(True)
+        form.addRow(context_status)
+        check_context = QPushButton(self.tr("Check context"))
+        form.addRow(check_context)
+
+        def context_selection():
+            return (
+                kind.currentText(),
+                address.text(),
+                model.currentText(),
+                context_auto.isChecked(),
+                context_window.value(),
+                key.text(),
+            )
+
+        def check():
+            try:
+                selection = context_selection()
+                connection = Provider(
+                    name=name.text() or "Discovery",
+                    kind=selection[0],
+                    url=selection[1],
+                    model=selection[2],
+                    context_auto=selection[3],
+                    context_window=selection[4],
+                    api_key=selection[5] or None,
+                )
+                check_context.setEnabled(False)
+                context_status.setText(self.tr("Checking server context…"))
+
+                def done(result):
+                    from shiboken6 import isValid
+
+                    if not isValid(dialog) or not dialog.isVisible():
+                        return
+                    check_context.setEnabled(True)
+                    if context_selection() != selection:
+                        return
+                    label = {
+                        "server": self.tr("Server context: %1 tokens"),
+                        "provider": self.tr("Provider context: %1 tokens"),
+                        "fallback": self.tr("Not reported. Fallback: %1 tokens"),
+                        "manual": self.tr("Manual context: %1 tokens"),
+                    }[result["source"]]
+                    context_status.setText(label.replace("%1", str(result["context_window"])))
+
+                def failed(error):
+                    from shiboken6 import isValid
+
+                    if isValid(dialog) and dialog.isVisible():
+                        check_context.setEnabled(True)
+                        self.error(error)
+
+                run_in_background(
+                    lambda: self.service.context_preview(connection, existing.get("id", "")),
+                    done,
+                    failed,
+                )
+            except Exception as error:
+                self.error(error)
+
+        check_context.clicked.connect(check)
+        for field in (address, key):
+            field.textChanged.connect(context_status.clear)
+        model.currentTextChanged.connect(context_status.clear)
+        context_auto.toggled.connect(context_status.clear)
+        context_window.valueChanged.connect(context_status.clear)
         kind.currentTextChanged.connect(lambda value: address.setText(PRESETS[value]))
         hint = QLabel(
             self.tr(
@@ -857,6 +943,8 @@ class AssistantTab(QWidget):
                         url=address.text(),
                         model=model.currentText(),
                         api_key=key.text() or None,
+                        context_window=context_window.value(),
+                        context_auto=context_auto.isChecked(),
                     )
                 )
                 self.service.save_provider(p, existing.get("id", ""))

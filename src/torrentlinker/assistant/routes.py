@@ -28,6 +28,18 @@ def routes(app, assistant):
             assistant.provider(identifier), assistant.secrets.get("assistant:" + identifier)
         )
 
+    @app.get("/api/setup/assistant/providers/{identifier}/context")
+    def provider_context(identifier: str):
+        return assistant.context_preview(assistant.provider(identifier), identifier)
+
+    @app.post("/api/setup/assistant/providers/{identifier}/context")
+    def preview_saved_context(identifier: str, body: Provider):
+        return assistant.context_preview(body, identifier)
+
+    @app.post("/api/setup/assistant/context")
+    def preview_context(body: Provider):
+        return assistant.context_preview(body)
+
     @app.get("/api/setup/assistant/chat")
     def chat_defaults():
         return assistant.chat_defaults()

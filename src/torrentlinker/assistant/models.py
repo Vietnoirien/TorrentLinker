@@ -17,7 +17,8 @@ class Conversation(BaseModel):
     web: bool = False
     max_calls: int = Field(default=12, ge=1, le=40)
     max_output_tokens: int = Field(default=2048, ge=128, le=8192)
-    max_tokens: int = Field(default=60000, ge=1024, le=500000)
+    # Accepted when reading older settings; cumulative usage is no longer a cutoff.
+    max_tokens: int | None = Field(default=None, exclude=True)
     max_seconds: int = Field(default=300, ge=10, le=1800)
 
 

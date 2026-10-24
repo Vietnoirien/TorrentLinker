@@ -5945,6 +5945,42 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
 <context>
     <name>AssistantTab</name>
     <message>
+        <source>Detect context automatically</source>
+        <translation>Détecter automatiquement le contexte</translation>
+    </message>
+    <message>
+        <source>Automatic detection runs before each task. The value above is used when the server does not report its limit. Disable detection to use it manually.</source>
+        <translation>La détection automatique a lieu avant chaque tâche. La valeur ci-dessus sert de repli si le serveur ne communique pas sa limite. Désactivez la détection pour utiliser cette valeur manuellement.</translation>
+    </message>
+    <message>
+        <source>Check context</source>
+        <translation>Vérifier le contexte</translation>
+    </message>
+    <message>
+        <source>Checking server context…</source>
+        <translation>Vérification du contexte du serveur…</translation>
+    </message>
+    <message>
+        <source>Server context: %1 tokens</source>
+        <translation>Contexte du serveur : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Provider context: %1 tokens</source>
+        <translation>Contexte du fournisseur : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Not reported. Fallback: %1 tokens</source>
+        <translation>Non communiqué. Valeur de repli : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Manual context: %1 tokens</source>
+        <translation>Contexte manuel : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Context window (tokens)</source>
+        <translation>Fenêtre de contexte (tokens)</translation>
+    </message>
+    <message>
         <location filename="../gui/assistant.py" line="314"/>
         <source>Queued</source>
         <translation>En attente</translation>
@@ -6354,6 +6390,41 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
         <location filename="../gui/local_drafts.py" line="302"/>
         <source>Check c411 and wait for any running send to finish first. Confirm that no Draft was created and another attempt is needed.</source>
         <translation>Vérifiez c411 et attendez la fin de tout envoi en cours. Confirmez qu’aucun brouillon n’a été créé et qu’un nouvel essai est nécessaire.</translation>
+    </message>
+</context>
+<context>
+    <name>ChatTranscript</name>
+    <message>
+        <source>What would you like to do?</source>
+        <translation>Que souhaitez-vous faire ?</translation>
+    </message>
+    <message>
+        <source>Find films, prepare an Upload or build your next Zen Plan.</source>
+        <translation>Trouvez des films, préparez un Upload ou votre prochain Plan Zen.</translation>
+    </message>
+    <message>
+        <source>You</source>
+        <translation>Vous</translation>
+    </message>
+    <message>
+        <source>Working…</source>
+        <translation>En cours…</translation>
+    </message>
+    <message>
+        <source>Activity</source>
+        <translation>Activité</translation>
+    </message>
+    <message>
+        <source>%1 calls · %2 tokens</source>
+        <translation>%1 appels · %2 tokens</translation>
+    </message>
+    <message>
+        <source>Context compacted; full history retained.</source>
+        <translation>Contexte compacté ; historique complet conservé.</translation>
+    </message>
+    <message>
+        <source>Review proposal</source>
+        <translation>Examiner la proposition</translation>
     </message>
 </context>
 </TS>

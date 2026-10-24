@@ -45,6 +45,10 @@ class Assistant:
                 CREATE TABLE IF NOT EXISTS usage (provider_id TEXT, day TEXT, calls INTEGER,
                     PRIMARY KEY(provider_id,day));
             """)
+            if "compactions" not in {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}:
+                self.db.execute("ALTER TABLE runs ADD COLUMN compactions INTEGER DEFAULT 0")
+            if "context" not in {r[1] for r in self.db.execute("PRAGMA table_info(runs)")}:
+                self.db.execute("ALTER TABLE runs ADD COLUMN context TEXT DEFAULT '{}'")
             self.db.execute(
                 "UPDATE runs SET status='interrupted', error=? "
                 "WHERE status IN ('queued','running')",
@@ -66,7 +70,7 @@ class Assistant:
     def provider_row(self, row):
         return {
             "id": row["id"],
-            **json.loads(row["body"]),
+            **Provider.model_validate_json(row["body"]).model_dump(),
             "has_key": bool(self.secrets.get("assistant:" + row["id"])),
         }
 
@@ -91,6 +95,14 @@ class Assistant:
                 (identifier, body.model_dump_json()),
             )
             return {"id": identifier, **body.model_dump()}
+
+    def context_preview(self, body, identifier=""):
+        credential = body.api_key or ""
+        if not credential and identifier:
+            saved = self.provider(identifier)
+            if (saved.url, saved.kind) == (body.url, body.kind):
+                credential = self.secrets.get("assistant:" + identifier)
+        return self.models.context(body, credential)
 
     def test_provider(self, identifier):
         return self.models.test(
@@ -212,7 +224,9 @@ class Assistant:
                 )
             run = uuid4().hex
             self.db.execute(
-                "INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO runs (id,conversation_id,schedule_id,status,created,messages,"
+                "events,tokens,calls,error) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     run,
                     identifier,
@@ -246,6 +260,7 @@ class Assistant:
                 raise ValueError("Assistant run not found.")
             return {
                 **dict(row),
+                "context": json.loads(row["context"]),
                 "messages": json.loads(row["messages"]),
                 "events": json.loads(row["events"]),
             }
@@ -270,6 +285,26 @@ class Assistant:
                 (*values.values(), identifier),
             )
 
+    def read_context_history(self, conversation_id, run_id, section, index, offset=0):
+        if section not in {"messages", "events"} or index < 0 or offset < 0:
+            raise ValueError("Choose messages or events and non-negative offsets.")
+        run = self.run(run_id)
+        if run["conversation_id"] != conversation_id:
+            raise PermissionError("History belongs to another discussion.")
+        records = run[section]
+        if index >= len(records):
+            raise ValueError("History record not found.")
+        text = json.dumps(records[index], ensure_ascii=False)
+        end = offset + 8000
+        return {
+            "run_id": run_id,
+            "section": section,
+            "index": index,
+            "total_records": len(records),
+            "text": text[offset:end],
+            "next_offset": end if end < len(text) else None,
+        }
+
     def cancel(self, identifier):
         run = self.run(identifier)
         if identifier in self.stops:
@@ -289,6 +324,13 @@ class Assistant:
         import time
 
         from torrentlinker.agent.server import ACTOR
+        from torrentlinker.assistant.context import (
+            HISTORY_TOOL,
+            compact_context,
+            encoded_size,
+            input_budget,
+        )
+        from torrentlinker.assistant.providers import ContextTooLong
 
         started = time.monotonic()
         transcript = self.run(identifier)["messages"]
@@ -298,6 +340,10 @@ class Assistant:
             self.update_run(identifier, status="running")
             provider = self.provider(config.provider_id)
             key = self.secrets.get("assistant:" + config.provider_id)
+            context = self.models.context(provider, key)
+            provider = provider.model_copy(update={"context_window": context["context_window"]})
+            self.update_run(identifier, context=json.dumps(context))
+            output_tokens = min(config.max_output_tokens, max(128, provider.context_window // 4))
             system = (
                 "You are TorrentLinker Assistant. Use tools for facts and actions."
                 " Call overview first. "
@@ -361,6 +407,7 @@ class Assistant:
                                     "automatically."
                                 )
                             }
+                    event["result"] = result
                     receipts.append({"tool": event["tool"], "result": result})
             if receipts:
                 messages.append(
@@ -377,26 +424,53 @@ class Assistant:
                 {"name": t.name, "description": t.description or "", "parameters": t.input_schema}
                 for t in asyncio.run(self.mcp.list_tools())
             ]
+            tools.append(HISTORY_TOOL)
             research_names = {t["name"] for t in self.research.tools()} if config.web else set()
             if config.web:
                 tools.extend(self.research.tools())
             for _ in range(config.max_calls):
                 if stop.is_set():
                     raise InterruptedError()
-                if time.monotonic() - started >= config.max_seconds or tokens >= config.max_tokens:
-                    raise ValueError("Assistant run reached its time or token limit.")
+                if time.monotonic() - started >= config.max_seconds:
+                    raise ValueError(
+                        "Assistant run reached its duration limit. "
+                        "Review progress before continuing."
+                    )
                 self.agent.access.grant(actor)
-                if len(json.dumps(messages)) > 180000:
-                    raise ValueError("Conversation is too long. Start a new conversation.")
-                self.reserve_call(config.provider_id)
-                text, calls, used = self.models.turn(
-                    provider,
-                    key,
-                    messages,
-                    tools,
-                    min(config.max_output_tokens, config.max_tokens - tokens),
-                    max(1, min(60, config.max_seconds - (time.monotonic() - started))),
-                )
+                budget = input_budget(provider, tools, output_tokens)
+                if encoded_size(messages) > budget:
+                    memory = compact_context(previous[-8:] + [self.run(identifier)], budget // 2)
+                    messages = [
+                        {"role": "system", "content": system},
+                        self.models.user(provider, memory),
+                    ]
+                    self.update_run(identifier, compactions=self.run(identifier)["compactions"] + 1)
+                for attempt in range(3):
+                    self.reserve_call(config.provider_id)
+                    try:
+                        text, calls, used = self.models.turn(
+                            provider,
+                            key,
+                            messages,
+                            tools,
+                            output_tokens,
+                            max(1, min(60, config.max_seconds - (time.monotonic() - started))),
+                        )
+                        break
+                    except ContextTooLong:
+                        if attempt == 2 or stop.is_set():
+                            raise
+                        budget = max(4000, budget // 2)
+                        memory = compact_context(
+                            previous[-8:] + [self.run(identifier)], budget // 2
+                        )
+                        messages = [
+                            {"role": "system", "content": system},
+                            self.models.user(provider, memory),
+                        ]
+                        self.update_run(
+                            identifier, compactions=self.run(identifier)["compactions"] + 1
+                        )
                 calls_used += 1
                 tokens += used
                 if stop.is_set():
@@ -444,7 +518,11 @@ class Assistant:
                     try:
                         token = ACTOR.set(actor)
                         try:
-                            if call["name"] in research_names:
+                            if call["name"] == "read_assistant_history":
+                                result = self.read_context_history(
+                                    self.run(identifier)["conversation_id"], **args
+                                )
+                            elif call["name"] in research_names:
                                 result = getattr(self.research, call["name"])(**args)
                             else:
                                 answer = asyncio.run(self.mcp.call_tool(call["name"], args))
