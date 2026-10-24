@@ -29,6 +29,7 @@ CLIENT_SETTINGS = {
     "deluge": "deluge",
     "transmission": "transmission",
     "utorrent": "utorrent",
+    "bittorrent": "utorrent",
 }
 
 
@@ -121,6 +122,7 @@ class Setup:
         self.secrets = secrets
         self.connector = connector
         self.lock = threading.RLock()
+        self.download_guard: Callable[[bytes, str], None] | None = None
         self._client: ClientApi | None = None
         self._indexer: Indexer | None = None
         self.store = Store(directory / "catalogue.sqlite").for_client(

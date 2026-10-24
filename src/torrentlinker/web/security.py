@@ -55,6 +55,8 @@ class ServerSecrets:
     def redact(self, text: str) -> str:
         from torrentlinker.torrent_management import safe_error
 
+        if not text:
+            return text
         with self.lock:
             values = list(self.values.values())
             for path in self.files.values():

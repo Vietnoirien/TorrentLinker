@@ -101,6 +101,7 @@ def main() -> int:
         update_timer.start()
         QTimer.singleShot(1000, window.check_for_updates)
         QTimer.singleShot(0, window.startup)
+        QTimer.singleShot(2000, window.start_saved_agent_access)
     return app.exec()
 
 

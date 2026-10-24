@@ -272,3 +272,45 @@ def test_suggested_mapping_uses_only_allowed_storage_roots(tmp_path: Path):
             "local": str(root),
             "qbit": "/downloads",
         }
+
+
+def test_bittorrent_classic_connection_uses_webui_and_persists_its_own_profile(
+    tmp_path, monkeypatch
+):
+    import httpx
+
+    from tests.test_utorrent_unit import WebUI
+    from torrentlinker import net
+
+    remote = WebUI()
+    monkeypatch.setattr(
+        net, "client", lambda **kwargs: httpx.Client(transport=httpx.MockTransport(remote.handle))
+    )
+    directory = tmp_path / "config"
+    connection = {
+        "client": "bittorrent",
+        "name": "My BitTorrent box",
+        "host": "http://classic.example:8081/gui/",
+        "username": "owner",
+        "password": "private-classic-password",
+    }
+    with TestClient(create_app(directory, password="test-password-long")) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        result = browser.post("/api/setup/test-client", json=connection)
+        assert result.status_code == 200, result.text
+        assert result.json()["folders"][0]["path"] == r"C:\Downloads"
+        saved = browser.post("/api/setup/client", json=connection)
+        assert saved.status_code == 200, saved.text
+        snapshot = browser.get("/api/setup")
+        assert snapshot.json()["client"] == "bittorrent"
+        assert "private-classic-password" not in snapshot.text
+    with TestClient(create_app(directory, password="test-password-long")) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        connection.pop("password")
+        assert browser.post("/api/setup/test-client", json=connection).status_code == 200
+        remote.bad_password = True
+        denied = browser.post("/api/setup/test-client", json=connection)
+        assert denied.status_code == 400
+        assert "private-classic-password" not in denied.text

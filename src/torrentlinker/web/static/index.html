@@ -73,6 +73,7 @@
             Connect your client, check its folders, then add c411. You can
             change each connection later.
           </p>
+          <button data-view="agents" data-i18n="agentAccess">Agent access (MCP)</button>
           <div class="steps" role="group" aria-label="Setup steps">
             <button data-step="client" data-i18n="stepClient">
               1 · Torrent client</button
@@ -104,6 +105,7 @@
                     <option value="deluge">Deluge</option>
                     <option value="transmission">Transmission</option>
                     <option value="utorrent">µTorrent Classic</option>
+                    <option value="bittorrent">BitTorrent Classic</option>
                   </select></label
                 ><label
                   ><span data-i18n="address">Server address</span
@@ -302,6 +304,41 @@
               Open Torrents
             </button>
           </section>
+        </section>
+        <section id="view-agents" class="view" hidden>
+          <div class="toolbar"><label><input type="checkbox" id="agents-enabled" />
+            <span data-i18n="enableAgents">Enable agent access</span></label>
+            <button id="agents-refresh" data-i18n="refresh">Refresh</button></div>
+          <p data-i18n="agentHelp">New connections only propose changes. Approve them below or explicitly allow selected actions within daily limits. Removal and file deletion always need approval.</p>
+          <p><span data-i18n="agentEndpoint">MCP endpoint</span>: <code id="agents-endpoint"></code></p>
+          <form id="agent-form" class="card">
+            <label><span data-i18n="clientName">Name</span><input id="agent-name" required maxlength="100" /></label>
+            <fieldset><legend data-i18n="agentClients">Allowed clients</legend><div id="agent-clients"></div></fieldset>
+            <label><span data-i18n="agentMode">Mode</span><select id="agent-mode">
+              <option value="propose" data-i18n="agentPropose">Proposals only</option>
+              <option value="execute" data-i18n="agentExecute">Execute permitted actions</option></select></label>
+            <fieldset id="agent-permissions"><legend data-i18n="agentPermissions">Automatic actions</legend>
+              <label><input type="checkbox" value="controls" /><span data-i18n="agentControls">Pause, recheck and resume completed torrents</span></label>
+              <label><input type="checkbox" value="downloads" /><span data-i18n="downloads">Downloads</span></label>
+              <label><input type="checkbox" value="reseed" />Reseed</label>
+              <label><input type="checkbox" value="uploads" /><span data-i18n="agentUploads">Upload drafts and seeding</span></label>
+            </fieldset>
+            <div class="toolbar">
+              <label><span data-i18n="agentDailyGiB">Daily download budget (GiB)</span><input id="agent-bytes" type="number" min="0" max="100000" value="10" required /></label>
+              <label><span data-i18n="agentDailyCount">Torrents per day</span><input id="agent-count" type="number" min="0" max="1000" value="20" required /></label>
+              <label><span data-i18n="agentReserve">Keep free (GiB)</span><input id="agent-reserve" type="number" min="0" max="100000" value="10" required /></label>
+            </div>
+            <button class="primary" data-i18n="agentCreate">Create connection</button>
+          </form>
+          <div id="agent-token-box" class="card" hidden>
+            <p data-i18n="agentTokenHelp">Copy this token now. It is shown only once. Use it as the Bearer token or TL_MCP_TOKEN for the stdio bridge. Keep it private.</p>
+            <textarea id="agent-token" readonly aria-label="Agent token"></textarea>
+            <button id="agent-token-hide" data-i18n="agentHide">Hide token</button>
+          </div>
+          <h2 data-i18n="agentConnections">Connections</h2><div id="agent-connections"></div>
+          <h2 data-i18n="agentProposals">Proposals and jobs</h2><div id="agent-proposals"></div>
+          <h2 data-i18n="agentGoals">Saved goals</h2><div id="agent-goals"></div>
+          <h2 data-i18n="activity">Activity</h2><div id="agent-activity"></div>
         </section>
         <section id="view-torrents" class="view">
           <div class="toolbar">

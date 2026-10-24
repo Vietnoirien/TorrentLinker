@@ -16,6 +16,8 @@ datas = (
     + collect_data_files("guessit")
     + collect_data_files("babelfish")
     + copy_metadata("torrentlinker")
+    + copy_metadata("mcp")
+    + copy_metadata("mcp-types")
 )
 docs = Path(SPECPATH).parent / "docs"
 datas += [(str(docs / "README.md"), "docs")]
@@ -31,6 +33,7 @@ hiddenimports = (
     + collect_submodules("rebulk")
     # mutagen picks its format readers by file type (the Audio and Ebook uploads)
     + collect_submodules("mutagen")
+    + collect_submodules("uvicorn")
     # Imported only when a SOCKS proxy is set (httpx, and requests for qBittorrent)
     + collect_submodules("socksio")
     + ["socks", "sockshandler"]

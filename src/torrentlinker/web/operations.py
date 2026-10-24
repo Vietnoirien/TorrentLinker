@@ -392,6 +392,13 @@ class Operations:
                 self.setup.settings.indexer_categories,
                 stop,
                 lambda p: progress(asdict(p)),
+                only={
+                    e.key
+                    for e in entries(self.setup.store)
+                    if e.candidate.infohash in request.hashes
+                }
+                if request.hashes
+                else None,
             )
             return {
                 "added": len(report.added),

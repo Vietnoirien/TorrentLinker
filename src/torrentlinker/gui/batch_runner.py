@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
+from torrentlinker.agent.coordination import desktop_worker
 from torrentlinker.batch import run_batch
 from torrentlinker.library import LibraryEntry
 from torrentlinker.review import CheckedCandidate
@@ -43,6 +44,7 @@ class BatchRunner(QRunnable):
     def start(self) -> None:
         QThreadPool.globalInstance().start(self)
 
+    @desktop_worker
     def run(self) -> None:
         done = run_batch(
             self.entries,

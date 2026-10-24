@@ -8,6 +8,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, SignalInstance
 from shiboken6 import isValid
 
+from torrentlinker.agent.coordination import desktop_worker
 from torrentlinker.send import SendProgress, SendReport
 
 
@@ -35,6 +36,7 @@ class SendRunner(QRunnable):
     def start(self) -> None:
         QThreadPool.globalInstance().start(self)
 
+    @desktop_worker
     def run(self) -> None:
         def emit(signal: SignalInstance, *args: object) -> None:
             try:

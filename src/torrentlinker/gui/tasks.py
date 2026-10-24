@@ -7,6 +7,8 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
+from torrentlinker.agent.coordination import desktop_worker
+
 
 class _Signals(QObject):
     done = Signal(object)
@@ -20,6 +22,7 @@ class _Job(QRunnable):
         self.fn = fn
         self.signals = _Signals()
 
+    @desktop_worker
     def run(self) -> None:
         try:
             result = self.fn()

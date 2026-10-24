@@ -895,6 +895,22 @@ La mettre à la corbeille ?</translation>
         <source>Wait for the current operation before changing client.</source>
         <translation>Attendez la fin de l’opération en cours avant de changer de client.</translation>
     </message>
+    <message>
+        <source>Agent access</source>
+        <translation>Accès des agents</translation>
+    </message>
+    <message>
+        <source>Cannot start the local MCP server on port 8790. Check whether another TorrentLinker instance is running.</source>
+        <translation>Impossible de démarrer le serveur MCP local sur le port 8790. Vérifiez si une autre instance de TorrentLinker est ouverte.</translation>
+    </message>
+    <message>
+        <source>Wait for agent jobs before changing settings.</source>
+        <translation>Attendez la fin des tâches des agents avant de modifier les paramètres.</translation>
+    </message>
+    <message>
+        <source>Agent access could not start. Open Settings → Agent access to retry.</source>
+        <translation>L'accès des agents n'a pas pu démarrer. Ouvrez Paramètres → Accès des agents pour réessayer.</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -3184,6 +3200,22 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Finish or remove this client's pending work before changing its connection. You can add another client instead.</source>
         <translation>Terminez ou retirez les opérations en attente de ce client avant de modifier sa connexion. Vous pouvez ajouter un autre client.</translation>
     </message>
+    <message>
+        <source>Connect an assistant, review its proposals and manage its permissions.</source>
+        <translation>Connectez un assistant, examinez ses propositions et gérez ses permissions.</translation>
+    </message>
+    <message>
+        <source>Open agent access (MCP)</source>
+        <translation>Ouvrir l'accès des agents (MCP)</translation>
+    </message>
+    <message>
+        <source>Agent access</source>
+        <translation>Accès des agents</translation>
+    </message>
+    <message>
+        <source>Experimental: µTorrent Classic / BitTorrent Classic. Web editions are not supported. Enable WebUI in Preferences → Advanced → Web UI. Full Reseeds and Upload seeding are supported. If names differ, a confirmation lists the files that must be renamed on disk. Partial Matches are unavailable. Enable ‘Don't start the download automatically’ and choose a default folder in the client. TorrentLinker checks the destination before starting each download. Only that folder and its subfolders can be used.</source>
+        <translation>Expérimental : µTorrent Classic / BitTorrent Classic. Les éditions Web ne sont pas prises en charge. Activez l'interface Web dans Préférences → Avancé → Interface Web. La remise en seed complète et la mise en seed des uploads sont disponibles. Si les noms diffèrent, une confirmation liste les fichiers à renommer sur le disque. Les correspondances partielles sont indisponibles. Activez « Ne pas démarrer les téléchargements automatiquement » et choisissez un dossier par défaut dans le client. TorrentLinker vérifie la destination avant chaque téléchargement. Seuls ce dossier et ses sous-dossiers peuvent être utilisés.</translation>
+    </message>
 </context>
 <context>
     <name>Subcategory</name>
@@ -5193,6 +5225,133 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
     <message>
         <source>Budget · GiB</source>
         <translation>Budget · Gio</translation>
+    </message>
+</context>
+<context>
+    <name>AgentDialog</name>
+    <message>
+        <source>Agent access (MCP)</source>
+        <translation>Accès des agents (MCP)</translation>
+    </message>
+    <message>
+        <source>Enable agent access</source>
+        <translation>Activer l'accès des agents</translation>
+    </message>
+    <message>
+        <source>New connections only propose changes. Approve proposals here, or allow selected actions within daily limits. Removal and file deletion always need your approval.</source>
+        <translation>Les nouvelles connexions proposent seulement des modifications. Approuvez-les ici ou autorisez certaines actions avec des limites quotidiennes. Le retrait des torrents et la suppression des fichiers demandent toujours votre accord.</translation>
+    </message>
+    <message>
+        <source>Connection name</source>
+        <translation>Nom de la connexion</translation>
+    </message>
+    <message>
+        <source>Proposals only</source>
+        <translation>Propositions uniquement</translation>
+    </message>
+    <message>
+        <source>Execute permitted actions</source>
+        <translation>Exécuter les actions autorisées</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>Mode</translation>
+    </message>
+    <message>
+        <source>Daily download budget (GiB)</source>
+        <translation>Budget quotidien de téléchargement (Gio)</translation>
+    </message>
+    <message>
+        <source>Torrents per day</source>
+        <translation>Torrents par jour</translation>
+    </message>
+    <message>
+        <source>Keep free (GiB)</source>
+        <translation>Espace à préserver (Gio)</translation>
+    </message>
+    <message>
+        <source>Create connection</source>
+        <translation>Créer la connexion</translation>
+    </message>
+    <message>
+        <source>New connection</source>
+        <translation>Nouvelle connexion</translation>
+    </message>
+    <message>
+        <source>Approve proposal</source>
+        <translation>Approuver la proposition</translation>
+    </message>
+    <message>
+        <source>Reject proposal</source>
+        <translation>Refuser la proposition</translation>
+    </message>
+    <message>
+        <source>Revoke connection</source>
+        <translation>Révoquer la connexion</translation>
+    </message>
+    <message>
+        <source>Cancel job</source>
+        <translation>Annuler la tâche</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Actualiser</translation>
+    </message>
+    <message>
+        <source>Release uncertain storage reservation</source>
+        <translation>Libérer la réserve disque incertaine</translation>
+    </message>
+    <message>
+        <source>Proposals and activity</source>
+        <translation>Propositions et activité</translation>
+    </message>
+    <message>
+        <source>Agent access</source>
+        <translation>Accès des agents</translation>
+    </message>
+    <message>
+        <source>Copy your agent token</source>
+        <translation>Copier le jeton de votre agent</translation>
+    </message>
+    <message>
+        <source>Shown only once. Keep this token private. Use it as the Bearer token or TL_MCP_TOKEN for the stdio bridge.</source>
+        <translation>Ce jeton n'est affiché qu'une fois. Gardez-le privé. Utilisez-le comme jeton Bearer ou dans TL_MCP_TOKEN pour le relais stdio.</translation>
+    </message>
+    <message>
+        <source>Copy token</source>
+        <translation>Copier le jeton</translation>
+    </message>
+    <message>
+        <source>Pause, recheck and resume completed torrents</source>
+        <translation>Suspendre, vérifier et reprendre les torrents complets</translation>
+    </message>
+    <message>
+        <source>Downloads</source>
+        <translation>Téléchargements</translation>
+    </message>
+    <message>
+        <source>Reseed</source>
+        <translation>Remettre en seed</translation>
+    </message>
+    <message>
+        <source>Upload drafts and seeding</source>
+        <translation>Brouillons d'upload et mise en seed</translation>
+    </message>
+    <message>
+        <source>Release storage reservation</source>
+        <translation>Libérer la réserve disque</translation>
+    </message>
+    <message>
+        <source>Check the Torrent Client first. Confirm that this send has finished or did not start. This releases uncertain storage only; daily spending stays counted.</source>
+        <translation>Vérifiez d'abord le client torrent. Confirmez que cet envoi est terminé ou n'a pas démarré. Seule la réserve disque incertaine est libérée ; le budget quotidien reste débité.</translation>
+    </message>
+    <message>
+        <source>Enter a name and select at least one client.</source>
+        <translation>Saisissez un nom et sélectionnez au moins un client.</translation>
+    </message>
+    <message>
+        <source>Confirm removal</source>
+        <translation>Confirmer le retrait</translation>
     </message>
 </context>
 </TS>

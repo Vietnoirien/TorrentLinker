@@ -21,6 +21,16 @@ const state = {
   localItem: "",
 };
 const french = {
+  agentAccess: "Accès agent (MCP)", enableAgents: "Activer l’accès agent",
+  agentHelp: "Les nouvelles connexions proposent uniquement des changements. Approuvez-les ci-dessous ou autorisez certaines actions dans les limites quotidiennes. Le retrait et la suppression de fichiers nécessitent toujours votre accord.",
+  agentEndpoint: "Adresse MCP", agentClients: "Clients autorisés", agentMode: "Mode",
+  agentPropose: "Propositions uniquement", agentExecute: "Exécuter les actions autorisées",
+  agentPermissions: "Actions automatiques", agentControls: "Pause, vérification et reprise des torrents complets",
+  agentUploads: "Brouillons d’upload et mise en seed", agentDailyGiB: "Budget quotidien (Gio)",
+  agentDailyCount: "Torrents par jour", agentReserve: "Espace à conserver (Gio)",
+  agentCreate: "Créer la connexion", agentConnections: "Connexions", agentProposals: "Propositions et tâches",
+  agentGoals: "Objectifs enregistrés", agentHide: "Masquer le jeton",
+  agentTokenHelp: "Copiez ce jeton maintenant. Il ne sera affiché qu’une fois. Utilisez-le comme jeton Bearer ou TL_MCP_TOKEN pour le pont stdio. Gardez-le privé.",
   targetClient: "Client cible", addClient: "Ajouter un client", defaultClient: "Définir par défaut",
   removeClient: "Retirer ce client", clientName: "Nom du client", planDestinations: "Destinations du Plan",
   planDestinationHelp: "Choisissez un client ou répartissez entre plusieurs clients. Budget 0 : espace disponible.",
@@ -146,7 +156,7 @@ async function guard(fn) {
     toast(error.message);
   }
 }
-async function api(path, body) {
+async function api(path, body, method) {
   const scoped = ["setup", "torrents", "library", "queue"];
   if (body === undefined && scoped.includes(path.split("?")[0]) && state.clientId) {
     const id = state.clientId === "all" && path === "setup" ? state.setup?.default_client_id || "" : state.clientId;
@@ -157,7 +167,7 @@ async function api(path, body) {
     if (path === "jobs" && body.kind === "refresh") body.client_id = state.clientId;
   }
   const response = await fetch(`api/${path}`, {
-    method: body === undefined ? "GET" : "POST",
+    method: method || (body === undefined ? "GET" : "POST"),
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", "X-TorrentLinker": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -512,6 +522,8 @@ async function navigate(view) {
     await refreshSetup();
     step("client");
   }
+  if (view === "agents") await loadAgents();
+  if (view !== "agents") { $("agent-token").value = ""; $("agent-token-box").hidden = true; }
   if (view === "documentation") await loadGuides();
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
@@ -1389,3 +1401,89 @@ $("remove-client").onclick = () => guard(async () => {
   if (!confirm(say("Remove this client profile? Torrents and files will be kept.", "Retirer ce profil ? Les torrents et fichiers seront conservés."))) return;
   await api("clients/remove", {client_id: state.setup.client_id}); state.clientId = ""; await refreshSetup();
 });
+
+
+async function loadAgents() {
+  const data = await api("agents");
+  $("agents-enabled").checked = data.enabled;
+  $("agents-endpoint").textContent = new URL("mcp/", location.href).href;
+  const choices = $("agent-clients");
+  const previous = new Set([...choices.querySelectorAll("input:checked")].map(e => e.value));
+  const firstLoad = !choices.children.length;
+  choices.replaceChildren(...state.setup.clients.filter(p => p.enabled).map(p => {
+    const label = element("label"), input = document.createElement("input");
+    input.type = "checkbox"; input.value = p.id;
+    input.checked = firstLoad ? p.id === state.setup.client_id : previous.has(p.id);
+    label.append(input, document.createTextNode(p.name)); return label;
+  }));
+  $("agent-permissions").disabled = $("agent-mode").value === "propose";
+  $("agent-connections").replaceChildren(...data.connections.map(g => {
+    const row = element("div", undefined, "card");
+    row.append(element("p", `${g.name} · ${g.mode} · ${g.clients.join(", ")}`));
+    if (g.revoked) row.append(element("span", say("Revoked", "Révoqué")));
+    else row.append(button(say("Revoke", "Révoquer"), async () => {
+      await api(`agents/${g.id}/revoke`, {}); await loadAgents();
+    }));
+    return row;
+  }));
+  $("agent-proposals").replaceChildren(...data.proposals.map(p => {
+    const row = element("details", undefined, "card");
+    const name = data.connections.find(g => g.id === p.grant_id)?.name || p.grant_id;
+    row.append(element("summary", `${name} · ${p.body.kind} · ${p.body.client_id} · ${p.status}`));
+    const details = element("pre", JSON.stringify(p.body, null, 2)); row.append(details);
+    if (p.status === "pending") {
+      row.append(button(say("Approve", "Approuver"), async () => {
+        const destructive = p.body.kind === "manage" && ["remove", "delete"].includes(p.body.action);
+        if (destructive) {
+          const preview = await api(`agents/proposals/${p.id}/review`);
+          if (!confirm(preview.client + "\n" + preview.warning + "\n\n" +
+            preview.torrents.map(t => t.name + "\n" + t.folder).join("\n"))) return;
+        }
+        await api(`agents/proposals/${p.id}/approve`, {}); await loadAgents();
+      }), button(say("Reject", "Refuser"), async () => {
+        await api(`agents/proposals/${p.id}/reject`, {}); await loadAgents();
+      }));
+    }
+    if (p.job_id) row.append(button(say("View job", "Voir la tâche"), async () => {
+      const job = await api(`jobs/${p.job_id}`);
+      details.textContent = JSON.stringify(job, null, 2);
+    }), button(say("Cancel job", "Annuler la tâche"), async () => {
+      await api(`jobs/${p.job_id}/cancel`, {}); await loadAgents();
+    }));
+    if (p.body.kind === "send-queue") row.append(button(
+      say("Release uncertain storage reservation", "Libérer la réserve disque incertaine"), async () => {
+        if (!confirm(say(
+          "Check the Torrent Client first. Confirm that this send has finished or did not start. Daily spending stays counted.",
+          "Vérifiez d'abord le client torrent. Confirmez que cet envoi est terminé ou n'a pas démarré. Le budget quotidien reste débité."
+        ))) return;
+        await api(`agents/proposals/${p.id}/release-storage`, {}); await loadAgents();
+      }
+    ));
+    return row;
+  }));
+  $("agent-goals").replaceChildren(...data.goals.map(g => element("pre", JSON.stringify(g.body, null, 2))));
+  $("agent-activity").replaceChildren(...data.activity.map(e =>
+    element("p", `${new Date(e.created * 1000).toLocaleString()} · ${e.action} · ${e.detail}`)));
+}
+$("agents-refresh").onclick = () => guard(loadAgents);
+$("agents-enabled").onchange = () => guard(async () => {
+  await api("agents", {enabled: $("agents-enabled").checked}, "PUT"); await loadAgents();
+});
+$("agent-mode").onchange = () => { $("agent-permissions").disabled = $("agent-mode").value === "propose"; };
+$("agent-token-hide").onclick = () => { $("agent-token").value = ""; $("agent-token-box").hidden = true; };
+$("agent-form").onsubmit = event => {
+  event.preventDefault();
+  guard(async () => {
+    const grant = await api("agents", {
+      name: $("agent-name").value,
+      clients: [...$("agent-clients").querySelectorAll("input:checked")].map(e => e.value),
+      mode: $("agent-mode").value,
+      permissions: $("agent-mode").value === "propose" ? [] : [...$("agent-permissions").querySelectorAll("input:checked")].map(e => e.value),
+      daily_bytes: Number($("agent-bytes").value) * 1024 ** 3,
+      daily_torrents: Number($("agent-count").value),
+      reserve_bytes: Number($("agent-reserve").value) * 1024 ** 3,
+    });
+    $("agent-token").value = grant.token; $("agent-token-box").hidden = false;
+    await loadAgents();
+  });
+};

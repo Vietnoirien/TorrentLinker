@@ -167,6 +167,28 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 for language in ("en", "fr"):
                     page.locator("#language").select_option(language)
                     page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
+            page.locator("[data-view=setup][data-i18n=settings]").click()
+            page.locator("#language").select_option("en")
+            page.locator("[data-view=agents]").click()
+            expect(page.locator("#view-agents")).to_be_visible()
+            expect(page.locator("#agents-enabled")).not_to_be_checked()
+            page.locator("#agents-enabled").check()
+            page.locator("#agent-name").fill("My assistant")
+            expect(page.locator("#agent-mode")).to_have_value("propose")
+            page.locator("#agent-form button.primary").click()
+            expect(page.locator("#agent-token-box")).to_be_visible()
+            expect(page.locator("#agent-connections")).to_contain_text("My assistant")
+            page.locator("#agent-token-hide").click()
+            expect(page.locator("#agent-token")).to_have_value("")
+            page.locator("#agent-connections button").click()
+            expect(page.locator("#agent-connections")).to_contain_text("Revoked")
+            if screenshot:
+                for language in ("en", "fr"):
+                    page.locator("#language").select_option(language)
+                    page.evaluate("window.scrollTo(0, 0)")
+                    page.screenshot(
+                        path=str(Path(screenshot) / f"agent-access-{language}.png"), full_page=True
+                    )
             assert not errors, errors
             browser.close()
     finally:

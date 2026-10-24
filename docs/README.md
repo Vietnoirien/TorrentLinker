@@ -12,6 +12,8 @@ Les guides et leurs captures sont aussi disponibles dans **Documentation**, just
 
 ## Aller plus loin
 
+- [Agents et accès MCP](guide/fr/agents.md) : connexions, propositions, permissions et objectifs.
+
 - [Plusieurs clients torrent](guide/fr/clients.md) : profils nommés, dossiers et Plans répartis.
 
 - [Gérer les torrents](guide/fr/torrents.md) : trackers, catégories et commandes.
@@ -23,6 +25,8 @@ Les guides et leurs captures sont aussi disponibles dans **Documentation**, just
 Les captures montrent l’interface en français, en thème sombre, avec des données d’exemple. Ce sont des captures des composants de l’application, réalisées hors ligne ; elles ne contiennent aucun compte ni fichier personnel. Les décorations des fenêtres dépendent du système utilisé.
 
 ## English guides
+
+- [Agents and MCP access](guide/en/agents.md)
 
 - [Multiple Torrent Clients](guide/en/clients.md)
 

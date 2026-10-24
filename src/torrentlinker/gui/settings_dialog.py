@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from keyring.errors import KeyringError
-from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -132,6 +132,24 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._page(self._paths_box(), fill=True), self.tr("Client Paths"))
         self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
+        if parent is not None and hasattr(parent, "open_agent_access"):
+            agent_page = QWidget()
+            agent_layout = QVBoxLayout(agent_page)
+            info = QLabel(
+                self.tr("Connect an assistant, review its proposals and manage its permissions.")
+            )
+            info.setWordWrap(True)
+            agent_layout.addWidget(info)
+            open_agents = QPushButton(self.tr("Open agent access (MCP)"))
+
+            def agent_access():
+                self.reject()
+                QTimer.singleShot(0, parent.open_agent_access)
+
+            open_agents.clicked.connect(agent_access)
+            agent_layout.addWidget(open_agents)
+            agent_layout.addStretch()
+            self.tabs.addTab(agent_page, self.tr("Agent access"))
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -312,8 +330,8 @@ class SettingsDialog(QDialog):
         self.client_forms.addWidget(self._deluge_form())
         self.client_forms.addWidget(self._transmission_form())
         self.client_forms.addWidget(self._utorrent_form())
-        self.client_forms.setCurrentIndex(self.client.currentIndex())
-        self.client.currentIndexChanged.connect(self.client_forms.setCurrentIndex)
+        self._show_client_form()
+        self.client.currentIndexChanged.connect(self._show_client_form)
         layout.addWidget(self.client_forms)
         test = QPushButton(self.tr("Test connection"))
         test.clicked.connect(self._test_qbit)
@@ -374,6 +392,14 @@ class SettingsDialog(QDialog):
         form.addRow("", note)
         return page
 
+    def _show_client_form(self):
+        from torrentlinker.config import CLIENT_FIELDS
+
+        field = CLIENT_FIELDS[self._chosen_client()]
+        self.client_forms.setCurrentIndex(
+            ["qbit", "deluge", "transmission", "utorrent"].index(field)
+        )
+
     def _utorrent_form(self) -> QWidget:
         page = QWidget()
         form = QFormLayout(page)
@@ -386,12 +412,13 @@ class SettingsDialog(QDialog):
         form.addRow(self.tr("Password"), self.utorrent_password)
         note = QLabel(
             self.tr(
-                "Experimental: µTorrent Classic WebUI, not µTorrent Web. Enable WebUI in "
+                "Experimental: µTorrent Classic / BitTorrent Classic. "
+                "Web editions are not supported. Enable WebUI in "
                 "Preferences → Advanced → Web UI. Full Reseeds and Upload seeding are supported. "
                 "If names differ, a confirmation lists the files that must be renamed on disk. "
                 "Partial Matches are unavailable. Enable "
                 "‘Don't start the download automatically’ and choose a default folder in "
-                "µTorrent. TorrentLinker checks the destination before starting each download. "
+                "the client. TorrentLinker checks the destination before starting each download. "
                 "Only that folder and its subfolders can be used."
             )
         )
@@ -433,7 +460,7 @@ class SettingsDialog(QDialog):
                 self.transmission_user.text(),
                 self.transmission_password.text(),
             )
-        if client is TorrentClient.UTORRENT:
+        if client in {TorrentClient.UTORRENT, TorrentClient.BITTORRENT}:
             return connect(
                 client,
                 self.utorrent_host.text(),

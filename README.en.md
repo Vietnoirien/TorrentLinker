@@ -2,7 +2,7 @@
 
 [Français](README.md) · English · [Documentation](docs/README.md)
 
-Find torrents matching your existing files and reseed them in **qBittorrent, Deluge or Transmission**, with experimental support for **µTorrent Classic**. TorrentLinker searches a Torznab Indexer such as **c411**, then asks your torrent client to verify the files before seeding.
+Find torrents matching your existing files and reseed them in **qBittorrent, Deluge or Transmission**, with experimental support for **µTorrent Classic and BitTorrent Classic**. TorrentLinker searches a Torznab Indexer such as **c411**, then asks your torrent client to verify the files before seeding.
 
 ![TorrentLinker: Zen estimates, categories and torrent notes](docs/guide/images/en/zen.png)
 
@@ -10,6 +10,7 @@ Find torrents matching your existing files and reseed them in **qBittorrent, Del
 
 ## What you can do
 
+- **MCP agents**: connect an assistant, prepare Plans and approve its actions. [Guide](docs/guide/en/agents.md).
 - **Named clients**: multiple connections, a combined overview and Plans distributed across selected clients.
 - **Library**: find files no longer seeded, search and check Candidates, then reseed matching torrents.
 - **Search**: filter torrents, explore details in tabs and prepare a download queue.
@@ -17,7 +18,7 @@ Find torrents matching your existing files and reseed them in **qBittorrent, Del
 - **Torrents**: manage downloads and seeding, grouped by tracker and category.
 - **Upload**: prepare files, a description and NFO for a c411 Draft that you review and publish on the website.
 
-With qBittorrent, Deluge and Transmission, reseeding does not rename existing files on disk. µTorrent Classic may require disk renames, with explicit confirmation. In the desktop app, API keys and passwords stay in your system keyring. The interface supports French and English, with system, light and dark themes.
+With qBittorrent, Deluge and Transmission, reseeding does not rename existing files on disk. µTorrent Classic and BitTorrent Classic may require disk renames, with explicit confirmation. In the desktop app, API keys and passwords stay in your system keyring. The interface supports French and English, with system, light and dark themes.
 
 ## Download
 

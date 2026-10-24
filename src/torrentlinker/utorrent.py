@@ -1,4 +1,6 @@
-"""Experimental µTorrent Classic WebUI adapter, tested with build 47390.
+"""Experimental µTorrent / BitTorrent Classic WebUI adapter.
+
+Live-tested with µTorrent build 47390 and BitTorrent build 47391.
 
 Management, downloads and full Reseeds with unchanged paths use the WebUI's
 token-authenticated HTTP API. The Reseed service can rename files on disk after
@@ -82,14 +84,21 @@ class UtorrentApi:
     requires_disk_renames = True
 
     def __init__(
-        self, host: str, username: str, password: str, http: httpx.Client | None = None
+        self,
+        host: str,
+        username: str,
+        password: str,
+        http: httpx.Client | None = None,
+        *,
+        client_name: str = "µTorrent Classic",
     ) -> None:
+        self.client_name = client_name
         base = host.strip().rstrip("/")
         if "://" not in base:
             base = "http://" + base
         parsed = urlsplit(base)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise UtorrentError("Enter the µTorrent Classic WebUI address")
+            raise self._error("Enter the µTorrent Classic WebUI address")
         path = parsed.path.rstrip("/")
         if not path.endswith("/gui"):
             path += "/gui"
@@ -101,17 +110,24 @@ class UtorrentApi:
         self._token = ""
         self._props: dict[str, tuple[float, dict[str, Any]]] = {}
 
+    def _error(self, message: str) -> UtorrentError:
+        return UtorrentError(
+            message.replace("µTorrent Classic", self.client_name).replace(
+                "µTorrent", self.client_name.removesuffix(" Classic")
+            )
+        )
+
     def _authenticate(self) -> None:
         reply = self._http.get(self._url + "token.html", auth=self._auth)
         if reply.status_code in (401, 403):
-            raise UtorrentError(
+            raise self._error(
                 "µTorrent refused WebUI access: check the credentials and IP whitelist"
             )
         reply.raise_for_status()
         parser = _TokenParser()
         parser.feed(reply.text)
         if not parser.token:
-            raise UtorrentError("No WebUI token returned. Use µTorrent Classic with WebUI enabled.")
+            raise self._error("No WebUI token returned. Use µTorrent Classic with WebUI enabled.")
         self._token = parser.token
 
     def _call(self, params: list[tuple[str, str]], data: bytes | None = None) -> dict[str, Any]:
@@ -140,11 +156,11 @@ class UtorrentApi:
                 reply.raise_for_status()
                 result = reply.json()
                 if not isinstance(result, dict) or "build" not in result:
-                    raise UtorrentError("Invalid µTorrent Classic WebUI response")
+                    raise self._error("Invalid µTorrent Classic WebUI response")
                 if result.get("error"):
-                    raise UtorrentError(str(result["error"]))
+                    raise self._error(str(result["error"]))
                 return result
-        raise UtorrentError("µTorrent WebUI authentication failed")
+        raise self._error("µTorrent WebUI authentication failed")
 
     def _action(self, action: str, hash: str) -> dict[str, Any]:
         return self._call([("action", action), ("hash", hash)])
@@ -161,9 +177,7 @@ class UtorrentApi:
         if not _enabled(settings.get("dir_active_download_flag")) or not settings.get(
             "dir_active_download"
         ):
-            raise UtorrentError(
-                "Set a default download folder in µTorrent Preferences → Directories"
-            )
+            raise self._error("Set a default download folder in µTorrent Preferences → Directories")
         return str(settings["dir_active_download"])
 
     def folder_settings(self) -> list[ClientFolder]:
@@ -180,7 +194,7 @@ class UtorrentApi:
     def _list(self) -> list[list[Any]]:
         result = self._call([("list", "1")])
         if not isinstance(result.get("torrents"), list):
-            raise UtorrentError("µTorrent did not return its torrent list")
+            raise self._error("µTorrent did not return its torrent list")
         return list(result["torrents"])
 
     def torrents(self, tag: str | None = None, with_files: bool = True) -> list[Torrent]:
@@ -218,7 +232,7 @@ class UtorrentApi:
 
     def _torrent(self, row: list[Any], with_files: bool) -> Torrent:
         if len(row) <= 26 or not row[26]:
-            raise UtorrentError("This µTorrent build does not report torrent save paths")
+            raise self._error("This µTorrent build does not report torrent save paths")
         hash = str(row[0]).lower()
         progress = float(row[4]) / 1000
         props = self._props.get(hash, (0, {}))[1]
@@ -251,7 +265,7 @@ class UtorrentApi:
     def file_listing(self, hash: str) -> list[TorrentFile]:
         result = self._action("getfiles", hash).get("files", [])
         if len(result) != 2 or str(result[0]).lower() != hash.lower():
-            raise UtorrentError("µTorrent did not return the requested file list")
+            raise self._error("µTorrent did not return the requested file list")
         return [
             TorrentFile(i, str(row[0]).replace("\\", "/"), int(row[1]), int(row[3]) != 0)
             for i, row in enumerate(result[1])
@@ -271,20 +285,20 @@ class UtorrentApi:
         a fresh adapter after an application restart.
         """
         if match.unwanted or set(match.pairs) != set(meta.files):
-            raise UtorrentError(
+            raise self._error(
                 "µTorrent Classic cannot verify Partial Matches through its WebUI. "
                 "All torrent files must be present, including ignored files. "
                 "Use qBittorrent, Transmission or Deluge for Partial Matches."
             )
         if match.renames:
-            raise UtorrentError(
+            raise self._error(
                 "µTorrent Classic cannot rename files inside a torrent through its WebUI. "
                 "Disk renaming must be explicitly confirmed before seeding this torrent."
             )
         if self._multifile(meta):
             prefix = meta.name + "/"
             if not all(path.startswith(prefix) for path in meta.files):
-                raise UtorrentError("Unexpected µTorrent multifile layout")
+                raise self._error("Unexpected µTorrent multifile layout")
             return Match({path[len(prefix) :]: path[len(prefix) :] for path in meta.files})
         return match
 
@@ -292,28 +306,27 @@ class UtorrentApi:
     def _multifile(meta: TorrentMeta) -> bool:
         return len(meta.files) != 1 or next(iter(meta.files), "") != meta.name
 
-    @staticmethod
-    def _check_reseed_settings(settings: dict[str, Any]) -> None:
+    def _check_reseed_settings(self, settings: dict[str, Any]) -> None:
         for key, option in [
             ("append_incomplete", "Append .!ut to incomplete files"),
             ("dir_completed_download_flag", "Move completed downloads to"),
             ("dir_add_label", "Append the torrent's label"),
         ]:
             if key not in settings or _enabled(settings[key]):
-                raise UtorrentError(
+                raise self._error(
                     f"Disable ‘{option}’ in µTorrent before Reseeds or Upload seeding, "
                     "so it cannot rename or move your existing files."
                 )
         if settings.get("finish_cmd") or settings.get("state_cmd"):
-            raise UtorrentError(
+            raise self._error(
                 "Disable µTorrent's Run Program commands before Reseeds or Upload seeding."
             )
 
     def rename_file(self, hash: str, old: str, new: str) -> None:
-        raise UtorrentError("In-torrent file renaming is not yet supported with µTorrent Classic")
+        raise self._error("In-torrent file renaming is not yet supported with µTorrent Classic")
 
     def piece_states(self, hash: str) -> list[int]:
-        raise UtorrentError("Piece verification is not yet supported with µTorrent Classic")
+        raise self._error("Piece verification is not yet supported with µTorrent Classic")
 
     def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
         with self._lock:
@@ -334,13 +347,13 @@ class UtorrentApi:
             if reseed:
                 self._check_reseed_settings(settings)
             if not _enabled(settings.get("torrents_start_stopped")):
-                raise UtorrentError(
+                raise self._error(
                     "Enable ‘Don't start the download automatically’ in µTorrent "
                     "before sending torrents"
                 )
             base = str(settings.get("dir_active_download", ""))
             if not base or not _enabled(settings.get("dir_active_download_flag")):
-                raise UtorrentError(
+                raise self._error(
                     "Set a default download folder in µTorrent Preferences → Directories"
                 )
             module = _path_module(base)
@@ -350,7 +363,7 @@ class UtorrentApi:
             except ValueError:
                 inside = False
             if not inside:
-                raise UtorrentError(
+                raise self._error(
                     "µTorrent torrents must use its default download folder or a subfolder"
                 )
             relative = module.relpath(save_path, base)
@@ -370,12 +383,12 @@ class UtorrentApi:
                         break
                     time.sleep(0.1)
                 else:
-                    raise UtorrentError(
+                    raise self._error(
                         "µTorrent did not confirm the added torrent; "
                         "inspect its WebUI before retrying"
                     )
                 if len(row) <= 26 or not _same_path(str(row[26]), expected) or int(row[1]) & 1:
-                    raise UtorrentError(
+                    raise self._error(
                         "µTorrent did not keep the torrent stopped in the requested folder"
                     )
                 self.add_tags(meta.infohash, tags)
@@ -390,7 +403,7 @@ class UtorrentApi:
             return
         known = {f.index for f in self.file_listing(hash)}
         if any(i not in known for i in indexes):
-            raise UtorrentError("A selected file no longer exists in µTorrent")
+            raise self._error("A selected file no longer exists in µTorrent")
         self._call(
             [
                 ("action", "setprio"),
@@ -410,7 +423,7 @@ class UtorrentApi:
         with self._lock:
             row = next((r for r in self._list() if str(r[0]).lower() == hash.lower()), None)
             if row is None:
-                raise UtorrentError("Torrent no longer exists in µTorrent")
+                raise self._error("Torrent no longer exists in µTorrent")
             if "torrentlinker:verifying" in self._tags(str(row[11])):
                 self._check_reseed_settings(self._settings())
                 # The list's progress is rounded. Check exact completed byte counts
@@ -423,7 +436,7 @@ class UtorrentApi:
                     and all(int(f[1]) == int(f[2]) and int(f[3]) != 0 for f in result[1])
                 )
                 if int(row[1]) & (2 | 16) or int(row[4]) != 1000 or int(row[18]) or not complete:
-                    raise UtorrentError(
+                    raise self._error(
                         "µTorrent has not verified every file. The torrent stays stopped."
                     )
             self._action("start", hash)
@@ -445,10 +458,10 @@ class UtorrentApi:
         with self._lock:
             row = next((r for r in self._list() if str(r[0]).lower() == hash.lower()), None)
             if row is None:
-                raise UtorrentError("Torrent no longer exists in µTorrent")
+                raise self._error("Torrent no longer exists in µTorrent")
             old = str(row[11])
             if old and old != "torrentlinker" and not old.startswith("torrentlinker:"):
-                raise UtorrentError("µTorrent's existing personal label cannot be replaced")
+                raise self._error("µTorrent's existing personal label cannot be replaced")
             wanted = set(tags) | self._tags(old)
             label = max(wanted, key=lambda t: (t.count(":"), t), default="")
             self._call([("action", "setprops"), ("hash", hash), ("s", "label"), ("v", label)])
@@ -461,7 +474,7 @@ class UtorrentApi:
         with self._lock:
             row = next((r for r in self._list() if str(r[0]).lower() == hash.lower()), None)
             if row is None:
-                raise UtorrentError("Torrent no longer exists in µTorrent")
+                raise self._error("Torrent no longer exists in µTorrent")
             old = str(row[11])
             if old != "torrentlinker" and not old.startswith("torrentlinker:"):
                 return  # never replace a personal label

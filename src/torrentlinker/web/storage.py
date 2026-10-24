@@ -14,6 +14,8 @@ class DownloadClient(MappedQbit):
         self.setup = setup
 
     def download(self, data: bytes, save_path: str, tags: list[str]) -> str:
+        if self.setup.download_guard is not None:
+            self.setup.download_guard(data, save_path)
         root = self.setup.path_under_root(save_path)
         for relative in read_torrent(data).files:
             target = (root / relative).resolve()

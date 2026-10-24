@@ -29,6 +29,7 @@ class TorrentClient(StrEnum):
     DELUGE = "deluge"
     TRANSMISSION = "transmission"
     UTORRENT = "utorrent"
+    BITTORRENT = "bittorrent"
 
     @property
     def display_name(self) -> str:
@@ -37,6 +38,7 @@ class TorrentClient(StrEnum):
             "deluge": "Deluge",
             "transmission": "Transmission",
             "utorrent": "µTorrent Classic",
+            "bittorrent": "BitTorrent Classic",
         }[self.value]
 
 

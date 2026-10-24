@@ -17,6 +17,6 @@ def connect(
         return DelugeApi(host, password)
     if client is TorrentClient.TRANSMISSION:
         return TransmissionApi(host, username, password)
-    if client is TorrentClient.UTORRENT:
-        return UtorrentApi(host, username, password)
+    if client in {TorrentClient.UTORRENT, TorrentClient.BITTORRENT}:
+        return UtorrentApi(host, username, password, client_name=client.display_name)
     return QbitApi(host, username, password, api_key)

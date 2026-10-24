@@ -11,6 +11,11 @@ def main() -> int:
         from torrentlinker.web.server import main as serve
 
         return serve()
+    if len(sys.argv) > 1 and sys.argv[1] == "mcp":
+        del sys.argv[1]
+        from torrentlinker.agent.stdio import main as bridge
+
+        return bridge()
     from torrentlinker.app import main as desktop
 
     return desktop()

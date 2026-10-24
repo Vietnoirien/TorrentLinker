@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QFile, QItemSelection, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent
@@ -38,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker import i18n, net
+from torrentlinker.agent.desktop import agent_settings_change
 from torrentlinker.catalogue import (
     STARTUP_PAGES,
     CrawlProgress,
@@ -152,6 +154,11 @@ class MainWindow(QMainWindow):
         store = store.for_client(settings.active_client_id)
         self.settings = settings
         self.settings_path = settings_path
+        self.agent_runtime: Any = None
+        self.agent_settings_timer = QTimer(self)
+        self.agent_settings_timer.setInterval(1000)
+        self.agent_settings_timer.timeout.connect(self._sync_agent_settings)
+        self.agent_settings_timer.start()
         self.store = store
         from torrentlinker.client_profiles import Connections
 
@@ -501,6 +508,62 @@ class MainWindow(QMainWindow):
         self._startup_complete = False
         self.show_saved_plan(interrupted=bool((saved := store.saved_plan()) and saved.sending))
 
+    def open_agent_access(self) -> None:
+        try:
+            from PySide6.QtWidgets import QApplication
+
+            from torrentlinker.agent.desktop import DesktopServer
+            from torrentlinker.gui.agent_access import AgentDialog
+
+            if self.agent_runtime is None:
+                self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
+                app = QApplication.instance()
+                if app is not None:
+                    app.aboutToQuit.connect(self.agent_runtime.close)
+            self.agent_runtime.start()
+            AgentDialog(self.agent_runtime.service, self.agent_runtime.url, self).exec()
+        except Exception as error:
+            if self.agent_runtime is not None and self.agent_runtime.app is None:
+                self.agent_runtime.close()
+                self.agent_runtime = None
+            QMessageBox.warning(
+                self,
+                self.tr("Agent access"),
+                self.tr(
+                    "Cannot start the local MCP server on port 8790. Check whether another "
+                    "TorrentLinker instance is running."
+                )
+                + "\n"
+                + type(error).__name__,
+            )
+
+    def start_saved_agent_access(self) -> None:
+        if not (self.settings_path.parent / "agents.sqlite").exists():
+            return
+        from torrentlinker.agent.access import Access
+
+        access = Access(self.settings_path.parent)
+        enabled = access.enabled
+        access.db.close()
+        if enabled:
+            try:
+                from PySide6.QtWidgets import QApplication
+
+                from torrentlinker.agent.desktop import DesktopServer
+
+                self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
+                self.agent_runtime.start()
+                app = QApplication.instance()
+                if app is not None:
+                    app.aboutToQuit.connect(self.agent_runtime.close)
+            except Exception:
+                if self.agent_runtime is not None:
+                    self.agent_runtime.close()
+                    self.agent_runtime = None
+                self.statusBar().showMessage(
+                    self.tr("Agent access could not start. Open Settings → Agent access to retry.")
+                )
+
     def _has_indexer_key(self) -> bool:
         return bool(self.settings.indexer.url.strip() and get_secret(INDEXER_API_KEY).strip())
 
@@ -688,7 +751,7 @@ class MainWindow(QMainWindow):
         elif s.client is TorrentClient.TRANSMISSION:
             t = s.transmission
             key = (s.client, t.host, t.username, get_secret(s.secret_name(TRANSMISSION_PASSWORD)))
-        elif s.client is TorrentClient.UTORRENT:
+        elif s.client in {TorrentClient.UTORRENT, TorrentClient.BITTORRENT}:
             u = s.utorrent
             key = (s.client, u.host, u.username, get_secret(s.secret_name(UTORRENT_PASSWORD)))
         else:
@@ -727,6 +790,10 @@ class MainWindow(QMainWindow):
         if self._profile is None or self._profile[0] != (*wanted, net.current()):
             self._profile = ((*wanted, net.current()), ProfileClient(*wanted))
         return self._profile[1]
+
+    def _sync_agent_settings(self) -> None:
+        if self.agent_runtime is not None:
+            self.agent_runtime.sync(self.settings)
 
     def refresh_profile(self) -> None:
         """Read the c411 profile; only at startup and when the user asks."""
@@ -1578,6 +1645,7 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.upload_tab)
         self.upload_tab.select(entry.item.path)
 
+    @agent_settings_change
     def add_library_folder(self) -> None:
         if not self.add_folder_action.isEnabled():
             return
@@ -1605,6 +1673,8 @@ class MainWindow(QMainWindow):
             )
             return
         self.settings.library_folders = folders
+        if self.agent_runtime:
+            self.agent_runtime.reset(self.settings)
         self._fill_folder_filter()
         self.library_search.clear()
         self.state_filter.setCurrentIndex(0)
@@ -1617,7 +1687,9 @@ class MainWindow(QMainWindow):
             return
         from PySide6.QtCore import QThreadPool
 
-        if QThreadPool.globalInstance().activeThreadCount():
+        if QThreadPool.globalInstance().activeThreadCount() or (
+            self.agent_runtime and self.agent_runtime.busy()
+        ):
             self.client_selector.blockSignals(True)
             self.client_selector.setCurrentIndex(
                 self.client_selector.findData(self.settings.active_client_id)
@@ -1629,10 +1701,17 @@ class MainWindow(QMainWindow):
             return
         self._replace_workspace(self.settings.for_client(identifier))
 
+    @agent_settings_change
     def _replace_workspace(self, settings: Settings) -> None:
+        if self.agent_runtime and self.agent_runtime.busy():
+            self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
+            return
         settings.save(self.settings_path)
         self.verify_timer.stop()
         replacement = MainWindow(settings, self.settings_path, self.store)
+        replacement.agent_runtime = self.agent_runtime
+        if self.agent_runtime:
+            self.agent_runtime.reset(settings)
         replacement.restoreGeometry(self.saveGeometry())
         replacement.tabs.setCurrentIndex(min(self.tabs.currentIndex(), 4))
         replacement.show()
@@ -1645,7 +1724,11 @@ class MainWindow(QMainWindow):
         self.deleteLater()
         QTimer.singleShot(0, replacement.startup)
 
+    @agent_settings_change
     def open_client_profiles(self) -> None:
+        if self.agent_runtime and self.agent_runtime.busy():
+            self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
+            return
         from PySide6.QtCore import QThreadPool
 
         if QThreadPool.globalInstance().activeThreadCount():
@@ -1658,9 +1741,14 @@ class MainWindow(QMainWindow):
         if ClientProfilesDialog(self.settings, self.store, self).exec():
             self._replace_workspace(self.settings)
 
+    @agent_settings_change
     def open_settings(self) -> None:
+        if self.agent_runtime and self.agent_runtime.busy():
+            self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
+            return
         folders = list(self.settings.library_folders)
-        if SettingsDialog(self.settings, self).exec():
+        accepted = SettingsDialog(self.settings, self).exec()
+        if accepted:
             self._lock_reading_room()
             self.torrents_tab.reset_connection()
             self.settings.capture_client()
@@ -1668,6 +1756,8 @@ class MainWindow(QMainWindow):
                 self.client_selector.currentIndex(), self.settings.profile().name
             )
             self.settings.save(self.settings_path)
+            if self.agent_runtime:
+                self.agent_runtime.reset(self.settings)
             log.info("settings written to %s", self.settings_path)
             self.apply_proxy()
             set_theme(self.settings.theme)

@@ -77,6 +77,7 @@ CLIENT_FIELDS = {
     TorrentClient.DELUGE: "deluge",
     TorrentClient.TRANSMISSION: "transmission",
     TorrentClient.UTORRENT: "utorrent",
+    TorrentClient.BITTORRENT: "utorrent",  # same WebUI protocol; secrets scoped per profile
 }
 CLIENT_SECRET_NAMES = {
     "qbit-password",

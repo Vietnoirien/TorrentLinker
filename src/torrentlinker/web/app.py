@@ -52,10 +52,15 @@ def create_app(
     connector: Connector = connect,
     secret_files: dict[str, Path] | None = None,
     secure_cookie: bool = False,
+    service_override: Setup | None = None,
+    operation_factory=Operations,
+    monitor_verifications: bool = True,
 ) -> FastAPI:
     directory.mkdir(parents=True, exist_ok=True)
     sessions = Sessions(password)
-    service = Setup(directory, roots, ServerSecrets(directory, secret_files), connector)
+    service = service_override or Setup(
+        directory, roots, ServerSecrets(directory, secret_files), connector
+    )
 
     def error_message(error: Exception) -> str:
         if isinstance(error, ValueError):
@@ -77,7 +82,7 @@ def create_app(
         )
 
     jobs = Jobs(directory, error_message)
-    operations = Operations(service)
+    operations = operation_factory(service)
     confirmations = Confirmations(service)
     client_operations: dict[str, Operations] = {}
     client_confirmations: dict[str, Confirmations] = {}
@@ -88,7 +93,7 @@ def create_app(
         if identifier == service.settings.active_client_id:
             return operations
         if identifier not in client_operations:
-            client_operations[identifier] = Operations(service.for_client(identifier))
+            client_operations[identifier] = operation_factory(service.for_client(identifier))
         target = client_operations[identifier]
         target.setup.settings = service.settings.for_client(identifier)
         return target
@@ -103,7 +108,7 @@ def create_app(
 
     def reset_clients() -> None:
         nonlocal operations, confirmations
-        operations = Operations(service)
+        operations = operation_factory(service)
         confirmations = Confirmations(service)
         client_operations.clear()
         client_confirmations.clear()
@@ -144,15 +149,32 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         monitor = threading.Thread(target=verify_loop, daemon=True, name="verification-monitor")
-        monitor.start()
+        if monitor_verifications:
+            monitor.start()
         try:
-            yield
+            async with mcp_server.session_manager.run():
+                yield
         finally:
             shutdown.set()
-            monitor.join(timeout=2)
+            if monitor_verifications:
+                monitor.join(timeout=2)
             jobs.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+    from torrentlinker.agent.access import Access
+    from torrentlinker.agent.routes import owner_routes
+
+    agent_access = Access(directory)
+    from torrentlinker.agent.server import make_server
+    from torrentlinker.agent.service import AgentService
+
+    agent_service = AgentService(agent_access, service, jobs, for_client)
+    mcp_server, mcp_app = make_server(agent_service)
+    app.mount("/mcp", mcp_app)
+    owner_routes(app, agent_access, service, agent_service)
+    app.state.agent_service = agent_service
+    app.state.reset_clients = reset_clients
 
     def idle() -> None:
         if jobs.active():

@@ -1,6 +1,6 @@
 # Plusieurs clients torrent
 
-Cliquez sur **Clients…**, à côté du sélecteur de client cible de l'application, pour ajouter une connexion, modifier ses paramètres ou choisir le client par défaut. Donnez un nom court à chaque connexion, par exemple NAS ou Seedbox. Vous pouvez utiliser plusieurs instances de qBittorrent ou mélanger qBittorrent, Deluge, Transmission et µTorrent.
+Cliquez sur **Clients…**, à côté du sélecteur de client cible de l'application, pour ajouter une connexion, modifier ses paramètres ou choisir le client par défaut. Donnez un nom court à chaque connexion, par exemple NAS ou Seedbox. Vous pouvez utiliser plusieurs instances de qBittorrent ou mélanger qBittorrent, Deluge, Transmission, µTorrent Classic et BitTorrent Classic.
 
 ![Clients torrent nommés](../images/clients.png)
 
