@@ -275,7 +275,6 @@ function aActivity(card, run, indexed, anchor) {
   activity.append(entries); card.append(activity);
   for (const [index, event] of indexed) {
     const detail = element("details", undefined, "assistant-tool"), result = event.result || {};
-    if (event.tool === "present_selection" && result.presentation_id) card.append(aSelectionCards(result.presentation_id));
     const eventKey = `${run.id}:${index}`;
     const error = aToolError(event);
     if (error) detail.classList.add("has-tool-error");
@@ -338,6 +337,12 @@ function aRunCard(run) {
     block.append(aMarkdown(message)); card.append(block);
     if (groups.has(index)) aActivity(card, run, groups.get(index), index);
   });
+  // Keep activity chronological; place card presentations after the response summary.
+  for (const event of run.events) {
+    if (event.tool === "present_selection" && event.result?.presentation_id) {
+      card.append(aSelectionCards(event.result.presentation_id));
+    }
+  }
   if (!run.events.length) aActivity(card, run, [], run.messages.length);
   if (run.error) card.append(element("p", run.error, "error"));
   if (["queued", "running", "awaiting_approval", "awaiting_user", "waiting_settings"].includes(run.status)) card.append(element("p", at("Working…", "En cours…"), "assistant-working"), button(at("Stop", "Arrêter"), async () => { await api(`assistant/jobs/${run.id}/cancel`, {}); await aRefreshChat(); }));

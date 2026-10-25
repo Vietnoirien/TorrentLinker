@@ -2,12 +2,12 @@ import copy
 import os
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton
 
 from tests import test_catalogue_selection
 from tests.test_tool_activity import narrative_run
-from torrentlinker.gui.chat_transcript import ChatTranscript
+from torrentlinker.gui.chat_transcript import ChatTranscript, MessageText
 
 catalogue_app = test_catalogue_selection.catalogue_app
 
@@ -69,7 +69,13 @@ def presentation_run():
         {"role": "user", "content": "Show me the selection before doing anything."},
         {
             "role": "assistant",
+            "content": "I will present the saved selection.",
+            "phase": "commentary",
+        },
+        {
+            "role": "assistant",
             "content": "Here are your saved selections. Open a card for details.",
+            "phase": "final",
         },
     ]
     run["events"] = [
@@ -114,6 +120,11 @@ def test_cards_open_details_without_model_turn_and_paginate(qtbot):
     transcript.show()
     qtbot.waitUntil(lambda: len(transcript.findChildren(QPushButton, "selectionCard")) == 2)
     cards = transcript.findChildren(QPushButton, "selectionCard")
+    summary = transcript.findChildren(MessageText)[-1]
+    assert (
+        summary.mapTo(transcript.widget(), QPoint()).y()
+        < cards[0].mapTo(transcript.widget(), QPoint()).y()
+    )
     assert cards[0].property("kind") == "movie"
     assert cards[1].property("kind") == "ebook"
     score = cards[0].findChild(QLabel, "selectionScores")
@@ -327,6 +338,13 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path)
                 presentation_run(),
             )
             expect(page.locator(".selection-presentation")).to_have_count(1)
+            assert page.evaluate("""() => {
+                const run = document.querySelector('.assistant-run');
+                const summary = [...run.querySelectorAll('.assistant-message.assistant')].at(-1);
+                const cards = run.querySelector('.selection-presentation');
+                return !!(summary.compareDocumentPosition(cards)
+                    & Node.DOCUMENT_POSITION_FOLLOWING);
+            }""")
             expect(page.locator(".selection-card")).to_have_count(2)
             expect(page.locator(".selection-card").first.locator(".selection-scores")).to_have_text(
                 "Note 1.35 · ≈ 0.128 Zen/day"

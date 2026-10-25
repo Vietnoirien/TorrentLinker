@@ -249,23 +249,6 @@ class ChatTranscript(QScrollArea):
         for i, event in indexed_events:
             result = event.get("result", {})
             if (
-                event.get("tool") == "present_selection"
-                and result.get("presentation_id")
-                and self.presentation_page
-            ):
-                from torrentlinker.gui.selection_cards import SelectionCards
-
-                layout.addWidget(
-                    SelectionCards(
-                        result["presentation_id"],
-                        self.presentation_page,
-                        self.presentation_item,
-                        self.images,
-                        self.presentation_pages,
-                        self.presentation_offsets,
-                    )
-                )
-            if (
                 event.get("status") == "waiting"
                 and result.get("requires_owner_approval")
                 and "decision" not in event
@@ -339,6 +322,28 @@ class ChatTranscript(QScrollArea):
                 box.addWidget(submit)
                 layout.addWidget(panel)
 
+    def add_presentations(self, layout, run):
+        # Cards belong below the response summary, while activity keeps its timeline.
+        for event in run["events"]:
+            result = event.get("result", {})
+            if (
+                event.get("tool") == "present_selection"
+                and result.get("presentation_id")
+                and self.presentation_page
+            ):
+                from torrentlinker.gui.selection_cards import SelectionCards
+
+                layout.addWidget(
+                    SelectionCards(
+                        result["presentation_id"],
+                        self.presentation_page,
+                        self.presentation_item,
+                        self.images,
+                        self.presentation_pages,
+                        self.presentation_offsets,
+                    )
+                )
+
     def set_runs(self, rows, status_text):
         self.plain_text = "\n".join(
             [m["content"] for r in reversed(rows) for m in r["messages"]]
@@ -365,6 +370,7 @@ class ChatTranscript(QScrollArea):
                 self.add_message(layout, message, dark)
                 if index in groups:
                     self.add_activity(layout, run, groups[index], index, status_text, dark)
+            self.add_presentations(layout, run)
             if not run["events"]:
                 self.add_activity(layout, run, [], len(messages), status_text, dark)
             if run["error"]:
