@@ -75,3 +75,10 @@ actor/client isolation, unknown sizes, explicit batches beyond 1,000, atomic sto
 bounds, volatile/stable metadata, ambiguous queue identities and live-state groups.
 Opt-in local-model tests exercise natural-language multi-turn workflows across eight
 categories with all tracker access blocked and no actual downloads.
+
+Working context carries fresh authoritative list IDs/revisions/counts/bytes, separate
+from prior model prose. Large current/prior receipts retain structured IDs and
+summary fields plus archive pointers; bulk rows are omitted instead of cutting JSON
+mid-record. Newest complete prior receipts take priority within the context budget.
+List-write revision summaries also survive compaction. A provider-request regression
+covers a 1,000-item list with oversized row titles and incorrect prior model prose.

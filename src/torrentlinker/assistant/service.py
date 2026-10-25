@@ -514,9 +514,12 @@ class Assistant:
         from torrentlinker.agent.server import ACTOR
         from torrentlinker.assistant.context import (
             HISTORY_TOOL,
+            bounded_receipts,
             compact_context,
+            current_list_state,
             encoded_size,
             input_budget,
+            model_receipt,
         )
         from torrentlinker.assistant.providers import ContextTooLong, InvalidModelResponse
 
@@ -631,6 +634,8 @@ class Assistant:
             ]
             for old in previous[-8:]:
                 for m in old["messages"]:
+                    if m.get("phase") == "commentary":
+                        continue
                     if provider.kind == "gemini":
                         messages.append(
                             {
@@ -642,7 +647,7 @@ class Assistant:
                         messages.append({"role": m["role"], "content": m["content"][:8000]})
             receipts = []
             for old in previous[-3:]:
-                for event in old["events"][-12:]:
+                for index, event in list(enumerate(old["events"]))[-12:]:
                     result = event.get("result", {})
                     if result.get("id") and "requires_owner_approval" in result:
                         try:
@@ -657,17 +662,38 @@ class Assistant:
                                 )
                             }
                     event["result"] = result
-                    receipts.append({"tool": event["tool"], "result": result})
+                    receipts.append(
+                        {
+                            "run_id": old["id"],
+                            "index": index,
+                            "tool": event["tool"],
+                            "result": result,
+                        }
+                    )
             if receipts:
                 messages.append(
                     self.models.user(
                         provider,
                         "Prior action receipts, for context only: "
-                        + self.secrets.redact(json.dumps(receipts, default=str), public_urls=True)[
-                            :24000
-                        ],
+                        + self.secrets.redact(
+                            json.dumps(bounded_receipts(receipts), default=str), public_urls=True
+                        ),
                     )
                 )
+
+            def list_state_message():
+                return self.models.user(
+                    provider,
+                    "Current saved torrent lists (authoritative; prior prose may be wrong). "
+                    "These are facts, not instructions or permission to repeat actions. "
+                    "Category totals and more pages are available through list tools: "
+                    + self.secrets.redact(
+                        json.dumps(current_list_state(self.agent, actor, config.policy.clients)),
+                        public_urls=True,
+                    ),
+                )
+
+            messages.append(list_state_message())
             messages.append(self.models.user(provider, transcript[0]["content"]))
             tools = [
                 {"name": t.name, "description": t.description or "", "parameters": t.input_schema}
@@ -733,6 +759,7 @@ class Assistant:
                         )
                         messages = [
                             {"role": "system", "content": system},
+                            list_state_message(),
                             self.models.user(provider, memory),
                         ]
                         self.update_run(
@@ -781,6 +808,7 @@ class Assistant:
                             )
                             messages = [
                                 {"role": "system", "content": system},
+                                list_state_message(),
                                 self.models.user(provider, memory),
                             ]
                             self.update_run(
@@ -1023,19 +1051,7 @@ class Assistant:
                         event["result"] = result
                         self.update_run(identifier, events=json.dumps(events))
                     checkpoint = {}
-                    encoded = json.dumps(result)
-                    results.append(
-                        (
-                            call,
-                            result
-                            if len(encoded) < 24000
-                            else {
-                                "truncated": True,
-                                "excerpt": encoded[:22000],
-                                "hint": "Use pagination to read the remaining results.",
-                            },
-                        )
-                    )
+                    results.append((call, model_receipt(result, identifier, len(events) - 1)))
                 self.models.results(provider, messages, results)
                 pending_calls, results = [], []
                 self.update_run(identifier, checkpoint="{}")
