@@ -43,6 +43,7 @@ class Assistant:
         self.lock = threading.RLock()
         self.db = sqlite3.connect(directory / "assistant.sqlite", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self.agent.presentations.research_for_actor = self.presentation_research
         with self.db:
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS schedules (id TEXT PRIMARY KEY, body TEXT,
@@ -335,6 +336,24 @@ class Assistant:
             )
         return {"id": identifier, **body.model_dump()}
 
+    def presentation_research(self, actor):
+        with self.lock:
+            row = self.db.execute(
+                "SELECT body FROM conversations WHERE actor=?", (actor,)
+            ).fetchone()
+        if row:
+            from torrentlinker.assistant.models import Conversation
+
+            if Conversation.model_validate_json(row[0]).web:
+                return self.research
+        return None
+
+    def presentation_page(self, identifier, offset=0, limit=12):
+        return self.agent.presentations.page(None, identifier, offset, limit)
+
+    def presentation_item(self, identifier, item_id):
+        return self.agent.presentations.item(None, identifier, item_id)
+
     def conversation(self, identifier):
         from torrentlinker.assistant.models import Conversation
 
@@ -569,6 +588,9 @@ class Assistant:
                 "sentence, without internal deliberation or repeated consideration of options. "
                 "For torrent lists spanning turns use create_torrent_list/edit_torrent_list with "
                 "saved selection IDs. Keep exact identities server-side; never reconstruct hashes. "
+                "Use present_selection to show cards for an exact list revision or selection. "
+                "it automatically fetches bounded release metadata and safe artwork. Do not invent "
+                "posters or canonical identities. get_presentation_item reads the details. "
                 "Rediscover list IDs/current revisions with list_torrent_lists after compaction, "
                 "then get_torrent_list for bounded pages. Use replace_subset to refine films "
                 "without discarding appended music. Use select_torrent_list for an immutable "

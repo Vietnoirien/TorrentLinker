@@ -6623,4 +6623,77 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <translation>Dépannage</translation>
     </message>
 </context>
+<context>
+    <name>Artwork</name>
+    <message>
+        <source>No artwork</source>
+        <translation>Aucune illustration</translation>
+    </message>
+</context>
+<context>
+    <name>SelectionDetail</name>
+    <message>
+        <source>Selection details</source>
+        <translation>Détails de la sélection</translation>
+    </message>
+    <message>
+        <source>Loading details…</source>
+        <translation>Chargement des détails…</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Unknown size</source>
+        <translation>Taille inconnue</translation>
+    </message>
+    <message>
+        <source>%1 seeders</source>
+        <translation>%1 sources</translation>
+    </message>
+    <message>
+        <source>No description available.</source>
+        <translation>Aucune description disponible.</translation>
+    </message>
+    <message>
+        <source>Open source</source>
+        <translation>Ouvrir la source</translation>
+    </message>
+</context>
+<context>
+    <name>SelectionCards</name>
+    <message>
+        <source>Note %1 · ≈ %2 Zen/day</source>
+        <translation>Note %1 · ≈ %2 Zen/jour</translation>
+    </message>
+    <message>
+        <source>Loading selection…</source>
+        <translation>Chargement de la sélection…</translation>
+    </message>
+    <message>
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
+    <message>
+        <source>%1–%2 of %3 · saved revision %4</source>
+        <translation>%1–%2 sur %3 · révision enregistrée %4</translation>
+    </message>
+    <message>
+        <source>Unknown size</source>
+        <translation>Taille inconnue</translation>
+    </message>
+    <message>
+        <source>%1 seeders</source>
+        <translation>%1 sources</translation>
+    </message>
+</context>
 </TS>

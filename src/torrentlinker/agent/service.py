@@ -88,6 +88,9 @@ class AgentService:
         from torrentlinker.agent.torrent_lists import TorrentLists
 
         self.torrent_lists = TorrentLists(self)
+        from torrentlinker.agent.selection_presentations import Presentations
+
+        self.presentations = Presentations(self)
 
     def target(self, actor: str, client_id: str) -> Operations:
         grant = self.access.grant(actor)

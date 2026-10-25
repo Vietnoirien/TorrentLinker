@@ -597,3 +597,35 @@ dialog .description img {
 .assistant-json .json-string { color: #a7d58d; }
 .assistant-json .json-literal { color: #d5a6ff; }
 .assistant-json .json-number { color: #ffbd78; }
+
+.selection-presentation { margin: 1rem 0 1.8rem; }
+.selection-presentation h3 { margin: .5rem 0; }
+.selection-presentation > .muted { font-size: .82rem; }
+.selection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 14px; }
+.selection-card { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 12px; font-weight: 400; min-width: 0; max-width: 320px; }
+.selection-card strong, .selection-release { overflow-wrap: anywhere; }
+.selection-card strong { font-size: .98rem; }
+.selection-card .muted, .selection-size, .selection-note { font-size: .8rem; }
+.selection-note { line-height: 1.5; }
+.selection-artwork { position: relative; width: 100%; height: 210px; display: flex; align-items: center; justify-content: center; border-radius: 7px; background: var(--tint); color: var(--muted); overflow: hidden; }
+.selection-artwork[data-kind="music"], .selection-artwork[data-kind="software"], .selection-artwork[data-kind="model3d"] { height: 175px; }
+.selection-artwork img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.selection-artwork span { position: absolute; padding: 12px; }
+.selection-artwork img { position: relative; }
+.selection-pagination { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
+.selection-detail { width: min(780px, 94vw); }
+.selection-detail-header { display: grid; grid-template-columns: 190px 1fr; gap: 22px; margin-bottom: 1.5rem; }
+.selection-artwork.large { height: 280px; }
+.selection-facts { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; font-size: .85rem; }
+.selection-facts dt { color: var(--muted); }
+.selection-facts dd { margin: 0; overflow-wrap: anywhere; }
+.selection-description { overflow-wrap: anywhere; margin-bottom: 1.5rem; }
+@media (max-width: 520px) {
+  .selection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .selection-card { padding: 8px; }
+  .selection-artwork { height: 170px; }
+  .selection-detail-header { grid-template-columns: 1fr; }
+  .selection-detail-header .selection-artwork { max-width: 240px; margin: auto; }
+}
+
+.selection-scores { font-weight: 600; font-size: .82rem; color: var(--accent); }

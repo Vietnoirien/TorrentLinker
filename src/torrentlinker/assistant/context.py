@@ -47,7 +47,16 @@ def compact_context(runs, budget):
             result = event.get("result", {})
             if not isinstance(result, dict):
                 continue
-            if any(k in result for k in ("job_id", "requires_owner_approval", "selection_id")) or (
+            if any(
+                k in result
+                for k in (
+                    "job_id",
+                    "requires_owner_approval",
+                    "selection_id",
+                    "presentation_id",
+                    "enrichment_id",
+                )
+            ) or (
                 event["tool"] in {"create_torrent_list", "edit_torrent_list"}
                 and "revision" in result
             ):
@@ -79,6 +88,8 @@ def compact_context(runs, budget):
                                 "status",
                                 "requires_owner_approval",
                                 "selection_id",
+                                "presentation_id",
+                                "enrichment_id",
                                 "revision",
                                 "count",
                                 "total_size_bytes",
@@ -234,6 +245,8 @@ def model_receipt(result, run_id, index, budget=24000):
         "id",
         "job_id",
         "selection_id",
+        "presentation_id",
+        "enrichment_id",
         "list_id",
         "revision",
         "list_revision",

@@ -135,8 +135,12 @@ class ChatTranscript(QScrollArea):
     decisionSubmitted = Signal(str, int, bool)
     answerSubmitted = Signal(str, int, str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, presentation_page=None, presentation_item=None):
         super().__init__(parent)
+        self.presentation_page = presentation_page
+        self.presentation_item = presentation_item
+        self.presentation_pages = {}
+        self.presentation_offsets = {}
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -244,6 +248,23 @@ class ChatTranscript(QScrollArea):
         layout.addWidget(activity)
         for i, event in indexed_events:
             result = event.get("result", {})
+            if (
+                event.get("tool") == "present_selection"
+                and result.get("presentation_id")
+                and self.presentation_page
+            ):
+                from torrentlinker.gui.selection_cards import SelectionCards
+
+                layout.addWidget(
+                    SelectionCards(
+                        result["presentation_id"],
+                        self.presentation_page,
+                        self.presentation_item,
+                        self.images,
+                        self.presentation_pages,
+                        self.presentation_offsets,
+                    )
+                )
             if (
                 event.get("status") == "waiting"
                 and result.get("requires_owner_approval")

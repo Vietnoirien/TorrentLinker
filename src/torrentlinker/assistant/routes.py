@@ -1,6 +1,6 @@
 """Owner APIs share the application's cookie and CSRF protection."""
 
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Query, Response
 
 from torrentlinker.assistant.images import fetch_image
 from torrentlinker.assistant.models import (
@@ -16,6 +16,16 @@ from torrentlinker.assistant.research import SearchSettings
 
 
 def routes(app, assistant):
+    @app.get("/api/assistant/presentations/{identifier}")
+    def presentation_page(
+        identifier: str, offset: int = Query(0, ge=0), limit: int = Query(12, ge=1, le=20)
+    ):
+        return assistant.presentation_page(identifier, offset, limit)
+
+    @app.get("/api/assistant/presentations/{identifier}/items/{item_id}")
+    def presentation_item(identifier: str, item_id: str):
+        return assistant.presentation_item(identifier, item_id)
+
     @app.get("/api/assistant/image")
     def image(url: str):
         try:

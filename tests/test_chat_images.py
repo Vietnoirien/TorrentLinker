@@ -315,8 +315,7 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(
             page.evaluate("run => document.body.append(aRunCard(run))", failed)
             failed_card = page.locator(".assistant-run").last
             summary = failed_card.locator(".assistant-activity > summary")
-            expect(failed_card.locator(":scope > .assistant-tool-error")).to_have_text(error)
-            expect(failed_card.locator(":scope > .assistant-tool-error")).to_be_visible()
+            expect(failed_card.locator(".assistant-tool-error")).to_have_count(0)
             assert failed_card.locator(".assistant-tool-error b").count() == 0
             expect(summary).to_have_css("color", "rgb(182, 56, 72)")
             assert failed_card.locator("pre").count() == 0
@@ -325,6 +324,9 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(
                 "color", "rgb(182, 56, 72)"
             )
             failed_card.locator(".assistant-tool > summary").click()
+            expect(failed_card.locator(".assistant-tool-error")).to_have_text(error)
+            expect(failed_card.locator(".assistant-tool-error")).to_be_visible()
+            assert failed_card.locator(".assistant-tool-error b").count() == 0
             expect(failed_card.locator(".assistant-json")).to_be_visible()
             failed_card.screenshot(path=str(tmp_path / "chat-tool-error.png"))
             page.evaluate(

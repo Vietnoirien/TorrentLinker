@@ -254,6 +254,8 @@ class Operations:
                 criteria,
             ),
             "catalogue": catalogue_status(self.setup),
+            "indexer_url": getattr(getattr(self.setup, "_indexer", None), "url", None)
+            or self.setup.settings.indexer.url,
         }
 
     def enqueue_categories(self, request: JobRequest) -> dict[str, int | None]:
@@ -459,6 +461,8 @@ class Operations:
                         "cancelled": True,
                         "rows": [],
                         "catalogue": catalogue_status(self.setup),
+                        "indexer_url": getattr(getattr(self.setup, "_indexer", None), "url", None)
+                        or self.setup.settings.indexer.url,
                     }
                 settings = replace(
                     self.setup.settings,
@@ -486,6 +490,8 @@ class Operations:
                 return {
                     "provisional": True,
                     "catalogue": catalogue_status(self.setup),
+                    "indexer_url": getattr(getattr(self.setup, "_indexer", None), "url", None)
+                    or self.setup.settings.indexer.url,
                     "zen": proposed.zen_added,
                     "size": proposed.download_size,
                     "rows": [
@@ -664,6 +670,7 @@ class Operations:
                 **snapshot(result, "catalogue", metadata["search"]),
                 **metadata,
                 "selection_kind": "live-search",
+                "indexer_url": indexer.url,
                 "coverage": "Exact returned page after exclusions; "
                 "not the whole tracker or all matching pages.",
             }

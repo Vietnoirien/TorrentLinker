@@ -376,7 +376,10 @@ class AssistantTab(QWidget):
         splitter.addWidget(left)
         right = QWidget()
         rl = QVBoxLayout(right)
-        self.transcript = ChatTranscript()
+        self.transcript = ChatTranscript(
+            presentation_page=lambda *a, **kw: self.service.presentation_page(*a, **kw),
+            presentation_item=lambda *a, **kw: self.service.presentation_item(*a, **kw),
+        )
         self.transcript.decisionSubmitted.connect(self.submit_decision)
         self.transcript.answerSubmitted.connect(self.submit_answer)
         self.transcript.anchorClicked.connect(self.open_receipt)
@@ -442,7 +445,10 @@ class AssistantTab(QWidget):
             task_buttons.addWidget(b)
         tl.addLayout(task_buttons)
         self.pages.addTab(tasks, self.tr("Automations"))
-        self.history = ChatTranscript()
+        self.history = ChatTranscript(
+            presentation_page=lambda *a, **kw: self.service.presentation_page(*a, **kw),
+            presentation_item=lambda *a, **kw: self.service.presentation_item(*a, **kw),
+        )
         self.history.anchorClicked.connect(self.open_receipt)
         self.history.decisionSubmitted.connect(self.submit_decision)
         self.history.answerSubmitted.connect(self.submit_answer)

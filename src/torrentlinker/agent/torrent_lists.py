@@ -114,7 +114,7 @@ class TorrentLists:
             "maximum_rows": MAX_ROWS,
         }
 
-    def _write(self, actor, request_id, intent, work):
+    def write_request(self, actor, request_id, intent, work):
         self.access.grant(actor)
         if not request_id or len(request_id) > 100:
             raise ValueError("Supply a stable request_id of 1 to 100 characters.")
@@ -163,6 +163,9 @@ class TorrentLists:
                     "provenance": {
                         "selection_id": selection_id,
                         "source": saved["source"],
+                        "indexer_url": item.get("indexer_url")
+                        or item.get("provenance", {}).get("indexer_url")
+                        or saved.get("indexer_url", ""),
                         "snapshot_at": saved["snapshot_at"],
                         "selection_fingerprint": saved["selection_fingerprint"],
                         **(
@@ -209,7 +212,7 @@ class TorrentLists:
             )
             return self._summary(record, rows)
 
-        return self._write(
+        return self.write_request(
             actor,
             request_id,
             {"tool": "create", "client": client_id, "name": name, "selection": selection_id},
@@ -300,7 +303,7 @@ class TorrentLists:
             )
             return self._summary(record, result, revision)
 
-        return self._write(
+        return self.write_request(
             actor,
             request_id,
             {
@@ -313,6 +316,12 @@ class TorrentLists:
             },
             work,
         )
+
+    def snapshot(self, actor, list_id, revision):
+        """Return an owned immutable revision for server-side planning consumers."""
+        with self.access.lock:
+            record = self._record(actor, list_id)
+            return record["client"], record["name"], self._rows(record, revision)
 
     def get(self, actor, list_id, revision, offset, limit):
         with self.access.lock:
@@ -439,7 +448,7 @@ class TorrentLists:
                 "expires_at": saved["snapshot_at"] + 900,
             }
 
-        return self._write(
+        return self.write_request(
             actor,
             request_id,
             {

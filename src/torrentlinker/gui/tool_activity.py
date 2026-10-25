@@ -86,14 +86,6 @@ class ToolActivity(QWidget):
         self.toggle.setText(f"{label[:96]}{count} · {status_text(group_status)}")
         self.toggle.setToolTip(label)
         layout.addWidget(self.toggle)
-        if failures:
-            error_label = QLabel(failures[-1][1])
-            error_label.setObjectName("toolActivityError")
-            error_label.setTextFormat(Qt.TextFormat.PlainText)
-            error_label.setWordWrap(True)
-            error_label.setStyleSheet(error_style)
-            error_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            layout.addWidget(error_label)
         self.scroll = QScrollArea()
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setWidgetResizable(True)
@@ -123,16 +115,17 @@ class ToolActivity(QWidget):
             toggle.setText(f"{label[:110]} · {status_text(state)}")
             toggle.setToolTip(label)
             content.addWidget(toggle)
+            payload = QWidget()
+            body = QVBoxLayout(payload)
+            body.setContentsMargins(0, 0, 0, 6)
             if error:
                 error_label = QLabel(error)
+                error_label.setObjectName("toolActivityError")
                 error_label.setTextFormat(Qt.TextFormat.PlainText)
                 error_label.setWordWrap(True)
                 error_label.setStyleSheet(error_style)
                 error_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                content.addWidget(error_label)
-            payload = QWidget()
-            body = QVBoxLayout(payload)
-            body.setContentsMargins(0, 0, 0, 6)
+                body.addWidget(error_label)
             content.addWidget(payload)
             event_key = (run["id"], index)
 
@@ -145,16 +138,17 @@ class ToolActivity(QWidget):
                 identity=event_key,
                 position=index,
             ):
-                if checked and not box.count():
+                if checked and not panel.property("loaded"):
                     box.addWidget(
                         JsonCode(
                             {
                                 k: item[k]
-                                for k in ("tool", "arguments", "result", "review")
+                                for k in ("tool", "arguments", "result", "review", "error")
                                 if k in item
                             }
                         )
                     )
+                    panel.setProperty("loaded", True)
                     open_receipt = QPushButton(self.tr("Open receipt"))
                     open_receipt.setFlat(True)
                     open_receipt.clicked.connect(lambda checked=False, i=position: receipt(i))

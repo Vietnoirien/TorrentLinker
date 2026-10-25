@@ -188,3 +188,22 @@ un client indisponible fait échouer cette demande. Les résultats de secours de
 soins palliatifs sont signalés séparément. Rechercher ne met rien en file et ne
 lance aucun téléchargement. Une page exacte peut être conservée dans une liste
 durable ou proposée pour mise en file, avec les permissions et validations habituelles.
+
+### Fiches de sélection
+
+Demandez à l’Assistant d’afficher une liste de torrents sous forme de fiches. Il utilise
+`present_selection` avec la révision exacte de la liste (ou une sélection récente).
+Modifier ensuite la liste ne change pas les torrents présentés. Chaque fiche affiche le
+titre, la catégorie, la taille, les seeders, la Note et une estimation de Zen/jour. Les
+hypothèses du profil et du temps de seed sont indiquées ; une valeur inconnue reste
+indisponible. Un clic ouvre description, image, informations et sources sans nouveau
+tour du modèle. Les fiches suivantes se chargent par pages explicites.
+
+Les affiches et couvertures viennent de champs explicites des métadonnées. Une image
+absente reste un emplacement vide ; une bannière de description n’est jamais choisie
+comme couverture. La recherche externe facultative de films/séries exige l’autorisation
+Web et une identité de contenu native exacte. Le titre de release et le titre du contenu
+restent distincts. Les fiches et leurs observations persistent après redémarrage.
+
+Un appel d’outil en échec affiche une courte ligne rouge. Dépliez-la pour lire l’erreur
+complète et la commande ; l’Assistant reçoit la même erreur pour corriger son appel.

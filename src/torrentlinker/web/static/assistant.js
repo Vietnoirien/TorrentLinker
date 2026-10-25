@@ -273,9 +273,9 @@ function aActivity(card, run, indexed, anchor) {
   entries.append(element("p", usage, "assistant-usage"));
   if (run.compactions) entries.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "assistant-usage"));
   activity.append(entries); card.append(activity);
-  if (failures.length) card.append(element("p", aToolError(failures.at(-1)[1]), "assistant-tool-error"));
   for (const [index, event] of indexed) {
     const detail = element("details", undefined, "assistant-tool"), result = event.result || {};
+    if (event.tool === "present_selection" && result.presentation_id) card.append(aSelectionCards(result.presentation_id));
     const eventKey = `${run.id}:${index}`;
     const error = aToolError(event);
     if (error) detail.classList.add("has-tool-error");
@@ -283,7 +283,8 @@ function aActivity(card, run, indexed, anchor) {
     const content = element("div"); detail.append(content);
     const fill = () => {
       if (detail.open && !content.childElementCount) {
-        content.append(aJson(Object.fromEntries(["tool", "arguments", "result", "review"].filter(k => k in event).map(k => [k, event[k]]))));
+        if (error) content.append(element("p", error, "assistant-tool-error"));
+        content.append(aJson(Object.fromEntries(["tool", "arguments", "result", "review", "error"].filter(k => k in event).map(k => [k, event[k]]))));
         if (result.job_id) content.append(button(at("Job progress", "Avancement de la tâche"), async () => {
           const job = await api(`jobs/${result.job_id}`); content.querySelector("pre").replaceWith(aJson(job));
         }));
@@ -295,7 +296,6 @@ function aActivity(card, run, indexed, anchor) {
       fill();
     });
     entries.append(detail);
-    if (error) entries.append(element("p", error, "assistant-tool-error"));
     if (event.status === "waiting" && result.requires_owner_approval && result.id && !("decision" in event)) {
       const panel = element("section", undefined, "assistant-decision card");
       panel.append(element("h3", at("Action requires your approval", "Action à approuver")));

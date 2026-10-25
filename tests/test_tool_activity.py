@@ -58,7 +58,7 @@ def test_json_encoded_operation_uses_same_summary_as_validated_object():
 
 
 @pytest.mark.parametrize("nested", [False, True])
-def test_tool_error_is_red_and_visible_without_expanding_command(qtbot, nested):
+def test_tool_error_stays_collapsed_until_details_are_opened(qtbot, nested):
     run = narrative_run()
     error = "Choose an allowed client. <b>Keep this literal.</b>"
     run["events"][0]["result"] = (
@@ -74,13 +74,18 @@ def test_tool_error_is_red_and_visible_without_expanding_command(qtbot, nested):
     assert "failed" in group.text()
     assert "#" in group.styleSheet()
     error_label = transcript.findChild(QLabel, "toolActivityError")
-    assert error_label.isVisible() and error_label.text() == error
+    assert not error_label.isVisible() and error_label.text() == error
     assert error_label.textFormat() == Qt.TextFormat.PlainText
     group.click()
     entry = transcript.findChild(QToolButton, "toolEventSummary")
     assert "failed" in entry.text()
     assert entry.styleSheet() == group.styleSheet()
-    assert not transcript.findChildren(JsonCode)
+    assert not error_label.isVisible()
+    entry.click()
+    assert error_label.isVisible()
+    assert transcript.findChildren(JsonCode)
+    group.click()
+    assert not error_label.isVisible()
 
 
 def narrative_run():

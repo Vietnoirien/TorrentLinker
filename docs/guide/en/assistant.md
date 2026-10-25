@@ -170,3 +170,20 @@ returned page, including paused torrents; an unavailable client makes that reque
 fail. Revival fallback is reported separately. Search changes no queue and starts
 no downloads. An exact returned page can be saved in a durable list or proposed
 for queueing under the usual permissions and owner review.
+
+### Selection cards
+
+Ask the Assistant to show a saved torrent list as cards. It uses `present_selection`
+with the exact list revision (or a fresh selection); release membership stays fixed even
+if the list changes later. Cards show title, category, size, seeders, Torrent Note and an
+estimated Zen/day. The estimate states its profile and seed-time assumptions; unknown
+values remain unavailable. Click a card for description, artwork, release facts and source
+links without spending another model turn. More cards load in explicit pages.
+
+Posters/covers come from explicit release metadata. Missing artwork uses a placeholder;
+description banners are never guessed to be covers. Optional external film/TV metadata
+requires Web research permission and an exact native content identity. Release title and
+canonical content title remain separate. Cards and their observations survive restarts.
+
+A failed tool call shows a concise red activity line. Expand it to read its complete
+error and command; the Assistant receives the same error to correct its next call.
