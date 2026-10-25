@@ -115,7 +115,7 @@ Messages appear in separate cards. Expand **Activity** below an exchange to insp
 
 For questions, select a suggested answer or type your own, then choose **Submit answer**. Selecting an option does not send it. An answer never grants action permission. Markdown tables render in chat; embedded HTML is disabled; observed image URLs use the protected image viewer described above.
 
-Discussions and tasks share a limit of 200 calls per model connection per UTC day. Connection tests are separate from this counter. One Assistant run executes at a time; up to ten can be queued or active. Downloads remain TorrentLinker jobs and continue in your torrent client.
+TorrentLinker imposes no daily model-call limit. Usage across discussions and tasks is informational; only configured per-run limits apply. Provider-side quotas still apply. One Assistant run executes at a time; up to ten can be queued or active. Downloads remain TorrentLinker jobs and continue in your torrent client.
 
 External assistants can still use [MCP access](agents.md). The built-in Assistant needs neither external MCP access enabled nor a copied token.
 

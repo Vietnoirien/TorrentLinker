@@ -355,7 +355,7 @@ async function aReview(id, completed = aRefreshChat) {
   form.append(button(at("Approve this action", "Approuver cette action"), async () => { await api(`agents/proposals/${id}/approve`, {}); dialog.close(); await completed(); }, "primary"), button(at("Reject", "Refuser"), async () => { await api(`agents/proposals/${id}/reject`, {}); dialog.close(); await completed(); }), button(at("Close", "Fermer"), () => dialog.close()));
 }
 async function aConnections(root) {
-  root.append(element("p", at("Credentials stay in TorrentLinker. Hosted providers receive your messages and tool results. Local connections never fall back to a hosted provider. Daily limit: 200 calls per connection, UTC.", "Les clés restent dans TorrentLinker. Les fournisseurs distants reçoivent vos messages et les résultats des outils. Aucune bascule automatique du local vers une API distante. Limite : 200 appels par connexion et par jour UTC."), "muted"));
+  root.append(element("p", at("Credentials stay in TorrentLinker. Hosted providers receive your messages and tool results. Local connections never fall back to a hosted provider.", "Les clés restent dans TorrentLinker. Les fournisseurs distants reçoivent vos messages et les résultats des outils. Aucune bascule automatique du local vers une API distante."), "muted"));
   root.append(button(at("Add connection", "Ajouter une connexion"), () => aProvider(), "primary"));
   root.append(button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aTaskEditor(false, await api("setup/assistant/chat"), true)));
   for (const p of assistantSnapshot.providers) {

@@ -116,7 +116,7 @@ TorrentLinker compacte le contexte de travail lorsqu'il se remplit, en conservan
 
 Les messages sont présentés dans des cartes séparées. Dépliez **Activité** sous un échange pour consulter les reçus des outils et la consommation. Les erreurs et les demandes de validation restent visibles quand l'activité est repliée.
 
-Les discussions et tâches partagent une limite de 200 appels par connexion de modèle et par jour UTC. Les tests de connexion sont distincts de ce compteur. Un seul travail de l'Assistant s'exécute à la fois ; jusqu'à dix peuvent être en attente ou en cours. Les téléchargements restent des tâches de TorrentLinker et continuent dans votre client torrent.
+TorrentLinker n'impose aucune limite quotidienne d'appels au modèle. Le cumul des appels des discussions et tâches reste informatif ; seules les limites configurées par exécution s'appliquent. Les quotas du fournisseur restent applicables. Un seul travail de l'Assistant s'exécute à la fois ; jusqu'à dix peuvent être en attente ou en cours. Les téléchargements restent des tâches de TorrentLinker et continuent dans votre client torrent.
 
 Les assistants externes restent accessibles via le [guide MCP](agents.md). L'Assistant intégré ne nécessite pas d'activer l'accès MCP externe ni de copier un jeton.
 

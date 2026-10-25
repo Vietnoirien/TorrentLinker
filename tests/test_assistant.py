@@ -1,7 +1,9 @@
 """Assistant acceptance at owner setup/job APIs; provider HTTP is the external boundary."""
 
 import json
+import sqlite3
 import time
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -257,6 +259,11 @@ def test_schedule_preview_run_now_pause_and_restart_are_persistent(tmp_path):
             "/api/setup/assistant/providers",
             json={"name": "Local", "kind": "ollama", "model": "test"},
         ).json()
+        with sqlite3.connect(tmp_path / "assistant.sqlite") as db:
+            db.execute(
+                "INSERT INTO usage VALUES (?, ?, ?)",
+                (p["id"], datetime.now(UTC).date().isoformat(), 250),
+            )
         body = {
             "name": "Daily report",
             "instruction": "Summarize the current state.",
@@ -921,7 +928,8 @@ def test_chat_defaults_and_settings_keep_existing_discussions_and_grants(tmp_pat
         assert saved["policy"]["mode"] == "propose"
 
 
-def test_cumulative_usage_does_not_stop_a_discussion(tmp_path):
+@pytest.mark.parametrize("kind", ["ollama", "openrouter"])
+def test_cumulative_usage_does_not_stop_a_discussion(tmp_path, kind):
     count = 0
 
     def provider(request):
@@ -963,10 +971,16 @@ def test_cumulative_usage_does_not_stop_a_discussion(tmp_path):
             "/api/setup/assistant/providers",
             json={
                 "name": "Local",
-                "kind": "ollama",
+                "kind": kind,
                 "model": "test",
             },
         ).json()
+        # Existing usage from earlier chats must not prevent another tool round trip.
+        with sqlite3.connect(tmp_path / "assistant.sqlite") as db:
+            db.execute(
+                "INSERT INTO usage VALUES (?, ?, ?)",
+                (p["id"], datetime.now(UTC).date().isoformat(), 200),
+            )
         chat = browser.post(
             "/api/assistant/conversations",
             json={

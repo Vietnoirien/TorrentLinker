@@ -458,8 +458,7 @@ class AssistantTab(QWidget):
         info = QLabel(
             self.tr(
                 "Hosted providers receive messages and tool results. No automatic "
-                "fallback to a hosted model. Limit: 200 calls per connection per "
-                "UTC day."
+                "fallback to a hosted model."
             )
         )
         info.setWordWrap(True)

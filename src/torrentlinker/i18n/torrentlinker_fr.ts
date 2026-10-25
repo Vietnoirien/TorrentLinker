@@ -586,8 +586,8 @@
     </message>
     <message>
         <location filename="../gui/assistant.py" line="454"/>
-        <source>Hosted providers receive messages and tool results. No automatic fallback to a hosted model. Limit: 200 calls per connection per UTC day.</source>
-        <translation>Les fournisseurs distants reçoivent les messages et les résultats des outils. Aucune bascule automatique vers un modèle distant. Limite : 200 appels par connexion et par jour UTC.</translation>
+        <source>Hosted providers receive messages and tool results. No automatic fallback to a hosted model.</source>
+        <translation>Les fournisseurs distants reçoivent les messages et les résultats des outils. Aucune bascule automatique vers un modèle distant.</translation>
     </message>
     <message>
         <location filename="../gui/assistant.py" line="465"/>

@@ -835,7 +835,7 @@ class Assistant:
                             identifier, compactions=self.run(identifier)["compactions"] + 1
                         )
                     for attempt in range(3):
-                        self.reserve_call(config.provider_id)
+                        self.record_call(config.provider_id)
                         message_count = len(messages)
                         try:
                             text, calls, used = self.models.turn(
@@ -1379,7 +1379,8 @@ class Assistant:
                     self.update_run(run["id"], status="queued")
                     self.worker.submit(self._run, run["id"], config, actor, stop)
 
-    def reserve_call(self, provider_id):
+    def record_call(self, provider_id):
+        """Track provider usage without imposing a shared daily cutoff."""
         from datetime import datetime
 
         day = datetime.now(UTC).date().isoformat()
@@ -1388,8 +1389,6 @@ class Assistant:
                 "SELECT calls FROM usage WHERE provider_id=? AND day=?", (provider_id, day)
             ).fetchone()
             count = row[0] if row else 0
-            if count >= 200:
-                raise ValueError("Daily limit of 200 model calls reached for this connection.")
             self.db.execute(
                 "INSERT OR REPLACE INTO usage VALUES (?,?,?)", (provider_id, day, count + 1)
             )
