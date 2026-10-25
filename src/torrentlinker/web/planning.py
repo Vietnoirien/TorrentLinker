@@ -107,6 +107,7 @@ def plan(
         {t.hash.lower() for t in torrents},
         disk_of,
         {category} if category is not None else None,
+        settings.plan_exclusions,
     )
     existing = [
         row

@@ -1236,6 +1236,15 @@ class SettingsDialog(QDialog):
         self.ignore.setToolTip(self.tr("One pattern per line, matched against each path segment"))
         self.ignore.setMaximumHeight(100)
         form.addRow(self.tr("Ignored Files"), self.ignore)
+        self.plan_exclusions = QPlainTextEdit("\n".join(self.settings.plan_exclusions))
+        self.plan_exclusions.setToolTip(
+            self.tr(
+                "One word per line. A Plan never proposes a torrent whose title carries "
+                "any of them (case and accents do not matter)."
+            )
+        )
+        self.plan_exclusions.setMaximumHeight(100)
+        form.addRow(self.tr("Excluded from Plans"), self.plan_exclusions)
         return box
 
     # Save ------------------------------------------------------------------
@@ -1340,6 +1349,15 @@ class SettingsDialog(QDialog):
         s.matching.ignore_patterns = [
             line.strip() for line in self.ignore.toPlainText().splitlines() if line.strip()
         ]
+        words = [
+            line.strip().lower()
+            for line in self.plan_exclusions.toPlainText().splitlines()
+            if line.strip()
+        ]
+        # Keep the words that seed "Mein Kampf" out of Plans even when left empty.
+        if not any(w in ("mein", "kampf") for w in words):
+            words += [w for w in ("mein", "kampf") if w not in words]
+        s.plan_exclusions = words
         log.info("settings saved: %d Library Folders", len(s.library_folders))
         self.accept()
 

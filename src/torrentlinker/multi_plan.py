@@ -65,6 +65,7 @@ def distributed_plan(
             hashes,
             disk_of,
             set(settings.plan_categories) if settings.plan_categories is not None else None,
+            settings.plan_exclusions,
         )
         for folder in {c.folder for c in candidates if c.folder is not None}:
             validate_folder(identifier, folder)

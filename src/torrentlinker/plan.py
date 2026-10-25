@@ -151,16 +151,13 @@ NOISE = frozenset(
     "french francais vff vf multi notag ebook ebooks livre book books "
     "the and les des une pour avec dans sur par aux".split()
 )
-# A plan never proposes this work: it is a book, not the content a user wants to seed.
-# Matched on normalized title words, so case and accents do not matter.
-EXCLUDED = frozenset({"mein", "kampf"})
 
 
-def _excluded(title: str) -> bool:
-    """Whether this title is never to be proposed by a Plan."""
+def _normalise(title: str) -> str:
+    """Title words, lower-cased and accent-stripped, so matches ignore case and accents."""
     plain = unicodedata.normalize("NFKD", title)
     plain = "".join(ch for ch in plain if not unicodedata.combining(ch)).casefold()
-    return any(word in EXCLUDED for word in re.split(r"[^0-9a-z]+", plain))
+    return plain
 
 
 def on_disk(candidates: Iterable[PlanCandidate], items: Iterable[LocalItem]) -> list[OnDisk]:
@@ -433,17 +430,24 @@ def catalogue_candidates(
     in_client: set[str],
     disk_of: Callable[[Path], Hashable],
     only: Collection[int] | None = None,
+    plan_exclusions: Iterable[str] = (),
 ) -> list[PlanCandidate]:
     """Catalogue torrents a Plan may download: not in qBittorrent, alive, in a category
-    that has a Download Folder and, if `only` is given, in one of those categories (a
-    category includes its subcategories)."""
+    that has a Download Folder, not carrying an excluded title, and, if `only` is given,
+    in one of those categories (a category includes its subcategories)."""
     resolved: dict[int | None, Path | None] = {}
     disks: dict[Path, Hashable] = {}
+    excluded = {unicodedata.normalize("NFKD", w) for w in plan_exclusions}
+    excluded = {
+        "".join(ch for ch in w if not unicodedata.combining(ch)).casefold() for w in excluded
+    }
     result = []
     for r in rows:
         if r.infohash.lower() in in_client or r.seeders < 1 or r.category is None:
             continue
-        if _excluded(r.title):
+        if excluded and any(
+            word in excluded for word in re.split(r"[^0-9a-z]+", _normalise(r.title))
+        ):
             continue
         category = r.category
         if only is not None and not _within(category, only, categories):

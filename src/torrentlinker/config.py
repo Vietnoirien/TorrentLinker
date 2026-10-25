@@ -131,6 +131,8 @@ class Settings:
     free_space_margin: float = 0.10  # share of each disk a Plan leaves free
     plan_categories: list[int] | None = None  # categories a Plan draws from; None = all
     plan_options: PlanOptions = field(default_factory=PlanOptions)
+    # Normalized title words a Plan must never propose, e.g. ["mein", "kampf"].
+    plan_exclusions: list[str] = field(default_factory=list)
     # How qBittorrent sees this computer's paths, e.g. when it runs in Docker or on a NAS.
     path_mappings: list[PathMapping] = field(default_factory=list)
     download_speed: float | None = None  # bytes/s from the last speed test
@@ -238,6 +240,7 @@ class Settings:
             "free_space_margin": self.free_space_margin,
             "plan_categories": self.plan_categories,
             "plan_options": asdict(self.plan_options),
+            "plan_exclusions": self.plan_exclusions,
             "download_speed": self.download_speed,
             "download_speed_tested": self.download_speed_tested,
             "indexer_categories": {str(k): asdict(v) for k, v in self.indexer_categories.items()},
@@ -283,6 +286,7 @@ class Settings:
                 else None
             ),
             plan_options=_plan_options_from_json(data.get("plan_options", {})),
+            plan_exclusions=[str(w) for w in data.get("plan_exclusions", [])],
             download_speed=(
                 float(data["download_speed"]) if data.get("download_speed") is not None else None
             ),

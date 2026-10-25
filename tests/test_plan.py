@@ -311,7 +311,7 @@ def test_a_plan_can_be_limited_to_chosen_categories_parents_including_their_subc
     assert titles({2030}) == ["foreign film"]
 
 
-def test_the_plan_never_proposes_mein_kampf() -> None:
+def test_the_plan_respects_the_excluded_titles() -> None:
     categories = {
         7000: IndexerCategory("Ebook"),
         7020: IndexerCategory("Livres", parent=7000),
@@ -332,7 +332,27 @@ def test_the_plan_never_proposes_mein_kampf() -> None:
     ]
     folders = DownloadFolders({7020: "/books"})
 
-    found = catalogue_candidates(rows, folders, categories, set(), lambda p: "d", {7000})
+    found = catalogue_candidates(
+        rows, folders, categories, set(), lambda p: "d", {7000}, ["mein", "kampf"]
+    )
+
+    assert [c.title for c in found] == ["ok"]
+
+
+def test_the_plan_exclusion_is_case_insensitive() -> None:
+    categories = {
+        7000: IndexerCategory("Ebook"),
+        7020: IndexerCategory("Livres", parent=7000),
+    }
+    rows = [
+        # Uppercase "KAMPF" must still match the lowercase exclusion "kampf".
+        CatalogueRow("aa" * 20, "Mon.Combat.KAMPF [EPUB]", GB, 9, 7020, "u", "d", 0),
+        # Contains "Kampf" too, so it survives only because of the case-insensitive match.
+        CatalogueRow("bb" * 20, "ok", GB, 5, 7020, "u", "d", 0),
+    ]
+    folders = DownloadFolders({7020: "/books"})
+
+    found = catalogue_candidates(rows, folders, categories, set(), lambda p: "d", {7000}, ["kampf"])
 
     assert [c.title for c in found] == ["ok"]
 

@@ -1084,6 +1084,7 @@ class MainWindow(QMainWindow):
                 in_client,
                 disk_of,
                 only,
+                s.plan_exclusions,
             )
             on_disk_items = list(local_items)
             for folder in unlisted:
