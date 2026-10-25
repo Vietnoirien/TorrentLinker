@@ -295,3 +295,27 @@ def test_selection_cannot_be_retargeted_or_given_extra_hashes(tmp_path):
         )["structuredContent"]
         assert "error" in result
         assert client.paused == []
+
+
+def test_smallest_client_selection_supports_title_and_size_filters(tmp_path):
+    client = SelectionClient([book(1, 0), book(2, 10), book(3, 20), book(4, 30), book(5, 40)])
+    with TestClient(
+        create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+    ) as browser:
+        token = connect(browser)
+        identifier = select(
+            browser,
+            token,
+            category="Ebook",
+            ranking="smallest_size",
+            query="Book",
+            min_size_bytes=15,
+            max_size_bytes=35,
+            count=10,
+        )
+        result = call(browser, token, "job_status", {"job_id": identifier})["structuredContent"][
+            "result"
+        ]
+        assert [r["hash"] for r in result["rows"]] == [f"{3:040x}", f"{4:040x}"]
+        assert result["total_size_bytes"] == 50
+        assert result["shortfall"] == 8

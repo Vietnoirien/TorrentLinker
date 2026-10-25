@@ -572,3 +572,72 @@ def test_live_category_presentation(controlled, case):
         "single_code_block": True,
         "unexpected_tool_calls": [],
     }, checks
+
+
+def test_live_catalogue_selection_reports_exact_film_weight(controlled):
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.store import CatalogueRow
+
+    browser, provider, _, _ = controlled
+    setup = browser.app.state.agent_service.setup
+    setup.settings.indexer_categories = {
+        2000: IndexerCategory("Films & Videos"),
+        2030: IndexerCategory("Films", 2000),
+        7000: IndexerCategory("Ebook"),
+    }
+    setup.store.save_catalogue(
+        [
+            CatalogueRow(
+                f"{i:040x}",
+                f"Film {i}",
+                i * 1_000_000,
+                5,
+                2030,
+                "https://test.invalid/download",
+                "",
+                1,
+            )
+            for i in range(1, 502)
+        ]
+        + [CatalogueRow("f" * 40, "Book", 1, 5, 7000, "https://test.invalid/download", "", 1)]
+    )
+    thread = conversation(browser, provider)
+    result = run(
+        browser,
+        thread,
+        "Quel est le poids total des 500 films les plus légers du catalogue ? "
+        "Donne le total exact en octets et précise la couverture des données. "
+        "Donne aussi les tailles minimale et maximale de ces 500 films en octets. "
+        "Ne télécharge rien et ne modifie aucun paramètre.",
+        "catalogue-film-weight",
+    )
+    assert result["status"] == "completed", result
+    selections = [e for e in result["events"] if e["tool"] == "select_catalogue"]
+    assert selections, result
+    jobs = [
+        browser.app.state.agent_service.jobs.get(e["result"]["job_id"])
+        for e in selections
+        if e.get("result", {}).get("job_id")
+    ]
+    assert any(
+        j["status"] == "completed"
+        and j["result"]["selected_count"] == 500
+        and j["result"]["total_size_bytes"] == 125_250_000_000
+        for j in jobs
+    ), result
+    answer = re.sub(r"[\s,.\u202f\u00a0]", "", result["messages"][-1]["content"])
+    assert "125250000000" in answer, result
+    assert "500000000" in answer, result
+    assert all(
+        e["tool"]
+        not in {
+            "enqueue_selection",
+            "send_selection",
+            "propose_download_folder",
+            "save_goal",
+            "plan_goal",
+        }
+        for e in result["events"]
+    )
+    assert browser.get("/api/queue").json() == []
+    assert setup.settings.download_folders.default == ""

@@ -7,7 +7,7 @@ import json
 import time
 from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import ConfigDict, model_validator
@@ -20,6 +20,7 @@ from torrentlinker.web.setup import Setup
 READ_JOBS = {
     "refresh",
     "select-torrents",
+    "select-catalogue",
     "search",
     "scan",
     "check",
@@ -288,7 +289,9 @@ class AgentService:
             self.access.event(actor, "approved" if approved else "submitted", identifier)
             return self.proposal(identifier)
 
-    def selection(self, actor: str, identifier: str) -> tuple[str, dict]:
+    def selection(
+        self, actor: str, identifier: str, *, kind: str = "select-torrents"
+    ) -> tuple[str, dict]:
         """Resolve an immutable, connection-owned completed selection, not a caller's hashes."""
         self.access.grant(actor)
         with self.access.lock:
@@ -298,22 +301,34 @@ class AgentService:
             if proposal is None:
                 raise ValueError("Selection not found for this connection.")
             body = AgentRequest.model_validate_json(proposal["body"])
-            if body.kind != "select-torrents":
-                raise ValueError("Use a completed select_torrents job as the selection_id.")
+            if body.kind != kind:
+                raise ValueError(
+                    f"Use a completed {kind.replace('-', '_')} job as the selection_id."
+                )
             self.target(actor, body.client_id)
             result = self.jobs.get(identifier)
             if result["status"] != "completed" or not isinstance(result["result"], dict):
                 raise ValueError("Wait for the selection job to complete successfully.")
             snapshot = result["result"]
-            if (
-                time.time() - snapshot["snapshot_at"] > 900
-                or proposal["fingerprint"] != self.fingerprint()
+            if time.time() - snapshot["snapshot_at"] > 900 or (
+                kind == "select-torrents" and proposal["fingerprint"] != self.fingerprint()
             ):
                 raise ValueError("Selection expired or settings changed. Select torrents again.")
             return body.client_id, snapshot
 
     def validate_selection(self, actor: str, body: AgentRequest) -> None:
         if not body.selection_id:
+            return
+        if body.kind in {"enqueue", "send-queue"}:
+            client_id, snapshot = self.selection(actor, body.selection_id, kind="select-catalogue")
+            if (
+                body.client_id != client_id
+                or body.category is not None
+                or body.hashes != [row["hash"] for row in snapshot["rows"]]
+                or body.catalogue_selection.model_dump() != snapshot["criteria"]
+                or body.selection_fingerprint != snapshot["selection_fingerprint"]
+            ):
+                raise ValueError("The operation does not match the saved catalogue selection.")
             return
         client_id, snapshot = self.selection(actor, body.selection_id)
         if (
@@ -352,6 +367,40 @@ class AgentService:
                         "selection_id": selection_id,
                         "selection": snapshot["criteria"],
                     }
+                ),
+            )
+
+    def catalogue_action(
+        self,
+        actor: str,
+        request_id: str,
+        selection_id: str,
+        kind: Literal["enqueue", "send-queue"],
+    ) -> dict:
+        """Queue a connection-owned Catalogue selection, preserving each category's folder."""
+        self.access.grant(actor)
+        with self.access.lock:
+            previous = self.access.db.execute(
+                "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
+            ).fetchone()
+            if previous:
+                body = AgentRequest.model_validate_json(previous["body"])
+                if body.kind != kind or body.selection_id != selection_id:
+                    raise ValueError("This request_id already belongs to a different operation.")
+                return self.proposal(previous["id"])
+            client_id, snapshot = self.selection(actor, selection_id, kind="select-catalogue")
+            if not snapshot["rows"]:
+                raise ValueError("The catalogue selection is empty. Adjust its criteria first.")
+            return self.request(
+                actor,
+                request_id,
+                AgentRequest(
+                    kind=kind,
+                    client_id=client_id,
+                    selection_id=selection_id,
+                    hashes=[row["hash"] for row in snapshot["rows"]],
+                    catalogue_selection=snapshot["criteria"],
+                    selection_fingerprint=snapshot["selection_fingerprint"],
                 ),
             )
 
@@ -434,6 +483,17 @@ class AgentService:
                 "operation": body.model_dump(),
                 "client": target.setup.settings.profile().name,
                 "local_draft": target.setup.store.local_draft(body.draft_id),
+            }
+        if body.selection_id and body.kind in {"enqueue", "send-queue"}:
+            _, snapshot = self.selection(
+                row["grant_id"], body.selection_id, kind="select-catalogue"
+            )
+            return {
+                "operation": body.model_dump(),
+                "selection": {
+                    k: snapshot[k]
+                    for k in ("criteria", "selected_count", "total_size_bytes", "coverage")
+                },
             }
         return {"operation": body.model_dump()}
 

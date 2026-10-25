@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from typing import TYPE_CHECKING
 
@@ -24,6 +23,7 @@ class Goal(BaseModel):
     desired_class: ZenClass | None = None
     maximum_bytes: int = Field(default=10 * 1024**3, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1000)
+    category: int | None = Field(default=None, gt=0)
     prefer_existing_files: bool = True
 
 
@@ -69,7 +69,7 @@ def status(service: AgentService, actor: str, identifier: str) -> dict:
     return {
         "id": identifier,
         "revision": row["revision"],
-        **json.loads(row["body"]),
+        **goal.model_dump(mode="json"),
         "actual_class": service.setup.settings.zen.zen_class,
         "daily_zen": daily,
         "remaining_daily_zen": max(0, goal.target_daily_zen - daily) if daily is not None else None,

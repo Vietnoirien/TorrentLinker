@@ -67,7 +67,9 @@ Note/Zen rankings exclude unknown metrics, missing seeder data and provisional c
 estimates. All rankings exclude torrents undergoing Verification. If only 700 qualify, the
 tool selects 700 and reports a shortfall of 300.
 
-Other rankings are `largest_size` and `lowest_zen_per_gib`. A category includes descendants;
+Other rankings are `largest_size`, `smallest_size`, `highest_note`,
+`lowest_zen_per_gib` and `highest_zen_per_gib`. Use `query` for a title substring and
+`min_size_bytes`/`max_size_bytes` for a size range. A category includes descendants;
 an empty category selects all categories. The optional `tracker` filter takes a hostname,
 such as `c411.org`, and groups its known mirror `tk.c411.tw`. Each selection targets one client.
 
@@ -84,6 +86,48 @@ anything; create and review a new selection. Failed refreshes never reuse old ca
 Pausing keeps files and frees **no disk space**. Total size may count shared files more than
 once. The Zen total is the selected torrents' current estimate, not an exact prediction of the
 account's loss after Class bonuses change.
+
+## Select and weigh Catalogue torrents
+
+For available downloads, use `catalogue_categories` to find category IDs, then
+`select_catalogue`. It filters the entire local Catalogue by category, title,
+size and seeder ranges. Category filters include descendants by default. Sort by
+`size`, `seeders`, `title` or `seen_at`, in either direction. `seen_at` is the cache
+observation time, not the torrent's publication date.
+
+For the 500 smallest Films entries, call `select_catalogue` with:
+
+```json
+{
+  "request_id": "smallest-films-1",
+  "client_id": "default",
+  "criteria": {
+    "categories": [2030],
+    "sort_by": "size",
+    "descending": false,
+    "count": 500
+  }
+}
+```
+
+Use the category ID returned by your Indexer. Read the returned job through
+`job_status`. `total_size_bytes` is the exact sum for the selected cached rows,
+while `eligible_size_bytes` sums every matching row before the count/offset limit.
+`selected_count`, `eligible_count` and `shortfall` do not change when paging the
+results. Unknown or zero sizes are excluded. The tool requires no Download Folder
+and does not apply Plan exclusions or free-space limits. Cache coverage is reported;
+the result is not a claim that every tracker torrent is present.
+
+When requested, `enqueue_selection` takes that job's ID as `selection_id` and queues
+those exact rows. `send_selection` starts only those already-queued entries when
+the user asks to start downloads. Both use normal permissions, approval, folder and
+budget checks. Neither silently replaces missing entries or sends the whole queue.
+Catalogue selections belong to their connection and expire after 15 minutes;
+changed selected metadata or ranking requires a fresh selection. Configuring a
+missing folder does not discard the selection.
+
+Saved goals also accept `category`, which `plan_goal` preserves. A Plan optimizes
+Zen within download constraints; use `select_catalogue` for exact size rankings.
 
 ## Approve and monitor
 

@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from torrentlinker.catalogue_selection import CatalogueCriteria, select_catalogue_rows
 from torrentlinker.domain import Torrent
 from torrentlinker.download_queue import enqueue, entries, run_queue
 from torrentlinker.indexer import Candidate, SearchQuery
@@ -52,6 +53,7 @@ class JobRequest(BaseModel):
         "manage",
         "refresh",
         "select-torrents",
+        "select-catalogue",
         "search",
         "enqueue",
         "send-queue",
@@ -84,6 +86,8 @@ class JobRequest(BaseModel):
     cached_only: bool = False
     selection: SelectionCriteria = Field(default_factory=SelectionCriteria)
     selection_id: str = Field(default="", max_length=64)
+    catalogue_selection: CatalogueCriteria = Field(default_factory=CatalogueCriteria)
+    selection_fingerprint: str = Field(default="", max_length=64)
     path: str = Field(default="", max_length=4096)
     client_path: str = Field(default="", max_length=4096)
     query: str = Field(default="", max_length=500)
@@ -121,8 +125,37 @@ class Operations:
             raise ValueError("Add a mounted Library Folder in Settings first.")
         if request.kind == "reseed" and len(request.hashes) != 1:
             raise ValueError("Select one checked Candidate.")
-        if request.kind == "enqueue":
-            self.enqueue_folders(request)
+        if request.kind in {"enqueue", "send-queue"}:
+            if request.selection_id:
+                selected = self.select_catalogue(request.catalogue_selection)
+                if (
+                    selected["selection_fingerprint"] != request.selection_fingerprint
+                    or [r["hash"] for r in selected["rows"]] != request.hashes
+                ):
+                    raise ValueError("Catalogue selection changed. Select and review it again.")
+                if request.kind == "send-queue":
+                    queued = {
+                        e.candidate.infohash: e.candidate
+                        for e in entries(self.setup.store)
+                        if e.status == "queued"
+                    }
+                    for row in selected["rows"]:
+                        candidate = queued.get(row["hash"])
+                        if (
+                            candidate is None
+                            or candidate.size != row["size"]
+                            or candidate.title != row["title"]
+                            or (
+                                row["category"] is not None
+                                and row["category"] not in candidate.categories
+                            )
+                        ):
+                            raise ValueError(
+                                "Queued entries do not match the catalogue selection. "
+                                "Review and queue the selection again."
+                            )
+            if request.kind == "enqueue":
+                self.enqueue_folders(request)
         if request.kind in {"send-queue", "plan"}:
             targets = (
                 [self.setup.for_client(identifier) for identifier in request.client_ids]
@@ -154,6 +187,16 @@ class Operations:
                 target.path_under_root(str(folder))
         if request.kind == "manage" and not request.hashes:
             raise ValueError("Select at least one torrent.")
+
+    def select_catalogue(self, criteria: CatalogueCriteria) -> dict[str, Any]:
+        from torrentlinker.web.planning import catalogue_status
+
+        return {
+            **select_catalogue_rows(
+                self.setup.store.catalogue(), self.setup.settings.indexer_categories, criteria
+            ),
+            "catalogue": catalogue_status(self.setup),
+        }
 
     def enqueue_categories(self, request: JobRequest) -> dict[str, int | None]:
         """Keep each torrent's category; a mixed batch does not mean the default."""
@@ -238,6 +281,8 @@ class Operations:
         self, request: JobRequest, stop: threading.Event, progress: Callable[[Any], None]
     ) -> Any:
         self.validate(request)
+        if request.kind == "select-catalogue":
+            return self.select_catalogue(request.catalogue_selection)
         if request.kind == "configure-download-folder":
             return self.setup.configure_download_folder(
                 request.path, request.category, request.client_path, save=True
@@ -481,7 +526,7 @@ class Operations:
             indexer = self.setup.indexer()
             count = 0
             for h in request.hashes:
-                candidate = self.candidates.get(h)
+                candidate = None if request.selection_id else self.candidates.get(h)
                 if candidate is None:
                     cached = self.setup.store.catalogue([h])
                     if not cached:

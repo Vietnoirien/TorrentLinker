@@ -6,7 +6,7 @@ import math
 import time
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from torrentlinker.reseed import VERIFYING
 from torrentlinker.torrent_management import tracker_group
@@ -17,10 +17,24 @@ class SelectionCriteria(BaseModel):
     category: str = Field(default="Ebook", max_length=200)
     tracker: str = Field(default="", max_length=253)
     status: Literal["seeding", "paused", "downloading", "any"] = "seeding"
-    ranking: Literal["lowest_note_largest_size", "largest_size", "lowest_zen_per_gib"] = (
-        "lowest_note_largest_size"
-    )
+    ranking: Literal[
+        "lowest_note_largest_size",
+        "highest_note",
+        "largest_size",
+        "smallest_size",
+        "lowest_zen_per_gib",
+        "highest_zen_per_gib",
+    ] = "lowest_note_largest_size"
     count: int = Field(default=1000, ge=1, le=1000)
+    query: str = Field(default="", max_length=500)
+    min_size_bytes: int = Field(default=0, ge=0)
+    max_size_bytes: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def valid_size_range(self):
+        if self.max_size_bytes is not None and self.min_size_bytes > self.max_size_bytes:
+            raise ValueError("Minimum size must not exceed maximum size.")
+        return self
 
     @field_validator("tracker")
     @classmethod
@@ -34,7 +48,10 @@ class SelectionCriteria(BaseModel):
 RANKINGS = {
     "lowest_note_largest_size": "Note ascending, size descending, hash ascending",
     "largest_size": "Size descending, hash ascending",
+    "smallest_size": "Size ascending, hash ascending",
+    "highest_note": "Note descending, size descending, hash ascending",
     "lowest_zen_per_gib": "Estimated Zen/day per GiB ascending, size descending, hash ascending",
+    "highest_zen_per_gib": "Estimated Zen/day per GiB descending, size descending, hash ascending",
 }
 
 
@@ -51,6 +68,9 @@ def select_rows(rows: list[dict[str, Any]], criteria: SelectionCriteria) -> dict
         paths = [" / ".join(path).casefold() for path in row["categories"]]
         if (
             (criteria.status != "any" and row["status"] != criteria.status)
+            or (criteria.query.strip().casefold() not in row.get("name", "").casefold())
+            or row["size"] < criteria.min_size_bytes
+            or (criteria.max_size_bytes is not None and row["size"] > criteria.max_size_bytes)
             or (
                 category and not any(p == category or p.startswith(category + " / ") for p in paths)
             )
@@ -64,8 +84,13 @@ def select_rows(rows: list[dict[str, Any]], criteria: SelectionCriteria) -> dict
         if VERIFYING in row["tags"] or row["status"] == "checking":
             excluded["verifying"] += 1
             continue
-        metric = "note" if criteria.ranking == "lowest_note_largest_size" else "zen"
-        if criteria.ranking != "largest_size":
+        if criteria.ranking == "smallest_size" and row["size"] <= 0:
+            excluded["unknown_metric"] += 1
+            continue
+        metric = (
+            "note" if criteria.ranking in {"lowest_note_largest_size", "highest_note"} else "zen"
+        )
+        if criteria.ranking not in {"largest_size", "smallest_size"}:
             value = row[metric]
             if (
                 value is None
@@ -83,8 +108,13 @@ def select_rows(rows: list[dict[str, Any]], criteria: SelectionCriteria) -> dict
     def order(row):
         if criteria.ranking == "lowest_note_largest_size":
             return row["note"], -row["size"], row["hash"]
-        if criteria.ranking == "lowest_zen_per_gib":
-            return row["zen"] / (row["size"] / 1024**3), -row["size"], row["hash"]
+        if criteria.ranking == "highest_note":
+            return -row["note"], -row["size"], row["hash"]
+        if criteria.ranking in {"lowest_zen_per_gib", "highest_zen_per_gib"}:
+            direction = -1 if criteria.ranking == "highest_zen_per_gib" else 1
+            return direction * row["zen"] / (row["size"] / 1024**3), -row["size"], row["hash"]
+        if criteria.ranking == "smallest_size":
+            return row["size"], row["hash"]
         return -row["size"], row["hash"]
 
     chosen = sorted(eligible, key=order)[: criteria.count]

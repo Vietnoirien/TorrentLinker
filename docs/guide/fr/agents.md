@@ -69,7 +69,9 @@ les nombres de seeders manquants et les estimations de catégorie provisoires. T
 classements excluent les torrents en cours de Vérification. Si seuls 700 torrents conviennent,
 le serveur en sélectionne 700 et signale qu'il en manque 300.
 
-Les autres classements sont `largest_size` et `lowest_zen_per_gib`. Une catégorie inclut ses
+Les autres classements sont `largest_size`, `smallest_size`, `highest_note`,
+`lowest_zen_per_gib` et `highest_zen_per_gib`. Le filtre `query` cherche dans le titre ;
+`min_size_bytes` et `max_size_bytes` délimitent la taille. Une catégorie inclut ses
 sous-catégories ; une catégorie vide inclut toutes les catégories. Le filtre facultatif
 `tracker` prend un nom d'hôte, par exemple `c411.org`, et regroupe son miroir connu `tk.c411.tw`.
 Une sélection concerne un seul client.
@@ -89,6 +91,50 @@ Un échec d'actualisation ne réutilise jamais les anciennes données en cache.
 Mettre en pause conserve les fichiers et ne libère **aucun espace disque**. La taille totale peut
 compter plusieurs fois des fichiers partagés. Le total de Zen est l'estimation actuelle des
 torrents sélectionnés, pas une prédiction exacte de la perte après évolution des bonus de Classe.
+
+## Sélectionner et calculer le poids du Catalogue
+
+Pour les téléchargements disponibles, `catalogue_categories` donne les identifiants
+des catégories. `select_catalogue` filtre ensuite tout le Catalogue local par
+catégorie, titre, taille et nombre de sources. Les sous-catégories sont incluses
+par défaut. Le tri porte sur `size`, `seeders`, `title` ou `seen_at`, dans les deux
+sens. `seen_at` désigne l'observation dans le cache, pas la date de publication.
+
+Pour les 500 Films les plus légers, appelez `select_catalogue` avec :
+
+```json
+{
+  "request_id": "films-legers-1",
+  "client_id": "default",
+  "criteria": {
+    "categories": [2030],
+    "sort_by": "size",
+    "descending": false,
+    "count": 500
+  }
+}
+```
+
+Utilisez l'identifiant de catégorie fourni par votre Indexer. Consultez le travail
+avec `job_status`. `total_size_bytes` est la somme exacte des tailles des entrées
+sélectionnées dans le cache. `eligible_size_bytes` couvre toutes les entrées qui
+correspondent aux filtres, avant la limite et le décalage. Les comptes et le manque
+éventuel, `shortfall`, restent identiques quelle que soit la page affichée. Les
+tailles inconnues ou nulles sont exclues. Aucun dossier n'est requis ; les limites
+d'espace et exclusions des Plans ne s'appliquent pas. La couverture du cache reste
+indiquée : le résultat ne garantit pas la présence de tous les torrents du tracker.
+
+Sur demande, `enqueue_selection` utilise l'identifiant du travail comme
+`selection_id` pour mettre ces entrées précises en file. `send_selection` démarre
+uniquement ces entrées déjà en file lorsque l'utilisateur le demande. Les droits,
+approbations, dossiers et budgets habituels s'appliquent. Les sélections restent
+propres à leur connexion et expirent après 15 minutes. Un changement des métadonnées
+sélectionnées ou du classement impose une nouvelle sélection. La configuration
+d'un dossier manquant ne fait pas perdre la sélection.
+
+Les objectifs acceptent aussi `category`, que `plan_goal` conserve. Un Plan optimise
+le Zen sous contraintes ; pour un classement exact par taille, utilisez
+`select_catalogue`.
 
 ## Approuver et suivre les actions
 

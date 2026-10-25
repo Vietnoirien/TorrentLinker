@@ -77,7 +77,9 @@ def reserve(
     if body.kind == "enqueue":
         rows = {r.infohash: r for r in target.setup.store.catalogue(body.hashes)}
         sizes = {
-            h: target.candidates[h].size if h in target.candidates else rows[h].size
+            h: target.candidates[h].size
+            if h in target.candidates and not body.selection_id
+            else rows[h].size
             for h in body.hashes
             if h in rows or h in target.candidates
         }
