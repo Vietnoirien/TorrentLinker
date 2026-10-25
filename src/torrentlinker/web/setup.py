@@ -502,8 +502,44 @@ class Setup:
                 else "Folder readable, but no matching torrent file confirms the mapping yet.",
             }
 
-    def verified_download_folder(self) -> Path:
-        local = self.path_under_root(self.settings.download_folders.default)
+    def configure_download_folder(
+        self, local: str, category: int | None = None, client_path: str = "", *, save: bool = False
+    ) -> dict[str, Any]:
+        """Validate one destination using existing mappings; never create a mount or mapping."""
+        with self.lock:
+            if category is not None and category not in self.settings.indexer_categories:
+                raise ValueError("Choose a known Indexer category or subcategory.")
+            path = self.path_under_root(local)
+            mapped = PathMapper(self.settings.path_mappings).to_qbit(str(path))
+            if client_path and client_path != mapped:
+                raise ValueError(
+                    "The client folder differs from the existing Path Mapping. "
+                    "Configure and verify the Path Mapping in Settings first."
+                )
+            checked = self.folder(FolderSetup(local=str(path), client_path=mapped))
+            if checked["sample"] is None:
+                raise ValueError(
+                    "No existing torrent file confirms this Download Folder's Path Mapping. "
+                    "Choose a mounted folder containing a seeded sample, or verify its "
+                    "Path Mapping in Settings first. Browser computer paths are not server mounts."
+                )
+            if save:
+                if category is None:
+                    self.settings.download_folders.default = str(path)
+                else:
+                    self.settings.download_folders.by_category[category] = str(path)
+                self.save()
+            return {**checked, "category": category, "saved": save}
+
+    def download_folder(self, category: int | None = None) -> Path | None:
+        if category is None:
+            value = self.settings.download_folders.default
+            return Path(value) if value else None
+        return self.settings.download_folders.resolve(category, self.settings.indexer_categories)
+
+    def verified_download_folder(self, category: int | None = None) -> Path:
+        folder = self.download_folder(category)
+        local = self.path_under_root(str(folder) if folder else "")
         client_path = PathMapper(self.settings.path_mappings).to_qbit(str(local))
         checked = self.folder(FolderSetup(local=str(local), client_path=client_path))
         if checked["sample"] is None:

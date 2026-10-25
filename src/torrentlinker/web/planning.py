@@ -59,16 +59,35 @@ def plan(
     progress: Callable[[Any], None],
     *,
     cached_only: bool = False,
+    category: int | None = None,
 ) -> dict:
-    folder = setup.verified_download_folder()
-    library.check_tree(folder, stop)
     settings = setup.settings
+    if category is not None:
+        relevant = plan_categories(
+            [category], settings.download_folders, settings.indexer_categories
+        )
+        destinations = (setup.download_folder(c) for c in relevant)
+        folders = list(dict.fromkeys(path for path in destinations if path is not None))
+        for folder in folders:
+            setup.configure_download_folder(str(folder))
+    else:
+        configured = settings.download_folders
+        paths = dict.fromkeys([configured.default, *configured.by_category.values()])
+        folders = []
+        for value in paths:
+            if value:
+                setup.configure_download_folder(value)
+                folders.append(setup.path_under_root(value))
+    for folder in folders:
+        library.check_tree(folder, stop)
     if not cached_only:
         sync_catalogue(
             setup.indexer(),
             setup.store,
             plan_categories(
-                settings.indexer_categories, settings.download_folders, settings.indexer_categories
+                [category] if category is not None else settings.indexer_categories,
+                settings.download_folders,
+                settings.indexer_categories,
             ),
             bootstrap=True,
             max_pages=10,
@@ -87,10 +106,15 @@ def plan(
         settings.indexer_categories,
         {t.hash.lower() for t in torrents},
         disk_of,
+        {category} if category is not None else None,
     )
-    existing = on_disk(candidates, scan(LibraryFolder(folder), setup.store))
+    existing = [
+        row
+        for folder in folders
+        for row in on_disk(candidates, scan(LibraryFolder(folder), setup.store))
+    ]
     exclude = {r.infohash for r in existing}
-    spaces = disk_space([folder], settings.free_space_margin)
+    spaces = disk_space(folders, settings.free_space_margin)
     available = {space.disk: space.available for space in spaces}
     slots = max(0, settings.zen.torrent_cap - current.count) if settings.zen.torrent_cap else None
     proposed = make_plan(

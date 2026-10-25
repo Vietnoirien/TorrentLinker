@@ -69,28 +69,111 @@ class DesktopSetup(Setup):
         self._indexer = None
         self.download_guard = None
         self.roots = ()
+        self.download_folder_changes: list[tuple[str, int | None, str, str]] = []
+        self._folder_candidate: Path | None = None
 
     def path_under_root(self, value: str, *, directory: bool = True) -> Path:
         roots = [f.path for f in self.settings.library_folders]
         for profile in self.settings.client_profiles:
             folders = profile.download_folders
             roots.extend(Path(p) for p in [folders.default, *folders.by_category.values()] if p)
+        roots.extend(Path(m.local) for m in self.settings.path_mappings)
+        if candidate := getattr(self, "_folder_candidate", None):
+            roots.append(candidate)
         self.roots = tuple(p.resolve() for p in roots)
         return super().path_under_root(value, directory=directory)
 
-    def verified_download_folder(self) -> Path:
-        # Desktop uses the existing Path Mappings and may download into a new empty folder.
-        # Remote mappings still require the web adapter's matching-file verification.
-        if self.settings.path_mappings:
-            return super().verified_download_folder()
+    def local_client(self) -> bool:
         from urllib.parse import urlsplit
 
         from torrentlinker.config import CLIENT_FIELDS
 
         host = urlsplit(getattr(self.settings, CLIENT_FIELDS[self.settings.client]).host).hostname
-        if host not in {"localhost", "127.0.0.1", "::1"}:
-            return super().verified_download_folder()
-        return self.path_under_root(self.settings.download_folders.default)
+        return host in {"localhost", "127.0.0.1", "::1"} and not self.settings.path_mappings
+
+    def configure_download_folder(
+        self, local: str, category: int | None = None, client_path: str = "", *, save: bool = False
+    ) -> dict[str, Any]:
+        import os
+
+        with self.lock:
+            if category is not None and category not in self.settings.indexer_categories:
+                raise ValueError("Choose a known Indexer category or subcategory.")
+            # The owner may select a new desktop directory. This temporary candidate
+            # authorizes validation only; it does not register a root or mapping.
+            self._folder_candidate = Path(local)
+            try:
+                path = self.path_under_root(local)
+                checked: dict[str, Any]
+                if self.local_client():
+                    if client_path and client_path != str(path):
+                        raise ValueError(
+                            "Use this computer's exact path for a local Torrent Client."
+                        )
+                    with os.scandir(path) as children:
+                        next(children, None)
+                    if not os.access(path, os.W_OK):
+                        raise ValueError("The Download Folder is not writable. Check permissions.")
+                    checked = {
+                        "local": str(path),
+                        "client": str(path),
+                        "sample": None,
+                        "readable": True,
+                        "warning": "",
+                        "category": category,
+                    }
+                else:
+                    checked = super().configure_download_folder(
+                        local, category, client_path, save=False
+                    )
+            finally:
+                self._folder_candidate = None
+            if save:
+                folders = self.settings.download_folders
+                old = folders.default if category is None else folders.by_category.get(category, "")
+                if category is None:
+                    folders.default = checked["local"]
+                else:
+                    folders.by_category[category] = checked["local"]
+                self.save()
+                root = self._root or self
+                assert isinstance(root, DesktopSetup)
+                root.download_folder_changes.append(
+                    (self.settings.active_client_id, category, old, checked["local"])
+                )
+            return {**checked, "saved": save}
+
+    def verified_download_folder(self, category: int | None = None) -> Path:
+        folder = self.download_folder(category)
+        if self.local_client():
+            return self.path_under_root(str(folder) if folder else "")
+        return super().verified_download_folder(category)
+
+    def apply_download_folder_changes(self, settings: Settings) -> None:
+        """Merge only approved folder edits back into the GUI's live settings."""
+        with self.lock:
+            settings.capture_client()
+            while self.download_folder_changes:
+                identifier, category, old, value = self.download_folder_changes.pop(0)
+                try:
+                    profile = settings.profile(identifier)
+                except ValueError:
+                    continue
+                targets = [profile.download_folders]
+                if identifier == settings.active_client_id:
+                    targets.append(settings.download_folders)
+                for folders in targets:
+                    current = (
+                        folders.default
+                        if category is None
+                        else folders.by_category.get(category, "")
+                    )
+                    if current not in {old, value}:
+                        continue  # A later explicit owner edit takes precedence.
+                    if category is None:
+                        folders.default = value
+                    else:
+                        folders.by_category[category] = value
 
 
 class DesktopOperations(Operations):
@@ -200,6 +283,7 @@ class DesktopServer:
         """GUI-thread refresh after profile, folder or Plan preferences change."""
         if self.app is None:
             return
+        self.setup.apply_download_folder_changes(settings)
         # These are the only owners of suspension. Repair a stale legacy flag
         # without unlocking an active editor or a deferred settings update.
         self.service.suspended = bool(self.settings_edit_depth or self.pending_settings)
@@ -251,6 +335,7 @@ def agent_settings_change(fn):
         if runtime is None or runtime.app is None:
             return fn(window, *args, **kwargs)
         try:
+            runtime.sync(window.settings)
             with runtime.editing_settings():
                 return fn(window, *args, **kwargs)
         except ValueError as error:

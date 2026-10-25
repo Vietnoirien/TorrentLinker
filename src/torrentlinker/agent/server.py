@@ -17,6 +17,7 @@ from torrentlinker.agent import goals
 from torrentlinker.agent.goals import Goal
 from torrentlinker.agent.service import AgentRequest, AgentService
 from torrentlinker.torrent_selection import SelectionCriteria
+from torrentlinker.web.operations import DownloadFolderRequired
 
 ACTOR: ContextVar[str] = ContextVar("mcp_actor")
 Page = Annotated[int, Field(ge=0)]
@@ -81,6 +82,8 @@ def make_server(service: AgentService):
                     return item
 
                 return clean(value)
+            except DownloadFolderRequired as error:
+                return service.folder_requirement(ACTOR.get(), error)
             except (ValueError, PermissionError, KeyError) as error:
                 return {"error": service.setup.secrets.redact(str(error))}
             except Exception:
@@ -93,6 +96,44 @@ def make_server(service: AgentService):
     def overview() -> dict[str, object]:
         """Read permitted clients, execution policy and the current Zen Profile."""
         return service.overview(ACTOR.get())
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def download_folder_options(client_id: str, category: int | None = None) -> dict[str, object]:
+        """Read verified Download Folder suggestions; always allow the user's custom answer.
+
+        For a missing Download Folder, ask the user where this client's category should
+        download, then propose_download_folder. An answer never authorizes a settings edit.
+        Paths must be visible to TorrentLinker, not merely to the browser computer.
+        """
+        return service.download_folder_options(ACTOR.get(), client_id, category)
+
+    @mcp.tool(structured_output=True)
+    @safe
+    def propose_download_folder(
+        request_id: str,
+        client_id: str,
+        path: str,
+        category: int | None = None,
+        client_path: str = "",
+    ) -> dict[str, object]:
+        """Propose exactly one client's category Download Folder, always requiring owner approval.
+
+        category=None changes only the default. Existing Path Mappings must already
+        establish client visibility. Never invent mounts or silently change mappings.
+        After approval completes, retry the original action with its stable request_id.
+        """
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="configure-download-folder",
+                client_id=client_id,
+                path=path,
+                category=category,
+                client_path=client_path,
+            ),
+        )
 
     @mcp.tool(structured_output=True)
     @safe
@@ -148,6 +189,8 @@ def make_server(service: AgentService):
         """
         try:
             return service.request(ACTOR.get(), request_id, operation)
+        except DownloadFolderRequired as error:
+            return service.folder_requirement(ACTOR.get(), error)
         except (ValueError, PermissionError) as error:
             return {"error": service.setup.secrets.redact(str(error))}
         except Exception:

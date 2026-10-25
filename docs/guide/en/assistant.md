@@ -102,3 +102,5 @@ Discussions and tasks share a limit of 200 calls per model connection per UTC da
 External assistants can still use [MCP access](agents.md). The built-in Assistant needs neither external MCP access enabled nor a copied token.
 
 Use **Delete discussion** to remove a chat and its history after confirmation. Pending proposals are rejected; torrents and files are kept. Stop an active discussion and wait for submitted actions to finish before deleting it. Automated-task discussions cannot be deleted this way.
+
+If a task needs a missing Download Folder, the discussion asks where the selected client and category should download. Choose a suggested folder or enter your own absolute path. Review and approve the exact client, category and path before Settings change. The original task then continues under its existing permissions. A rejected change leaves Settings intact. An unavailable folder or unverified remote Path Mapping opens a correction question. On desktop, a local Torrent Client can use an existing empty folder; a remote client needs a matching seeded sample.

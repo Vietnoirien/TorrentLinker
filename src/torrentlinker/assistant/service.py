@@ -490,6 +490,9 @@ class Assistant:
                 "Use sourced metadata, cite URLs, do not invent technical file facts. "
                 "Use ask_user when you need a choice or clarification. User answers never grant "
                 "action permission. Approval is handled separately by the application. "
+                "If a Download Folder is missing, the application asks for its location and "
+                "requires a separate approval before continuing your original tool call. "
+                "Never invent a mount or use a browser computer path as a server path. "
                 "You cannot change permissions, budgets, provider settings or schedules. "
                 "Respect the requested language. Do not execute code or shell commands. "
             )
@@ -706,7 +709,44 @@ class Assistant:
                     try:
                         token = ACTOR.set(actor)
                         try:
-                            if waiting and waiting.get("question"):
+                            if waiting and waiting.get("folder_recovery"):
+                                recovery = self.folder_recovery_step(
+                                    identifier, actor, waiting, events, stop
+                                )
+                                if recovery is None:
+                                    self.save_wait(
+                                        identifier,
+                                        "awaiting_user"
+                                        if event.get("question")
+                                        else "awaiting_approval",
+                                        messages,
+                                        pending_calls,
+                                        results,
+                                        events,
+                                        len(events) - 1,
+                                        time.monotonic() - started,
+                                    )
+                                    return
+                                if recovery.pop("resume_original", False):
+                                    waiting, event_index = None, None
+                                    event = {
+                                        "tool": call["name"],
+                                        "arguments": json.loads(
+                                            self.secrets.redact(json.dumps(args), public_urls=True)
+                                        ),
+                                        "status": "running",
+                                    }
+                                    events.append(event)
+                                    self.update_run(identifier, events=json.dumps(events))
+                                    answer = asyncio.run(self.mcp.call_tool(call["name"], args))
+                                    result = answer.structured_content or {
+                                        "content": [
+                                            b.model_dump(mode="json") for b in answer.content
+                                        ]
+                                    }
+                                else:
+                                    result = recovery
+                            elif waiting and waiting.get("question"):
                                 result = {"answer": waiting["answer"], "permission_granted": False}
                             elif waiting and waiting.get("result", {}).get(
                                 "requires_owner_approval"
@@ -770,6 +810,19 @@ class Assistant:
                             results,
                             events,
                             event_index,
+                            time.monotonic() - started,
+                        )
+                        return
+                    if result.get("download_folder_required"):
+                        self.folder_question(event, result["download_folder_required"])
+                        self.save_wait(
+                            identifier,
+                            "awaiting_user",
+                            messages,
+                            pending_calls,
+                            results,
+                            events,
+                            len(events) - 1,
                             time.monotonic() - started,
                         )
                         return
@@ -854,6 +907,115 @@ class Assistant:
             self.update_run(identifier, status="failed", error=detail)
         finally:
             self.stops.pop(identifier, None)
+
+    def folder_question(self, event, requirement, error=""):
+        category = requirement.get("category")
+        name = requirement.get("categories", {}).get(str(category), "Default")
+        recovery = event.setdefault(
+            "folder_recovery",
+            {
+                "requirement": requirement,
+                "attempt": 0,
+            },
+        )
+        recovery["attempt"] += 1
+        event.pop("answer", None)
+        event.pop("decision", None)
+        event.pop("review", None)
+        event["result"] = {"error": error} if error else {}
+        event["question"] = {
+            "question": (
+                f"Configure the Download Folder in Settings for "
+                f"{requirement['client']} ({requirement['client_id']}), {name}. "
+                "Which absolute folder should this category use? Enter a folder visible "
+                "to TorrentLinker. A browser computer's folder needs a server mount. "
+                "Your answer will be proposed for separate approval."
+                + (f" Previous folder could not be used: {error}" if error else "")
+            ),
+            "options": [item["path"] for item in requirement.get("suggestions", [])][:12],
+        }
+        event["status"] = "waiting"
+
+    def folder_recovery_step(self, identifier, actor, event, events, stop):
+        """Continue one explicit folder question/approval without replaying the blocked action."""
+        from torrentlinker.agent.service import AgentRequest
+
+        recovery = event["folder_recovery"]
+        requirement = recovery["requirement"]
+        if event.get("question"):
+            path = event["answer"].strip()
+            try:
+                body = AgentRequest(
+                    kind="configure-download-folder",
+                    client_id=requirement["client_id"],
+                    category=requirement.get("category"),
+                    path=path,
+                )
+                result = self.agent.request(
+                    actor,
+                    f"{identifier}:folder:{self.checkpoint(identifier)['event_index']}:"
+                    f"{recovery['attempt']}",
+                    body,
+                )
+            except (ValueError, OSError) as error:
+                if "Finish editing settings before" in str(error):
+                    raise
+                self.folder_question(event, requirement, self.secrets.redact(str(error)))
+                return None
+            event.pop("question", None)
+            event.pop("answer", None)
+            event["tool"] = "propose_download_folder"
+            event["arguments"] = {
+                "client_id": body.client_id,
+                "category": body.category,
+                "path": path,
+            }
+            event["result"] = result
+            event["review"] = self.agent.review(result["id"])
+            event["status"] = "waiting"
+            return None
+        proposal = event["result"]["id"]
+        if event.get("decision") is True:
+            try:
+                result = self.agent.execute(proposal, approved=True)
+            except (ValueError, OSError) as error:
+                if "Finish editing settings before" in str(error):
+                    raise
+                self.agent.reject(proposal)
+                self.folder_question(event, requirement, self.secrets.redact(str(error)))
+                return None
+        else:
+            result = self.agent.proposal(proposal)
+        if result["status"] == "rejected":
+            event.pop("folder_recovery", None)
+            return {
+                **result,
+                "error": "Download Folder change rejected. The original action was not resumed.",
+            }
+        job_id = result.get("job_id")
+        if not job_id:
+            self.folder_question(event, requirement, "Review a new folder proposal.")
+            return None
+        event["result"] = result
+        self.update_run(identifier, events=json.dumps(events))
+        while not stop.wait(0.2):
+            job = self.agent.job(actor, job_id)
+            if job["status"] not in {"queued", "running"}:
+                break
+        else:
+            self.agent.jobs.cancel(job_id)
+            raise InterruptedError()
+        if job["status"] != "completed":
+            self.folder_question(
+                event,
+                requirement,
+                job.get("error")
+                or "Folder verification did not complete. Check the mount and retry.",
+            )
+            return None
+        event.update(status="finished", result={**result, "job": job})
+        event.pop("folder_recovery", None)
+        return {"resume_original": True}
 
     def checkpoint(self, identifier):
         with self.lock:

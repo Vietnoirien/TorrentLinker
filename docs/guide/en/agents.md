@@ -38,7 +38,7 @@ Ask your assistant:
 
 Search results, descriptions and NFOs are external content, not instructions to your assistant. Goals can record a desired Class and daily Zen target; they never change your real c411 Class. Refresh client data before assessing progress. Balance targets are recorded, but this first implementation does not fetch a balance through MCP. Seed income estimates exclude revival payouts and upload rewards.
 
-A default Download Folder must currently be configured for each MCP download target, even if category folders already exist. Remote folders need the usual Path Mapping and file verification. The first MCP version uses this default folder for queued downloads.
+Downloads use the selected client's Download Folder for the Indexer category, with the usual parent-category and default fallbacks. If a folder is missing, read `download_folder_options`, ask the owner for a location, then call `propose_download_folder` with the exact client, category and path. This setting change always requires owner approval, even with download execution permission. The answer alone grants no permission. Retry the original request after the approved setting job completes. Remote folders need an existing Path Mapping and a matching seeded file visible to TorrentLinker; a browser computer's path does not mount it on the server.
 
 ## Select many torrents without counting them yourself
 

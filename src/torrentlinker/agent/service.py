@@ -30,6 +30,7 @@ READ_JOBS = {
     "upload-preview",
 }
 PERMISSIONS = {
+    "configure-download-folder": "download-folder",
     "enqueue": "downloads",
     "send-queue": "downloads",
     "manage": "controls",
@@ -85,6 +86,13 @@ class AgentService:
         if set(body.client_budgets) - set(body.client_ids):
             raise ValueError("Budgets must refer to the selected clients.")
         target.validate(body)
+        if body.kind == "configure-download-folder":
+            checked = target.setup.configure_download_folder(
+                body.path, body.category, body.client_path
+            )
+            body = body.model_copy(
+                update={"path": checked["local"], "client_path": checked["client"]}
+            )
         serialized = body.model_dump_json()
         with self.access.lock:
             row = self.access.db.execute(
@@ -109,11 +117,67 @@ class AgentService:
                 grant.mode == "execute"
                 and PERMISSIONS.get(body.kind) in grant.permissions
                 and not (body.kind == "manage" and body.action in {"delete", "remove"})
-                and body.kind not in {"upload-send", "upload-reset"}
+                and body.kind not in {"upload-send", "upload-reset", "configure-download-folder"}
             )
             if body.kind in READ_JOBS or automatic:
                 return self.execute(identifier, approved=False)
             return self.proposal(identifier)
+
+    def folder_requirement(self, actor: str, error) -> dict:
+        return {
+            "error": str(error),
+            "download_folder_required": self.download_folder_options(
+                actor, error.client_id, error.category
+            ),
+        }
+
+    def download_folder_options(
+        self, actor: str, client_id: str, category: int | None = None
+    ) -> dict:
+        target = self.target(actor, client_id)
+        setup = target.setup
+        suggestions = []
+        folders = setup.settings.download_folders
+        for value in dict.fromkeys([folders.default, *folders.by_category.values()]):
+            if not value:
+                continue
+            try:
+                checked = setup.configure_download_folder(value, category)
+            except (ValueError, OSError):
+                continue
+            suggestions.append({"path": checked["local"], "client_path": checked["client"]})
+        # Client API paths are suggestions only when the existing mapping and a seeded
+        # sample establish that this server sees the same folder.
+        from torrentlinker.paths import PathMapper
+
+        mapper = PathMapper(setup.settings.path_mappings)
+        try:
+            client_folders = setup.client().folder_settings()
+        except Exception:
+            client_folders = []
+        for folder in client_folders:
+            value = getattr(folder, "path", "")
+            if not value:
+                continue
+            try:
+                checked = setup.configure_download_folder(mapper.to_local(str(value)), category)
+            except (ValueError, OSError):
+                continue
+            item = {"path": checked["local"], "client_path": checked["client"]}
+            if item not in suggestions:
+                suggestions.append(item)
+        return {
+            "client_id": client_id,
+            "client": setup.settings.profile().name,
+            "category": category,
+            "categories": {str(k): v.name for k, v in setup.settings.indexer_categories.items()},
+            "suggestions": suggestions,
+            "custom_answer_allowed": True,
+            "instruction": "Ask the user for an absolute folder visible to TorrentLinker. "
+            "Their answer does not approve a settings change. Propose the exact "
+            "client, category and folder with propose_download_folder, then wait "
+            "for owner approval before continuing the original action.",
+        }
 
     def proposal(self, identifier: str) -> dict:
         row = self.access.db.execute("SELECT * FROM proposals WHERE id=?", (identifier,)).fetchone()
@@ -154,7 +218,7 @@ class AgentService:
                     grant.mode != "execute"
                     or PERMISSIONS.get(body.kind) not in grant.permissions
                     or (body.kind == "manage" and body.action in {"remove", "delete"})
-                    or body.kind in {"upload-send", "upload-reset"}
+                    or body.kind in {"upload-send", "upload-reset", "configure-download-folder"}
                 ):
                     raise ValueError("Owner approval is required.")
             self.limits(identifier, actor, grant, target, body)
@@ -333,6 +397,21 @@ class AgentService:
             preview.pop("token")
             preview["client"] = target.setup.settings.profile().name
             return preview
+        if body.kind == "configure-download-folder":
+            details = {
+                "kind": body.kind,
+                "client": target.setup.settings.profile().name,
+                "client_id": body.client_id,
+                "category": body.category,
+                "category_name": (
+                    target.setup.settings.indexer_categories[body.category].name
+                    if body.category is not None
+                    else "Default"
+                ),
+                "path": body.path,
+                "client_path": body.client_path,
+            }
+            return {"operation": details, **details}
         if body.kind in {"upload-send", "upload-reset", "upload-remove"}:
             target.validate(body)
             return {

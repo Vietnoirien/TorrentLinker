@@ -7,6 +7,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -32,6 +33,15 @@ from torrentlinker.web.setup import Setup
 from torrentlinker.web.storage import DownloadClient
 from torrentlinker.web.uploads import UploadForm, Uploads
 from torrentlinker.zen import ZenTorrent, note, torrent_zen
+
+
+class DownloadFolderRequired(ValueError):
+    def __init__(self, client_id: str, category: int | None):
+        super().__init__(
+            "Configure and verify a mounted Download Folder in Settings first. "
+            "A seedbox API connection alone cannot check existing files."
+        )
+        self.client_id, self.category = client_id, category
 
 
 class JobRequest(BaseModel):
@@ -61,6 +71,7 @@ class JobRequest(BaseModel):
         "upload-seed",
         "profile",
         "verify",
+        "configure-download-folder",
     ]
     action: Literal["pause", "resume", "recheck", "remove", "delete"] = "pause"
     hashes: list[str] = Field(default_factory=list, max_length=1000)
@@ -74,6 +85,7 @@ class JobRequest(BaseModel):
     selection: SelectionCriteria = Field(default_factory=SelectionCriteria)
     selection_id: str = Field(default="", max_length=64)
     path: str = Field(default="", max_length=4096)
+    client_path: str = Field(default="", max_length=4096)
     query: str = Field(default="", max_length=500)
     page: int = Field(default=1, ge=1, le=10000)
     category: int | None = None
@@ -116,15 +128,54 @@ class Operations:
                 else [self.setup]
             )
             for target in targets:
-                folder = target.settings.download_folders.default
-                if not folder:
-                    raise ValueError(
-                        "Configure and verify a mounted Download Folder in Settings first."
-                        " A seedbox API connection alone cannot check existing files."
+                folder = target.download_folder(self.request_category(request))
+                if not folder and request.kind == "plan" and request.category is None:
+                    folder = next(
+                        (
+                            Path(value)
+                            for value in target.settings.download_folders.by_category.values()
+                        ),
+                        None,
                     )
-                target.path_under_root(folder)
+                if request.kind == "send-queue":
+                    folder = next(
+                        (
+                            e.folder
+                            for e in entries(target.store)
+                            if e.status == "queued"
+                            and (not request.hashes or e.candidate.infohash in request.hashes)
+                        ),
+                        folder,
+                    )
+                if not folder:
+                    raise DownloadFolderRequired(
+                        target.settings.active_client_id, self.request_category(request)
+                    )
+                target.path_under_root(str(folder))
         if request.kind == "manage" and not request.hashes:
             raise ValueError("Select at least one torrent.")
+
+    def request_category(self, request: JobRequest) -> int | None:
+        if request.category is not None:
+            return request.category
+        if request.kind == "enqueue" and request.hashes:
+            categories = {r.category for r in self.setup.store.catalogue(request.hashes)}
+            if len(categories) == 1:
+                return categories.pop()
+        return None
+
+    def download_destinations(self) -> set[str]:
+        folders = self.setup.settings.download_folders
+        result = set()
+        for value in [folders.default, *folders.by_category.values()]:
+            if not value:
+                continue
+            try:
+                result.add(str(self.setup.path_under_root(value)))
+            except (ValueError, OSError):
+                # An unrelated disconnected destination does not invalidate this one.
+                continue
+        return result
 
     def queue(self) -> list[dict[str, Any]]:
         return [
@@ -153,6 +204,10 @@ class Operations:
         self, request: JobRequest, stop: threading.Event, progress: Callable[[Any], None]
     ) -> Any:
         self.validate(request)
+        if request.kind == "configure-download-folder":
+            return self.setup.configure_download_folder(
+                request.path, request.category, request.client_path, save=True
+            )
         if request.kind == "upload-preview":
             if request.draft_id:
                 record = self.setup.store.local_draft(request.draft_id)
@@ -228,6 +283,9 @@ class Operations:
                     }
                 settings = replace(
                     self.setup.settings,
+                    plan_categories=[request.category]
+                    if request.category is not None
+                    else self.setup.settings.plan_categories,
                     plan_options=PlanOptions(
                         max_download_bytes=request.maximum_bytes,
                         max_torrents=request.maximum_torrents,
@@ -236,8 +294,7 @@ class Operations:
 
                 def validate(identifier, folder):
                     target = targets[identifier]
-                    if folder != target.verified_download_folder():
-                        raise ValueError("Verify this client's Download Folder in Settings first.")
+                    target.configure_download_folder(str(folder))
                     Library(target).check_tree(folder, stop)
 
                 proposed = distributed_plan(
@@ -274,6 +331,7 @@ class Operations:
                 stop,
                 progress,
                 cached_only=request.cached_only,
+                category=request.category,
             )
         if request.kind == "details":
             from torrentlinker.torrent_details import parse_details, preview_html
@@ -406,16 +464,24 @@ class Operations:
                     self.setup.store,
                     indexer,
                     candidate,
-                    self.setup.path_under_root(self.setup.settings.download_folders.default),
+                    self.setup.verified_download_folder(self.request_category(request)),
                 )
             return {"queued": count}
         if request.kind == "send-queue":
-            self.setup.verified_download_folder()
-            # Recheck every queued folder, including entries saved before settings changed.
-            for entry in entries(self.setup.store):
+            queued_entries = [
+                e
+                for e in entries(self.setup.store)
+                if e.status == "queued"
+                and (not request.hashes or e.candidate.infohash in request.hashes)
+            ]
+            if not queued_entries and self.setup.download_folder(request.category):
+                self.setup.verified_download_folder(request.category)
+            # Recheck selected folders, including entries saved before settings changed.
+            for entry in queued_entries:
                 if entry.status == "queued":
                     self.setup.path_under_root(str(entry.folder))
-                    if str(entry.folder) != self.setup.settings.download_folders.default:
+                    self.setup.configure_download_folder(str(entry.folder))
+                    if str(entry.folder) not in self.download_destinations():
                         raise ValueError(
                             "A queued destination changed. Remove that entry and queue it again."
                         )

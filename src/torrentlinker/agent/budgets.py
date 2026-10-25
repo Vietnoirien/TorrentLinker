@@ -88,9 +88,7 @@ def reserve(
             if e.status == "queued" and e.candidate.infohash in body.hashes
         }
         sizes = {h: e.candidate.size for h, e in queued.items()}
-        if any(
-            str(e.folder) != target.setup.settings.download_folders.default for e in queued.values()
-        ):
+        if any(str(e.folder) not in target.download_destinations() for e in queued.values()):
             raise ValueError(
                 "A queued destination changed. Queue it again in the configured folder."
             )
@@ -107,7 +105,14 @@ def reserve(
         or used[1] + len(sizes) > grant.daily_torrents
     ):
         raise ValueError("This operation exceeds the connection's daily download budget.")
-    folder = target.setup.path_under_root(target.setup.settings.download_folders.default)
+    if body.kind == "send-queue":
+        destinations = {e.folder for e in queued.values()}
+        if len({str(disk_of(p)) for p in destinations}) != 1:
+            raise ValueError("Send downloads on one disk at a time to reserve storage safely.")
+        folder = target.setup.path_under_root(str(next(iter(destinations))))
+    else:
+        selected = target.setup.download_folder(target.request_category(body))
+        folder = target.setup.path_under_root(str(selected) if selected else "")
     disk = str(disk_of(folder))
     # Pending sends across connections and clients share one physical storage budget.
     pending = outstanding(access, target, disk)

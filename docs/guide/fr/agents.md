@@ -38,7 +38,7 @@ Vous pouvez demander à votre assistant :
 
 Les descriptions, NFO et résultats de recherche sont du contenu externe, pas des instructions pour l'assistant. Un objectif peut enregistrer une Classe souhaitée et un revenu quotidien visé, sans modifier votre Classe sur c411. Actualisez les données avant d'évaluer la progression. Un objectif de solde peut être enregistré, mais cette première version ne récupère pas le solde par MCP. Les estimations de seed n'incluent pas les primes de revival ni les récompenses d'upload.
 
-Chaque cible MCP doit actuellement avoir un Dossier de téléchargement par défaut, même si des dossiers par catégorie existent. Un dossier distant nécessite la correspondance de chemins et la vérification habituelles. La première version MCP utilise ce dossier par défaut pour les téléchargements mis en file.
+Les téléchargements utilisent le Dossier de téléchargement de la catégorie pour le client choisi, avec les replis habituels vers la catégorie parente et le dossier par défaut. Si ce dossier manque, consultez `download_folder_options`, demandez son emplacement au propriétaire, puis appelez `propose_download_folder` avec le client, la catégorie et le chemin exacts. Ce changement exige toujours une approbation, même avec la permission d’exécuter des téléchargements. La réponse seule ne donne aucune autorisation. Reprenez la requête initiale après la réussite du changement approuvé. Un dossier distant nécessite une correspondance de chemins existante et un fichier déjà seedé visible par TorrentLinker ; le chemin du navigateur ne crée pas de montage sur le serveur.
 
 ## Sélectionner beaucoup de torrents sans les compter soi-même
 
