@@ -8,12 +8,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from torrentlinker.library import LibraryEntry, build_library, indexer_contents
+from torrentlinker.library import LibraryEntry, LibraryResult, build_library, indexer_contents
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.reseed import start_reseed
 from torrentlinker.review import check_candidate, remember_candidates, remembered_candidates
-from torrentlinker.scan import scan_item
-from torrentlinker.web.setup import Setup
+from torrentlinker.scan import ScanError, scan_item
+from torrentlinker.web.setup import Setup, StorageUnavailableError
 
 
 class Library:
@@ -26,9 +26,15 @@ class Library:
 
     def check_tree(self, path: Path, stop: threading.Event) -> None:
         self.setup.path_under_root(str(path), directory=path.is_dir())
+        if not path.is_dir():
+            return
+
         # Reject links in traversed trees, including in-root cycles, before the existing
         # desktop scanner follows a directory at its configured depth.
-        for base, dirs, files in os.walk(path):
+        def walk_failed(error: OSError) -> None:
+            raise error
+
+        for base, dirs, files in os.walk(path, onerror=walk_failed):
             if stop.is_set():
                 raise ValueError("Scan cancelled.")
             for name in (*dirs, *files):
@@ -41,21 +47,51 @@ class Library:
                 self.setup.path_under_root(str(child), directory=False)
 
     def scan(self, stop: threading.Event, progress: Callable[[Any], None]) -> dict:
-        for folder in self.setup.settings.library_folders:
-            self.check_tree(folder.path, stop)
-        torrents = indexer_contents(
-            self.client(), self.setup.store, self.setup.settings.indexer.url
-        )
-        result = []
+        unavailable = {}
         for folder in self.setup.settings.library_folders:
             if stop.is_set():
                 return {"cancelled": True}
-            result += build_library(
-                [folder], torrents, self.setup.settings.matching.ignore, self.setup.store
-            )
+            try:
+                self.check_tree(folder.path, stop)
+            except (OSError, StorageUnavailableError) as error:
+                unavailable[folder.path] = error
+            except ValueError:
+                if stop.is_set():
+                    return {"cancelled": True}
+                raise
+        if stop.is_set():
+            return {"cancelled": True}
+        torrents = indexer_contents(
+            self.client(), self.setup.store, self.setup.settings.indexer.url
+        )
+        result = LibraryResult()
+        for folder in self.setup.settings.library_folders:
+            if stop.is_set():
+                return {"cancelled": True}
+            if folder.path in unavailable:
+                result.errors.append(ScanError(folder.path, str(unavailable[folder.path])))
+                result.extend(entry for entry in self.entries if entry.folder == folder)
+            else:
+                scanned = build_library(
+                    [folder],
+                    torrents,
+                    self.setup.settings.matching.ignore,
+                    self.setup.store,
+                    previous=self.entries,
+                )
+                result.extend(scanned)
+                result.errors.extend(scanned.errors)
             progress({"items": len(result), "folder": str(folder.path)})
+        if stop.is_set():
+            return {"cancelled": True}
         self.entries = result
-        return {"count": len(result)}
+        return {
+            "count": len(result),
+            "partial": bool(result.errors),
+            "errors": [
+                {"path": str(error.path), "message": error.message} for error in result.errors
+            ],
+        }
 
     def rows(self) -> list[dict[str, Any]]:
         return [

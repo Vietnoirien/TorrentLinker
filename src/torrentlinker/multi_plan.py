@@ -72,7 +72,7 @@ def distributed_plan(
                 raise ValueError(f"Download Folder is unavailable for {scoped.profile().name}.")
             folders.add(folder)
             if folder not in scanned:
-                scanned[folder] = scan(LibraryFolder(folder), store)
+                scanned[folder] = scan(LibraryFolder(folder), store).require_complete()
         existing = on_disk(
             candidates,
             [

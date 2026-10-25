@@ -111,7 +111,7 @@ def plan(
     existing = [
         row
         for folder in folders
-        for row in on_disk(candidates, scan(LibraryFolder(folder), setup.store))
+        for row in on_disk(candidates, scan(LibraryFolder(folder), setup.store).require_complete())
     ]
     exclude = {r.infohash for r in existing}
     spaces = disk_space(folders, settings.free_space_margin)

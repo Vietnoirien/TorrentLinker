@@ -562,14 +562,17 @@ async function pollJobs() {
     if (pending && !["running", "queued"].includes(row.status)) {
       state.jobs.delete(row.id);
       const full = await api(`jobs/${row.id}`);
-      if (full.status === "completed") {
+      if (["completed", "partial"].includes(full.status)) {
         if (pending.done && (pending.body.client_id === state.clientId || pending.body.kind === "enqueue")) await pending.done(full.result);
+        if (full.status === "partial") toast(say("Scan incomplete. Some paths could not be read; previous items were kept. See job details.", "Analyse incomplète. Certains chemins sont inaccessibles ; les éléments précédents ont été conservés. Consultez les détails de la tâche."));
       } else toast(full.error || say("Job cancelled", "Tâche annulée"));
     }
   }
   $("work-status").textContent = running
     ? `${running} ${say("active job(s)", "tâche(s) active(s)")}`
-    : say("Up to date", "À jour");
+    : rows.find(row => row.kind === "scan" && row.client_id === state.clientId)?.status === "partial"
+      ? say("Scan incomplete · see jobs", "Analyse incomplète · voir les tâches")
+      : say("Up to date", "À jour");
   if (state.view === "jobs") renderJobs(rows);
   if (state.view === "queue") await loadQueue();
 }

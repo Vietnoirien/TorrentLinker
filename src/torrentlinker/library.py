@@ -16,7 +16,7 @@ from torrentlinker.domain import ItemState, LibraryFolder, LocalItem, Torrent
 from torrentlinker.matching import IgnoreList
 from torrentlinker.qbit import Qbit
 from torrentlinker.reconcile import classify
-from torrentlinker.scan import scan
+from torrentlinker.scan import ScanError, scan
 from torrentlinker.seeding import indexer_torrents
 from torrentlinker.store import Store
 
@@ -85,23 +85,42 @@ class LibraryEntry:
     torrent_hashes: frozenset[str] = frozenset()
 
 
+class LibraryResult(list[LibraryEntry]):
+    """Current entries and failures, retaining previous unavailable entries."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.errors: list[ScanError] = []
+
+
 def build_library(
     folders: Iterable[LibraryFolder],
     torrents: list[Torrent],
     ignore: IgnoreList = IgnoreList(),
     cache: Store | None = None,
     refresh: bool = False,
-) -> list[LibraryEntry]:
+    previous: Iterable[LibraryEntry] = (),
+) -> LibraryResult:
     file_hashes: dict[Path, set[str]] = {}
     for torrent in torrents:
         for rel in torrent.files:
             file_hashes.setdefault(torrent.save_path / rel, set()).add(torrent.hash.lower())
-    entries: list[LibraryEntry] = []
+    entries = LibraryResult()
+    previous = list(previous)
     for folder in folders:
-        try:
-            items = scan(folder, cache, refresh)
-        except TimeoutError as error:
-            raise LibraryReadTimeout("folder", str(folder.path)) from error
+        items = scan(folder, cache, refresh)
+        entries.errors.extend(items.errors)
+        entries.extend(
+            entry
+            for entry in previous
+            if entry.folder == folder
+            and any(
+                entry.item.path == error.path
+                or error.path in entry.item.path.parents
+                or entry.item.path in error.path.parents
+                for error in items.errors
+            )
+        )
         states = classify(items, torrents, ignore)
         for item in items:
             content = [rel for rel in item.files if not ignore.matches(rel)] or list(item.files)

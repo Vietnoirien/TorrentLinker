@@ -1088,7 +1088,7 @@ class MainWindow(QMainWindow):
             on_disk_items = list(local_items)
             for folder in unlisted:
                 try:
-                    on_disk_items += scan(LibraryFolder(folder), store)
+                    on_disk_items += scan(LibraryFolder(folder), store).require_complete()
                 except OSError as e:
                     log.info("Download Folder not scanned for books on disk: %s", e)
             already = on_disk(downloads, on_disk_items)
@@ -2116,11 +2116,12 @@ class MainWindow(QMainWindow):
         self.add_folder_action.setEnabled(False)
         self.statusBar().showMessage(self.tr("Scanning…"))
         folders = list(self.settings.library_folders)
+        previous = list(self.library_model.entries)
         qbit, ignore, store = self.qbit(), self.settings.matching.ignore, self.store
         url = self.settings.indexer.url
         run_in_background(
             lambda: build_library(
-                folders, indexer_contents(qbit, store, url), ignore, store, refresh
+                folders, indexer_contents(qbit, store, url), ignore, store, refresh, previous
             ),
             self._scan_done,
             self._scan_failed,
@@ -2134,6 +2135,20 @@ class MainWindow(QMainWindow):
         self.add_folder_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("{0} Local Items").format(len(entries)))
         self.restore_searches(entries)
+        errors = getattr(entries, "errors", [])
+        if errors:
+            self.statusBar().showMessage(self.tr("Scan incomplete: {0} errors").format(len(errors)))
+            box = QMessageBox(
+                QMessageBox.Icon.Warning,
+                self.tr("Scan incomplete"),
+                self.tr(
+                    "Some paths could not be read. Previous items for these paths were kept. "
+                    "Check that the drive or network share is accessible, then scan again."
+                ),
+                parent=self,
+            )
+            box.setDetailedText("\n".join(f"{error.path}: {error.message}" for error in errors))
+            box.exec()
 
     def restore_searches(self, entries: list[LibraryEntry]) -> None:
         """Show each Local Item's last search again, from cached .torrent files only."""

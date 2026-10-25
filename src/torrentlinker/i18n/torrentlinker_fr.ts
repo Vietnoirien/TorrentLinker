@@ -913,6 +913,18 @@ Chaque .torrent est téléchargé directement depuis c411 avec votre clé et ajo
         <translation>{0} éléments locaux</translation>
     </message>
     <message>
+        <source>Scan incomplete: {0} errors</source>
+        <translation>Analyse incomplète : {0} erreurs</translation>
+    </message>
+    <message>
+        <source>Scan incomplete</source>
+        <translation>Analyse incomplète</translation>
+    </message>
+    <message>
+        <source>Some paths could not be read. Previous items for these paths were kept. Check that the drive or network share is accessible, then scan again.</source>
+        <translation>Certains chemins n'ont pas pu être lus. Les éléments précédents de ces chemins ont été conservés. Vérifiez que le lecteur ou le partage réseau est accessible, puis relancez l'analyse.</translation>
+    </message>
+    <message>
         <location filename="../gui/main_window.py" line="2173"/>
         <location filename="../gui/main_window.py" line="2174"/>
         <source>Scan failed</source>

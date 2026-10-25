@@ -24,6 +24,12 @@ from torrentlinker.store import Store
 from torrentlinker.web.security import ServerSecrets
 
 Connector = Callable[..., ClientApi]
+
+
+class StorageUnavailableError(ValueError):
+    """A configured storage path could not be read, rather than rejected for safety."""
+
+
 CLIENT_SETTINGS = {
     "qbittorrent": "qbit",
     "deluge": "deluge",
@@ -395,10 +401,11 @@ class Setup:
             raise ValueError("Choose an absolute folder visible to this server.")
         try:
             resolved = path.resolve(strict=True)
-        except OSError:
-            raise ValueError(
+        except OSError as error:
+            raise StorageUnavailableError(
                 "The folder is unavailable. Check the storage mount and permissions."
-            ) from None
+                f" {path}: {error}"
+            ) from error
         if not any(resolved.is_relative_to(root) for root in self.roots):
             raise ValueError("This path is outside the configured storage roots.")
         if directory and not resolved.is_dir():

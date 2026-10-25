@@ -103,9 +103,16 @@ class Jobs:
                 error=self.error_message(error),
             )
         else:
+            status = (
+                "partial"
+                if self.get(identifier)["kind"] == "scan"
+                and isinstance(result, dict)
+                and result.get("partial")
+                else "completed"
+            )
             self._update(
                 identifier,
-                status="cancelled" if stop.is_set() else "completed",
+                status="cancelled" if stop.is_set() else status,
                 result=json.dumps(result),
             )
         finally:

@@ -81,10 +81,11 @@ def test_folder_timeout_identifies_folder_without_retry(tmp_path, monkeypatch):
         raise TimeoutError("timed out")
 
     monkeypatch.setattr(Path, "iterdir", timeout)
-    with pytest.raises(TimeoutError) as error:
-        build_library([LibraryFolder(tmp_path, depth=5)], [])
-    assert str(tmp_path) in str(error.value)
-    assert "Torrent Client" not in str(error.value)
+    result = build_library([LibraryFolder(tmp_path, depth=5)], [])
+    assert result == []
+    assert len(result.errors) == 1
+    assert result.errors[0].path == tmp_path
+    assert "timed out" in result.errors[0].message
 
 
 def test_qbittorrent_wrapped_timeout_is_retried(tmp_path):

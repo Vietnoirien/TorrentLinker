@@ -414,6 +414,7 @@ BOOKS, BD, AUDIO, PRESS = (
 def folder(tmp_path: Path, name: str, *files: str) -> LocalItem:
     """A Local Item folder `name` holding small files called `files` (`/` nests them)."""
     root = tmp_path / name
+    root.mkdir(parents=True, exist_ok=True)
     for rel in files:
         f = root / rel
         f.parent.mkdir(parents=True, exist_ok=True)
