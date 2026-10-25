@@ -139,3 +139,22 @@ Si une tâche nécessite un Dossier de téléchargement manquant, la discussion 
 ## Dossiers de discussions
 
 La barre latérale regroupe les discussions dans des dossiers repliables : Général, Envois, Recherche de films, Recherche de séries et Dépannage. Utilisez **Déplacer** pour choisir un dossier ou saisir un nom court. Le classement manuel persiste après redémarrage et le modèle ne peut pas le remplacer. Activez le classement automatique dans cette fenêtre pour autoriser de nouveau le modèle à classer la discussion en cours. Il ne peut ni déplacer les autres discussions ni modifier les permissions.
+
+## Listes de torrents conservées entre les messages
+
+Demandez à l'Assistant d'enregistrer une liste nommée pour préparer plusieurs étapes.
+Par exemple : choisir dix films, garder les cinq plus légers, ajouter cinquante
+albums, puis affiner seulement les films en conservant les albums. TorrentLinker
+conserve les membres exacts et les totaux ; l'Assistant peut retrouver les identifiants
+et révisions après compactage du contexte. Chaque discussion possède ses listes,
+et chaque liste concerne un seul client.
+
+Enregistrer ou modifier une liste change seulement le projet. La mise en file et le
+démarrage des téléchargements restent des actions séparées, avec leurs permissions
+et validations habituelles. Les listes survivent aux redémarrages et à l'expiration
+des sélections temporaires. Avant une action, l'Assistant matérialise une révision
+exacte et vérifie les métadonnées et destinations actuelles. Modifier ensuite la
+liste ne change pas une action déjà préparée. Une liste contient au plus 10 000
+éléments ; les lots d'action de 1 000 maximum indiquent les éléments restants.
+Les tailles inconnues restent inconnues. L'Assistant peut aussi comparer une révision
+aux torrents actuellement en partage, terminés en pause, incomplets ou absents du client.

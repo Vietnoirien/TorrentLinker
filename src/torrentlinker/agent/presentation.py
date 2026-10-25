@@ -177,6 +177,18 @@ def request_command(event: dict) -> dict:
 def tool_description(event: dict, language: str = "en") -> str:
     """Name the observable tool action; model commentary remains a separate message."""
     descriptions = {
+        "create_torrent_list": ("Save a durable torrent list", "Enregistrer une liste de torrents"),
+        "edit_torrent_list": ("Update the saved torrent list", "Modifier la liste enregistrée"),
+        "get_torrent_list": ("Read the saved torrent list", "Lire la liste enregistrée"),
+        "list_torrent_lists": ("Find saved torrent lists", "Retrouver les listes enregistrées"),
+        "select_torrent_list": (
+            "Prepare an exact saved-list selection",
+            "Préparer une sélection de la liste",
+        ),
+        "compare_torrent_list_client": (
+            "Compare the list with the torrent client",
+            "Comparer la liste au client torrent",
+        ),
         "classify_conversation": (
             "Organize this discussion in the sidebar.",
             "Classer cette discussion dans la barre latérale.",

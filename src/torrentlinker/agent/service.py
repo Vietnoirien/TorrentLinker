@@ -85,6 +85,9 @@ class AgentService:
     ):
         self.access, self.setup, self.jobs, self.for_client = access, setup, jobs, for_client
         self.suspended = False
+        from torrentlinker.agent.torrent_lists import TorrentLists
+
+        self.torrent_lists = TorrentLists(self)
 
     def target(self, actor: str, client_id: str) -> Operations:
         grant = self.access.grant(actor)
@@ -159,6 +162,11 @@ class AgentService:
             )
         serialized = body.model_dump_json()
         with self.access.lock:
+            if self.access.db.execute(
+                "SELECT 1 FROM torrent_list_requests WHERE actor=? AND request_id=?",
+                (actor, request_id),
+            ).fetchone():
+                raise ValueError("This request_id already belongs to a different operation.")
             row = self.access.db.execute(
                 "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
             ).fetchone()
@@ -418,6 +426,9 @@ class AgentService:
         """Resolve an immutable, connection-owned completed selection, not a caller's hashes."""
         self.access.grant(actor)
         with self.access.lock:
+            materialized = self.torrent_lists.selection(actor, identifier, kind)
+            if materialized is not None:
+                return materialized
             proposal = self.access.db.execute(
                 "SELECT * FROM proposals WHERE grant_id=? AND job_id=?", (actor, identifier)
             ).fetchone()

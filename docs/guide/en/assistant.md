@@ -126,3 +126,20 @@ If a task needs a missing Download Folder, the discussion asks where the selecte
 ## Conversation folders
 
 The sidebar groups discussions in collapsible folders: General, Uploads, Film research, Series research and Troubleshooting. Use **Move** to choose a folder or enter a short custom name. Manual placement persists across restarts and the model cannot override it. Enable automatic classification in the move dialog to let the model organize the current conversation again. It cannot move other conversations or change permissions.
+
+## Saved torrent lists across turns
+
+Ask the Assistant to save a named torrent list when planning over several messages.
+For example: choose ten films, keep the five smallest, add fifty albums, then refine
+only the film portion while preserving the albums. The Assistant keeps exact list
+members and totals in TorrentLinker; it can recover list IDs and revisions after
+context compaction. Each discussion owns its lists, and each list targets one client.
+
+Saving or editing a list only changes the plan. Queueing and starting downloads
+remain separate actions with their usual permissions and review. Lists survive
+restarts and the expiry of short-lived selections. Before an action, the Assistant
+materializes an exact saved revision and validates current metadata/destinations.
+Later list edits do not change an already prepared action. Lists can hold 10,000
+items; action batches contain at most 1,000 and report remaining members explicitly.
+Unknown sizes remain unknown. The Assistant can also compare a saved revision with
+currently seeding, paused/completed, incomplete or absent torrents in its client.
