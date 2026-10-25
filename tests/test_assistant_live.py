@@ -159,7 +159,10 @@ def run(browser, thread, message, name):
 def wait(browser, identifier, name):
     deadline = time.monotonic() + 270
     while time.monotonic() < deadline:
-        result = browser.get("/api/assistant/jobs/" + identifier).json()
+        response = browser.get("/api/assistant/jobs/" + identifier)
+        assert response.is_success, (response.status_code, response.text)
+        result = response.json()
+        assert "status" in result, result
         if result["status"] not in {"queued", "running"}:
             record(name, result)
             return result

@@ -710,3 +710,129 @@ def test_blank_exclusion_filter_cannot_silently_clear_saved_list(catalogue_app):
     assert "error" in denied
     saved = tool(browser, token, "get_torrent_list", list_id=created["id"], revision=1)
     assert saved["count"] == 2 and saved["current_revision"] == 1
+
+
+def test_exact_film_music_workflow_queues_53_saved_members_with_zero_download_budget(catalogue_app):
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.store import CatalogueRow
+
+    app, browser, _ = catalogue_app
+    setup = app.state.agent_service.setup
+    setup.settings.indexer_categories[3000] = IndexerCategory("Music")
+    setup.settings.download_folders.by_category[3000] = setup.settings.download_folders.by_category[
+        2030
+    ]
+    setup.store.save_catalogue(
+        [
+            CatalogueRow(
+                f"{i:040x}",
+                f"Saved film {i:02}",
+                i * 1000,
+                5,
+                2030,
+                f"https://test.invalid/{i}",
+                "",
+                1,
+            )
+            for i in range(1, 13)
+        ]
+        + [
+            CatalogueRow(
+                f"{100 + i:040x}",
+                f"Saved album {i:02}",
+                i * 100,
+                5,
+                3000,
+                f"https://test.invalid/{100 + i}",
+                "",
+                1,
+            )
+            for i in range(1, 52)
+        ]
+    )
+    token = browser.post(
+        "/api/agents",
+        json={
+            "name": "Queue-only planning",
+            "clients": ["default"],
+            "mode": "execute",
+            "permissions": ["queue"],
+            "daily_bytes": 0,
+            "daily_torrents": 0,
+            "reserve_bytes": 0,
+        },
+    ).json()["token"]
+    films = selected(browser, token, "ten-films", query="Saved film", count=10)
+    saved = tool(
+        browser,
+        token,
+        "create_torrent_list",
+        request_id="weekend",
+        client_id="default",
+        name="Weekend",
+        selection_id=films,
+    )
+    kept = tool(
+        browser,
+        token,
+        "edit_torrent_list",
+        request_id="five-films",
+        list_id=saved["id"],
+        expected_revision=1,
+        action="keep",
+        subset={"sort_by": "size", "count": 5},
+    )
+    assert kept["count"] == 5 and kept["total_size_bytes"] == 15000
+    music = selected(browser, token, "fifty-albums", query="Saved album", count=50)
+    added = tool(
+        browser,
+        token,
+        "edit_torrent_list",
+        request_id="add-music",
+        list_id=saved["id"],
+        expected_revision=2,
+        action="add",
+        selection_id=music,
+    )
+    assert added["count"] == 55 and added["total_size_bytes"] == 142500
+    films = selected(browser, token, "three-films", query="Saved film", count=3)
+    refined = tool(
+        browser,
+        token,
+        "edit_torrent_list",
+        request_id="refine-films",
+        list_id=saved["id"],
+        expected_revision=3,
+        action="replace_subset",
+        selection_id=films,
+        subset={"categories": [2030]},
+    )
+    assert refined["count"] == 53 and refined["total_size_bytes"] == 133500
+    materialized = tool(
+        browser,
+        token,
+        "select_torrent_list",
+        request_id="exact-weekend",
+        list_id=saved["id"],
+        expected_revision=4,
+        source="catalogue",
+    )
+    proposed = tool(
+        browser,
+        token,
+        "enqueue_selection",
+        request_id="queue-weekend",
+        selection_id=materialized["selection_id"],
+    )
+    assert finished(browser, proposed["job_id"])["status"] == "completed"
+    queued = browser.get("/api/queue").json()
+    assert len(queued) == 53
+    assert {row["hash"] for row in queued} == {f"{i:040x}" for i in range(1, 4)} | {
+        f"{100 + i:040x}" for i in range(1, 51)
+    }
+    assert (
+        tool(browser, token, "get_torrent_list", list_id=saved["id"], revision=4)[
+            "current_revision"
+        ]
+        == 4
+    )

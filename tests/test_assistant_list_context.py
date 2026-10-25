@@ -149,3 +149,59 @@ def test_next_turn_receipts_are_bounded_valid_json_with_latest_authoritative_lis
         assert state["clients"]["default"]["lists"][0]["id"] == list_id
         assert state["clients"]["default"]["lists"][0]["count"] == 1000
         assert state["clients"]["default"]["lists"][0]["total_size_bytes"] == 500500
+
+
+def test_context_recovery_reduces_authoritative_list_inventory(tmp_path):
+    inventories = []
+
+    def provider(request):
+        payload = json.loads(request.content)
+        message = next(
+            m["content"]
+            for m in payload["messages"]
+            if m.get("content", "").startswith("Current saved torrent lists")
+        )
+        encoded = message.split(": ", 1)[1]
+        inventories.append(encoded)
+        if len(inventories) < 3:
+            return httpx.Response(400, json={"error": {"code": "context_length_exceeded"}})
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "Recovered."}}]}
+        )
+
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=generation_transport(provider)
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        model = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Fake",
+                "kind": "compatible",
+                "url": "http://model.invalid/v1",
+                "model": "test",
+                "context_window": 32768,
+            },
+        ).json()["id"]
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={"provider_id": model, "policy": {"name": "Read", "clients": ["default"]}},
+        ).json()["id"]
+        _, actor = app.state.assistant.conversation(chat)
+        for number in range(20):
+            app.state.agent_service.torrent_lists.create(
+                actor, f"list-{number}", "default", f"{number}" + "é" * 117
+            )
+        submitted = browser.post(
+            "/api/assistant/jobs", json={"conversation_id": chat, "message": "Read current state."}
+        ).json()["id"]
+        result = wait_run(browser, submitted)
+        assert result["status"] == "completed", result["error"]
+        assert len(inventories) == 3
+        assert len(inventories[1].encode()) < len(inventories[0].encode())
+        assert len(inventories[2].encode()) < len(inventories[1].encode())
+        assert len(inventories[2].encode()) < len(inventories[0].encode()) // 2
+        assert r"\u00e9" not in inventories[0]
+        state = json.loads(inventories[2])
+        assert state["clients"]["default"]["has_more"]

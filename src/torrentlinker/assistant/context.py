@@ -170,8 +170,8 @@ def bounded_receipts(receipts, budget=24000):
 
 
 def current_list_state(agent, actor, clients, budget=24000):
-    """Fresh list summaries outweigh old prose; paging remains explicit and bounded."""
-    state = {"clients": {}, "omitted_clients": []}
+    """Fresh list summaries outweigh old prose; shrink explicit pages to the budget."""
+    state = {"clients": {}, "omitted_client_count": 0}
     for index, client in enumerate(clients):
         try:
             page = agent.torrent_lists.listing(actor, client, 0, 20)
@@ -195,52 +195,71 @@ def current_list_state(agent, actor, clients, budget=24000):
         except (ValueError, PermissionError):
             page = {"error": "Client list state unavailable; verify access with tools."}
         state["clients"][client] = page
-        if encoded_size(state) > budget - 2000:
+        while encoded_size(state) > budget and page.get("lists"):
+            page["lists"].pop()
+            page.update(has_more=True, next_offset=len(page["lists"]))
+        if encoded_size(state) > budget:
             del state["clients"][client]
-            state["omitted_clients"] = clients[index:]
+            state["omitted_client_count"] = len(clients) - index
             break
     return state
 
 
 def model_receipt(result, run_id, index, budget=24000):
-    """Large tool results retain usable IDs/totals instead of a cut JSON excerpt."""
-    if encoded_size(result) <= budget:
+    """Bound the actual ASCII JSON sent by provider adapters, retaining useful IDs."""
+
+    def size(value):
+        return len(json.dumps(value).encode("utf-8"))
+
+    if size(result) <= budget:
         return result
     preview = receipt_preview(result)
-    if encoded_size(preview) > budget - 1000:
-        fields = {
-            "id",
-            "job_id",
-            "selection_id",
-            "list_id",
-            "revision",
-            "list_revision",
-            "status",
-            "requires_owner_approval",
-            "count",
-            "selected_count",
-            "eligible_count",
-            "total_size_bytes",
-            "known_size_bytes",
-            "unknown_size_count",
-            "error",
-            "has_more",
-            "next_offset",
-            "client_id",
-            "name",
-        }
-
-        def essentials(value):
-            return {key: item for key, item in value.items() if key in fields}
-
-        preview = essentials(preview)
-        if isinstance(result.get("job"), dict):
-            preview["job"] = essentials(result["job"])
-            if isinstance(result["job"].get("result"), dict):
-                preview["job"]["result"] = essentials(result["job"]["result"])
-    return {
-        **preview,
+    metadata = {
         "truncated": True,
         "archive": {"run_id": run_id, "section": "events", "index": index},
         "hint": "Bulk rows/text omitted. Read exact archived receipt or use source pagination.",
     }
+    if size({**preview, **metadata}) <= budget:
+        return {**preview, **metadata}
+    # Keep bounded primitives from the preview, never restore original oversized strings.
+    fields = (
+        "id",
+        "job_id",
+        "selection_id",
+        "list_id",
+        "revision",
+        "list_revision",
+        "status",
+        "requires_owner_approval",
+        "count",
+        "selected_count",
+        "eligible_count",
+        "total_size_bytes",
+        "known_size_bytes",
+        "unknown_size_count",
+        "error",
+        "has_more",
+        "next_offset",
+        "client_id",
+        "name",
+    )
+
+    def essentials(value):
+        return {
+            key: (item[:200] if isinstance(item, str) else item)
+            for key, item in value.items()
+            if key in fields and (item is None or isinstance(item, (str, int, float, bool)))
+        }
+
+    bounded = dict(metadata)
+    for key, item in essentials(preview).items():
+        if size({**bounded, key: item}) <= budget:
+            bounded[key] = item
+    job = preview.get("job")
+    if isinstance(job, dict):
+        bounded_job = essentials(job)
+        if isinstance(job.get("result"), dict):
+            bounded_job["result"] = essentials(job["result"])
+        if size({**bounded, "job": bounded_job}) <= budget:
+            bounded["job"] = bounded_job
+    return bounded

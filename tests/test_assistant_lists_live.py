@@ -266,7 +266,11 @@ def test_live_rediscovers_saved_mixed_list_and_compares_actual_client_states(con
         "durable-list-rediscovery-comparison",
     )
     assert result["status"] == "completed", result
-    assert any(e["tool"] == "list_torrent_lists" for e in result["events"]), result
+    # Fresh authoritative context can rediscover the ID without an extra listing call.
+    assert any(
+        e["tool"] == "compare_torrent_list_client" and e["arguments"]["list_id"] == saved["id"]
+        for e in result["events"]
+    ), result
     comparisons = [
         e["result"] for e in result["events"] if e["tool"] == "compare_torrent_list_client"
     ]
