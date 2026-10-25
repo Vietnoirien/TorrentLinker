@@ -846,10 +846,10 @@ def test_making_a_plan_fetches_its_categories_and_discloses_limits(
     assert store.catalogue_size() == min(count, paging_window or count)
     assert window.zen_tab.plan_view.plan.items
     if paging_window is not None:
-        assert "incomplete Catalogue" in window.zen_tab.plan_view.summary.text()
-        assert "Catalogue incomplete" in window.zen_tab.catalogue.status.text()
+        assert "coverage is partial" in window.zen_tab.plan_view.catalogue_notice.text()
+        assert "Partial Catalogue coverage" in window.zen_tab.catalogue.status.text()
     else:
-        assert "incomplete Catalogue" not in window.zen_tab.plan_view.summary.text()
+        assert "coverage is partial" not in window.zen_tab.plan_view.catalogue_notice.text()
 
 
 @pytest.mark.parametrize("stop_early", [False, True])

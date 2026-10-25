@@ -2446,6 +2446,18 @@ La mettre à la corbeille ?</translation>
         <source>Could not check Verifications: {0}</source>
         <translation>Impossible de suivre les vérifications : {0}</translation>
     </message>
+    <message>
+        <source>Catalogue refresh failed. This Plan uses cached metadata; retry the refresh later.</source>
+        <translation>L'actualisation du Catalogue a échoué. Ce Plan utilise les métadonnées en cache ; réessayez l'actualisation plus tard.</translation>
+    </message>
+    <message>
+        <source>Catalogue coverage is partial: older torrents may be missing. Cached torrents remain usable for this Plan.</source>
+        <translation>La couverture du Catalogue est partielle : des torrents plus anciens peuvent manquer. Les torrents en cache restent utilisables pour ce Plan.</translation>
+    </message>
+    <message>
+        <source>Partial Catalogue coverage: the Indexer limits how far back pages can be read. Cached torrents remain usable.</source>
+        <translation>Couverture partielle : l'Indexeur limite l'accès aux pages anciennes. Les torrents en cache restent utilisables.</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -2970,6 +2982,10 @@ La mettre à la corbeille ?</translation>
         <location filename="../gui/zen_view.py" line="844"/>
         <source>{0} h {1:02d}</source>
         <translation>{0} h {1:02d}</translation>
+    </message>
+    <message>
+        <source>No torrents selected. See the reason above.</source>
+        <translation>Aucun torrent sélectionné. Consultez la raison indiquée ci-dessus.</translation>
     </message>
 </context>
 <context>
@@ -6694,6 +6710,81 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>%1 seeders</source>
         <translation>%1 sources</translation>
+    </message>
+</context>
+<context>
+    <name>PlanDiagnostics</name>
+    <message>
+        <source>The Catalogue is empty. Fetch the selected categories, then make a Plan again.</source>
+        <translation>Le Catalogue est vide. Récupérez les catégories choisies, puis relancez le Plan.</translation>
+    </message>
+    <message>
+        <source>{0} cached torrents are outside the selected categories. Refresh the selected categories or broaden the selection.</source>
+        <translation>{0} torrents en cache sont hors des catégories choisies. Actualisez ces catégories ou élargissez la sélection.</translation>
+    </message>
+    <message>
+        <source>{0} cached torrents have no category. Refresh their metadata before planning.</source>
+        <translation>{0} torrents en cache n'ont pas de catégorie. Actualisez leurs métadonnées avant de préparer un Plan.</translation>
+    </message>
+    <message>
+        <source>{0} torrents are already in the target client. Choose other categories or refresh the Catalogue for new torrents.</source>
+        <translation>{0} torrents sont déjà dans le client cible. Choisissez d'autres catégories ou actualisez le Catalogue pour trouver de nouveaux torrents.</translation>
+    </message>
+    <message>
+        <source>{0} torrents have no known seeders. Refresh the selected categories to update swarm counts.</source>
+        <translation>{0} torrents n'ont aucune source connue. Actualisez les catégories choisies pour mettre à jour les sources.</translation>
+    </message>
+    <message>
+        <source>{0} torrents match your excluded words. Review the Plan exclusions in Settings.</source>
+        <translation>{0} torrents correspondent à vos mots exclus. Vérifiez les exclusions du Plan dans les Paramètres.</translation>
+    </message>
+    <message>
+        <source>{0} torrents have no Download Folder for their category. Set its folder in Settings, or choose a category with a folder.</source>
+        <translation>{0} torrents n'ont pas de Dossier de téléchargement pour leur catégorie. Définissez ce dossier dans les Paramètres ou choisissez une catégorie qui en a un.</translation>
+    </message>
+    <message>
+        <source>{0} torrents appear to be on disk already. Search them in the Library to Reseed them.</source>
+        <translation>{0} torrents semblent déjà présents sur le disque. Recherchez-les dans la Bibliothèque pour les remettre en partage.</translation>
+    </message>
+    <message>
+        <source>Your total torrent cap is reached. Raise it in Settings &gt; Zen to add more torrents.</source>
+        <translation>Votre plafond total de torrents est atteint. Augmentez-le dans Paramètres &gt; Zen pour ajouter des torrents.</translation>
+    </message>
+    <message>
+        <source>The Plan torrent limit is zero. Increase it or disable the limit.</source>
+        <translation>La limite du Plan est de zéro torrent. Augmentez-la ou désactivez cette limite.</translation>
+    </message>
+    <message>
+        <source>{0} torrents do not match the size or seeder filters. Widen the Plan filters.</source>
+        <translation>{0} torrents ne respectent pas les filtres de taille ou de sources. Élargissez les filtres du Plan.</translation>
+    </message>
+    <message>
+        <source>Your Zen class does not earn Zen from seeding. Choose a seeding class in Settings &gt; Zen.</source>
+        <translation>Votre Classe ne gagne pas de Zen en partageant des torrents. Choisissez une Classe rémunérée pour le partage dans Paramètres &gt; Zen.</translation>
+    </message>
+    <message>
+        <source>Seeding time is set to zero. Set the hours per day in Settings &gt; Zen.</source>
+        <translation>Le temps de partage est réglé à zéro. Définissez le nombre d'heures par jour dans Paramètres &gt; Zen.</translation>
+    </message>
+    <message>
+        <source>No candidate adds estimated Zen with this profile. Review the Zen settings or optimize for Note.</source>
+        <translation>Aucun candidat n'ajoute de Zen estimé avec ce profil. Vérifiez les paramètres Zen ou optimisez pour la Note.</translation>
+    </message>
+    <message>
+        <source>{0} torrents exceed the available disk space after the free-space reserve. Free space or review the reserve in Settings.</source>
+        <translation>{0} torrents dépassent l'espace disque utilisable après la réserve. Libérez de l'espace ou vérifiez la réserve dans les Paramètres.</translation>
+    </message>
+    <message>
+        <source>{0} torrents exceed the Plan download limit. Increase the download limit or choose smaller torrents.</source>
+        <translation>{0} torrents dépassent la limite de téléchargement du Plan. Augmentez cette limite ou choisissez des torrents plus petits.</translation>
+    </message>
+    <message>
+        <source>No torrent fits the selected clients' download budgets. Increase a client budget or choose smaller torrents.</source>
+        <translation>Aucun torrent ne respecte les budgets des clients choisis. Augmentez un budget ou choisissez des torrents plus petits.</translation>
+    </message>
+    <message>
+        <source>No eligible torrent remains for this Plan. Review the selected categories and filters.</source>
+        <translation>Aucun torrent admissible ne reste pour ce Plan. Vérifiez les catégories choisies et les filtres.</translation>
     </message>
 </context>
 </TS>

@@ -139,7 +139,13 @@ def plan_categories(
     given a Download Folder) that can be planned at all, i.e. resolve to a folder, each
     with every subcategory on its own: an Indexer pages through a limited number of
     results per query (~600 on c411), so each subcategory reaches deeper."""
-    wanted = set(chosen) if chosen is not None else set(folders.by_category)
+    wanted = (
+        set(chosen)
+        if chosen is not None
+        else set(categories) | set(folders.by_category)
+        if folders.default.strip()
+        else set(folders.by_category)
+    )
     expanded = set(wanted) | {c for c in categories if _parent(c, categories) in wanted}
     # A chosen category without a folder still brings its subcategories that have one.
     return sorted(c for c in expanded if folders.resolve(c, categories) is not None)

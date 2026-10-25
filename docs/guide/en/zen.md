@@ -54,6 +54,8 @@ A progress bar shows how many torrents have been sent, added, refused, or failed
 
 The Plan and each torrent's result are saved as sending goes. After you stop sending, close the app, or after a crash, the Plan comes back with only the torrents left to send; failed ones are tried again. Click **Send to the torrent client** to continue. Making a new Plan or changing its options replaces the saved one. Reseeds are not saved, but sending always starts with them.
 
+An empty Plan states the observed blocker and what to change: total torrent cap, filters, missing folders, existing torrents, no seeders, Zen profile or insufficient budget. Catalogue exclusions include counts. The total cap in **Settings → Zen** is separate from the Plan's torrent limit.
+
 ### Catalog updates and provisional estimates
 
 The first Plan imports Zen Lab's public metadata snapshot anonymously. Your c411 API key and all `.torrent` requests go directly to c411.
@@ -66,7 +68,7 @@ A paging-limit warning means the Indexer stopped exposing older pages. Cached to
 
 Plans use cached metadata and show provisional estimates. There are no per-torrent c411 metadata checks before planning or sending. The torrent client is read every 30 seconds to update Seeding estimates as tracker responses arrive. Its known swarm counts also update the local Catalogue for future Plans; unknown counts retain the cached estimate.
 
-If another Catalogue refresh is running, the Plan waits for it and then refreshes its selected categories. A failed refresh stops Plan creation. You can stop fetching and make a Plan from the data already available.
+If another Catalogue refresh is running, the Plan waits for it and then refreshes its selected categories. If a refresh fails while the Catalogue already contains torrents, the desktop Plan uses the cached data and shows a separate notice. Without any cached data, the error stops Plan creation. You can stop fetching and make a Plan from the data already available.
 
 The snapshot has coarse categories and unknown upstream age. Broad entries are excluded from narrower subcategory selections until the local Catalogue has a specific category from c411. Selecting the parent category allows the broader set. Seeder updates from the client preserve that category uncertainty. c411's paging limits and the snapshot do not establish complete tracker coverage, and the app reports known limits. Zen values remain estimates.
 

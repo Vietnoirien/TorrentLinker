@@ -606,7 +606,7 @@ def test_large_cached_plan_makes_no_per_torrent_metadata_requests(qtbot, tmp_pat
 
     assert len(window.zen_tab.plan_view.plan.items) == 14_000
     assert requested == ["/api/torrents"]
-    assert "Provisional estimates" in window.zen_tab.plan_view.summary.text()
+    assert "Provisional estimates" in window.zen_tab.plan_view.catalogue_notice.text()
 
 
 @pytest.mark.parametrize("paused_history", [False, True])

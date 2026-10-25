@@ -1138,6 +1138,7 @@ $("plan").onclick = () =>
       },
       (r) => {
         showCatalogue(r.catalogue);
+        $("plan-diagnostics").textContent = (r.issues || []).map(issue => issue.message).join(" ");
         state.planRows = r.rows;
         state.planSelected = new Set(r.rows.map((v) => v.hash));
         table("plan-result", r.rows, [...searchColumns(), {label: "Client", render: row => {

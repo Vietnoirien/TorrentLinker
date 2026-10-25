@@ -13,8 +13,9 @@ import re
 import shutil
 import unicodedata
 from bisect import bisect_left, bisect_right
+from collections import Counter
 from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
@@ -22,6 +23,7 @@ from torrentlinker import ratelimit
 from torrentlinker.domain import ItemState, LocalItem
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
 from torrentlinker.library import LibraryEntry
+from torrentlinker.plan_diagnostics import PlanIssue
 from torrentlinker.review import CheckedCandidate
 from torrentlinker.store import CatalogueRow, SavedPlan, SavedPlanItem
 from torrentlinker.zen import GB, ZenProfile, ZenTorrent, added_values, estimate, note, weight
@@ -114,6 +116,7 @@ class Plan:
     goal: PlanGoal = PlanGoal.ZEN
     disk_spaces: tuple[DiskSpace, ...] = ()
     on_disk: tuple[OnDisk, ...] = ()
+    issues: tuple[PlanIssue, ...] = ()
 
     @property
     def average_note(self) -> float | None:
@@ -143,6 +146,15 @@ class Plan:
     def download_seconds(self, bytes_per_second: float) -> float:
         """Time for qBittorrent to download the Plan's data at this speed, at best."""
         return self.download_size / bytes_per_second
+
+
+def explain_inputs(plan: Plan, issues: Sequence[PlanIssue], existing: Sequence[OnDisk]) -> Plan:
+    """Use upstream exclusions when no candidate reached the optimizer."""
+    reasons = plan.issues
+    if not plan.items and reasons == (PlanIssue("no_candidates"),):
+        reasons = tuple(issues) + ((PlanIssue("on_disk", len(existing)),) if existing else ())
+        reasons = reasons or plan.issues
+    return replace(plan, issues=reasons, on_disk=tuple(existing))
 
 
 EXTRAS = 64 * 1024  # bytes a torrent may hold beyond the local data: .nfo, cover…
@@ -282,7 +294,20 @@ def make_plan(
     disk_spaces: Sequence[DiskSpace] = (),
 ) -> Plan:
     """Choose candidates within each disk's budget (bytes) and `slots` more torrents."""
+    original_count = len(candidates)
     candidates = [c for c in candidates if options.admits(c.size, c.seeders)]
+    issues: list[PlanIssue] = []
+    if slots is not None and slots <= 0:
+        issues.append(PlanIssue("torrent_cap"))
+    if options.max_torrents is not None and options.max_torrents <= 0:
+        issues.append(PlanIssue("plan_cap"))
+    if not profile.zen_class.paid_on_seeding:
+        issues.append(PlanIssue("zen_class"))
+    elif options.goal is PlanGoal.ZEN and profile.seed_hours <= 0:
+        issues.append(PlanIssue("seed_hours"))
+    if original_count and not candidates:
+        issues.append(PlanIssue("filters", original_count))
+
     values = added_values(profile, [c.as_zen() for c in candidates], seeding)
     notes = {
         c.infohash: note(profile.zen_class, c.as_zen())
@@ -339,6 +364,19 @@ def make_plan(
         )
         if options.goal is PlanGoal.NOTE or plan.zen_added > best.zen_added:
             best = plan
+    if not best.items:
+        if not issues and valued:
+            blocked = Counter[str]()
+            for c, _ in valued:
+                if not c.reseed:
+                    if c.size > budgets.get(c.disk, 0):
+                        blocked["disk_space"] += 1
+                    if options.max_download_bytes > 0 and c.size > options.max_download_bytes:
+                        blocked["download_limit"] += 1
+            issues.extend(PlanIssue(code, count) for code, count in blocked.items())
+        if not issues:
+            issues.append(PlanIssue("no_gain" if candidates else "no_candidates"))
+        best = Plan(goal=options.goal, disk_spaces=tuple(disk_spaces), issues=tuple(issues))
     return best
 
 
@@ -431,6 +469,8 @@ def catalogue_candidates(
     disk_of: Callable[[Path], Hashable],
     only: Collection[int] | None = None,
     plan_exclusions: Iterable[str] = (),
+    *,
+    issues: list[PlanIssue] | None = None,
 ) -> list[PlanCandidate]:
     """Catalogue torrents a Plan may download: not in qBittorrent, alive, in a category
     that has a Download Folder, not carrying an excluded title, and, if `only` is given,
@@ -442,20 +482,33 @@ def catalogue_candidates(
         "".join(ch for ch in w if not unicodedata.combining(ch)).casefold() for w in excluded
     }
     result = []
+    rejected = Counter[str]()
+    count = 0
     for r in rows:
-        if r.infohash.lower() in in_client or r.seeders < 1 or r.category is None:
+        count += 1
+        if r.category is None:
+            rejected["unknown_category"] += 1
+            continue
+        if only is not None and not _within(r.category, only, categories):
+            rejected["category"] += 1
+            continue
+        if r.infohash.lower() in in_client:
+            rejected["in_client"] += 1
+            continue
+        if r.seeders < 1:
+            rejected["no_seeders"] += 1
             continue
         if excluded and any(
             word in excluded for word in re.split(r"[^0-9a-z]+", _normalise(r.title))
         ):
+            rejected["excluded_title"] += 1
             continue
         category = r.category
-        if only is not None and not _within(category, only, categories):
-            continue
         if category not in resolved:
             resolved[category] = folders.resolve(category, categories)
         folder = resolved[category]
         if folder is None:
+            rejected["no_folder"] += 1
             continue
         if folder not in disks:
             disks[folder] = disk_of(folder)
@@ -471,6 +524,13 @@ def catalogue_candidates(
                 source=r,
             )
         )
+    if issues is not None and not result:
+        if count > rejected["category"] + rejected["unknown_category"]:
+            rejected.pop("category", None)
+            rejected.pop("unknown_category", None)
+        issues.extend(PlanIssue(code, total) for code, total in rejected.most_common())
+        if not count:
+            issues.append(PlanIssue("catalogue_empty"))
     return result
 
 

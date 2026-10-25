@@ -15,9 +15,11 @@ from torrentlinker.plan import (
     catalogue_candidates,
     disk_of,
     disk_space,
+    explain_inputs,
     make_plan,
     on_disk,
 )
+from torrentlinker.plan_diagnostics import PlanIssue, issue_text
 from torrentlinker.scan import scan
 from torrentlinker.seeding import seeding
 from torrentlinker.web.library import Library
@@ -100,6 +102,7 @@ def plan(
     torrents = setup.client().torrents(with_files=False)
     cached = {r.infohash: r for r in setup.store.catalogue()}
     current = seeding(settings.zen, torrents, settings.indexer.url, catalogue=cached)
+    issues: list[PlanIssue] = []
     candidates = catalogue_candidates(
         cached.values(),
         settings.download_folders,
@@ -108,6 +111,7 @@ def plan(
         disk_of,
         {category} if category is not None else None,
         settings.plan_exclusions,
+        issues=issues,
     )
     existing = [
         row
@@ -127,7 +131,9 @@ def plan(
         options=PlanOptions(max_download_bytes=maximum_bytes, max_torrents=maximum_torrents),
         disk_spaces=spaces,
     )
+    proposed = explain_inputs(proposed, issues, existing)
     return {
+        "issues": [{**asdict(issue), "message": issue_text(issue)} for issue in proposed.issues],
         "provisional": True,
         "catalogue": catalogue_status(setup),
         "rows": [

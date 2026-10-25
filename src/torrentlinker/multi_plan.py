@@ -14,9 +14,11 @@ from torrentlinker.plan import (
     catalogue_candidates,
     disk_of,
     disk_space,
+    explain_inputs,
     make_plan,
     on_disk,
 )
+from torrentlinker.plan_diagnostics import PlanIssue
 from torrentlinker.qbit import Qbit
 from torrentlinker.scan import scan
 from torrentlinker.seeding import combined_seeding
@@ -56,8 +58,10 @@ def distributed_plan(
     folders: set[Path] = set()
     scanned = {}
     excluded = {}
+    input_issues: dict[str, int] = {}
     for identifier in clients:
         scoped = settings.for_client(identifier)
+        issues: list[PlanIssue] = []
         candidates = catalogue_candidates(
             rows,
             scoped.download_folders,
@@ -66,6 +70,7 @@ def distributed_plan(
             disk_of,
             set(settings.plan_categories) if settings.plan_categories is not None else None,
             settings.plan_exclusions,
+            issues=issues,
         )
         for folder in {c.folder for c in candidates if c.folder is not None}:
             validate_folder(identifier, folder)
@@ -84,6 +89,10 @@ def distributed_plan(
             ],
         )
         excluded.update({item.infohash: item for item in existing})
+        if candidates and not any(options.admits(c.size, c.seeders) for c in candidates):
+            issues.append(PlanIssue("filters", len(candidates)))
+        for issue in issues:
+            input_issues[issue.code] = max(input_issues.get(issue.code, 0), issue.count)
         available[identifier] = [
             replace(c, client_id=identifier)
             for c in candidates
@@ -130,4 +139,11 @@ def distributed_plan(
     result = make_plan(
         settings.zen, assigned, physical, current.active, slots, options=options, disk_spaces=spaces
     )
-    return replace(result, on_disk=tuple(excluded.values()))
+    issues = [PlanIssue(code, count) for code, count in input_issues.items()]
+    if not assigned and by_hash:
+        candidates = [c for choices in by_hash.values() for c in choices.values()]
+        if all(c.size > physical.get(c.disk, 0) for c in candidates):
+            issues = [PlanIssue("disk_space", len(by_hash))]
+        else:
+            issues = [PlanIssue("client_budget")]
+    return explain_inputs(result, issues, list(excluded.values()))

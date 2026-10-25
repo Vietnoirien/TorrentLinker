@@ -110,12 +110,14 @@ from torrentlinker.plan import (
     catalogue_candidates,
     disk_of,
     disk_space,
+    explain_inputs,
     make_plan,
     on_disk,
     reseed_candidates,
     restore_plan,
     saved_items,
 )
+from torrentlinker.plan_diagnostics import PlanIssue
 from torrentlinker.profile import ProfileClient, UserProfile
 from torrentlinker.qbit import AlreadyInClient as ClientAlreadyInClient
 from torrentlinker.qbit import ClientApi
@@ -859,6 +861,7 @@ class MainWindow(QMainWindow):
         if not self._ensure_plan_download_folders():
             return
         self._use_cached_plan = False
+        self._plan_refresh_failed = False
         self.store.clear_plan()
         self.zen_tab.plan_view.begin()
         self.band.set_plan(None)
@@ -904,11 +907,14 @@ class MainWindow(QMainWindow):
 
         def after_fetch() -> None:
             if self._catalogue_error is not None and not self._use_cached_plan:
-                self._planning = False
-                self.zen_tab.plan_view.fetching(False)
-                self.zen_tab.plan_view.failed(self._catalogue_error)
-            else:
-                self._build_plan(then)
+                if self.store.catalogue_size() == 0:
+                    self._planning = False
+                    self.zen_tab.plan_view.fetching(False)
+                    self.zen_tab.plan_view.failed(self._catalogue_error)
+                    return
+                self._plan_refresh_failed = True
+                log.info("Planning from cached metadata after Catalogue refresh failure")
+            self._build_plan(then)
 
         self._after_catalogue_always = after_fetch
         self._run_catalogue(work)
@@ -1150,6 +1156,7 @@ class MainWindow(QMainWindow):
                 view.active,
                 options=options,
             )
+            issues: list[PlanIssue] = []
             downloads = catalogue_candidates(
                 store.catalogue(),
                 folders,
@@ -1158,6 +1165,7 @@ class MainWindow(QMainWindow):
                 disk_of,
                 only,
                 s.plan_exclusions,
+                issues=issues,
             )
             on_disk_items = list(local_items)
             for folder in unlisted:
@@ -1189,32 +1197,45 @@ class MainWindow(QMainWindow):
                 options=options,
                 disk_spaces=spaces,
             )
-            return replace(plan, on_disk=tuple(already))
+            return explain_inputs(plan, issues, already)
 
         return work
 
     def _plan_made(self, plan: Plan) -> None:
         self.store.save_plan(saved_items(plan), zen_added=plan.zen_added)
         self.zen_tab.plan_view.show_plan(plan)
+        if not plan.items:
+            log.info("Empty Plan: %s", [(issue.code, issue.count) for issue in plan.issues])
         s = self.settings
         targets = plan_categories(s.plan_categories, s.download_folders, s.indexer_categories)
-        if self.store.limited_categories().intersection(targets):
-            summary = self.zen_tab.plan_view.summary
-            summary.setText(
-                summary.text()
-                + "\n"
-                + self.tr("Based on an incomplete Catalogue; older torrents may be missing.")
+        notices = []
+        if getattr(self, "_plan_refresh_failed", False):
+            notices.append(
+                self.tr(
+                    "Catalogue refresh failed. This Plan uses cached metadata; "
+                    "retry the refresh later."
+                )
             )
+        if self.store.limited_categories().intersection(targets):
+            notices.append(
+                self.tr(
+                    "Catalogue coverage is partial: older torrents may be missing. "
+                    "Cached torrents remain usable for this Plan."
+                )
+            )
+        if notices:
+            self.zen_tab.plan_view.catalogue_notice.setText("\n".join(notices))
+            self.zen_tab.plan_view.catalogue_notice.show()
         if plan.items:
-            summary = self.zen_tab.plan_view.summary
-            summary.setText(
-                summary.text()
-                + "\n"
-                + self.tr(
+            notice = self.zen_tab.plan_view.catalogue_notice
+            notices.append(
+                self.tr(
                     "Provisional estimates from cached metadata. Seeder counts update from "
                     "your torrent client after tracker responses."
                 )
             )
+            notice.setText("\n".join(notices))
+            notice.show()
         self.band.set_plan(plan.zen_added if plan.items else None)
 
     def confirm_send(self) -> None:
@@ -1631,7 +1652,8 @@ class MainWindow(QMainWindow):
             result = self.tr("Catalogue update failed: {0}").format(error_text(error))
         if self.store.limited_categories():
             result += " · " + self.tr(
-                "Catalogue incomplete: the Indexer limited the available pages. "
+                "Partial Catalogue coverage: the Indexer limits how far back "
+                "pages can be read. "
                 "Cached torrents remain usable."
             )
         self.statusBar().showMessage(result, 15000)
@@ -1656,16 +1678,17 @@ class MainWindow(QMainWindow):
             self.catalogue_age()
             + (" · " + self.tr("whole-catalogue fetch paused") if paused else "")
             + (
-                " · "
+                "\n"
                 + self.tr(
-                    "Catalogue incomplete: the Indexer limited the available pages. "
+                    "Partial Catalogue coverage: the Indexer limits how far back "
+                    "pages can be read. "
                     "Cached torrents remain usable."
                 )
                 if self.store.limited_categories()
                 else ""
             )
             + (
-                " · " + self.tr("Zen Lab snapshot imported; c411 data takes priority")
+                "\n" + self.tr("Zen Lab snapshot imported; c411 data takes priority")
                 if self.store.feed_state(SNAPSHOT_NAME).updated_at is not None
                 else ""
             )

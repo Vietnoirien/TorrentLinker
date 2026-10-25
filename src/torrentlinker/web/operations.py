@@ -449,6 +449,7 @@ class Operations:
 
                 from torrentlinker.multi_plan import distributed_plan
                 from torrentlinker.plan import PlanOptions
+                from torrentlinker.plan_diagnostics import issue_text
 
                 targets = {
                     identifier: self.setup.for_client(identifier)
@@ -488,6 +489,10 @@ class Operations:
                     validate,
                 )
                 return {
+                    "issues": [
+                        {"code": issue.code, "count": issue.count, "message": issue_text(issue)}
+                        for issue in proposed.issues
+                    ],
                     "provisional": True,
                     "catalogue": catalogue_status(self.setup),
                     "indexer_url": getattr(getattr(self.setup, "_indexer", None), "url", None)

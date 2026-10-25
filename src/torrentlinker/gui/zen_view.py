@@ -38,6 +38,7 @@ from torrentlinker.gui.seeding_tree import SeedingTree
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.plan import Plan, PlanGoal, PlanOptions
+from torrentlinker.plan_diagnostics import PlanIssue, issue_text
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
 from torrentlinker.send import SendProgress
@@ -300,6 +301,11 @@ class PlanView(QGroupBox):
         )
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        self.catalogue_notice = QLabel()
+        self.catalogue_notice.setProperty("role", "muted")
+        self.catalogue_notice.setWordWrap(True)
+        self.catalogue_notice.hide()
+        layout.addWidget(self.catalogue_notice)
         self.speed: float | None = None  # bytes/s
         self.keys = 1  # API keys a Plan's downloads spread over
         self.speed_tested: str | None = None
@@ -635,6 +641,9 @@ class PlanView(QGroupBox):
     def begin(self) -> None:
         """Clear the previous result while a new Plan is being prepared."""
         self.plan = None
+        self.empty_state.label.setText(self.tr("Making a Plan…"))
+        self.catalogue_notice.clear()
+        self.catalogue_notice.hide()
         self._show_times()
         self.table.setRowCount(0)
         self.space_table.setRowCount(0)
@@ -659,6 +668,9 @@ class PlanView(QGroupBox):
 
     def show_plan(self, plan: Plan) -> None:
         self.plan = plan
+        self.catalogue_notice.clear()
+        self.catalogue_notice.hide()
+        self.summary.setToolTip("")
         self.busy(False)
         self._show_times()
         clear_rows(self.table, len(plan.items))
@@ -697,9 +709,13 @@ class PlanView(QGroupBox):
             )
         )
         if not plan.items:
+            self.empty_state.label.setText(self.tr("No torrents selected. See the reason above."))
             self.summary.setText(
-                self.tr(
-                    "Nothing to add: fetch the Catalogue, set Download Folders, or free some space."
+                "\n".join(
+                    issue_text(
+                        issue, lambda text: QCoreApplication.translate("PlanDiagnostics", text)
+                    )
+                    for issue in plan.issues or (PlanIssue("no_candidates"),)
                 )
             )
             return

@@ -54,6 +54,8 @@ Une barre de progression indique les envois, ajouts, refus et échecs, avec le t
 
 Le Plan et les résultats sont enregistrés au fil de l’envoi. Après un arrêt, une fermeture ou un plantage, seuls les torrents restant à envoyer reviennent ; les échecs sont retentés. Cliquez sur **Envoyer au client torrent** pour reprendre. Créer un nouveau Plan ou changer ses options remplace le Plan enregistré. Les remises en seed ne sont pas sauvegardées dans le Plan, mais passent toujours avant les téléchargements lors de l’envoi.
 
+Un Plan vide indique la cause constatée et l’action utile : plafond total atteint, filtres trop stricts, dossier manquant, torrents déjà présents, absence de sources, profil Zen ou budget insuffisant. Le nombre de torrents exclus accompagne les causes liées au Catalogue. Le plafond total de **Paramètres → Zen** est distinct de la limite de torrents du Plan.
+
 ### Actualisation du Catalogue et estimations provisoires
 
 Le premier Plan importe anonymement le catalogue public de métadonnées Zen Lab. Votre clé API et toutes les demandes de `.torrent` sont envoyées directement à c411.
@@ -68,7 +70,7 @@ Un avertissement de limite de pagination signifie que l’Indexeur ne fournit pl
 
 Les Plans utilisent les métadonnées en cache et affichent des estimations provisoires. Aucun contrôle de métadonnées torrent par torrent n’est effectué auprès de c411 avant la préparation ou l’envoi. Le client torrent est interrogé toutes les 30 secondes pour actualiser la vue En partage à mesure que les trackers répondent. Les nombres de seeders connus mettent aussi à jour le Catalogue ; les valeurs inconnues conservent l’estimation en cache.
 
-Si une actualisation est déjà en cours, le Plan l’attend puis actualise ses catégories. Un échec d’actualisation arrête sa création. Vous pouvez interrompre la récupération et créer un Plan avec les données déjà disponibles.
+Si une actualisation est déjà en cours, le Plan l’attend puis actualise ses catégories. Si l’actualisation échoue et que le Catalogue contient déjà des torrents, le Plan utilise ces données en cache et le signale séparément. Sans aucune donnée en cache, l’erreur arrête la création du Plan. Vous pouvez interrompre la récupération et créer un Plan avec les données déjà disponibles.
 
 Le catalogue tiers fournit des catégories générales et sa fraîcheur en amont est inconnue. Ses entrées générales sont exclues d’une sélection de sous-catégorie tant que c411 n’a pas fourni une catégorie précise. Sélectionner la catégorie parente les inclut. L’actualisation des seeders ne lève pas cette incertitude. Ni les limites de pagination c411 ni ce catalogue tiers ne garantissent une couverture complète du tracker ; l’application indique les limites connues. Les valeurs de Zen restent des estimations.
 
