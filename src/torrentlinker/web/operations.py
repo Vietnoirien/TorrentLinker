@@ -94,6 +94,7 @@ class JobRequest(BaseModel):
     catalogue_selection: CatalogueCriteria = Field(default_factory=CatalogueCriteria)
     selection_source: Literal["catalogue", "queue", "saved-catalogue"] = "catalogue"
     selection_rows: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    queue_binding: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
     queue_action: Literal["remove", "retry", "priority"] = "remove"
     priority: int = Field(default=0, ge=-1000, le=1000)
     queue_selection: QueueCriteria = Field(default_factory=QueueCriteria)
@@ -160,7 +161,10 @@ class Operations:
                         )
                         for r in request.selection_rows
                     ):
-                        raise ValueError("Queued entries changed. Review them again.")
+                        raise ValueError(
+                            "Queued entries do not match the catalogue selection. "
+                            "Review and queue it again."
+                        )
             if request.selection_id and request.selection_source == "catalogue":
                 selected = self.select_catalogue(request.catalogue_selection)
                 if (
@@ -191,6 +195,10 @@ class Operations:
                             )
             if request.kind == "enqueue":
                 self.enqueue_folders(request)
+        if request.kind == "send-queue" and request.queue_binding:
+            from torrentlinker.queue_selection import fingerprint, validate_snapshot
+
+            validate_snapshot(self.setup, request.queue_binding, fingerprint(request.queue_binding))
         if request.kind in {"send-queue", "plan"}:
             targets = (
                 [self.setup.for_client(identifier) for identifier in request.client_ids]
@@ -653,7 +661,9 @@ class Operations:
             }
         if request.kind == "send-queue":
             selected_keys = (
-                {r["key"] for r in request.selection_rows}
+                {r["key"] for r in request.queue_binding}
+                if request.queue_binding
+                else {r["key"] for r in request.selection_rows}
                 if request.selection_source == "queue"
                 else None
             )

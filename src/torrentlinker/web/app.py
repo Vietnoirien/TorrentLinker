@@ -261,13 +261,13 @@ def create_app(
         return documentation.guides(language)
 
     @app.get("/documentation/{name:path}", response_class=HTMLResponse)
-    def documentation_reference(name: str) -> HTMLResponse:
+    def documentation_reference(name: str, request: Request) -> HTMLResponse:
         if name not in {
             g["path"] for language in ("en", "fr") for g in documentation.guides(language)
         }:
             raise HTTPException(404, "Guide unavailable.")
         try:
-            html = render(name, standalone=True)
+            html = render(name, standalone=True, root_path=request.scope.get("root_path", ""))
         except (ValueError, OSError) as error:
             raise HTTPException(404, "Guide unavailable.") from error
         return HTMLResponse(

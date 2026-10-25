@@ -550,6 +550,11 @@ dialog .description img {
 .assistant-layout { display: grid; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr); gap: 1.2rem; }
 .assistant-conversations { display: flex; flex-direction: column; gap: .5rem; max-height: 65vh; overflow: auto; }
 .assistant-conversations button { text-align: left; overflow-wrap: anywhere; }
+.assistant-folder { margin: .8rem 0; }
+.assistant-folder > summary { color: var(--muted); cursor: pointer; padding: .35rem 0; }
+.assistant-folder-icon { margin-right: .5rem; }
+.assistant-folder > button { display: block; width: calc(100% - 1rem); margin: .2rem 0 .2rem 1rem; border: 0; background: transparent; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.assistant-folder > button.active { background: var(--tint); color: var(--ink); }
 .assistant-main { min-width: 0; display: flex; flex-direction: column; min-height: 65vh; }
 .assistant-transcript { flex: 1; min-height: 180px; max-height: 60vh; overflow: auto; padding-right: .5rem; }
 .assistant-run { max-width: 900px; margin: 0 auto 1.8rem; }

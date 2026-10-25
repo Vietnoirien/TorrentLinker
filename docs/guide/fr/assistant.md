@@ -132,6 +132,10 @@ Les questions, validations d'actions et attentes temporaires de paramètres sont
 
 Les cartes d'action affichent les détails et proposent **Approuver une fois** ou **Refuser**. La validation ne concerne que cette proposition. Les paramètres, autorisations et budgets sont vérifiés avant l'action ; une proposition expirée nécessite une nouvelle validation.
 
-Pour une question, choisissez une suggestion ou saisissez votre réponse, puis cliquez sur **Envoyer la réponse**. Le choix seul n'envoie rien. Une réponse ne donne aucune autorisation d'action. Les tableaux Markdown s'affichent dans la discussion ; le HTML intégré et les images externes sont désactivés.
+Pour une question, choisissez une suggestion ou saisissez votre réponse, puis cliquez sur **Envoyer la réponse**. Le choix seul n'envoie rien. Une réponse ne donne aucune autorisation d'action. Les tableaux Markdown s'affichent dans la discussion ; le HTML intégré est désactivé ; les URL d’images observées utilisent l’affichage protégé décrit plus haut.
 
 Si une tâche nécessite un Dossier de téléchargement manquant, la discussion demande son emplacement pour le client et la catégorie choisis. Sélectionnez une suggestion ou saisissez votre chemin absolu. Vérifiez et approuvez le client, la catégorie et le chemin exacts avant la modification des paramètres. La tâche reprend ensuite avec ses autorisations habituelles. Un refus conserve les paramètres. Un dossier inaccessible ou une correspondance de chemins non vérifiée entraîne une nouvelle question pour le corriger. Sur ordinateur, un client torrent local peut utiliser un dossier vide existant ; un client distant nécessite un fichier déjà seedé correspondant.
+
+## Dossiers de discussions
+
+La barre latérale regroupe les discussions dans des dossiers repliables : Général, Envois, Recherche de films, Recherche de séries et Dépannage. Utilisez **Déplacer** pour choisir un dossier ou saisir un nom court. Le classement manuel persiste après redémarrage et le modèle ne peut pas le remplacer. Activez le classement automatique dans cette fenêtre pour autoriser de nouveau le modèle à classer la discussion en cours. Il ne peut ni déplacer les autres discussions ni modifier les permissions.

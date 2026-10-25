@@ -3,7 +3,14 @@
 from fastapi import HTTPException, Response
 
 from torrentlinker.assistant.images import fetch_image
-from torrentlinker.assistant.models import Conversation, Decision, Message, Schedule, UserAnswer
+from torrentlinker.assistant.models import (
+    Conversation,
+    Decision,
+    FolderMove,
+    Message,
+    Schedule,
+    UserAnswer,
+)
 from torrentlinker.assistant.providers import Provider
 from torrentlinker.assistant.research import SearchSettings
 
@@ -58,6 +65,10 @@ def routes(app, assistant):
     @app.put("/api/setup/assistant/chat")
     def save_chat_defaults(body: Conversation):
         return assistant.save_chat_defaults(body)
+
+    @app.put("/api/assistant/conversations/{identifier}/folder")
+    def move_conversation(identifier: str, body: FolderMove):
+        return assistant.move_conversation(identifier, body.folder, automatic=body.automatic)
 
     @app.put("/api/assistant/conversations/{identifier}")
     def edit_conversation(identifier: str, body: Conversation):

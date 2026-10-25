@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from torrentlinker.assistant.models import Conversation, Schedule
 from torrentlinker.assistant.providers import PRESETS, Provider
 from torrentlinker.assistant.research import SearchSettings
+from torrentlinker.gui.chat_folders import ChatFolders
 from torrentlinker.gui.chat_transcript import ChatTranscript
 from torrentlinker.gui.request_details import JsonCode, RequestDetails
 from torrentlinker.gui.tasks import run_in_background
@@ -366,15 +367,12 @@ class AssistantTab(QWidget):
         delete = QPushButton(self.tr("Delete discussion"))
         delete.clicked.connect(self.delete_discussion)
         ll.addWidget(delete)
-        self.conversations = QListWidget()
-        self.conversations.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.conversations.setTextElideMode(Qt.TextElideMode.ElideRight)
-        self.conversations.setStyleSheet(
-            "QListWidget { border: none; } "
-            "QListWidget::item { padding: 12px 8px; border-radius: 7px; }"
-        )
-        self.conversations.currentRowChanged.connect(self.select_conversation)
+        self.conversations = ChatFolders()
+        self.conversations.conversationSelected.connect(self.select_conversation)
         ll.addWidget(self.conversations)
+        self.move_chat = QPushButton(self.tr("Move to folder…"))
+        self.move_chat.clicked.connect(self.move_conversation)
+        ll.addWidget(self.move_chat)
         splitter.addWidget(left)
         right = QWidget()
         rl = QVBoxLayout(right)
@@ -500,13 +498,8 @@ class AssistantTab(QWidget):
         if not self.service:
             return
         self.conversation_data = self.service.conversations()
-        self.conversations.blockSignals(True)
-        self.conversations.clear()
-        for c in self.conversation_data:
-            self.conversations.addItem(c["name"])
-            if c["id"] == self.conversation_id:
-                self.conversations.setCurrentRow(self.conversations.count() - 1)
-        self.conversations.blockSignals(False)
+        self.conversations.set_rows(self.conversation_data, self.conversation_id)
+        self.move_chat.setEnabled(bool(self.conversation_id))
         self.task_data = self.service.schedules()
         task_row = self.tasks.currentRow()
         self.tasks.clear()
@@ -593,13 +586,52 @@ class AssistantTab(QWidget):
         except Exception as error:
             self.error(error)
 
+    def move_conversation(self):
+        if not self.service or not self.conversation_id:
+            return
+        current = next(c for c in self.conversation_data if c["id"] == self.conversation_id)
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self.tr("Move to folder…"))
+        layout = QFormLayout(dialog)
+        folder = QComboBox()
+        folder.setEditable(True)
+        folder.lineEdit().setMaxLength(80)
+        choices = dict.fromkeys(
+            ["", "uploads", "film_research", "series_research", "troubleshooting"]
+            + [c.get("folder", "") for c in self.conversation_data]
+        )
+        for value in choices:
+            folder.addItem(self.conversations.folder_label(value), value)
+        folder.setCurrentIndex(folder.findData(current.get("folder", "")))
+        layout.addRow(self.tr("Folder"), folder)
+        automatic = QCheckBox(self.tr("Let the assistant organize this conversation"))
+        automatic.setChecked(current.get("folder_source", "auto") == "auto")
+        # Choosing a folder manually pins it; opting back in permits future classification.
+        folder.editTextChanged.connect(lambda _: automatic.setChecked(False))
+        layout.addRow(automatic)
+        actions = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        actions.accepted.connect(dialog.accept)
+        actions.rejected.connect(dialog.reject)
+        layout.addRow(actions)
+        if dialog.exec():
+            index = folder.findText(folder.currentText())
+            value = folder.itemData(index) if index >= 0 else folder.currentText().strip()
+            self.perform(
+                lambda: self.service.move_conversation(
+                    self.conversation_id, value, automatic=automatic.isChecked()
+                )
+            )
+
     def new_discussion(self):
         self.drafts[self.conversation_id] = self.prompt.toPlainText()
         self.drafts.pop("", None)
         self.conversation_id = ""
         self.run_id = ""
         self.prompt.clear()
-        self.conversations.setCurrentRow(-1)
+        self.conversations.select_id("")
+        self.move_chat.setEnabled(False)
         self.chat_model.setCurrentIndex(
             self.chat_model.findData(self.service.chat_defaults().provider_id)
         )
@@ -608,11 +640,12 @@ class AssistantTab(QWidget):
         self.refresh_run()
         self.prompt.setFocus()
 
-    def select_conversation(self, row):
-        if 0 <= row < len(self.conversation_data):
-            conversation = self.conversation_data[row]
+    def select_conversation(self, identifier):
+        conversation = next((c for c in self.conversation_data if c["id"] == identifier), None)
+        if conversation:
             self.drafts[self.conversation_id] = self.prompt.toPlainText()
             self.conversation_id = conversation["id"]
+            self.move_chat.setEnabled(True)
             self.chat_model.setCurrentIndex(self.chat_model.findData(conversation["provider_id"]))
             self.prompt.setPlainText(self.drafts.get(self.conversation_id, ""))
             self.run_id = ""
@@ -722,6 +755,8 @@ class AssistantTab(QWidget):
     def refresh_run(self):
         if not self.service or not self.isVisible():
             return
+        self.conversation_data = self.service.conversations()
+        self.conversations.set_rows(self.conversation_data, self.conversation_id)
         rows = self.service.history(self.conversation_id) if self.conversation_id else []
         all_rows = self.service.history() if self.pages.currentIndex() == 2 else []
         key = json.dumps([rows, all_rows])

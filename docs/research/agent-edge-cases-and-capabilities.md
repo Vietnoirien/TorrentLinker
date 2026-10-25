@@ -189,3 +189,8 @@ The English and French README files include the repository mirror at
 https://git.mma.dev/Vietnoirien/TorrentLinker. Future release/chat announcements
 should include that mirror as requested; this implementation does not publish a
 release, push or restart the running app.
+
+
+## Conversation folders
+
+Native and web sidebars group conversations in collapsible built-in or bounded custom folders. Owner moves persist independently of ordinary discussion settings edits. The internal `classify_conversation` tool derives the current conversation from the active run, accepts no other conversation ID and respects manual owner placement. Re-enabling automatic classification is an explicit owner action. This tool changes neither settings nor permissions. Public owner API and simulated-provider tests cover restart persistence, manual protection and rejection of foreign conversation IDs.

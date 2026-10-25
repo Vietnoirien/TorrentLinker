@@ -57,6 +57,11 @@ class AgentRequest(JobRequest):
     exclude_selection_id: str = Field(default="", max_length=64)
     model_config = ConfigDict(extra="forbid")
 
+    def same_intent(self, other: AgentRequest) -> bool:
+        return self.model_dump(exclude={"queue_binding"}) == other.model_dump(
+            exclude={"queue_binding"}
+        )
+
     @model_validator(mode="before")
     @classmethod
     def explicit_folder_category(cls, value: Any) -> Any:
@@ -116,8 +121,34 @@ class AgentService:
             previous = self.access.db.execute(
                 "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
             ).fetchone()
-            if previous and AgentRequest.model_validate_json(previous["body"]) == body:
+            if previous and AgentRequest.model_validate_json(previous["body"]).same_intent(body):
                 return self.proposal(previous["id"])
+        if body.kind == "send-queue":
+            from torrentlinker.queue_selection import queue_rows
+
+            if not body.hashes:
+                raise ValueError(
+                    "Select explicit torrent hashes; MCP cannot send the whole shared queue."
+                )
+            keys = (
+                {row["key"] for row in body.selection_rows}
+                if body.selection_source == "queue"
+                else None
+            )
+            rows = [
+                row
+                for row in queue_rows(target.setup)
+                if row["status"] == "queued"
+                and row["hash"] in body.hashes
+                and (keys is None or row["key"] in keys)
+            ]
+            by_hash = {row["hash"]: row for row in rows}
+            if len(rows) != len(by_hash) or set(by_hash) != set(body.hashes):
+                raise ValueError(
+                    "Every selected torrent needs one explicit queued entry. "
+                    "Review the queue again."
+                )
+            body = body.model_copy(update={"queue_binding": [by_hash[h] for h in body.hashes]})
         target.validate(body)
         if body.kind == "configure-download-folder":
             checked = target.setup.configure_download_folder(
@@ -132,7 +163,7 @@ class AgentService:
                 "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
             ).fetchone()
             if row:
-                if AgentRequest.model_validate_json(row["body"]) != body:
+                if not AgentRequest.model_validate_json(row["body"]).same_intent(body):
                     raise ValueError("This request_id already belongs to a different operation.")
                 return self.proposal(row["id"])
             self.validate_selection(actor, body)
@@ -242,6 +273,10 @@ class AgentService:
             if body.kind == "upload-draft":
                 body = body.model_copy(update={"kind": "upload-queue"})
             self.validate_selection(actor, body)
+            if body.kind == "send-queue" and not body.queue_binding:
+                raise ValueError(
+                    "Review a new download proposal with explicit queued destinations."
+                )
             target = self.target(actor, body.client_id)
             target.validate(body)  # A changed Local Draft invalidates pending approval.
             for client_id in body.client_ids:
@@ -546,7 +581,7 @@ class AgentService:
                         selection_fingerprint=snapshot["selection_fingerprint"],
                     ),
                 )
-            if snapshot.get("parent_selection_id"):
+            if snapshot.get("parent_selection_id") or kind == "send-queue":
                 if not snapshot["rows"]:
                     raise ValueError("The refined selection is empty.")
                 return self.request(
@@ -576,6 +611,41 @@ class AgentService:
                     selection_fingerprint=snapshot["selection_fingerprint"],
                 ),
             )
+
+    def selection_request(
+        self, actor: str, request_id: str, selection_id: str, kind: str, **parameters
+    ) -> dict:
+        self.access.grant(actor)
+        reference_field = (
+            "selection_id" if kind == "edit-queue-selection" else "source_selection_id"
+        )
+        with self.access.lock:
+            previous = self.access.db.execute(
+                "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
+            ).fetchone()
+            if previous:
+                stored = AgentRequest.model_validate_json(previous["body"])
+                expected = {"kind": kind, reference_field: selection_id, **parameters}
+                if any(getattr(stored, key) != value for key, value in expected.items()):
+                    raise ValueError("This request_id already belongs to a different operation.")
+                self.target(actor, stored.client_id)
+                return self.proposal(previous["id"])
+            client_id, saved = self.selection(actor, selection_id, kind=None)
+            values = {
+                "kind": kind,
+                "client_id": client_id,
+                reference_field: selection_id,
+                **parameters,
+            }
+            if kind == "edit-queue-selection":
+                if saved["source"] != "queue" or not saved["rows"]:
+                    raise ValueError("Select a nonempty queue selection first.")
+                values.update(
+                    selection_source="queue",
+                    selection_rows=saved["rows"],
+                    selection_fingerprint=saved["selection_fingerprint"],
+                )
+            return self.request(actor, request_id, AgentRequest.model_validate(values))
 
     def release_storage(self, identifier: str) -> None:
         """Owner acknowledgement of an uncertain send; never refund daily spending."""

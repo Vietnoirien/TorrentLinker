@@ -904,3 +904,33 @@ def test_live_guidance_reads_installed_documentation_and_cites_local_sections(co
     assert {"search_documentation", "read_documentation"} <= names, result
     assert "/documentation/guide/fr/" in result["messages"][-1]["content"], result
     assert browser.get("/api/agents").json()["proposals"] == []
+
+
+def test_live_current_conversation_classification_preserves_manual_folder(controlled):
+    browser, provider, clients, _ = controlled
+    thread = conversation(browser, provider)
+    result = run(
+        browser,
+        thread,
+        "Use classify_conversation now to put this discussion in film_research. "
+        "This is a synthetic film research discussion. Do not read any client or website.",
+        "current-chat-classification",
+    )
+    assert result["status"] == "completed", result
+    assert any(e["tool"] == "classify_conversation" for e in result["events"]), result
+    chats = {chat["id"]: chat for chat in browser.get("/api/assistant/conversations").json()}
+    assert chats[thread]["folder"] == "film_research"
+    moved = browser.put(f"/api/assistant/conversations/{thread}/folder", json={"folder": "uploads"})
+    assert moved.is_success, moved.text
+    result = run(
+        browser,
+        thread,
+        "Call classify_conversation with film_research again. The owner has manually moved "
+        "this discussion; report the tool result without changing any other setting.",
+        "manual-folder-preserved",
+    )
+    assert result["status"] == "completed", result
+    chats = {chat["id"]: chat for chat in browser.get("/api/assistant/conversations").json()}
+    assert chats[thread]["folder"] == "uploads"
+    assert chats[thread]["folder_source"] == "manual"
+    assert all(client.reads == 0 for client in clients.values())

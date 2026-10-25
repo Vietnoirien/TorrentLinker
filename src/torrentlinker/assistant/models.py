@@ -1,17 +1,39 @@
-"""Validated owner choices, never writable by the model."""
+"""Validated owner choices and limited current-chat model classification."""
 
 from datetime import datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from torrentlinker.agent.access import Grant
 
 
-class Conversation(BaseModel):
+class FolderChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    folder: str = Field(default="", max_length=80)
+
+    @field_validator("folder")
+    @classmethod
+    def folder_name(cls, value: str) -> str:
+        value = value.strip()
+        if any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("Use a folder name without control characters.")
+        return value
+
+
+class FolderMove(FolderChoice):
+    automatic: bool = False
+
+
+class FolderClassification(FolderChoice):
+    folder: str = Field(max_length=80)
+
+
+class Conversation(FolderChoice):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(default="Discussion", min_length=1, max_length=100)
+    folder_source: Literal["auto", "manual"] = "auto"
     provider_id: str = ""
     policy: Grant
     web: bool = False

@@ -113,7 +113,7 @@ TorrentLinker compacts the working context as it fills, keeping the current requ
 
 Messages appear in separate cards. Expand **Activity** below an exchange to inspect tool receipts and usage. Errors, questions and action approvals stay visible when Activity is closed. Approval cards show the action details with **Approve once** and **Reject**. Approval applies only to that proposal and is checked against current settings, permissions and budgets before execution. Expired or changed proposals need a fresh decision.
 
-For questions, select a suggested answer or type your own, then choose **Submit answer**. Selecting an option does not send it. An answer never grants action permission. Markdown tables render in chat; embedded HTML and external images are disabled.
+For questions, select a suggested answer or type your own, then choose **Submit answer**. Selecting an option does not send it. An answer never grants action permission. Markdown tables render in chat; embedded HTML is disabled; observed image URLs use the protected image viewer described above.
 
 Discussions and tasks share a limit of 200 calls per model connection per UTC day. Connection tests are separate from this counter. One Assistant run executes at a time; up to ten can be queued or active. Downloads remain TorrentLinker jobs and continue in your torrent client.
 
@@ -122,3 +122,7 @@ External assistants can still use [MCP access](agents.md). The built-in Assistan
 Use **Delete discussion** to remove a chat and its history after confirmation. Pending proposals are rejected; torrents and files are kept. Stop an active discussion and wait for submitted actions to finish before deleting it. Automated-task discussions cannot be deleted this way.
 
 If a task needs a missing Download Folder, the discussion asks where the selected client and category should download. Choose a suggested folder or enter your own absolute path. Review and approve the exact client, category and path before Settings change. The original task then continues under its existing permissions. A rejected change leaves Settings intact. An unavailable folder or unverified remote Path Mapping opens a correction question. On desktop, a local Torrent Client can use an existing empty folder; a remote client needs a matching seeded sample.
+
+## Conversation folders
+
+The sidebar groups discussions in collapsible folders: General, Uploads, Film research, Series research and Troubleshooting. Use **Move** to choose a folder or enter a short custom name. Manual placement persists across restarts and the model cannot override it. Enable automatic classification in the move dialog to let the model organize the current conversation again. It cannot move other conversations or change permissions.

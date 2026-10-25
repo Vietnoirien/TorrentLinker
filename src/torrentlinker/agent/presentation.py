@@ -177,6 +177,10 @@ def request_command(event: dict) -> dict:
 def tool_description(event: dict, language: str = "en") -> str:
     """Name the observable tool action; model commentary remains a separate message."""
     descriptions = {
+        "classify_conversation": (
+            "Organize this discussion in the sidebar.",
+            "Classer cette discussion dans la barre latérale.",
+        ),
         "overview": (
             "Inspect permissions and Torrent Clients.",
             "Consulter les droits et clients torrent.",

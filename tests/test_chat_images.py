@@ -217,13 +217,21 @@ def test_documentation_links_only_open_bundled_guides():
 
 
 @pytest.mark.skipif(os.environ.get("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
-def test_browser_cover_uses_authenticated_proxy_and_opens_original(tmp_path, public_images):
+@pytest.mark.parametrize("root_path", ["", "/tl"])
+def test_browser_cover_uses_authenticated_proxy_and_opens_original(
+    tmp_path, public_images, root_path
+):
     import uvicorn
+    from fastapi import FastAPI
     from playwright.sync_api import expect, sync_playwright
 
     from tests.test_tool_activity import narrative_run
 
     app = create_app(tmp_path, password="test-password-long")
+    if root_path:
+        mounted = FastAPI()
+        mounted.mount(root_path, app)
+        app = mounted
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen()
@@ -249,7 +257,7 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(tmp_path, pub
                     else None
                 ),
             )
-            page.goto(f"http://127.0.0.1:{port}/")
+            page.goto(f"http://127.0.0.1:{port}{root_path}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator('[data-view="assistant"]')).to_be_visible()
@@ -299,6 +307,66 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(tmp_path, pub
             )
             expect(page.locator(".assistant-tool .assistant-json")).to_be_visible()
             page.locator(".assistant-run").screenshot(path=str(tmp_path / "chat-tool-activity.png"))
+            page.evaluate(
+                "html => document.body.append(aMarkdown({html}))",
+                render("[Documentation](/documentation/guide/en/agents.md#connections)"),
+            )
+            citation = page.get_by_role("link", name="Documentation", exact=True)
+            assert citation.evaluate("link => new URL(link.href).pathname") == (
+                root_path + "/documentation/guide/en/agents.md"
+            )
+            with page.expect_popup() as opened:
+                citation.click()
+            guide = opened.value
+            guide.wait_for_load_state()
+            assert guide.url.endswith("/documentation/guide/en/agents.md#connections")
+            expect(guide.locator("h1")).to_be_visible()
+            chats = [
+                {"id": "film", "name": "Find a film", "folder": "film_research"},
+                {"id": "upload", "name": "My upload", "folder": "uploads"},
+            ]
+            page.evaluate(
+                "chats => { const pane = document.createElement('aside'); "
+                "pane.id = 'folder-demo'; document.body.append(pane); "
+                "aConversationFolders(pane, chats); }",
+                chats,
+            )
+            groups = page.locator("#folder-demo .assistant-folder")
+            expect(groups).to_have_count(2)
+            expect(groups.nth(0).get_by_role("button", name="Find a film")).to_be_visible()
+            groups.nth(0).locator("summary").click()
+            expect(groups.nth(0).get_by_role("button", name="Find a film")).not_to_be_visible()
+            chats[1]["name"] = "Upload ready"
+            page.evaluate(
+                "chats => aConversationFolders(document.getElementById('folder-demo'), chats)",
+                chats,
+            )
+            expect(groups.nth(0).get_by_role("button", name="Find a film")).not_to_be_visible()
+            expect(groups.nth(1).get_by_role("button", name="Upload ready")).to_be_visible()
+            identifier = page.evaluate(
+                """async () => {
+                  const model = await api('setup/assistant/providers',
+                    {name: 'Local', kind: 'ollama', model: 'test'});
+                  const chat = await api('assistant/conversations',
+                    {name: 'Film ideas', provider_id: model.id,
+                     policy: {name: 'Read', clients: ['default']}});
+                  assistantConversation = chat.id;
+                  aMoveConversation(chat, [chat]);
+                  return chat.id;
+                }"""
+            )
+            dialog = page.locator("dialog.assistant-dialog")
+            dialog.locator("select").select_option("__new__")
+            dialog.locator('input[type="text"]').fill("My films")
+            expect(dialog.locator('input[type="checkbox"]')).not_to_be_checked()
+            dialog.locator(".toolbar button").first.click()
+            expect(dialog).not_to_be_visible()
+            moved = page.evaluate(
+                "async id => (await api('assistant/conversations')).find(c => c.id === id)",
+                identifier,
+            )
+            assert (moved["folder"], moved["folder_source"]) == ("My films", "manual")
+            expect(page.locator("#assistant-folders summary")).to_have_text("▱My films")
             browser.close()
     finally:
         server.should_exit = True

@@ -40,3 +40,9 @@ def test_markdown_escapes_html_and_blocks_remote_images(monkeypatch, tmp_path):
     assert "<script>" not in html
     assert 'src="https://' not in html
     assert 'href="javascript:' not in html
+
+
+def test_standalone_guide_links_and_images_keep_mount_prefix():
+    html = render("guide/en/getting-started.md", standalone=True, root_path="/tl")
+    assert 'href="/tl/documentation/guide/en/web-docker.md#' in html
+    assert 'src="/tl/api/documentation/file/guide/images/en/' in html

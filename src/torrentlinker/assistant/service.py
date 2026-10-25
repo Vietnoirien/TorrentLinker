@@ -260,7 +260,11 @@ class Assistant:
     def update_conversation(self, identifier, body):
         self.validate_conversation(body)
         with self.lock, self.db:
-            _, actor = self.conversation(identifier)
+            current, actor = self.conversation(identifier)
+            # Folder placement changes only through the dedicated move operation.
+            body = body.model_copy(
+                update={"folder": current.folder, "folder_source": current.folder_source}
+            )
             if self.db.execute(
                 "SELECT 1 FROM runs WHERE conversation_id=? AND "
                 "status IN ('queued','running','awaiting_approval','awaiting_user',"
@@ -273,6 +277,35 @@ class Assistant:
                 "UPDATE conversations SET body=? WHERE id=?", (body.model_dump_json(), identifier)
             )
         return {"id": identifier, **body.model_dump()}
+
+    def move_conversation(self, identifier, folder, *, automatic=False):
+        from torrentlinker.assistant.models import FolderChoice
+
+        folder = FolderChoice(folder=self.secrets.redact(folder, public_urls=True)).folder
+        with self.lock, self.db:
+            current, _ = self.conversation(identifier)
+            source = "auto" if automatic else "manual"
+            changed = (current.folder, current.folder_source) != (folder, source)
+            body = current.model_copy(update={"folder": folder, "folder_source": source})
+            if changed:
+                self.db.execute(
+                    "UPDATE conversations SET body=? WHERE id=?",
+                    (body.model_dump_json(), identifier),
+                )
+            return {"id": identifier, **body.model_dump(), "changed": changed}
+
+    def classify_conversation(self, identifier, folder):
+        with self.lock:
+            current, _ = self.conversation(identifier)
+            if current.folder_source == "manual":
+                return {
+                    "folder": current.folder,
+                    "folder_source": "manual",
+                    "changed": False,
+                    "reason": "Owner folder placement is preserved.",
+                }
+            result = self.move_conversation(identifier, folder, automatic=True)
+            return {key: result[key] for key in ("folder", "folder_source", "changed")}
 
     def create_conversation(self, body, *, require_provider=True):
         body = body.model_copy(update={"name": self.secrets.redact(body.name, public_urls=True)})
@@ -301,9 +334,11 @@ class Assistant:
             return Conversation.model_validate_json(row["body"]), row["actor"]
 
     def conversations(self):
+        from torrentlinker.assistant.models import Conversation
+
         with self.lock:
             return [
-                {"id": r["id"], **json.loads(r["body"])}
+                {"id": r["id"], **Conversation.model_validate_json(r["body"]).model_dump()}
                 for r in self.db.execute(
                     "SELECT * FROM conversations ORDER BY rowid DESC LIMIT 200"
                 )
@@ -504,6 +539,10 @@ class Assistant:
                 "You are TorrentLinker Assistant. Use tools for facts and actions."
                 " Call overview first. "
                 "Use explicit client IDs. Never claim success without a successful job result. "
+                "You may organize this current discussion with classify_conversation into "
+                "uploads, film_research, series_research, troubleshooting, General as an empty "
+                "folder, or a short useful custom folder. Classify only when the topic warrants "
+                "a change; manual owner placement is always preserved by the tool. "
                 "When calling tools, you may give one short plain-language note about the "
                 "actions you are about to take. Keep that note brief and report results afterward. "
                 "For setup/how-to questions, search_documentation then read_documentation "
@@ -622,6 +661,19 @@ class Assistant:
                 for t in asyncio.run(self.mcp.list_tools())
             ]
             tools.append(HISTORY_TOOL)
+            from torrentlinker.assistant.models import FolderClassification
+
+            tools.append(
+                {
+                    "name": "classify_conversation",
+                    "description": "Organize only this current discussion into a sidebar folder. "
+                    "Built-ins are uploads, film_research, series_research, troubleshooting; "
+                    "an empty folder means General. Short custom names are allowed. "
+                    "Manual owner placement is always preserved. "
+                    "This changes no client, settings or permissions.",
+                    "parameters": FolderClassification.model_json_schema(),
+                }
+            )
             tools.append(
                 {
                     "name": "ask_user",
@@ -853,6 +905,11 @@ class Assistant:
                                     time.monotonic() - started,
                                 )
                                 return
+                            elif call["name"] == "classify_conversation":
+                                classification = FolderClassification.model_validate(args)
+                                result = self.classify_conversation(
+                                    self.run(identifier)["conversation_id"], classification.folder
+                                )
                             elif call["name"] == "read_assistant_history":
                                 result = self.read_context_history(
                                     self.run(identifier)["conversation_id"], **args

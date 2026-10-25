@@ -755,6 +755,18 @@
         <source>Waiting for settings to finish updating</source>
         <translation>Mise à jour des paramètres en cours</translation>
     </message>
+    <message>
+        <source>Move to folder…</source>
+        <translation>Déplacer vers un dossier…</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>Let the assistant organize this conversation</source>
+        <translation>Laisser l’assistant classer cette conversation</translation>
+    </message>
 </context>
 <context>
     <name>BookReader</name>
@@ -6586,6 +6598,29 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Open receipt</source>
         <translation>Ouvrir le reçu</translation>
+    </message>
+</context>
+<context>
+    <name>ChatFolders</name>
+    <message>
+        <source>General</source>
+        <translation>Général</translation>
+    </message>
+    <message>
+        <source>Uploads</source>
+        <translation>Uploads</translation>
+    </message>
+    <message>
+        <source>Film research</source>
+        <translation>Recherche de films</translation>
+    </message>
+    <message>
+        <source>Series research</source>
+        <translation>Recherche de séries</translation>
+    </message>
+    <message>
+        <source>Troubleshooting</source>
+        <translation>Dépannage</translation>
     </message>
 </context>
 </TS>

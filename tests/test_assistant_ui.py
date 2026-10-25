@@ -83,7 +83,7 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkey
         qtbot.keyClick(widget.prompt, Qt.Key.Key_Return)
         qtbot.waitUntil(lambda: "Ready to prepare" in widget.transcript.toPlainText(), timeout=5000)
         assert len(browser.get("/api/assistant/conversations").json()) == 2
-        widget.conversations.setCurrentRow(1)
+        widget.conversations.setCurrentItem(widget.conversations.topLevelItem(0).child(1))
         assert "Help me build a Plan." in widget.transcript.toPlainText()
         widget.grab().save(str(tmp_path / "assistant-desktop.png"))
         from PySide6.QtWidgets import QMessageBox

@@ -280,17 +280,13 @@ def make_server(service: AgentService):
         Zero means zero. Leaves the larger queue intact and reserves nothing. Use send_selection
         with the returned job_id only when asked to start this exact batch; normal approval applies.
         """
-        client_id, _ = service.selection(ACTOR.get(), selection_id, kind=None)
-        return service.request(
+        return service.selection_request(
             ACTOR.get(),
             request_id,
-            AgentRequest(
-                kind="prepare-download-batch",
-                client_id=client_id,
-                source_selection_id=selection_id,
-                batch_bytes=maximum_bytes,
-                batch_torrents=maximum_torrents,
-            ),
+            selection_id,
+            "prepare-download-batch",
+            batch_bytes=maximum_bytes,
+            batch_torrents=maximum_torrents,
         )
 
     @mcp.tool(structured_output=True)
@@ -307,22 +303,13 @@ def make_server(service: AgentService):
         destination validation. Uncertain or interrupted sends require owner investigation.
         Priority is persistent; larger values send first, then insertion order.
         """
-        client_id, saved = service.selection(ACTOR.get(), selection_id, kind=None)
-        if saved["source"] != "queue" or not saved["rows"]:
-            raise ValueError("Select a nonempty queue selection first.")
-        return service.request(
+        return service.selection_request(
             ACTOR.get(),
             request_id,
-            AgentRequest(
-                kind="edit-queue-selection",
-                client_id=client_id,
-                selection_id=selection_id,
-                selection_source="queue",
-                selection_rows=saved["rows"],
-                selection_fingerprint=saved["selection_fingerprint"],
-                queue_action=action,
-                priority=priority,
-            ),
+            selection_id,
+            "edit-queue-selection",
+            queue_action=action,
+            priority=priority,
         )
 
     @mcp.tool(structured_output=True)
@@ -339,18 +326,14 @@ def make_server(service: AgentService):
         Filters the saved rows in their existing order, without changing or widening the original.
         Unavailable client observations fail rather than assuming nothing is seeded.
         """
-        client_id, _ = service.selection(ACTOR.get(), selection_id, kind=None)
-        return service.request(
+        return service.selection_request(
             ACTOR.get(),
             request_id,
-            AgentRequest(
-                kind="refine-selection",
-                client_id=client_id,
-                source_selection_id=selection_id,
-                exclude_queued=exclude_queued,
-                exclude_seeded=exclude_seeded,
-                exclude_selection_id=exclude_selection_id,
-            ),
+            selection_id,
+            "refine-selection",
+            exclude_queued=exclude_queued,
+            exclude_seeded=exclude_seeded,
+            exclude_selection_id=exclude_selection_id,
         )
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)

@@ -80,7 +80,11 @@ def reserve(
     if not body.hashes:
         raise ValueError("Select explicit torrent hashes; MCP cannot send the whole shared queue.")
     selected_keys = (
-        {r["key"] for r in body.selection_rows} if body.selection_source == "queue" else None
+        {r["key"] for r in body.queue_binding}
+        if body.queue_binding
+        else {r["key"] for r in body.selection_rows}
+        if body.selection_source == "queue"
+        else None
     )
     selected = [
         e

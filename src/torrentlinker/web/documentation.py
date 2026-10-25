@@ -7,7 +7,7 @@ from markdown_it import MarkdownIt
 from torrentlinker import documentation as docs
 
 
-def render(name: str, *, standalone: bool = False) -> str:
+def render(name: str, *, standalone: bool = False, root_path: str = "") -> str:
     path = docs.document_path(name)
     if path.suffix != ".md":
         raise ValueError("Not a guide.")
@@ -47,13 +47,21 @@ def render(name: str, *, standalone: bool = False) -> str:
             if child.type == "image":
                 child.attrSet(
                     "src",
-                    ("/api/documentation/file/" if standalone else "api/documentation/file/")
+                    (
+                        root_path.rstrip("/") + "/api/documentation/file/"
+                        if standalone
+                        else "api/documentation/file/"
+                    )
                     + quote(relative, safe="/"),
                 )
             elif resolved.suffix == ".md":
                 child.attrSet(
                     "href",
-                    ("/documentation/" + quote(relative, safe="/") if standalone else "")
+                    (
+                        root_path.rstrip("/") + "/documentation/" + quote(relative, safe="/")
+                        if standalone
+                        else ""
+                    )
                     + "#"
                     + parsed.fragment,
                 )

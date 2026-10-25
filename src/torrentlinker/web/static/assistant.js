@@ -2,8 +2,59 @@
 let assistantView = "chat", assistantConversation = "", assistantRun = "", assistantSnapshot = null;
 let assistantRefreshBusy = false, assistantRenderKey = "", assistantLoadVersion = 0;
 const assistantDrafts = new Map();
+const assistantCollapsedFolders = new Set();
 const at = (en, fr) => say(en, fr);
 const assistantRoot = () => $("view-assistant");
+function aFolderLabel(folder) {
+  return ({"": at("General", "Général"), uploads: at("Uploads", "Uploads"), film_research: at("Film research", "Recherche de films"), series_research: at("Series research", "Recherche de séries"), troubleshooting: at("Troubleshooting", "Dépannage")})[folder] ?? folder;
+}
+function aConversationFolders(container, conversations) {
+  const key = JSON.stringify([assistantConversation, conversations.map(c => [c.id, c.name, c.folder])]);
+  if (container.dataset.snapshot === key) return;
+  for (const group of container.querySelectorAll(":scope > .assistant-folder")) {
+    group.open ? assistantCollapsedFolders.delete(group.dataset.folder) : assistantCollapsedFolders.add(group.dataset.folder);
+  }
+  container.dataset.snapshot = key;
+  const groups = new Map();
+  for (const chat of conversations) {
+    const folder = chat.folder || "";
+    if (!groups.has(folder)) groups.set(folder, []);
+    groups.get(folder).push(chat);
+  }
+  container.replaceChildren();
+  for (const [folder, chats] of groups) {
+    const group = element("details", undefined, "assistant-folder");
+    group.dataset.folder = folder;
+    group.open = !assistantCollapsedFolders.has(folder);
+    group.addEventListener("toggle", () => {
+      if (group.isConnected) group.open ? assistantCollapsedFolders.delete(folder) : assistantCollapsedFolders.add(folder);
+    });
+    const title = element("summary", aFolderLabel(folder));
+    const icon = element("span", "▱", "assistant-folder-icon"); icon.setAttribute("aria-hidden", "true"); title.prepend(icon);
+    group.append(title);
+    for (const chat of chats) {
+      const item = button(chat.name, async () => { assistantConversation = chat.id; assistantRun = ""; await loadAssistant(); }, assistantConversation === chat.id ? "active" : "");
+      item.title = chat.name;
+      if (assistantConversation === chat.id) item.setAttribute("aria-current", "page");
+      group.append(item);
+    }
+    container.append(group);
+  }
+}
+function aMoveConversation(current, conversations) {
+  const {dialog, form} = aDialog(at("Move to folder…", "Déplacer vers un dossier…"));
+  const choices = [...new Set(["", "uploads", "film_research", "series_research", "troubleshooting", ...conversations.map(c => c.folder || "")])];
+  const folder = aField(form, at("Folder", "Dossier"), current.folder || "", "", [...choices.map(f => [f, aFolderLabel(f)]), ["__new__", at("New folder…", "Nouveau dossier…")]]);
+  const name = aField(form, at("Folder name", "Nom du dossier")); name.maxLength = 80; name.parentElement.hidden = true;
+  const automatic = aField(form, at("Let the assistant organize this conversation", "Laisser l’assistant classer cette conversation"), current.folder_source !== "manual", "checkbox");
+  folder.onchange = () => { name.parentElement.hidden = folder.value !== "__new__"; automatic.checked = false; };
+  aActions(dialog, form, async () => {
+    const value = folder.value === "__new__" ? name.value.trim() : folder.value;
+    if (folder.value === "__new__" && !value) { name.setCustomValidity(at("Enter a folder name", "Saisissez un nom de dossier")); name.reportValidity(); return false; }
+    await api(`assistant/conversations/${current.id}/folder`, {folder: value, automatic: automatic.checked}, "PUT");
+  });
+  name.oninput = () => name.setCustomValidity("");
+}
 function aField(form, label, value = "", type = "text", options = null) {
   const wrapper = element("label", label), input = element(options ? "select" : type === "textarea" ? "textarea" : "input");
   if (options) for (const [id, name] of options) { const o = element("option", name); o.value = id; input.append(o); }
@@ -19,7 +70,7 @@ function aDialog(title) {
 }
 function aActions(dialog, form, save) {
   const footer = element("div", undefined, "toolbar");
-  footer.append(button(at("Save", "Enregistrer"), async () => { await save(); dialog.close(); await loadAssistant(); }, "primary"), button(at("Cancel", "Annuler"), () => dialog.close()));
+  footer.append(button(at("Save", "Enregistrer"), async () => { if (await save() === false) return; dialog.close(); await loadAssistant(); }, "primary"), button(at("Cancel", "Annuler"), () => dialog.close()));
   form.onsubmit = e => e.preventDefault(); form.append(footer);
 }
 async function loadAssistant() {
@@ -48,9 +99,15 @@ async function loadAssistant() {
   }, "primary"));
   const conversations = await api("assistant/conversations");
   if (version !== assistantLoadVersion) return;
-  for (const c of conversations) side.append(button(c.name, async () => { assistantConversation = c.id; assistantRun = ""; await loadAssistant(); }, assistantConversation === c.id ? "active" : ""));
+  const folders = element("div"); folders.id = "assistant-folders";
+  aConversationFolders(folders, conversations); side.append(folders);
   layout.append(side, main); root.append(layout);
   const current = conversations.find(c => c.id === assistantConversation);
+  if (current) side.append(button(at("Move to folder…", "Déplacer vers un dossier…"), async () => {
+    const latest = await api("assistant/conversations");
+    const selected = latest.find(c => c.id === assistantConversation);
+    if (selected) aMoveConversation(selected, latest);
+  }));
   if (current) side.append(button(at("Delete discussion", "Supprimer la discussion"), async () => {
     if (!confirm(at("Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.", "Supprimer cette discussion et son historique ? Les propositions en attente seront refusées. Les torrents et fichiers ne seront pas supprimés."))) return;
     await api(`assistant/conversations/${current.id}`, undefined, "DELETE");
@@ -126,8 +183,9 @@ async function aRefreshChat() {
   assistantRefreshBusy = true;
   const identifier = assistantConversation, transcript = $("assistant-transcript");
   try {
-    const rows = await api(`assistant/jobs?conversation_id=${encodeURIComponent(identifier)}`);
+    const [rows, conversations] = await Promise.all([api(`assistant/jobs?conversation_id=${encodeURIComponent(identifier)}`), api("assistant/conversations")]);
     if (assistantConversation !== identifier || $("assistant-transcript") !== transcript) return;
+    if ($("assistant-folders")) aConversationFolders($("assistant-folders"), conversations);
     const key = JSON.stringify(rows); if (key === assistantRenderKey) return;
     assistantRenderKey = key;
     const position = transcript.scrollTop, bottom = position >= transcript.scrollHeight - transcript.clientHeight - 20;
@@ -146,6 +204,9 @@ function aMarkdown(message) {
   if (message.html) content.innerHTML = message.html;
   else content.textContent = message.content;
   for (const link of content.querySelectorAll("a")) {
+    const href = link.getAttribute("href") || "";
+    // Tool citations are app-relative; retain the reverse proxy's mount path.
+    if (href.startsWith("/documentation/")) link.href = new URL(href.slice(1), document.baseURI).href;
     link.rel = "noopener noreferrer";
     link.target = "_blank";
   }

@@ -840,3 +840,80 @@ def test_unknown_queue_identity_and_size_are_blocked_but_can_be_removed(catalogu
     )
     assert approve(browser, edit)["removed"] == 1
     assert browser.get("/api/queue").json() == []
+
+
+def test_catalogue_admission_exclusion_does_not_invalidate_its_queued_send(catalogue_app):
+    app, browser, token = catalogue_app
+    identifier = selection(browser, token, query="Film B", exclude_queued=True)
+    approve(
+        browser,
+        tool(browser, token, "enqueue_selection", request_id="admit", selection_id=identifier),
+    )
+    send = tool(
+        browser, token, "send_selection", request_id="send-admitted", selection_id=identifier
+    )
+    result = approve(browser, send)
+    assert result["selected_count"] == 1
+    assert result["rows"][0]["hash"] == "b" * 40
+
+
+@pytest.mark.parametrize(
+    "name,arguments",
+    [
+        ("prepare_download_batch", {"maximum_bytes": 100, "maximum_torrents": 2}),
+        ("refine_selection", {"exclude_seeded": False}),
+        ("edit_queue_selection", {"action": "priority", "priority": 2}),
+    ],
+)
+def test_completed_selection_operations_remain_idempotent_after_source_expires(
+    catalogue_app, monkeypatch, name, arguments
+):
+    app, browser, token = catalogue_app
+    queue_films(browser, token)
+    selected = queue_selection(browser, token)
+    operation = tool(browser, token, name, request_id="stable", selection_id=selected, **arguments)
+    if operation["requires_owner_approval"]:
+        approve(browser, operation)
+    else:
+        assert finished(browser, operation["job_id"])["status"] == "completed"
+    import time
+
+    now = time.time()
+    monkeypatch.setattr("torrentlinker.agent.service.time.time", lambda: now + 901)
+    retried = tool(browser, token, name, request_id="stable", selection_id=selected, **arguments)
+    assert retried["id"] == operation["id"]
+    assert retried["job_id"]
+
+
+def test_send_approval_rejects_changed_queued_destination(catalogue_app):
+    import json
+
+    app, browser, token = catalogue_app
+    queue_films(browser, token)
+    selected = tool(
+        browser,
+        token,
+        "select_catalogue",
+        request_id="bound-selection",
+        client_id="default",
+        criteria={"query": "Film B", "count": 1},
+    )["job_id"]
+    assert finished(browser, selected)["status"] == "completed"
+    proposal = tool(
+        browser, token, "send_selection", request_id="bound-folder", selection_id=selected
+    )
+    store = app.state.agent_service.setup.store
+    key, payload, _, _ = next(
+        row for row in store.queued_downloads() if row[1]["candidate"]["infohash"] == "b" * 40
+    )
+    payload["folder"] = "/changed-destination"
+    with store._lock, store._db:
+        store._db.execute(
+            "UPDATE download_queue SET payload=? WHERE id=?", (json.dumps(payload), key)
+        )
+    response = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")
+    if response.is_success:
+        result = finished(browser, response.json()["job_id"])
+        assert result["status"] == "failed", result
+    else:
+        assert response.status_code == 400, response.text
