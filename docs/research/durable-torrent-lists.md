@@ -109,3 +109,18 @@ action; uncertain download/upload sends must never be replayed automatically.
 Historical malformed/JSON-encoded operation arguments display safely. Both review
 axes checked the backend and native/browser error presentation; all actionable
 findings were corrected and reviewed again.
+
+Final full-suite result: **1,256 passed, 93 skipped, 1 failed** (193.09 seconds).
+The failure is the previously known upload-view archive teardown callback:
+`upload_view.py:1384`, `_image_failed` touches a deleted `QLabel`. That file is
+unchanged by this work; the failure was retained and not masked. The additional
+failed-read-job correction regression passed separately with the MCP validation
+correction case (2 passed). Ruff, formatting, mypy and whitespace checks passed.
+The urgent native/browser tool-error fix was also tested independently against
+actual saved malformed-operation history and browser rendering.
+
+The final focused local-model mixed-list and fresh-context comparison checks passed
+(2 tests, 101.84 seconds); the film/music acceptance remains failed as described
+above. Full reports were saved under `/tmp/tl-durable-list-final-live` and
+`/tmp/tl-durable-list-final-readback`. Model test success is recorded per workflow,
+not generalized into a guarantee of tool use or truthful completion claims.
