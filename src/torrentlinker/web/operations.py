@@ -641,7 +641,7 @@ class Operations:
                         "note": note(self.setup.settings.zen.zen_class, zt),
                         "categories": c.categories,
                         "category": c.categories[-1] if c.categories else None,
-                        "source": indexer.redact(c.download_url),
+                        "source": "indexer",
                         "seen_at": metadata["observed_at"],
                     }
                 )
