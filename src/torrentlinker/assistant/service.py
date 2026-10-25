@@ -12,6 +12,19 @@ from uuid import uuid4
 from torrentlinker.assistant.providers import PRESETS, Models, Provider
 
 
+def _mcp_result(answer):
+    result = answer.structured_content
+    if not isinstance(result, dict):
+        result = {"content": [block.model_dump(mode="json") for block in answer.content]}
+    if answer.is_error:
+        text = " ".join(getattr(block, "text", "") for block in answer.content)
+        result = {
+            **result,
+            "error": str(result.get("error") or text or "MCP tool call failed.")[:2000],
+        }
+    return result
+
+
 class Assistant:
     def __init__(self, directory, agent, mcp, transport=None):
         self.agent, self.mcp = agent, mcp
@@ -413,7 +426,7 @@ class Assistant:
             return {"id": run}
 
     def run(self, identifier, *, rendered=False):
-        from torrentlinker.agent.presentation import request_summary, tool_description
+        from torrentlinker.agent.presentation import request_summary, tool_description, tool_error
         from torrentlinker.assistant.markdown import render
 
         with self.lock:
@@ -430,6 +443,11 @@ class Assistant:
                 "events": [
                     {
                         **event,
+                        **(
+                            {"status": "failed", "error": tool_error(event)}
+                            if tool_error(event)
+                            else {}
+                        ),
                         "summary": {lang: request_summary(event, lang) for lang in ("en", "fr")},
                         "description": {
                             lang: tool_description(event, lang) for lang in ("en", "fr")
@@ -511,6 +529,7 @@ class Assistant:
         import hashlib
         import time
 
+        from torrentlinker.agent.presentation import tool_error
         from torrentlinker.agent.server import ACTOR
         from torrentlinker.assistant.context import (
             HISTORY_TOOL,
@@ -912,11 +931,7 @@ class Assistant:
                                     events.append(event)
                                     self.update_run(identifier, events=json.dumps(events))
                                     answer = asyncio.run(self.mcp.call_tool(call["name"], args))
-                                    result = answer.structured_content or {
-                                        "content": [
-                                            b.model_dump(mode="json") for b in answer.content
-                                        ]
-                                    }
+                                    result = _mcp_result(answer)
                                 else:
                                     result = recovery
                             elif waiting and waiting.get("question"):
@@ -959,9 +974,7 @@ class Assistant:
                                 result = getattr(self.research, call["name"])(**args)
                             else:
                                 answer = asyncio.run(self.mcp.call_tool(call["name"], args))
-                                result = answer.structured_content or {
-                                    "content": [b.model_dump(mode="json") for b in answer.content]
-                                }
+                                result = _mcp_result(answer)
                         finally:
                             ACTOR.reset(token)
                     except Exception as error:
@@ -1049,6 +1062,22 @@ class Assistant:
                             self.agent.jobs.cancel(job_id)
                             raise InterruptedError()
                         event["result"] = result
+                        self.update_run(identifier, events=json.dumps(events))
+                    call_error = tool_error({**event, "result": result})
+                    if call_error:
+                        result = {
+                            **result,
+                            "error": call_error,
+                            "correction_guidance": (
+                                "This call failed; do not claim success. Inspect the error and "
+                                "current state. Correct invalid arguments only for the user's "
+                                "still-authorized request. Permission or approval blockers require "
+                                "owner action; never bypass them. Never retry an actual send "
+                                "when acceptance is uncertain: inspect the client and use owner "
+                                "recovery first. No action was automatically replayed."
+                            ),
+                        }
+                        event.update(status="failed", error=call_error, result=result)
                         self.update_run(identifier, events=json.dumps(events))
                     checkpoint = {}
                     results.append((call, model_receipt(result, identifier, len(events) - 1)))
