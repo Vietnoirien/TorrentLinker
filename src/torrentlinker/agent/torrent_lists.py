@@ -32,7 +32,7 @@ class ListFilter(BaseModel):
         return bool(
             self.categories
             or self.query.strip()
-            or self.exclude_terms
+            or any(term.strip() for term in self.exclude_terms)
             or self.min_size_bytes
             or self.max_size_bytes is not None
             or self.count is not None

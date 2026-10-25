@@ -681,3 +681,32 @@ def test_list_sources_cannot_cross_client_scope_and_missing_observations_are_err
         ]
         == 1
     )
+
+
+def test_blank_exclusion_filter_cannot_silently_clear_saved_list(catalogue_app):
+    _, browser, token = catalogue_app
+    source = selected(browser, token, "blank-source", categories=[2030])
+    created = tool(
+        browser,
+        token,
+        "create_torrent_list",
+        request_id="blank-list",
+        client_id="default",
+        name="Kept safe",
+        selection_id=source,
+    )
+    denied = call(
+        browser,
+        token,
+        "edit_torrent_list",
+        {
+            "request_id": "blank-filter",
+            "list_id": created["id"],
+            "expected_revision": 1,
+            "action": "remove",
+            "subset": {"exclude_terms": ["", " "]},
+        },
+    )["structuredContent"]
+    assert "error" in denied
+    saved = tool(browser, token, "get_torrent_list", list_id=created["id"], revision=1)
+    assert saved["count"] == 2 and saved["current_revision"] == 1
