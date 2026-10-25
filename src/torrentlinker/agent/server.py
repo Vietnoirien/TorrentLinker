@@ -75,6 +75,8 @@ def make_server(service: AgentService):
             "for actions. Execute authorized list edits with tools in the current turn and "
             "verify revision/totals before the final answer; a promise to do it later is not done. "
             "Never rebuild or copy list hashes into model text. "
+            "For distinct film recommendations, use deduplicate_selection before presenting "
+            "or saving the final list; different releases of one film are not different films. "
             "Use present_selection to display saved revisions or selections as durable cards; "
             "get_presentation and get_presentation_item paginate and inspect them. "
             "enqueue_selection queues those saved rows only when the user asks. "
@@ -416,6 +418,35 @@ def make_server(service: AgentService):
         )
 
     @mcp.tool(structured_output=True)
+    @safe
+    def deduplicate_selection(
+        request_id: str,
+        selection_id: str = "",
+        list_id: str = "",
+        expected_revision: Annotated[int, Field(ge=0)] = 0,
+        keep: Literal["first", "smallest", "most_seeded"] = "first",
+        count: Annotated[int | None, Field(ge=1, le=100)] = None,
+    ) -> dict[str, object]:
+        """Save one release per verified film as a new exact selection, available to all tools.
+
+        Supply exactly one selection_id or list_id+expected_revision, at most 100 candidate
+        releases. Fetches bounded Indexer metadata, groups by verified TMDb film ID, then
+        retains first-ranked, smallest or most-seeded release; ties keep original order.
+        Optional count caps the result AFTER deduplication. Report shortfall and unknown
+        identities; fetch more live candidates if fewer distinct films than requested remain.
+        Missing identities, other categories and TV seasons/episodes stay separate. Never
+        group by similar titles or posters. Language/format/size preferences must be filtered
+        before this call. Does not mutate the original list, queue or Torrent Client.
+        Use returned selection_id with present_selection, create_torrent_list or edit_torrent_list
+        to persist the result for later actions. No model-side hash copying is needed.
+        """
+        from torrentlinker.agent.selection_deduplication import deduplicate
+
+        return deduplicate(
+            service, ACTOR.get(), request_id, selection_id, list_id, expected_revision, keep, count
+        )
+
+    @mcp.tool(structured_output=True)
     @safe(public_urls=True)
     def present_selection(
         request_id: str,
@@ -431,6 +462,8 @@ def make_server(service: AgentService):
         """Show persistent category-adapted cards for an exact saved list revision or selection.
 
         Usually one call: basic release facts and bounded Indexer metadata/artwork are automatic.
+        For distinct film recommendations, first use deduplicate_selection and present its
+        returned selection_id so alternate releases do not count as separate films.
         Specify exactly one list_id+expected_revision, selection_id or prior enrichment_id.
         For an existing saved list, pass list_id+expected_revision directly; no need to
         materialize it through select_torrent_list merely to display cards.

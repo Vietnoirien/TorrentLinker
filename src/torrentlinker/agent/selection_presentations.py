@@ -75,6 +75,7 @@ class Presentations:
         research=False,
         title="",
         enrichment=False,
+        max_rows=None,
     ):
         if sum(bool(s) for s in (list_id, selection_id, enrichment_id)) != 1:
             raise ValueError("Supply exactly one list revision, selection_id or enrichment_id.")
@@ -91,6 +92,8 @@ class Presentations:
             research=research,
             title=title,
         )
+        if max_rows is not None:
+            intent["max_rows"] = max_rows
 
         def work():
             if enrichment_id:
@@ -119,6 +122,10 @@ class Presentations:
                         for r in saved["rows"]
                     ]
                     label = "Selection"
+                if max_rows is not None and len(rows) > max_rows:
+                    raise ValueError(
+                        f"Deduplication requires at most {max_rows} candidate releases."
+                    )
                 setup = self.service.target(actor, client).setup
                 body = dict(
                     rows=rows,

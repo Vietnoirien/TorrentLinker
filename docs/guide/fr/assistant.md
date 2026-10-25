@@ -199,6 +199,16 @@ hypothèses du profil et du temps de seed sont indiquées ; une valeur inconnue 
 indisponible. Un clic ouvre description, image, informations et sources sans nouveau
 tour du modèle. Les fiches suivantes se chargent par pages explicites.
 
+Pour recommander des films distincts, `deduplicate_selection` conserve une seule release
+par identifiant de film TMDb vérifié avant d'enregistrer ou d'afficher la sélection finale.
+Il peut garder la première, la plus légère ou celle qui a le plus de seeders. Il examine
+jusqu'à 100 candidats par appel et applique le nombre demandé après dédoublonnage, en
+signalant les releases retirées et les résultats manquants. La nouvelle sélection peut
+être enregistrée, présentée ou mise en file avec les mêmes torrents ; la liste initiale
+reste inchangée. Les identités inconnues, autres catégories et saisons/épisodes restent
+séparés. Un titre similaire ou une affiche identique ne suffit jamais. L'outil est aussi
+accessible par MCP. Demandez plusieurs releases explicitement pour les comparer.
+
 Les affiches et couvertures viennent de champs explicites des métadonnées. Une image
 absente reste un emplacement vide ; une bannière de description n’est jamais choisie
 comme couverture. La recherche externe facultative de films/séries exige l’autorisation

@@ -99,3 +99,73 @@ def test_local_model_presents_category_cards_without_downloading(controlled, cat
     assert browser.get("/api/queue").json() == []
     assert not any(e["tool"] in {"enqueue_selection", "send_queue"} for e in run["events"])
     assert all(not client.paused for client in clients.values())
+
+
+def test_local_model_deduplicates_film_releases_before_presenting(controlled):
+    browser, provider, clients, _ = controlled
+    setup = browser.app.state.agent_service.setup
+    setup.settings.indexer_categories = {2030: IndexerCategory("Films")}
+    rows = [
+        CatalogueRow(
+            f"{i:040x}",
+            f"Film release {i}",
+            i * 1_000_000,
+            5,
+            2030,
+            f"https://c411.org/api?t=get&id={i:040x}",
+            "",
+            1,
+        )
+        for i in (1, 2, 3)
+    ]
+
+    def tracker(request):
+        identity = request.url.path.rsplit("/", 1)[-1]
+        number = int(identity, 16)
+        assert number in (1, 2, 3)
+        return httpx.Response(
+            200,
+            json={
+                "infoHash": identity,
+                "description": "Fictional film for deduplication tests.",
+                "metadata": {
+                    "tmdbData": {
+                        "id": 42 if number < 3 else 43,
+                        "title": "First film" if number < 3 else "Second film",
+                        "posterUrl": "https://covers.example/demo.png",
+                    }
+                },
+            },
+        )
+
+    setup._indexer = fake_indexer(tracker)
+    setup.store.save_catalogue(rows)
+    thread = test_assistant_live.conversation(browser, provider)
+    run = test_assistant_live.run(
+        browser,
+        thread,
+        "Dans le catalogue local du client default, compare les 3 releases Film disponibles "
+        "et présente 2 films DISTINCTS en cartes. Plusieurs releases peuvent être le même film : "
+        "garde la plus légère pour chaque film. Sauvegarde la sélection finale pour plus tard. "
+        "Ne mets rien en file et ne télécharge rien.",
+        "selection-cards-distinct-films",
+    )
+    assert run["status"] == "completed", run
+    assert any(e["tool"] == "deduplicate_selection" for e in run["events"]), run
+    presentations = [
+        e["result"]
+        for e in run["events"]
+        if e["tool"] == "present_selection" and e.get("result", {}).get("items")
+    ]
+    assert presentations, run
+    page = presentations[-1]
+    assert page["count"] == 2
+    assert {i["content_identity"]["id"] for i in page["items"]} == {"42", "43"}
+    assert sum(i["size_bytes"] for i in page["items"]) == 4_000_000
+    _, actor = browser.app.state.assistant.conversation(thread)
+    saved = browser.app.state.agent_service.torrent_lists.listing(actor, "default", 0, 50)
+    assert any(
+        item["count"] == 2 and item["total_size_bytes"] == 4_000_000 for item in saved["lists"]
+    ), saved
+    assert browser.get("/api/queue").json() == []
+    assert all(not client.paused for client in clients.values())

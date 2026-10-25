@@ -180,6 +180,15 @@ estimated Zen/day. The estimate states its profile and seed-time assumptions; un
 values remain unavailable. Click a card for description, artwork, release facts and source
 links without spending another model turn. More cards load in explicit pages.
 
+For distinct film recommendations, `deduplicate_selection` keeps one release per verified
+TMDb film ID before saving or displaying the final selection. Choose the first-ranked,
+smallest or most-seeded release. It examines up to 100 candidates per call and applies the
+requested count after deduplication, reporting removed releases and any shortfall. The new
+selection can be saved, presented or queued with the same exact membership; the original
+list is unchanged. Unknown identities, other content kinds and TV seasons/episodes stay
+separate. Similar titles or identical posters are never enough to merge items. The tool is
+also available through MCP. Ask for multiple releases explicitly when you want to compare them.
+
 Posters/covers come from explicit release metadata. Missing artwork uses a placeholder;
 description banners are never guessed to be covers. Optional external film/TV metadata
 requires Web research permission and an exact native content identity. Release title and

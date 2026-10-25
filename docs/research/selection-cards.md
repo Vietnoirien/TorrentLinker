@@ -131,3 +131,31 @@ metadata with the corrected source binding.
 Full regression suite: 1,285 passed, 102 skipped, one failure in the previously observed
 Upload image callback race (`upload_view.py:_image_failed` accesses a deleted QLabel).
 Ruff, formatting, mypy and both reviews passed. No Upload code was changed.
+
+## Follow-up: distinct films instead of duplicate releases
+
+`deduplicate_selection` is shared by Assistant and MCP. It freezes up to 100 candidates,
+reads their native metadata, groups verified TMDb film IDs and saves a new exact selection.
+The caller chooses first-ranked, smallest or most-seeded release, with stable ties.
+The requested count applies after grouping. The receipt reports removed duplicates,
+unknown identities and any shortfall. Cards, durable lists and approved actions consume
+the returned selection ID, so displayed counts and queued membership agree.
+
+Original lists stay unchanged. Unknown or malformed identities, other categories and TV
+seasons/episodes remain separate. Titles and posters never establish identity. The original
+Indexer binding is checked before lookup, and oversized inputs fail before any metadata
+fetch. Immutable enrichment observations make retries stable. A list-revision parent marker
+keeps list-derived results on the exact-subset action path.
+
+Validation: 12 dedicated public MCP regressions passed, covering release choice, exact
+totals, cards/list reuse, original-list preservation, bounded reads, metadata failures,
+Indexer changes, malformed IDs, request conflicts and owner-approved queueing. The broader
+focused run passed 47 checks before four malformed-ID cases were added. Local Qwen completed
+the duplicate-film workflow in seven calls, chose the smaller release and saved/presented
+two distinct films with matching totals. The film and music baseline workflows also passed;
+the ebook run failed its existing no-duplicate-prose assertion. Reports are in
+`/tmp/tl-content-dedup-model`.
+
+Full suite: 1,293 passed, 103 skipped, one known Upload deleted-QLabel callback failure.
+The final list-action and malformed-ID fixes were checked with the dedicated regressions
+after the full run started. Ruff and mypy passed. No tracker downloads were started.

@@ -272,6 +272,10 @@ def tool_description(event: dict, language: str = "en") -> str:
             "Exclude items and save a new selection.",
             "Exclure des éléments et enregistrer une nouvelle sélection.",
         ),
+        "deduplicate_selection": (
+            "Keep one release per verified film.",
+            "Garder une version par film identifié.",
+        ),
         "compare_selections": (
             "Compare exact selections and category totals.",
             "Comparer les sélections et les totaux par catégorie.",
