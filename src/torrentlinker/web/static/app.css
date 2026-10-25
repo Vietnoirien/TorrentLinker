@@ -564,6 +564,9 @@ dialog .description img {
 .assistant-activity summary { cursor: pointer; padding: .3rem 0; overflow-wrap: anywhere; }
 .assistant-tool-list { max-height: 280px; overflow: auto; padding: .25rem .4rem .25rem 1rem; }
 .assistant-tool > summary:hover { color: var(--ink); }
+.has-tool-error > summary, .has-tool-error > summary:hover, .assistant-tool-error { color: var(--danger); }
+.assistant-activity.has-tool-error { margin-bottom: .2rem; }
+.assistant-tool-error { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .86rem; margin: .2rem 0 .6rem; }
 .assistant-usage { font-size: .78rem; margin: .2rem 0 .5rem; }
 .assistant-working { color: var(--accent); }
 .assistant-run > .error { padding: 1rem; border: 1px solid currentColor; border-radius: 12px; }

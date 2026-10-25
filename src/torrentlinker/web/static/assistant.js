@@ -255,24 +255,31 @@ function aJson(value) {
 
 const assistantExpandedToolEvents = new Set();
 const aToolDescription = event => at(event.description?.en, event.description?.fr) || event.tool.replaceAll("_", " ");
+const aToolError = event => String(event.error || event.result?.error || event.result?.job?.error ||
+  ((event.status === "failed" || event.result?.job?.status === "failed") ? at("Tool call failed.", "Échec de l’appel d’outil.") : "")).slice(0, 2000);
 function aActivity(card, run, indexed, anchor) {
   const key = `${run.id}:${anchor}`;
   const activity = element("details", undefined, "assistant-activity");
   activity.open = assistantExpandedActivity.has(key);
   activity.addEventListener("toggle", () => { if (activity.isConnected) activity.open ? assistantExpandedActivity.add(key) : assistantExpandedActivity.delete(key); });
   const usage = `${run.calls} ${at("calls", "appels")} · ${run.tokens} tokens`;
-  const label = indexed.length ? `${aToolDescription(indexed.at(-1)[1])} · ${indexed.length}` : usage;
+  const failures = indexed.filter(([, event]) => aToolError(event));
+  const label = indexed.length ? `${aToolDescription((failures.at(-1) || indexed.at(-1))[1])} · ${indexed.length}` : usage;
   let groupStatus = indexed.length ? (indexed.find(([, event]) => ["running", "waiting", "failed"].includes(event.status))?.[1].status || "finished") : run.status;
   if (groupStatus === "waiting") groupStatus = run.status;
+  if (failures.length) { if (groupStatus === "finished") groupStatus = "failed"; activity.classList.add("has-tool-error"); }
   activity.append(element("summary", `${label} · ${aStatus(groupStatus)}`));
   const entries = element("div", undefined, "assistant-tool-list");
   entries.append(element("p", usage, "assistant-usage"));
   if (run.compactions) entries.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "assistant-usage"));
   activity.append(entries); card.append(activity);
+  if (failures.length) card.append(element("p", aToolError(failures.at(-1)[1]), "assistant-tool-error"));
   for (const [index, event] of indexed) {
     const detail = element("details", undefined, "assistant-tool"), result = event.result || {};
     const eventKey = `${run.id}:${index}`;
-    detail.append(element("summary", `${aToolDescription(event)} · ${aStatus(event.status === "waiting" ? run.status : event.status)}`));
+    const error = aToolError(event);
+    if (error) detail.classList.add("has-tool-error");
+    detail.append(element("summary", `${aToolDescription(event)} · ${aStatus(error ? "failed" : event.status === "waiting" ? run.status : event.status)}`));
     const content = element("div"); detail.append(content);
     const fill = () => {
       if (detail.open && !content.childElementCount) {
@@ -288,6 +295,7 @@ function aActivity(card, run, indexed, anchor) {
       fill();
     });
     entries.append(detail);
+    if (error) entries.append(element("p", error, "assistant-tool-error"));
     if (event.status === "waiting" && result.requires_owner_approval && result.id && !("decision" in event)) {
       const panel = element("section", undefined, "assistant-decision card");
       panel.append(element("h3", at("Action requires your approval", "Action à approuver")));

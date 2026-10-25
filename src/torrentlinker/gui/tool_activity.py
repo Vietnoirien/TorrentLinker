@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
-from torrentlinker.agent.presentation import tool_description
+from torrentlinker.agent.presentation import tool_description, tool_error
 from torrentlinker.gui.request_details import JsonCode
 
 
@@ -33,6 +33,7 @@ class ToolActivity(QWidget):
         super().__init__()
         self.setObjectName("toolActivity")
         color = "#b0bdcd" if dark else "#4c596b"
+        error_style = f"color: {'#ff9696' if dark else '#ad2020'};"
         self.setStyleSheet(
             f"QToolButton {{ color: {color}; background: transparent; border: none; "
             "text-align: left; padding: 5px 0; font-size: 12px; }"
@@ -55,7 +56,14 @@ class ToolActivity(QWidget):
             .replace("%1", str(run["calls"]))
             .replace("%2", str(run["tokens"]))
         )
-        label = description(indexed_events[-1][1]) if indexed_events else usage
+        failures = [(event, tool_error(event)) for _, event in indexed_events if tool_error(event)]
+        label = (
+            description(failures[-1][0])
+            if failures
+            else description(indexed_events[-1][1])
+            if indexed_events
+            else usage
+        )
         count = f" · {len(indexed_events)}" if indexed_events else ""
         group_status = (
             next(
@@ -71,9 +79,21 @@ class ToolActivity(QWidget):
         )
         if group_status == "waiting":
             group_status = run["status"]
+        if failures:
+            if group_status == "finished":
+                group_status = "failed"
+            self.toggle.setStyleSheet(error_style)
         self.toggle.setText(f"{label[:96]}{count} · {status_text(group_status)}")
         self.toggle.setToolTip(label)
         layout.addWidget(self.toggle)
+        if failures:
+            error_label = QLabel(failures[-1][1])
+            error_label.setObjectName("toolActivityError")
+            error_label.setTextFormat(Qt.TextFormat.PlainText)
+            error_label.setWordWrap(True)
+            error_label.setStyleSheet(error_style)
+            error_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(error_label)
         self.scroll = QScrollArea()
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setWidgetResizable(True)
@@ -96,9 +116,20 @@ class ToolActivity(QWidget):
             toggle.setCheckable(True)
             label = description(event)
             state = run["status"] if event["status"] == "waiting" else event["status"]
+            error = tool_error(event)
+            if error:
+                state = "failed"
+                toggle.setStyleSheet(error_style)
             toggle.setText(f"{label[:110]} · {status_text(state)}")
             toggle.setToolTip(label)
             content.addWidget(toggle)
+            if error:
+                error_label = QLabel(error)
+                error_label.setTextFormat(Qt.TextFormat.PlainText)
+                error_label.setWordWrap(True)
+                error_label.setStyleSheet(error_style)
+                error_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                content.addWidget(error_label)
             payload = QWidget()
             body = QVBoxLayout(payload)
             body.setContentsMargins(0, 0, 0, 6)

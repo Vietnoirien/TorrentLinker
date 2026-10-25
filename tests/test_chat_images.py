@@ -307,6 +307,26 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(
             )
             expect(page.locator(".assistant-tool .assistant-json")).to_be_visible()
             page.locator(".assistant-run").screenshot(path=str(tmp_path / "chat-tool-activity.png"))
+            failed = narrative_run()
+            failed["id"] = "failed-tool"
+            failed["events"][0]["status"] = "finished"
+            error = "Choose an allowed client. <b>Literal error</b>"
+            failed["events"][0]["result"] = {"job": {"status": "failed", "error": error}}
+            page.evaluate("run => document.body.append(aRunCard(run))", failed)
+            failed_card = page.locator(".assistant-run").last
+            summary = failed_card.locator(".assistant-activity > summary")
+            expect(failed_card.locator(":scope > .assistant-tool-error")).to_have_text(error)
+            expect(failed_card.locator(":scope > .assistant-tool-error")).to_be_visible()
+            assert failed_card.locator(".assistant-tool-error b").count() == 0
+            expect(summary).to_have_css("color", "rgb(182, 56, 72)")
+            assert failed_card.locator("pre").count() == 0
+            summary.click()
+            expect(failed_card.locator(".assistant-tool > summary")).to_have_css(
+                "color", "rgb(182, 56, 72)"
+            )
+            failed_card.locator(".assistant-tool > summary").click()
+            expect(failed_card.locator(".assistant-json")).to_be_visible()
+            failed_card.screenshot(path=str(tmp_path / "chat-tool-error.png"))
             page.evaluate(
                 "html => document.body.append(aMarkdown({html}))",
                 render("[Documentation](/documentation/guide/en/agents.md#connections)"),

@@ -1,13 +1,51 @@
 """Compact owner-facing descriptions of the concrete action awaiting approval."""
 
+import json
+
+
+def _operation(event: dict) -> dict:
+    """Summarize object or JSON-encoded arguments without trusting rejected call shapes."""
+    for source in (event.get("review"), event.get("arguments")):
+        if isinstance(source, dict):
+            operation = source.get("operation")
+            if isinstance(operation, str):
+                try:
+                    operation = json.loads(operation)
+                except ValueError:
+                    continue
+            if (
+                isinstance(operation, dict)
+                and operation
+                and all(
+                    isinstance(operation.get(key, ""), str)
+                    for key in ("kind", "action", "queue_action", "path", "client_path", "draft_id")
+                )
+                and isinstance(operation.get("hashes", []), list)
+            ):
+                return operation
+    return {}
+
+
+def tool_error(event: dict) -> str:
+    """Recognize failed receipts, including history saved before explicit failed status."""
+    result = event.get("result")
+    result = result if isinstance(result, dict) else {}
+    job = result.get("job")
+    job = job if isinstance(job, dict) else {}
+    error = event.get("error") or result.get("error") or job.get("error")
+    if error:
+        return str(error)[:2000]
+    if event.get("status") == "failed" or job.get("status") == "failed":
+        return "Tool call failed."
+    return ""
+
 
 def request_summary(event: dict, language: str = "en") -> list[str]:
     def say(en: str, fr: str) -> str:
         return fr if language == "fr" else en
 
     review = event.get("review") or {}
-    arguments = event.get("arguments") or {}
-    operation = review.get("operation") or arguments.get("operation") or {}
+    operation = _operation(event)
     kind = operation.get("kind", "")
     action = operation.get("action", "")
     selection = review.get("selection") or {}
@@ -300,9 +338,8 @@ def tool_description(event: dict, language: str = "en") -> str:
         ),
     }
     tool = event.get("tool", "")
-    review = event.get("review") or {}
     arguments = event.get("arguments") or {}
-    if review.get("operation") or arguments.get("operation"):
+    if _operation(event):
         return request_summary(event, language)[0]
     english, french = descriptions.get(tool, ("Run a tool.", "Exécuter un outil."))
     if tool == "edit_queue_selection":
@@ -320,5 +357,7 @@ def tool_description(event: dict, language: str = "en") -> str:
                 "Modifier la priorité des entrées sélectionnées dans la file.",
             ),
         }
-        english, french = actions.get(arguments.get("action", ""), (english, french))
+        action = arguments.get("action", "")
+        if isinstance(action, str):
+            english, french = actions.get(action, (english, french))
     return french if language == "fr" else english

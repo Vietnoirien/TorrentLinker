@@ -1,11 +1,86 @@
 import json
 
-from PySide6.QtCore import QPoint
+import pytest
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QApplication, QToolButton
+from PySide6.QtWidgets import QApplication, QLabel, QToolButton
 
 from torrentlinker.gui.chat_transcript import ChatTranscript, MessageText
 from torrentlinker.gui.request_details import JsonCode
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "search",
+        '["search"]',
+        ["search"],
+        42,
+        {"kind": ["search"]},
+        {"kind": "manage", "action": ["pause"]},
+        {"kind": "enqueue", "hashes": 42},
+        {"kind": "search", "path": ["/media"]},
+    ],
+)
+def test_rejected_tool_operation_remains_readable_in_chat(qtbot, operation):
+    from torrentlinker.agent.presentation import request_summary, tool_description
+
+    run = narrative_run()
+    event = {
+        "tool": "propose_action",
+        "status": "failed",
+        "after_message_index": 1,
+        "arguments": {"operation": operation},
+        "result": {"error": "Invalid operation: expected an object"},
+    }
+    run["events"] = [event]
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    transcript.set_runs([run], str)
+    transcript.findChild(QToolButton, "toolActivitySummary").click()
+    transcript.findChild(QToolButton, "toolEventSummary").click()
+    code = transcript.findChild(JsonCode)
+    assert json.loads(code.toPlainText())["arguments"]["operation"] == operation
+    # Both web history summaries and native fallback descriptions must remain readable.
+    assert "propose_action" in request_summary(event)[0]
+    assert tool_description(event) == "Run the requested application action."
+
+
+def test_json_encoded_operation_uses_same_summary_as_validated_object():
+    from torrentlinker.agent.presentation import request_summary, tool_description
+
+    operation = {"kind": "enqueue", "client_id": "default", "hashes": ["a" * 40]}
+    plain = {"tool": "propose_action", "arguments": {"operation": operation}}
+    encoded = {"tool": "propose_action", "arguments": {"operation": json.dumps(operation)}}
+    for language in ("en", "fr"):
+        assert request_summary(encoded, language) == request_summary(plain, language)
+        assert tool_description(encoded, language) == tool_description(plain, language)
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_tool_error_is_red_and_visible_without_expanding_command(qtbot, nested):
+    run = narrative_run()
+    error = "Choose an allowed client. <b>Keep this literal.</b>"
+    run["events"][0]["result"] = (
+        {"job": {"status": "failed", "error": error}} if nested else {"error": error}
+    )
+    # Legacy events called even failed tool results 'finished'.
+    run["events"][0]["status"] = "finished"
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    transcript.set_runs([run], str)
+    transcript.show()
+    group = transcript.findChild(QToolButton, "toolActivitySummary")
+    assert "failed" in group.text()
+    assert "#" in group.styleSheet()
+    error_label = transcript.findChild(QLabel, "toolActivityError")
+    assert error_label.isVisible() and error_label.text() == error
+    assert error_label.textFormat() == Qt.TextFormat.PlainText
+    group.click()
+    entry = transcript.findChild(QToolButton, "toolEventSummary")
+    assert "failed" in entry.text()
+    assert entry.styleSheet() == group.styleSheet()
+    assert not transcript.findChildren(JsonCode)
 
 
 def narrative_run():
