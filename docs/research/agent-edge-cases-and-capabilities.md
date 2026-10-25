@@ -194,3 +194,26 @@ release, push or restart the running app.
 ## Conversation folders
 
 Native and web sidebars group conversations in collapsible built-in or bounded custom folders. Owner moves persist independently of ordinary discussion settings edits. The internal `classify_conversation` tool derives the current conversation from the active run, accepts no other conversation ID and respects manual owner placement. Re-enabling automatic classification is an explicit owner action. This tool changes neither settings nor permissions. Public owner API and simulated-provider tests cover restart persistence, manual protection and rejection of foreign conversation IDs.
+
+## Final validation
+
+The combined implementation passed the complete suite: **1,229 passed, 90 skipped**
+(185.11 seconds). The enabled native/browser checks passed **24 tests**, including
+mounted documentation links, protected images, chronological tool activity and
+actual owner folder moves. Two further native and two root/mounted browser
+regressions verified custom folder names that collide with built-in labels or the
+new-folder selector. Ruff, formatting, mypy and whitespace checks passed.
+
+The isolated local Qwen classification smoke passed: the model classified its
+current synthetic conversation, then preserved a subsequent manual owner move,
+without reading any torrent client. Earlier isolated Qwen queue preparation,
+queue-only editing, installed-document guidance and oversized-queue scenarios also
+passed. These opt-in model checks assess observed behavior rather than guarantee
+future model choices.
+
+The parallel Standards and Spec reviews covered the release-to-implementation
+changes and follow-up fixes. Three initial Spec findings (dynamic catalogue
+exclusions during send, mounted citation paths, expired-selection idempotency)
+and two custom-folder identity collisions were fixed and reviewed again. No
+remaining actionable findings were reported. An optional shared typed queue-row
+representation remains a maintainability suggestion.
