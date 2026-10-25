@@ -164,3 +164,12 @@ the live title without queueing. The four-case run passed in 61.3 seconds; a mor
 faithful category-options fixture was then checked with the unchanged ebook case
 (1 passed, 13.5 seconds). Model correction after invalid filter attempts was observed;
 these opt-in checks do not guarantee future model behavior.
+
+Final validation: **1,266 passed, 97 skipped** in the complete suite (205.74 seconds),
+plus the opt-in local-model runs above. **60 focused tests** passed, including exact
+native page → owner approval → queueing only the returned hash, durable provenance,
+all native filter parameters, client/category isolation, unavailable-client exclusions,
+revival fallback and JSON-encoded history compaction. Ruff, formatting, mypy and
+whitespace checks passed. Parallel Standards and Spec reviews reported no remaining
+actionable findings. The previously known upload-view teardown callback failure did
+not recur in this full run. No release or push was performed.
