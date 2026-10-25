@@ -55,6 +55,7 @@ def test_select_500_smallest_films_counts_whole_catalogue_without_a_download_fol
         )
         assert not response.get("isError"), response
         proposal = response["structuredContent"]
+        assert proposal["selection_id"] == proposal["job_id"]
         job = finished(browser, proposal["job_id"])
         assert job["status"] == "completed", job
         result = call(browser, token, "job_status", {"job_id": job["id"]})["structuredContent"][

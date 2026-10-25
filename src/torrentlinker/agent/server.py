@@ -297,6 +297,9 @@ def make_server(service: AgentService):
     ) -> dict[str, object]:
         """Filter/sort the entire cached Catalogue and save up to 1000 exact rows.
 
+        Use only for explicitly requested cached bulk ranking/counts or offline work.
+        Genre/year recommendations and their refinements require search_indexer instead:
+        cached title matches and seen_at timestamps do not verify genre or release year.
         Use catalogue_categories for IDs. For the 500 smallest films, set categories
         to the Films ID, sort_by=size, descending=false, count=500. Filters include
         category descendants, title query/exclusions, size and seeder ranges.
@@ -305,15 +308,17 @@ def make_server(service: AgentService):
         totals are exact for cached metadata, never proof of full tracker coverage.
         min_size_bytes/max_size_bytes describe the full selection, not one result page.
         This is not a Zen Plan and requires no Download Folder. It changes no torrent.
-        The returned job_id is the selection_id for enqueue_selection.
+        Use the returned selection_id with present_selection/create_torrent_list/enqueue_selection;
+        it equals job_id, not the operation id.
         """
-        return service.request(
+        result = service.request(
             ACTOR.get(),
             request_id,
             AgentRequest(
                 kind="select-catalogue", client_id=client_id, catalogue_selection=criteria
             ),
         )
+        return {**result, "selection_id": result["job_id"]}
 
     @mcp.tool(structured_output=True)
     @safe
@@ -427,6 +432,8 @@ def make_server(service: AgentService):
 
         Usually one call: basic release facts and bounded Indexer metadata/artwork are automatic.
         Specify exactly one list_id+expected_revision, selection_id or prior enrichment_id.
+        For an existing saved list, pass list_id+expected_revision directly; no need to
+        materialize it through select_torrent_list merely to display cards.
         Cards survive restart/selection expiry and never queue/download. Missing artwork stays
         missing; release title and content identity remain separate. External metadata lookup
         requires research=True and this conversation's Web permission. Paginate at most 20 cards.

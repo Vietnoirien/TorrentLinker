@@ -104,3 +104,30 @@ Validation: 76 focused Assistant, presentation, context and tool-activity tests 
 passed the new no-duplicate-image/list checks in 27.16 seconds, using the same isolated
 simulated tracker. Reports are in /tmp/tl-cards-no-duplicate. Existing saved replies are
 not rewritten.
+
+## Follow-up: preserve metadata through saved-list selections
+
+Materializing a saved list against the Catalogue rebuilt its rows without the original
+Indexer binding. Presentations therefore refused metadata lookup, producing empty artwork
+and descriptions even when the original live-search presentation had metadata. Materialized
+rows now retain their provenance and category details while refreshing the validated fields.
+The regression exercises Catalogue selection, saved list, materialization, card and modal,
+and verifies that changing the Indexer still prevents fetching from a different source.
+
+Live discovery and size refinements now explicitly require live Indexer search while keeping
+the original genre/year constraints. Saved lists can be presented directly by ID and revision.
+Catalogue selection remains available for explicitly requested cached ranking and totals.
+It now returns an explicit selection_id, matching live search. Local Qwen had repeatedly
+mistaken the operation ID for the selection ID without that field.
+
+Validation: 41 focused tests passed. Local Qwen passed film, ebook and music card checks,
+including images and modal descriptions, and four native-search cases across the final run
+and a focused film rerun. One search assertion was updated to accept the title in rendered
+cards instead of requiring duplicate final prose. Reports: /tmp/tl-card-source-model-fixed
+and /tmp/tl-card-source-film-check. These simulated-tracker evaluations do not guarantee every
+model response is accurate. Existing immutable presentations must be recreated to obtain
+metadata with the corrected source binding.
+
+Full regression suite: 1,285 passed, 102 skipped, one failure in the previously observed
+Upload image callback race (`upload_view.py:_image_failed` accesses a deleted QLabel).
+Ruff, formatting, mypy and both reviews passed. No Upload code was changed.

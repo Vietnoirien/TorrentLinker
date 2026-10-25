@@ -412,6 +412,7 @@ class TorrentLists:
                         raise ValueError("Catalogue source changed. Review the list.")
                     resolved.append(
                         {
+                            **row,
                             "hash": row["hash"],
                             "title": row["title"],
                             "size": row["size"],

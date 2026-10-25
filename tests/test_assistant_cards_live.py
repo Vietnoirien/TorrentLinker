@@ -90,6 +90,12 @@ def test_local_model_presents_category_cards_without_downloading(controlled, cat
     assert page["count"] == 2 and {item["kind"] for item in page["items"]} == {kind}, page
     assert all(item["torrent_note"] is not None for item in page["items"]), page
     assert all(item["estimated_zen_per_day"] is not None for item in page["items"]), page
+    assert all(item["image_url"] == "https://covers.example/demo.png" for item in page["items"])
+    for item in page["items"]:
+        detail = browser.get(
+            f"/api/assistant/presentations/{page['presentation_id']}/items/{item['item_id']}"
+        ).json()
+        assert "fictional entry used for testing" in detail["description"]
     assert browser.get("/api/queue").json() == []
     assert not any(e["tool"] in {"enqueue_selection", "send_queue"} for e in run["events"])
     assert all(not client.paused for client in clients.values())

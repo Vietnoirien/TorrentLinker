@@ -144,7 +144,17 @@ def test_live_prefers_native_search_and_discovers_category_filters(controlled, c
         for r in requests
     ), result
     assert any(event["tool"] == "search_indexer" for event in result["events"]), result
-    assert title in result["messages"][-1]["content"], result
+    assert not any(event["tool"] == "select_catalogue" for event in result["events"]), result
+    # Card presentations intentionally omit a duplicate item list from the final prose.
+    presented = [
+        item
+        for event in result["events"]
+        if event["tool"] == "present_selection"
+        for item in event.get("result", {}).get("items", [])
+    ]
+    assert title in result["messages"][-1]["content"] or any(
+        item["title"] == f"{title} {year}" for item in presented
+    ), result
     assert browser.get("/api/queue").json() == [], result
     assert all(not client.paused for client in clients.values())
     assert not any(

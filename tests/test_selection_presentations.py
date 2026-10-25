@@ -71,6 +71,25 @@ def test_native_artwork_provenance_and_sanitized_details(catalogue_app):
         }
 
     selection = selected(browser, token, "native-cards", categories=[2030])
+    saved = tool(
+        browser,
+        token,
+        "create_torrent_list",
+        request_id="native-list",
+        client_id="default",
+        name="Films",
+        selection_id=selection,
+    )
+    materialized = tool(
+        browser,
+        token,
+        "select_torrent_list",
+        request_id="native-materialized",
+        list_id=saved["id"],
+        expected_revision=1,
+        source="catalogue",
+    )
+    selection = materialized["selection_id"]
     service.setup._indexer = SimpleNamespace(
         url="https://test.invalid", is_c411=True, torrent_json=details, redact=lambda v: v
     )
@@ -332,3 +351,21 @@ def test_original_source_remains_bound_before_and_after_presentation(catalogue_a
         browser, token, "present_selection", request_id="source-b-direct", selection_id=selection
     )
     assert calls == [] and direct["count"] == 3
+    materialized = tool(
+        browser,
+        token,
+        "select_torrent_list",
+        request_id="source-b-materialize",
+        list_id=saved["id"],
+        expected_revision=1,
+        source="catalogue",
+    )
+    page = tool(
+        browser,
+        token,
+        "present_selection",
+        request_id="source-b-materialized-show",
+        selection_id=materialized["selection_id"],
+    )
+    assert calls == []
+    assert all(item["metadata_status"] == "missing" for item in page["items"])
