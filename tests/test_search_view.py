@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 
 from tests.fake_qbit import FakeQbit
 from tests.test_download_queue import setup_queue
-from torrentlinker.config import Settings
+from torrentlinker.config import ClientProfile, Settings
 from torrentlinker.download_queue import entries
 from torrentlinker.gui.search_view import SearchTab
 from torrentlinker.indexer import Candidate, Indexer
@@ -323,3 +323,53 @@ def test_queue_estimates_use_saved_origin_when_current_indexer_changes(qtbot, tm
     assert view.queue.item(1, 2).text() == "–"
     assert view.queue.item(1, 3).text() == "–"
     assert "available for c411" in view.queue.item(1, 2).toolTip()
+
+
+def test_search_queue_tracks_external_writes(qtbot, tmp_path):
+    from torrentlinker.download_queue import enqueue
+
+    store = Store(tmp_path / "state.db")
+    writer = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.show()
+    candidate = Candidate("Added by Assistant", 1024, "https://example.test/a", 2, "a" * 40)
+    enqueue(writer, indexer, candidate, tmp_path)
+    qtbot.waitUntil(lambda: view.queue.rowCount() == 1, timeout=3000)
+    assert view.queue.item(0, 0).text() == "Added by Assistant"
+    view.queue.selectRow(0)
+    selected = view.selected_keys()
+    view.hide()
+    enqueue(writer, indexer, replace(candidate, title="Second", infohash="b" * 40), tmp_path)
+    view.show()
+    assert view.queue.rowCount() == 2
+    assert view.selected_keys() == selected
+    writer.download_outcome(selected[0], "sent")
+    qtbot.waitUntil(lambda: view.queue.item(0, 5).text() == "Sent to client", timeout=3000)
+    assert view.selected_keys() == selected
+    writer.remove_downloads(selected)
+    qtbot.waitUntil(lambda: view.queue.rowCount() == 1, timeout=3000)
+    assert view.queue.item(0, 0).text() == "Second"
+
+
+def test_search_queue_poll_keeps_client_scope(qtbot, tmp_path):
+    from torrentlinker.download_queue import enqueue
+
+    store = Store(tmp_path / "state.db")
+    writer = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    settings = Settings()
+    settings.ensure_profiles()
+    settings.client_profiles.append(ClientProfile("other", "Other"))
+    view = SearchTab(store, settings, lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.show()
+    candidate = Candidate("Other client", 1024, "https://example.test/a", 2, "a" * 40)
+    enqueue(writer.for_client("other"), indexer, candidate, tmp_path)
+    view._poll_queue()
+    assert view.queue.rowCount() == 0
+    view.store = store.for_client("other")
+    view._poll_queue()
+    assert view.queue.rowCount() == 1
+    assert view.queue.item(0, 0).text() == "Other client"

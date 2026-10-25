@@ -104,6 +104,25 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#torrent-table tbody input[type=checkbox]").check()
             page.locator("[data-action=pause]").click()
             expect(page.locator("#torrent-table")).to_contain_text("paused", timeout=10000)
+            # Assistant writes use a separate connection while this view stays open.
+            from torrentlinker.download_queue import enqueue, entries
+            from torrentlinker.indexer import Candidate, Indexer
+            from torrentlinker.store import Store
+
+            writer = Store(tmp_path / "config" / "catalogue.sqlite")
+            indexer = Indexer("https://example.test/api", "key")
+            candidate = Candidate(
+                "Assistant queue entry", 1024, "https://example.test/a", 2, "b" * 40
+            )
+            page.locator("[data-view=queue]").click()
+            enqueue(writer, indexer, candidate, tmp_path)
+            expect(page.locator("#queue-table")).to_contain_text(candidate.title, timeout=6000)
+            checkbox = page.locator("#queue-table tbody input[type=checkbox]")
+            checkbox.check()
+            writer.download_outcome(entries(writer)[0].key, "sent")
+            expect(page.locator("#queue-table")).to_contain_text("sent", timeout=6000)
+            expect(checkbox).to_be_checked()
+            page.locator("[data-view=torrents]").click()
             if screenshot:
                 for lang in ("fr", "en"):
                     page.locator("#language").select_option(lang)

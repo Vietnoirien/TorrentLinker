@@ -248,6 +248,10 @@ class SearchTab(QWidget):
         self.filters.ready_changed.connect(self._buttons)
         self.refresh_categories()
         self.refresh_queue()
+        self.queue_timer = QTimer(self)
+        self.queue_timer.setInterval(1000)
+        self.queue_timer.timeout.connect(self._poll_queue)
+        self.queue_timer.start()
         self.age_timer = QTimer(self)
         self.age_timer.setInterval(60_000)
         self.age_timer.timeout.connect(self.refresh_ages)
@@ -265,6 +269,7 @@ class SearchTab(QWidget):
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         self._configure_filters()
+        self.refresh_queue()
         self.refresh_ages()
 
     def _configure_filters(self) -> Indexer | None:
@@ -776,9 +781,14 @@ class SearchTab(QWidget):
             if (item := self.queue.item(i.row(), 0)) is not None
         ]
 
+    def _poll_queue(self) -> None:
+        if self.isVisible() and entries(self.store) != self._queue_snapshot:
+            self.refresh_queue()
+
     def refresh_queue(self) -> None:
         selected = set(self.selected_keys())
         rows = entries(self.store)
+        self._queue_snapshot = rows
         labels = {
             "queued": self.tr("Queued"),
             "sending": self.tr("Sending…"),

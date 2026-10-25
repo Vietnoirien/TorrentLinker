@@ -466,7 +466,13 @@ class Operations:
                     candidate,
                     self.setup.verified_download_folder(self.request_category(request)),
                 )
-            return {"queued": count}
+            return {
+                "queued": count,
+                "location": "TorrentLinker Search > Download queue",
+                "sent_to_client": False,
+                "downloads_started": False,
+                "next_step": "Use send-queue only if the user asks to start downloads.",
+            }
         if request.kind == "send-queue":
             queued_entries = [
                 e

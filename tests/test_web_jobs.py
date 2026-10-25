@@ -436,7 +436,12 @@ def test_selected_download_uses_verified_client_path_and_survives_queue_reload(
         job = browser.post("/api/jobs", json={"kind": "search", "query": "Film"}).json()
         assert finished(browser, job["id"])["status"] == "completed"
         job = browser.post("/api/jobs", json={"kind": "enqueue", "hashes": [meta.infohash]}).json()
-        assert finished(browser, job["id"])["result"]["queued"] == 1
+        receipt = finished(browser, job["id"])["result"]
+        assert receipt["queued"] == 1
+        assert receipt["location"] == "TorrentLinker Search > Download queue"
+        assert receipt["sent_to_client"] is False
+        assert receipt["downloads_started"] is False
+        assert client.downloads == []
     with TestClient(app()) as browser:
         login(browser)
         assert browser.get("/api/queue").json()[0]["status"] == "queued"

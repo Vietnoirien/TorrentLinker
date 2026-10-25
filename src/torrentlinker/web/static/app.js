@@ -571,6 +571,7 @@ async function pollJobs() {
     ? `${running} ${say("active job(s)", "tâche(s) active(s)")}`
     : say("Up to date", "À jour");
   if (state.view === "jobs") renderJobs(rows);
+  if (state.view === "queue") await loadQueue();
 }
 async function loadJobs() {
   renderJobs(await api("jobs"));
@@ -840,7 +841,12 @@ function showCatalogue(r) {
   $("catalogue-status").textContent = parts.join(" · ");
 }
 async function loadQueue() {
+  const clientId = state.clientId;
   const rows = await api("queue");
+  if (clientId !== state.clientId) return;
+  const snapshot = JSON.stringify([clientId, language, rows]);
+  if (state.queueSnapshot === snapshot) return;
+  state.queueSnapshot = snapshot;
   table(
     "queue-table",
     rows,
