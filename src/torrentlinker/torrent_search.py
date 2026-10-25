@@ -68,6 +68,9 @@ class SearchPage:
     total_pages: int
     labels: dict[str, str]
     palliative: frozenset[str]
+    palliative_matches: int | None = None
+    palliative_fallback: bool | None = None
+    palliative_count: int | None = None
 
     @property
     def has_more(self) -> bool:
@@ -114,4 +117,7 @@ def native_search(indexer: Indexer, params: dict[str, str], page: int = 1) -> Se
         int(meta["totalPages"]),
         labels,
         frozenset(palliative),
+        meta.get("palliativeMatches"),
+        meta.get("palliativeFallback"),
+        meta.get("palliativeCount"),
     )

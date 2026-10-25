@@ -148,3 +148,25 @@ Check the saved revision and totals in **Activity**. A model can mistakenly clai
 change without calling a tool; its confirmation alone does not change saved data.
 Failed tool calls show their error. The model can correct an invalid argument and
 try again within your existing permissions; uncertain sends require owner recovery.
+
+## Discover titles with live Indexer search
+
+For title, genre or release-year discovery, the Assistant now prefers the live
+Indexer search used by the Search UI. It first reads the native category/filter
+options, then sends the actual option value IDs and filters. It does not infer a
+genre from a cached title. c411 supports exact release years from 1900 to 2100;
+there is no year-range parameter. Upload/publication dates are not release years.
+
+Native search includes category/subcategory, genre/format/language option groups,
+uploader, exclusivity/revival modes, sorting and the video resolution, source,
+codec, HDR, audio, channels, profile and crew controls. Missing or unsupported
+filters produce an error. A failed live query is never silently replaced by a
+cached Catalogue match. The Catalogue remains useful for explicitly requested
+cached bulk totals/ranking and offline work.
+
+Results report the tracker's actual page/total/window limit. One page is not all
+matches. Optional exclusion of already completed torrents applies only to the
+returned page, including paused torrents; an unavailable client makes that request
+fail. Revival fallback is reported separately. Search changes no queue and starts
+no downloads. An exact returned page can be saved in a durable list or proposed
+for queueing under the usual permissions and owner review.

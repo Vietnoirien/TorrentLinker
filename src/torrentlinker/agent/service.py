@@ -440,6 +440,7 @@ class AgentService:
                 and body.kind
                 not in {
                     "select-catalogue",
+                    "search",
                     "select-queue",
                     "prepare-download-batch",
                     "refine-selection",
@@ -592,7 +593,11 @@ class AgentService:
                         selection_fingerprint=snapshot["selection_fingerprint"],
                     ),
                 )
-            if snapshot.get("parent_selection_id") or kind == "send-queue":
+            if (
+                snapshot.get("parent_selection_id")
+                or snapshot.get("selection_kind") == "live-search"
+                or kind == "send-queue"
+            ):
                 if not snapshot["rows"]:
                     raise ValueError("The refined selection is empty.")
                 return self.request(

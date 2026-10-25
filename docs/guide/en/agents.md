@@ -87,9 +87,40 @@ Pausing keeps files and frees **no disk space**. Total size may count shared fil
 once. The Zen total is the selected torrents' current estimate, not an exact prediction of the
 account's loss after Class bonuses change.
 
+## Discover titles with live Indexer search
+
+For title, genre or release-year discovery, the Assistant now prefers the live
+Indexer search used by the Search UI. It first reads the native category/filter
+options, then sends the actual option value IDs and filters. It does not infer a
+genre from a cached title. c411 supports exact release years from 1900 to 2100;
+there is no year-range parameter. Upload/publication dates are not release years.
+
+Native search includes category/subcategory, genre/format/language option groups,
+uploader, exclusivity/revival modes, sorting and the video resolution, source,
+codec, HDR, audio, channels, profile and crew controls. Missing or unsupported
+filters produce an error. A failed live query is never silently replaced by a
+cached Catalogue match. The Catalogue remains useful for explicitly requested
+cached bulk totals/ranking and offline work.
+
+Results report the tracker's actual page/total/window limit. One page is not all
+matches. Optional exclusion of already completed torrents applies only to the
+returned page, including paused torrents; an unavailable client makes that request
+fail. Revival fallback is reported separately. Search changes no queue and starts
+no downloads. An exact returned page can be saved in a durable list or proposed
+for queueing under the usual permissions and owner review.
+
+The shared tools are `search_indexer_options(client_id, category=null)` and
+`search_indexer(request_id, client_id, query="", category=null, filters={}, page=1,
+exclude_seeded=false)`. Native root IDs are positive, child IDs negative; these
+are separate from Catalogue/Torznab IDs. Facet **value** IDs go in `filters.options`
+as CSV. Video choices retain their API spelling/case. Unknown fields (including
+invented year ranges) fail. The search job ID is also the exact page's selection ID
+for `create_torrent_list`, `compare_selections` or `enqueue_selection`; it expires
+after 15 minutes. List provenance retains the live query/filter/page origin.
+
 ## Select and weigh Catalogue torrents
 
-For available downloads, use `catalogue_categories` to find category IDs, then
+For explicitly requested cached bulk work, use `catalogue_categories` for IDs, then
 `select_catalogue`. It filters the entire local Catalogue by category, title,
 size and seeder ranges. Category filters include descendants by default. Sort by
 `size`, `seeders`, `title` or `seen_at`, in either direction. `seen_at` is the cache

@@ -166,6 +166,16 @@ class TorrentLists:
                         "snapshot_at": saved["snapshot_at"],
                         "selection_fingerprint": saved["selection_fingerprint"],
                         **(
+                            {
+                                "discovery": "live-search",
+                                "search": saved["search"],
+                                "page": saved["page"],
+                                "backend": saved["backend"],
+                            }
+                            if saved.get("selection_kind") == "live-search"
+                            else {}
+                        ),
+                        **(
                             {"list_id": saved["list_id"], "list_revision": saved["list_revision"]}
                             if "list_id" in saved
                             else {}

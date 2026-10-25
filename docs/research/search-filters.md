@@ -125,3 +125,42 @@ The website URL `palliative=true` becomes API `palliative=include`. The dedicate
 ## Local reference fixtures
 
 Public metadata snapshots from this investigation are at `/tmp/c411-search-categories.json`, `/tmp/c411-search-filter-options-1.json`, `/tmp/c411-search-filter-options-2.json`, and `/tmp/c411-search-filter-options-10.json`. Sanitized, shortened listing examples are `/tmp/c411-search-listing-0.json` and `/tmp/c411-search-listing-1.json`. They contain no API keys, private download URLs, uploader identity, descriptions, or original torrent names and hashes. Tests should use minimal synthetic fixtures with these shapes, rather than committing the whole live catalogue response.
+
+## Agent and Assistant discovery tools
+
+The shared `search_indexer_options` and `search_indexer` tools now expose the native
+Search UI's controls directly. Assistant/shared-server instructions prefer these
+live tools for title/genre/year discovery; Catalogue queries remain explicit cached
+bulk/ranking/offline operations. An unavailable live query never silently substitutes
+a cached title or guesses a genre from its name.
+
+Filter metadata reports the category namespace, dynamic visible facets/value IDs,
+all global and video controls, exact-year bounds and unsupported range semantics.
+Video choices and facet visibility are shared with the desktop Search UI. Invalid
+category namespaces, unavailable option IDs and incompatible filters fail before
+the listing request. Native multi-subcategory CSV searches are supported within one
+root. Non-c411 Indexers retain basic Torznab searches and explicitly reject advanced
+native filters instead of silently ignoring them.
+
+Search retains an immutable exact returned-page selection, usable directly with
+comparison, durable lists and owner-reviewed queueing. It does not queue/download by
+itself. Lists preserve the live query/filter/page/backend provenance. True server
+pagination, accessible-window limits and explicit revival-fallback metadata are
+returned; upload/publication timestamps are separate from release-year filtering.
+Optional exclusion of completed client torrents is page-local (paused included),
+never fills from other pages and fails if the client observation is unavailable.
+
+A provider-boundary regression also covers valid JSON-encoded operation arguments
+in prior history during context compaction; these are normalized safely rather than
+indexed as dictionaries.
+
+Validation uses shared MCP, actual owner approval, native UI filters and simulated
+c411 HTTP. The local Qwen baseline used only cached Catalogue discovery and failed
+the live-query assertion. After the change, four natural French requests passed:
+science-fiction film in 2024, jazz music in 2023, fantasy ebook in 2022, and a
+science-fiction film after 2020 (no invented year-range parameter). They fetched
+native definitions, sent actual category/subcategory/year/option IDs and returned
+the live title without queueing. The four-case run passed in 61.3 seconds; a more
+faithful category-options fixture was then checked with the unchanged ebook case
+(1 passed, 13.5 seconds). Model correction after invalid filter attempts was observed;
+these opt-in checks do not guarantee future model behavior.

@@ -105,6 +105,8 @@ class JobRequest(BaseModel):
     page: int = Field(default=1, ge=1, le=10000)
     category: int | None = None
     filters: dict[str, str] = Field(default_factory=dict, max_length=30)
+    indexer_search: bool = False
+    search_exclude_seeded: bool = False
 
     @field_validator("hashes")
     @classmethod
@@ -342,6 +344,15 @@ class Operations:
             for e in entries(self.setup.store)
         ]
 
+    def search_options(self, category=None):
+        from torrentlinker.indexer_search import search_options
+
+        return search_options(
+            self.setup.indexer(),
+            category,
+            {str(k): asdict(v) for k, v in self.setup.settings.indexer_categories.items()},
+        )
+
     def run(
         self, request: JobRequest, stop: threading.Event, progress: Callable[[Any], None]
     ) -> Any:
@@ -515,23 +526,7 @@ class Operations:
                 "files": detail.files,
             }
         if request.kind == "search-options":
-            from torrentlinker.torrent_search import parse_facets, parse_tree
-
-            indexer = self.setup.indexer()
-            if not indexer.is_c411:
-                return {
-                    "categories": {
-                        str(k): asdict(v) for k, v in self.setup.settings.indexer_categories.items()
-                    },
-                    "facets": [],
-                }
-            tree = parse_tree(indexer.search_categories())
-            root = tree.root(request.category)
-            facets = parse_facets(indexer.search_filter_options(root)) if root else []
-            return {
-                "categories": {str(k): asdict(v) for k, v in tree.categories.items()},
-                "facets": [asdict(f) for f in facets],
-            }
+            return self.search_options(request.category)
         if request.kind == "scan":
             return self.library.scan(stop, progress)
         if request.kind == "check":
@@ -540,6 +535,27 @@ class Operations:
             return self.library.reseed(request.path, request.hashes[0], stop)
         if request.kind == "search":
             indexer = self.setup.indexer()
+            seeded = set()
+            if request.search_exclude_seeded:
+                seeded = {
+                    t.hash.lower()
+                    for t in self.setup.client().torrents(with_files=False)
+                    if t.progress >= 1
+                }
+            native_params = None
+            if request.indexer_search:
+                from torrentlinker.indexer_search import IndexerFilters
+
+                typed_filters = IndexerFilters.model_validate(request.filters)
+                if indexer.is_c411:
+                    native_params = typed_filters.validate_native(
+                        indexer, request.category, request.query
+                    )
+                elif typed_filters != IndexerFilters():
+                    raise ValueError(
+                        "Advanced native filters are unavailable on this Indexer; "
+                        "no filters were ignored."
+                    )
             if indexer.is_c411:
                 allowed = {
                     k: v
@@ -550,10 +566,10 @@ class Operations:
                 params = {
                     "sortBy": "createdAt",
                     "sortOrder": "desc",
-                    **allowed,
+                    **(native_params if native_params is not None else allowed),
                     "name": request.query,
                 }
-                if request.category is not None:
+                if request.category is not None and native_params is None:
                     if request.category < 0:
                         from torrentlinker.torrent_search import parse_tree
 
@@ -576,9 +592,35 @@ class Operations:
                     )
                 )
                 total_pages = request.page + int(len(found) == 100)
+            metadata: dict[str, Any] = {
+                "backend": "c411-native" if indexer.is_c411 else "torznab",
+                "page": page.page if indexer.is_c411 else request.page,
+                "pages": total_pages,
+                "total": page.total if indexer.is_c411 else None,
+                "per_page": page.per_page if indexer.is_c411 else 100,
+                "has_more": page.has_more if indexer.is_c411 else len(found) == 100,
+                "window_limited": page.limited if indexer.is_c411 else None,
+                "pagination_is_estimate": not indexer.is_c411,
+                "palliative_matches": page.palliative_matches if indexer.is_c411 else None,
+                "palliative_fallback": page.palliative_fallback if indexer.is_c411 else None,
+                "palliative_count": page.palliative_count if indexer.is_c411 else None,
+                "returned_count_before_exclusions": len(found),
+                "excluded_seeded_count": sum(c.infohash in seeded for c in found),
+                "seeded_exclusion_scope": "returned page only; completed includes paused"
+                if request.search_exclude_seeded
+                else None,
+                "observed_at": time.time(),
+                "search": {
+                    "query": request.query,
+                    "category": request.category,
+                    "filters": request.filters,
+                },
+            }
             result = []
             catalogue = []
             for c in found:
+                if c.infohash in seeded:
+                    continue
                 if not c.infohash:
                     continue
                 self.candidates[c.infohash] = c
@@ -590,10 +632,17 @@ class Operations:
                         "size": c.size,
                         "seeders": c.seeders,
                         "published_at": c.published_at,
+                        "native_category_label": page.labels.get(c.infohash)
+                        if indexer.is_c411
+                        else None,
+                        "revival": c.infohash in page.palliative if indexer.is_c411 else None,
                         "website": indexer.redact(website_url(c, indexer)),
                         "zen": torrent_zen(self.setup.settings.zen, zt),
                         "note": note(self.setup.settings.zen.zen_class, zt),
                         "categories": c.categories,
+                        "category": c.categories[-1] if c.categories else None,
+                        "source": indexer.redact(c.download_url),
+                        "seen_at": metadata["observed_at"],
                     }
                 )
                 catalogue.append(
@@ -609,7 +658,15 @@ class Operations:
                     )
                 )
             self.setup.store.save_catalogue(catalogue)
-            return {"rows": result, "page": request.page, "pages": total_pages}
+            from torrentlinker.queue_selection import snapshot
+
+            return {
+                **snapshot(result, "catalogue", metadata["search"]),
+                **metadata,
+                "selection_kind": "live-search",
+                "coverage": "Exact returned page after exclusions; "
+                "not the whole tracker or all matching pages.",
+            }
         if request.kind == "enqueue":
             folders = self.enqueue_folders(request, verify=True)
             indexer = self.setup.indexer()

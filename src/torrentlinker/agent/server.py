@@ -18,6 +18,7 @@ from torrentlinker.agent.goals import Goal
 from torrentlinker.agent.service import AgentRequest, AgentService
 from torrentlinker.agent.torrent_lists import ListFilter
 from torrentlinker.catalogue_selection import CatalogueCriteria
+from torrentlinker.indexer_search import IndexerFilters
 from torrentlinker.queue_selection import QueueCriteria
 from torrentlinker.torrent_selection import SelectionCriteria
 from torrentlinker.web.operations import DownloadFolderRequired
@@ -62,8 +63,11 @@ def make_server(service: AgentService):
             "Mutations may return proposals requiring approval in TorrentLinker. "
             "For bulk torrent management, use select_torrents then manage_selection; "
             "the server filters, ranks, counts and retains the exact selection. "
-            "For available downloads, use catalogue_categories then select_catalogue; "
-            "use its exact totals instead of estimating from search pages or Plans. "
+            "For title/genre/year discovery prefer LIVE search_indexer_options then "
+            "search_indexer, using native category IDs and returned option values. Do not "
+            "substitute cached Catalogue matches or infer genre from titles. Catalogue tools "
+            "are for explicit cached bulk ranking/totals or offline work; their exact totals "
+            "are not proof of complete tracker coverage. Never silently fall back after errors. "
             "For work across turns, create_torrent_list, then edit_torrent_list to compose/refine "
             "saved snapshots. Rediscover IDs and revisions with list_torrent_lists after context "
             "loss; get_torrent_list reads pages. "
@@ -223,6 +227,66 @@ def make_server(service: AgentService):
             "unknown_category_count": sum(n for cid, n in exact.items() if cid not in categories),
             "catalogue": catalogue_status(setup),
         }
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def search_indexer_options(client_id: str, category: int | None = None) -> dict[str, object]:
+        """Discover live c411 search categories and every supported native search filter.
+
+        First call without category, then with chosen category to get genre/format VALUE IDs.
+        Native roots are POSITIVE, children NEGATIVE (e.g. Film=-6); never use catalogue/Torznab
+        category IDs here. Option values go in filters.options as CSV, not genre names/group IDs.
+        Returned metadata covers exact release year, uploader, exclusivity/revival modes, sorting,
+        and video language/resolution/source/codec/HDR/audio/channels/profiles/crew. Seasons and
+        episodes are category option IDs, not numeric API parameters. No year-range API exists.
+        This contacts the Indexer, never queues or downloads. Errors never imply an empty result.
+        Large definitions remain in read_assistant_history if working context omits bulk data.
+        """
+        return service.target(ACTOR.get(), client_id).search_options(category)
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def search_indexer(
+        request_id: str,
+        client_id: str,
+        query: Annotated[str, Field(max_length=200)] = "",
+        category: int | None = None,
+        filters: IndexerFilters = IndexerFilters(),
+        page: Annotated[int, Field(ge=1, le=10000)] = 1,
+        exclude_seeded: bool = False,
+    ) -> dict[str, object]:
+        """Search the live Indexer for titles/discovery, using the full native c411 UI filters.
+
+        Prefer this for title/genre/year discovery; inspect search_indexer_options first. query
+        may be empty for genre/year browsing. Use exact year only; for a range, query relevant
+        exact years or inspect returned details rather than invent year_min/year_max fields.
+        Preserve API spelling/case and CSV choice values. Native root/negative child IDs differ
+        from catalogue categories. Unsupported/unknown filters fail, never silently fall back
+        to cache. Other Indexers support basic Torznab text/category searches only.
+        Returned job_id/selection_id retains this EXACT returned page for create_torrent_list,
+        compare_selections or enqueue_selection; no model-side hash copying is needed.
+        Read total/page/per_page/pages/has_more/window_limited; never call one page all matches.
+        published_at is upload/publication time, not release year. Check palliative_fallback:
+        true reports revival fallback results, not proof that the original query matched.
+        exclude_seeded filters this page against a fresh client read (all completed, even paused),
+        without filling from other pages. Unavailable client observations fail closed.
+        This only searches/caches metadata: no queue, download, budget reservation or client start.
+        """
+        result = service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="search",
+                client_id=client_id,
+                query=query,
+                category=category,
+                filters=filters.params(),
+                page=page,
+                indexer_search=True,
+                search_exclude_seeded=exclude_seeded,
+            ),
+        )
+        return {**result, "selection_id": result["job_id"]}
 
     @mcp.tool(structured_output=True)
     @safe

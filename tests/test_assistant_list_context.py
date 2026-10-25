@@ -205,3 +205,71 @@ def test_context_recovery_reduces_authoritative_list_inventory(tmp_path):
         assert r"\u00e9" not in inventories[0]
         state = json.loads(inventories[2])
         assert state["clients"]["default"]["has_more"]
+
+
+def test_context_recovery_accepts_valid_json_encoded_operation_history(tmp_path):
+    turns = 0
+
+    def provider(request):
+        nonlocal turns
+        turns += 1
+        if turns == 1:
+            message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "one",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_action",
+                            "arguments": json.dumps(
+                                {
+                                    "request_id": "encoded-read",
+                                    "operation": json.dumps(
+                                        {"kind": "select-catalogue", "client_id": "default"}
+                                    ),
+                                }
+                            ),
+                        },
+                    }
+                ],
+            }
+        elif turns == 3:
+            return httpx.Response(400, json={"error": {"code": "context_length_exceeded"}})
+        else:
+            message = {"role": "assistant", "content": "Read completed."}
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=generation_transport(provider)
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        model = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Fake",
+                "kind": "compatible",
+                "url": "http://model.invalid/v1",
+                "model": "test",
+            },
+        ).json()["id"]
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={"provider_id": model, "policy": {"name": "Read", "clients": ["default"]}},
+        ).json()["id"]
+        first = browser.post(
+            "/api/assistant/jobs",
+            json={"conversation_id": chat, "message": "Read cached catalogue."},
+        ).json()["id"]
+        result = wait_run(browser, first)
+        assert result["status"] == "completed", result["error"]
+        assert result["events"][0]["result"]["job"]["status"] == "completed"
+        second = browser.post(
+            "/api/assistant/jobs",
+            json={"conversation_id": chat, "message": "Continue after compaction."},
+        ).json()["id"]
+        result = wait_run(browser, second)
+        assert result["status"] == "completed", result["error"]
+        assert result["compactions"] == 1 and turns == 4

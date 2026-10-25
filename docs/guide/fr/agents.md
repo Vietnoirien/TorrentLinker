@@ -92,9 +92,43 @@ Mettre en pause conserve les fichiers et ne libère **aucun espace disque**. La 
 compter plusieurs fois des fichiers partagés. Le total de Zen est l'estimation actuelle des
 torrents sélectionnés, pas une prédiction exacte de la perte après évolution des bonus de Classe.
 
+## Découvrir des titres avec la recherche directe de l’Indexeur
+
+Pour découvrir des titres par genre ou année de sortie, l’Assistant privilégie
+maintenant la recherche directe de l’Indexeur utilisée par l’écran Recherche. Il
+lit d’abord les catégories et filtres natifs, puis transmet les vrais identifiants
+des options. Il ne déduit pas un genre du titre d’une entrée en cache. c411 accepte
+une année de sortie exacte entre 1900 et 2100, sans paramètre de plage d’années.
+La date d’ajout/publication n’est pas l’année de sortie.
+
+La recherche propose catégorie/sous-catégorie, options de genre/format/langue,
+uploader, exclusivité/soins palliatifs, tri et filtres vidéo de résolution, source,
+codec, HDR, audio, canaux, profil et recherche dans les équipes. Un filtre absent ou
+incompatible produit une erreur. Une recherche directe échouée n’est jamais
+remplacée silencieusement par un résultat du Catalogue en cache. Le Catalogue reste
+adapté aux totaux/classements de masse explicitement demandés et au travail hors ligne.
+
+Les résultats indiquent les pages, totaux et limites réellement renvoyés. Une page
+ne représente pas tous les résultats. L’exclusion facultative des torrents déjà
+terminés concerne seulement la page renvoyée, y compris les torrents en pause ;
+un client indisponible fait échouer cette demande. Les résultats de secours des
+soins palliatifs sont signalés séparément. Rechercher ne met rien en file et ne
+lance aucun téléchargement. Une page exacte peut être conservée dans une liste
+durable ou proposée pour mise en file, avec les permissions et validations habituelles.
+
+Les outils partagés sont `search_indexer_options(client_id, category=null)` et
+`search_indexer(request_id, client_id, query="", category=null, filters={}, page=1,
+exclude_seeded=false)`. Les racines natives sont positives, les sous-catégories
+négatives : ces identifiants diffèrent de ceux du Catalogue/Torznab. Les identifiants
+de **valeurs** des facettes vont dans `filters.options` en CSV. Les choix vidéo
+gardent leur casse et écriture API. Un champ inconnu, dont une plage d’années
+inventée, échoue. L’identifiant du job est aussi celui de la page exacte pour
+`create_torrent_list`, `compare_selections` ou `enqueue_selection` ; il expire après
+15 minutes. La liste conserve la provenance de la requête, des filtres et de la page.
+
 ## Sélectionner et calculer le poids du Catalogue
 
-Pour les téléchargements disponibles, `catalogue_categories` donne les identifiants
+Pour un traitement de masse du cache explicitement demandé, `catalogue_categories` donne les identifiants
 des catégories. `select_catalogue` filtre ensuite tout le Catalogue local par
 catégorie, titre, taille et nombre de sources. Les sous-catégories sont incluses
 par défaut. Le tri porte sur `size`, `seeders`, `title` ou `seen_at`, dans les deux

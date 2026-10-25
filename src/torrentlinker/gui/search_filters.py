@@ -24,6 +24,7 @@ from torrentlinker.gui.category_picker import CategoryPicker
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
+from torrentlinker.indexer_search import VIDEO_FILTERS, visible_facets
 from torrentlinker.torrent_search import SearchFacet, SearchTree, parse_facets, parse_tree
 
 
@@ -272,12 +273,7 @@ class SearchFilters(QWidget):
                         item = control.items.item(i)
                         if item.data(Qt.ItemDataRole.UserRole) in values:
                             item.setCheckState(Qt.CheckState.Checked)
-            for facet in facets:
-                if root == 1 and (
-                    facet.slug == "langue"
-                    or (facet.slug in {"saison", "episode"} and not tree.series(selected))
-                ):
-                    continue
+            for facet in visible_facets(tree, selected, facets):
                 self.options[facet.slug] = MultiFilter(facet.label, facet.choices)
             for i, control in enumerate([*self.video.values(), *self.options.values()]):
                 self.grid.addWidget(control, i // 6, i % 6)
@@ -298,18 +294,16 @@ class SearchFilters(QWidget):
     def _video_controls(self) -> None:
         # First-party values verified 2026-10-23; docs/research/search-filters.md.
         definitions = [
-            ("resolution", self.tr("Resolution"), "2160p,1080p,720p,SD"),
-            ("source", self.tr("Source"), "BluRay,Remux,BDMV,WEB-DL,WEBRip,DVDRip,HDTV,SDTV"),
-            ("codec", self.tr("Codec"), "H.265,H.264,H.263,H.262,AV1"),
-            ("hdr", self.tr("HDR"), "SDR,HDR10,HDR10+,DV,DV.HDR10,DV.HDR10+"),
-            ("audioType", self.tr("Audio"), "lossless,lossy"),
-            ("channels", self.tr("Channels"), "7.1,5.1,2.0,1.0"),
-            ("lang", self.tr("Language"), "MULTI,VFF,TRUEFRENCH,VOSTFR,VFQ,VF,MULTI.VF2,VF2"),
+            ("resolution", self.tr("Resolution"), VIDEO_FILTERS["resolution"]),
+            ("source", self.tr("Source"), VIDEO_FILTERS["source"]),
+            ("codec", self.tr("Codec"), VIDEO_FILTERS["codec"]),
+            ("hdr", self.tr("HDR"), VIDEO_FILTERS["hdr"]),
+            ("audioType", self.tr("Audio"), VIDEO_FILTERS["audioType"]),
+            ("channels", self.tr("Channels"), VIDEO_FILTERS["channels"]),
+            ("lang", self.tr("Language"), VIDEO_FILTERS["lang"]),
         ]
         for key, label, values in definitions:
-            self.video[key] = MultiFilter(
-                label, tuple((value, value) for value in values.split(","))
-            )
+            self.video[key] = MultiFilter(label, tuple((value, value) for value in values))
         self.video["profile"] = MultiFilter(
             self.tr("Profile"),
             (

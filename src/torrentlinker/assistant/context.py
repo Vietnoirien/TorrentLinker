@@ -51,13 +51,21 @@ def compact_context(runs, budget):
                 event["tool"] in {"create_torrent_list", "edit_torrent_list"}
                 and "revision" in result
             ):
-                operation = event.get("arguments", {}).get("operation", {})
+                arguments = event.get("arguments")
+                arguments = arguments if isinstance(arguments, dict) else {}
+                operation = arguments.get("operation", {})
+                if isinstance(operation, str):
+                    try:
+                        operation = json.loads(operation)
+                    except (ValueError, TypeError):
+                        operation = {}
+                operation = operation if isinstance(operation, dict) else {}
                 actions.append(
                     {
                         "run_id": run["id"],
                         "index": index,
                         "tool": event["tool"],
-                        "request_id": event.get("arguments", {}).get("request_id"),
+                        "request_id": arguments.get("request_id"),
                         "operation": {
                             k: operation[k]
                             for k in ("kind", "client_id", "action")

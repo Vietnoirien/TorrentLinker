@@ -164,3 +164,27 @@ annoncer à tort une modification sans appeler l'outil ; sa confirmation seule n
 change aucune donnée. Les appels échoués affichent leur erreur. Le modèle peut
 corriger un argument et réessayer dans vos permissions existantes ; un envoi dont
 l'acceptation est incertaine exige une vérification par le propriétaire.
+
+## Découvrir des titres avec la recherche directe de l’Indexeur
+
+Pour découvrir des titres par genre ou année de sortie, l’Assistant privilégie
+maintenant la recherche directe de l’Indexeur utilisée par l’écran Recherche. Il
+lit d’abord les catégories et filtres natifs, puis transmet les vrais identifiants
+des options. Il ne déduit pas un genre du titre d’une entrée en cache. c411 accepte
+une année de sortie exacte entre 1900 et 2100, sans paramètre de plage d’années.
+La date d’ajout/publication n’est pas l’année de sortie.
+
+La recherche propose catégorie/sous-catégorie, options de genre/format/langue,
+uploader, exclusivité/soins palliatifs, tri et filtres vidéo de résolution, source,
+codec, HDR, audio, canaux, profil et recherche dans les équipes. Un filtre absent ou
+incompatible produit une erreur. Une recherche directe échouée n’est jamais
+remplacée silencieusement par un résultat du Catalogue en cache. Le Catalogue reste
+adapté aux totaux/classements de masse explicitement demandés et au travail hors ligne.
+
+Les résultats indiquent les pages, totaux et limites réellement renvoyés. Une page
+ne représente pas tous les résultats. L’exclusion facultative des torrents déjà
+terminés concerne seulement la page renvoyée, y compris les torrents en pause ;
+un client indisponible fait échouer cette demande. Les résultats de secours des
+soins palliatifs sont signalés séparément. Rechercher ne met rien en file et ne
+lance aucun téléchargement. Une page exacte peut être conservée dans une liste
+durable ou proposée pour mise en file, avec les permissions et validations habituelles.

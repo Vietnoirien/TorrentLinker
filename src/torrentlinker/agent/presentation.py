@@ -215,6 +215,11 @@ def request_command(event: dict) -> dict:
 def tool_description(event: dict, language: str = "en") -> str:
     """Name the observable tool action; model commentary remains a separate message."""
     descriptions = {
+        "search_indexer_options": (
+            "Discover native Indexer filters",
+            "Lire les filtres natifs de l’Indexeur",
+        ),
+        "search_indexer": ("Search the live Indexer", "Rechercher dans l’Indexeur en direct"),
         "create_torrent_list": ("Save a durable torrent list", "Enregistrer une liste de torrents"),
         "edit_torrent_list": ("Update the saved torrent list", "Modifier la liste enregistrée"),
         "get_torrent_list": ("Read the saved torrent list", "Lire la liste enregistrée"),
