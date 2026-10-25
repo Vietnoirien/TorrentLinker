@@ -89,6 +89,7 @@ def compact_context(runs, budget):
                                 "requires_owner_approval",
                                 "selection_id",
                                 "presentation_id",
+                                "displayed_in_chat",
                                 "enrichment_id",
                                 "revision",
                                 "count",
@@ -230,6 +231,35 @@ def model_receipt(result, run_id, index, budget=24000):
     def size(value):
         return len(json.dumps(value).encode("utf-8"))
 
+    if (
+        result.get("displayed_in_chat")
+        and result.get("presentation_id")
+        and not result.get("error")
+    ):
+        # The event archive and owner APIs retain full card data. The model needs a
+        # display receipt, not a second copy of titles/posters to render in prose.
+        result = {
+            key: result[key]
+            for key in (
+                "presentation_id",
+                "list_id",
+                "revision",
+                "client_id",
+                "title",
+                "count",
+                "offset",
+                "has_more",
+                "next_offset",
+                "displayed_in_chat",
+            )
+            if key in result
+        }
+        result["response_guidance"] = (
+            "Cards are displayed in chat. Reply briefly; do not repeat items, images, tables "
+            "or internal IDs unless the user explicitly asks for a separate "
+            "text, table or image response."
+        )
+        result["details_tool"] = "get_presentation_item"
     if size(result) <= budget:
         return result
     preview = receipt_preview(result)
@@ -247,6 +277,8 @@ def model_receipt(result, run_id, index, budget=24000):
         "selection_id",
         "presentation_id",
         "enrichment_id",
+        "displayed_in_chat",
+        "response_guidance",
         "list_id",
         "revision",
         "list_revision",

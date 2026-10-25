@@ -589,7 +589,13 @@ class Assistant:
                 "For torrent lists spanning turns use create_torrent_list/edit_torrent_list with "
                 "saved selection IDs. Keep exact identities server-side; never reconstruct hashes. "
                 "Use present_selection to show cards for an exact list revision or selection. "
-                "it automatically fetches bounded release metadata and safe artwork. Do not invent "
+                "It automatically fetches bounded release metadata and safe artwork. "
+                "The app renders cards with titles, images, Note, estimated Zen/day and "
+                "clickable details. "
+                "After a successful presentation, give only a short summary and useful caveats. "
+                "Do not repeat its items, posters, tables, list IDs or revision numbers in prose "
+                "unless the user explicitly requests a separate text, table or image response. "
+                "Do not invent "
                 "posters or canonical identities. get_presentation_item reads the details. "
                 "Rediscover list IDs/current revisions with list_torrent_lists after compaction, "
                 "then get_torrent_list for bounded pages. Use replace_subset to refine films "
@@ -607,7 +613,9 @@ class Assistant:
                 "Cite the returned reference_url and heading. Respect app_version/source_kind; "
                 "source-checkout docs can differ from a released version. Missing documentation "
                 "is unavailable evidence, not permission to invent an answer. "
-                "Show observed posters/covers with Markdown ![alt](image_url), and ordinary "
+                "For standalone image requests or items without cards, show observed "
+                "posters/covers "
+                "with Markdown ![alt](image_url), and ordinary "
                 "Markdown links when appropriate. Only use image URLs actually returned by "
                 "a tool or supplied by the user; never invent cover URLs. "
                 "enqueue only saves to TorrentLinker Search > Download queue. "
@@ -1120,6 +1128,14 @@ class Assistant:
                             ),
                         }
                         event.update(status="failed", error=call_error, result=result)
+                        self.update_run(identifier, events=json.dumps(events))
+                    if (
+                        call["name"] == "present_selection"
+                        and result.get("presentation_id")
+                        and not call_error
+                    ):
+                        result = {**result, "displayed_in_chat": True}
+                        event["result"] = result
                         self.update_run(identifier, events=json.dumps(events))
                     checkpoint = {}
                     results.append((call, model_receipt(result, identifier, len(events) - 1)))

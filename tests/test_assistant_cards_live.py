@@ -1,6 +1,7 @@
 """Opt-in local model card presentation, with isolated clients and tracker responses."""
 
 import os
+import re
 
 import httpx
 import pytest
@@ -75,6 +76,14 @@ def test_local_model_presents_category_cards_without_downloading(controlled, cat
         if e["tool"] == "present_selection" and e.get("result", {}).get("presentation_id")
     ]
     assert presentations, run
+    final = "\n".join(
+        m["content"]
+        for m in run["messages"]
+        if m["role"] == "assistant" and m.get("phase") == "final"
+    )
+    assert not re.search(r"!\[[^\]]*\]\(", final), final
+    assert "covers.example" not in final, final
+    assert not re.search(r"(?m)^\s*(?:\d+[.)]|[-*])\s+.*Demo ", final), final
     page = browser.get(
         "/api/assistant/presentations/" + presentations[-1]["presentation_id"]
     ).json()

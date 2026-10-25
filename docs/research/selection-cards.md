@@ -90,3 +90,17 @@ Demo-artwork screenshots, explicitly labeled demo in the preview:
 `/tmp/tl-selection-preview/desktop-cards.png` and
 `/tmp/tl-cards-browser-fixed/test_browser_cards_open_modal_0/selection-cards-web.png`.
 No tracker download, publish, push, release or settings changes were performed for validation.
+
+## Follow-up: avoid duplicate prose and posters
+
+The first local-model acceptance runs all produced a second pair of Markdown images
+after displaying cards. The Assistant prompt still explicitly requested Markdown covers.
+It now distinguishes standalone images from already displayed cards and asks for a short
+summary unless the user explicitly wants textual detail. Successful Assistant presentations
+retain complete event data but send the model a compact display acknowledgement; external
+MCP responses and ordinary metadata reads retain their full data.
+
+Validation: 76 focused Assistant, presentation, context and tool-activity tests passed. All three local Qwen category workflows
+passed the new no-duplicate-image/list checks in 27.16 seconds, using the same isolated
+simulated tracker. Reports are in /tmp/tl-cards-no-duplicate. Existing saved replies are
+not rewritten.
