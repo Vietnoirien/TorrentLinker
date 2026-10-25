@@ -44,13 +44,15 @@ function aConversationFolders(container, conversations) {
 function aMoveConversation(current, conversations) {
   const {dialog, form} = aDialog(at("Move to folder…", "Déplacer vers un dossier…"));
   const choices = [...new Set(["", "uploads", "film_research", "series_research", "troubleshooting", ...conversations.map(c => c.folder || "")])];
-  const folder = aField(form, at("Folder", "Dossier"), current.folder || "", "", [...choices.map(f => [f, aFolderLabel(f)]), ["__new__", at("New folder…", "Nouveau dossier…")]]);
+  let newValue = "__new__";
+  while (choices.includes(newValue)) newValue += "_";
+  const folder = aField(form, at("Folder", "Dossier"), current.folder || "", "", [...choices.map(f => [f, aFolderLabel(f)]), [newValue, at("New folder…", "Nouveau dossier…")]]);
   const name = aField(form, at("Folder name", "Nom du dossier")); name.maxLength = 80; name.parentElement.hidden = true;
   const automatic = aField(form, at("Let the assistant organize this conversation", "Laisser l’assistant classer cette conversation"), current.folder_source !== "manual", "checkbox");
-  folder.onchange = () => { name.parentElement.hidden = folder.value !== "__new__"; automatic.checked = false; };
+  folder.onchange = () => { name.parentElement.hidden = folder.value !== newValue; automatic.checked = false; };
   aActions(dialog, form, async () => {
-    const value = folder.value === "__new__" ? name.value.trim() : folder.value;
-    if (folder.value === "__new__" && !value) { name.setCustomValidity(at("Enter a folder name", "Saisissez un nom de dossier")); name.reportValidity(); return false; }
+    const value = folder.value === newValue ? name.value.trim() : folder.value;
+    if (folder.value === newValue && !value) { name.setCustomValidity(at("Enter a folder name", "Saisissez un nom de dossier")); name.reportValidity(); return false; }
     await api(`assistant/conversations/${current.id}/folder`, {folder: value, automatic: automatic.checked}, "PUT");
   });
   name.oninput = () => name.setCustomValidity("");

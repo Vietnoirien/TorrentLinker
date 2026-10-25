@@ -367,6 +367,19 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(
             )
             assert (moved["folder"], moved["folder_source"]) == ("My films", "manual")
             expect(page.locator("#assistant-folders summary")).to_have_text("▱My films")
+            page.evaluate(
+                """async id => {
+                  await api(`assistant/conversations/${id}/folder`, {folder: '__new__'}, 'PUT');
+                  const chats = await api('assistant/conversations');
+                  aMoveConversation(chats.find(c => c.id === id), chats);
+                }""",
+                identifier,
+            )
+            expect(dialog.locator("select")).to_have_value("__new__")
+            expect(dialog.locator('input[type="text"]')).not_to_be_visible()
+            dialog.locator(".toolbar button").first.click()
+            expect(dialog).not_to_be_visible()
+            expect(page.locator("#assistant-folders summary")).to_have_text("▱__new__")
             browser.close()
     finally:
         server.should_exit = True
