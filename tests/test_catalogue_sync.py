@@ -20,6 +20,77 @@ from torrentlinker.store import FeedState, Store
 from torrentlinker.zen import GB
 
 
+@pytest.mark.parametrize("full", [False, True])
+def test_images_catalogue_uses_torznab_when_json_omits_the_category(tmp_path, full):
+    from tests.fake_torznab import FakeTorznab
+    from torrentlinker.plan import PlanOptions, catalogue_candidates, make_plan
+    from torrentlinker.store import CrawlState
+    from torrentlinker.zen import ZenClass, ZenProfile
+
+    fake = FakeTorznab(window=200)
+    fake.add(6060, 300)
+    json_calls = []
+
+    def handler(request):
+        if request.url.path == "/api/torrents":
+            json_calls.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "data": [],
+                    "meta": {"page": 1, "perPage": 100, "total": 0, "totalPages": 0},
+                },
+            )
+        return fake.handler(request)
+
+    store = Store(tmp_path / "s.db")
+    # The old JSON crawl falsely certified this category as empty and complete.
+    store.save_crawl_state(CrawlState(6060, complete=True))
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    ix = native_indexer(handler)
+    sync_catalogue(ix, store, [6060], full=full)
+    categories = {6000: IndexerCategory("XXX"), 6060: IndexerCategory("Images", 6000)}
+    candidates = catalogue_candidates(
+        store.catalogue(),
+        DownloadFolders({6060: str(tmp_path)}),
+        categories,
+        set(),
+        lambda _: "disk",
+        {6060},
+    )
+    plan = make_plan(
+        ZenProfile(ZenClass.SWARM_KEEPER),
+        candidates,
+        {"disk": 10 * GB},
+        options=PlanOptions(max_download_bytes=10 * GB),
+    )
+    assert plan.items
+    assert not json_calls
+    assert all(item.candidate.category == 6060 for item in plan.items)
+    assert store.catalogue_size() == 200
+    assert store.crawl_state(6060).limited
+    assert not store.crawl_state(6060).complete
+
+
+def test_torznab_only_category_keeps_its_resume_cursor_after_backend_migration(tmp_path):
+    from tests.fake_torznab import FakeTorznab
+    from torrentlinker.store import CrawlState
+
+    fake = FakeTorznab()
+    fake.add(6060, 250)
+    store = Store(tmp_path / "s.db")
+    store.save_feed_state(FeedState(SNAPSHOT_NAME, updated_at=time.time()))
+    store.save_crawl_state(CrawlState(6060, next_offset=1))  # old JSON pause marker
+    ix = native_indexer(fake.handler)
+    sync_catalogue(ix, store, [6060], full=True, max_pages=1)
+    assert store.crawl_state(6060).next_offset == 100
+    fake.requests.clear()
+    sync_catalogue(ix, store, [6060], full=True)
+    assert fake.requests[0].url.params["offset"] == "100"
+    assert store.catalogue_size() == 250
+    assert store.crawl_state(6060).complete
+
+
 def snapshot(count=3):  # type: ignore[no-untyped-def]
     return {
         "stored": count,

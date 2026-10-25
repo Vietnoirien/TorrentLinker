@@ -119,7 +119,9 @@ def make_server(service: AgentService):
     ) -> dict[str, object]:
         """Propose exactly one client's category Download Folder, always requiring owner approval.
 
-        category=None changes only the default. Existing Path Mappings must already
+        category=None changes the fallback for ALL categories without a configured
+        Download Folder. Use it only when the user asks to change that global default.
+        For a specific download, supply its category. Existing Path Mappings must already
         establish client visibility. Never invent mounts or silently change mappings.
         After approval completes, retry the original action with its stable request_id.
         """

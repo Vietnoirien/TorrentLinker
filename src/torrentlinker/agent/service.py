@@ -406,7 +406,7 @@ class AgentService:
                 "category_name": (
                     target.setup.settings.indexer_categories[body.category].name
                     if body.category is not None
-                    else "Default"
+                    else "Default for all categories without a configured Download Folder"
                 ),
                 "path": body.path,
                 "client_path": body.client_path,

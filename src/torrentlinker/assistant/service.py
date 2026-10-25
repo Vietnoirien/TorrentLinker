@@ -913,7 +913,9 @@ class Assistant:
 
     def folder_question(self, event, requirement, error=""):
         category = requirement.get("category")
-        name = requirement.get("categories", {}).get(str(category), "Default")
+        name = requirement.get("categories", {}).get(str(category), str(category))
+        if category is None:
+            name = "Default for all categories without a configured Download Folder"
         recovery = event.setdefault(
             "folder_recovery",
             {

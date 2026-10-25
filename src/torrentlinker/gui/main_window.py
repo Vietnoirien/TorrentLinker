@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -855,6 +856,8 @@ class MainWindow(QMainWindow):
 
     def make_plan(self, then: Callable[[], None] | None = None) -> None:
         """Refresh new torrents in the Plan's categories, then make the Plan."""
+        if not self._ensure_plan_download_folders():
+            return
         self._use_cached_plan = False
         self.store.clear_plan()
         self.zen_tab.plan_view.begin()
@@ -909,6 +912,76 @@ class MainWindow(QMainWindow):
 
         self._after_catalogue_always = after_fetch
         self._run_catalogue(work)
+
+    def _ensure_plan_download_folders(self) -> bool:
+        """Offer category-scoped destinations before starting an otherwise empty Plan."""
+        from torrentlinker.category_tags import category_path
+
+        s = self.settings
+        cats = s.indexer_categories
+        for identifier in self._plan_destinations:
+            profile = s.profile(identifier)
+            folders = (
+                s.download_folders if identifier == s.active_client_id else profile.download_folders
+            )
+            chosen = s.plan_categories
+            if chosen is None:
+                if folders.default.strip() or plan_categories(None, folders, cats):
+                    continue
+                if not cats:
+                    QMessageBox.information(
+                        self,
+                        self.tr("Download Folder"),
+                        self.tr(
+                            "Fetch the Indexer categories in Settings before choosing "
+                            "a Download Folder."
+                        ),
+                    )
+                    return False
+                choices = sorted(cats, key=lambda cid: category_path(cid, cats))
+                labels = [
+                    " / ".join(cats[c].name for c in category_path(cid, cats) if c in cats)
+                    for cid in choices
+                ]
+                label, accepted = QInputDialog.getItem(
+                    self,
+                    self.tr("Download Folder"),
+                    self.tr(
+                        "No Download Folder is set for {0}. Choose the category to configure."
+                    ).format(profile.name),
+                    labels,
+                    0,
+                    False,
+                )
+                if not accepted:
+                    return False
+                missing = [choices[labels.index(label)]]
+            else:
+                missing = [cid for cid in chosen if not plan_categories([cid], folders, cats)]
+            for cid in missing:
+                name = " / ".join(
+                    cats[c].name for c in category_path(cid, cats) if c in cats
+                ) or str(cid)
+                if (
+                    chosen is not None
+                    and QMessageBox.question(
+                        self,
+                        self.tr("Download Folder"),
+                        self.tr(
+                            "No Download Folder is set for {0} on {1}. "
+                            "Set one now to make the Plan?"
+                        ).format(name, profile.name),
+                    )
+                    != QMessageBox.StandardButton.Yes
+                ):
+                    return False
+                path = choose_directory(self, self.tr("Download Folder for {0}").format(name))
+                if not path:
+                    return False
+                folders.by_category[cid] = path
+                s.save(self.settings_path)
+                self.offer_plan_categories()
+        return True
 
     def _stop_plan_fetch(self) -> None:
         self._use_cached_plan = True

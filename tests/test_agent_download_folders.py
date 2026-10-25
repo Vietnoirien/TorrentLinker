@@ -234,6 +234,11 @@ def test_folder_approval_revalidates_mount_after_proposal_and_can_be_corrected(t
         proposed = call(browser, grant["token"], "propose_download_folder", arguments)[
             "structuredContent"
         ]
+        review = browser.get(f"/api/agents/proposals/{proposed['id']}/review").json()
+        assert review["category"] is None
+        assert review["category_name"] == (
+            "Default for all categories without a configured Download Folder"
+        )
         sample.unlink()
         approved = browser.post(f"/api/agents/proposals/{proposed['id']}/approve")
         result = finished(browser, approved.json()["job_id"])

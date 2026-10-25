@@ -110,18 +110,24 @@ def reserve(
         if len({str(disk_of(p)) for p in destinations}) != 1:
             raise ValueError("Send downloads on one disk at a time to reserve storage safely.")
         folder = target.setup.path_under_root(str(next(iter(destinations))))
+        disk_sizes = {str(disk_of(folder)): (folder, sum(sizes.values()))}
     else:
-        selected = target.setup.download_folder(target.request_category(body))
-        folder = target.setup.path_under_root(str(selected) if selected else "")
-    disk = str(disk_of(folder))
-    # Pending sends across connections and clients share one physical storage budget.
-    pending = outstanding(access, target, disk)
-    reserve_bytes = max(
-        grant.reserve_bytes,
-        int(shutil.disk_usage(folder).total * target.setup.settings.free_space_margin),
-    )
-    if shutil.disk_usage(folder).free - pending - sum(sizes.values()) < reserve_bytes:
-        raise ValueError("The selected downloads would consume the required free-space reserve.")
+        disk_sizes = {}
+        for h, folder in target.enqueue_folders(body).items():
+            disk = str(disk_of(folder))
+            disk_sizes[disk] = (folder, disk_sizes.get(disk, (folder, 0))[1] + sizes[h])
+    # Categories may use different disks; charge each disk only for its own downloads.
+    for disk, (folder, size) in disk_sizes.items():
+        pending = outstanding(access, target, disk)
+        usage = shutil.disk_usage(folder)
+        reserve_bytes = max(
+            grant.reserve_bytes,
+            int(usage.total * target.setup.settings.free_space_margin),
+        )
+        if usage.free - pending - size < reserve_bytes:
+            raise ValueError(
+                "The selected downloads would consume the required free-space reserve."
+            )
     if body.kind == "send-queue":
         with access.db:
             access.db.execute(

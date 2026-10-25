@@ -121,14 +121,16 @@ class Operations:
             raise ValueError("Add a mounted Library Folder in Settings first.")
         if request.kind == "reseed" and len(request.hashes) != 1:
             raise ValueError("Select one checked Candidate.")
-        if request.kind in {"enqueue", "send-queue", "plan"}:
+        if request.kind == "enqueue":
+            self.enqueue_folders(request)
+        if request.kind in {"send-queue", "plan"}:
             targets = (
                 [self.setup.for_client(identifier) for identifier in request.client_ids]
                 if request.kind == "plan" and request.client_ids
                 else [self.setup]
             )
             for target in targets:
-                folder = target.download_folder(self.request_category(request))
+                folder = target.download_folder(request.category)
                 if not folder and request.kind == "plan" and request.category is None:
                     folder = next(
                         (
@@ -148,21 +150,53 @@ class Operations:
                         folder,
                     )
                 if not folder:
-                    raise DownloadFolderRequired(
-                        target.settings.active_client_id, self.request_category(request)
-                    )
+                    raise DownloadFolderRequired(target.settings.active_client_id, request.category)
                 target.path_under_root(str(folder))
         if request.kind == "manage" and not request.hashes:
             raise ValueError("Select at least one torrent.")
 
-    def request_category(self, request: JobRequest) -> int | None:
-        if request.category is not None:
-            return request.category
-        if request.kind == "enqueue" and request.hashes:
-            categories = {r.category for r in self.setup.store.catalogue(request.hashes)}
-            if len(categories) == 1:
-                return categories.pop()
-        return None
+    def enqueue_categories(self, request: JobRequest) -> dict[str, int | None]:
+        """Keep each torrent's category; a mixed batch does not mean the default."""
+        from torrentlinker.category_tags import category_path
+
+        rows = {r.infohash: r for r in self.setup.store.catalogue(request.hashes)}
+        categories: dict[str, int | None] = {}
+        for h in request.hashes:
+            if h not in rows and h not in self.candidates:
+                raise ValueError("Search again before queueing this torrent.")
+            if request.category is not None:
+                categories[h] = request.category
+            elif h in rows:
+                categories[h] = rows[h].category
+            else:
+                categories[h] = max(
+                    self.candidates[h].categories,
+                    key=lambda cid: len(category_path(cid, self.setup.settings.indexer_categories)),
+                    default=None,
+                )
+        return categories
+
+    def enqueue_folders(self, request: JobRequest, *, verify: bool = False) -> dict[str, Path]:
+        """Resolve the entire batch before queueing, asking only for missing categories."""
+        resolved: dict[int | None, Path] = {}
+        folders: dict[str, Path] = {}
+        for h, category in self.enqueue_categories(request).items():
+            if category not in resolved:
+                folder = self.setup.download_folder(category)
+                if folder is None:
+                    if category is None:
+                        raise ValueError(
+                            "Torrent category is unknown. Search again or choose an explicit "
+                            "category before queueing; no default Download Folder was changed."
+                        )
+                    raise DownloadFolderRequired(self.setup.settings.active_client_id, category)
+                resolved[category] = (
+                    self.setup.verified_download_folder(category)
+                    if verify
+                    else self.setup.path_under_root(str(folder))
+                )
+            folders[h] = resolved[category]
+        return folders
 
     def download_destinations(self) -> set[str]:
         folders = self.setup.settings.download_folders
@@ -443,6 +477,7 @@ class Operations:
             self.setup.store.save_catalogue(catalogue)
             return {"rows": result, "page": request.page, "pages": total_pages}
         if request.kind == "enqueue":
+            folders = self.enqueue_folders(request, verify=True)
             indexer = self.setup.indexer()
             count = 0
             for h in request.hashes:
@@ -459,12 +494,13 @@ class Operations:
                         r.seeders,
                         r.infohash,
                         r.details_url,
+                        categories=(r.category,) if r.category is not None else (),
                     )
                 count += enqueue(
                     self.setup.store,
                     indexer,
                     candidate,
-                    self.setup.verified_download_folder(self.request_category(request)),
+                    folders[h],
                 )
             return {
                 "queued": count,

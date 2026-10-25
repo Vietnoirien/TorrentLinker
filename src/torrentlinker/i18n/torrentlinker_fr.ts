@@ -1664,6 +1664,18 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
 <context>
     <name>MainWindow</name>
     <message>
+        <source>Fetch the Indexer categories in Settings before choosing a Download Folder.</source>
+        <translation>Récupérez les catégories de l'Indexeur dans les Paramètres avant de choisir un Dossier de téléchargement.</translation>
+    </message>
+    <message>
+        <source>No Download Folder is set for {0}. Choose the category to configure.</source>
+        <translation>Aucun Dossier de téléchargement n'est défini pour {0}. Choisissez la catégorie à configurer.</translation>
+    </message>
+    <message>
+        <source>No Download Folder is set for {0} on {1}. Set one now to make the Plan?</source>
+        <translation>Aucun Dossier de téléchargement n'est défini pour {0} sur {1}. Voulez-vous en choisir un pour créer le Plan ?</translation>
+    </message>
+    <message>
         <location filename="../gui/main_window.py" line="178"/>
         <location filename="../gui/main_window.py" line="246"/>
         <location filename="../gui/main_window.py" line="314"/>

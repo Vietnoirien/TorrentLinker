@@ -72,6 +72,13 @@ SUBCATS = {
     10: {51: 8010, 52: 8010, 53: 8010},
 }
 
+# Verified 2026-10-25: c411's JSON tree/listing omits XXX (native root 8),
+# while Torznab returns its torrents with the correct category IDs.
+TORZNAB_ONLY_ROOTS = {8}
+TORZNAB_ONLY_CATEGORIES = {ROOTS[r] for r in TORZNAB_ONLY_ROOTS} | {
+    cat for r in TORZNAB_ONLY_ROOTS for cat in SUBCATS[r].values()
+}
+
 
 def download_url(infohash: str) -> str:
     """A direct c411 URL, with a placeholder until the Indexer fetches it."""
@@ -164,6 +171,8 @@ def bootstrap_snapshot(
 def _filters(wanted: set[int]) -> list[tuple[int, tuple[int, ...]]]:
     result: list[tuple[int, tuple[int, ...]]] = []
     for root, torznab in ROOTS.items():
+        if root in TORZNAB_ONLY_ROOTS:
+            continue
         if torznab in wanted:
             result.append((root, ()))
         else:
@@ -400,7 +409,9 @@ def sync_catalogue(
         snapshot_error = error
         log.warning("Zen Lab metadata unavailable: %s", error)
     filters = _filters(wanted)
-    mapped = set(ROOTS.values()) | {c for subs in SUBCATS.values() for c in subs.values()}
+    mapped = (set(ROOTS.values()) | {c for subs in SUBCATS.values() for c in subs.values()}) - (
+        TORZNAB_ONLY_CATEGORIES
+    )
     # A full parent fetch also supersedes older child crawl markers. Only include
     # a child when every native source for that Torznab category is covered:
     # some IDs combine subcategories from several different native roots.
@@ -467,6 +478,13 @@ def sync_catalogue(
                 )
             )
     if unsupported := wanted - mapped:
+        for cat in sorted(unsupported & TORZNAB_ONLY_CATEGORIES):
+            # Discard old JSON "complete but empty" markers once. Subsequent
+            # Torznab crawls keep their own pagination checkpoints and limits.
+            key = f"c411-torznab:{cat}"
+            if store.feed_state(key).updated_at is None:
+                store.save_crawl_state(CrawlState(cat))
+                store.save_feed_state(FeedState(key, updated_at=time.time()))
         update_categories(
             indexer,
             store,

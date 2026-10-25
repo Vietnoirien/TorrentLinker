@@ -157,6 +157,76 @@ def test_missing_folder_asks_then_approves_and_resumes_original_once(tmp_path, a
             finish_folder(browser, second, identifier, books, approve)
 
 
+@pytest.mark.parametrize("book_configured", [False, True])
+def test_mixed_batch_recovers_each_missing_category_without_setting_default(
+    tmp_path, book_configured
+):
+    root, books = mounted(tmp_path)
+    game_hash = "c" * 40
+
+    def mixed_provider(request):
+        body = json.loads(request.content)
+        if not any(message.get("role") == "tool" for message in body["messages"]):
+            return response(
+                [
+                    tool(
+                        "propose_action",
+                        {
+                            "request_id": "mixed-downloads",
+                            "operation": {
+                                "kind": "enqueue",
+                                "client_id": "default",
+                                "hashes": [HASH, game_hash],
+                            },
+                        },
+                    )
+                ]
+            )
+        return response(text="Queued.")
+
+    app = create_app(
+        tmp_path / "config",
+        password="test-password-long",
+        roots=(root,),
+        connector=lambda *args: MountedClient(),
+        assistant_transport=generation_transport(mixed_provider),
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        prepare(app, browser, root)
+        setup = app.state.agent_service.setup
+        setup.settings.indexer_categories[4050] = IndexerCategory("Games")
+        if book_configured:
+            setup.settings.download_folders.by_category[7000] = str(books)
+        setup.save()
+        setup.store.save_catalogue(
+            [CatalogueRow(game_hash, "Game", 4, 1, 4050, "https://indexer.test/game", "", 1)]
+        )
+        identifier = start_download(browser)
+        for category in [4050] if book_configured else [7000, 4050]:
+            run = wait_run(browser, identifier)
+            assert run["status"] == "awaiting_user", run
+            index = len(run["events"]) - 1
+            event = run["events"][index]
+            assert event["folder_recovery"]["requirement"]["category"] == category
+            assert setup.settings.indexer_categories[category].name in event["question"]["question"]
+            assert browser.get("/api/queue").json() == []
+            browser.post(
+                f"/api/assistant/jobs/{identifier}/questions/{index}", json={"answer": str(books)}
+            )
+            run = wait_run(browser, identifier)
+            assert run["status"] == "awaiting_approval", run
+            assert run["events"][index]["review"]["category"] == category
+            browser.post(
+                f"/api/assistant/jobs/{identifier}/decisions/{index}", json={"approve": True}
+            )
+        run = terminal(browser, identifier)
+        assert run["status"] == "completed", run
+        assert len(browser.get("/api/queue").json()) == 2
+        assert setup.settings.download_folders.default == ""
+        assert setup.settings.download_folders.by_category == {7000: str(books), 4050: str(books)}
+
+
 def finish_folder(browser, app, identifier, books, approve):
     run = wait_run(browser, identifier)
     index = len(run["events"]) - 1
