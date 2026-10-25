@@ -82,3 +82,30 @@ summary fields plus archive pointers; bulk rows are omitted instead of cutting J
 mid-record. Newest complete prior receipts take priority within the context budget.
 List-write revision summaries also survive compaction. A provider-request regression
 covers a 1,000-item list with oversized row titles and incorrect prior model prose.
+
+## Local model findings and correction feedback
+
+The local Qwen3.8-27B-MXFP4-off evaluation covered films, music, series, ebooks,
+games, software, 3D models and comics, using temporary settings and simulated clients.
+The final five-turn mixed-category workflow passed: append category pairs, remove
+only series, then add existing ebooks without duplicates. It retained 11 items and
+25,200 bytes. The final fresh-context 99-item comparison passed with 8 actively
+seeding, 1 completed paused, 1 completed other, 1 incomplete and 88 absent.
+
+The film/music natural-language workflow did **not** pass reliably. In its final
+attempt Qwen claimed to save revision 2 with five films without calling an edit
+tool; the server correctly retained revision 1 with ten films. Earlier attempts
+also stopped at a plan or invented completion. This is a remaining model reliability
+limit, not a successful save. The exact requested 10-film → keep-5 → add-50-albums →
+replace-film-subset-with-3 → enqueue-53 workflow passed deterministically through
+public MCP tools with a queue-only grant and zero download budgets. No prompt-only
+claim substitutes for an actual receipt, and no automatic action replay was added.
+
+Failed MCP calls and failed underlying jobs now produce failed events with bounded
+inline errors and correction guidance for the model. Provider-boundary tests cover
+an invalid count corrected on the next call and a failed read job followed by a
+successful model-requested read. Permission/approval blockers still require owner
+action; uncertain download/upload sends must never be replayed automatically.
+Historical malformed/JSON-encoded operation arguments display safely. Both review
+axes checked the backend and native/browser error presentation; all actionable
+findings were corrected and reviewed again.

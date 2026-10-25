@@ -158,3 +158,9 @@ liste ne change pas une action déjà préparée. Une liste contient au plus 10 
 éléments ; les lots d'action de 1 000 maximum indiquent les éléments restants.
 Les tailles inconnues restent inconnues. L'Assistant peut aussi comparer une révision
 aux torrents actuellement en partage, terminés en pause, incomplets ou absents du client.
+
+Vérifiez la révision enregistrée et les totaux dans **Activité**. Un modèle peut
+annoncer à tort une modification sans appeler l'outil ; sa confirmation seule ne
+change aucune donnée. Les appels échoués affichent leur erreur. Le modèle peut
+corriger un argument et réessayer dans vos permissions existantes ; un envoi dont
+l'acceptation est incertaine exige une vérification par le propriétaire.

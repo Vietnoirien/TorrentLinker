@@ -143,3 +143,8 @@ Later list edits do not change an already prepared action. Lists can hold 10,000
 items; action batches contain at most 1,000 and report remaining members explicitly.
 Unknown sizes remain unknown. The Assistant can also compare a saved revision with
 currently seeding, paused/completed, incomplete or absent torrents in its client.
+
+Check the saved revision and totals in **Activity**. A model can mistakenly claim a
+change without calling a tool; its confirmation alone does not change saved data.
+Failed tool calls show their error. The model can correct an invalid argument and
+try again within your existing permissions; uncertain sends require owner recovery.
