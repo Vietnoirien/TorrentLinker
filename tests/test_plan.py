@@ -311,6 +311,32 @@ def test_a_plan_can_be_limited_to_chosen_categories_parents_including_their_subc
     assert titles({2030}) == ["foreign film"]
 
 
+def test_the_plan_never_proposes_mein_kampf() -> None:
+    categories = {
+        7000: IndexerCategory("Ebook"),
+        7020: IndexerCategory("Livres", parent=7000),
+    }
+    rows = [
+        CatalogueRow(
+            "aa" * 20,
+            "Adolf.Hitler.Mon.Combat.Mein.Kampf.2017.FR.[ePub]-NOTAG",
+            GB,
+            119,
+            7020,
+            "u",
+            "d",
+            0,
+        ),
+        CatalogueRow("bb" * 20, "Mein Kampf (traduction) FR [EPUB]", GB, 50, 7020, "u", "d", 0),
+        CatalogueRow("cc" * 20, "ok", GB, 5, 7020, "u", "d", 0),
+    ]
+    folders = DownloadFolders({7020: "/books"})
+
+    found = catalogue_candidates(rows, folders, categories, set(), lambda p: "d", {7000})
+
+    assert [c.title for c in found] == ["ok"]
+
+
 def test_disk_budget_is_free_space_minus_a_margin_of_the_disk_shared_by_its_folders(
     tmp_path: Path,
 ) -> None:
