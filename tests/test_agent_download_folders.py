@@ -185,6 +185,7 @@ def test_folder_proposal_refuses_unmounted_paths_and_mapping_changes(tmp_path):
                     "client_id": "default",
                     "path": path,
                     "client_path": client_path,
+                    "category": None,
                 },
             )["structuredContent"]
             assert "error" in result
@@ -196,6 +197,7 @@ def test_folder_proposal_refuses_unmounted_paths_and_mapping_changes(tmp_path):
                 "request_id": "unverified",
                 "client_id": "default",
                 "path": str(root),
+                "category": None,
             },
         )["structuredContent"]
         assert "seeded sample" in result["error"]
@@ -230,7 +232,32 @@ def test_folder_approval_revalidates_mount_after_proposal_and_can_be_corrected(t
         )
         grant = browser.post("/api/agents", json={"name": "Helper", "clients": ["default"]}).json()
         browser.put("/api/agents", json={"enabled": True})
-        arguments = {"request_id": "first", "client_id": "default", "path": str(books)}
+        arguments = {
+            "request_id": "first",
+            "client_id": "default",
+            "path": str(books),
+            "category": None,
+        }
+        omitted = {key: value for key, value in arguments.items() if key != "category"}
+        for tool, payload in (
+            ("propose_download_folder", omitted),
+            (
+                "propose_action",
+                {
+                    "request_id": "missing-category",
+                    "operation": {
+                        "kind": "configure-download-folder",
+                        "client_id": "default",
+                        "path": str(books),
+                    },
+                },
+            ),
+        ):
+            rejected = call(browser, grant["token"], tool, payload)
+            assert rejected.get("isError") is True, rejected
+            assert "category" in str(rejected).lower()
+            assert browser.get("/api/agents").json()["proposals"] == []
+            assert app.state.agent_service.setup.settings.download_folders.default == ""
         proposed = call(browser, grant["token"], "propose_download_folder", arguments)[
             "structuredContent"
         ]

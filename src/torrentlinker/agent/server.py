@@ -114,7 +114,7 @@ def make_server(service: AgentService):
         request_id: str,
         client_id: str,
         path: str,
-        category: int | None = None,
+        category: int | None,
         client_path: str = "",
     ) -> dict[str, object]:
         """Propose exactly one client's category Download Folder, always requiring owner approval.
@@ -182,6 +182,9 @@ def make_server(service: AgentService):
         Kinds: refresh, search, search-options, details, scan, check, plan, catalogue,
         upload-preview, enqueue, send-queue, manage, reseed, upload-queue, upload-send,
         upload-remove, upload-reset, upload-seed. upload-draft is a legacy alias for upload-queue.
+        For Download Folder changes, use propose_download_folder with an explicit category
+        from download_folder_options. Never omit the category or infer a global default
+        from a request about one category.
         upload-queue saves locally; pass draft_id and revision to edit an existing Local Draft.
         Read collection upload-queue for saved forms and revisions. upload-send requires
         draft_id/revision and always owner approval. It sends only that saved description.

@@ -10,7 +10,7 @@ from dataclasses import asdict
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 
 from torrentlinker.agent.access import Access, Grant
 from torrentlinker.web.jobs import Jobs
@@ -45,6 +45,22 @@ PERMISSIONS = {
 
 class AgentRequest(JobRequest):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def explicit_folder_category(cls, value: Any) -> Any:
+        if (
+            isinstance(value, dict)
+            and value.get("kind") == "configure-download-folder"
+            and "category" not in value
+        ):
+            raise ValueError(
+                "A Download Folder change requires an explicit category. "
+                "Call download_folder_options to find the category ID, then include it. "
+                "Use category=null only when the user explicitly requests the global default "
+                "for all categories without a configured Download Folder."
+            )
+        return value
 
 
 class AgentService:
