@@ -16,6 +16,7 @@ from torrentlinker.catalogue_selection import CatalogueCriteria, select_catalogu
 from torrentlinker.domain import Torrent
 from torrentlinker.download_queue import enqueue, entries, run_queue
 from torrentlinker.indexer import Candidate, SearchQuery
+from torrentlinker.queue_selection import QueueCriteria
 from torrentlinker.seeding import observe_swarm, seeding
 from torrentlinker.store import CatalogueRow
 from torrentlinker.torrent_details import website_url
@@ -54,6 +55,10 @@ class JobRequest(BaseModel):
         "refresh",
         "select-torrents",
         "select-catalogue",
+        "select-queue",
+        "prepare-download-batch",
+        "refine-selection",
+        "edit-queue-selection",
         "search",
         "enqueue",
         "send-queue",
@@ -87,6 +92,11 @@ class JobRequest(BaseModel):
     selection: SelectionCriteria = Field(default_factory=SelectionCriteria)
     selection_id: str = Field(default="", max_length=64)
     catalogue_selection: CatalogueCriteria = Field(default_factory=CatalogueCriteria)
+    selection_source: Literal["catalogue", "queue", "saved-catalogue"] = "catalogue"
+    selection_rows: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    queue_action: Literal["remove", "retry", "priority"] = "remove"
+    priority: int = Field(default=0, ge=-1000, le=1000)
+    queue_selection: QueueCriteria = Field(default_factory=QueueCriteria)
     selection_fingerprint: str = Field(default="", max_length=64)
     path: str = Field(default="", max_length=4096)
     client_path: str = Field(default="", max_length=4096)
@@ -125,8 +135,33 @@ class Operations:
             raise ValueError("Add a mounted Library Folder in Settings first.")
         if request.kind == "reseed" and len(request.hashes) != 1:
             raise ValueError("Select one checked Candidate.")
-        if request.kind in {"enqueue", "send-queue"}:
-            if request.selection_id:
+        if request.kind in {"enqueue", "send-queue", "edit-queue-selection"}:
+            if request.selection_id and request.selection_source == "queue":
+                from torrentlinker.queue_selection import validate_snapshot
+
+                validate_snapshot(self.setup, request.selection_rows, request.selection_fingerprint)
+            if request.selection_id and request.selection_source == "saved-catalogue":
+                from torrentlinker.queue_selection import validate_catalogue_subset
+
+                validate_catalogue_subset(self.setup, request.selection_rows)
+                if request.kind == "send-queue":
+                    queued_subset = {
+                        e.candidate.infohash: e
+                        for e in entries(self.setup.store)
+                        if e.status == "queued"
+                    }
+                    if any(
+                        r["hash"] not in queued_subset
+                        or queued_subset[r["hash"]].candidate.size != r["size"]
+                        or queued_subset[r["hash"]].candidate.title != r["title"]
+                        or (
+                            r["category"] is not None
+                            and r["category"] not in queued_subset[r["hash"]].candidate.categories
+                        )
+                        for r in request.selection_rows
+                    ):
+                        raise ValueError("Queued entries changed. Review them again.")
+            if request.selection_id and request.selection_source == "catalogue":
                 selected = self.select_catalogue(request.catalogue_selection)
                 if (
                     selected["selection_fingerprint"] != request.selection_fingerprint
@@ -191,9 +226,22 @@ class Operations:
     def select_catalogue(self, criteria: CatalogueCriteria) -> dict[str, Any]:
         from torrentlinker.web.planning import catalogue_status
 
+        excluded = set(criteria.exclude_hashes)
+        if criteria.exclude_queued:
+            excluded.update(
+                e.candidate.infohash for e in entries(self.setup.store) if e.candidate.infohash
+            )
+        if criteria.exclude_seeded:
+            excluded.update(
+                t.hash.lower()
+                for t in self.setup.client().torrents(with_files=False)
+                if t.progress >= 1
+            )
         return {
             **select_catalogue_rows(
-                self.setup.store.catalogue(), self.setup.settings.indexer_categories, criteria
+                (r for r in self.setup.store.catalogue() if r.infohash not in excluded),
+                self.setup.settings.indexer_categories,
+                criteria,
             ),
             "catalogue": catalogue_status(self.setup),
         }
@@ -265,7 +313,16 @@ class Operations:
                 "size": e.candidate.size,
                 "folder": str(e.folder),
                 "status": e.status,
-                "reason": "Check the last job and client state." if e.reason else "",
+                "reason": (
+                    "Check the Torrent Client before removing and queueing this entry again."
+                    if e.status == "uncertain"
+                    else "Check the last job and client state."
+                    if e.reason
+                    else ""
+                ),
+                "priority": e.priority,
+                "added_at": e.added_at,
+                "retry_safe": e.retry_safe,
                 "zen": torrent_zen(
                     self.setup.settings.zen, ZenTorrent(e.candidate.size, e.candidate.seeders + 1)
                 ),
@@ -281,6 +338,30 @@ class Operations:
         self, request: JobRequest, stop: threading.Event, progress: Callable[[Any], None]
     ) -> Any:
         self.validate(request)
+        if request.kind == "edit-queue-selection":
+            if request.queue_action == "retry":
+                for row in request.selection_rows:
+                    self.setup.path_under_root(row["folder"])
+                    self.setup.configure_download_folder(row["folder"])
+                    if row["folder"] not in self.download_destinations():
+                        raise ValueError("The queued destination changed. Review it again.")
+            self.setup.store.edit_downloads(
+                request.selection_rows, request.queue_action, request.priority
+            )
+            return {
+                "rows": [
+                    {"hash": row["hash"], "outcome": request.queue_action}
+                    for row in request.selection_rows
+                ],
+                "removed" if request.queue_action == "remove" else "updated": len(
+                    request.selection_rows
+                ),
+                "downloads_started": False,
+            }
+        if request.kind == "select-queue":
+            from torrentlinker.queue_selection import select_queue
+
+            return select_queue(self.setup, request.queue_selection)
         if request.kind == "select-catalogue":
             return self.select_catalogue(request.catalogue_selection)
         if request.kind == "configure-download-folder":
@@ -524,7 +605,7 @@ class Operations:
         if request.kind == "enqueue":
             folders = self.enqueue_folders(request, verify=True)
             indexer = self.setup.indexer()
-            count = 0
+            candidates = []
             for h in request.hashes:
                 candidate = None if request.selection_id else self.candidates.get(h)
                 if candidate is None:
@@ -541,25 +622,47 @@ class Operations:
                         r.details_url,
                         categories=(r.category,) if r.category is not None else (),
                     )
-                count += enqueue(
+                if not candidate.download_url:
+                    raise ValueError("This torrent has no download link.")
+                candidates.append((h, candidate))
+            count = 0
+            queue_outcomes = []
+            for h, candidate in candidates:
+                added = enqueue(
                     self.setup.store,
                     indexer,
                     candidate,
                     folders[h],
                 )
+                count += added
+                queue_outcomes.append(
+                    {
+                        "hash": h,
+                        "title": candidate.title,
+                        "outcome": "queued" if added else "already_present",
+                    }
+                )
             return {
+                "rows": queue_outcomes,
                 "queued": count,
+                "already_present": len(candidates) - count,
                 "location": "TorrentLinker Search > Download queue",
                 "sent_to_client": False,
                 "downloads_started": False,
                 "next_step": "Use send-queue only if the user asks to start downloads.",
             }
         if request.kind == "send-queue":
+            selected_keys = (
+                {r["key"] for r in request.selection_rows}
+                if request.selection_source == "queue"
+                else None
+            )
             queued_entries = [
                 e
                 for e in entries(self.setup.store)
                 if e.status == "queued"
                 and (not request.hashes or e.candidate.infohash in request.hashes)
+                and (selected_keys is None or e.key in selected_keys)
             ]
             if not queued_entries and self.setup.download_folder(request.category):
                 self.setup.verified_download_folder(request.category)
@@ -573,6 +676,11 @@ class Operations:
                             "A queued destination changed. Remove that entry and queue it again."
                         )
             client = DownloadClient(self.setup)
+            send_options: dict[str, Any] = (
+                {"order": [r["key"] for r in request.selection_rows]}
+                if request.selection_source == "queue"
+                else {}
+            )
             report = run_queue(
                 self.setup.store,
                 self.setup.indexer(),
@@ -580,15 +688,24 @@ class Operations:
                 self.setup.settings.indexer_categories,
                 stop,
                 lambda p: progress(asdict(p)),
-                only={
-                    e.key
-                    for e in entries(self.setup.store)
-                    if e.candidate.infohash in request.hashes
-                }
-                if request.hashes
-                else None,
+                only={e.key for e in queued_entries} if request.hashes else None,
+                **send_options,
             )
+            after = {e.key: e for e in entries(self.setup.store)}
             return {
+                "rows": [
+                    {
+                        "key": e.key,
+                        "hash": e.candidate.infohash,
+                        "title": e.candidate.title,
+                        "outcome": after[e.key].status if e.key in after else "removed",
+                        "reason": after[e.key].reason if e.key in after else "",
+                    }
+                    for e in queued_entries
+                ],
+                "selected_count": len(queued_entries),
+                "total_size_bytes": sum(e.candidate.size for e in queued_entries),
+                "attempted_count": report.handled,
                 "added": len(report.added),
                 "refused": [title for title, _ in report.refused],
                 "failed": [title for title, _ in report.failed],

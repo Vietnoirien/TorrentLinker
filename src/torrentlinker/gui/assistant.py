@@ -34,6 +34,7 @@ from torrentlinker.assistant.models import Conversation, Schedule
 from torrentlinker.assistant.providers import PRESETS, Provider
 from torrentlinker.assistant.research import SearchSettings
 from torrentlinker.gui.chat_transcript import ChatTranscript
+from torrentlinker.gui.request_details import JsonCode, RequestDetails
 from torrentlinker.gui.tasks import run_in_background
 
 
@@ -113,7 +114,8 @@ class AssistantEditor(QDialog):
         advanced.toggled.connect(self.options.setVisible)
         self.permissions = []
         for value, label in [
-            ("downloads", self.tr("Downloads")),
+            ("queue", self.tr("Prepare and edit download queue")),
+            ("downloads", self.tr("Start downloads")),
             ("controls", self.tr("Torrent controls")),
             ("reseed", self.tr("Reseeds")),
             ("uploads", self.tr("Uploads")),
@@ -776,7 +778,7 @@ class AssistantTab(QWidget):
             dialog = QDialog(self)
             dialog.resize(720, 520)
             layout = QVBoxLayout(dialog)
-            text = QPlainTextEdit(json.dumps(event, indent=2, ensure_ascii=False))
+            text = JsonCode(event)
             text.setReadOnly(True)
             layout.addWidget(text)
             result = event.get("result", {})
@@ -815,9 +817,7 @@ class AssistantTab(QWidget):
         dialog.setWindowTitle(self.tr("Review proposal"))
         dialog.resize(720, 520)
         layout = QVBoxLayout(dialog)
-        text = QPlainTextEdit(json.dumps(review, indent=2, ensure_ascii=False))
-        text.setReadOnly(True)
-        layout.addWidget(text)
+        layout.addWidget(RequestDetails({"review": review}))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         approve = buttons.addButton(
             self.tr("Approve this action"), QDialogButtonBox.ButtonRole.AcceptRole

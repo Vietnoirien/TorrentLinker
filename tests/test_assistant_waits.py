@@ -214,7 +214,7 @@ def test_settings_wait_releases_worker_and_resumes_without_new_model_call(tmp_pa
         assert run["calls"] == 2
 
 
-def test_chat_markdown_tables_have_no_embedded_resources():
+def test_chat_markdown_tables_allow_only_proxied_image_resources():
     from torrentlinker.assistant.markdown import render
 
     html = render(
@@ -225,7 +225,8 @@ def test_chat_markdown_tables_have_no_embedded_resources():
     assert "<table>" in html
     assert "<td>Films</td>" in html
     assert "<script>" not in html
-    assert "<img" not in html
+    assert '<img src="api/assistant/image?url=' in html
+    assert 'src="https://' not in html
     assert 'href="javascript:' not in html
     assert 'href="https://example.test"' in html
 

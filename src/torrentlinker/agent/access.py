@@ -19,8 +19,8 @@ class Grant(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     clients: list[str] = Field(min_length=1, max_length=32)
     mode: Literal["propose", "execute"] = "propose"
-    permissions: list[Literal["downloads", "controls", "reseed", "uploads"]] = Field(
-        default_factory=list, max_length=4
+    permissions: list[Literal["queue", "downloads", "controls", "reseed", "uploads"]] = Field(
+        default_factory=list, max_length=5
     )
     daily_bytes: int = Field(default=10 * 1024**3, ge=0)
     daily_torrents: int = Field(default=20, ge=0, le=1000)
@@ -60,6 +60,25 @@ class Access:
                 self.db.execute(
                     "ALTER TABLE reservations ADD COLUMN storage_reconciled INTEGER DEFAULT 0"
                 )
+
+        self._migrate_queue_permissions()
+
+    def _migrate_queue_permissions(self) -> None:
+        """Preserve old grants' queue rights once; new download-only grants stay separate."""
+        if self.db.execute("SELECT 1 FROM config WHERE key='queue_permission_v1'").fetchone():
+            return
+        with self.db:
+            for row in self.db.execute("SELECT id,body FROM grants").fetchall():
+                body = json.loads(row["body"])
+                if (
+                    "downloads" in body.get("permissions", [])
+                    and "queue" not in body["permissions"]
+                ):
+                    body["permissions"].append("queue")
+                    self.db.execute(
+                        "UPDATE grants SET body=? WHERE id=?", (json.dumps(body), row["id"])
+                    )
+            self.db.execute("INSERT INTO config VALUES ('queue_permission_v1','true')")
 
     @property
     def enabled(self) -> bool:

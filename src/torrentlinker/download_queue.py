@@ -15,7 +15,14 @@ from torrentlinker.downloads import IndexerCategory
 from torrentlinker.indexer import Candidate, Indexer, KeyRefused, RateLimited
 from torrentlinker.plan import PlanCandidate
 from torrentlinker.qbit import Qbit
-from torrentlinker.send import LIMIT_WAITS, Refused, SendProgress, SendReport, send_one
+from torrentlinker.send import (
+    LIMIT_WAITS,
+    Refused,
+    SendProgress,
+    SendReport,
+    UncertainSend,
+    send_one,
+)
 from torrentlinker.store import CatalogueRow, Store
 from torrentlinker.torrent_meta import read_torrent
 
@@ -31,6 +38,9 @@ class QueueEntry:
     status: str = "queued"
     reason: str = ""
     client_id: str = "default"
+    priority: int = 0
+    added_at: float = 0
+    retry_safe: bool = False
 
 
 def entries(store: Store, *, all_clients: bool = False) -> list[QueueEntry]:
@@ -50,6 +60,9 @@ def entries(store: Store, *, all_clients: bool = False) -> list[QueueEntry]:
                 status,
                 reason,
                 client_id,
+                int(cast(Any, payload.get("priority", 0))),
+                float(cast(Any, payload.get("added_at", 0))),
+                bool(payload.get("retry_safe", False)),
             )
         )
     return result
@@ -94,14 +107,20 @@ def run_queue(
     wait: Callable[[float], bool] | None = None,
     *,
     only: set[str] | None = None,
+    order: list[str] | None = None,
 ) -> SendReport:
-    """Send in insertion order. Pause leaves remaining items queued; errors are explicit."""
+    """Send by priority and insertion order, or an explicitly reviewed snapshot order."""
     report = SendReport()
     pending = [
         entry
         for entry in entries(store)
         if entry.status == "queued" and (only is None or entry.key in only)
     ]
+    if order is not None:
+        positions = {key: i for i, key in enumerate(order)}
+        if any(entry.key not in positions for entry in pending):
+            raise ValueError("The send order must explicitly include every selected queue entry.")
+        pending.sort(key=lambda entry: positions[entry.key])
     wait = wait or stop.wait
     for entry in pending:
         if stop.is_set():
@@ -124,6 +143,7 @@ def run_queue(
             )
 
         show()
+        accepted = False
         try:
             if entry.indexer_url != indexer.url:
                 raise Refused("The Indexer changed. Search again before downloading this torrent.")
@@ -161,6 +181,7 @@ def run_queue(
                 meta.infohash, c.title, c.size, c.seeders, category, entry.folder
             )
             send_one(client, planned, data, tags=tags)
+            accepted = True
             store.save_catalogue(
                 [
                     CatalogueRow(
@@ -181,7 +202,12 @@ def run_queue(
             report.refused.append((c.title, reason))
         except Exception as error:
             reason = indexer.redact(str(error) or type(error).__name__)
-            store.download_outcome(entry.key, "failed", reason)
+            store.download_outcome(
+                entry.key,
+                "uncertain" if accepted or isinstance(error, UncertainSend) else "failed",
+                reason,
+                retry_safe=not accepted and not isinstance(error, UncertainSend),
+            )
             report.failed.append((c.title, reason))
             if isinstance(error, KeyRefused):
                 report.stopped = True

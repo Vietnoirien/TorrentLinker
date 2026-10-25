@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import posixpath
+import re
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -71,3 +72,8 @@ def link_path(current: str, target: str) -> str:
     if not parsed.path:
         return current
     return posixpath.normpath(posixpath.join(posixpath.dirname(current), unquote(parsed.path)))
+
+
+def heading_anchor(title: str) -> str:
+    """Stable guide anchor shared by rendered pages and agent section references."""
+    return re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")

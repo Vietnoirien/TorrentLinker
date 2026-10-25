@@ -120,8 +120,10 @@ the result is not a claim that every tracker torrent is present.
 
 When requested, `enqueue_selection` takes that job's ID as `selection_id` and queues
 those exact rows. `send_selection` starts only those already-queued entries when
-the user asks to start downloads. Both use normal permissions, approval, folder and
-budget checks. Neither silently replaces missing entries or sends the whole queue.
+the user asks to start downloads. Both use normal permissions, approval and folder checks. Queuing does not
+consume download budgets or reserve disk space: the queue may exceed disk capacity.
+Daily download budgets, torrent limits and free-space reserves apply when sending
+the selected entries to the Torrent Client. Neither silently replaces missing entries or sends the whole queue.
 Catalogue selections belong to their connection and expire after 15 minutes;
 changed selected metadata or ranking requires a fresh selection. Configuring a
 missing folder does not discard the selection.
@@ -129,13 +131,61 @@ missing folder does not discard the selection.
 Saved goals also accept `category`, which `plan_goal` preserves. A Plan optimizes
 Zen within download constraints; use `select_catalogue` for exact size rankings.
 
+## Inspect and edit the download queue
+
+`select_queue` saves up to 1,000 persistent queue entries with category, status,
+title, size, seeder and added-date filters. Choose `sort_by` and `descending` for
+oldest/newest, size, title or priority order. `job_status` keeps whole-selection
+counts and exact byte totals while paging rows. Queue snapshots expire after
+15 minutes; the queue itself persists.
+
+Use `preview_download` with that selection ID for per-item blockers, remaining daily
+allowances, measured capacity/free space, pending allocations and the required
+reserve. Unknown remote space stays unknown. Previewing changes no budget ledger.
+Use `prepare_download_batch` with both `maximum_bytes` and `maximum_torrents` to
+save an exact feasible subset in the selected order. Zero means zero. It keeps the
+larger queue intact and starts nothing. Only an explicit `send_selection` request
+starts that saved batch, with normal owner approval and fresh send checks.
+
+`edit_queue_selection` accepts `remove`, `retry` or `priority`. Removal affects local
+unsent queue records only. Retry requires a definite pre-send failure and a verified
+current destination. Higher persistent priority sends first, then insertion order;
+a saved batch preserves its explicitly selected order. Queue permission permits
+queueing/editing; **Start downloads** is a separate permission. Old saved download
+grants retain their previous queue rights through a one-time migration.
+
+If a send is uncertain or interrupted, inspect the Torrent Client first. Agents
+cannot retry or erase its evidence. If no torrent was accepted, the owner can
+remove that local entry and queue it again manually. Removing a queue record does
+not remove torrents or files from the Torrent Client.
+
+`refine_selection` returns a new subset excluding queued, seeded or another saved
+selection's hashes. It preserves the original. To fill a Catalogue count after
+exclusions, set `exclude_queued`, `exclude_seeded` or `exclude_hashes` on
+`select_catalogue`; those apply before ordering and count. `compare_selections`
+returns exact hash intersections/differences and category counts/bytes from saved
+Catalogue or queue snapshots. Comparisons require the same permitted Torrent Client;
+intersection bytes use the left snapshot's metadata.
+
+## Ask for guidance from the installed documentation
+
+`search_documentation` searches English or French guide titles, headings and text
+without network access. `read_documentation` reads one returned guide/section ID in
+bounded chunks, with `next_offset` for continuation. The tools report missing
+files, the app version, document SHA256 and source type. Source checkout guides can
+differ from released documentation. Cite the returned local section link to open
+that exact installed guide in the browser or native reader. Neither tool changes
+settings, refreshes a Torrent Client or starts a download.
+
 ## Approve and monitor
+
+In Assistant chats, approval cards describe the action and its scope first. Expand **Show full command** to inspect the complete tool arguments and resolved operation as formatted, colored JSON. Large hash lists stay inside a scrollable code block.
 
 Open **Proposals and activity** on desktop, or the **Agent access** page on the web. Inspect the client, operation and selected hashes before approving. Torrent removal and deletion additionally show the torrent names and folders. Rejected proposals do not execute. A pending proposal expires after 15 minutes; changing settings also invalidates pending proposals.
 
 The assistant can follow its jobs and cancel further work. Cancellation does not undo downloads already sent to a Torrent Client. Stable request IDs prevent duplicate submissions after a network retry. Restarted, interrupted actions are not replayed automatically.
 
-You may choose **Execute permitted actions** and grant only the permissions you need. Removal and file deletion always require approval in TorrentLinker. Upload preparation saves Local Drafts; sending a saved revision to c411 always requires approval. Publication remains manual on c411. µTorrent/BitTorrent Classic operations requiring on-disk renames must use the desktop confirmation workflow.
+You may choose **Execute permitted actions** and grant only the permissions you need. Torrent Client removal and file deletion always require approval in TorrentLinker. Upload preparation saves Local Drafts; sending a saved revision to c411 always requires approval. Publication remains manual on c411. µTorrent/BitTorrent Classic operations requiring on-disk renames must use the desktop confirmation workflow.
 
 Budgets are cumulative per connection and reset at UTC midnight. Failed or interrupted sends remain counted conservatively. Pending client downloads count against free space across clients sharing a physical disk. If an interrupted send cannot be reconciled, check the Torrent Client first and use **Release uncertain storage reservation**. This releases the storage hold, not the daily spending record.
 

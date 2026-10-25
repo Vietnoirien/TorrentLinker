@@ -22,6 +22,7 @@ def pick_language(setting: str, system: str | None = None) -> str:
 
 def install(app: QApplication, language: str) -> list[QTranslator]:
     """Install the app's and Qt's own translators; keep the returned list alive."""
+    app.setProperty("language", language)
     if language == "en":
         return []
     installed = []

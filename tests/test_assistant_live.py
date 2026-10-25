@@ -641,3 +641,266 @@ def test_live_catalogue_selection_reports_exact_film_weight(controlled):
     )
     assert browser.get("/api/queue").json() == []
     assert setup.settings.download_folders.default == ""
+
+
+def test_live_oversized_queue_with_zero_download_budget_does_not_start_downloads(
+    controlled, tmp_path, monkeypatch
+):
+    from collections import namedtuple
+    from types import SimpleNamespace
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import PathMapping
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.store import CatalogueRow
+
+    browser, provider, _, _ = controlled
+    setup = browser.app.state.agent_service.setup
+    root = tmp_path / "media"
+    root.mkdir()
+    (root / "existing.epub").write_bytes(b"book")
+    setup.roots = (root,)
+    setup.settings.path_mappings = [PathMapping(str(root), "/downloads")]
+    setup.settings.indexer_categories = {
+        2030: IndexerCategory("Films"),
+        7000: IndexerCategory("Ebook"),
+    }
+    setup.settings.download_folders.by_category = {2030: str(root)}
+    setup.save()
+    client = FakeQbit()
+    client.by_hash["a" * 40] = Torrent(
+        "a" * 40, "Existing book", Path("/downloads"), files={"existing.epub": 4}, progress=1
+    )
+    setup._client = client
+    setup._indexer = SimpleNamespace(
+        url="https://test.invalid", redact=lambda v: v, unredact=lambda v: v
+    )
+    setup.store.save_catalogue(
+        [
+            CatalogueRow(
+                f"{i:040x}", f"Film {i}", 1024**3 + i, 5, 2030, f"https://test.invalid/{i}", "", 1
+            )
+            for i in range(1, 502)
+        ]
+        + [CatalogueRow("f" * 40, "Tiny ebook", 1, 5, 7000, "https://test.invalid/book", "", 1)]
+    )
+    usage = namedtuple("usage", "total used free")(100 * 1024**3, 90 * 1024**3, 10 * 1024**3)
+    monkeypatch.setattr("torrentlinker.agent.budgets.shutil.disk_usage", lambda _: usage)
+    thread = browser.post(
+        "/api/assistant/conversations",
+        json={
+            "name": "Queue larger than disk",
+            "provider_id": provider,
+            "max_calls": 12,
+            "max_seconds": 180,
+            "policy": {
+                "name": "Queue test",
+                "clients": ["default"],
+                "mode": "execute",
+                "permissions": ["queue"],
+                "daily_bytes": 0,
+                "daily_torrents": 0,
+                "reserve_bytes": 0,
+            },
+        },
+    ).json()["id"]
+    result = run(
+        browser,
+        thread,
+        "Mets en file les 500 films les plus légers du catalogue pour le client default. "
+        "Je veux préparer cette file même si elle dépasse la capacité du disque et le budget "
+        "de téléchargement. Ne démarre aucun téléchargement et ne modifie aucun paramètre.",
+        "oversized-queue",
+    )
+    assert result["status"] == "completed", result
+    from torrentlinker.download_queue import entries
+
+    queued = entries(setup.store)
+    assert len(queued) == 500, result
+    assert sum(row.candidate.size for row in queued) > usage.total * 3
+    assert all(row.candidate.categories == (2030,) for row in queued)
+    assert client.downloads == []
+    # Exact arithmetic is supplied by the tool. The model must not invent positive
+    # budgets or disk capacity absent from any result, as the first live run did.
+    answer = re.sub(r"[\s,\u202f\u00a0]", "", result["messages"][-1]["content"]).casefold()
+    assert "536871037250" in answer, result
+    assert "49927" not in answer.replace(".", ""), result
+    assert "5go/jour" not in answer and "5gb/day" not in answer, result
+    assert all(
+        event["tool"] not in {"send_selection", "propose_download_folder"}
+        for event in result["events"]
+    )
+    assert (
+        browser.app.state.agent_service.access.db.execute(
+            "SELECT count(*) FROM reservations"
+        ).fetchone()[0]
+        == 0
+    )
+
+
+@pytest.mark.parametrize("available", [0, 3])
+def test_live_catalogue_shortfall_reports_only_available_films(controlled, available):
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.store import CatalogueRow
+
+    browser, provider, _, _ = controlled
+    setup = browser.app.state.agent_service.setup
+    setup.settings.indexer_categories = {
+        2030: IndexerCategory("Films"),
+        7000: IndexerCategory("Ebook"),
+    }
+    setup.store.save_catalogue(
+        [
+            CatalogueRow(
+                f"{i:040x}", f"Film {i}", 8_000_000, 5, 2030, f"https://test.invalid/{i}", "", 1
+            )
+            for i in range(1, available + 1)
+        ]
+        + [CatalogueRow("f" * 40, "Tiny ebook", 1, 5, 7000, "https://test.invalid/book", "", 1)]
+    )
+    thread = conversation(browser, provider)
+    result = run(
+        browser,
+        thread,
+        "Combien pèsent les 500 films les plus légers du catalogue du client default ? "
+        "S'il y en a moins, donne le nombre disponible et leur poids exact en octets, "
+        "sans estimer les films absents. Ne mets rien en file et ne télécharge rien.",
+        f"catalogue-shortfall-{available}",
+    )
+    assert result["status"] == "completed", result
+    selections = [e for e in result["events"] if e["tool"] == "select_catalogue"]
+    assert selections, result
+    summaries = [
+        browser.app.state.agent_service.jobs.get(e["result"]["job_id"])["result"]
+        for e in selections
+        if "job_id" in e.get("result", {})
+    ]
+    assert any(
+        s["selected_count"] == available and s["total_size_bytes"] == available * 8_000_000
+        for s in summaries
+    )
+    if available:
+        answer = re.sub(r"[\s,.\u202f\u00a0]", "", result["messages"][-1]["content"])
+        assert "24000000" in answer, result
+    assert browser.get("/api/queue").json() == []
+    assert all(
+        e["tool"] not in {"enqueue_selection", "send_selection", "plan_goal", "save_goal"}
+        for e in result["events"]
+    )
+
+
+def test_live_queue_preview_batch_and_queue_only_edit(controlled, tmp_path):
+    from types import SimpleNamespace
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import PathMapping
+    from torrentlinker.download_queue import enqueue, entries
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.indexer import Candidate
+
+    browser, provider, _, _ = controlled
+    setup = browser.app.state.agent_service.setup
+    root = tmp_path / "batch-media"
+    root.mkdir()
+    (root / "existing.epub").write_bytes(b"book")
+    setup.roots = (root,)
+    setup.settings.path_mappings = [PathMapping(str(root), "/downloads")]
+    setup.settings.indexer_categories = {2030: IndexerCategory("Films")}
+    setup.settings.download_folders.by_category = {2030: str(root)}
+    setup.settings.free_space_margin = 0
+    setup.save()
+    client = FakeQbit()
+    client.by_hash["a" * 40] = Torrent(
+        "a" * 40, "Existing book", Path("/downloads"), files={"existing.epub": 4}
+    )
+    setup._client = client
+    setup._indexer = SimpleNamespace(
+        url="https://test.invalid", redact=lambda v: v, unredact=lambda v: v
+    )
+    for number in range(1, 11):
+        enqueue(
+            setup.store,
+            setup.indexer(),
+            Candidate(
+                f"Film {number:02}",
+                10,
+                "https://test.invalid/file",
+                5,
+                f"{number:040x}",
+                categories=(2030,),
+            ),
+            root,
+        )
+    thread = browser.post(
+        "/api/assistant/conversations",
+        json={
+            "name": "Queue preparation and editing",
+            "provider_id": provider,
+            "max_calls": 16,
+            "max_seconds": 180,
+            "policy": {
+                "name": "Queue only",
+                "clients": ["default"],
+                "mode": "execute",
+                "permissions": ["queue"],
+                "daily_bytes": 1024**3,
+                "daily_torrents": 20,
+                "reserve_bytes": 0,
+            },
+        },
+    ).json()["id"]
+    result = run(
+        browser,
+        thread,
+        "Pour le client default, inspecte les 10 films de la file persistante "
+        "dans l’ordre du titre. "
+        "Montre les blocages, le budget restant et l’espace observé. Prépare ensuite un lot exact "
+        "de 2 torrents au maximum et de 20 octets au maximum. Garde les 10 entrées dans la file. "
+        "Ne démarre aucun téléchargement et ne demande pas à changer de permission.",
+        "queue-preview-batch",
+    )
+    assert result["status"] == "completed", result
+    names = {event["tool"] for event in result["events"]}
+    assert {"select_queue", "preview_download", "prepare_download_batch"} <= names, result
+    assert "send_selection" not in names
+    assert len(entries(setup.store)) == 10
+    assert client.downloads == []
+    edited = run(
+        browser,
+        thread,
+        "Retire maintenant seulement Film 01 et Film 02 de la file de téléchargement du client "
+        "default. Tu as la permission de modifier la file. Ne touche à aucun fichier, "
+        "ne supprime aucun torrent du client et ne démarre aucun téléchargement.",
+        "queue-only-edit",
+    )
+    assert edited["status"] == "completed", edited
+    assert any(event["tool"] == "edit_queue_selection" for event in edited["events"]), edited
+    assert [row.candidate.title for row in entries(setup.store)] == [
+        f"Film {i:02}" for i in range(3, 11)
+    ]
+    assert client.downloads == []
+    assert client.removed == []
+    assert (
+        browser.app.state.agent_service.access.db.execute(
+            "SELECT COUNT(*) FROM reservations"
+        ).fetchone()[0]
+        == 0
+    )
+
+
+def test_live_guidance_reads_installed_documentation_and_cites_local_sections(controlled):
+    browser, provider, _, _ = controlled
+    result = run(
+        browser,
+        conversation(browser, provider),
+        "Comment vérifier les chemins de mes dossiers quand mon client torrent tourne "
+        "dans Docker ? "
+        "Consulte les guides français installés, lis la section pertinente et donne un lien vers "
+        "cette section locale. Ne change aucun réglage et ne contacte aucun client torrent.",
+        "installed-documentation-guidance",
+    )
+    assert result["status"] == "completed", result
+    names = {event["tool"] for event in result["events"]}
+    assert {"search_documentation", "read_documentation"} <= names, result
+    assert "/documentation/guide/fr/" in result["messages"][-1]["content"], result
+    assert browser.get("/api/agents").json()["proposals"] == []

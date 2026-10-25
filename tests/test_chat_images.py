@@ -1,0 +1,306 @@
+import os
+import socket
+import threading
+import time
+from html.parser import HTMLParser
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice, QUrl
+from PySide6.QtGui import QImage, QTextDocument
+
+from tests.test_assistant import login
+from torrentlinker.assistant.images import fetch_image
+from torrentlinker.assistant.markdown import render
+from torrentlinker.assistant.research import PublicTransport
+from torrentlinker.web.app import create_app
+
+
+class Elements(HTMLParser):
+    def __init__(self, text):
+        super().__init__()
+        self.elements = []
+        self.feed(text)
+
+    def handle_starttag(self, tag, attrs):
+        self.elements.append((tag, dict(attrs)))
+
+
+def test_chat_embeds_public_covers_with_clickable_originals_and_safe_markup():
+    html = render(
+        "![Book cover](https://covers.example/cover.jpg?edition=2&size=large)\n\n"
+        "[Full cover](https://covers.example/cover.jpg)\n\n"
+        "<script>alert(1)</script>\n\n![local](file:///etc/passwd)"
+    )
+    tags = Elements(html).elements
+    images = [attrs for tag, attrs in tags if tag == "img"]
+    assert len(images) == 1
+    assert images[0]["alt"] == "Book cover"
+    assert images[0]["src"].startswith("api/assistant/image?url=https%3A%2F%2Fcovers.example")
+    assert images[0]["loading"] == "lazy"
+    assert images[0]["referrerpolicy"] == "no-referrer"
+    assert any(
+        attrs.get("href") == "https://covers.example/cover.jpg?edition=2&size=large"
+        for tag, attrs in tags
+        if tag == "a"
+    )
+    assert not any(tag == "script" for tag, _ in tags)
+
+
+@pytest.fixture
+def public_images(monkeypatch):
+    import socket
+
+    pixels = QImage(480, 720, QImage.Format.Format_RGB32)
+    pixels.fill(0xFF225588)
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert pixels.save(buffer, "PNG")
+    png = bytes(buffer.data())
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        if request.url.path == "/redirect":
+            return httpx.Response(302, headers={"location": "http://127.0.0.1/private"})
+        if request.url.path == "/html":
+            return httpx.Response(
+                200, text="<script>bad</script>", headers={"content-type": "image/png"}
+            )
+        if request.url.path == "/large":
+            return httpx.Response(
+                200, content=png + b"x" * 5_000_000, headers={"content-type": "image/png"}
+            )
+        return httpx.Response(200, content=png, headers={"content-type": "image/png"})
+
+    monkeypatch.setattr(
+        PublicTransport,
+        "__init__",
+        lambda self: setattr(self, "http", httpx.MockTransport(respond)),
+    )
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, *args, **kwargs: [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("127.0.0.1" if host == "127.0.0.1" else "93.184.216.34", 443),
+            )
+        ],
+    )
+    fetch_image.cache_clear()
+    yield png, requests
+    fetch_image.cache_clear()
+
+
+def test_chat_image_endpoint_requires_login_and_never_fetches_private_redirects(
+    tmp_path, public_images
+):
+    png, requests = public_images
+    app = create_app(tmp_path, password="test-password-long")
+    with TestClient(app) as browser:
+        assert (
+            browser.get(
+                "/api/assistant/image", params={"url": "https://covers.example/cover.png"}
+            ).status_code
+            == 401
+        )
+        assert not requests
+        login(browser)
+        response = browser.get(
+            "/api/assistant/image", params={"url": "https://covers.example/cover.png"}
+        )
+        assert response.status_code == 200
+        assert response.content == png
+        assert response.headers["content-type"] == "image/png"
+        assert "'self' data:" in response.headers["content-security-policy"]
+        assert requests[0].headers.get("cookie") is None
+        assert requests[0].headers.get("authorization") is None
+        assert requests[0].headers.get("referer") is None
+        for url in [
+            "file:///etc/passwd",
+            "http://127.0.0.1/private",
+            "https://covers.example/redirect",
+            "https://covers.example/html",
+            "https://covers.example/large",
+        ]:
+            failed = browser.get("/api/assistant/image", params={"url": url})
+            assert failed.status_code == 400, url
+        assert not any(request.url.path == "/private" for request in requests)
+
+
+def test_native_cover_loads_async_resizes_and_survives_transcript_refresh(
+    qtbot, public_images, monkeypatch, tmp_path
+):
+    from PySide6.QtGui import QDesktopServices
+
+    from torrentlinker.gui.chat_images import ChatImages
+    from torrentlinker.gui.chat_transcript import MessageText
+
+    _, requests = public_images
+    url = "https://covers.example/cover.png"
+    cache = ChatImages()
+    opened = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda value: opened.append(value.toString()))
+    widget = MessageText(f"![Film poster]({url})", images=cache)
+    qtbot.addWidget(widget)
+    widget.resize(400, 500)
+    widget.show()
+    qtbot.waitUntil(lambda: url in cache.images, timeout=5000)
+    image = widget.document().resource(QTextDocument.ResourceType.ImageResource, QUrl(url))
+    assert isinstance(image, QImage) and not image.isNull()
+    assert image.height() == 360
+    assert "Film poster" in widget.toPlainText()
+    assert widget.height() >= 360
+    original_height = widget.height()
+    widget.anchorClicked.emit(QUrl(url))
+    assert opened == [url]
+    widget.resize(160, 600)
+    qtbot.waitUntil(lambda: widget.height() < original_height)
+    assert widget.horizontalScrollBar().maximum() == 0
+    refreshed = MessageText(f"![Film poster]({url})", images=cache)
+    qtbot.addWidget(refreshed)
+    refreshed.show()
+    qtbot.wait(20)
+    assert len(requests) == 1
+    refreshed.grab().save(str(tmp_path / "chat-cover-native.png"))
+
+
+def test_many_images_are_bounded_and_private_images_stay_text():
+    text = "\n\n".join(f"![cover {i}](https://covers.example/{i}.png)" for i in range(20))
+    tags = Elements(render(text + "\n\n![private](http://192.168.1.1/image)")).elements
+    assert len([tag for tag, _ in tags if tag == "img"]) == 8
+    assert len([tag for tag, _ in tags if tag == "a"]) == 20
+
+
+def test_closing_chat_before_image_response_does_not_touch_deleted_widgets(
+    qtbot, public_images, monkeypatch
+):
+    from torrentlinker.gui.chat_transcript import MessageText
+
+    entered, release, done = threading.Event(), threading.Event(), threading.Event()
+    original = PublicTransport.handle_request
+
+    def delayed(self, request):
+        entered.set()
+        release.wait(5)
+        try:
+            return original(self, request)
+        finally:
+            done.set()
+
+    monkeypatch.setattr(PublicTransport, "handle_request", delayed)
+    widget = MessageText("![Cover](https://covers.example/delayed.png)")
+    widget.show()
+    try:
+        qtbot.waitUntil(entered.is_set)
+        widget.close()
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    finally:
+        release.set()
+    qtbot.waitUntil(done.is_set)
+    qtbot.wait(50)
+
+
+def test_documentation_links_only_open_bundled_guides():
+    tags = Elements(
+        render("[Guide](/documentation/guide/en/agents.md#connections)\n\n[bad](/api/logout)")
+    ).elements
+    assert [attrs["href"] for tag, attrs in tags if tag == "a"] == [
+        "/documentation/guide/en/agents.md#connections"
+    ]
+
+
+@pytest.mark.skipif(os.environ.get("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+def test_browser_cover_uses_authenticated_proxy_and_opens_original(tmp_path, public_images):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_tool_activity import narrative_run
+
+    app = create_app(tmp_path, password="test-password-long")
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", log_config=None))
+    worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+    worker.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.02)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 560, "height": 760})
+            errors, remote = [], []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on(
+                "request",
+                lambda request: (
+                    remote.append(request.url)
+                    if request.url.startswith("https://covers.example")
+                    else None
+                ),
+            )
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            expect(page.locator('[data-view="assistant"]')).to_be_visible()
+            page.evaluate(
+                "html => document.body.append(aMarkdown({html}))",
+                render("![Book cover](https://covers.example/cover.png)"),
+            )
+            image = page.locator(".assistant-markdown img")
+            expect(image).to_be_visible()
+            page.wait_for_function(
+                "document.querySelector('.assistant-markdown img').naturalWidth === 480"
+            )
+            assert image.bounding_box()["height"] <= 360
+            link = page.locator(".assistant-markdown a")
+            expect(link).to_have_attribute("href", "https://covers.example/cover.png")
+            expect(link).to_have_attribute("target", "_blank")
+            assert not errors and not remote
+            page.locator(".assistant-markdown").screenshot(path=str(tmp_path / "chat-cover.png"))
+            page.evaluate(
+                "html => document.body.append(aMarkdown({html}))",
+                render("![Unavailable cover](https://covers.example/html)"),
+            )
+            expect(page.locator(".assistant-image-error")).to_be_visible()
+            expect(page.locator(".assistant-markdown a").last).to_have_attribute(
+                "href", "https://covers.example/html"
+            )
+            run = narrative_run()
+            page.evaluate("run => document.body.append(aRunCard(run))", run)
+            card = page.locator(".assistant-run").last
+            assert card.locator(":scope > *").evaluate_all(
+                "nodes => nodes.map(n => n.className)"
+            ) == [
+                "assistant-message user",
+                "assistant-message assistant",
+                "assistant-activity",
+                "assistant-message assistant",
+            ]
+            activity = card.locator(".assistant-activity")
+            assert "read_documentation" not in activity.locator(":scope > summary").inner_text()
+            assert activity.locator("pre").count() == 0
+            activity.locator(":scope > summary").click()
+            activity.locator(".assistant-tool > summary").click()
+            expect(activity.locator(".assistant-json")).to_be_visible()
+            assert activity.locator(".json-key").count() > 0
+            page.evaluate(
+                "run => document.querySelector('.assistant-run').replaceWith(aRunCard(run))", run
+            )
+            expect(page.locator(".assistant-tool .assistant-json")).to_be_visible()
+            page.locator(".assistant-run").screenshot(path=str(tmp_path / "chat-tool-activity.png"))
+            browser.close()
+    finally:
+        server.should_exit = True
+        worker.join(5)
+        listener.close()

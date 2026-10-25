@@ -127,7 +127,10 @@ indiquée : le résultat ne garantit pas la présence de tous les torrents du tr
 Sur demande, `enqueue_selection` utilise l'identifiant du travail comme
 `selection_id` pour mettre ces entrées précises en file. `send_selection` démarre
 uniquement ces entrées déjà en file lorsque l'utilisateur le demande. Les droits,
-approbations, dossiers et budgets habituels s'appliquent. Les sélections restent
+approbations et dossiers habituels s'appliquent. La mise en file ne consomme aucun
+budget de téléchargement et ne réserve pas d’espace disque : la file peut dépasser
+la capacité du disque. Les budgets journaliers, limites de torrents et réserves
+d’espace libre s’appliquent à l’envoi au client torrent. Les sélections restent
 propres à leur connexion et expirent après 15 minutes. Un changement des métadonnées
 sélectionnées ou du classement impose une nouvelle sélection. La configuration
 d'un dossier manquant ne fait pas perdre la sélection.
@@ -136,7 +139,57 @@ Les objectifs acceptent aussi `category`, que `plan_goal` conserve. Un Plan opti
 le Zen sous contraintes ; pour un classement exact par taille, utilisez
 `select_catalogue`.
 
+## Consulter et modifier la file de téléchargement
+
+`select_queue` enregistre jusqu'à 1 000 entrées de la file persistante avec des
+filtres de catégorie, état, titre, taille, seeders et date d'ajout. `sort_by` et
+`descending` fixent l'ordre par date, taille, titre ou priorité. `job_status` garde
+les comptes et octets exacts de toute la sélection malgré la pagination. La
+sélection expire après 15 minutes ; la file reste enregistrée.
+
+`preview_download` indique les blocages par entrée, les budgets quotidiens restants,
+la capacité et l'espace libre mesurés, les allocations en cours et la réserve.
+Un espace distant inconnu reste inconnu. Cet aperçu ne modifie aucun budget.
+`prepare_download_batch` exige `maximum_bytes` et `maximum_torrents` et enregistre
+un sous-ensemble précis qui respecte ces limites et les contraintes observées,
+dans l'ordre sélectionné. Zéro signifie zéro. La file complète reste intacte.
+Seul un appel explicite à `send_selection` démarre ce lot, avec les approbations
+habituelles et de nouveaux contrôles avant l'envoi.
+
+`edit_queue_selection` accepte `remove`, `retry` ou `priority`. Le retrait concerne
+uniquement les entrées locales non envoyées. Réessayer exige un échec certain avant
+l'ajout au client et un dossier actuel vérifié. Les priorités élevées passent en
+premier, puis l'ordre d'ajout ; un lot enregistré conserve son ordre explicite.
+Le droit de préparer/modifier la file est distinct du droit de démarrer les
+téléchargements. Une migration unique conserve les anciens droits des connexions.
+
+Après un envoi incertain ou interrompu, vérifiez le client torrent. Un agent ne
+peut ni réessayer ni effacer la trace. Si aucun torrent n'a été accepté, le
+propriétaire peut retirer l'entrée locale puis la remettre en file manuellement.
+Retirer cette entrée ne supprime aucun torrent ni fichier du client torrent.
+
+`refine_selection` crée un nouveau sous-ensemble en excluant les éléments déjà en
+file, en seed ou dans une autre sélection. La sélection initiale reste intacte.
+Pour atteindre un nombre demandé après exclusion, utilisez `exclude_queued`,
+`exclude_seeded` ou `exclude_hashes` dans `select_catalogue`, avant le tri et la
+limite. `compare_selections` calcule les intersections/différences de hashes et les
+comptes/octets par catégorie des sélections de Catalogue ou de file, pour le même
+client torrent autorisé. Les octets de l'intersection viennent de la sélection gauche.
+
+## Consulter la documentation installée avec l'assistant
+
+`search_documentation` recherche dans les titres, sections et textes des guides
+français ou anglais, sans accès réseau. `read_documentation` lit un identifiant de
+guide/section renvoyé par la recherche, par portions limitées avec `next_offset`.
+Les outils indiquent les fichiers manquants, la version de l'app, le SHA256 du
+document et son origine. Les guides d'un dépôt source peuvent différer d'une
+version publiée. Le lien local renvoyé ouvre la section exacte du guide installé,
+dans le navigateur ou le lecteur natif. Aucun réglage, actualisation du client
+torrent ou téléchargement n'est lancé.
+
 ## Approuver et suivre les actions
+
+Dans les discussions de l’Assistant, les cartes d’approbation décrivent d’abord l’action et sa portée. Dépliez **Afficher la commande complète** pour consulter les arguments de l’outil et l’opération résolue en JSON formaté et coloré. Les longues listes de hashes restent dans un bloc de code défilant.
 
 Ouvrez **Propositions et activité** sur le bureau ou **Accès des agents** sur le web. Vérifiez le client, l'opération et les torrents avant d'approuver. Le retrait et la suppression affichent aussi les noms et les dossiers. Une proposition refusée n'est pas exécutée. Une proposition en attente expire après 15 minutes ; une modification des paramètres l'invalide également.
 

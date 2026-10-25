@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt
 from tests.fake_qbit import FakeQbit
 from tests.test_download_queue import setup_queue
 from torrentlinker.config import ClientProfile, Settings
-from torrentlinker.download_queue import entries
+from torrentlinker.download_queue import enqueue, entries
 from torrentlinker.gui.search_view import SearchTab
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.store import Store
@@ -106,8 +106,17 @@ def test_queue_worker_and_restart_recovery(qtbot, tmp_path):
     store, indexer, client, c, data, folder = setup_queue(tmp_path)
     key = entries(store)[0].key
     store.download_outcome(key, "sending")
+    store = Store(tmp_path / "state.db")
     view = SearchTab(store, Settings(), lambda: indexer, lambda: client)
     qtbot.addWidget(view)
+    assert entries(store)[0].status == "uncertain"
+    assert not view.start.isEnabled()
+    assert "Check Torrent Client" in view.queue.item(0, 5).text()
+    # After checking the client, the owner explicitly removes and queues it again.
+    view.queue.selectRow(0)
+    view.remove_selected()
+    enqueue(store, indexer, c, folder)
+    view.refresh_queue()
     assert entries(store)[0].status == "queued"
     assert not client.downloads
     view.start.click()

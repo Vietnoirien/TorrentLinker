@@ -80,14 +80,16 @@ def test_unknown_category_does_not_offer_to_configure_a_global_default(operation
 
 @pytest.mark.parametrize("shared_disk", [False, True])
 @pytest.mark.parametrize("game_free", [4, 3])
-def test_batch_storage_checks_each_disk_and_combines_shared_destinations(
+def test_queue_does_not_reserve_space_on_shared_or_separate_disks(
     operations, tmp_path, monkeypatch, shared_disk, game_free
 ):
     from torrentlinker.agent import budgets
     from torrentlinker.agent.access import Access, Grant
 
     access = Access(tmp_path)
-    grant = Grant(name="Test", clients=["default"], reserve_bytes=0)
+    grant = Grant(
+        name="Test", clients=["default"], daily_bytes=0, daily_torrents=0, reserve_bytes=0
+    )
     operations.setup.settings.free_space_margin = 0
     monkeypatch.setattr(budgets, "outstanding", lambda *args: 0)
     monkeypatch.setattr(budgets, "disk_of", lambda folder: "one" if shared_disk else folder.name)
@@ -98,13 +100,9 @@ def test_batch_storage_checks_each_disk_and_combines_shared_destinations(
     )
     request = JobRequest(kind="enqueue", hashes=["a" * 40, "b" * 40])
     try:
-        if shared_disk or game_free < 4:
-            with pytest.raises(ValueError, match="reserve"):
-                budgets.reserve(access, "proposal", "actor", grant, operations, request)
-        else:
-            assert budgets.reserve(access, "proposal", "actor", grant, operations, request) == {
-                "a" * 40: 4,
-                "b" * 40: 4,
-            }
+        assert budgets.reserve(access, "proposal", "actor", grant, operations, request) == {}
+        result = operations.run(request, threading.Event(), lambda _: None)
+        assert result["queued"] == 2
+        assert access.db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0] == 0
     finally:
         access.db.close()

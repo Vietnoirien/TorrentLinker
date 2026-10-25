@@ -1,11 +1,22 @@
 """Owner APIs share the application's cookie and CSRF protection."""
 
+from fastapi import HTTPException, Response
+
+from torrentlinker.assistant.images import fetch_image
 from torrentlinker.assistant.models import Conversation, Decision, Message, Schedule, UserAnswer
 from torrentlinker.assistant.providers import Provider
 from torrentlinker.assistant.research import SearchSettings
 
 
 def routes(app, assistant):
+    @app.get("/api/assistant/image")
+    def image(url: str):
+        try:
+            data, kind = fetch_image(url)
+        except Exception:
+            raise HTTPException(400, "Image unavailable. Open its source link instead.") from None
+        return Response(data, media_type=kind, headers={"X-Content-Type-Options": "nosniff"})
+
     @app.get("/api/setup/assistant")
     def setup():
         return assistant.setup()

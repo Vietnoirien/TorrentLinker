@@ -69,9 +69,6 @@ class SearchTab(QWidget):
         self._native_params: dict[str, str] = {}
         self._native_page: SearchPage | None = None
         self._result_indexer: Indexer | None = None
-        for entry in entries(store):
-            if entry.status == "sending":
-                store.download_outcome(entry.key, "queued")
         workspace = QVBoxLayout(self)
         workspace.setContentsMargins(0, 0, 0, 0)
         queue_access = QHBoxLayout()
@@ -648,6 +645,16 @@ class SearchTab(QWidget):
         added = 0
         pending: set[str] = set()
         for page, (indexer, destination, key, existing) in prepared:
+            if existing and (
+                existing.status in {"sending", "uncertain"}
+                or (existing.status == "failed" and not existing.retry_safe)
+            ):
+                page.action_status.setText(
+                    self.tr(
+                        "Check the Torrent Client before removing and queueing this entry again."
+                    )
+                )
+                continue
             if existing and existing.status == "sent":
                 page.action_status.setText(self.tr("Already sent to the torrent client."))
                 continue
@@ -712,6 +719,13 @@ class SearchTab(QWidget):
             raise ValueError(self.tr("This torrent has no download link."))
         key = queue_key(indexer, candidate)
         existing = next((entry for entry in entries(self.store) if entry.key == key), None)
+        if existing and (
+            existing.status in {"sending", "uncertain"}
+            or (existing.status == "failed" and not existing.retry_safe)
+        ):
+            raise ValueError(
+                self.tr("Check the Torrent Client before removing and queueing this entry again.")
+            )
         if existing and existing.status == "sent":
             return current, existing.folder, key, existing
         destination = Path(folder).expanduser() if folder else None
@@ -794,6 +808,7 @@ class SearchTab(QWidget):
             "sending": self.tr("Sending…"),
             "sent": self.tr("Sent to client"),
             "failed": self.tr("Failed"),
+            "uncertain": self.tr("Check Torrent Client before retrying"),
             "refused": self.tr("Skipped"),
         }
         self.queue.blockSignals(True)
@@ -884,7 +899,11 @@ class SearchTab(QWidget):
         self.runner = None
         for entry in entries(self.store):
             if entry.status == "sending":
-                self.store.download_outcome(entry.key, "queued")
+                self.store.download_outcome(
+                    entry.key,
+                    "uncertain",
+                    "Interrupted send. Check the Torrent Client before retrying.",
+                )
         self.refresh_queue()
         self.queue_status.setText(error_text(error))
 
@@ -899,7 +918,9 @@ class SearchTab(QWidget):
             return
         selected = set(self.selected_keys())
         for entry in entries(self.store):
-            if entry.key in selected and entry.status in ("failed", "refused"):
+            if entry.key in selected and (
+                entry.status == "refused" or (entry.status == "failed" and entry.retry_safe)
+            ):
                 self.store.download_outcome(entry.key, "queued")
         self.refresh_queue()
 

@@ -75,7 +75,8 @@ class AgentDialog(QDialog):
         self.permissions = []
         for key, title in (
             ("controls", self.tr("Pause, recheck and resume completed torrents")),
-            ("downloads", self.tr("Downloads")),
+            ("queue", self.tr("Prepare and edit download queue")),
+            ("downloads", self.tr("Start downloads")),
             ("reseed", self.tr("Reseed")),
             ("uploads", self.tr("Upload drafts and seeding")),
         ):

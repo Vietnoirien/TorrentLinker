@@ -2,6 +2,8 @@
 
 Français · [English](README.en.md) · [Documentation](docs/README.md)
 
+Dépôt principal : [GitHub](https://github.com/Vietnoirien/TorrentLinker) · [Miroir du dépôt](https://git.mma.dev/Vietnoirien/TorrentLinker)
+
 Retrouvez les torrents qui correspondent à vos fichiers et remettez-les en seed dans **qBittorrent, Deluge ou Transmission**, avec une prise en charge expérimentale de **µTorrent Classic et BitTorrent Classic**. TorrentLinker recherche les correspondances auprès d’un indexeur Torznab comme **c411**, puis fait vérifier les fichiers par le client torrent avant de lancer le partage.
 
 ![TorrentLinker : suivi Zen, catégories et notes des torrents](docs/guide/images/zen.png)

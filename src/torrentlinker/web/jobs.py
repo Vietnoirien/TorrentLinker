@@ -46,13 +46,11 @@ class Jobs:
                 ).fetchone()
             )
 
-    def submit(
-        self,
-        kind: str,
-        work: Callable[[threading.Event, Callable[[Any], None]], Any],
-        *,
-        client_id: str = "default",
-    ) -> str:
+    def check_capacity(self, kind: str, client_id: str = "default") -> str | None:
+        """Check before reserving download budgets; return an existing refresh job if any.
+
+        Callers that reserve before submit must hold this lock across both operations.
+        """
         with self.lock:
             if self.closed:
                 raise ValueError("Server is shutting down.")
@@ -69,6 +67,19 @@ class Jobs:
             ).fetchone()[0]
             if count >= 20:
                 raise ValueError("Too many pending jobs. Wait for the current work to finish.")
+            return None
+
+    def submit(
+        self,
+        kind: str,
+        work: Callable[[threading.Event, Callable[[Any], None]], Any],
+        *,
+        client_id: str = "default",
+    ) -> str:
+        with self.lock:
+            existing = self.check_capacity(kind, client_id)
+            if existing is not None:
+                return existing
             identifier = uuid.uuid4().hex
             stop = self.stops[identifier] = threading.Event()
             with self.db:

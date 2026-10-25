@@ -8,6 +8,7 @@ from PySide6.QtCore import QSignalBlocker, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QImage, QTextBlockFormat, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -204,6 +205,27 @@ class DocumentationTab(QWidget):
         if fragment:
             url.setFragment(fragment)
         self.browser.setSource(url, QTextDocument.ResourceType.MarkdownResource)
+        if fragment:
+            self._scroll_to_heading(fragment)
+            # The dialog may not have a laid-out viewport until the next event loop turn.
+            QTimer.singleShot(0, self.browser, lambda: self._scroll_to_heading(fragment))
+
+    def _scroll_to_heading(self, fragment: str) -> None:
+        if self.browser.source().fragment() != fragment:
+            return
+        # QTextDocument's Markdown importer does not create named heading anchors.
+        block = self.browser.document().begin()
+        seen: dict[str, int] = {}
+        while block.isValid():
+            if block.blockFormat().headingLevel():
+                anchor = docs.heading_anchor(block.text())
+                number = seen.get(anchor, 0)
+                seen[anchor] = number + 1
+                if anchor + ("-" + str(number) if number else "") == fragment:
+                    self.browser.setTextCursor(QTextCursor(block))
+                    self.browser.ensureCursorVisible()
+                    break
+            block = block.next()
 
     def _follow(self, url: QUrl) -> None:
         if url.scheme() in {"http", "https"}:
@@ -231,3 +253,22 @@ class DocumentationTab(QWidget):
         except (ValueError, OSError):
             name = "README.md"
         QDesktopServices.openUrl(QUrl(docs.ONLINE + name))
+
+
+def show_guide(parent: QWidget, name: str, fragment: str = "") -> QDialog:
+    """Open an allowlisted guide in a nonmodal reader for an Assistant citation."""
+    allowed = {g["path"] for language in ("en", "fr") for g in docs.guides(language)}
+    if name not in allowed:
+        raise ValueError("Not a bundled guide.")
+    docs.document_path(name)
+    dialog = QDialog(parent)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+    dialog.setWindowTitle("TorrentLinker documentation")
+    dialog.resize(1000, 750)
+    layout = QVBoxLayout(dialog)
+    language = name.split("/")[1]
+    reader = DocumentationTab(language)
+    layout.addWidget(reader)
+    reader.open_guide(name, fragment)
+    dialog.show()
+    return dialog

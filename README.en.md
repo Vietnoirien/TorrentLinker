@@ -1,5 +1,7 @@
 # TorrentLinker
 
+Main repository: [GitHub](https://github.com/Vietnoirien/TorrentLinker) · [Repository mirror](https://git.mma.dev/Vietnoirien/TorrentLinker)
+
 [Français](README.md) · English · [Documentation](docs/README.md)
 
 Find torrents matching your existing files and reseed them in **qBittorrent, Deluge or Transmission**, with experimental support for **µTorrent Classic and BitTorrent Classic**. TorrentLinker searches a Torznab Indexer such as **c411**, then asks your torrent client to verify the files before seeding.

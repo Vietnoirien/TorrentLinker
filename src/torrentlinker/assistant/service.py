@@ -74,6 +74,7 @@ class Assistant:
             )
 
         self.migrate_chat_limits()
+        self.migrate_queue_permissions()
 
     def delete_conversation(self, identifier):
         with self.lock, self.db:
@@ -111,6 +112,29 @@ class Assistant:
             self.db.execute("DELETE FROM runs WHERE conversation_id=?", (identifier,))
             self.db.execute("DELETE FROM conversations WHERE id=?", (identifier,))
         return {"deleted": True}
+
+    def migrate_queue_permissions(self):
+        with self.lock, self.db:
+            if self.db.execute("SELECT 1 FROM options WHERE key='queue_permission_v1'").fetchone():
+                return
+            for row in self.db.execute("SELECT id,body,actor FROM conversations").fetchall():
+                body = json.loads(row["body"])
+                permissions = body.get("policy", {}).get("permissions", [])
+                if "downloads" in permissions and "queue" not in permissions:
+                    permissions.append("queue")
+                    self.db.execute(
+                        "UPDATE conversations SET body=? WHERE id=?", (json.dumps(body), row["id"])
+                    )
+            row = self.db.execute("SELECT value FROM options WHERE key='chat_defaults'").fetchone()
+            if row:
+                body = json.loads(row[0])
+                permissions = body.get("policy", {}).get("permissions", [])
+                if "downloads" in permissions and "queue" not in permissions:
+                    permissions.append("queue")
+                    self.db.execute(
+                        "UPDATE options SET value=? WHERE key='chat_defaults'", (json.dumps(body),)
+                    )
+            self.db.execute("INSERT INTO options VALUES ('queue_permission_v1','1')")
 
     def migrate_chat_limits(self):
         with self.lock, self.db:
@@ -354,6 +378,7 @@ class Assistant:
             return {"id": run}
 
     def run(self, identifier, *, rendered=False):
+        from torrentlinker.agent.presentation import request_summary, tool_description
         from torrentlinker.assistant.markdown import render
 
         with self.lock:
@@ -367,7 +392,18 @@ class Assistant:
                     {**m, "html": render(m["content"])} if rendered else m
                     for m in json.loads(row["messages"])
                 ],
-                "events": json.loads(row["events"]),
+                "events": [
+                    {
+                        **event,
+                        "summary": {lang: request_summary(event, lang) for lang in ("en", "fr")},
+                        "description": {
+                            lang: tool_description(event, lang) for lang in ("en", "fr")
+                        },
+                    }
+                    if rendered
+                    else event
+                    for event in json.loads(row["events"])
+                ],
             }
 
     def history(self, conversation_id="", *, rendered=False):
@@ -468,6 +504,16 @@ class Assistant:
                 "You are TorrentLinker Assistant. Use tools for facts and actions."
                 " Call overview first. "
                 "Use explicit client IDs. Never claim success without a successful job result. "
+                "When calling tools, you may give one short plain-language note about the "
+                "actions you are about to take. Keep that note brief and report results afterward. "
+                "For setup/how-to questions, search_documentation then read_documentation "
+                "to consult the installed EN/FR guides before claiming a feature or instruction. "
+                "Cite the returned reference_url and heading. Respect app_version/source_kind; "
+                "source-checkout docs can differ from a released version. Missing documentation "
+                "is unavailable evidence, not permission to invent an answer. "
+                "Show observed posters/covers with Markdown ![alt](image_url), and ordinary "
+                "Markdown links when appropriate. Only use image URLs actually returned by "
+                "a tool or supplied by the user; never invent cover URLs. "
                 "enqueue only saves to TorrentLinker Search > Download queue. "
                 "It does not add torrents to the torrent client or start downloads. "
                 "Never describe enqueued entries as already present in qBittorrent. "
@@ -483,6 +529,17 @@ class Assistant:
                 "catalogue queries. Report the cache coverage and any selection shortfall. "
                 "Use the selection summary's min/max sizes; never infer them from a results page. "
                 "Only use enqueue_selection with its job_id when asked to queue that selection. "
+                "For persistent queue work use select_queue, then preview_download for per-item "
+                "blockers, measured space and today's remaining allowances. Unknown is unknown. "
+                "Use prepare_download_batch with both explicit byte and torrent caps to save a "
+                "subset; zero caps mean zero. This never starts downloads or removes queued items. "
+                "Only use send_selection for an explicit request to start the saved batch. "
+                "Use edit_queue_selection for removal, safe retries and persistent priority. "
+                "Queue permission and start-download permission are separate. "
+                "Use refine_selection to filter saved rows without changing the original, "
+                "and compare_selections for exact differences and grouped totals. To fill a "
+                "catalogue count after exclusions, select_catalogue with exclude_queued and "
+                "exclude_seeded criteria, which apply before ranking and count. "
                 "For an explicitly named torrent hash, use propose_action with "
                 "kind=manage, action and hashes; do not create a bulk selection. "
                 "A selection_id is the completed selection job's ID, never a torrent hash. "
@@ -490,6 +547,13 @@ class Assistant:
                 "for an identical retry. "
                 "When a tool result already contains job.status=completed, use that "
                 "result without redundant polling or resubmission. "
+                "The download queue may exceed disk capacity and daily download budgets. "
+                "Those limits apply when sending downloads, not when adding to the queue. "
+                "Report budget, disk capacity and free-space figures only when a tool returned "
+                "them for the current client. Do not invent values or infer capacity from free "
+                "space. A zero daily download budget means zero, not unlimited or a default. "
+                "Quote total_size_bytes exactly. GB/Go uses 1,000,000,000 bytes; GiB/Gio uses "
+                "1,073,741,824 bytes. Use the tool's formatted total_size_display when provided. "
                 "Prepare uploads with upload-preview, then save them locally with upload-queue. "
                 "Automated tasks must stop after saving to the local review queue. "
                 "Use list_items collection=upload-queue to read saved forms and revisions. "
@@ -666,6 +730,8 @@ class Assistant:
                             {
                                 "role": "assistant",
                                 "content": self.secrets.redact(text, public_urls=True),
+                                "phase": "commentary" if calls else "final",
+                                "model_turn": calls_used,
                             }
                         )
                     self.update_run(
@@ -712,6 +778,8 @@ class Assistant:
                             self.secrets.redact(json.dumps(args), public_urls=True)
                         ),
                         "status": "running",
+                        "after_message_index": len(transcript) - 1,
+                        "model_turn": calls_used,
                     }
                     if waiting is None:
                         events.append(event)
@@ -745,6 +813,8 @@ class Assistant:
                                             self.secrets.redact(json.dumps(args), public_urls=True)
                                         ),
                                         "status": "running",
+                                        "after_message_index": len(transcript) - 1,
+                                        "model_turn": calls_used,
                                     }
                                     events.append(event)
                                     self.update_run(identifier, events=json.dumps(events))
@@ -1333,6 +1403,7 @@ class Assistant:
                 events.append(
                     {
                         "tool": "propose_action",
+                        "arguments": {"operation": {"kind": kind, "client_id": client_id}},
                         "client_id": client_id,
                         "status": "finished",
                         "result": result,

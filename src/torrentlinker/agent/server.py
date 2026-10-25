@@ -17,6 +17,7 @@ from torrentlinker.agent import goals
 from torrentlinker.agent.goals import Goal
 from torrentlinker.agent.service import AgentRequest, AgentService
 from torrentlinker.catalogue_selection import CatalogueCriteria
+from torrentlinker.queue_selection import QueueCriteria
 from torrentlinker.torrent_selection import SelectionCriteria
 from torrentlinker.web.operations import DownloadFolderRequired
 
@@ -55,6 +56,8 @@ def make_server(service: AgentService):
         "TorrentLinker",
         instructions=(
             "Call overview first. Use explicit client IDs and stable request IDs. "
+            "For app setup/how-to guidance, search_documentation then read_documentation "
+            "and cite the installed guide heading/reference URL and source metadata. "
             "Mutations may return proposals requiring approval in TorrentLinker. "
             "For bulk torrent management, use select_torrents then manage_selection; "
             "the server filters, ranks, counts and retains the exact selection. "
@@ -94,6 +97,43 @@ def make_server(service: AgentService):
                 return {"error": "Operation unavailable. Check TorrentLinker's activity."}
 
         return guarded
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def search_documentation(
+        query: Annotated[str, Field(min_length=1, max_length=500)],
+        language: Literal["en", "fr"] = "en",
+        limit: Annotated[int, Field(ge=1, le=10)] = 5,
+    ) -> dict[str, object]:
+        """Search the installed app's EN/FR guides by title, heading and content, offline.
+
+        Use for setup and how-to questions before guessing app features. Results include safe
+        document/section IDs, bounded snippets, exact source metadata and local citation links.
+        No client refresh, settings change or download. Missing docs are reported honestly.
+        """
+        from torrentlinker.agent.documentation import search
+
+        service.access.grant(ACTOR.get())
+        return search(query, language, limit)
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def read_documentation(
+        document_id: str,
+        language: Literal["en", "fr"] = "en",
+        section_id: str = "",
+        offset: Page = 0,
+        limit: Annotated[int, Field(ge=1, le=6000)] = 4000,
+    ) -> dict[str, object]:
+        """Read a bounded installed guide or named section using IDs returned by search.
+
+        Follow next_offset for continuation. Cite reference_url with heading/app version;
+        source-checkout docs may differ from online releases. Never accept arbitrary paths.
+        """
+        from torrentlinker.agent.documentation import read
+
+        service.access.grant(ACTOR.get())
+        return read(document_id, language, section_id, offset, limit)
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
@@ -203,12 +243,160 @@ def make_server(service: AgentService):
 
     @mcp.tool(structured_output=True)
     @safe
+    def select_queue(request_id: str, client_id: str, criteria: QueueCriteria) -> dict[str, object]:
+        """Save an exact queue snapshot with category/status/date filters and stable ordering.
+
+        Totals cover the whole selection. No Catalogue refresh, reservation or download.
+        The returned job_id can be used with preview_download and prepare_download_batch.
+        """
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(kind="select-queue", client_id=client_id, queue_selection=criteria),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def preview_download(selection_id: str) -> dict[str, object]:
+        """Read per-item blockers, measured space and remaining daily budgets for a saved queue.
+
+        Makes no reservation. Unknown capacity stays null, with observation time and uncertainty.
+        """
+        from torrentlinker.agent.download_preview import preview
+
+        client_id, saved = service.selection(ACTOR.get(), selection_id, kind=None)
+        return preview(service, ACTOR.get(), client_id, saved)
+
+    @mcp.tool(structured_output=True)
+    @safe
+    def prepare_download_batch(
+        request_id: str,
+        selection_id: str,
+        maximum_bytes: Annotated[int, Field(ge=0)],
+        maximum_torrents: Annotated[int, Field(ge=0, le=1000)],
+    ) -> dict[str, object]:
+        """Save an exact feasible subset in saved order, bounded by both explicit caps.
+
+        Zero means zero. Leaves the larger queue intact and reserves nothing. Use send_selection
+        with the returned job_id only when asked to start this exact batch; normal approval applies.
+        """
+        client_id, _ = service.selection(ACTOR.get(), selection_id, kind=None)
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="prepare-download-batch",
+                client_id=client_id,
+                source_selection_id=selection_id,
+                batch_bytes=maximum_bytes,
+                batch_torrents=maximum_torrents,
+            ),
+        )
+
+    @mcp.tool(structured_output=True)
+    @safe
+    def edit_queue_selection(
+        request_id: str,
+        selection_id: str,
+        action: Literal["remove", "retry", "priority"],
+        priority: Annotated[int, Field(ge=-1000, le=1000)] = 0,
+    ) -> dict[str, object]:
+        """Edit exact saved queue rows under the queue permission, without sending downloads.
+
+        Remove only definitively unsent entries. Retry only known pre-send failures after
+        destination validation. Uncertain or interrupted sends require owner investigation.
+        Priority is persistent; larger values send first, then insertion order.
+        """
+        client_id, saved = service.selection(ACTOR.get(), selection_id, kind=None)
+        if saved["source"] != "queue" or not saved["rows"]:
+            raise ValueError("Select a nonempty queue selection first.")
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="edit-queue-selection",
+                client_id=client_id,
+                selection_id=selection_id,
+                selection_source="queue",
+                selection_rows=saved["rows"],
+                selection_fingerprint=saved["selection_fingerprint"],
+                queue_action=action,
+                priority=priority,
+            ),
+        )
+
+    @mcp.tool(structured_output=True)
+    @safe
+    def refine_selection(
+        request_id: str,
+        selection_id: str,
+        exclude_queued: bool = False,
+        exclude_seeded: bool = False,
+        exclude_selection_id: str = "",
+    ) -> dict[str, object]:
+        """Save a new subset, excluding queued, seeded or another saved selection's hashes.
+
+        Filters the saved rows in their existing order, without changing or widening the original.
+        Unavailable client observations fail rather than assuming nothing is seeded.
+        """
+        client_id, _ = service.selection(ACTOR.get(), selection_id, kind=None)
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="refine-selection",
+                client_id=client_id,
+                source_selection_id=selection_id,
+                exclude_queued=exclude_queued,
+                exclude_seeded=exclude_seeded,
+                exclude_selection_id=exclude_selection_id,
+            ),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def compare_selections(left_selection_id: str, right_selection_id: str) -> dict[str, object]:
+        """Read exact hash intersections/differences and category counts/bytes of saved snapshots.
+
+        No mutation, arithmetic over pages or implicit client changes. Metadata totals for each
+        side come from that snapshot; intersection totals use the left snapshot's metadata.
+        """
+        from torrentlinker.queue_selection import statistics
+
+        left_client, left = service.selection(ACTOR.get(), left_selection_id, kind=None)
+        right_client, right = service.selection(ACTOR.get(), right_selection_id, kind=None)
+        if left_client != right_client:
+            raise ValueError("Selections must belong to the same Torrent Client.")
+        if any(not row.get("hash") for row in left["rows"] + right["rows"]):
+            raise ValueError(
+                "Cannot compare unknown torrent identities. Select identified entries first."
+            )
+        # Compare torrent identities, deduplicating rows from separate Indexers.
+        left_rows = list({r["hash"]: r for r in left["rows"]}.values())
+        right_rows = list({r["hash"]: r for r in right["rows"]}.values())
+        left_hashes = {r["hash"] for r in left_rows}
+        right_hashes = {r["hash"] for r in right_rows}
+
+        def group(rows):
+            return {**statistics(rows), "hashes": [r["hash"] for r in rows]}
+
+        return {
+            "left": group(left_rows),
+            "right": group(right_rows),
+            "intersection": group([r for r in left_rows if r["hash"] in right_hashes]),
+            "left_only": group([r for r in left_rows if r["hash"] not in right_hashes]),
+            "right_only": group([r for r in right_rows if r["hash"] not in left_hashes]),
+        }
+
+    @mcp.tool(structured_output=True)
+    @safe
     def enqueue_selection(request_id: str, selection_id: str) -> dict[str, object]:
         """Queue the exact saved select_catalogue rows when the user asks to download them.
 
         No manual hash copying or substitution. Each category uses its own folder;
-        missing folders require owner input and approval. Existing permissions and
-        download budgets apply. Changed selections require a new selection/review.
+        missing folders require owner input and approval. Queueing does not reserve
+        disk space or use download budgets; those limits apply when sending downloads.
+        Changed selections require a new selection/review.
         This only saves the TorrentLinker download queue; it does not start downloads.
         Reuse request_id only for an identical retry.
         """

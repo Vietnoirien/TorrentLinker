@@ -159,6 +159,14 @@
         <source>Confirm removal</source>
         <translation>Confirmer le retrait</translation>
     </message>
+    <message>
+        <source>Prepare and edit download queue</source>
+        <translation>Préparer et modifier la file de téléchargement</translation>
+    </message>
+    <message>
+        <source>Start downloads</source>
+        <translation>Démarrer les téléchargements</translation>
+    </message>
 </context>
 <context>
     <name>AssistantEditor</name>
@@ -397,6 +405,14 @@
         <location filename="../gui/assistant.py" line="160"/>
         <source>No limit</source>
         <translation>Sans limite</translation>
+    </message>
+    <message>
+        <source>Prepare and edit download queue</source>
+        <translation>Préparer et modifier la file de téléchargement</translation>
+    </message>
+    <message>
+        <source>Start downloads</source>
+        <translation>Démarrer les téléchargements</translation>
     </message>
 </context>
 <context>
@@ -3962,6 +3978,14 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>{0} torrent tabs open</source>
         <translation>{0} onglets torrent ouverts</translation>
     </message>
+    <message>
+        <source>Check Torrent Client before retrying</source>
+        <translation>Vérifier le client torrent avant de réessayer</translation>
+    </message>
+    <message>
+        <source>Check the Torrent Client before removing and queueing this entry again.</source>
+        <translation>Vérifier le client torrent avant de retirer et remettre cette entrée en file.</translation>
+    </message>
 </context>
 <context>
     <name>SeedingTree</name>
@@ -6533,6 +6557,35 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <location filename="../gui/zen_view.py" line="883"/>
         <source>Catalogue</source>
         <translation>Catalogue</translation>
+    </message>
+</context>
+<context>
+    <name>JsonCode</name>
+    <message>
+        <source>Full command (JSON)</source>
+        <translation>Commande complète (JSON)</translation>
+    </message>
+</context>
+<context>
+    <name>RequestDetails</name>
+    <message>
+        <source>Show full command</source>
+        <translation>Afficher la commande complète</translation>
+    </message>
+    <message>
+        <source>Hide full command</source>
+        <translation>Masquer la commande complète</translation>
+    </message>
+</context>
+<context>
+    <name>ToolActivity</name>
+    <message>
+        <source>%1 calls · %2 tokens</source>
+        <translation>%1 appels · %2 tokens</translation>
+    </message>
+    <message>
+        <source>Open receipt</source>
+        <translation>Ouvrir le reçu</translation>
     </message>
 </context>
 </TS>

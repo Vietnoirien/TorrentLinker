@@ -278,20 +278,45 @@ def test_catalogue_filter_ranges_descendants_ties_and_unknown_sizes():
         CatalogueCriteria(min_size_bytes=20, max_size_bytes=10)
 
 
-def test_selection_respects_download_budget(catalogue_app):
-    _, browser, _ = catalogue_app
+@pytest.mark.parametrize("limit", ["bytes", "torrents", "space"])
+def test_large_queue_is_allowed_but_actual_send_respects_limits(catalogue_app, monkeypatch, limit):
+    from collections import namedtuple
+
+    app, browser, _ = catalogue_app
+    limits = (
+        {"daily_bytes": 1}
+        if limit == "bytes"
+        else {"daily_torrents": 0}
+        if limit == "torrents"
+        else {}
+    )
     restricted = browser.post(
-        "/api/agents", json={"name": "Limited", "clients": ["default"], "daily_bytes": 1}
+        "/api/agents", json={"name": "Limited", "clients": ["default"], **limits}
     ).json()
     token = restricted["token"]
+    # A 4-byte selection is larger than this entire 1-byte disk, not just its free space.
+    if limit == "space":
+        usage = namedtuple("usage", "total used free")(1, 1, 0)
+        monkeypatch.setattr("torrentlinker.agent.budgets.shutil.disk_usage", lambda _: usage)
     identifier = selection(browser, token)
     proposal = call(
         browser, token, "enqueue_selection", {"request_id": "queue", "selection_id": identifier}
     )["structuredContent"]
-    denied = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")
+    approved = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")
+    assert approved.is_success, approved.text
+    assert finished(browser, approved.json()["job_id"])["status"] == "completed"
+    assert len(browser.get("/api/queue").json()) == 1
+    assert (
+        app.state.agent_service.access.db.execute("SELECT count(*) FROM reservations").fetchone()[0]
+        == 0
+    )
+    send = call(
+        browser, token, "send_selection", {"request_id": "send", "selection_id": identifier}
+    )["structuredContent"]
+    denied = browser.post(f"/api/agents/proposals/{send['id']}/approve")
     assert denied.status_code == 400
-    assert "budget" in denied.text
-    assert browser.get("/api/queue").json() == []
+    assert ("reserve" if limit == "space" else "budget") in denied.text
+    assert browser.get("/api/queue").json()[0]["status"] == "queued"
 
 
 def test_send_selection_only_sends_its_queued_rows(catalogue_app, monkeypatch):

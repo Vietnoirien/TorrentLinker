@@ -41,13 +41,31 @@ Try:
 
 > Refresh my NAS client. Prepare a Plan of at most three ebooks, below 30 MiB. Show sizes, folders and estimated Zen income before proposing downloads.
 
-Action links show parameters and results. **Review proposal** opens the approval dialog. Proposals can expire or become invalid after settings change; request a new proposal in that case.
+Model notes appear before their compact tool activity, with the final answer below.
+Open an activity line to see readable call descriptions, then expand a call for the
+exact arguments and results as formatted, colored JSON. Expanded details stay open
+during refresh. Approval cards and questions stay visible. **Review proposal** opens
+the approval dialog. Proposals can expire or become invalid after settings change; request a new proposal in that case.
 
 **Execute within limits** allows the action types selected under **Permissions and limits**. You choose the clients, daily download size and count, and free-space reserve. Removing torrents and deleting files always require approval.
 
 Download budgets belong to each discussion or task. They are not a global budget shared by every agent.
 
 **Stop** interrupts the model loop and requests cancellation of submitted jobs. It cannot undo an action already performed. Check history and your torrent client before trying again.
+
+## Documentation, posters and covers in chat
+
+For setup questions, the Assistant can search and read the installed English or
+French guides through the shared MCP tools. Local section links open the matching
+guide in the Web UI or a separate native reader. These tools work offline and
+identify the app version and exact source document.
+
+The model can display a poster or cover using `![Description](https://...)`, or
+include an ordinary clickable image link. It must use a URL supplied by you or
+observed in a tool result. Images load as bounded thumbnails through TorrentLinker;
+click the source link to open the original. If an image is unavailable or unsupported,
+the description/link remains available. This adds display support, not an automatic
+poster search or image generation service.
 
 ## Schedule a task
 

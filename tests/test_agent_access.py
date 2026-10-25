@@ -181,7 +181,9 @@ def test_zero_download_budget_cannot_be_bypassed_by_owner_approval(tmp_path, mon
             200,
             text=(
                 '<rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><item>'
-                "<title>Book</title><size>1024</size><link>https://tracker.example/file</link>"
+                "<title>Book</title><size>1024</size>"
+                '<enclosure url="https://tracker.example/file" length="1024" '
+                'type="application/x-bittorrent"/>'
                 '<torznab:attr name="infohash" value="' + "a" * 40 + '"/>'
                 "</item></channel></rss>"
             ),
@@ -243,9 +245,22 @@ def test_zero_download_budget_cannot_be_bypassed_by_owner_approval(tmp_path, mon
         )["structuredContent"]
         assert "id" in proposal, proposal
         approved = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")
-        assert approved.status_code == 400, approved.text
-        assert "budget" in approved.text.lower()
-        assert browser.get("/api/queue").json() == []
+        assert approved.is_success, approved.text
+        queued = finished(browser, approved.json()["job_id"])
+        assert queued["status"] == "completed", queued
+        assert len(browser.get("/api/queue").json()) == 1
+        send = call(
+            browser,
+            token,
+            "propose_action",
+            {
+                "request_id": "send",
+                "operation": {"kind": "send-queue", "client_id": "default", "hashes": ["a" * 40]},
+            },
+        )["structuredContent"]
+        denied = browser.post(f"/api/agents/proposals/{send['id']}/approve")
+        assert denied.status_code == 400
+        assert "budget" in denied.text.lower()
 
 
 def test_saved_goal_uses_estimates_without_changing_the_actual_class(tmp_path):
@@ -381,6 +396,17 @@ def test_download_budget_accounts_for_incomplete_client_data(tmp_path, monkeypat
     store.save_catalogue(
         [CatalogueRow("b" * 40, "Next book", 1000, 5, 7000, "https://example/file", "", 0)]
     )
+    from types import SimpleNamespace
+
+    from torrentlinker.download_queue import enqueue
+    from torrentlinker.indexer import Candidate
+
+    enqueue(
+        store,
+        SimpleNamespace(url="https://example", redact=lambda value: value),
+        Candidate("Next book", 1000, "https://example/file", 5, infohash="b" * 40),
+        root,
+    )
     setup = DesktopSetup(settings, tmp_path / "settings.json", store)
     pending = Torrent(
         "a" * 40, "Downloading book", Path(root), size=1000, progress=0, state="downloading"
@@ -410,7 +436,7 @@ def test_download_budget_accounts_for_incomplete_client_data(tmp_path, monkeypat
             "propose_action",
             {
                 "request_id": "queue-next",
-                "operation": {"kind": "enqueue", "client_id": "default", "hashes": ["b" * 40]},
+                "operation": {"kind": "send-queue", "client_id": "default", "hashes": ["b" * 40]},
             },
         )["structuredContent"]
         result = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")

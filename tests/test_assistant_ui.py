@@ -455,7 +455,9 @@ def test_browser_inline_question_approval_and_safe_table(tmp_path):
             page.on(
                 "request",
                 lambda request: (
-                    remote.append(request.url) if "resource.test" in request.url else None
+                    remote.append(request.url)
+                    if request.url.startswith("https://resource.test/")
+                    else None
                 ),
             )
             page.goto(f"http://127.0.0.1:{port}/")
@@ -486,12 +488,17 @@ def test_browser_inline_question_approval_and_safe_table(tmp_path):
             assert client.paused == ["a" * 40]
             assert (
                 page.locator(
-                    ".assistant-markdown script, .assistant-markdown img, "
-                    ".assistant-markdown a[href^='javascript:']"
+                    ".assistant-markdown script, .assistant-markdown a[href^='javascript:']"
                 ).count()
                 == 0
             )
             assert not remote
+            assert (
+                page.locator(
+                    ".assistant-markdown a[href='https://resource.test/image.png']"
+                ).count()
+                == 1
+            )
             assert not errors
             page.screenshot(path=str(tmp_path / "assistant-inline-web.png"))
             browser.close()

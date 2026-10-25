@@ -10,7 +10,7 @@ from dataclasses import asdict
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import ConfigDict, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from torrentlinker.agent.access import Access, Grant
 from torrentlinker.web.jobs import Jobs
@@ -21,6 +21,9 @@ READ_JOBS = {
     "refresh",
     "select-torrents",
     "select-catalogue",
+    "select-queue",
+    "prepare-download-batch",
+    "refine-selection",
     "search",
     "scan",
     "check",
@@ -32,7 +35,8 @@ READ_JOBS = {
 }
 PERMISSIONS = {
     "configure-download-folder": "download-folder",
-    "enqueue": "downloads",
+    "enqueue": "queue",
+    "edit-queue-selection": "queue",
     "send-queue": "downloads",
     "manage": "controls",
     "reseed": "reseed",
@@ -45,6 +49,12 @@ PERMISSIONS = {
 
 
 class AgentRequest(JobRequest):
+    source_selection_id: str = ""
+    batch_bytes: int = Field(default=0, ge=0)
+    batch_torrents: int = Field(default=0, ge=0, le=1000)
+    exclude_queued: bool = False
+    exclude_seeded: bool = False
+    exclude_selection_id: str = Field(default="", max_length=64)
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="before")
@@ -102,6 +112,12 @@ class AgentService:
             self.target(actor, identifier)
         if set(body.client_budgets) - set(body.client_ids):
             raise ValueError("Budgets must refer to the selected clients.")
+        with self.access.lock:
+            previous = self.access.db.execute(
+                "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
+            ).fetchone()
+            if previous and AgentRequest.model_validate_json(previous["body"]) == body:
+                return self.proposal(previous["id"])
         target.validate(body)
         if body.kind == "configure-download-folder":
             checked = target.setup.configure_download_folder(
@@ -116,7 +132,7 @@ class AgentService:
                 "SELECT * FROM proposals WHERE grant_id=? AND request_id=?", (actor, request_id)
             ).fetchone()
             if row:
-                if row["body"] != serialized:
+                if AgentRequest.model_validate_json(row["body"]) != body:
                     raise ValueError("This request_id already belongs to a different operation.")
                 return self.proposal(row["id"])
             self.validate_selection(actor, body)
@@ -241,6 +257,7 @@ class AgentService:
             self.limits(identifier, actor, grant, target, body)
             from torrentlinker.agent.budgets import reserve
 
+            self.jobs.check_capacity(body.kind, body.client_id)
             sizes = reserve(self.access, identifier, actor, grant, target, body)
             # Record intent before submitting. A crash never replays an uncertain mutation.
             with self.access.db:
@@ -266,6 +283,77 @@ class AgentService:
                     )
                 try:
                     self.validate_selection(actor, body)
+                    if body.kind == "refine-selection":
+                        from torrentlinker.download_queue import entries
+                        from torrentlinker.queue_selection import snapshot, validate_snapshot
+
+                        client_id, saved = self.selection(
+                            actor, body.source_selection_id, kind=None
+                        )
+                        if saved["source"] == "queue":
+                            validate_snapshot(
+                                target.setup, saved["rows"], saved["selection_fingerprint"]
+                            )
+                        excluded = set()
+                        if body.exclude_queued:
+                            excluded.update(
+                                e.candidate.infohash for e in entries(target.setup.store)
+                            )
+                        if body.exclude_seeded:
+                            excluded.update(
+                                t.hash.lower()
+                                for t in target.setup.client().torrents(with_files=False)
+                                if t.progress >= 1
+                            )
+                        if body.exclude_selection_id:
+                            other_client, other = self.selection(
+                                actor, body.exclude_selection_id, kind=None
+                            )
+                            if other_client != client_id:
+                                raise ValueError(
+                                    "Selections must belong to the same Torrent Client."
+                                )
+                            excluded.update(r["hash"] for r in other["rows"])
+                        rows = [r for r in saved["rows"] if r["hash"] not in excluded]
+                        result = snapshot(rows, saved["source"], saved["criteria"])
+                        result.update(
+                            excluded_count=len(saved["rows"]) - len(rows),
+                            parent_selection_id=body.source_selection_id,
+                        )
+                        return result
+                    if body.kind == "prepare-download-batch":
+                        from torrentlinker.agent.download_preview import preview
+                        from torrentlinker.queue_selection import snapshot
+
+                        client_id, saved = self.selection(
+                            actor, body.source_selection_id, kind=None
+                        )
+                        observed = preview(
+                            self,
+                            actor,
+                            client_id,
+                            saved,
+                            maximum_bytes=body.batch_bytes,
+                            maximum_torrents=body.batch_torrents,
+                        )
+                        chosen = [
+                            row
+                            for row, check in zip(saved["rows"], observed["rows"], strict=True)
+                            if check["fits_now"]
+                        ]
+                        excluded = [
+                            {"hash": row["hash"], "blockers": row["blockers"]}
+                            for row in observed["rows"]
+                            if not row["fits_now"]
+                        ]
+                        result = snapshot(chosen, "queue", saved["criteria"])
+                        result.update(
+                            excluded=excluded,
+                            preview={k: v for k, v in observed.items() if k != "rows"},
+                            maximum_bytes=body.batch_bytes,
+                            maximum_torrents=body.batch_torrents,
+                        )
+                        return result
                     return target.run(body, stop, progress)
                 except Exception:
                     if body.kind in {"refresh", "select-torrents"}:
@@ -290,7 +378,7 @@ class AgentService:
             return self.proposal(identifier)
 
     def selection(
-        self, actor: str, identifier: str, *, kind: str = "select-torrents"
+        self, actor: str, identifier: str, *, kind: str | None = "select-torrents"
     ) -> tuple[str, dict]:
         """Resolve an immutable, connection-owned completed selection, not a caller's hashes."""
         self.access.grant(actor)
@@ -301,10 +389,17 @@ class AgentService:
             if proposal is None:
                 raise ValueError("Selection not found for this connection.")
             body = AgentRequest.model_validate_json(proposal["body"])
-            if body.kind != kind:
-                raise ValueError(
-                    f"Use a completed {kind.replace('-', '_')} job as the selection_id."
-                )
+            if (kind is not None and body.kind != kind) or (
+                kind is None
+                and body.kind
+                not in {
+                    "select-catalogue",
+                    "select-queue",
+                    "prepare-download-batch",
+                    "refine-selection",
+                }
+            ):
+                raise ValueError(f"Use a completed {kind or 'selection'} job as the selection_id.")
             self.target(actor, body.client_id)
             result = self.jobs.get(identifier)
             if result["status"] != "completed" or not isinstance(result["result"], dict):
@@ -317,7 +412,51 @@ class AgentService:
             return body.client_id, snapshot
 
     def validate_selection(self, actor: str, body: AgentRequest) -> None:
+        if body.kind == "edit-queue-selection" and (
+            not body.selection_id or body.selection_source != "queue" or not body.selection_rows
+        ):
+            raise ValueError("Queue edits require a nonempty saved queue selection.")
+        if body.selection_source != "catalogue" and not body.selection_id:
+            raise ValueError("A saved selection ID is required.")
+        if body.kind in {"prepare-download-batch", "refine-selection"}:
+            client_id, _ = self.selection(actor, body.source_selection_id, kind=None)
+            if body.client_id != client_id:
+                raise ValueError("The operation must use the saved selection's Torrent Client.")
         if not body.selection_id:
+            return
+        if body.selection_source == "saved-catalogue":
+            client_id, saved = self.selection(actor, body.selection_id, kind=None)
+            if (
+                saved["source"] != "catalogue"
+                or body.kind not in {"enqueue", "send-queue"}
+                or body.client_id != client_id
+                or body.hashes != [r["hash"] for r in saved["rows"]]
+                or body.selection_rows != saved["rows"]
+                or body.selection_fingerprint != saved["selection_fingerprint"]
+            ):
+                raise ValueError("The operation does not match the saved catalogue subset.")
+            return
+        if body.selection_source == "queue":
+            from torrentlinker.queue_selection import validate_snapshot
+
+            client_id, saved = self.selection(actor, body.selection_id, kind=None)
+            if (
+                body.kind not in {"send-queue", "edit-queue-selection"}
+                or saved["source"] != "queue"
+                or body.client_id != client_id
+                or body.hashes
+                != (
+                    []
+                    if body.kind == "edit-queue-selection"
+                    else [r["hash"] for r in saved["rows"]]
+                )
+                or body.selection_rows != saved["rows"]
+                or body.selection_fingerprint != saved["selection_fingerprint"]
+            ):
+                raise ValueError("The operation does not match the saved queue selection.")
+            validate_snapshot(
+                self.target(actor, client_id).setup, saved["rows"], saved["selection_fingerprint"]
+            )
             return
         if body.kind in {"enqueue", "send-queue"}:
             client_id, snapshot = self.selection(actor, body.selection_id, kind="select-catalogue")
@@ -388,7 +527,41 @@ class AgentService:
                 if body.kind != kind or body.selection_id != selection_id:
                     raise ValueError("This request_id already belongs to a different operation.")
                 return self.proposal(previous["id"])
-            client_id, snapshot = self.selection(actor, selection_id, kind="select-catalogue")
+            client_id, snapshot = self.selection(actor, selection_id, kind=None)
+            if snapshot["source"] == "queue":
+                if kind != "send-queue":
+                    raise ValueError("Queue selections are already queued.")
+                if not snapshot["rows"]:
+                    raise ValueError("The queue selection is empty.")
+                return self.request(
+                    actor,
+                    request_id,
+                    AgentRequest(
+                        kind=kind,
+                        client_id=client_id,
+                        selection_id=selection_id,
+                        hashes=[r["hash"] for r in snapshot["rows"]],
+                        selection_source="queue",
+                        selection_rows=snapshot["rows"],
+                        selection_fingerprint=snapshot["selection_fingerprint"],
+                    ),
+                )
+            if snapshot.get("parent_selection_id"):
+                if not snapshot["rows"]:
+                    raise ValueError("The refined selection is empty.")
+                return self.request(
+                    actor,
+                    request_id,
+                    AgentRequest(
+                        kind=kind,
+                        client_id=client_id,
+                        selection_id=selection_id,
+                        selection_source="saved-catalogue",
+                        selection_rows=snapshot["rows"],
+                        hashes=[r["hash"] for r in snapshot["rows"]],
+                        selection_fingerprint=snapshot["selection_fingerprint"],
+                    ),
+                )
             if not snapshot["rows"]:
                 raise ValueError("The catalogue selection is empty. Adjust its criteria first.")
             return self.request(
@@ -460,6 +633,7 @@ class AgentService:
         if body.kind == "manage" and body.action in {"remove", "delete"}:
             preview = Confirmations(target.setup).preview(body)
             preview.pop("token")
+            preview["operation"] = body.model_dump()
             preview["client"] = target.setup.settings.profile().name
             return preview
         if body.kind == "configure-download-folder":
@@ -484,18 +658,20 @@ class AgentService:
                 "client": target.setup.settings.profile().name,
                 "local_draft": target.setup.store.local_draft(body.draft_id),
             }
-        if body.selection_id and body.kind in {"enqueue", "send-queue"}:
-            _, snapshot = self.selection(
-                row["grant_id"], body.selection_id, kind="select-catalogue"
-            )
+        if body.selection_id and body.kind in {"enqueue", "send-queue", "edit-queue-selection"}:
+            _, snapshot = self.selection(row["grant_id"], body.selection_id, kind=None)
             return {
                 "operation": body.model_dump(),
+                "client": target.setup.settings.profile().name,
+                "category_names": {
+                    str(k): v.name for k, v in target.setup.settings.indexer_categories.items()
+                },
                 "selection": {
                     k: snapshot[k]
                     for k in ("criteria", "selected_count", "total_size_bytes", "coverage")
                 },
             }
-        return {"operation": body.model_dump()}
+        return {"operation": body.model_dump(), "client": target.setup.settings.profile().name}
 
     def enable(self, enabled: bool) -> None:
         with self.access.lock:

@@ -88,7 +88,8 @@ class Research:
     def __init__(self, secrets, settings):
         self.secrets, self.settings = secrets, settings
 
-    def fetch(self, url, *, headers=None, maximum=512000):
+    @staticmethod
+    def fetch(url, *, headers=None, maximum=512000):
         if len(url) > 4096:
             raise ValueError("URL is too long.")
         with httpx.Client(

@@ -229,6 +229,12 @@ class Store:
         with self._lock, self._db:
             self._db.executescript(SCHEMA)
             self._migrate()
+            self._db.execute(
+                "UPDATE download_queue SET status='uncertain', retry_safe=0, "
+                "reason='Interrupted send. Check the Torrent Client "
+                "before removing and queueing again.' "
+                "WHERE status='sending'"
+            )
 
     def for_client(self, identifier: str) -> Store:
         """An immutable client scope sharing caches, SQLite connection and its lock."""
@@ -338,21 +344,111 @@ class Store:
     def queued_downloads(self) -> list[tuple[str, dict[str, object], str, str]]:
         with self._lock:
             rows = self._db.execute(
-                "SELECT id, payload, status, reason FROM download_queue ORDER BY added_at, rowid"
+                "SELECT id, payload, status, reason, priority, added_at, retry_safe "
+                "FROM download_queue ORDER BY priority DESC, added_at, rowid"
             ).fetchall()
-        return [(key, json.loads(payload), status, reason) for key, payload, status, reason in rows]
+        return [
+            (
+                key,
+                {
+                    **json.loads(payload),
+                    "priority": priority,
+                    "added_at": added_at,
+                    "retry_safe": bool(retry_safe),
+                },
+                status,
+                reason,
+            )
+            for key, payload, status, reason, priority, added_at, retry_safe in rows
+        ]
 
-    def download_outcome(self, key: str, status: str, reason: str = "") -> None:
+    def download_outcome(
+        self, key: str, status: str, reason: str = "", *, retry_safe: bool = False
+    ) -> None:
         with self._lock, self._db:
             self._db.execute(
-                "UPDATE download_queue SET status=?, reason=? WHERE id=?", (status, reason, key)
+                "UPDATE download_queue SET status=?, reason=?, retry_safe=? WHERE id=?",
+                (status, reason, int(retry_safe), key),
             )
 
     def remove_downloads(self, keys: list[str]) -> None:
         with self._lock, self._db:
             self._db.executemany("DELETE FROM download_queue WHERE id=?", [(key,) for key in keys])
 
+    def edit_downloads(self, expected: list[dict], action: str, priority: int = 0) -> None:
+        """Atomically edit only unchanged, definitively unsent queue rows."""
+        with self._lock, self._db:
+            current = {
+                key: (
+                    {
+                        **json.loads(payload),
+                        "priority": priority_value,
+                        "added_at": added_at,
+                        "retry_safe": bool(retry_safe),
+                    },
+                    status,
+                )
+                for key, payload, status, priority_value, added_at, retry_safe in self._db.execute(
+                    "SELECT id,payload,status,priority,added_at,retry_safe FROM download_queue"
+                )
+            }
+            for row in expected:
+                payload, status = current.get(row["key"], ({}, "missing"))
+                candidate = payload.get("candidate", {})
+                actual = {
+                    "key": row["key"],
+                    "hash": candidate.get("infohash"),
+                    "title": candidate.get("title"),
+                    "size": candidate.get("size"),
+                    "seeders": candidate.get("seeders"),
+                    "categories": list(candidate.get("categories", [])),
+                    "folder": payload.get("folder"),
+                    "indexer_url": payload.get("indexer_url"),
+                    "status": status,
+                    "priority": payload.get("priority"),
+                    "added_at": payload.get("added_at"),
+                    "retry_safe": payload.get("retry_safe"),
+                }
+                if any(actual[k] != v for k, v in row.items() if k != "category"):
+                    raise ValueError("Queue selection changed. Review it again.")
+                safe = status in {"queued", "refused"} or (
+                    status == "failed" and payload.get("retry_safe")
+                )
+                if (
+                    not safe
+                    or (
+                        action == "retry" and not (status == "failed" and payload.get("retry_safe"))
+                    )
+                    or (action == "priority" and status != "queued")
+                ):
+                    raise ValueError(
+                        "Only definitively unsent entries can be edited; "
+                        "uncertain sends require owner investigation."
+                    )
+            for row in expected:
+                if action == "remove":
+                    self._db.execute("DELETE FROM download_queue WHERE id=?", (row["key"],))
+                elif action == "retry":
+                    self._db.execute(
+                        "UPDATE download_queue SET status='queued',reason='',retry_safe=0 "
+                        "WHERE id=?",
+                        (row["key"],),
+                    )
+                elif action == "priority":
+                    self._db.execute(
+                        "UPDATE download_queue SET priority=? WHERE id=?", (priority, row["key"])
+                    )
+                else:
+                    raise ValueError("Unknown queue edit action.")
+
     def _migrate(self) -> None:
+        queue_columns = {r[1] for r in self._db.execute("PRAGMA table_info(download_queue)")}
+        for name, definition in {
+            "priority": "INTEGER NOT NULL DEFAULT 0",
+            "retry_safe": "INTEGER NOT NULL DEFAULT 0",
+        }.items():
+            if name not in queue_columns:
+                self._db.execute(f"ALTER TABLE download_queue ADD COLUMN {name} {definition}")
         feed_columns = {r[1] for r in self._db.execute("PRAGMA table_info(catalogue_feed)")}
         if "head_hashes" not in feed_columns:
             self._db.execute(

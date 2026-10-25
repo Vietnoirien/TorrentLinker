@@ -54,6 +54,10 @@ class _Stopped(Exception):
     pass
 
 
+class UncertainSend(Exception):
+    """The client may have accepted the torrent; never retry automatically."""
+
+
 class Refused(Exception):
     pass
 
@@ -92,6 +96,10 @@ def send_one(
         return qbit.download(data, str(candidate.folder), tags if tags is not None else [ZEN_TAG])
     except AlreadyInClient as e:  # added meanwhile, e.g. by a Reseed
         raise Refused(str(e)) from e
+    except Refused:
+        raise
+    except Exception as e:
+        raise UncertainSend(str(e) or type(e).__name__) from e
 
 
 def send_plan(

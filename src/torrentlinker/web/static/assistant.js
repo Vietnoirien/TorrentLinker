@@ -145,36 +145,92 @@ function aMarkdown(message) {
   // HTML comes only from the server's restricted Markdown renderer.
   if (message.html) content.innerHTML = message.html;
   else content.textContent = message.content;
-  for (const link of content.querySelectorAll("a")) link.rel = "noopener noreferrer";
+  for (const link of content.querySelectorAll("a")) {
+    link.rel = "noopener noreferrer";
+    link.target = "_blank";
+  }
+  for (const image of content.querySelectorAll("img")) {
+    image.addEventListener("error", () => {
+      image.replaceWith(element("span", at("Image unavailable", "Image indisponible"), "assistant-image-error"));
+    }, {once: true});
+  }
   return content;
 }
 const assistantExpandedActivity = new Set();
-function aRunCard(run) {
-  const card = element("article", undefined, "assistant-run");
-  const activity = element("details", undefined, "assistant-activity");
-  activity.open = assistantExpandedActivity.has(run.id);
-  activity.addEventListener("toggle", () => { if (activity.isConnected) activity.open ? assistantExpandedActivity.add(run.id) : assistantExpandedActivity.delete(run.id); });
-  activity.append(element("summary", `${at("Activity", "Activité")} · ${run.events.length} · ${aStatus(run.status)}`));
-  activity.append(element("p", `${new Date(run.created * 1000).toLocaleString()} · ${run.calls} ${at("calls", "appels")} · ${run.tokens} tokens`, "muted"));
-  if (run.compactions) activity.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "muted"));
-  for (const m of run.messages) {
-    const block = element("div", undefined, `assistant-message ${m.role}`);
-    block.append(element("strong", m.role === "user" ? at("You", "Vous") : "Assistant"), aMarkdown(m)); card.append(block);
+const assistantExpandedCommands = new Set();
+function aCommand(event, key) {
+  const details = element("details", undefined, "assistant-command");
+  details.open = assistantExpandedCommands.has(key);
+  const summary = element("summary");
+  const update = () => { summary.textContent = details.open ? at("Hide full command", "Masquer la commande complète") : at("Show full command", "Afficher la commande complète"); };
+  update();
+  details.addEventListener("toggle", () => {
+    update();
+    if (details.isConnected) details.open ? assistantExpandedCommands.add(key) : assistantExpandedCommands.delete(key);
+  });
+  const command = Object.fromEntries(["tool", "arguments", "review"].filter(k => k in event).map(k => [k, event[k]]));
+  details.append(summary, aJson(command));
+  return details;
+}
+function aJson(value) {
+  const pre = element("pre", undefined, "assistant-json"), code = element("code");
+  pre.setAttribute("tabindex", "0");
+  pre.setAttribute("aria-label", at("Full command (JSON)", "Commande complète (JSON)"));
+  const text = JSON.stringify(value, null, 2);
+  const tokens = /"(?:\\.|[^"\\])*"\s*(?=:)|"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+  let end = 0;
+  for (const match of text.matchAll(tokens)) {
+    code.append(document.createTextNode(text.slice(end, match.index)));
+    const value = match[0], next = text.slice(match.index + value.length).trimStart();
+    const kind = next.startsWith(":") ? "key" : value.startsWith('"') ? "string" : ["true", "false", "null"].includes(value) ? "literal" : "number";
+    code.append(element("span", value, `json-${kind}`));
+    end = match.index + value.length;
   }
-  if (run.error) card.append(element("p", run.error, "error"));
-  for (const event of run.events) {
-    const detail = element("details"), result = event.result || {};
-    detail.append(element("summary", `${event.tool} · ${aStatus(event.status)}`), element("pre", JSON.stringify({arguments: event.arguments, result}, null, 2)));
-    const index = run.events.indexOf(event);
+  code.append(document.createTextNode(text.slice(end))); pre.append(code);
+  return pre;
+}
+
+const assistantExpandedToolEvents = new Set();
+const aToolDescription = event => at(event.description?.en, event.description?.fr) || event.tool.replaceAll("_", " ");
+function aActivity(card, run, indexed, anchor) {
+  const key = `${run.id}:${anchor}`;
+  const activity = element("details", undefined, "assistant-activity");
+  activity.open = assistantExpandedActivity.has(key);
+  activity.addEventListener("toggle", () => { if (activity.isConnected) activity.open ? assistantExpandedActivity.add(key) : assistantExpandedActivity.delete(key); });
+  const usage = `${run.calls} ${at("calls", "appels")} · ${run.tokens} tokens`;
+  const label = indexed.length ? `${aToolDescription(indexed.at(-1)[1])} · ${indexed.length}` : usage;
+  let groupStatus = indexed.length ? (indexed.find(([, event]) => ["running", "waiting", "failed"].includes(event.status))?.[1].status || "finished") : run.status;
+  if (groupStatus === "waiting") groupStatus = run.status;
+  activity.append(element("summary", `${label} · ${aStatus(groupStatus)}`));
+  const entries = element("div", undefined, "assistant-tool-list");
+  entries.append(element("p", usage, "assistant-usage"));
+  if (run.compactions) entries.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "assistant-usage"));
+  activity.append(entries); card.append(activity);
+  for (const [index, event] of indexed) {
+    const detail = element("details", undefined, "assistant-tool"), result = event.result || {};
+    const eventKey = `${run.id}:${index}`;
+    detail.append(element("summary", `${aToolDescription(event)} · ${aStatus(event.status === "waiting" ? run.status : event.status)}`));
+    const content = element("div"); detail.append(content);
+    const fill = () => {
+      if (detail.open && !content.childElementCount) {
+        content.append(aJson(Object.fromEntries(["tool", "arguments", "result", "review"].filter(k => k in event).map(k => [k, event[k]]))));
+        if (result.job_id) content.append(button(at("Job progress", "Avancement de la tâche"), async () => {
+          const job = await api(`jobs/${result.job_id}`); content.querySelector("pre").replaceWith(aJson(job));
+        }));
+      }
+    };
+    detail.open = assistantExpandedToolEvents.has(eventKey); fill();
+    detail.addEventListener("toggle", () => {
+      if (detail.isConnected) detail.open ? assistantExpandedToolEvents.add(eventKey) : assistantExpandedToolEvents.delete(eventKey);
+      fill();
+    });
+    entries.append(detail);
     if (event.status === "waiting" && result.requires_owner_approval && result.id && !("decision" in event)) {
       const panel = element("section", undefined, "assistant-decision card");
       panel.append(element("h3", at("Action requires your approval", "Action à approuver")));
-      const operation = event.review?.operation || event.arguments?.operation || event.review || {};
-      const fields = element("dl");
-      for (const [name, value] of Object.entries(operation)) {
-        if (value === null || value === "" || value === false || JSON.stringify(value) === "[]" || JSON.stringify(value) === "{}") continue;
-        fields.append(element("dt", name.replaceAll("_", " ")), element("dd", Array.isArray(value) ? value.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join("\n") : typeof value === "object" ? JSON.stringify(value) : String(value)));
-      }
+      const fields = element("div", undefined, "assistant-request-summary");
+      for (const line of at(event.summary?.en, event.summary?.fr) || [event.tool]) fields.append(element("p", line));
+      fields.append(aCommand(event, `${run.id}:${index}`));
       const decide = async approve => { await api(`assistant/jobs/${run.id}/decisions/${index}`, {approve}); await aRefreshChat(); };
       panel.append(fields, button(at("Approve once", "Approuver une fois"), () => decide(true), "primary"), button(at("Reject", "Refuser"), () => decide(false)));
       card.append(panel);
@@ -192,15 +248,31 @@ function aRunCard(run) {
       choices.addEventListener("change", changed); custom.addEventListener("input", changed);
       panel.append(element("h3", event.question.question), choices, custom, submit); card.append(panel);
     }
-    if (result.job_id) detail.append(button(at("Job progress", "Avancement de la tâche"), async () => {
-      const job = await api(`jobs/${result.job_id}`); const pre = detail.querySelector("pre"); pre.textContent = JSON.stringify(job, null, 2);
-    }));
-    activity.append(detail);
   }
-  card.append(activity);
+}
+function aRunCard(run) {
+  const card = element("article", undefined, "assistant-run"), groups = new Map();
+  let fallback = run.messages.length - 1;
+  if (run.messages.at(-1)?.role === "assistant") fallback--;
+  run.events.forEach((event, index) => {
+    const raw = Number.isInteger(event.after_message_index) ? event.after_message_index : fallback;
+    const anchor = Math.max(-1, Math.min(raw, run.messages.length - 1));
+    if (!groups.has(anchor)) groups.set(anchor, []);
+    groups.get(anchor).push([index, event]);
+  });
+  if (groups.has(-1)) aActivity(card, run, groups.get(-1), -1);
+  run.messages.forEach((message, index) => {
+    const block = element("div", undefined, `assistant-message ${message.role}`);
+    block.setAttribute("aria-label", message.role === "user" ? at("You", "Vous") : "Assistant");
+    block.append(aMarkdown(message)); card.append(block);
+    if (groups.has(index)) aActivity(card, run, groups.get(index), index);
+  });
+  if (!run.events.length) aActivity(card, run, [], run.messages.length);
+  if (run.error) card.append(element("p", run.error, "error"));
   if (["queued", "running", "awaiting_approval", "awaiting_user", "waiting_settings"].includes(run.status)) card.append(element("p", at("Working…", "En cours…"), "assistant-working"), button(at("Stop", "Arrêter"), async () => { await api(`assistant/jobs/${run.id}/cancel`, {}); await aRefreshChat(); }));
   return card;
 }
+
 async function aReview(id, completed = aRefreshChat) {
   const review = await api(`agents/proposals/${id}/review`), {dialog, form} = aDialog(at("Review action", "Vérifier l’action"));
   form.append(element("pre", JSON.stringify(review, null, 2)));
@@ -284,7 +356,7 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
   const clients = element("fieldset"); clients.append(element("legend", at("Allowed Torrent Clients", "Clients torrent autorisés"))); form.append(clients);
   const clientInputs = state.setup.clients.filter(c => c.enabled).map(c => [c.id, aField(clients, c.name, existing ? existing.policy.clients.includes(c.id) : c.id === state.setup.client_id, "checkbox")]);
   const details = element("details"); details.append(element("summary", at("Permissions and limits", "Autorisations et limites"))); form.append(details);
-  const permissions = ["downloads", "controls", "reseed", "uploads"].map(p => [p, aField(details, ({downloads: at("Downloads", "Téléchargements"), controls: at("Torrent controls", "Commandes des torrents"), reseed: at("Reseeds", "Remises en seed"), uploads: "Uploads"})[p], existing?.policy.permissions.includes(p) || false, "checkbox")]);
+  const permissions = ["queue", "downloads", "controls", "reseed", "uploads"].map(p => [p, aField(details, ({queue: at("Prepare and edit download queue", "Préparer et modifier la file"), downloads: at("Start downloads", "Démarrer les téléchargements"), controls: at("Torrent controls", "Commandes des torrents"), reseed: at("Reseeds", "Remises en seed"), uploads: "Uploads"})[p], existing?.policy.permissions.includes(p) || false, "checkbox")]);
   const updateMode = () => { for (const [, el] of permissions) el.disabled = mode.value === "propose"; }; mode.onchange = updateMode; updateMode();
   const bytes = aField(details, at("Downloads per day, GiB", "Téléchargements par jour, Gio"), (existing?.policy.daily_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
   const torrents = aField(details, at("Torrents per day", "Torrents par jour"), existing?.policy.daily_torrents ?? 20, "number");

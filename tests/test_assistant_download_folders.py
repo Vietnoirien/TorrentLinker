@@ -97,7 +97,7 @@ def start_download(browser, mode="execute"):
                 "name": "Helper",
                 "clients": ["default"],
                 "mode": mode,
-                "permissions": ["downloads"] if mode == "execute" else [],
+                "permissions": ["queue"] if mode == "execute" else [],
                 "reserve_bytes": 0,
             },
         },

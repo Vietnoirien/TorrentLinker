@@ -16,7 +16,9 @@ from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.web.operations import JobRequest, Operations
 
 
-def outstanding(access: Access, target: Operations, disk: str, exclude: str = "") -> int:
+def outstanding(
+    access: Access, target: Operations, disk: str, exclude: str = "", *, reconcile: bool = True
+) -> int:
     """Account for unallocated client data and sends not yet observable in a client."""
     setup = target.setup._root or target.setup
     observed: dict[str, set[str]] = {}
@@ -55,10 +57,12 @@ def outstanding(access: Access, target: Operations, disk: str, exclude: str = ""
     ):
         request = json.loads(row[1])
         if set(request["hashes"]).issubset(completed.get(request["client_id"], set())):
-            with access.db:
-                access.db.execute(
-                    "UPDATE reservations SET storage_reconciled=1 WHERE proposal_id=?", (row[2],)
-                )
+            if reconcile:
+                with access.db:
+                    access.db.execute(
+                        "UPDATE reservations SET storage_reconciled=1 WHERE proposal_id=?",
+                        (row[2],),
+                    )
             continue
         # Missing or unavailable client data is uncertain, including after a restart.
         # Keep the whole reservation until every selected hash is observable.
@@ -70,30 +74,29 @@ def outstanding(access: Access, target: Operations, disk: str, exclude: str = ""
 def reserve(
     access: Access, identifier: str, actor: str, grant: Grant, target: Operations, body: JobRequest
 ) -> dict[str, int]:
-    if body.kind not in {"enqueue", "send-queue"}:
+    # The queue is a wishlist. Reserve budgets and disk space only when starting downloads.
+    if body.kind != "send-queue":
         return {}
     if not body.hashes:
         raise ValueError("Select explicit torrent hashes; MCP cannot send the whole shared queue.")
-    if body.kind == "enqueue":
-        rows = {r.infohash: r for r in target.setup.store.catalogue(body.hashes)}
-        sizes = {
-            h: target.candidates[h].size
-            if h in target.candidates and not body.selection_id
-            else rows[h].size
-            for h in body.hashes
-            if h in rows or h in target.candidates
-        }
-    else:
-        queued = {
-            e.candidate.infohash: e
-            for e in entries(target.setup.store)
-            if e.status == "queued" and e.candidate.infohash in body.hashes
-        }
-        sizes = {h: e.candidate.size for h, e in queued.items()}
-        if any(str(e.folder) not in target.download_destinations() for e in queued.values()):
-            raise ValueError(
-                "A queued destination changed. Queue it again in the configured folder."
-            )
+    selected_keys = (
+        {r["key"] for r in body.selection_rows} if body.selection_source == "queue" else None
+    )
+    selected = [
+        e
+        for e in entries(target.setup.store)
+        if e.status == "queued"
+        and e.candidate.infohash in body.hashes
+        and (selected_keys is None or e.key in selected_keys)
+    ]
+    queued = {e.candidate.infohash: e for e in selected if e.candidate.infohash}
+    if len(selected) != len(queued):
+        raise ValueError(
+            "The selected queue contains duplicate torrent identities. Review one entry per hash."
+        )
+    sizes = {h: e.candidate.size for h, e in queued.items()}
+    if any(str(e.folder) not in target.download_destinations() for e in queued.values()):
+        raise ValueError("A queued destination changed. Queue it again in the configured folder.")
     if set(sizes) != set(body.hashes) or any(s <= 0 for s in sizes.values()):
         raise ValueError("Search again: every selected torrent needs a known, positive size.")
     day = datetime.now(UTC).date().isoformat()
@@ -107,36 +110,25 @@ def reserve(
         or used[1] + len(sizes) > grant.daily_torrents
     ):
         raise ValueError("This operation exceeds the connection's daily download budget.")
-    if body.kind == "send-queue":
-        destinations = {e.folder for e in queued.values()}
-        if len({str(disk_of(p)) for p in destinations}) != 1:
-            raise ValueError("Send downloads on one disk at a time to reserve storage safely.")
-        folder = target.setup.path_under_root(str(next(iter(destinations))))
-        disk_sizes = {str(disk_of(folder)): (folder, sum(sizes.values()))}
-    else:
-        disk_sizes = {}
-        for h, folder in target.enqueue_folders(body).items():
-            disk = str(disk_of(folder))
-            disk_sizes[disk] = (folder, disk_sizes.get(disk, (folder, 0))[1] + sizes[h])
-    # Categories may use different disks; charge each disk only for its own downloads.
-    for disk, (folder, size) in disk_sizes.items():
-        pending = outstanding(access, target, disk)
-        usage = shutil.disk_usage(folder)
-        reserve_bytes = max(
-            grant.reserve_bytes,
-            int(usage.total * target.setup.settings.free_space_margin),
+    destinations = {e.folder for e in queued.values()}
+    if len({str(disk_of(p)) for p in destinations}) != 1:
+        raise ValueError("Send downloads on one disk at a time to reserve storage safely.")
+    folder = target.setup.path_under_root(str(next(iter(destinations))))
+    disk = str(disk_of(folder))
+    pending = outstanding(access, target, disk)
+    usage = shutil.disk_usage(folder)
+    reserve_bytes = max(
+        grant.reserve_bytes,
+        int(usage.total * target.setup.settings.free_space_margin),
+    )
+    if usage.free - pending - sum(sizes.values()) < reserve_bytes:
+        raise ValueError("The selected downloads would consume the required free-space reserve.")
+    with access.db:
+        access.db.execute(
+            "INSERT INTO reservations (proposal_id,grant_id,day,bytes,torrents,disk) "
+            "VALUES (?,?,?,?,?,?)",
+            (identifier, actor, day, sum(sizes.values()), len(sizes), disk),
         )
-        if usage.free - pending - size < reserve_bytes:
-            raise ValueError(
-                "The selected downloads would consume the required free-space reserve."
-            )
-    if body.kind == "send-queue":
-        with access.db:
-            access.db.execute(
-                "INSERT INTO reservations (proposal_id,grant_id,day,bytes,torrents,disk) "
-                "VALUES (?,?,?,?,?,?)",
-                (identifier, actor, day, sum(sizes.values()), len(sizes), disk),
-            )
     return sizes
 
 

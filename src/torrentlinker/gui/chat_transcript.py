@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QPalette, QTextBlockFormat, QTextCursor, QTextDocument
+from urllib.parse import unquote, urlsplit
+
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import (
+    QDesktopServices,
+    QImage,
+    QPalette,
+    QTextBlockFormat,
+    QTextCursor,
+    QTextDocument,
+)
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -14,15 +24,21 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QTextBrowser,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
+
+from torrentlinker.assistant.markdown import documentation_link, render
+from torrentlinker.gui.chat_images import ChatImages
+from torrentlinker.gui.request_details import RequestDetails
 
 
 class MessageText(QTextBrowser):
-    def __init__(self, text, parent=None):
+    def __init__(self, text, parent=None, *, images=None):
         super().__init__(parent)
+        self.images = images if images is not None else ChatImages(self)
+        self.images.ready.connect(self.image_ready)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setOpenLinks(False)
         self.setOpenExternalLinks(False)
@@ -33,34 +49,85 @@ class MessageText(QTextBrowser):
         font = self.font()
         font.setPointSizeF(max(10.5, font.pointSizeF()))
         self.setFont(font)
-        # Disable embedded HTML and all resource loading from model/user text.
-        self.document().setMarkdown(
-            text,
-            QTextDocument.MarkdownFeature.MarkdownDialectGitHub
-            | QTextDocument.MarkdownFeature.MarkdownNoHTML,
-        )
+        # Raw HTML stays disabled. Only the bounded public-image loader supplies resources.
+        self.setHtml(render(text, proxy_images=False))
         block = self.document().begin()
         while block.isValid():
             cursor = QTextCursor(block)
             formatting = block.blockFormat()
             formatting.setBottomMargin(10)
-            formatting.setLineHeight(135, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+            fragment = block.begin()
+            has_image = False
+            while not fragment.atEnd():
+                has_image |= fragment.fragment().charFormat().isImageFormat()
+                fragment += 1
+            formatting.setLineHeight(
+                100 if has_image else 135, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value
+            )
             cursor.setBlockFormat(formatting)
             block = block.next()
         self.setStyleSheet("QTextBrowser { background: transparent; border: none; padding: 0; }")
         self.anchorClicked.connect(self.open_link)
+        QTimer.singleShot(0, self.fit_content)
 
     def loadResource(self, kind, url):
+        if kind == QTextDocument.ResourceType.ImageResource:
+            return self.images.request(url.toString())
         return None
 
     def open_link(self, url):
+        if documentation_link(url.toString()):
+            from torrentlinker.gui.documentation import show_guide
+
+            parsed = urlsplit(url.toString())
+            show_guide(
+                self.window(), parsed.path.removeprefix("/documentation/"), unquote(parsed.fragment)
+            )
+            return
         if url.scheme() in {"http", "https"}:
             QDesktopServices.openUrl(url)
 
+    def image_ready(self, url, image):
+        if not isValid(self):
+            return
+        if image is not None:
+            self.document().addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), image)
+        else:
+            empty = QImage(1, 1, QImage.Format.Format_ARGB32)
+            empty.fill(Qt.GlobalColor.transparent)
+            self.document().addResource(QTextDocument.ResourceType.ImageResource, QUrl(url), empty)
+        self.fit_content()
+
+    def fit_content(self):
+        if not isValid(self):
+            return
+        width = max(80, self.viewport().width())
+        block = self.document().begin()
+        while block.isValid():
+            part = block.begin()
+            while not part.atEnd():
+                fragment = part.fragment()
+                if fragment.isValid() and fragment.charFormat().isImageFormat():
+                    fmt = fragment.charFormat().toImageFormat()
+                    image = self.images.images.get(fmt.name())
+                    if image is not None:
+                        fmt.setWidth(min(width, image.width()))
+                        fmt.setHeight(fmt.width() * image.height() / image.width())
+                        cursor = QTextCursor(self.document())
+                        cursor.setPosition(fragment.position())
+                        cursor.setPosition(
+                            fragment.position() + fragment.length(), QTextCursor.MoveMode.KeepAnchor
+                        )
+                        cursor.setCharFormat(fmt)
+                part += 1
+            block = block.next()
+        self.document().setTextWidth(width)
+        self.document().markContentsDirty(0, self.document().characterCount())
+        self.setFixedHeight(max(28, int(self.document().size().height()) + 8))
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.document().setTextWidth(max(80, self.viewport().width()))
-        self.setFixedHeight(max(28, int(self.document().size().height()) + 8))
+        self.fit_content()
 
 
 class ChatTranscript(QScrollArea):
@@ -75,7 +142,10 @@ class ChatTranscript(QScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setStyleSheet("ChatTranscript { border: none; background: transparent; }")
         self.expanded = set()
+        self.expanded_commands = set()
+        self.expanded_events = set()
         self.plain_text = ""
+        self.images = ChatImages(self)
         self.follow_bottom = True
         self.verticalScrollBar().rangeChanged.connect(self.follow_layout)
         self.verticalScrollBar().sliderMoved.connect(self.user_scrolled)
@@ -126,6 +196,128 @@ class ChatTranscript(QScrollArea):
         layout.addWidget(subtitle)
         layout.addStretch()
 
+    def add_message(self, layout, message, dark):
+        user = message["role"] == "user"
+        row = QHBoxLayout()
+        if user:
+            row.addStretch(2)
+        card = QFrame()
+        card.setObjectName("chatMessage")
+        card.setProperty("role", message["role"])
+        card.setMaximumWidth(700 if user else 860)
+        background = ("#263f65" if dark else "#e8eef8") if user else "transparent"
+        card.setStyleSheet(
+            f"QFrame#chatMessage {{ background: {background}; border: none; border-radius: 18px; }}"
+        )
+        contents = QVBoxLayout(card)
+        contents.setContentsMargins(
+            18 if user else 2, 12 if user else 4, 18 if user else 2, 12 if user else 4
+        )
+        message_text = MessageText(message["content"], card, images=self.images)
+        message_text.setStyleSheet(
+            message_text.styleSheet()
+            + "QTextBrowser { color: "
+            + ("#e8edf3" if dark else "#172b33")
+            + "; }"
+        )
+        contents.addWidget(message_text)
+        row.addWidget(card, 10)
+        if not user:
+            row.addStretch(1)
+        layout.addLayout(row)
+
+    def add_activity(self, layout, run, indexed_events, anchor, status_text, dark):
+        from torrentlinker.gui.tool_activity import ToolActivity
+
+        assistant_bg = "#202b37" if dark else "#ffffff"
+        border = "#344453" if dark else "#d4dfdf"
+        activity = ToolActivity(
+            run,
+            indexed_events,
+            (run["id"], anchor),
+            self.expanded,
+            self.expanded_events,
+            status_text,
+            lambda i: self.anchorClicked.emit(QUrl(f"receipt:{run['id']}:{i}")),
+            dark=dark,
+        )
+        layout.addWidget(activity)
+        for i, event in indexed_events:
+            result = event.get("result", {})
+            if (
+                event.get("status") == "waiting"
+                and result.get("requires_owner_approval")
+                and "decision" not in event
+            ):
+                panel = QFrame()
+                panel.setObjectName("approvalCard")
+                panel.setStyleSheet(
+                    f"QFrame#approvalCard {{ background: {assistant_bg}; "
+                    f"border: 1px solid {border}; border-radius: 10px; }}"
+                )
+                box = QVBoxLayout(panel)
+                box.setContentsMargins(16, 14, 16, 14)
+                heading = QLabel(self.tr("Action requires your approval"))
+                heading.setStyleSheet("font-weight: 600;")
+                box.addWidget(heading)
+                command_id = (run["id"], i)
+                request = RequestDetails(event, expanded=command_id in self.expanded_commands)
+                request.toggle.toggled.connect(
+                    lambda checked, key=command_id: (
+                        self.expanded_commands.add(key)
+                        if checked
+                        else self.expanded_commands.discard(key)
+                    )
+                )
+                box.addWidget(request)
+                for title, approve in (
+                    (self.tr("Approve once"), True),
+                    (self.tr("Reject"), False),
+                ):
+                    button = QPushButton(title)
+                    button.clicked.connect(
+                        lambda checked=False, r=run["id"], n=i, yes=approve: (
+                            self.decisionSubmitted.emit(r, n, yes)
+                        )
+                    )
+                    box.addWidget(button)
+                layout.addWidget(panel)
+            if event.get("status") == "waiting" and event.get("question") and "answer" not in event:
+                panel = QFrame()
+                panel.setObjectName("questionCard")
+                box = QVBoxLayout(panel)
+                label = QLabel(event["question"]["question"])
+                label.setTextFormat(Qt.TextFormat.PlainText)
+                label.setWordWrap(True)
+                box.addWidget(label)
+                options = QComboBox()
+                options.addItem(self.tr("Choose an answer…"), "")
+                for option in event["question"]["options"]:
+                    options.addItem(option, option)
+                box.addWidget(options)
+                custom = QLineEdit()
+                custom.setPlaceholderText(self.tr("Or enter your own answer"))
+                box.addWidget(custom)
+                submit = QPushButton(self.tr("Submit answer"))
+                submit.setEnabled(False)
+
+                def enable_answer(_=None, button=submit, field=custom, choices=options):
+                    button.setEnabled(bool(field.text().strip() or choices.currentData()))
+
+                custom.textChanged.connect(enable_answer)
+                options.currentIndexChanged.connect(enable_answer)
+                submit.clicked.connect(
+                    lambda checked=False, r=run["id"], n=i, field=custom, choices=options: (
+                        self.answerSubmitted.emit(
+                            r,
+                            n,
+                            field.text() if field.text().strip() else choices.currentData(),
+                        )
+                    )
+                )
+                box.addWidget(submit)
+                layout.addWidget(panel)
+
     def set_runs(self, rows, status_text):
         self.plain_text = "\n".join(
             [m["content"] for r in reversed(rows) for m in r["messages"]]
@@ -135,171 +327,33 @@ class ChatTranscript(QScrollArea):
             self.welcome()
             return
         layout = self.content()
-        palette = self.palette()
-        dark = palette.color(QPalette.ColorRole.Window).lightness() < 128
-        assistant_bg = "#202b37" if dark else "#ffffff"
-        user_bg = "#234750" if dark else "#e0f1ef"
-        border = "#344453" if dark else "#d4dfdf"
+        dark = QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
         for run in reversed(rows):
-            for message in run["messages"]:
-                user = message["role"] == "user"
-                row = QHBoxLayout()
-                if user:
-                    row.addStretch(1)
-                card = QFrame()
-                card.setObjectName("chatMessage")
-                card.setMaximumWidth(760 if user else 860)
-                card.setStyleSheet(
-                    f"QFrame#chatMessage {{ background: {user_bg if user else assistant_bg}; "
-                    f"border: 1px solid {border}; border-radius: 14px; }}"
-                )
-                contents = QVBoxLayout(card)
-                contents.setContentsMargins(18, 14, 18, 14)
-                contents.setSpacing(8)
-                role = QLabel(self.tr("You") if user else "Assistant")
-                role.setStyleSheet("font-weight: 600; color: #62bdb8; background: transparent;")
-                contents.addWidget(role)
-                message_text = MessageText(message["content"], card)
-                message_text.setStyleSheet(
-                    message_text.styleSheet()
-                    + "QTextBrowser { color: "
-                    + ("#e8f1f4" if dark else "#172b33")
-                    + "; }"
-                )
-                contents.addWidget(message_text)
-                row.addWidget(card, 12)
-                if not user:
-                    row.addStretch(1)
-                layout.addLayout(row)
+            messages = run["messages"]
+            fallback = len(messages) - 1
+            if messages and messages[-1]["role"] == "assistant":
+                fallback -= 1
+            groups = {}
+            for index, event in enumerate(run["events"]):
+                anchor = event.get("after_message_index", fallback)
+                anchor = max(-1, min(anchor, len(messages) - 1))
+                groups.setdefault(anchor, []).append((index, event))
+            if -1 in groups:
+                self.add_activity(layout, run, groups[-1], -1, status_text, dark)
+            for index, message in enumerate(messages):
+                self.add_message(layout, message, dark)
+                if index in groups:
+                    self.add_activity(layout, run, groups[index], index, status_text, dark)
+            if not run["events"]:
+                self.add_activity(layout, run, [], len(messages), status_text, dark)
             if run["error"]:
                 error = QLabel(run["error"])
                 error.setTextFormat(Qt.TextFormat.PlainText)
                 error.setWordWrap(True)
-                error.setStyleSheet(
-                    "background: #442d2e; color: #ffd5cf; border: 1px solid #785052; "
-                    "border-radius: 10px; padding: 14px;"
-                )
+                error.setStyleSheet("color: #dc756d; padding: 12px;")
                 layout.addWidget(error)
             if run["status"] in {"queued", "running"}:
                 busy = QLabel(self.tr("Working…"))
                 busy.setStyleSheet("color: #62bdb8; padding: 4px;")
                 layout.addWidget(busy)
-            activity = QWidget()
-            al = QVBoxLayout(activity)
-            al.setContentsMargins(4, 0, 4, 0)
-            toggle = QToolButton()
-            toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-            toggle.setText(
-                self.tr("Activity") + f" · {len(run['events'])} · " + status_text(run["status"])
-            )
-            toggle.setCheckable(True)
-            toggle.setChecked(run["id"] in self.expanded)
-            details = QWidget()
-            dl = QVBoxLayout(details)
-            dl.setContentsMargins(12, 6, 0, 6)
-            stats = QLabel(
-                self.tr("%1 calls · %2 tokens")
-                .replace("%1", str(run["calls"]))
-                .replace("%2", str(run["tokens"]))
-            )
-            dl.addWidget(stats)
-            if run.get("compactions"):
-                dl.addWidget(QLabel(self.tr("Context compacted; full history retained.")))
-            for i, event in enumerate(run["events"]):
-                link = QPushButton(event["tool"] + " · " + status_text(event["status"]))
-                link.setFlat(True)
-                link.clicked.connect(
-                    lambda checked=False, url=f"receipt:{run['id']}:{i}": self.anchorClicked.emit(
-                        QUrl(url)
-                    )
-                )
-                dl.addWidget(link)
-                result = event.get("result", {})
-                if (
-                    event.get("status") == "waiting"
-                    and result.get("requires_owner_approval")
-                    and "decision" not in event
-                ):
-                    panel = QFrame()
-                    panel.setObjectName("approvalCard")
-                    box = QVBoxLayout(panel)
-                    box.addWidget(QLabel(self.tr("Action requires your approval")))
-                    review = event.get("review", {}).get(
-                        "operation", event.get("arguments", {}).get("operation", {})
-                    )
-                    for name, value in review.items():
-                        if value not in (None, "", [], {}, False):
-                            display = (
-                                "\n".join(map(str, value))
-                                if isinstance(value, list)
-                                else str(value)
-                            )
-                            label = QLabel(
-                                str(name).replace("_", " ").capitalize() + ": " + display
-                            )
-                            label.setTextFormat(Qt.TextFormat.PlainText)
-                            label.setWordWrap(True)
-                            box.addWidget(label)
-                    for title, approve in (
-                        (self.tr("Approve once"), True),
-                        (self.tr("Reject"), False),
-                    ):
-                        button = QPushButton(title)
-                        button.clicked.connect(
-                            lambda checked=False, r=run["id"], n=i, yes=approve: (
-                                self.decisionSubmitted.emit(r, n, yes)
-                            )
-                        )
-                        box.addWidget(button)
-                    layout.addWidget(panel)
-                if (
-                    event.get("status") == "waiting"
-                    and event.get("question")
-                    and "answer" not in event
-                ):
-                    panel = QFrame()
-                    panel.setObjectName("questionCard")
-                    box = QVBoxLayout(panel)
-                    label = QLabel(event["question"]["question"])
-                    label.setTextFormat(Qt.TextFormat.PlainText)
-                    label.setWordWrap(True)
-                    box.addWidget(label)
-                    options = QComboBox()
-                    options.addItem(self.tr("Choose an answer…"), "")
-                    for option in event["question"]["options"]:
-                        options.addItem(option, option)
-                    box.addWidget(options)
-                    custom = QLineEdit()
-                    custom.setPlaceholderText(self.tr("Or enter your own answer"))
-                    box.addWidget(custom)
-                    submit = QPushButton(self.tr("Submit answer"))
-                    submit.setEnabled(False)
-
-                    def enable_answer(_=None, button=submit, field=custom, choices=options):
-                        button.setEnabled(bool(field.text().strip() or choices.currentData()))
-
-                    custom.textChanged.connect(enable_answer)
-                    options.currentIndexChanged.connect(enable_answer)
-                    submit.clicked.connect(
-                        lambda checked=False, r=run["id"], n=i, field=custom, choices=options: (
-                            self.answerSubmitted.emit(
-                                r,
-                                n,
-                                field.text() if field.text().strip() else choices.currentData(),
-                            )
-                        )
-                    )
-                    box.addWidget(submit)
-                    layout.addWidget(panel)
-
-            def expand(value, identifier=run["id"], panel=details, button=toggle):
-                panel.setVisible(value)
-                button.setArrowType(Qt.ArrowType.DownArrow if value else Qt.ArrowType.RightArrow)
-                self.expanded.add(identifier) if value else self.expanded.discard(identifier)
-
-            toggle.toggled.connect(expand)
-            expand(toggle.isChecked())
-            al.addWidget(toggle)
-            al.addWidget(details)
-            layout.addWidget(activity)
         layout.addStretch()

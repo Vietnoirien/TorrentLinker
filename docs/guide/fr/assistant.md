@@ -49,6 +49,27 @@ Les limites de téléchargement appartiennent à chaque discussion ou tâche. Ne
 
 **Arrêter** interrompt la boucle du modèle et demande l'annulation des tâches soumises. Une action déjà exécutée n'est pas annulée rétroactivement. Consultez l'historique et le client torrent avant de recommencer.
 
+Les remarques du modèle précèdent leur groupe compact d'appels d'outils, puis la
+réponse finale apparaît en dessous. Dépliez une ligne d'activité pour lire les
+descriptions des appels, puis un appel pour consulter ses arguments et résultats
+exacts en JSON formaté et coloré. Les détails dépliés restent ouverts pendant
+l'actualisation. Les cartes d'approbation et les questions restent visibles.
+
+## Documentation, affiches et couvertures dans la discussion
+
+Pour une question de configuration, l'Assistant peut rechercher et lire les guides
+français ou anglais installés via les outils MCP partagés. Les liens locaux ouvrent
+la section correspondante dans l'interface Web ou un lecteur natif séparé. Ces
+outils fonctionnent hors ligne et indiquent la version de l'app et le document exact.
+
+Le modèle peut afficher une affiche ou une couverture avec
+`![Description](https://...)`, ou fournir un lien d'image cliquable. L'URL doit venir
+de vous ou d'un résultat d'outil. TorrentLinker charge une vignette de taille
+limitée ; le lien source ouvre l'original. Si l'image est indisponible ou son format
+non pris en charge, la description et le lien restent accessibles. Cette fonction
+affiche les images ; elle n'ajoute aucun service de recherche d'affiches ou de
+génération d'images.
+
 ## Programmer une tâche
 
 Dans **Automatisations → Créer une tâche**, saisissez la consigne, les clients autorisés et la fréquence. Les tâches sont désactivées au départ.

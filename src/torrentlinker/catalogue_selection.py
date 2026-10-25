@@ -19,6 +19,9 @@ class CatalogueCriteria(BaseModel):
     model_config = ConfigDict(extra="forbid")
     categories: list[int] = Field(default_factory=list, max_length=100)
     include_descendants: bool = True
+    exclude_queued: bool = False
+    exclude_seeded: bool = False
+    exclude_hashes: list[str] = Field(default_factory=list, max_length=1000)
     query: str = Field(default="", max_length=500)
     exclude_terms: list[str] = Field(default_factory=list, max_length=100)
     min_size_bytes: int = Field(default=0, ge=0)
@@ -63,7 +66,8 @@ def select_catalogue_rows(
             )
         title = row.title.casefold()
         if (
-            (wanted and not wanted.intersection(paths[row.category]))
+            row.infohash in criteria.exclude_hashes
+            or (wanted and not wanted.intersection(paths[row.category]))
             or (query and query not in title)
             or any(term in title for term in excluded_terms)
             or row.size <= 0
@@ -106,6 +110,7 @@ def select_catalogue_rows(
             sort_keys=True,
         ).encode()
     ).hexdigest()
+    total_size = sum(row.size for row in chosen)
     return {
         "source": "catalogue",
         "criteria": criteria.model_dump(),
@@ -116,7 +121,8 @@ def select_catalogue_rows(
         "requested_count": criteria.count,
         "selected_count": len(chosen),
         "shortfall": max(0, criteria.count - len(chosen)),
-        "total_size_bytes": sum(row.size for row in chosen),
+        "total_size_bytes": total_size,
+        "total_size_display": f"{total_size / 1024**3:.2f} GiB / {total_size / 10**9:.2f} GB",
         "min_size_bytes": min((row.size for row in chosen), default=None),
         "max_size_bytes": max((row.size for row in chosen), default=None),
         "eligible_size_bytes": sum(row.size for row in eligible),

@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -196,6 +196,10 @@ def create_app(
         prefix = request.scope.get("root_path", "")
         if prefix and route.startswith(prefix + "/"):
             route = route[len(prefix) :]
+        if route.startswith("/documentation/") and not sessions.valid(
+            request.cookies.get("tl_session", "")
+        ):
+            return JSONResponse({"detail": "Sign in to TorrentLinker."}, status_code=401)
         if route.startswith("/api/"):
             length = request.headers.get("content-length", "0")
             if not length.isdigit() or int(length) > 256_000:
@@ -255,6 +259,22 @@ def create_app(
     @app.get("/api/documentation")
     def documentation_index(language: str = "en") -> list[dict[str, str]]:
         return documentation.guides(language)
+
+    @app.get("/documentation/{name:path}", response_class=HTMLResponse)
+    def documentation_reference(name: str) -> HTMLResponse:
+        if name not in {
+            g["path"] for language in ("en", "fr") for g in documentation.guides(language)
+        }:
+            raise HTTPException(404, "Guide unavailable.")
+        try:
+            html = render(name, standalone=True)
+        except (ValueError, OSError) as error:
+            raise HTTPException(404, "Guide unavailable.") from error
+        return HTMLResponse(
+            '<!doctype html><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width">'
+            "<title>TorrentLinker documentation</title><main>" + html + "</main>"
+        )
 
     @app.get("/api/documentation/page/{name:path}")
     def documentation_page(name: str) -> dict[str, str]:

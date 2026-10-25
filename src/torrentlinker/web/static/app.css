@@ -553,27 +553,39 @@ dialog .description img {
 .assistant-main { min-width: 0; display: flex; flex-direction: column; min-height: 65vh; }
 .assistant-transcript { flex: 1; min-height: 180px; max-height: 60vh; overflow: auto; padding-right: .5rem; }
 .assistant-run { max-width: 900px; margin: 0 auto 1.8rem; }
-.assistant-message { padding: 1rem 1.25rem; margin: 1rem 0; border: 1px solid var(--line); border-radius: 16px; max-width: 92%; background: var(--panel); }
-.assistant-message.user { margin-left: auto; background: color-mix(in srgb, #2eaaa2 18%, var(--panel)); }
-.assistant-message strong { color: var(--accent); font-size: .85rem; }
-.assistant-activity { margin: .8rem .4rem; color: var(--muted); }
-.assistant-activity summary { cursor: pointer; padding: .5rem; }
+.assistant-message { padding: .25rem 0; margin: 1.25rem 0 .75rem; max-width: 96%; }
+.assistant-message.user { padding: .8rem 1.15rem; max-width: 82%; margin: 1.5rem 0 1.5rem auto; border-radius: 18px; background: color-mix(in srgb, #4686d5 18%, var(--panel)); }
+.assistant-activity { margin: .4rem 0 1.2rem; color: color-mix(in srgb, var(--ink) 78%, var(--bg)); font-size: .86rem; }
+.assistant-activity summary { cursor: pointer; padding: .3rem 0; overflow-wrap: anywhere; }
+.assistant-tool-list { max-height: 280px; overflow: auto; padding: .25rem .4rem .25rem 1rem; }
+.assistant-tool > summary:hover { color: var(--ink); }
+.assistant-usage { font-size: .78rem; margin: .2rem 0 .5rem; }
 .assistant-working { color: var(--accent); }
 .assistant-run > .error { padding: 1rem; border: 1px solid currentColor; border-radius: 12px; }
 .assistant-message p { white-space: pre-wrap; line-height: 1.65; overflow-wrap: anywhere; margin-bottom: 0; }
 .assistant-run pre, .assistant-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
-.assistant-composer { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; }
+.assistant-composer { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; padding: .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
 .assistant-welcome { text-align: center; padding: 4rem 1rem; }
 .assistant-chat-controls { flex-wrap: wrap; width: 100%; }
 .assistant-chat-controls select { max-width: 340px; min-width: 120px; flex: 1; }
-.assistant-composer textarea { width: 100%; min-width: 0; resize: vertical; border-radius: 14px; padding: 1rem; min-height: 90px; }
+.assistant-composer textarea { width: 100%; min-width: 0; resize: vertical; border: none; border-radius: 12px; padding: .6rem; min-height: 80px; background: transparent; }
 .assistant-dialog { width: min(720px, 92vw); max-height: 88vh; overflow: auto; }
 .assistant-dialog label { margin: .7rem 0; }
 .assistant-dialog fieldset { display: flex; flex-wrap: wrap; gap: .5rem; }
 @media (max-width: 700px) { .assistant-layout { grid-template-columns: 1fr; } .assistant-conversations { max-height: 150px; } .assistant-composer { flex-wrap: wrap; } }
 .assistant-markdown { overflow-x: auto; max-width: 100%; }
+.assistant-markdown img { max-width: min(100%, 360px); max-height: 360px; object-fit: contain; border-radius: 8px; vertical-align: middle; }
+.assistant-image-error { color: var(--muted); font-style: italic; }
 .assistant-markdown table { border-collapse: collapse; min-width: max-content; margin: 12px 0; }
 .assistant-markdown th, .assistant-markdown td { border: 1px solid var(--border, #687782); padding: 8px 12px; text-align: left; }
 .assistant-decision dd { margin-bottom: 8px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant-decision dt { font-weight: 600; }
 .assistant-question select, .assistant-question input { display: block; width: 100%; margin: 10px 0; }
+
+.assistant-command { margin: .8rem 0; min-width: 0; }
+.assistant-command summary { cursor: pointer; padding: .5rem 0; }
+.assistant-json { max-height: 320px; overflow: auto; white-space: pre; padding: 1rem; background: #17212b; color: #e8f1f4; border: 1px solid #344453; border-radius: 8px; }
+.assistant-json .json-key { color: #82cfff; }
+.assistant-json .json-string { color: #a7d58d; }
+.assistant-json .json-literal { color: #d5a6ff; }
+.assistant-json .json-number { color: #ffbd78; }
