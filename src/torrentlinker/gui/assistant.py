@@ -616,8 +616,12 @@ class AssistantTab(QWidget):
         actions.rejected.connect(dialog.reject)
         layout.addRow(actions)
         if dialog.exec():
-            index = folder.findText(folder.currentText())
-            value = folder.itemData(index) if index >= 0 else folder.currentText().strip()
+            index = folder.currentIndex()
+            value = (
+                folder.itemData(index)
+                if index >= 0 and folder.itemText(index) == folder.currentText()
+                else folder.currentText().strip()
+            )
             self.perform(
                 lambda: self.service.move_conversation(
                     self.conversation_id, value, automatic=automatic.isChecked()

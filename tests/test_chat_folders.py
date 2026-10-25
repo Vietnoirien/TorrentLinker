@@ -68,15 +68,16 @@ def test_native_move_dialog_pins_custom_folder_and_can_enable_automatic_classifi
 
         def choose_custom():
             dialog = QApplication.activeModalWidget()
-            dialog.findChild(QComboBox).setEditText("My films")
+            # A custom name may equal a translated built-in label; retain its identity.
+            dialog.findChild(QComboBox).setEditText("Uploads")
             assert not dialog.findChild(QCheckBox).isChecked()
             dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
 
         QTimer.singleShot(0, choose_custom)
         tab.move_chat.click()
         stored = browser.get("/api/assistant/conversations").json()[0]
-        assert (stored["folder"], stored["folder_source"]) == ("My films", "manual")
-        assert tab.conversations.currentItem().parent().text(0) == "My films"
+        assert (stored["folder"], stored["folder_source"]) == ("Uploads", "manual")
+        assert tab.conversations.currentItem().parent().text(0) == "Uploads"
 
         def enable_auto():
             dialog = QApplication.activeModalWidget()
@@ -86,4 +87,5 @@ def test_native_move_dialog_pins_custom_folder_and_can_enable_automatic_classifi
         QTimer.singleShot(0, enable_auto)
         tab.move_chat.click()
         stored = browser.get("/api/assistant/conversations").json()[0]
+        assert stored["folder"] == "Uploads"
         assert stored["folder_source"] == "auto"
