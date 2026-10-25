@@ -1360,7 +1360,7 @@ class UploadTab(QWidget):
         )
 
     def _image_loaded(self, url: str, data: bytes) -> None:
-        if url != self._image_url:
+        if not isValid(self) or url != self._image_url:
             return
         image = QImage.fromData(data)
         if image.isNull():
@@ -1380,7 +1380,7 @@ class UploadTab(QWidget):
         self._render_description()
 
     def _image_failed(self, url: str, error: Exception) -> None:
-        if url == self._image_url:
+        if isValid(self) and url == self._image_url:
             self.image.setPixmap(QPixmap())
             self.image.setText(self.tr("Could not load the image: {0}").format(error_text(error)))
 

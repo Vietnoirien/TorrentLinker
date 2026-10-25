@@ -75,6 +75,49 @@ def tab(qtbot, tmp_path: Path, announce: str = ANNOUNCE) -> tuple[UploadTab, Stu
     return view, indexer, qbit
 
 
+@pytest.mark.parametrize("status", [200, 500])
+def test_image_reply_after_upload_tab_is_deleted_is_ignored(qtbot, tmp_path, status):
+    from threading import Event
+
+    from PySide6.QtCore import QBuffer, QIODevice, QThreadPool
+    from PySide6.QtGui import QImage
+
+    started, release = Event(), Event()
+    image = QImage(1, 1, QImage.Format.Format_RGB32)
+    image.fill(Qt.GlobalColor.white)
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert image.save(buffer, "PNG")
+    png = bytes(buffer.data())
+
+    def reply(request):
+        started.set()
+        assert release.wait(5)
+        return httpx.Response(status, content=png)
+
+    # This test owns deletion; do not register an already-deleted widget for QtBot cleanup.
+    indexer = StubIndexer()
+    view = UploadTab(
+        Store(tmp_path / "s.db"),
+        lambda: indexer,
+        lambda: FakeQbit(),
+        IgnoreList.default,
+        lambda: ANNOUNCE,
+        tmp_path / "uploads",
+    )
+    with httpx.Client(transport=httpx.MockTransport(reply)) as http:
+        view._http = http
+        try:
+            view.image_url.setText("https://example.org/poster.png")
+            qtbot.waitUntil(started.is_set)
+            with qtbot.waitSignal(view.destroyed):
+                view.deleteLater()
+        finally:
+            release.set()
+            assert QThreadPool.globalInstance().waitForDone(5000)
+        qtbot.wait(50)  # Deliver the completed worker callback to the GUI thread.
+
+
 def test_only_searched_3d_orphans_without_a_match_may_be_uploaded(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     view, _, _ = tab(qtbot, tmp_path)
     vise, archive = model(tmp_path), model(tmp_path, "Dragon.rar")
