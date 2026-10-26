@@ -15,6 +15,8 @@ Screenshots use the English interface, dark theme and example data.
 
 Click **Save to local queue** to keep work in TorrentLinker. Open **Local draft queue** on desktop, or the queue at the top of the web Upload page. Select a draft to inspect its files, description and NFO, edit the presentation, and save your changes locally.
 
+**Preview saved draft** opens the same review dialog as Assistant cards, with artwork, description, NFO, files, category options and review findings. It shows the saved revision, so save any editor changes first. Previewing does not approve or send the draft.
+
 Local drafts survive restarts and belong to the selected Torrent Client. They stay on the computer or server running TorrentLinker. Saving does not create a `.torrent`, send anything to c411 or start seeding. You can save an incomplete draft without an Announce URL and correct it later.
 
 When ready, save your changes and choose **Send to c411…**. The web form also asks you to check the review box. TorrentLinker checks the saved revision, current files, required category options, hosted image, description and NFO. Sending needs your Announce URL and c411 draft credentials. If files changed since review, save and review again.

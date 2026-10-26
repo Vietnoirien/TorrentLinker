@@ -242,6 +242,7 @@ def model_receipt(result, run_id, index, budget=24000):
             key: result[key]
             for key in (
                 "presentation_id",
+                "presentation_type",
                 "list_id",
                 "revision",
                 "client_id",

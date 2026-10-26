@@ -1292,6 +1292,10 @@ async function loadUploadQueue() {
       sent: say("Sent to c411", "Envoyé à c411")})[r.status] || r.status},
     {label: say("Actions", "Actions"), render: r => {
       const actions = element("div", "", "actions");
+      actions.append(button(say("Preview saved draft", "Aperçu du brouillon enregistré"), () => {
+        const client = state.clientId;
+        return aCardDetail(() => api(`upload/queue/${encodeURIComponent(r.id)}/preview?revision=${r.revision}&client_id=${encodeURIComponent(client || "")}`));
+      }));
       if (r.status === "queued") actions.append(button(say("Review / edit", "Relire / modifier"),
         () => prepareUpload({path: r.path, name: r.form.title}, r)));
       if (r.status !== "sending") actions.append(button(say("Remove locally", "Retirer localement"), async () => {

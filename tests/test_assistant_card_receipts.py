@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.test_assistant import generation_transport, login, wait_run
@@ -12,7 +13,10 @@ from torrentlinker.store import CatalogueRow
 from torrentlinker.web.app import create_app
 
 
-def test_presentation_receipt_keeps_cards_in_history_without_inviting_prose_duplicates(tmp_path):
+@pytest.mark.parametrize("upload", [False, True])
+def test_presentation_receipt_keeps_cards_in_history_without_inviting_prose_duplicates(
+    tmp_path, upload
+):
     turns = 0
     display_receipts = []
 
@@ -28,11 +32,28 @@ def test_presentation_receipt_keeps_cards_in_history_without_inviting_prose_dupl
             else {}
         )
         if turns == 1:
-            name = "select_catalogue"
-            arguments = {"request_id": "select", "client_id": "default", "criteria": {"count": 1}}
+            name = "list_items" if upload else "select_catalogue"
+            arguments = (
+                {"client_id": "default", "collection": "upload-queue"}
+                if upload
+                else {"request_id": "select", "client_id": "default", "criteria": {"count": 1}}
+            )
         elif turns == 2:
-            name = "present_selection"
-            arguments = {"request_id": "show", "selection_id": receipt["job_id"]}
+            name = "present_upload_drafts" if upload else "present_selection"
+            arguments = (
+                {
+                    "request_id": "show",
+                    "client_id": "default",
+                    "drafts": [
+                        {
+                            "draft_id": receipt["rows"][0]["id"],
+                            "revision": receipt["rows"][0]["revision"],
+                        }
+                    ],
+                }
+                if upload
+                else {"request_id": "show", "selection_id": receipt["job_id"]}
+            )
         else:
             display_receipts.append(receipt)
             assert receipt["displayed_in_chat"] is True
@@ -80,6 +101,10 @@ def test_presentation_receipt_keeps_cards_in_history_without_inviting_prose_dupl
         setup.store.save_catalogue(
             [CatalogueRow("a" * 40, "Demo Film", 4000, 5, 2030, "https://test.invalid/file", "", 1)]
         )
+        if upload:
+            from tests.test_upload_presentations import draft_payload
+
+            setup.store.save_local_draft(draft_payload("Demo Film", 1, 6))
         model = browser.post(
             "/api/setup/assistant/providers",
             json={
@@ -100,7 +125,9 @@ def test_presentation_receipt_keeps_cards_in_history_without_inviting_prose_dupl
             "/api/assistant/jobs",
             json={
                 "conversation_id": chat,
-                "message": "Show one film as a card.",
+                "message": "Show my saved upload drafts for review."
+                if upload
+                else "Show one film as a card.",
             },
         ).json()["id"]
         result = wait_run(browser, submitted)

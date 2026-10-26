@@ -21,9 +21,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.agent.upload_presentations import draft_item
 from torrentlinker.bbcode import bbcode_to_html
+from torrentlinker.gui.chat_images import ChatImages
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.selection_cards import SelectionDetail
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.upload import category_name
 from torrentlinker.upload_queue import reset_local
@@ -37,6 +40,7 @@ class LocalDrafts(QWidget):
         self.store, self.save_callback, self.send_callback = store, save, send
         self.record = None
         self.busy = False
+        self.images = ChatImages(self)
         layout = QVBoxLayout(self)
         note = QLabel(self.tr("Saved only on this device/server. Review before sending to c411."))
         note.setWordWrap(True)
@@ -86,6 +90,8 @@ class LocalDrafts(QWidget):
         actions = QGridLayout()
         self.refresh_button = QPushButton(self.tr("Refresh"))
         self.refresh_button.clicked.connect(self.refresh)
+        self.preview_button = QPushButton(self.tr("Preview saved draft"))
+        self.preview_button.clicked.connect(self.open_preview)
         self.save_button = QPushButton(self.tr("Save changes locally"))
         self.save_button.clicked.connect(self.save)
         self.send_button = QPushButton(self.tr("Send to c411…"))
@@ -97,6 +103,7 @@ class LocalDrafts(QWidget):
         for index, button in enumerate(
             (
                 self.refresh_button,
+                self.preview_button,
                 self.save_button,
                 self.send_button,
                 self.remove_button,
@@ -199,9 +206,24 @@ class LocalDrafts(QWidget):
             self.send_button,
         ):
             widget.setEnabled(editable)
+        self.preview_button.setEnabled(bool(state) and not self.busy)
         self.table.setEnabled(not self.busy)
         self.remove_button.setEnabled(bool(state) and state != "sending" and not self.busy)
         self.reset_button.setEnabled(state in {"sending", "uncertain"} and not self.busy)
+
+    def open_preview(self):
+        if not self.record:
+            return
+        identifier, revision = self.record["id"], self.record["revision"]
+
+        def load(_presentation, _item):
+            current = self.store.local_draft(identifier)
+            if current["revision"] != revision:
+                raise ValueError(self.tr("Draft changed. Refresh the queue and preview it again."))
+            return draft_item(current, "0")
+
+        dialog = SelectionDetail("", "0", load, self.images, self)
+        dialog.open()
 
     def form(self):
         return {

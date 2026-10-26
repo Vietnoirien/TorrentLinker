@@ -196,3 +196,18 @@ canonical content title remain separate. Cards and their observations survive re
 
 A failed tool call shows a concise red activity line. Expand it to read its complete
 error and command; the Assistant receives the same error to correct its next call.
+
+### Upload draft cards
+
+Ask the Assistant to present its saved uploads for review. `present_upload_drafts` is
+available to the Assistant and MCP. It takes 1–50 Local Draft IDs with their exact
+revisions, obtained from `list_items(collection="upload-queue")`. Each page shows up
+to 20 cards. Artwork comes from the saved image or description. Cards show category,
+size, revision, status, and warning/refusal counts. Opening a card shows the saved
+description, NFO, files, category options and review findings.
+
+The **Local draft queue** also has **Preview saved draft**, which opens the same
+review dialog. Save editor changes locally before previewing them. Queue previews
+check the revision and ask you to refresh if it changed. Chat cards retain their
+saved contents and flag newer revisions or removed drafts. Neither preview approves,
+changes, or sends the draft. Sending still uses the normal Upload review and approval.

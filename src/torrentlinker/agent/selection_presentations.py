@@ -155,7 +155,8 @@ class Presentations:
             page["enrichment_id"] = page.pop("presentation_id")
         return page
 
-    def basic(self, row, item_id):
+    @staticmethod
+    def basic(row, item_id):
         kind = kind_of(row)
         return dict(
             item_id=item_id,
@@ -191,7 +192,12 @@ class Presentations:
                 (identifier, item_id),
             ).fetchone()
         if cached:
-            return json.loads(cached[0])
+            item = json.loads(cached[0])
+            if body.get("presentation_type") == "upload_drafts":
+                from torrentlinker.agent.upload_presentations import current_state
+
+                return current_state(item, self.service.target(owner, client).setup.store)
+            return item
         row = body["rows"][int(item_id)]
         result = self.basic(row, item_id)
         setup = self.service.target(owner, client).setup
@@ -320,12 +326,25 @@ class Presentations:
         ]
         # Keep full descriptions out of model receipts and page responses.
         items = [
-            {k: v for k, v in item.items() if k not in {"description", "description_html"}}
+            {
+                k: v
+                for k, v in item.items()
+                if k
+                not in {
+                    "description",
+                    "description_html",
+                    "nfo",
+                    "files",
+                    "upload_form",
+                    "upload_review",
+                }
+            }
             for item in items
         ]
         end = offset + len(items)
         return dict(
             presentation_id=identifier,
+            presentation_type=body.get("presentation_type", "selection"),
             title=body["title"],
             list_id=body["list_id"],
             revision=body["revision"],

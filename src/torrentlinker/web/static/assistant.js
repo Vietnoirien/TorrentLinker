@@ -339,7 +339,7 @@ function aRunCard(run) {
   });
   // Keep activity chronological; place card presentations after the response summary.
   for (const event of run.events) {
-    if (event.tool === "present_selection" && event.result?.presentation_id) {
+    if (["present_selection", "present_upload_drafts"].includes(event.tool) && event.result?.presentation_id) {
       card.append(aSelectionCards(event.result.presentation_id));
     }
   }

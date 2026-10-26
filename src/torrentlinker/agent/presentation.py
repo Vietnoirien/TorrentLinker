@@ -219,6 +219,10 @@ def tool_description(event: dict, language: str = "en") -> str:
             "Discover native Indexer filters",
             "Lire les filtres natifs de l’Indexeur",
         ),
+        "present_upload_drafts": (
+            "Show Upload draft cards",
+            "Afficher les fiches des brouillons Upload",
+        ),
         "present_selection": ("Show selection cards", "Afficher les fiches de la sélection"),
         "enrich_selection": ("Read selection metadata", "Lire les métadonnées de la sélection"),
         "get_presentation": ("Read selection cards", "Lire les fiches de la sélection"),

@@ -227,7 +227,8 @@ def test_native_card_preview(qtbot, tmp_path):
 
 @pytest.mark.skipif(os.environ.get("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 @pytest.mark.parametrize("root_path", ["", "/tl"])
-def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path):
+@pytest.mark.parametrize("upload", [False, True])
+def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path, upload):
     import socket
     import threading
     import time
@@ -245,6 +246,29 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path)
     assert qt_app
     saved = presentation_page()
     saved["title"] = "Your saved selection · demo"
+    run = presentation_run()
+    if upload:
+        saved["presentation_type"] = "upload_drafts"
+        run["events"][0]["tool"] = "present_upload_drafts"
+        for item in saved["items"]:
+            item.update(
+                presentation_type="upload_drafts",
+                torrent_note=None,
+                estimated_zen_per_day=None,
+                zen_assumptions="",
+                source_url="",
+                note="",
+                facts={"Category": "Film", "Source": "Blu-ray", "Files": "1"},
+                draft_id="demo-draft",
+                draft_revision=1,
+                saved_status="queued",
+                draft_changed=True,
+                current_revision=2,
+                review_summary={"warnings": 1, "refusals": 1},
+                nfo="Saved upload NFO",
+                files=[{"path": "release.epub", "size": 1234}],
+                upload_review={"warnings": ["Check edition"], "refusals": ["Missing option"]},
+            )
     pngs = {}
     for item, color in zip(saved["items"], ("#203b59", "#785742"), strict=True):
         item["image_url"] = "https://covers.example/" + item["item_id"] + ".png"
@@ -328,14 +352,14 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path)
                 container.style.cssText = 'max-width:900px;margin:32px auto;padding:20px';
                 container.append(aRunCard(run)); document.body.append(container);
             }""",
-                presentation_run(),
+                run,
             )
             page.evaluate(
                 """run => {
                 run.events = run.events.map(e => ({...e, tool: "get_presentation"}));
                 document.querySelector('main').append(aRunCard(run));
             }""",
-                presentation_run(),
+                run,
             )
             expect(page.locator(".selection-presentation")).to_have_count(1)
             assert page.evaluate("""() => {
@@ -346,12 +370,16 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path)
                     & Node.DOCUMENT_POSITION_FOLLOWING);
             }""")
             expect(page.locator(".selection-card")).to_have_count(2)
-            expect(page.locator(".selection-card").first.locator(".selection-scores")).to_have_text(
-                "Note 1.35 · ≈ 0.128 Zen/day"
-            )
-            expect(
-                page.locator(".selection-card").last.locator(".selection-scores")
-            ).to_contain_text("—")
+            if upload:
+                expect(page.locator(".selection-scores")).to_have_count(0)
+                expect(page.locator(".selection-card").first).to_contain_text("Draft changed")
+            else:
+                expect(
+                    page.locator(".selection-card").first.locator(".selection-scores")
+                ).to_have_text("Note 1.35 · ≈ 0.128 Zen/day")
+                expect(
+                    page.locator(".selection-card").last.locator(".selection-scores")
+                ).to_contain_text("—")
             page.wait_for_function(
                 "() => Array.from(document.querySelectorAll('.selection-card img'))"
                 ".every(i => i.complete && i.naturalWidth > 0)"
@@ -359,6 +387,11 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path)
             page.screenshot(path=str(tmp_path / "selection-cards-web.png"))
             page.get_by_role("button", name="The Lunar Archive", exact=True).click()
             expect(page.locator("dialog .selection-description")).to_contain_text("lunar library")
+            if upload:
+                page.locator("dialog summary", has_text="NFO").click()
+                expect(page.locator("dialog pre", has_text="Saved upload NFO")).to_be_visible()
+                page.locator("dialog summary", has_text="Refusals").click()
+                expect(page.locator("dialog pre", has_text="Missing option")).to_be_visible()
             assert not page.evaluate("window.bad || false")
             assert page.locator("dialog script, dialog .selection-description img").count() == 0
             assert page.locator("dialog a[href^='javascript:']").count() == 0
@@ -372,11 +405,50 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path)
                 """run => {
                 document.querySelector('main').replaceChildren(aRunCard(run));
             }""",
-                presentation_run(),
+                run,
             )
             expect(page.locator(".selection-card")).to_have_count(1)
             assert not remote
-            assert len([c for c in calls if "/items/" not in c]) == 2
+            assert len([c for c in calls if "/items/" not in c]) == (3 if upload else 2)
+            if upload:
+                page.route(
+                    "**/api/upload/queue?**",
+                    lambda route: route.fulfill(
+                        json=[
+                            {
+                                "id": "demo-draft",
+                                "revision": 1,
+                                "status": "queued",
+                                "form": {"title": "The Lunar Archive"},
+                                "path": "/saved/release.epub",
+                            }
+                        ]
+                    ),
+                )
+                preview_calls = []
+
+                def preview_response(route):
+                    preview_calls.append(route.request.url)
+                    route.fulfill(json=dict(saved["items"][0], description="Saved description"))
+
+                page.route("**/api/upload/queue/demo-draft/preview?**", preview_response)
+                page.evaluate("""async () => {
+                    document.querySelector('main').replaceChildren();
+                    const queue = element('div'); queue.id = 'upload-local-queue';
+                    document.querySelector('main').append(queue);
+                    state.clientId = 'default'; await loadUploadQueue();
+                }""")
+                page.get_by_role("button", name="Preview saved draft", exact=True).click()
+                expect(page.locator("dialog h2")).to_have_text("Upload draft review")
+                expect(page.locator("dialog .selection-description")).to_have_text(
+                    "Saved description"
+                )
+                assert parse_qs(urlsplit(preview_calls[0]).query) == {
+                    "revision": ["1"],
+                    "client_id": ["default"],
+                }
+                page.screenshot(path=str(tmp_path / "upload-queue-preview-web.png"))
+                page.get_by_role("button", name="Close", exact=True).click()
             browser.close()
     finally:
         server.should_exit = True

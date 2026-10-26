@@ -327,7 +327,7 @@ class ChatTranscript(QScrollArea):
         for event in run["events"]:
             result = event.get("result", {})
             if (
-                event.get("tool") == "present_selection"
+                event.get("tool") in {"present_selection", "present_upload_drafts"}
                 and result.get("presentation_id")
                 and self.presentation_page
             ):

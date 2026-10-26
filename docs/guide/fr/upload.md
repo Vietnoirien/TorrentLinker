@@ -15,6 +15,8 @@ Captures de l’interface française en thème sombre, avec des données d’exe
 
 Cliquez sur **Enregistrer dans la file locale** pour conserver votre travail dans TorrentLinker. Sur ordinateur, ouvrez **File de brouillons locaux**. Sur le web, la file se trouve en haut de la page Upload. Sélectionnez un brouillon pour vérifier ses fichiers, sa description et son NFO, modifier la présentation et enregistrer vos corrections localement.
 
+**Aperçu du brouillon enregistré** ouvre la même fenêtre de relecture que les fiches de l’Assistant : illustration, description, NFO, fichiers, options de catégorie et résultats de la vérification. L’aperçu montre la révision enregistrée ; enregistrez donc vos modifications dans l’éditeur au préalable. Il ne valide ni n’envoie le brouillon.
+
 Les brouillons survivent aux redémarrages et appartiennent au client torrent sélectionné. Ils restent sur l’ordinateur ou le serveur qui exécute TorrentLinker. L’enregistrement ne crée pas de `.torrent`, n’envoie rien à c411 et ne lance aucun seed. Vous pouvez conserver un brouillon incomplet, sans URL d’annonce, puis le corriger plus tard.
 
 Quand tout est prêt, enregistrez vos corrections et choisissez **Envoyer à c411…**. Le formulaire web demande aussi de cocher la case de relecture. TorrentLinker contrôle la révision enregistrée, les fichiers actuels, les options obligatoires, l’image hébergée, la description et le NFO. L’envoi nécessite votre URL d’annonce et les accès aux brouillons c411. Si les fichiers ont changé, enregistrez et relisez à nouveau.

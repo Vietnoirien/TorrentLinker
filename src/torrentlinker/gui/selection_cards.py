@@ -1,5 +1,6 @@
 """Saved selection cards; detail and image requests stay off the Qt thread."""
 
+import json
 from urllib.parse import urlsplit
 
 from PySide6.QtCore import QCoreApplication, Qt, QUrl
@@ -9,7 +10,9 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +46,57 @@ def scores(item):
     label.setStyleSheet("font-weight: 600;")
     label.setToolTip(item.get("zen_assumptions") or "")
     return label
+
+
+def upload_summary(item):
+    status = {
+        "queued": QCoreApplication.translate("UploadCards", "Awaiting review"),
+        "sending": QCoreApplication.translate("UploadCards", "Sending to c411"),
+        "sent": QCoreApplication.translate("UploadCards", "Sent to c411"),
+        "uncertain": QCoreApplication.translate("UploadCards", "Check c411 before retrying"),
+    }.get(
+        (item.get("saved_status") if item.get("draft_changed") else item.get("current_status"))
+        or item.get("saved_status"),
+        QCoreApplication.translate("UploadCards", "Saved draft"),
+    )
+    lines = [
+        QCoreApplication.translate("UploadCards", "Upload draft · revision {0} · {1}").format(
+            item["draft_revision"], status
+        )
+    ]
+    review = item.get("review_summary") or {}
+    lines.append(
+        QCoreApplication.translate("UploadCards", "{0} refusals · {1} warnings").format(
+            review.get("refusals", 0), review.get("warnings", 0)
+        )
+    )
+    if item.get("draft_deleted"):
+        lines.append(
+            QCoreApplication.translate(
+                "UploadCards", "Draft removed. This is a saved review snapshot."
+            )
+        )
+    elif item.get("draft_changed"):
+        lines.append(
+            QCoreApplication.translate(
+                "UploadCards", "Draft changed. Review the current revision before sending."
+            )
+        )
+    return "\n".join(lines)
+
+
+def card_size(item):
+    size = item.get("size_bytes")
+    text = (
+        human_size(size)
+        if size is not None
+        else QCoreApplication.translate("SelectionCards", "Unknown size")
+    )
+    if item.get("presentation_type") != "upload_drafts":
+        text += " · " + QCoreApplication.translate("SelectionCards", "%1 seeders").replace(
+            "%1", str(item["seeders"] if item.get("seeders") is not None else "—")
+        )
+    return text
 
 
 class Artwork(QLabel):
@@ -110,17 +164,13 @@ class SelectionDetail(QDialog):
         row.addWidget(Artwork(item, self.images, large=True), 1)
         info = QVBoxLayout()
         info.addWidget(plain_label(item["title"]))
-        size = item.get("size_bytes")
-        info.addWidget(
-            plain_label(
-                (human_size(size) if size is not None else self.tr("Unknown size"))
-                + " · "
-                + self.tr("%1 seeders").replace(
-                    "%1", str(item["seeders"] if item.get("seeders") is not None else "—")
-                )
-            )
-        )
-        info.addWidget(scores(item))
+        info.addWidget(plain_label(card_size(item)))
+        upload = item.get("presentation_type") == "upload_drafts"
+        if upload:
+            self.setWindowTitle(self.tr("Upload draft review"))
+            info.addWidget(plain_label(upload_summary(item)))
+        else:
+            info.addWidget(scores(item))
         if item.get("zen_assumptions"):
             info.addWidget(plain_label(item["zen_assumptions"]))
         for name, value in (item.get("facts") or {}).items():
@@ -143,7 +193,44 @@ class SelectionDetail(QDialog):
             )[0]
         )
         description.setMinimumHeight(160)
-        box.addWidget(description, 1)
+        if upload:
+            tabs = QTabWidget()
+            tabs.setObjectName("uploadReviewTabs")
+            tabs.addTab(description, self.tr("Description"))
+            review = item.get("upload_review") or {}
+            review_text = self.tr("Reviewing these cards does not approve or send the draft.")
+            for label, key in (
+                (self.tr("Refusals"), "refusals"),
+                (self.tr("Warnings"), "warnings"),
+            ):
+                review_text += "\n\n" + label + "\n" + "\n".join(review.get(key, []))
+            fields = [
+                (self.tr("NFO"), item.get("nfo", "")),
+                (
+                    self.tr("Files"),
+                    "\n".join(
+                        f"{file['path']} · {human_size(file['size'])}"
+                        for file in item.get("files", [])
+                    ),
+                ),
+                (
+                    self.tr("Category options"),
+                    json.dumps(
+                        (item.get("upload_form") or {}).get("options", {}),
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                ),
+                (self.tr("Review"), review_text),
+            ]
+            for label, text in fields:
+                editor = QPlainTextEdit()
+                editor.setReadOnly(True)
+                editor.setPlainText(text)
+                tabs.addTab(editor, label)
+            box.addWidget(tabs, 1)
+        else:
+            box.addWidget(description, 1)
         source = item.get("source_url") or ""
         if urlsplit(source).scheme in {"https", "http"}:
             link = QPushButton(self.tr("Open source"))
@@ -209,7 +296,8 @@ class SelectionCards(QWidget):
             return
 
         def done(page):
-            self.pages[key] = page
+            if page.get("presentation_type") != "upload_drafts":
+                self.pages[key] = page
             while len(self.pages) > 64:
                 self.pages.pop(next(iter(self.pages)))
             if isValid(self) and self.offset == offset:
@@ -230,13 +318,21 @@ class SelectionCards(QWidget):
         self.heading.setText(page["title"])
         items = page["items"]
         total = page["count"]
-        self.status.setText(
-            self.tr("%1–%2 of %3 · saved revision %4")
-            .replace("%1", str(self.offset + 1 if items else 0))
-            .replace("%2", str(self.offset + len(items)))
-            .replace("%3", str(total))
-            .replace("%4", str(page.get("revision", "")))
-        )
+        if page.get("presentation_type") == "upload_drafts":
+            self.status.setText(
+                self.tr("%1–%2 of %3 · saved Upload drafts")
+                .replace("%1", str(self.offset + 1 if items else 0))
+                .replace("%2", str(self.offset + len(items)))
+                .replace("%3", str(total))
+            )
+        else:
+            self.status.setText(
+                self.tr("%1–%2 of %3 · saved revision %4")
+                .replace("%1", str(self.offset + 1 if items else 0))
+                .replace("%2", str(self.offset + len(items)))
+                .replace("%3", str(total))
+                .replace("%4", str(page.get("revision", "")))
+            )
         for card in self.cards:
             self.grid.removeWidget(card)
             card.setParent(None)
@@ -261,17 +357,11 @@ class SelectionCards(QWidget):
             content.addWidget(title)
             if item.get("subtitle"):
                 content.addWidget(plain_label(item["subtitle"]))
-            size = item.get("size_bytes")
-            content.addWidget(
-                plain_label(
-                    (human_size(size) if size is not None else self.tr("Unknown size"))
-                    + " · "
-                    + self.tr("%1 seeders").replace(
-                        "%1", str(item["seeders"] if item.get("seeders") is not None else "—")
-                    )
-                )
-            )
-            content.addWidget(scores(item))
+            content.addWidget(plain_label(card_size(item)))
+            if item.get("presentation_type") == "upload_drafts":
+                content.addWidget(plain_label(upload_summary(item)))
+            else:
+                content.addWidget(scores(item))
             if item.get("note"):
                 content.addWidget(plain_label(item["note"]))
             content.addStretch()

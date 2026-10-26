@@ -458,6 +458,21 @@ def create_app(
     def upload_queue(client_id: str = "") -> list:
         return for_client(client_id).setup.store.local_drafts()
 
+    @app.get("/api/upload/queue/{identifier}/preview")
+    def upload_queue_preview(
+        identifier: str, revision: int = Query(ge=1), client_id: str = ""
+    ) -> dict:
+        from torrentlinker.agent.upload_presentations import draft_item
+
+        store = for_client(client_id).setup.store
+        try:
+            draft = store.local_draft(identifier)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from error
+        if draft["revision"] != revision:
+            raise HTTPException(409, "Draft changed. Refresh the queue and preview it again.")
+        return draft_item(draft, "0")
+
     @app.get("/api/library")
     def library(
         client_id: str = "",

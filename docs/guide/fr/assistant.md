@@ -217,3 +217,21 @@ restent distincts. Les fiches et leurs observations persistent après redémarra
 
 Un appel d’outil en échec affiche une courte ligne rouge. Dépliez-la pour lire l’erreur
 complète et la commande ; l’Assistant reçoit la même erreur pour corriger son appel.
+
+### Fiches des brouillons Upload
+
+Demandez à l’Assistant de présenter ses uploads enregistrés pour les relire.
+`present_upload_drafts` est disponible dans l’Assistant et par MCP. Il prend de 1 à 50
+identifiants de brouillons locaux avec leurs révisions exactes, obtenus avec
+`list_items(collection="upload-queue")`. Chaque page affiche jusqu’à 20 fiches.
+L’illustration vient de l’image ou de la description enregistrée. Les fiches montrent
+la catégorie, la taille, la révision, l’état et le nombre d’avertissements et de refus.
+Ouvrez une fiche pour consulter la description, le NFO, les fichiers, les options de
+catégorie et les résultats de la vérification.
+
+La **File des brouillons locaux** propose aussi **Aperçu du brouillon enregistré**,
+qui ouvre la même fenêtre de relecture. Enregistrez les modifications de l’éditeur
+avant de les prévisualiser. Si la révision a changé, actualisez la file. Les fiches
+dans la discussion conservent leur contenu enregistré et signalent les révisions
+plus récentes ou les brouillons supprimés. Ces aperçus ne valident, ne modifient et
+n’envoient aucun brouillon. L’envoi conserve la relecture et la validation habituelles.

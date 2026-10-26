@@ -22,8 +22,18 @@ function aCardArtwork(item, large = false) {
   return art;
 }
 function aCardSize(item) {
-  return (item.size_bytes == null ? at("Unknown size", "Taille inconnue") : bytes(item.size_bytes))
-    + " · " + (item.seeders ?? "—") + " sources";
+  const size = item.size_bytes == null ? at("Unknown size", "Taille inconnue") : bytes(item.size_bytes);
+  return item.presentation_type === "upload_drafts" ? size : size + " · " + (item.seeders ?? "—") + " sources";
+}
+function aUploadSummary(item) {
+  const states = {queued: at("Awaiting review", "À relire"), sending: at("Sending to c411", "Envoi vers c411"),
+    sent: at("Sent to c411", "Envoyé à c411"), uncertain: at("Check c411 before retrying", "Vérifiez c411 avant de réessayer")};
+  const status = states[(item.draft_changed ? item.saved_status : item.current_status) || item.saved_status] || at("Saved draft", "Brouillon enregistré");
+  let text = `${at("Upload draft", "Brouillon Upload")} · ${at("revision", "révision")} ${item.draft_revision} · ${status}`;
+  text += ` · ${item.review_summary?.refusals || 0} ${at("refusals", "refus")} · ${item.review_summary?.warnings || 0} ${at("warnings", "avertissements")}`;
+  if (item.draft_deleted) text += " · " + at("Draft removed. Saved review snapshot.", "Brouillon supprimé. Copie de relecture enregistrée.");
+  else if (item.draft_changed) text += " · " + at("Draft changed. Review the current revision before sending.", "Brouillon modifié. Relisez la révision actuelle avant l'envoi.");
+  return element("span", text, "selection-upload-summary");
 }
 function aCardScores(item) {
   const value = (n, places) => typeof n === "number" && Number.isFinite(n) ? n.toFixed(places) : "—";
@@ -34,17 +44,21 @@ function aCardScores(item) {
   return label;
 }
 async function aPresentationItem(identifier, itemId) {
+  return aCardDetail(() => api(`assistant/presentations/${encodeURIComponent(identifier)}/items/${encodeURIComponent(itemId)}`));
+}
+async function aCardDetail(load) {
   const {dialog, form} = aDialog(at("Selection details", "Détails de la sélection"));
   dialog.classList.add("selection-detail");
   const body = element("div", at("Loading details…", "Chargement des détails…"));
   form.append(body, button(at("Close", "Fermer"), () => dialog.close()));
   try {
-    const item = await api(`assistant/presentations/${encodeURIComponent(identifier)}/items/${encodeURIComponent(itemId)}`);
+    const item = await load();
     if (!dialog.isConnected) return;
+    if (item.presentation_type === "upload_drafts") form.querySelector("h2").textContent = at("Upload draft review", "Relecture du brouillon Upload");
     body.replaceChildren(element("h3", item.content_title || item.title));
     const header = element("div", undefined, "selection-detail-header"), info = element("div");
     info.append(element("p", item.title, "selection-release"), element("p", aCardSize(item), "muted"));
-    info.append(aCardScores(item));
+    info.append(item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
     if (item.zen_assumptions) info.append(element("p", item.zen_assumptions, "muted"));
     const facts = element("dl", undefined, "selection-facts");
     for (const [name, value] of Object.entries(item.facts || {})) facts.append(element("dt", name), element("dd", String(value)));
@@ -71,6 +85,21 @@ async function aPresentationItem(identifier, itemId) {
       description.append(template.content);
     } else description.textContent = item.description || at("No description available.", "Aucune description disponible.");
     body.append(description);
+    if (item.presentation_type === "upload_drafts") {
+      body.append(element("p", at("Reviewing these cards does not approve or send the draft.", "Consulter ces fiches ne valide ni n'envoie le brouillon.")));
+      const review = item.upload_review || {};
+      for (const [title, text] of [
+        ["NFO", item.nfo || ""],
+        [at("Files", "Fichiers"), (item.files || []).map(file => `${file.path} · ${bytes(file.size)}`).join("\n")],
+        [at("Category options", "Options de catégorie"), JSON.stringify(item.upload_form?.options || {}, null, 2)],
+        [at("Refusals", "Refus"), (review.refusals || []).join("\n")],
+        [at("Warnings", "Avertissements"), (review.warnings || []).join("\n")],
+      ]) {
+        const details = element("details"), pre = element("pre", text);
+        pre.style.whiteSpace = "pre-wrap";
+        details.append(element("summary", title), pre); body.append(details);
+      }
+    }
     if (/^https?:\/\//i.test(item.source_url || "")) {
       const link = element("a", at("Open source", "Ouvrir la source"));
       link.href = item.source_url; link.target = "_blank"; link.rel = "noopener noreferrer";
@@ -105,7 +134,8 @@ function aSelectionCards(identifier) {
       const page = await assistantPresentationPages.get(key);
       if (!section.isConnected || offset !== position) return;
       title.textContent = page.title;
-      status.textContent = `${page.items.length ? offset + 1 : 0}–${offset + page.items.length} / ${page.count} · ${at("saved revision", "révision enregistrée")} ${page.revision ?? ""}`;
+      if (page.presentation_type === "upload_drafts") assistantPresentationPages.delete(key);
+      status.textContent = `${page.items.length ? offset + 1 : 0}–${offset + page.items.length} / ${page.count} · ${page.presentation_type === "upload_drafts" ? at("saved Upload drafts", "brouillons Upload enregistrés") : at("saved revision", "révision enregistrée") + " " + (page.revision ?? "")}`;
       grid.replaceChildren();
       for (const item of page.items) {
         const card = button("", () => aPresentationItem(identifier, item.item_id), "selection-card");
@@ -113,7 +143,8 @@ function aSelectionCards(identifier) {
         card.setAttribute("aria-label", item.content_title || item.title);
         card.append(aCardArtwork(item), element("strong", item.content_title || item.title));
         if (item.subtitle) card.append(element("span", item.subtitle, "muted"));
-        card.append(element("span", aCardSize(item), "selection-size"), aCardScores(item));
+        card.append(element("span", aCardSize(item), "selection-size"),
+          item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
         if (item.note) card.append(element("span", item.note, "selection-note"));
         grid.append(card);
       }

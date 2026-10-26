@@ -1688,6 +1688,14 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
         <source>Check c411 and wait for any running send to finish first. Confirm that no Draft was created and another attempt is needed.</source>
         <translation>Vérifiez c411 et attendez la fin de tout envoi en cours. Confirmez qu’aucun brouillon n’a été créé et qu’un nouvel essai est nécessaire.</translation>
     </message>
+    <message>
+        <source>Preview saved draft</source>
+        <translation>Aperçu du brouillon enregistré</translation>
+    </message>
+    <message>
+        <source>Draft changed. Refresh the queue and preview it again.</source>
+        <translation>Le brouillon a changé. Actualisez la file et ouvrez à nouveau l’aperçu.</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -6676,6 +6684,42 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>Open source</source>
         <translation>Ouvrir la source</translation>
     </message>
+    <message>
+        <source>Upload draft review</source>
+        <translation>Relecture du brouillon Upload</translation>
+    </message>
+    <message>
+        <source>Description</source>
+        <translation>Description</translation>
+    </message>
+    <message>
+        <source>NFO</source>
+        <translation>NFO</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <source>Category options</source>
+        <translation>Options de catégorie</translation>
+    </message>
+    <message>
+        <source>Review</source>
+        <translation>Relecture</translation>
+    </message>
+    <message>
+        <source>Refusals</source>
+        <translation>Refus</translation>
+    </message>
+    <message>
+        <source>Warnings</source>
+        <translation>Avertissements</translation>
+    </message>
+    <message>
+        <source>Reviewing these cards does not approve or send the draft.</source>
+        <translation>Consulter ces fiches ne valide ni n'envoie le brouillon.</translation>
+    </message>
 </context>
 <context>
     <name>SelectionCards</name>
@@ -6710,6 +6754,10 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>%1 seeders</source>
         <translation>%1 sources</translation>
+    </message>
+    <message>
+        <source>%1–%2 of %3 · saved Upload drafts</source>
+        <translation>%1–%2 sur %3 · brouillons Upload enregistrés</translation>
     </message>
 </context>
 <context>
@@ -6785,6 +6833,45 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>No eligible torrent remains for this Plan. Review the selected categories and filters.</source>
         <translation>Aucun torrent admissible ne reste pour ce Plan. Vérifiez les catégories choisies et les filtres.</translation>
+    </message>
+</context>
+<context>
+    <name>UploadCards</name>
+    <message>
+        <source>Awaiting review</source>
+        <translation>À relire</translation>
+    </message>
+    <message>
+        <source>Sending to c411</source>
+        <translation>Envoi vers c411</translation>
+    </message>
+    <message>
+        <source>Sent to c411</source>
+        <translation>Envoyé à c411</translation>
+    </message>
+    <message>
+        <source>Check c411 before retrying</source>
+        <translation>Vérifiez c411 avant de réessayer</translation>
+    </message>
+    <message>
+        <source>Saved draft</source>
+        <translation>Brouillon enregistré</translation>
+    </message>
+    <message>
+        <source>Upload draft · revision {0} · {1}</source>
+        <translation>Brouillon Upload · révision {0} · {1}</translation>
+    </message>
+    <message>
+        <source>{0} refusals · {1} warnings</source>
+        <translation>{0} refus · {1} avertissements</translation>
+    </message>
+    <message>
+        <source>Draft removed. This is a saved review snapshot.</source>
+        <translation>Brouillon supprimé. Cette copie de relecture a été conservée.</translation>
+    </message>
+    <message>
+        <source>Draft changed. Review the current revision before sending.</source>
+        <translation>Brouillon modifié. Relisez la révision actuelle avant tout envoi.</translation>
     </message>
 </context>
 </TS>

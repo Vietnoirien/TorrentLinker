@@ -597,6 +597,9 @@ class Assistant:
                 "remain separate and cannot be claimed as verified distinct films. "
                 "Skip content deduplication when the user explicitly wants multiple releases "
                 "or bulk torrent rankings rather than distinct content. "
+                "Use present_upload_drafts after saving Local Upload Drafts to show their exact "
+                "draft IDs/revisions as review cards. Use list_items upload-queue to rediscover "
+                "them. Displaying never approves/sends; upload-send still needs owner approval. "
                 "Use present_selection to show cards for an exact list revision or selection. "
                 "For a saved list, pass list_id and expected_revision directly; do not call "
                 "select_torrent_list just to display it. "
@@ -1145,7 +1148,7 @@ class Assistant:
                         event.update(status="failed", error=call_error, result=result)
                         self.update_run(identifier, events=json.dumps(events))
                     if (
-                        call["name"] == "present_selection"
+                        call["name"] in {"present_selection", "present_upload_drafts"}
                         and result.get("presentation_id")
                         and not call_error
                     ):
