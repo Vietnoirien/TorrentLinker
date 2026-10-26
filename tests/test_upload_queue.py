@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from tests.fake_qbit import FakeQbit
 from tests.test_agent_access import call
+from tests.test_upload_completeness import complete_description
 from tests.test_web_jobs import finished, login
 from torrentlinker.web.app import create_app
 
@@ -90,7 +91,9 @@ def test_local_draft_survives_restart_and_only_explicit_send_contacts_site(tmp_p
             path=str(path),
             upload={
                 **rows[0]["form"],
-                "description": "[img]https://images.example/old.png[/img]Reviewed description",
+                "description": complete_description().replace(
+                    "https://example.org/cover.jpg", "https://images.example/old.png"
+                ),
                 "image": "https://images.example/object.png",
             },
         )
@@ -242,7 +245,7 @@ def test_mcp_automations_queue_locally_and_sending_needs_current_revision_approv
             path=str(path),
             draft_id=draft["id"],
             revision=draft["revision"],
-            upload={**draft["form"], "description": "Corrected"},
+            upload={**draft["form"], "description": complete_description(text="Corrected")},
         )
         edited = finished(browser, changed["job_id"])["result"]
         stale = browser.post(f"/api/agents/proposals/{send['id']}/approve")
@@ -319,7 +322,10 @@ def test_uncertain_send_is_kept_and_does_not_retry_automatically(tmp_path, monke
         record = job(
             kind="upload-queue",
             path=str(item),
-            upload={"image": "https://images.example/object.png", "description": "Review me"},
+            upload={
+                "image": "https://images.example/object.png",
+                "description": complete_description(text="Review me"),
+            },
         )["result"]
         first = job(kind="upload-send", draft_id=record["id"], revision=record["revision"])
         assert first["status"] == "failed"

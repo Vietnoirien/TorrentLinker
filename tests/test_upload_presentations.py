@@ -2,6 +2,7 @@
 
 from tests import test_catalogue_selection
 from tests.test_agent_torrent_lists import tool
+from tests.test_upload_completeness import complete_description, complete_form
 
 catalogue_app = test_catalogue_selection.catalogue_app
 
@@ -14,8 +15,8 @@ def draft_payload(title="A book", category=2, subcategory=14):
             "category": category,
             "subcategory": subcategory,
             "image": "https://example.org/cover.jpg",
-            "description": "[b]Saved description[/b]",
-            "nfo": "Saved NFO",
+            "description": complete_description(category, subcategory, "Saved description"),
+            "nfo": "Saved NFO\n" + complete_form(category, subcategory)["nfo"],
             "source": "Retail",
             "options": {"language": [1]},
             "reviewed": False,
@@ -53,7 +54,7 @@ def test_saved_upload_is_presented_without_sending_or_changing_review(catalogue_
         item_id="0",
     )
     assert "Saved description" in detail["description_html"]
-    assert detail["nfo"] == "Saved NFO"
+    assert detail["nfo"].startswith("Saved NFO")
     assert detail["files"] == draft["files"]
     assert detail["upload_review"]["refusals"] == ["Missing option"]
     assert store.local_draft(draft["id"]) == draft
@@ -154,7 +155,7 @@ def test_review_snapshot_survives_edits_removal_and_restart(catalogue_app):
         presentation_id=page["presentation_id"],
         item_id="0",
     )
-    assert detail["draft_deleted"] is True and detail["nfo"] == "Saved NFO"
+    assert detail["draft_deleted"] is True and detail["nfo"].startswith("Saved NFO")
 
 
 def test_upload_cards_reject_wrong_revisions_client_and_actor(catalogue_app):
@@ -207,8 +208,8 @@ def test_draft_cards_sanitize_artwork_and_description_and_paginate(catalogue_app
     store = app.state.agent_service.setup.store
     payload = draft_payload()
     payload["form"]["image"] = "http://127.0.0.1/private.png"
-    payload["form"]["description"] = (
-        '<p>Review<script>alert(1)</script><img src="file:///private.png"></p>'
+    payload["form"]["description"] += (
+        '\n<p>Review<script>alert(1)</script><img src="file:///private.png"></p>'
     )
     drafts = [
         store.save_local_draft(payload),
@@ -223,7 +224,10 @@ def test_draft_cards_sanitize_artwork_and_description_and_paginate(catalogue_app
         drafts=[{"draft_id": row["id"], "revision": 1} for row in drafts],
         limit=1,
     )
-    assert page["has_more"] is True and page["items"][0]["image_url"] == ""
+    assert (
+        page["has_more"] is True
+        and page["items"][0]["image_url"] == "https://example.org/cover.jpg"
+    )
     detail = tool(
         browser,
         token,
@@ -231,7 +235,10 @@ def test_draft_cards_sanitize_artwork_and_description_and_paginate(catalogue_app
         presentation_id=page["presentation_id"],
         item_id="0",
     )
-    assert "<script" not in detail["description_html"] and "<img" not in detail["description_html"]
+    assert (
+        "<script" not in detail["description_html"]
+        and '<img src="file:' not in detail["description_html"]
+    )
     next_page = browser.get(
         f"/api/assistant/presentations/{page['presentation_id']}?offset=1&limit=1"
     )
@@ -249,7 +256,7 @@ def test_queue_preview_uses_saved_revision_and_does_not_send(catalogue_app):
     assert response.status_code == 200
     item = response.json()
     assert item["draft_revision"] == 1
-    assert item["nfo"] == "Saved NFO"
+    assert item["nfo"].startswith("Saved NFO")
     assert item["upload_review"]["refusals"] == ["Missing option"]
     assert store.local_draft(draft["id"]) == draft
     store.save_local_draft(draft_payload("Changed"), draft["id"], 1)
@@ -359,3 +366,74 @@ def test_plain_draft_description_is_escaped_once():
     assert "Alice &amp; Bob &lt;adventure&gt;" in markup
     assert "&amp;amp;" not in markup and "&amp;lt;" not in markup
     assert images == ()
+
+
+def test_incomplete_drafts_return_field_errors_without_creating_cards(catalogue_app):
+    from tests.test_agent_access import call
+
+    app, browser, token = catalogue_app
+    service = app.state.agent_service
+    draft = service.setup.store.save_local_draft(draft_payload())
+    payload = draft_payload()
+    payload["form"]["description"] = "L’œuvre de Lewis Carroll."
+    draft = service.setup.store.save_local_draft(payload, draft["id"], 1)
+    before = service.access.db.execute("SELECT count(*) FROM selection_presentations").fetchone()[0]
+    response = call(
+        browser,
+        token,
+        "present_upload_drafts",
+        {
+            "request_id": "missing-fields",
+            "client_id": "default",
+            "drafts": [{"draft_id": draft["id"], "revision": 2}],
+        },
+    )["structuredContent"]
+    assert response["error"] and "presentation_id" not in response
+    assert response["drafts"][0]["draft_id"] == draft["id"]
+    assert "description.author" in {x["field"] for x in response["drafts"][0]["missing_fields"]}
+    assert (
+        service.access.db.execute("SELECT count(*) FROM selection_presentations").fetchone()[0]
+        == before
+    )
+    assert service.setup.store.local_draft(draft["id"])["revision"] == 2
+
+
+def test_model_can_discover_category_presentation_contract(catalogue_app):
+    _, browser, token = catalogue_app
+    result = tool(browser, token, "get_upload_requirements", category=2, subcategory=11)
+    assert {f["id"] for f in result["fields"]} >= {"author", "language", "narrator", "duration"}
+    assert "Présentation" in result["template"]
+
+
+def test_mixed_batch_is_atomic_and_a_repaired_revision_can_be_presented(catalogue_app):
+    from tests.test_agent_access import call
+
+    app, browser, token = catalogue_app
+    service = app.state.agent_service
+    store = service.setup.store
+    valid = store.save_local_draft(draft_payload())
+    payload = draft_payload("Incomplete")
+    payload["form"]["description"] = "An unfinished description"
+    invalid = store.save_local_draft(payload)
+    args = dict(
+        request_id="repair-batch",
+        client_id="default",
+        drafts=[{"draft_id": row["id"], "revision": row["revision"]} for row in (valid, invalid)],
+    )
+    failed = call(browser, token, "present_upload_drafts", args)["structuredContent"]
+    assert len(failed["drafts"]) == 1 and "presentation_id" not in failed
+    assert (
+        service.access.db.execute("SELECT count(*) FROM selection_presentations").fetchone()[0] == 0
+    )
+    repaired = store.save_local_draft(draft_payload("Repaired"), invalid["id"], 1)
+    args["drafts"][1]["revision"] = repaired["revision"]
+    shown = tool(browser, token, "present_upload_drafts", **args)
+    assert shown["count"] == 2
+
+
+def test_upload_category_ids_are_discoverable_without_guessing(catalogue_app):
+    _, browser, token = catalogue_app
+    result = tool(browser, token, "get_upload_requirements")
+    categories = {row["id"]: row for row in result["categories"]}
+    assert set(categories) == {1, 2, 3, 4, 5, 6, 7, 10}
+    assert 14 in {row["id"] for row in categories[2]["subcategories"]}

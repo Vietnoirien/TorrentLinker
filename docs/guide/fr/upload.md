@@ -61,3 +61,11 @@ STEP, GCODE, BLEND, F3D, SLDPRT et FCStd n’ont pas d’aperçu : préparez leu
 Consultez les [règles par catégorie](upload-categories.md) pour les formats, noms, contrôles et métadonnées des livres numériques, de l’audio, des vidéos, du GPS, de l’émulation, des applications et des jeux.
 
 [Documentation](../../README.md) · [English](../en/upload.md)
+
+### Compléter la présentation avant d’afficher les fiches
+
+L’Assistant utilise `preview_upload` pour examiner un élément de la Bibliothèque, `get_upload_requirements` pour lire le modèle de sa catégorie et `save_upload_draft` pour enregistrer ou corriger le brouillon. Ces outils sont aussi accessibles par MCP. Les identifiants des catégories Upload diffèrent de ceux du Catalogue ; appeler `get_upload_requirements` sans catégorie donne la liste des identifiants et sous-catégories pris en charge.
+
+Un brouillon incomplet peut être enregistré localement. La vérification indique précisément chaque champ manquant dans la description ou le NFO. Conservez les libellés techniques du modèle et remplissez la section Présentation/Synopsis. Une valeur inconnue ou un texte à compléter ne compte pas comme un champ rempli. Certaines exigences dépendent du contenu : plateforme WEB, détails d’un livre audio, profondeur du son sans perte, durée de chaque piste. La langue des métadonnées EPUB est contrôlée lorsqu’elle est disponible ; déclarer « Français » ne rend pas admissible un fichier dans une autre langue.
+
+`present_upload_drafts` refuse les fiches incomplètes. L’Assistant doit corriger le formulaire enregistré puis présenter sa nouvelle révision, ou vous demander les informations manquantes. L’aperçu de la file reste accessible pour relire un travail en cours. Chaque envoi revérifie les champs avant de créer le torrent ou de contacter c411, y compris l’envoi direct sur ordinateur. Des champs complets ne garantissent ni leur exactitude ni l’acceptation par le site : les refus de catégorie, les doublons et la relecture restent à traiter. Conservez les NFO originaux ; les rapports vidéo MediaInfo sont reconnus sans réécriture.

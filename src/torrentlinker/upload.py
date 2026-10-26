@@ -732,7 +732,7 @@ def nfo_ebook(title: str, files: list[UploadFile]) -> str:
         f"Titre .......... : {book}",
         f"Auteur ......... : {author or '-'}",
         f"Format ......... : {', '.join(f.upper() for f in _formats_ebook(names)) or '-'}",
-        "Langue ......... : Français",
+        "Langue ......... : ",
         f"Fichiers ....... : {len(files)}",
         f"Taille totale .. : {human_size(sum(f.size for f in files))}",
         "",
@@ -766,7 +766,7 @@ def description_ebook(title: str, files: list[UploadFile], source: str, image_ur
         lines.append(f"[b]Auteur :[/b] {author}")
     lines += [
         f"[b]Format :[/b] {', '.join(f.upper() for f in _formats_ebook(names))}",
-        "[b]Langue :[/b] Français",
+        "[b]Langue :[/b] ",
         f"[b]Fichiers :[/b] {len(files)}",
         f"[b]Taille totale :[/b] {human_size(sum(f.size for f in files))}",
     ]
@@ -857,6 +857,9 @@ def create_upload(
     """Make the torrent, keep it and the NFO in `folder`, then save the c411 Draft."""
     if not announce:
         raise ValueError("No Announce URL: enter yours in Settings → Connections")
+    from torrentlinker.upload_presentation import file_evidence, request_form, require_complete
+
+    require_complete(request_form(request), file_evidence(request))
     item, title, files, nfo = request.item, request.title, request.files, request.nfo
     torrent = make_torrent(item, files, announce, report, stopped, now)
     save_upload_files(folder, title, torrent, nfo)

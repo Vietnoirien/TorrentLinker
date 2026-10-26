@@ -7,6 +7,7 @@ import pytest
 import torf
 
 from tests.fake_qbit import FakeQbit
+from tests.test_upload_completeness import complete_description, complete_form
 from torrentlinker.domain import ContentKind, LocalItem
 from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.matching import IgnoreList
@@ -285,7 +286,15 @@ def test_an_upload_keeps_its_files_saves_the_draft_then_seeds(tmp_path: Path) ->
 
     title = "Petit.Etau.De.Bureau.NOTAG.3MF"
     files = upload_files(item, title, IGNORE)
-    request = UploadRequest(item, title, files, "my nfo", "my description", 10, 51)
+    request = UploadRequest(
+        item,
+        title,
+        files,
+        complete_form(10, 51)["nfo"],
+        complete_description(text="my description"),
+        10,
+        51,
+    )
     prepared = create_upload(
         request, ANNOUNCE, tmp_path / "uploads", save_draft, store, now=lambda: 50.0
     )
@@ -295,8 +304,8 @@ def test_an_upload_keeps_its_files_saves_the_draft_then_seeds(tmp_path: Path) ->
     assert (tmp_path / "uploads" / "Petit.Etau.De.Bureau.NOTAG.3MF.nfo").exists()
     assert sorted(p.name for p in item.path.parent.iterdir()) == ["Petit étau de bureau.3mf"]
     assert sent[0]["categoryId"] == 10 and sent[0]["subcategoryId"] == 51
-    assert sent[0]["description"] == "my description"
-    assert base64.b64decode(sent[0]["nfoFileData"]) == b"my nfo"  # type: ignore[arg-type]
+    assert sent[0]["description"] == complete_description(text="my description")
+    assert base64.b64decode(sent[0]["nfoFileData"]) == complete_form(10, 51)["nfo"].encode()  # type: ignore[arg-type]
     assert store.uploads()[0].draft_id == 128232
     assert h == prepared.meta.infohash
     t = qbit.torrent(h)
@@ -394,7 +403,16 @@ def test_an_upload_sends_its_options_in_the_draft(tmp_path: Path) -> None:
         return 1
 
     files = upload_files(item, "T", IGNORE)
-    request = UploadRequest(item, "T", files, "n", "d", 10, 51, options={"9": 3})
+    request = UploadRequest(
+        item,
+        "T",
+        files,
+        complete_form(10, 51)["nfo"],
+        complete_description(),
+        10,
+        51,
+        options={"9": 3},
+    )
     create_upload(request, ANNOUNCE, tmp_path / "uploads", save_draft, Store(tmp_path / "s.db"))
 
     assert sent[0]["options"] == {"9": 3}
@@ -527,7 +545,7 @@ def test_the_nfo_lists_title_author_formats_language_count_size_and_every_file(
     nfo = EBOOK.nfo(name, upload_files(item, name, IGNORE))
 
     assert "Titre .......... : Dune" in nfo and "Auteur ......... : Frank Herbert" in nfo
-    assert "Format ......... : EPUB, PDF" in nfo and "Langue ......... : Français" in nfo
+    assert "Format ......... : EPUB, PDF" in nfo and "Langue ......... : Français" not in nfo
     assert "Fichiers ....... : 2" in nfo and "Taille totale .. : 200 o" in nfo
     assert "Dune.epub" in nfo and "Dune.pdf" in nfo
 
@@ -541,7 +559,7 @@ def test_the_ebook_description_has_the_image_the_facts_and_a_presentation(tmp_pa
     assert text.startswith("[center][img]https://i.example/d.png[/img][/center]")
     assert "[h3]Présentation[/h3]" in text
     assert "[b]Titre :[/b] Dune" in text and "[b]Auteur :[/b] Frank Herbert" in text
-    assert "[b]Format :[/b] EPUB" in text and "[b]Langue :[/b] Français" in text
+    assert "[b]Format :[/b] EPUB" in text and "[b]Langue :[/b] Français" not in text
     assert "[b]Fichiers :[/b] 1" in text and "[b]Taille totale :[/b] 100 o" in text
     assert "[img]" not in EBOOK.description(name, upload_files(item, name, IGNORE), "", "")
 

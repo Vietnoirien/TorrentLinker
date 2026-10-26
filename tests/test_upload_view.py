@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtCore import Qt
 
 from tests.fake_qbit import FakeQbit
+from tests.test_upload_completeness import complete_description, complete_form
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.gui.upload_view import UploadTab
 from torrentlinker.indexer import Candidate, SearchQuery
@@ -259,12 +260,15 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     view.items.selectRow(0)
     started: list[Path] = []
     view.upload_started.connect(started.append)
+    view.image_url.setText("https://example.org/cover.jpg")
+    view._image_timer.stop()
+    view.description.setPlainText(complete_description())
 
     qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
     view.create_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
-    assert "requires an image" in asked[0]
+    assert not asked
     assert "saved as a Draft" in shown[0], shown
     assert indexer.saved[0]["title"] == "Petit.Etau.De.Bureau.NOTAG.3MF"
     [t] = qbit.torrents()
@@ -289,7 +293,7 @@ def test_draft_keeps_the_image_with_a_custom_description(  # type: ignore[no-unt
     url = "https://i.example/desk-vise.png"
     if image_first:
         view.image_url.setText(url)
-    view.description.setPlainText("[center][b]My desk vise[/b][/center]")
+    view.description.setPlainText(complete_description(text="[center][b]My desk vise[/b][/center]"))
     if not image_first:
         view.image_url.setText(url)
     view._image_timer.stop()
@@ -677,6 +681,10 @@ def test_the_users_choice_wins_over_the_profile_and_is_sent_in_the_draft(  # typ
     view.source.setText("WEB")  # regenerating keeps the picks
 
     assert view.chosen_options() == {1: [2], 5: [39], 4: [38]}
+    view.image_url.setText("https://example.org/cover.jpg")
+    view._image_timer.stop()
+    view.description.setPlainText(complete_description(1, 6))
+    view.nfo.setPlainText(complete_form(1, 6)["nfo"])
     view.create_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
     assert indexer.saved[0]["options"] == {"1": [2], "5": [39], "4": 38}

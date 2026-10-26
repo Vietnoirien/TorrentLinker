@@ -15,6 +15,16 @@ from torrentlinker.bbcode import bbcode_to_html
 from torrentlinker.catalogue_sync import ROOTS, SUBCATS
 from torrentlinker.torrent_details import preview_html
 from torrentlinker.upload import category_name
+from torrentlinker.upload_presentation import assess
+
+
+class IncompletePresentation(ValueError):
+    def __init__(self, drafts):
+        super().__init__(
+            "Upload presentations are incomplete. Repair the listed fields "
+            "with upload-queue, then present the new revisions."
+        )
+        self.drafts = drafts
 
 
 class DraftRevision(BaseModel):
@@ -40,7 +50,17 @@ def draft_item(draft, item_id):
     )
     markup, artwork = draft_preview(form)
     image = next((url for url in [form.get("image", ""), *artwork] if image_url(url)), "")
-    review = draft.get("review") or {}
+    review = dict(draft.get("review") or {})
+    completeness = assess(form, review.get("file_facts"))
+    review["presentation"] = completeness
+    review["refusals"] = list(
+        dict.fromkeys(
+            [
+                *review.get("refusals", []),
+                *(f"{f['field']}: {f['message']}" for f in completeness["missing_fields"]),
+            ]
+        )
+    )
     item.update(
         presentation_type="upload_drafts",
         draft_id=draft["id"],
@@ -116,6 +136,15 @@ def present(service, actor, request_id, client_id, drafts, title="", offset=0, l
                     "Local Draft changed. Read upload-queue and present the current revision."
                 )
             records.append(record)
+        incomplete = []
+        for record in records:
+            check = assess(record["form"], record.get("review", {}).get("file_facts"))
+            if check["missing_fields"]:
+                incomplete.append(
+                    {"draft_id": record["id"], "revision": record["revision"], **check}
+                )
+        if incomplete:
+            raise IncompletePresentation(incomplete)
         # All items are captured before insertion; page/detail reads never enrich or fetch c411.
         items = [draft_item(record, str(i)) for i, record in enumerate(records)]
         identifier = uuid4().hex

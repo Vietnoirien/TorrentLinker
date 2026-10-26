@@ -8,7 +8,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from torrentlinker.options import category_options, options_body
 from torrentlinker.paths import PathMapper
@@ -24,12 +24,26 @@ from torrentlinker.upload import (
     seed_upload,
     upload_files,
 )
+from torrentlinker.upload_presentation import assess, extend_template, file_evidence
 from torrentlinker.upload_queue import edited_form, save_local, send_local, sent_result
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
 
 
 class UploadForm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def path_belongs_to_operation(cls, values):
+        if isinstance(values, dict) and "path" in values:
+            raise ValueError(
+                "Put the Local Item path in operation.path (or "
+                "preview_upload/save_upload_draft path), not inside upload. upload"
+                " contains metadata only."
+            )
+        return values
+
     category: int | None = None
     subcategory: int | None = None
     source: str = Field(default="", max_length=200)
@@ -98,7 +112,9 @@ class Uploads:
         image = web_url(form.image)
         if form.image and not image:
             raise ValueError("Use a direct HTTP(S) image link.")
-        description = form.description or profile.description(title, files, form.source, image)
+        description = form.description or extend_template(
+            profile.category, sub, profile.description(title, files, form.source, image)
+        )
         if image and image not in description:
             description = f"[center][img]{image}[/img][/center]\n" + description
         nfo = form.nfo or profile.nfo(title, files)
@@ -114,7 +130,7 @@ class Uploads:
             profile.draft_fields(item, ignore, files),
         )
         refusals = profile.refusals(item, ignore, sub) + missing_options(types, chosen)
-        preview = {
+        preview: dict[str, Any] = {
             "title": title,
             "category": profile.category,
             "subcategory": sub,
@@ -129,6 +145,22 @@ class Uploads:
                 f"{w.judgement.value}: {w.detail}" for w in profile.warnings(item, ignore, sub)
             ],
         }
+        evidence = file_evidence(request)
+        completeness = assess(
+            {
+                **form.model_dump(),
+                **{
+                    key: preview[key]
+                    for key in ("category", "subcategory", "title", "nfo", "description")
+                },
+            },
+            evidence,
+        )
+        preview["presentation"] = completeness
+        preview["file_facts"] = evidence
+        preview["refusals"].extend(
+            f"{f['field']}: {f['message']}" for f in completeness["missing_fields"]
+        )
         return request, preview
 
     def queue(

@@ -90,6 +90,7 @@ from torrentlinker.upload import (
     seed_upload,
     upload_files,
 )
+from torrentlinker.upload_presentation import assess, extend_template
 from torrentlinker.upload_queue import edited_form, save_local, send_local
 from torrentlinker.web.uploads import UploadForm
 
@@ -586,6 +587,10 @@ class UploadTab(QWidget):
         split.addWidget(self.description)
         split.addWidget(self.preview)
         dl.addWidget(split)
+        self.presentation_status = QLabel()
+        self.presentation_status.setWordWrap(True)
+        self.presentation_status.setTextFormat(Qt.TextFormat.PlainText)
+        dl.addWidget(self.presentation_status)
         reset_description = QPushButton(self.tr("Reset from the template"))
         reset_description.clicked.connect(lambda: self._reset("description"))
         dl.addWidget(reset_description, 0, Qt.AlignmentFlag.AlignRight)
@@ -598,6 +603,7 @@ class UploadTab(QWidget):
         self.nfo.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.nfo.setStyleSheet("font-family: monospace")
         self.nfo.textChanged.connect(lambda: self._edited.add("nfo"))
+        self.nfo.textChanged.connect(self._render_description)
         nl.addWidget(self.nfo)
         reset_nfo = QPushButton(self.tr("Reset from the files"))
         reset_nfo.clicked.connect(lambda: self._reset("nfo"))
@@ -1271,11 +1277,15 @@ class UploadTab(QWidget):
         profile = self.profile()
         if profile is None or not self.files:
             return ""
-        return profile.description(
-            self.name.text().strip(),
-            self.files,
-            self.source.text().strip(),
-            self.image_url.text().strip(),
+        return extend_template(
+            profile.category,
+            self.subcategory.currentData(),
+            profile.description(
+                self.name.text().strip(),
+                self.files,
+                self.source.text().strip(),
+                self.image_url.text().strip(),
+            ),
         )
 
     def _show_files(self) -> None:
@@ -1302,6 +1312,28 @@ class UploadTab(QWidget):
 
     def _render_description(self) -> None:
         self.preview.setHtml(bbcode_to_html(self.description.toPlainText()))
+        profile = self.profile()
+        if profile is not None:
+            check = assess(
+                dict(
+                    category=profile.category,
+                    subcategory=self.subcategory.currentData(),
+                    title=self.name.text(),
+                    nfo=self.nfo.toPlainText(),
+                    description=self.description.toPlainText(),
+                )
+            )
+            self.presentation_status.setText(
+                self.tr("Missing fields: ")
+                + ", ".join(row["field"] for row in check["missing_fields"])
+                if check["missing_fields"]
+                else ""
+            )
+            self.presentation_status.setToolTip(
+                "\n".join(row["message"] for row in check["missing_fields"])
+            )
+        else:
+            self.presentation_status.clear()
 
     def _reset(self, what: str) -> None:
         self._edited.discard(what)
@@ -1559,17 +1591,6 @@ class UploadTab(QWidget):
         if self.needs_unpacking(entry):
             self._unpack(entry)
             return
-        if not self.image_url.text().strip():
-            answer = QMessageBox.question(
-                self,
-                self.tr("No image"),
-                self.tr(
-                    "c411 requires an image in the description. Save the Draft anyway and add "
-                    "the image on c411 before publishing?"
-                ),
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
         self._sync_description_image()
         request = UploadRequest(
             entry.item,

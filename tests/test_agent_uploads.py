@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from tests.test_agent_access import call
+from tests.test_upload_completeness import complete_form
 from tests.test_web_jobs import finished, login
 from torrentlinker.web.app import create_app
 
@@ -88,7 +89,7 @@ def test_mcp_upload_draft_and_seeding_require_owner_approval(tmp_path, monkeypat
             {
                 "kind": "upload-draft",
                 "path": str(item),
-                "upload": {"image": "https://images.example/model.png", "reviewed": True},
+                "upload": {**complete_form(10, 51), "reviewed": True},
             },
         ).json()
         draft = finished(browser, job["id"])

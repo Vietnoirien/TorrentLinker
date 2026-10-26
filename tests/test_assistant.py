@@ -1329,7 +1329,9 @@ def test_model_can_read_full_archived_message_in_pages(tmp_path):
         login(browser)
         p = browser.post(
             "/api/setup/assistant/providers",
-            json={"name": "Local", "kind": "ollama", "model": "test"},
+            # This scripted provider follows raw tool messages, not compacted prose.
+            # Leave room for the tool schemas; compaction has separate coverage.
+            json={"name": "Local", "kind": "ollama", "model": "test", "context_window": 65536},
         ).json()
         chat = browser.post(
             "/api/assistant/conversations",

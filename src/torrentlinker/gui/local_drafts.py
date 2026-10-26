@@ -29,6 +29,7 @@ from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.selection_cards import SelectionDetail
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.upload import category_name
+from torrentlinker.upload_presentation import assess
 from torrentlinker.upload_queue import reset_local
 
 
@@ -188,6 +189,12 @@ class LocalDrafts(QWidget):
                 [
                     record.get("result", {}).get("message", ""),
                     *record.get("review", {}).get("refusals", []),
+                    *(
+                        f"{row['field']}: {row['message']}"
+                        for row in assess(form, record.get("review", {}).get("file_facts"))[
+                            "missing_fields"
+                        ]
+                    ),
                     *record.get("review", {}).get("warnings", []),
                 ]
             )

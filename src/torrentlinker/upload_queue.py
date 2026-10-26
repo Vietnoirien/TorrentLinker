@@ -8,6 +8,7 @@ from typing import Any
 
 from torrentlinker.store import Store
 from torrentlinker.upload import PreparedUpload, UploadRequest
+from torrentlinker.upload_presentation import assess, file_evidence, request_form, require_complete
 
 # Desktop and MCP can share a database through separate Store objects in this process.
 _active_lock = threading.Lock()
@@ -56,6 +57,19 @@ def save_local(
     revision: int = 0,
     review: dict | None = None,
 ) -> dict:
+    review = dict(review or {})
+    evidence = file_evidence(request)
+    completeness = assess(form, evidence)
+    review["file_facts"] = evidence
+    review["presentation"] = completeness
+    review["refusals"] = list(
+        dict.fromkeys(
+            [
+                *review.get("refusals", []),
+                *(f"{f['field']}: {f['message']}" for f in completeness["missing_fields"]),
+            ]
+        )
+    )
     # Saving is metadata-only: no hashing, announce key, remote Draft or seeding.
     return store.save_local_draft(
         {
@@ -77,6 +91,7 @@ def send_local(
     request: UploadRequest,
     send: Callable[[], PreparedUpload],
 ) -> PreparedUpload:
+    require_complete(request_form(request), file_evidence(request))
     key = _key(store, identifier)
     with _active_lock:
         if key in _active_sends:

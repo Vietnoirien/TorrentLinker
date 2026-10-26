@@ -6,6 +6,7 @@ import json
 from contextvars import ContextVar
 from functools import wraps
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -17,12 +18,13 @@ from torrentlinker.agent import goals
 from torrentlinker.agent.goals import Goal
 from torrentlinker.agent.service import AgentRequest, AgentService
 from torrentlinker.agent.torrent_lists import ListFilter
-from torrentlinker.agent.upload_presentations import DraftRevision
+from torrentlinker.agent.upload_presentations import DraftRevision, IncompletePresentation
 from torrentlinker.catalogue_selection import CatalogueCriteria
 from torrentlinker.indexer_search import IndexerFilters
 from torrentlinker.queue_selection import QueueCriteria
 from torrentlinker.torrent_selection import SelectionCriteria
 from torrentlinker.web.operations import DownloadFolderRequired
+from torrentlinker.web.uploads import UploadForm
 
 ACTOR: ContextVar[str] = ContextVar("mcp_actor")
 Page = Annotated[int, Field(ge=0)]
@@ -108,6 +110,8 @@ def make_server(service: AgentService):
                     return item
 
                 return clean(value)
+            except IncompletePresentation as error:
+                return {"error": str(error), "status": "incomplete", "drafts": error.drafts}
             except DownloadFolderRequired as error:
                 return service.folder_requirement(ACTOR.get(), error)
             except (ValueError, PermissionError, KeyError) as error:
@@ -116,6 +120,93 @@ def make_server(service: AgentService):
                 return {"error": "Operation unavailable. Check TorrentLinker's activity."}
 
         return guarded
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def preview_upload(
+        client_id: str, path: str, upload: UploadForm | None = None
+    ) -> dict[str, object]:
+        """Inspect one Library file/folder and check its Upload presentation, without saving.
+
+        path is the exact Local Item path from list_items(collection="library"). Omit upload
+        initially to obtain detected facts, NFO and category. Fill the returned requirements
+        and retry with upload metadata. Result job contains presentation.missing_fields and
+        file_facts. The assistant waits for jobs; external MCP callers use job_status.
+        """
+        return service.request(
+            ACTOR.get(),
+            uuid4().hex,
+            AgentRequest(
+                kind="upload-preview", client_id=client_id, path=path, upload=upload or UploadForm()
+            ),
+        )
+
+    @mcp.tool(structured_output=True)
+    @safe(public_urls=True)
+    def save_upload_draft(
+        request_id: str,
+        client_id: str,
+        path: str,
+        upload: UploadForm,
+        draft_id: str = "",
+        revision: int = 0,
+    ) -> dict[str, object]:
+        """Save or repair a LOCAL Upload draft; never sends to c411 or seeds.
+
+        Use preview_upload first. path is outside upload metadata. For edits pass draft_id,
+        exact revision and the FULL updated form from list_items(upload-queue). Incomplete
+        drafts are saveable: inspect returned review.presentation.missing_fields and repair
+        them before present_upload_drafts. Existing upload permissions/approvals still apply.
+        """
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="upload-queue",
+                client_id=client_id,
+                path=path,
+                upload=upload,
+                draft_id=draft_id,
+                revision=revision,
+            ),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def get_upload_requirements(
+        category: int = 0,
+        subcategory: int = 0,
+        description: Annotated[str, Field(max_length=15000)] = "",
+    ) -> dict[str, object]:
+        """Get category-specific mandatory presentation fields and an editable BBCode template.
+
+        UPLOAD IDs, not Catalogue IDs: 1 Video, 2 Ebook, 3 Audio, 4 Apps, 5 Games,
+        6 Emulation, 7 GPS, 10 3D. Omit category (0) to list categories and subcategories.
+        Call before drafting. Supply the current description to reveal conditional fields
+        such as WEB platform or lossless bit depth. Fill from files/NFO and reliable sources;
+        never invent missing facts. upload-preview returns precise missing_fields. Save
+        incomplete work with upload-queue, but present_upload_drafts refuses incomplete
+        presentations. Resolve each field, save, then present exact new revisions.
+        """
+        from torrentlinker.upload_presentation import requirements
+
+        service.access.grant(ACTOR.get())
+        if category == 0:
+            from torrentlinker.upload import PROFILES, category_name
+
+            return {
+                "categories": [
+                    {
+                        "id": key,
+                        "name": category_name(key),
+                        "subcategories": [
+                            {"id": sub.id, "name": sub.label} for sub in profile.subcategories
+                        ],
+                    }
+                    for key, profile in PROFILES.items()
+                ]
+            }
+        return requirements(category, subcategory, description)
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe(public_urls=True)
@@ -483,7 +574,9 @@ def make_server(service: AgentService):
         After upload-queue saves drafts, pass their draft_id and exact revision here.
         Rediscover IDs/revisions via list_items(collection="upload-queue", client_id=...).
         Cards show saved artwork, category, size, status and review findings. Clicking opens
-        the saved description, NFO, category options and files. Missing artwork stays missing.
+        the saved description, NFO, category options and files. Incomplete presentations return
+        missing_fields for every affected draft and create no cards. Repair them via upload-queue
+        and retry with new revisions/request ID. Never replace refused cards with inline images.
         One client per call, 1 to 50 distinct drafts. Pages contain at most 20 cards.
         Snapshots survive edits/restarts; changed/deleted drafts are marked on later reads.
         Use get_presentation/get_presentation_item to inspect. Editing requires upload-queue;

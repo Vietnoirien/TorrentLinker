@@ -57,3 +57,11 @@ STEP, GCODE, BLEND, F3D, SLDPRT and FCStd items show no preview and say so: make
 See [category rules](upload-categories.md) for formats, naming, checks and metadata for ebooks, audio, video, GPS, emulation, applications and games.
 
 [Documentation](../../README.md) · [Français](../fr/upload.md)
+
+### Complete the presentation before showing cards
+
+The Assistant uses `preview_upload` to inspect a Library item, `get_upload_requirements` to read the category template, and `save_upload_draft` to save or correct it. These tools are also available through MCP. Upload category IDs differ from Catalogue IDs; calling `get_upload_requirements` without a category lists the supported IDs and subcategories.
+
+You can save incomplete Local Drafts. Preview and validation identify each missing description or NFO field by name. Keep the template's technical labels and fill the presentation/synopsis section. Unknown values and placeholders do not count as completed fields. Conditional requirements include WEB platform, audiobook details, lossless audio bit depth and individual track durations. EPUB language metadata is checked when available; a foreign-language file cannot be made eligible by labelling it French.
+
+The Assistant cannot display incomplete drafts with `present_upload_drafts`. It must correct the saved form and present the new revision, or ask you for the missing facts. The queue preview remains available so you can inspect unfinished work. All sends recheck completeness before hashing or contacting c411, including the desktop direct-send action. Complete fields do not guarantee factual accuracy or tracker acceptance: category refusals, duplicate checks and human review still matter. Preserve original release NFOs; standard video MediaInfo text is recognized without rewriting it.

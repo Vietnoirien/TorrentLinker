@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from tests.test_upload_completeness import complete_description
 from torrentlinker.domain import Torrent
 from torrentlinker.web.app import create_app
 
@@ -490,7 +491,8 @@ def test_upload_preview_uses_local_profile_without_publishing(tmp_path: Path):
         assert preview["result"]["title"] == "Object.NOTAG.STL"
         assert preview["result"]["files"][0]["size"] == 27
         assert preview["result"]["warnings"]
-        assert not preview["result"]["refusals"]
+        assert preview["result"]["presentation"]["status"] == "incomplete"
+        assert any("description.synopsis" in row for row in preview["result"]["refusals"])
 
 
 def test_prepared_upload_survives_unrelated_folder_changes(tmp_path, monkeypatch):
@@ -554,7 +556,11 @@ def test_prepared_upload_survives_unrelated_folder_changes(tmp_path, monkeypatch
             json={
                 "kind": "upload-draft",
                 "path": str(item),
-                "upload": {"image": "https://images.example/model.png", "reviewed": True},
+                "upload": {
+                    "image": "https://images.example/model.png",
+                    "reviewed": True,
+                    "description": complete_description(),
+                },
             },
         ).json()
         draft = finished(browser, job["id"])

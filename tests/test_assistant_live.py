@@ -130,13 +130,13 @@ def record(name, result):
     print(name, json.dumps({k: result.get(k) for k in ("status", "calls", "tokens", "error")}))
 
 
-def conversation(browser, provider, mode="propose", permissions=None):
+def conversation(browser, provider, mode="propose", permissions=None, *, max_calls=12):
     result = browser.post(
         "/api/assistant/conversations",
         json={
             "name": "Controlled model test",
             "provider_id": provider,
-            "max_calls": 12,
+            "max_calls": max_calls,
             "max_seconds": 180,
             "max_tokens": 180000,
             "policy": {

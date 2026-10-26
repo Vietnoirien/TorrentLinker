@@ -6026,6 +6026,10 @@ Seeders annoncés par le tracker : {1}</translation>
 <context>
     <name>UploadTab</name>
     <message>
+        <source>Missing fields: </source>
+        <translation>Champs manquants : </translation>
+    </message>
+    <message>
         <location filename="../gui/upload_view.py" line="440"/>
         <location filename="../gui/upload_view.py" line="441"/>
         <source>Filter Local Items…</source>
