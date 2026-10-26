@@ -74,6 +74,12 @@ represent a specific version believed ready, with only final blockers being chec
 
 ## Versioning
 
+Update accepted on 2026-10-26: the next release is `1.0.0-beta.1`, establishing
+the baseline for polish and stabilization after the Media Center addition. The
+earlier `0.13.0` target below records the initial beta decision and is superseded
+by this target. The [1.0 readiness criteria](1.0.0-readiness-decision.md) remain
+required for the eventual stable release.
+
 The user explicitly confirmed that TorrentLinker will continue to follow Semantic
 Versioning. Beta is a release maturity label, not a replacement for SemVer.
 
