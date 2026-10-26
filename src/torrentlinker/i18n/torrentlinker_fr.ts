@@ -1912,6 +1912,10 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
     </message>
     <message>
         <location filename="../gui/main_window.py" line="561"/>
+        <source>The Assistant cannot start because local port {0} is already in use. Close the other TorrentLinker instance or application using this port, then reopen the Assistant tab to retry.</source>
+        <translation>L&apos;Assistant ne peut pas démarrer car le port local {0} est déjà utilisé. Fermez l&apos;autre instance de TorrentLinker ou l&apos;application qui utilise ce port, puis rouvrez l&apos;onglet Assistant pour réessayer.</translation>
+    </message>
+    <message>
         <source>Cannot start the local MCP server on port {0}. Check whether another TorrentLinker instance or another application is using it.</source>
         <translation>Impossible de démarrer le serveur MCP local sur le port {0}. Vérifiez si une autre instance de TorrentLinker ou une autre application l&apos;utilise.</translation>
     </message>

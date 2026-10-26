@@ -533,7 +533,18 @@ class MainWindow(QMainWindow):
             app = QApplication.instance()
             if app is not None:
                 app.aboutToQuit.connect(self.agent_runtime.close)
-        self.agent_runtime.start()
+        try:
+            self.agent_runtime.start()
+        except OSError as error:
+            if error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) == 10048:
+                raise ValueError(
+                    self.tr(
+                        "The Assistant cannot start because local port {0} is already in use. "
+                        "Close the other TorrentLinker instance or application using this port, "
+                        "then reopen the Assistant tab to retry."
+                    ).format(self.agent_runtime.port)
+                ) from error
+            raise
         return self.agent_runtime.app.state.assistant
 
     def open_agent_access(self) -> None:
@@ -588,15 +599,9 @@ class MainWindow(QMainWindow):
         access.db.close()
         if enabled:
             try:
-                from PySide6.QtWidgets import QApplication
-
-                from torrentlinker.agent.desktop import DesktopServer
-
-                self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
-                self.agent_runtime.start()
-                app = QApplication.instance()
-                if app is not None:
-                    app.aboutToQuit.connect(self.agent_runtime.close)
+                # RSS or an early visit to Assistant may already own the listener.
+                # Reuse it instead of losing its reference and binding the same port.
+                self.assistant_service()
             except Exception:
                 if self.agent_runtime is not None:
                     self.agent_runtime.close()

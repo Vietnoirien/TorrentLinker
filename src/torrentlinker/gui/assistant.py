@@ -486,6 +486,7 @@ class AssistantTab(QWidget):
     def activate(self):
         try:
             self.service = self.get_service()
+            self.notice.clear()
             self.refresh()
         except Exception as error:
             self.notice.setText(str(error))

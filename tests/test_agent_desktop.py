@@ -311,6 +311,61 @@ def test_main_window_settings_stay_available_after_mcp_port_failure(qtbot, tmp_p
     assert opened == [True]
 
 
+def test_saved_agent_startup_reuses_runtime_started_for_rss(qtbot, tmp_path, monkeypatch):
+    from torrentlinker.agent import desktop
+    from torrentlinker.gui.main_window import MainWindow
+
+    with socket.socket() as available:
+        available.bind(("127.0.0.1", 0))
+        port = available.getsockname()[1]
+    server_class = desktop.DesktopServer
+    monkeypatch.setattr(
+        desktop,
+        "DesktopServer",
+        lambda settings, path, store: server_class(settings, path, store, port=port),
+    )
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
+    qtbot.addWidget(window)
+    # RSS startup uses this same accessor before the delayed saved-agent startup.
+    service = window.assistant_service()
+    runtime = window.agent_runtime
+    try:
+        window.start_saved_agent_access()
+        window.assistant_tab.activate()
+        assert "Address already in use" not in window.assistant_tab.notice.text()
+        assert window.assistant_tab.service is service
+        assert window.agent_runtime is runtime
+    finally:
+        runtime.close()
+        if window.agent_runtime is not None and window.agent_runtime is not runtime:
+            window.agent_runtime.close()
+
+
+def test_assistant_port_conflict_explains_recovery_and_can_retry(qtbot, tmp_path):
+    from torrentlinker.agent.desktop import DesktopServer
+    from torrentlinker.gui.main_window import MainWindow
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
+    qtbot.addWidget(window)
+    with socket.socket() as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+        port = occupied.getsockname()[1]
+        runtime = DesktopServer(window.settings, window.settings_path, window.store, port=port)
+        window.agent_runtime = runtime
+        window.assistant_tab.activate()
+        notice = window.assistant_tab.notice.text()
+        assert str(port) in notice and "reopen the Assistant tab to retry" in notice
+        assert "Errno" not in notice
+        assert window.assistant_tab.service is None
+    try:
+        window.assistant_tab.activate()
+        assert window.assistant_tab.service is runtime.app.state.assistant
+        assert "already in use" not in window.assistant_tab.notice.text()
+    finally:
+        runtime.close()
+
+
 def test_agent_access_reports_non_port_startup_failure(qtbot, tmp_path, monkeypatch):
     from torrentlinker.agent.desktop import DesktopServer
     from torrentlinker.gui import main_window
