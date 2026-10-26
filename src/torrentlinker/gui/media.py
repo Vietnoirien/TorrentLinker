@@ -803,7 +803,7 @@ class MediaTab(QWidget):
         self.player_back.setText("←")
         self.player_back.setToolTip(self.tr("Home"))
         self.player_back.setAccessibleName(self.tr("Home"))
-        self.player_back.clicked.connect(self.stop)
+        self.player_back.clicked.connect(self.dismiss_video)
         self.video_overlay_box.addWidget(self.player_back, 0, Qt.AlignmentFlag.AlignLeft)
         self.video_overlay_box.addStretch()
         self.caption = QLabel()
@@ -1604,9 +1604,31 @@ class MediaTab(QWidget):
         except Exception as error:
             self._set_notice(str(error))
 
+    def dismiss_video(self) -> None:
+        """Return to browsing while preserving progress and the saved queue."""
+        if self.fullscreen_dialog.isVisible():
+            self.fullscreen_dialog.reject()
+        self._invalidate_preview_request()
+        if self.player is not None:
+            self.player.pause()
+            self.report()
+            self._clear_track_source()
+            self.player.stop()
+            self.player.setSource(QUrl())
+        self._close_preview()
+        self.last_source = ""
+        self.current_row = {}
+        self.state.update(current_id="", position=0, duration=0, paused=True)
+        self.subtitle_cues = []
+        self.caption.clear()
+        self.now_playing.setText(self.tr("Nothing playing"))
+        self._update_panes()
+        self.content_scroll.verticalScrollBar().setValue(0)
+        self.report()
+
     def _leave_video_for_navigation(self, *_args) -> None:
         if self._player_video_mode:
-            self.stop()
+            self.dismiss_video()
 
     def _kind_changed(self) -> None:
         self._leave_video_for_navigation()
@@ -2015,7 +2037,8 @@ class MediaTab(QWidget):
             chosen and self.preview_item == self.detail_row.get("id") and bool(self.preview_id)
         )
         self.player_panel.setVisible(
-            active or bool(self.state["queue"]) or (not video and self.queue_disclosure.isChecked())
+            active
+            or (not video and (bool(self.state["queue"]) or self.queue_disclosure.isChecked()))
         )
         self.video.setVisible(active_video)
         self._arrange_player()

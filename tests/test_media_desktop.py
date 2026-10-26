@@ -321,7 +321,27 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
     qtbot.mouseClick(tab.player_back, Qt.LeftButton)
     assert not tab.fullscreen_dialog.isVisible()
-    assert tab.player_panel.parentWidget() is original_parent
+    assert tab.player_panel.window() is tab
+    assert not tab.video.isVisible()
+    assert not tab.player_panel.isVisible()
+    assert tab.player.source().isEmpty()
+    assert not tab.last_source
+    assert tab.heartbeat.isActive()
+    saved_queue = list(tab.state["queue"])
+    assert saved_queue
+    tab.command("play", media_ids=saved_queue, index=0)
+    qtbot.waitUntil(lambda: tab.video.isVisible())
+    tab.view.setCurrentIndex(tab.view.findData("films"))
+    assert not tab.video.isVisible()
+    assert not tab.player_panel.isVisible()
+    tab.command("play", media_ids=saved_queue, index=0)
+    qtbot.waitUntil(lambda: tab.video.isVisible())
+    tab.kind.setCurrentIndex(tab.kind.findData("music"))
+    assert not tab.video.isVisible()
+    assert tab.player.source().isEmpty()
+    assert tab.state["queue"] == saved_queue
+    assert tab.heartbeat.isActive()
+    tab.stop()
 
 
 def test_native_explicit_preview_decodes_h264_without_reading_missing_pieces(qtbot, tmp_path):
