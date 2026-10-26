@@ -242,6 +242,7 @@ class Presentations:
             result.update(
                 description_html=markup,
                 description=html.unescape(re.sub(r"<[^>]+>", " ", markup)),
+                description_truncated=len(details.description) > 20000,
                 source_url=f"https://c411.org/torrents/{identity.lower()}",
             )
             metadata = payload.get("metadata") or {}

@@ -256,6 +256,14 @@ def tool_description(event: dict, language: str = "en") -> str:
         ),
         "present_selection": ("Show selection cards", "Afficher les fiches de la sélection"),
         "enrich_selection": ("Read selection metadata", "Lire les métadonnées de la sélection"),
+        "read_selection_descriptions": (
+            "Read descriptions for content review",
+            "Lire les descriptions pour analyser le contenu",
+        ),
+        "review_selection": (
+            "Save the selection after content review",
+            "Enregistrer la sélection après analyse du contenu",
+        ),
         "get_presentation": ("Read selection cards", "Lire les fiches de la sélection"),
         "get_presentation_item": ("Read card details", "Lire les détails de la fiche"),
         "search_indexer": ("Search the live Indexer", "Rechercher dans l’Indexeur en direct"),

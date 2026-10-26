@@ -100,6 +100,9 @@ class AgentService:
         from torrentlinker.agent.selection_presentations import Presentations
 
         self.presentations = Presentations(self)
+        from torrentlinker.agent.selection_review import ContentReviews
+
+        self.content_reviews = ContentReviews(self)
         from torrentlinker.feed_control import FeedControl
 
         self.feed_control = FeedControl(self)

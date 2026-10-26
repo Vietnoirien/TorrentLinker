@@ -191,6 +191,18 @@ durable ou proposée pour mise en file, avec les permissions et validations habi
 
 ### Fiches de sélection
 
+Pour choisir selon les thèmes, l’Assistant peut lire les descriptions des releases avec
+`read_selection_descriptions`, puis enregistrer ses décisions avec `review_selection`.
+Les deux outils sont aussi disponibles par MCP. La lecture se fait par lots de cinq au
+maximum, avec une suite explicite pour les textes longs. Chaque élément retenu ou exclu
+exige une raison et un extrait justificatif ; retenir un élément exige la lecture complète
+de sa description. Une description absente, tronquée ou insuffisante reste incertaine.
+Les outils produisent une nouvelle sélection exacte des éléments retenus et comptent les
+exclusions, les incertitudes et les candidats non examinés. Les décisions persistent et
+peuvent être reprises au fil de la discussion ; la liste initiale reste inchangée.
+L’Assistant peut enregistrer et présenter la sélection examinée. Cela reste une analyse
+du modèle : l’absence d’un thème dans le résumé ne garantit pas son absence dans l’œuvre.
+
 Demandez à l’Assistant d’afficher une liste de torrents sous forme de fiches. Il utilise
 `present_selection` avec la révision exacte de la liste (ou une sélection récente).
 Modifier ensuite la liste ne change pas les torrents présentés. Chaque fiche affiche le

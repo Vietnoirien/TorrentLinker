@@ -17,6 +17,80 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_local_model_reviews_descriptions_before_recommending(controlled):
+    browser, provider, clients, _ = controlled
+    setup = browser.app.state.agent_service.setup
+    setup.settings.indexer_categories = {7000: IndexerCategory("Ebooks")}
+    descriptions = {
+        1: "An illustrated natural history of coral reefs, their ecosystems and marine wildlife.",
+        2: "A history of naval warfare, violent military campaigns and battles at sea.",
+        3: "",
+    }
+    setup._indexer = fake_indexer(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "infoHash": request.url.path.rsplit("/", 1)[-1],
+                "description": descriptions[int(request.url.path.rsplit("/", 1)[-1], 16)],
+            },
+        )
+    )
+    setup.store.save_catalogue(
+        [
+            CatalogueRow(
+                f"{i:040x}",
+                f"Ocean {i}",
+                i * 1_000_000,
+                5,
+                7000,
+                f"https://c411.org/api?t=get&id={i:040x}",
+                "",
+                1,
+            )
+            for i in descriptions
+        ]
+    )
+    thread = test_assistant_live.conversation(browser, provider, max_calls=16)
+    result = test_assistant_live.run(
+        browser,
+        thread,
+        "Dans le catalogue local du client default, examine les trois ebooks Ocean. "
+        "Je cherche un livre sur la nature marine et je veux exclure les sujets guerre/batailles. "
+        "Analyse leurs descriptions avant de choisir : le titre ne suffit pas. "
+        "Si la description manque, signale-le et ne le retiens pas. Enregistre tes décisions "
+        "avec leurs raisons et extraits justificatifs, puis sauvegarde et présente uniquement "
+        "les livres retenus en cartes. Ne mets rien en file et ne télécharge rien.",
+        "selection-description-review",
+    )
+    assert result["status"] == "completed", result
+    reviews = [
+        e["result"]
+        for e in result["events"]
+        if e["tool"] == "review_selection" and e.get("result", {}).get("selection_id")
+    ]
+    assert reviews, result
+    assert (
+        reviews[-1]["kept_count"],
+        reviews[-1]["excluded_count"],
+        reviews[-1]["uncertain_count"],
+        reviews[-1]["unreviewed_count"],
+    ) == (1, 1, 1, 0)
+    pages = [
+        e["result"]
+        for e in result["events"]
+        if e["tool"] == "present_selection" and e.get("result", {}).get("items")
+    ]
+    assert pages and pages[-1]["count"] == 1, result
+    assert pages[-1]["items"][0]["title"] == "Ocean 1"
+    _, actor = browser.app.state.assistant.conversation(thread)
+    saved = browser.app.state.agent_service.torrent_lists.listing(actor, "default", 0, 50)
+    assert any(
+        item["count"] == 1 and item["total_size_bytes"] == 1_000_000 for item in saved["lists"]
+    ), saved
+    assert browser.get("/api/queue").json() == []
+    assert all(not client.paused for client in clients.values())
+
+
 @pytest.mark.parametrize(
     "category,label,kind",
     [(2030, "films", "movie"), (7000, "ebooks", "ebook"), (3000, "albums de musique", "music")],

@@ -173,6 +173,18 @@ for queueing under the usual permissions and owner review.
 
 ### Selection cards
 
+For recommendations that depend on topics, the Assistant can read the actual release
+descriptions with `read_selection_descriptions`, then record its decisions with
+`review_selection`. Both tools are also available through MCP. Descriptions load in
+batches of up to five, with explicit continuation for long text. Each accepted or excluded
+item needs a reason and a source excerpt; accepting an item requires reading the whole
+available description. Missing, truncated or inconclusive descriptions remain uncertain.
+The tools return a new exact selection containing only accepted items, plus counts of
+excluded, uncertain and unreviewed candidates. Reviews persist and can resume across turns;
+the original list stays unchanged. The Assistant can save and display the reviewed subset.
+These are model assessments: a synopsis that does not mention a topic cannot guarantee
+that the content excludes it.
+
 Ask the Assistant to show a saved torrent list as cards. It uses `present_selection`
 with the exact list revision (or a fresh selection); release membership stays fixed even
 if the list changes later. Cards show title, category, size, seeders, Torrent Note and an
