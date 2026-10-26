@@ -283,3 +283,79 @@ def test_desktop_queue_opens_saved_preview_without_saving_edits(qtbot, tmp_path)
     assert store.local_draft(draft["id"]) == draft
     assert not calls
     dialog.close()
+
+
+def test_draft_presentation_keeps_saved_bbcode_images_and_formatting():
+    from torrentlinker.agent.upload_presentations import current_state, draft_item
+
+    draft = {**draft_payload(), "id": "draft", "revision": 1, "status": "queued"}
+    draft["form"]["description"] = (
+        "[center][size=24][color=#cc8844][b]The book[/b][/color][/size]\n"
+        "[img]https://example.org/cover.jpg[/img]\n"
+        "[h2]Synopsis[/h2]Full saved synopsis\n"
+        "[img]https://example.org/page.jpg[/img][/center]\n"
+        '<img src="file:///private" onerror="alert(1)">'
+    )
+    item = draft_item(draft, "0")
+    assert item["description_images"] == [
+        "https://example.org/cover.jpg",
+        "https://example.org/page.jpg",
+    ]
+    markup = item["description_html"]
+    assert 'src="preview-image:0"' in markup and 'src="preview-image:1"' in markup
+    assert 'align="center"' in markup
+    assert 'style="font-size:24px"' in markup and 'style="color:#cc8844"' in markup
+    assert "<h2>Synopsis</h2>" in markup
+    assert '<img src="file:' not in markup
+
+    class EditedStore:
+        def local_draft(self, identifier):
+            return {**draft, "revision": 2, "form": {"description": "Replacement"}}
+
+    # An existing presentation with formerly stripped markup is restored from
+    # its captured form, never from the current edited draft.
+    restored = current_state({**item, "description_html": "old stripped preview"}, EditedStore())
+    assert restored["description_html"] == markup
+    assert restored["draft_changed"] is True
+
+
+def test_desktop_draft_description_loads_embedded_images(qtbot):
+    from PySide6.QtCore import QObject, QUrl, Signal
+    from PySide6.QtGui import QImage, QTextDocument
+    from PySide6.QtWidgets import QWidget
+
+    from torrentlinker.agent.upload_presentations import draft_item
+    from torrentlinker.gui.selection_cards import SelectionDetail
+    from torrentlinker.gui.torrent_details import DescriptionBrowser
+
+    class Images(QObject):
+        ready = Signal(str, object)
+
+        def request(self, url):
+            image = QImage(10, 10, QImage.Format.Format_RGB32)
+            image.fill(0x123456)
+            return image
+
+    draft = {**draft_payload(), "id": "draft", "revision": 1, "status": "queued"}
+    draft["form"]["description"] = "[img]https://example.org/page.jpg[/img][h2]Full synopsis[/h2]"
+    item = draft_item(draft, "0")
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    images = Images(parent)
+    dialog = SelectionDetail("demo", "0", lambda *args: item, images, parent)
+    qtbot.waitUntil(lambda: dialog.findChild(DescriptionBrowser) is not None)
+    description = dialog.findChild(DescriptionBrowser)
+    assert "Full synopsis" in description.toPlainText()
+    resource = description.document().resource(
+        QTextDocument.ResourceType.ImageResource, QUrl("preview-image:0")
+    )
+    assert isinstance(resource, QImage) and not resource.isNull()
+
+
+def test_plain_draft_description_is_escaped_once():
+    from torrentlinker.agent.upload_presentations import draft_preview
+
+    markup, images = draft_preview({"description": "Alice & Bob <adventure>"})
+    assert "Alice &amp; Bob &lt;adventure&gt;" in markup
+    assert "&amp;amp;" not in markup and "&amp;lt;" not in markup
+    assert images == ()

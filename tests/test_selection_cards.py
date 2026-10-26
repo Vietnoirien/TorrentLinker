@@ -388,9 +388,9 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
             page.get_by_role("button", name="The Lunar Archive", exact=True).click()
             expect(page.locator("dialog .selection-description")).to_contain_text("lunar library")
             if upload:
-                page.locator("dialog summary", has_text="NFO").click()
+                page.get_by_role("tab", name="NFO", exact=True).click()
                 expect(page.locator("dialog pre", has_text="Saved upload NFO")).to_be_visible()
-                page.locator("dialog summary", has_text="Refusals").click()
+                page.get_by_role("tab", name="Review", exact=True).click()
                 expect(page.locator("dialog pre", has_text="Missing option")).to_be_visible()
             assert not page.evaluate("window.bad || false")
             assert page.locator("dialog script, dialog .selection-description img").count() == 0

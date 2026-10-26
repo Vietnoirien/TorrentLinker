@@ -333,6 +333,7 @@ class Presentations:
                 not in {
                     "description",
                     "description_html",
+                    "description_images",
                     "nfo",
                     "files",
                     "upload_form",

@@ -235,3 +235,7 @@ avant de les prévisualiser. Si la révision a changé, actualisez la file. Les 
 dans la discussion conservent leur contenu enregistré et signalent les révisions
 plus récentes ou les brouillons supprimés. Ces aperçus ne valident, ne modifient et
 n’envoient aucun brouillon. L’envoi conserve la relecture et la validation habituelles.
+
+La relecture d’un brouillon affiche la présentation enregistrée avec ses titres BBCode, alignements, couleurs et images, puis les onglets NFO, Fichiers, Options de catégorie et Relecture. Cet aperçu est disponible depuis les fiches du chat et la file locale des brouillons. Il représente la révision enregistrée : une description courte ou incomplète le reste jusqu’à sa modification. Les images utilisent le chargeur sécurisé existant. Le style propre au site c411 peut différer.
+
+Dans le chat web, **Navigation** et **Discussions** replient les deux panneaux latéraux. Ils sont repliés au départ sur les petits écrans. La conversation défile au-dessus du champ de saisie, qui reste visible.

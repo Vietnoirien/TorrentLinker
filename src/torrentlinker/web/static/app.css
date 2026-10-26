@@ -643,3 +643,63 @@ dialog .description img {
 #seeding-classes { gap: 24px; }
 #zen-seeding-panel .error { color: var(--danger); }
 #view-zen [role="tab"][aria-selected="true"] { border-color: var(--accent); background: var(--tint); }
+
+/* Keep navigation optional and the composer inside the visible chat area. */
+.navigation-collapsed .sidebar { display: none; }
+.navigation-collapsed main { margin-left: 0; }
+.chat-view main { height: 100dvh; display: flex; flex-direction: column; }
+.chat-view main > header { flex-shrink: 0; }
+#view-assistant { min-height: 0; }
+.chat-view #view-assistant { flex: 1; display: flex; flex-direction: column; overflow: auto; }
+.assistant-layout { flex: 1; min-height: 0; position: relative; }
+.assistant-layout.conversations-collapsed { grid-template-columns: minmax(0, 1fr); }
+.conversations-collapsed .assistant-conversations { display: none; }
+.assistant-conversations { max-height: none; min-height: 0; }
+.assistant-main { min-height: 0; overflow: hidden; }
+.assistant-main > p { flex-shrink: 0; margin-top: 0; }
+.assistant-transcript { min-height: 0; max-height: none; overscroll-behavior: contain; }
+.assistant-composer { flex-shrink: 0; }
+.assistant-composer textarea { max-height: 25dvh; }
+.review-tabs { flex-wrap: wrap; }
+.review-tabs [aria-selected="true"] { color: var(--accent); border-color: var(--accent); background: var(--tint); }
+.review-panel { min-height: 160px; }
+.review-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 1050px) {
+  .chat-view:not(.navigation-collapsed) .sidebar { position: fixed; width: 240px; z-index: 5; box-shadow: var(--shadow); }
+  .chat-view main { margin-left: 0; padding: 12px; }
+  .chat-view header { gap: 8px; margin-bottom: 8px; }
+  .chat-view header h1 { font-size: 22px; margin-bottom: 0; }
+  .chat-view .eyebrow { display: none; }
+  .assistant-layout { grid-template-columns: minmax(0, 1fr); }
+  .assistant-conversations { position: absolute; inset: 0 auto 0 0; width: min(260px, 90%); z-index: 3; padding: 12px; background: var(--panel); border: 1px solid var(--line); }
+  .assistant-chat-controls { gap: 6px; }
+  .assistant-composer { padding: 8px; }
+}
+@media (max-width: 520px) {
+  header { flex-wrap: wrap; gap: 8px; }
+  .chat-view header > div { display: none; }
+  .chat-view header label { margin: 0; flex: 1; }
+  .chat-view .assistant-composer textarea { min-height: 56px; }
+  .chat-view #view-assistant > .toolbar { gap: 4px; }
+  .chat-view #view-assistant > .toolbar button { padding: 6px; font-size: 13px; }
+}
+
+.selection-description img { max-width: 100%; height: auto; }
+.selection-description { line-height: 1.6; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.selection-description p { max-width: none; }
+
+#navigation-close { display: none; }
+@media (max-width: 1050px) {
+  .chat-view #navigation-close { display: block; margin-bottom: 12px; }
+  .chat-view .sidebar nav { flex-direction: column; overflow: visible; }
+  .chat-view .sidebar-bottom { display: block; margin-top: auto; }
+  .chat-view .sidebar-bottom label { max-width: none; margin: 12px 0; }
+}
+
+.upload-review-header { grid-template-columns: 110px 1fr; gap: 16px; }
+.upload-review-header .selection-artwork.large { height: 160px; }
+.upload-review-header p { margin-top: 0; margin-bottom: 8px; }
+@media (max-width: 520px) {
+  .upload-review-header { grid-template-columns: 1fr; }
+  .upload-review-header .selection-artwork { display: none; }
+}

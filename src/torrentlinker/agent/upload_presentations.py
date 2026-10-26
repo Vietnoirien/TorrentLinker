@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from torrentlinker.agent.selection_presentations import Presentations
 from torrentlinker.assistant.images import image_url
+from torrentlinker.bbcode import bbcode_to_html
 from torrentlinker.catalogue_sync import ROOTS, SUBCATS
 from torrentlinker.torrent_details import preview_html
 from torrentlinker.upload import category_name
@@ -37,8 +38,7 @@ def draft_item(draft, item_id):
         },
         item_id,
     )
-    markup, artwork = preview_html(form.get("description", ""))
-    markup = re.sub(r"<img\b[^>]*>", "", markup)
+    markup, artwork = draft_preview(form)
     image = next((url for url in [form.get("image", ""), *artwork] if image_url(url)), "")
     review = draft.get("review") or {}
     item.update(
@@ -50,6 +50,7 @@ def draft_item(draft, item_id):
         artwork_status="saved_draft" if image else "missing",
         metadata_status="saved_draft",
         description_html=markup,
+        description_images=list(artwork),
         description=html.unescape(re.sub(r"<[^>]+>", " ", markup)),
         nfo=form.get("nfo", ""),
         files=files,
@@ -66,8 +67,16 @@ def draft_item(draft, item_id):
     return item
 
 
+def draft_preview(form):
+    # Upload descriptions are BBCode, including literal HTML typed by a user.
+    return preview_html("<div>" + bbcode_to_html(form.get("description", "")) + "</div>")
+
+
 def current_state(item, store):
     """Keep the reviewed contents frozen while marking edits/removal since capture."""
+    # Render old snapshots from their frozen form too; never substitute current edits.
+    markup, images = draft_preview(item.get("upload_form") or {})
+    item = {**item, "description_html": markup, "description_images": list(images)}
     try:
         current = store.local_draft(item["draft_id"])
     except ValueError:

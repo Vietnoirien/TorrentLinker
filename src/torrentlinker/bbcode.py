@@ -30,7 +30,19 @@ def bbcode_to_html(text: str) -> str:
     out = re.sub(r"\[img\](.*?)\[/img\]", _image, out, flags=re.IGNORECASE | re.DOTALL)
     out = re.sub(r"\[url=([^\]]+)\](.*?)\[/url\]", _link, out, flags=re.IGNORECASE | re.DOTALL)
     out = re.sub(r"\[url\](.*?)\[/url\]", lambda m: _link(m, m.group(1)), out, flags=re.I)
-    out = re.sub(r"\[size=\d+\]|\[/size\]|\[color=[^\]]+\]|\[/color\]", "", out, flags=re.I)
+    out = re.sub(
+        r"\[size=(\d+)\]",
+        lambda m: f'<span style="font-size:{min(36, max(8, int(m[1])))}px">',
+        out,
+        flags=re.I,
+    )
+    out = re.sub(
+        r"\[color=(#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,20})\]",
+        r'<span style="color:\1">',
+        out,
+        flags=re.I,
+    )
+    out = re.sub(r"\[/(?:size|color)\]", "</span>", out, flags=re.I)
     out = re.sub(
         r"\[spoiler(?:=([^\]]*))?\]",
         lambda m: f"<p><b>▸ {m.group(1) or 'Spoiler'}</b></p><div>",

@@ -30,7 +30,8 @@
       </form>
     </section>
     <div id="workspace" hidden>
-      <aside class="sidebar">
+      <aside class="sidebar" id="app-sidebar">
+        <button id="navigation-close" type="button" data-i18n="closeNavigation">Close navigation</button>
         <a class="brand" href="#torrents"
           ><span class="brandmark small">TL</span> TorrentLinker</a
         >
@@ -63,6 +64,7 @@
       </aside>
       <main>
         <header>
+          <button id="navigation-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" data-i18n="navigation">Navigation</button>
           <div>
             <p class="eyebrow" id="connection-status">TORRENTLINKER WEB</p>
             <h1 id="page-title">Torrents</h1>
@@ -352,12 +354,12 @@
               placeholder="Find a torrent…"
               aria-label="Find a torrent"
             /><select id="torrent-state" aria-label="State">
-              <option value="">All states</option>
-              <option>seeding</option>
-              <option>downloading</option>
-              <option>paused</option>
-              <option>checking</option>
-              <option>error</option></select
+              <option value="" data-i18n="allStates">All states</option>
+              <option value="seeding" data-i18n="seedingState">seeding</option>
+              <option value="downloading" data-i18n="downloadingState">downloading</option>
+              <option value="paused" data-i18n="pausedState">paused</option>
+              <option value="checking" data-i18n="checkingState">checking</option>
+              <option value="error" data-i18n="errorState">error</option></select
             ><select id="torrent-tracker" aria-label="Tracker">
               <option value="">All trackers</option></select
             ><select id="torrent-category" aria-label="Category">
@@ -398,7 +400,13 @@
           <div class="toolbar" role="tablist" aria-label="Zen">
             <button id="zen-seeding-tab" role="tab" aria-selected="true" aria-controls="zen-seeding-panel" data-i18n="seedingTab">Seeding</button>
             <button id="zen-plan-tab" role="tab" aria-selected="false" aria-controls="zen-plan-panel" tabindex="-1" data-i18n="planTab">Plan</button>
+            <button id="zen-catalogue-tab" role="tab" aria-selected="false" aria-controls="zen-catalogue-panel" tabindex="-1" data-i18n="catalogueTab">Catalogue</button>
           </div>
+          <section id="zen-catalogue-panel" class="card" role="tabpanel" aria-labelledby="zen-catalogue-tab" hidden>
+            <h2 data-i18n="catalogueTab">Catalogue</h2>
+            <p id="catalogue-status" role="status"></p>
+            <button id="catalogue" data-i18n="updateCatalogue">Update catalogue</button>
+          </section>
           <section id="zen-seeding-panel" role="tabpanel" aria-labelledby="zen-seeding-tab">
             <div class="toolbar">
               <input id="seeding-query" aria-label="Filter torrents or categories" placeholder="Filter torrents or categories…" />
@@ -432,38 +440,30 @@
               <p data-i18n="planDestinationHelp">Choose one client or distribute across selected clients. Budget 0 uses available space.</p>
               <div id="plan-clients" class="form-grid"></div>
             </details>
-            <div class="toolbar">
-              <label
-                ><span data-i18n="maxTorrents">Maximum torrents</span
-                ><input
-                  id="plan-count"
-                  type="number"
-                  value="20"
-                  min="1"
-                  max="1000" /></label
-              ><label
-                ><span data-i18n="maxGiB">Download budget, GiB</span
-                ><input
-                  id="plan-budget"
-                  type="number"
-                  value="10"
-                  min="0" /></label
-              ><button id="refresh-profile">Refresh profile</button
-              ><button id="catalogue" data-i18n="updateCatalogue">
-                Update catalogue</button
-              ><button id="plan" class="primary" data-i18n="buildPlan">
-                Build plan
-              </button>
+            <form id="plan-form">
+            <div class="form-grid">
+              <label><span data-i18n="planCategory">Category / subcategory</span><select id="plan-category"><option value="" data-i18n="allCategories">All categories</option></select></label>
+              <label><span data-i18n="optimizeFor">Optimize for</span><select id="plan-goal"><option value="zen" data-i18n="zenPerDay">≈ Zen/day</option><option value="note">Note</option></select></label>
+              <label><span data-i18n="maxGiB">Download budget, GiB</span><input id="plan-budget" type="number" value="10" min="0" step="any" required /></label>
+              <label><span><input id="plan-limit-count" type="checkbox" checked /><span data-i18n="maxTorrents">Maximum torrents</span></span><input id="plan-count" type="number" value="20" min="1" max="1000" required /></label>
+              <label><span><input id="plan-limit-seeders" type="checkbox" /><span data-i18n="maxSeeders">Maximum seeders</span></span><input id="plan-seeders" type="number" value="10" min="0" required disabled /></label>
+              <label><span data-i18n="minTorrentGiB">Minimum torrent size, GiB</span><input id="plan-min-size" type="number" value="0" min="0" step="any" required /></label>
+              <label><span data-i18n="maxTorrentGiB">Maximum torrent size, GiB</span><input id="plan-max-size" type="number" value="0" min="0" step="any" required /></label>
             </div>
+            <p class="muted" data-i18n="planZeroHelp">A budget or maximum size of 0 means no additional limit. Available disk space still applies to the plan.</p>
+            <div class="toolbar"><button id="refresh-profile" type="button" data-i18n="refreshProfile">Refresh profile</button><button id="plan" type="submit" class="primary" data-i18n="buildPlan">Build plan</button></div>
             <label
               ><input id="plan-cached" type="checkbox" /><span
                 data-i18n="cachedPlan"
                 >Use cached catalogue without refreshing</span
               ></label
             >
-            <p id="catalogue-status" role="status"></p>
-            <p id="plan-diagnostics" role="status"></p>
+            </form>
+            <div id="plan-diagnostics" role="status"></div>
+            <p id="plan-summary"></p>
+            <div id="plan-storage" class="table-wrap"></div>
             <div id="plan-result" class="table-wrap"></div>
+            <div class="pager"><button id="plan-prev" disabled data-i18n="previous">Previous</button><span id="plan-page"></span><button id="plan-next" disabled data-i18n="next">Next</button></div>
             <button id="queue-plan" data-i18n="queueSelected">
               Queue selected
             </button>
@@ -554,25 +554,25 @@
             <button id="upload-queue-refresh" data-en="Refresh" data-fr="Actualiser">Refresh</button>
             <div id="upload-local-queue" class="table-wrap"></div>
           </div>
-          <p id="upload-help">
+          <p id="upload-help" data-i18n="uploadHelp">
             Choose a Local Item from the Library to prepare an Upload.
           </p>
           <div id="upload-editor" class="card" hidden>
             <form id="upload-form">
               <div class="form-grid">
-                <label>Category<select id="upload-category"></select></label
+                <label><span data-i18n="categoryLabel">Category</span><select id="upload-category"></select></label
                 ><label
-                  >Subcategory<select id="upload-subcategory"></select></label
+                  ><span data-i18n="subcategoryLabel">Subcategory</span><select id="upload-subcategory"></select></label
                 ><label>Source<input id="upload-source" /></label
                 ><label
-                  >Image URL<input
+                  ><span data-i18n="imageUrl">Image URL</span><input
                     id="upload-image"
                     type="url"
                     placeholder="https://…"
                 /></label>
               </div>
               <label
-                >Release name<input id="upload-title" maxlength="200"
+                ><span data-i18n="releaseName">Release name</span><input id="upload-title" maxlength="200"
               /></label>
               <div id="upload-options" class="form-grid"></div>
               <label
@@ -583,11 +583,10 @@
               ><label>NFO<textarea id="upload-nfo" rows="6"></textarea></label>
               <div id="upload-rules"></div>
               <label
-                ><input id="upload-reviewed" type="checkbox" /> I have reviewed
-                the files, description and category warnings.</label
+                ><input id="upload-reviewed" type="checkbox" /><span data-i18n="reviewUpload">I have reviewed the files, description and category warnings.</span></label
               >
               <div class="actions">
-                <button id="upload-preview" type="button">Update preview</button
+                <button id="upload-preview" type="button" data-i18n="updatePreview">Update preview</button
                 ><button id="upload-save-local" type="button" class="primary"
                   data-en="Save to local queue" data-fr="Enregistrer dans la file locale">Save to local queue</button
                 ><button id="upload-send-local" type="button" hidden

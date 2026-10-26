@@ -79,3 +79,9 @@ Le catalogue tiers fournit des catégories générales et sa fraîcheur en amont
 Voir [CONTEXT.md](../../../CONTEXT.md) pour le vocabulaire du projet et [docs/adr](../../adr) pour les décisions de conception.
 
 [Documentation](../../README.md) · [English](../en/zen.md)
+
+### Contrôles du Plan dans l’interface web
+
+L’interface web propose les onglets **En partage**, **Plan** et **Catalogue**. Dans Plan, choisissez une catégorie ou sous-catégorie, optimisez pour les Zen/jour ou la Note, puis limitez éventuellement le nombre de torrents ou de sources. Les tailles minimum et maximum s’appliquent à chaque torrent ; une taille maximum ou un budget de zéro n’ajoute aucune limite. L’espace disque et les réserves configurées restent pris en compte. Le résultat présente la taille totale, les Zen/jour ajoutés et l’espace libre avant et après le plan. Les résultats volumineux sont paginés en conservant votre sélection.
+
+L’onglet Catalogue affiche l’âge du cache et sa couverture, y compris les limites de pagination et les métadonnées importées. Son actualisation ne lance aucun téléchargement.

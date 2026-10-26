@@ -11,6 +11,7 @@ from torrentlinker.catalogue import plan_categories
 from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
 from torrentlinker.domain import LibraryFolder
 from torrentlinker.plan import (
+    Plan,
     PlanOptions,
     catalogue_candidates,
     disk_of,
@@ -62,6 +63,7 @@ def plan(
     *,
     cached_only: bool = False,
     category: int | None = None,
+    options: PlanOptions | None = None,
 ) -> dict:
     settings = setup.settings
     if category is not None:
@@ -128,7 +130,8 @@ def plan(
         available,
         current.active,
         slots,
-        options=PlanOptions(max_download_bytes=maximum_bytes, max_torrents=maximum_torrents),
+        options=options
+        or PlanOptions(max_download_bytes=maximum_bytes, max_torrents=maximum_torrents),
         disk_spaces=spaces,
     )
     proposed = explain_inputs(proposed, issues, existing)
@@ -144,10 +147,26 @@ def plan(
                 "seeders": i.candidate.seeders,
                 "zen": i.zen,
                 "note": i.note,
+                "folder": str(i.candidate.folder),
+                "client_id": setup.settings.active_client_id,
             }
             for i in proposed.items
         ],
         "zen": proposed.zen_added,
         "size": proposed.download_size,
         "excluded": len(existing),
+        "storage": plan_storage(proposed),
     }
+
+
+def plan_storage(proposed: Plan) -> list[dict]:
+    return [
+        {
+            "folder": str(space.folder),
+            "free": space.free,
+            "reserved": space.reserved,
+            "download": space.download,
+            "after_plan": space.after_plan,
+        }
+        for space in proposed.disk_spaces
+    ]

@@ -57,11 +57,13 @@ async function aCardDetail(load) {
     if (item.presentation_type === "upload_drafts") form.querySelector("h2").textContent = at("Upload draft review", "Relecture du brouillon Upload");
     body.replaceChildren(element("h3", item.content_title || item.title));
     const header = element("div", undefined, "selection-detail-header"), info = element("div");
+    if (item.presentation_type === "upload_drafts") header.classList.add("upload-review-header");
     info.append(element("p", item.title, "selection-release"), element("p", aCardSize(item), "muted"));
     info.append(item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
     if (item.zen_assumptions) info.append(element("p", item.zen_assumptions, "muted"));
     const facts = element("dl", undefined, "selection-facts");
-    for (const [name, value] of Object.entries(item.facts || {})) facts.append(element("dt", name), element("dd", String(value)));
+    const labels = {Category: at("Category", "Catégorie"), Subcategory: at("Subcategory", "Sous-catégorie"), Source: at("Source", "Source"), Files: at("Files", "Fichiers"), Status: at("Status", "État")};
+    for (const [name, value] of Object.entries(item.facts || {})) facts.append(element("dt", labels[name] || name), element("dd", String(value)));
     info.append(facts);
     if (item.note) info.append(element("p", item.note));
     header.append(aCardArtwork(item, true), info); body.append(header);
@@ -73,33 +75,48 @@ async function aCardDetail(load) {
       template.innerHTML = item.description_html;
       const allowed = new Set(["P", "DIV", "SPAN", "B", "STRONG", "I", "EM", "U", "S", "BR", "HR",
         "H1", "H2", "H3", "H4", "PRE", "CODE", "BLOCKQUOTE", "UL", "OL", "LI",
-        "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "A"]);
+        "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "A", "IMG"]);
       for (const node of template.content.querySelectorAll("*")) {
         if (!allowed.has(node.tagName)) { node.remove(); continue; }
         const href = node.tagName === "A" ? node.getAttribute("href") : "";
+        const imageIndex = /^preview-image:(\d+)$/.exec(node.getAttribute("src") || "");
+        const align = node.getAttribute("align");
+        const color = node.style.color, fontSize = node.style.fontSize;
+        const width = node.getAttribute("width");
         for (const attr of [...node.attributes]) node.removeAttribute(attr.name);
+        if (["left", "center", "right"].includes(align)) node.style.textAlign = align;
+        if (/^(#[0-9a-f]{3,6}|[a-z]{1,20}|rgb\([\d, ]+\))$/i.test(color)) node.style.color = color;
+        if (/^\d{1,2}px$/.test(fontSize)) node.style.fontSize = `${Math.min(36, Math.max(8, parseInt(fontSize)))}px`;
+        if (node.tagName === "IMG") {
+          const url = imageIndex ? item.description_images?.[Number(imageIndex[1])] : "";
+          if (!/^https?:\/\//i.test(url || "")) { node.remove(); continue; }
+          node.src = "api/assistant/image?url=" + encodeURIComponent(url);
+          node.alt = at("Presentation image", "Image de présentation");
+          node.loading = "lazy"; node.referrerPolicy = "no-referrer";
+          if (/^\d+$/.test(width || "")) node.width = Math.min(600, Math.max(1, Number(width)));
+          node.addEventListener("error", () => node.replaceWith(element("span", at("Image unavailable", "Image indisponible"))), {once: true});
+        }
         if (href && /^https?:\/\//i.test(href)) {
           node.href = href; node.target = "_blank"; node.rel = "noopener noreferrer";
         }
       }
       description.append(template.content);
     } else description.textContent = item.description || at("No description available.", "Aucune description disponible.");
-    body.append(description);
     if (item.presentation_type === "upload_drafts") {
       body.append(element("p", at("Reviewing these cards does not approve or send the draft.", "Consulter ces fiches ne valide ni n'envoie le brouillon.")));
       const review = item.upload_review || {};
-      for (const [title, text] of [
-        ["NFO", item.nfo || ""],
-        [at("Files", "Fichiers"), (item.files || []).map(file => `${file.path} · ${bytes(file.size)}`).join("\n")],
-        [at("Category options", "Options de catégorie"), JSON.stringify(item.upload_form?.options || {}, null, 2)],
-        [at("Refusals", "Refus"), (review.refusals || []).join("\n")],
-        [at("Warnings", "Avertissements"), (review.warnings || []).join("\n")],
-      ]) {
-        const details = element("details"), pre = element("pre", text);
-        pre.style.whiteSpace = "pre-wrap";
-        details.append(element("summary", title), pre); body.append(details);
+      const reviewContent = element("div");
+      for (const [title, values] of [[at("Refusals", "Refus"), review.refusals || []], [at("Warnings", "Avertissements"), review.warnings || []]]) {
+        reviewContent.append(element("h3", title), element("pre", values.length ? values.join("\n") : at("None", "Aucun")));
       }
-    }
+      aReviewTabs(body, [
+        [at("Presentation", "Présentation"), description],
+        ["NFO", element("pre", item.nfo || at("No NFO available.", "Aucun NFO disponible."))],
+        [at("Files", "Fichiers"), element("pre", (item.files || []).map(file => `${file.path} · ${bytes(file.size)}`).join("\n"))],
+        [at("Category options", "Options de catégorie"), element("pre", JSON.stringify(item.upload_form?.options || {}, null, 2))],
+        [at("Review", "Relecture"), reviewContent],
+      ]);
+    } else body.append(description);
     if (/^https?:\/\//i.test(item.source_url || "")) {
       const link = element("a", at("Open source", "Ouvrir la source"));
       link.href = item.source_url; link.target = "_blank"; link.rel = "noopener noreferrer";
@@ -157,4 +174,38 @@ function aSelectionCards(identifier) {
   // Defer until aRunCard has attached the section to the document.
   queueMicrotask(() => load(offset));
   return section;
+}
+
+let reviewTabSequence = 0;
+function aReviewTabs(host, sections) {
+  const id = `upload-review-${++reviewTabSequence}`;
+  const nav = element("div", undefined, "toolbar review-tabs");
+  nav.setAttribute("role", "tablist");
+  nav.setAttribute("aria-label", at("Upload draft review", "Relecture du brouillon Upload"));
+  const panels = [], tabs = [];
+  function select(index) {
+    tabs.forEach((tab, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i].hidden = i !== index;
+    });
+  }
+  host.append(nav);
+  sections.forEach(([label, content], index) => {
+    const panel = element("section", undefined, "review-panel");
+    panel.id = `${id}-panel-${index}`; panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", `${id}-tab-${index}`); panel.tabIndex = 0;
+    panel.append(content); panels.push(panel); host.append(panel);
+    const tab = button(label, () => select(index));
+    tab.id = `${id}-tab-${index}`; tab.type = "button";
+    tab.setAttribute("role", "tab"); tab.setAttribute("aria-controls", panel.id);
+    tab.onkeydown = event => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? sections.length - 1 : (index + (event.key === "ArrowRight" ? 1 : sections.length - 1)) % sections.length;
+      select(next); tabs[next].focus();
+    };
+    tabs.push(tab); nav.append(tab);
+  });
+  select(0);
 }

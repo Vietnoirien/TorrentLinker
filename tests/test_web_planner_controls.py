@@ -1,0 +1,127 @@
+"""Web planner controls reach the domain planner on both execution paths."""
+
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from tests.test_web_jobs import finished, login
+from torrentlinker.domain import Torrent
+from torrentlinker.downloads import IndexerCategory
+from torrentlinker.store import CatalogueRow
+from torrentlinker.web.app import create_app
+from torrentlinker.web.operations import JobRequest, Operations
+from torrentlinker.zen import ZenClass, ZenProfile
+
+
+@pytest.mark.parametrize("distributed", [False, True])
+def test_web_plan_filters_categories_sizes_seeders_and_optional_count(tmp_path, distributed):
+    class Client:
+        def check(self):
+            return "test"
+
+        def folder_settings(self):
+            return []
+
+        def torrents(self, **kwargs):
+            return [Torrent("f" * 40, "Existing", storage, size=4)]
+
+        def files(self, infohash):
+            return {"existing.epub": 4}
+
+    class PreparedOperations(Operations):
+        def __init__(self, setup):
+            super().__init__(setup)
+            setup.settings.indexer_categories = {
+                2000: IndexerCategory("Films"),
+                2030: IndexerCategory("Film", 2000),
+                7000: IndexerCategory("Ebook"),
+            }
+            setup.settings.zen = ZenProfile(ZenClass.SWARM_KEEPER)
+            # Desktop category state must not silently restrict web "All categories".
+            setup.settings.plan_categories = [7000]
+            setup.store.save_catalogue(
+                [
+                    CatalogueRow(f"{i:040x}", title, size, seeds, category, "", "", 0)
+                    for i, title, size, seeds, category in [
+                        (1, "Small film", 100, 2, 2030),
+                        (2, "Film A", 1000, 3, 2030),
+                        (3, "Film B", 1100, 4, 2030),
+                        (4, "Large film", 10000, 2, 2030),
+                        (5, "Popular film", 1000, 50, 2030),
+                        (6, "Book", 1000, 3, 7000),
+                    ]
+                ]
+            )
+
+    storage = tmp_path / "downloads"
+    storage.mkdir()
+    (storage / "existing.epub").write_bytes(b"book")
+    app = create_app(
+        tmp_path / "config",
+        password="test-password-long",
+        roots=(storage,),
+        connector=lambda *args: Client(),
+        operation_factory=PreparedOperations,
+        monitor_verifications=False,
+    )
+    with TestClient(app) as browser:
+        assert browser.get("/api/zen/catalogue").status_code == 401
+        login(browser)
+        assert browser.post(
+            "/api/setup/client", json={"client": "qbittorrent", "host": "https://client.test"}
+        ).is_success
+        assert browser.post(
+            "/api/setup/folder",
+            json={"local": str(storage), "client_path": str(storage), "purpose": "download"},
+        ).is_success
+        assert browser.get("/api/setup").json()["indexer_categories"]["2030"]["parent"] == 2000
+        assert browser.get("/api/zen/catalogue").json()["count"] == 6
+        request = {
+            "kind": "plan",
+            "cached_only": True,
+            "category": 2000,
+            "plan_goal": "note",
+            "min_size": 500,
+            "max_size": 2000,
+            "max_seeders": 4,
+            "maximum_torrents": 1,
+            "limit_torrents": False,
+        }
+        if distributed:
+            request["client_ids"] = ["default"]
+
+        def run(body):
+            submitted = browser.post("/api/jobs", json=body)
+            assert submitted.status_code == 202, submitted.text
+            result = finished(browser, submitted.json()["id"])
+            assert result["status"] == "completed", result
+            return result["result"]
+
+        result = run(request)
+        assert {row["title"] for row in result["rows"]} == {"Film A", "Film B"}
+        assert result["size"] == 2100
+        assert result["storage"][0]["download"] == 2100
+        assert result["storage"][0]["after_plan"] == result["storage"][0]["free"] - 2100
+        assert len(run({**request, "limit_torrents": True})["rows"]) == 1
+        assert {row["title"] for row in run({**request, "category": None})["rows"]} == {
+            "Film A",
+            "Film B",
+            "Book",
+        }
+        assert run({**request, "max_seeders": 0})["rows"] == []
+        invalid = browser.post("/api/jobs", json={**request, "min_size": 3000})
+        assert invalid.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"plan_goal": "invalid"},
+        {"min_size": -1},
+        {"max_seeders": -1},
+        {"min_size": 2, "max_size": 1},
+    ],
+)
+def test_plan_rejects_invalid_filters(fields):
+    with pytest.raises(ValidationError):
+        JobRequest(kind="plan", **fields)

@@ -501,6 +501,12 @@ def create_app(
             service.store.remove_downloads(keys[:1000])
         return {"ok": True}
 
+    @app.get("/api/zen/catalogue")
+    def zen_catalogue() -> dict:
+        from torrentlinker.web.planning import catalogue_status
+
+        return catalogue_status(service)
+
     @app.get("/api/zen/seeding")
     def zen_seeding(
         client_id: str = "",

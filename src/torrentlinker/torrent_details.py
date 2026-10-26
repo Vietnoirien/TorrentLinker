@@ -113,7 +113,18 @@ class _PreviewHTML(HTMLParser):
             if match:
                 align = match[1].lower()
             alignment = f' align="{align}"' if align in {"center", "left", "right"} else ""
-            self.output.append(f"<{tag}{alignment}>")
+            styles = []
+            for part in (attributes.get("style") or "").split(";"):
+                key, _, value = part.strip().partition(":")
+                value = value.strip()
+                if key == "color" and re.fullmatch(
+                    r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?|[a-zA-Z]{1,20}", value
+                ):
+                    styles.append(f"color:{value}")
+                if key == "font-size" and re.fullmatch(r"\d{1,2}px", value):
+                    styles.append(f"font-size:{min(36, max(8, int(value[:-2])))}px")
+            style = f' style="{";".join(styles)}"' if styles else ""
+            self.output.append(f"<{tag}{alignment}{style}>")
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style", "iframe", "object"}:

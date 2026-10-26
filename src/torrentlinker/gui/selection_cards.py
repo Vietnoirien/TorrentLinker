@@ -4,7 +4,7 @@ import json
 from urllib.parse import urlsplit
 
 from PySide6.QtCore import QCoreApplication, Qt, QUrl
-from PySide6.QtGui import QDesktopServices, QPixmap
+from PySide6.QtGui import QDesktopServices, QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QDialog,
     QGridLayout,
@@ -160,12 +160,17 @@ class SelectionDetail(QDialog):
         title = plain_label(item.get("content_title") or item["title"], "selectionDetailTitle")
         title.setStyleSheet("font-size: 20px; font-weight: 600;")
         box.addWidget(title)
+        upload = item.get("presentation_type") == "upload_drafts"
         row = QHBoxLayout()
-        row.addWidget(Artwork(item, self.images, large=True), 1)
+        artwork = Artwork(item, self.images, large=not upload)
+        if upload:
+            self.resize(900, 860)
+            artwork.setFixedHeight(150)
+            artwork.setMaximumWidth(130)
+        row.addWidget(artwork, 1)
         info = QVBoxLayout()
         info.addWidget(plain_label(item["title"]))
         info.addWidget(plain_label(card_size(item)))
-        upload = item.get("presentation_type") == "upload_drafts"
         if upload:
             self.setWindowTitle(self.tr("Upload draft review"))
             info.addWidget(plain_label(upload_summary(item)))
@@ -185,14 +190,25 @@ class SelectionDetail(QDialog):
         description.setOpenLinks(False)
         description.anchorClicked.connect(self.open_source)
         # Re-sanitize even persisted markup. DescriptionBrowser never fetches embedded resources.
-        description.setHtml(
-            preview_html(
-                item.get("description_html")
-                or item.get("description")
-                or self.tr("No description available.")
-            )[0]
-        )
-        description.setMinimumHeight(160)
+        if upload:
+            from torrentlinker.agent.upload_presentations import draft_preview
+
+            markup, urls = draft_preview(item.get("upload_form") or {})
+            description.setHtml(markup)
+            self.description = description
+            self.description_urls = urls
+            self.images.ready.connect(self.description_image)
+            for url in urls:
+                self.description_image(url, self.images.request(url))
+        else:
+            description.setHtml(
+                preview_html(
+                    item.get("description_html")
+                    or item.get("description")
+                    or self.tr("No description available.")
+                )[0]
+            )
+        description.setMinimumHeight(280 if upload else 160)
         if upload:
             tabs = QTabWidget()
             tabs.setObjectName("uploadReviewTabs")
@@ -237,6 +253,18 @@ class SelectionDetail(QDialog):
             link.clicked.connect(lambda: self.open_source(QUrl(source)))
             box.addWidget(link)
         self.layout_box.insertWidget(0, body, 1)
+
+    def description_image(self, url, image):
+        if not isValid(self) or image is None or url not in self.description_urls:
+            return
+        document = self.description.document()
+        document.addResource(
+            QTextDocument.ResourceType.ImageResource,
+            QUrl(f"preview-image:{self.description_urls.index(url)}"),
+            image,
+        )
+        document.markContentsDirty(0, document.characterCount())
+        self.description.viewport().update()
 
     @staticmethod
     def open_source(url):

@@ -1,3 +1,4 @@
+let assistantSidebarOpen = !matchMedia("(max-width: 1050px)").matches;
 /* Same owner APIs as desktop; chat Markdown is rendered safely by the server. */
 let assistantView = "chat", assistantConversation = "", assistantRun = "", assistantSnapshot = null;
 let assistantRefreshBusy = false, assistantRenderKey = "", assistantLoadVersion = 0;
@@ -95,6 +96,16 @@ async function loadAssistant() {
     return;
   }
   const layout = element("div", undefined, "assistant-layout"), side = element("aside", undefined, "assistant-conversations"), main = element("div", undefined, "assistant-main");
+  side.id = "assistant-conversations";
+  layout.classList.toggle("conversations-collapsed", !assistantSidebarOpen);
+  const toggle = button(at("Discussions", "Discussions"), () => {
+    assistantSidebarOpen = !assistantSidebarOpen;
+    layout.classList.toggle("conversations-collapsed", !assistantSidebarOpen);
+    toggle.setAttribute("aria-expanded", String(assistantSidebarOpen));
+  });
+  toggle.setAttribute("aria-controls", side.id);
+  toggle.setAttribute("aria-expanded", String(assistantSidebarOpen));
+  nav.append(toggle);
   side.append(button(at("New discussion", "Nouvelle discussion"), async () => {
     assistantConversation = ""; assistantRun = ""; assistantDrafts.delete("");
     await loadAssistant(); $("assistant-prompt")?.focus();

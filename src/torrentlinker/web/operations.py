@@ -10,12 +10,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from torrentlinker.catalogue_selection import CatalogueCriteria, select_catalogue_rows
 from torrentlinker.domain import Torrent
 from torrentlinker.download_queue import enqueue, entries, run_queue
 from torrentlinker.indexer import Candidate, SearchQuery
+from torrentlinker.plan import PlanGoal, PlanOptions
 from torrentlinker.queue_selection import QueueCriteria
 from torrentlinker.seeding import observe_swarm, seeding
 from torrentlinker.store import CatalogueRow
@@ -88,6 +89,11 @@ class JobRequest(BaseModel):
     revision: int = Field(default=0, ge=0)
     maximum_bytes: int = Field(default=0, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1000)
+    limit_torrents: bool = True
+    plan_goal: PlanGoal = PlanGoal.ZEN
+    max_seeders: int | None = Field(default=None, ge=0)
+    min_size: int = Field(default=0, ge=0)
+    max_size: int = Field(default=0, ge=0)
     cached_only: bool = False
     selection: SelectionCriteria = Field(default_factory=SelectionCriteria)
     selection_id: str = Field(default="", max_length=64)
@@ -114,6 +120,22 @@ class JobRequest(BaseModel):
         if any(len(h) != 40 or any(c not in "0123456789abcdefABCDEF" for c in h) for h in hashes):
             raise ValueError("Invalid torrent hash.")
         return list(dict.fromkeys(h.lower() for h in hashes))
+
+    @model_validator(mode="after")
+    def valid_plan_range(self) -> JobRequest:
+        if self.kind == "plan" and self.max_size and self.min_size > self.max_size:
+            raise ValueError("Minimum torrent size must not exceed maximum torrent size.")
+        return self
+
+    def planning_options(self) -> PlanOptions:
+        return PlanOptions(
+            goal=self.plan_goal,
+            max_download_bytes=self.maximum_bytes,
+            max_torrents=self.maximum_torrents if self.limit_torrents else None,
+            max_seeders=self.max_seeders,
+            min_size=self.min_size,
+            max_size=self.max_size,
+        )
 
 
 class Operations:
@@ -442,13 +464,12 @@ class Operations:
             return update_catalogue(self.setup, stop, progress)
         if request.kind == "plan":
             from torrentlinker.web.planning import catalogue as update_plan_catalogue
-            from torrentlinker.web.planning import catalogue_status, plan
+            from torrentlinker.web.planning import catalogue_status, plan, plan_storage
 
             if request.client_ids:
                 from dataclasses import replace
 
                 from torrentlinker.multi_plan import distributed_plan
-                from torrentlinker.plan import PlanOptions
                 from torrentlinker.plan_diagnostics import issue_text
 
                 targets = {
@@ -467,13 +488,8 @@ class Operations:
                     }
                 settings = replace(
                     self.setup.settings,
-                    plan_categories=[request.category]
-                    if request.category is not None
-                    else self.setup.settings.plan_categories,
-                    plan_options=PlanOptions(
-                        max_download_bytes=request.maximum_bytes,
-                        max_torrents=request.maximum_torrents,
-                    ),
+                    plan_categories=[request.category] if request.category is not None else None,
+                    plan_options=request.planning_options(),
                 )
 
                 def validate(identifier, folder):
@@ -497,6 +513,7 @@ class Operations:
                     "catalogue": catalogue_status(self.setup),
                     "indexer_url": getattr(getattr(self.setup, "_indexer", None), "url", None)
                     or self.setup.settings.indexer.url,
+                    "storage": plan_storage(proposed),
                     "zen": proposed.zen_added,
                     "size": proposed.download_size,
                     "rows": [
@@ -522,6 +539,7 @@ class Operations:
                 progress,
                 cached_only=request.cached_only,
                 category=request.category,
+                options=request.planning_options(),
             )
         if request.kind == "details":
             from torrentlinker.torrent_details import parse_details, preview_html

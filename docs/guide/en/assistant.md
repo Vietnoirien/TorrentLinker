@@ -211,3 +211,7 @@ review dialog. Save editor changes locally before previewing them. Queue preview
 check the revision and ask you to refresh if it changed. Chat cards retain their
 saved contents and flag newer revisions or removed drafts. Neither preview approves,
 changes, or sends the draft. Sending still uses the normal Upload review and approval.
+
+The draft review opens the saved presentation with its BBCode headings, alignment, colours and embedded images, followed by separate NFO, Files, Category options and Review tabs. The same preview is available from chat cards and the local draft queue. It renders the exact saved revision, so a short or incomplete description stays short until you edit the draft. Images load through the existing protected image loader. Site-specific styling may differ on c411.
+
+In web chat, **Navigation** and **Discussions** collapse the two sidebars. Narrow screens start with both collapsed. The transcript scrolls above the composer, keeping the input visible.

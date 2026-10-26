@@ -21,6 +21,18 @@ const state = {
   localItem: "",
 };
 const french = {
+  allStates: "Tous les états", seedingState: "En partage", downloadingState: "Téléchargement",
+  pausedState: "En pause", checkingState: "Vérification", errorState: "Erreur",
+  uploadHelp: "Choisissez un élément local dans la Bibliothèque pour préparer un Upload.",
+  categoryLabel: "Catégorie", subcategoryLabel: "Sous-catégorie", imageUrl: "URL de l’image",
+  releaseName: "Nom de la release", updatePreview: "Actualiser l’aperçu",
+  reviewUpload: "J’ai relu les fichiers, la description et les avertissements de catégorie.",
+  closeNavigation: "Fermer la navigation",
+  navigation: "Navigation", catalogueTab: "Catalogue", planCategory: "Catégorie / sous-catégorie",
+  allCategories: "Toutes les catégories", optimizeFor: "Optimiser pour", maxSeeders: "Sources maximum",
+  minTorrentGiB: "Taille minimum par torrent, Gio", maxTorrentGiB: "Taille maximum par torrent, Gio",
+  refreshProfile: "Actualiser le profil",
+  planZeroHelp: "Un budget ou une taille maximum de 0 ne fixe aucune limite supplémentaire. L’espace disponible reste pris en compte dans le plan.",
   seedingTab: "En partage", planTab: "Plan", expandAll: "Tout développer", collapseAll: "Tout réduire",
   seedingSort: "Trier les torrents par", torrentName: "Torrent", torrentSize: "Taille",
   seedAge: "Âge du seed (jours)", seedingOrder: "Ordre", descending: "Décroissant", ascending: "Croissant",
@@ -305,6 +317,17 @@ async function refreshSetup() {
   selector.replaceChildren(new Option(say("All clients · overview", "Tous les clients · aperçu"), "all"),
     ...state.setup.clients.map(p => new Option(p.name, p.id)));
   selector.value = state.clientId;
+  const oldCategory = $("plan-category").value;
+  $("plan-category").replaceChildren(new Option(say("All categories", "Toutes les catégories"), ""));
+  const categories = Object.entries(state.setup.indexer_categories || {});
+  const appendCategory = (id, category, depth = 0, visited = new Set()) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    $("plan-category").append(new Option("　".repeat(depth) + category.name, id));
+    for (const [child, value] of categories.filter(([, v]) => String(v.parent) === id)) appendCategory(child, value, depth + 1, visited);
+  };
+  for (const [id, category] of categories.filter(([, c]) => !c.parent || !categories.some(([key]) => key === String(c.parent)))) appendCategory(id, category);
+  $("plan-category").value = [...$("plan-category").options].some(o => o.value === oldCategory) ? oldCategory : "";
   $("client-name").value = state.setup.name;
   $("plan-clients").replaceChildren(...state.setup.clients.filter(p => p.enabled).map(p => {
     const row = element("label");
@@ -518,6 +541,7 @@ async function browse(path = "") {
 }
 async function navigate(view) {
   state.view = view;
+  document.body.classList.toggle("chat-view", view === "assistant");
   document
     .querySelectorAll(".view")
     .forEach((el) => (el.hidden = el.id !== `view-${view}`));
@@ -539,7 +563,10 @@ async function navigate(view) {
   if (view === "upload") await loadUploadQueue();
   if (view === "library") await loadLibrary();
   if (view === "jobs") await loadJobs();
-  if (view === "zen") await loadZenSeeding();
+  if (view === "zen") {
+    await refreshSetup();
+    await Promise.all([loadZenSeeding(), api("zen/catalogue").then(showCatalogue)]);
+  }
   if (
     view === "search" &&
     state.setup.indexer_configured &&
@@ -1108,8 +1135,16 @@ $("queue-plan").onclick = () => guard(async () => {
     if (!grouped.has(id)) grouped.set(id, []);
     grouped.get(id).push(row.hash);
   }
-  for (const [id, hashes] of grouped) await job({kind: "enqueue", hashes, client_id: id}, loadQueue);
-  await navigate("queue");
+  $("queue-plan").disabled = true;
+  try {
+    for (const [id, hashes] of grouped) {
+      for (let offset = 0; offset < hashes.length; offset += 1000) {
+        const identifier = await job({kind: "enqueue", hashes: hashes.slice(offset, offset + 1000), client_id: id}, loadQueue);
+        await waitForJob(identifier);
+      }
+    }
+    await navigate("queue");
+  } finally { $("queue-plan").disabled = false; }
 });
 $("start-queue").onclick = () =>
   guard(() => job({ kind: "send-queue" }, loadQueue));
@@ -1134,32 +1169,46 @@ $("library-next").onclick = () => {
 };
 $("catalogue").onclick = () =>
   guard(() => job({ kind: "catalogue" }, showCatalogue));
-$("plan").onclick = () =>
+$("plan-limit-count").onchange = () => { $("plan-count").disabled = !$("plan-limit-count").checked; };
+$("plan-limit-seeders").onchange = () => { $("plan-seeders").disabled = !$("plan-limit-seeders").checked; };
+$("plan-form").onsubmit = event => {
+  event.preventDefault();
   guard(() =>
     job(
       {
         kind: "plan",
         client_ids: [...$("plan-clients").querySelectorAll("input[data-client-id]:checked")].map(e => e.dataset.clientId),
         client_budgets: Object.fromEntries([...$("plan-clients").querySelectorAll("input[data-budget-id]")].map(e => [e.dataset.budgetId, Math.round(Number(e.value) * 1024 ** 3)])),
-        maximum_torrents: Number($("plan-count").value),
+        maximum_torrents: $("plan-limit-count").checked ? Number($("plan-count").value) : 20,
+        limit_torrents: $("plan-limit-count").checked,
+        plan_goal: $("plan-goal").value,
+        category: Number($("plan-category").value) || null,
+        max_seeders: $("plan-limit-seeders").checked ? Number($("plan-seeders").value) : null,
+        min_size: Math.round(Number($("plan-min-size").value) * 1024 ** 3),
+        max_size: Math.round(Number($("plan-max-size").value) * 1024 ** 3),
         maximum_bytes: Math.round(Number($("plan-budget").value) * 1024 ** 3),
         cached_only: $("plan-cached").checked,
       },
       (r) => {
         showCatalogue(r.catalogue);
-        $("plan-diagnostics").textContent = (r.issues || []).map(issue => issue.message).join(" ");
+        if (r.cancelled) return;
+        $("plan-diagnostics").replaceChildren(...(r.issues || []).map(issue => element("p", issue.message)));
+        $("plan-summary").textContent = `${r.rows.length} torrents · ${bytes(r.size)} · +${num(r.zen)} Zen/${say("day", "jour")}`;
+        table("plan-storage", r.storage || [], [
+          {label: say("Download folder", "Dossier de téléchargement"), render: r => r.folder},
+          {label: say("Free now", "Libre actuellement"), render: r => bytes(r.free)},
+          {label: say("Reserved", "Réservé"), render: r => bytes(r.reserved)},
+          {label: say("Plan downloads", "Téléchargements du plan"), render: r => bytes(r.download)},
+          {label: say("Free after plan", "Libre après le plan"), render: r => bytes(r.after_plan)},
+        ]);
         state.planRows = r.rows;
         state.planSelected = new Set(r.rows.map((v) => v.hash));
-        table("plan-result", r.rows, [...searchColumns(), {label: "Client", render: row => {
-          const select = document.createElement("select");
-          for (const p of state.setup.clients) select.add(new Option(p.name, p.id));
-          select.value = row.client_id || state.clientId;
-          select.onchange = () => { row.client_id = select.value; };
-          return select;
-        }}], state.planSelected);
+        state.planOffset = 0;
+        renderPlan();
       },
     ),
   );
+};
 setInterval(() => {
   if (!$("workspace").hidden) guard(pollJobs);
 }, 2000);
@@ -1597,3 +1646,49 @@ $("agent-form").onsubmit = event => {
     await loadAgents();
   });
 };
+
+$("navigation-toggle").onclick = () => {
+  const collapsed = document.body.classList.toggle("navigation-collapsed");
+  $("navigation-toggle").setAttribute("aria-expanded", String(!collapsed));
+};
+
+if (matchMedia("(max-width: 1050px)").matches) {
+  document.body.classList.add("navigation-collapsed");
+  $("navigation-toggle").setAttribute("aria-expanded", "false");
+}
+
+function renderPlan() {
+  const offset = state.planOffset || 0;
+  const rows = state.planRows.slice(offset, offset + 100);
+  table("plan-result", rows, [...searchColumns(),
+    {label: say("Download folder", "Dossier de téléchargement"), render: row => row.folder || "—"},
+    {label: "Client", render: row => {
+      const select = document.createElement("select");
+      for (const p of state.setup.clients.filter(p => p.enabled)) select.add(new Option(p.name, p.id));
+      select.value = row.client_id || state.clientId;
+      select.onchange = () => { row.client_id = select.value; };
+      return select;
+    }},
+  ], state.planSelected);
+  $("plan-page").textContent = `${state.planRows.length ? offset + 1 : 0}–${offset + rows.length} / ${state.planRows.length}`;
+  $("plan-prev").disabled = offset === 0;
+  $("plan-next").disabled = offset + 100 >= state.planRows.length;
+}
+$("plan-prev").onclick = () => { state.planOffset = Math.max(0, (state.planOffset || 0) - 100); renderPlan(); };
+$("plan-next").onclick = () => { state.planOffset = (state.planOffset || 0) + 100; renderPlan(); };
+
+$("navigation-close").onclick = () => {
+  document.body.classList.add("navigation-collapsed");
+  $("navigation-toggle").setAttribute("aria-expanded", "false");
+  $("navigation-toggle").focus();
+};
+
+async function waitForJob(identifier) {
+  while (true) {
+    const result = await api(`jobs/${identifier}`);
+    if (result.status === "completed") return;
+    if (!["queued", "running"].includes(result.status))
+      throw Error(result.error || say("Job cancelled", "Tâche annulée"));
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}

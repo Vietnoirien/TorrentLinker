@@ -77,3 +77,9 @@ The snapshot has coarse categories and unknown upstream age. Broad entries are e
 See [CONTEXT.md](../../../CONTEXT.md) for the vocabulary and [docs/adr](../../adr) for the design decisions.
 
 [Documentation](../../README.md) · [Français](../fr/zen.md)
+
+### Web planner controls
+
+The web interface has separate **Seeding**, **Plan** and **Catalogue** tabs. In Plan, choose a category or subcategory, optimize for Zen/day or Note, and optionally limit torrent count or seeders. Minimum and maximum sizes are per torrent; a maximum size or download budget of zero adds no limit. Disk space and configured reserves still apply. The result shows total size, added Zen/day and free space before and after the plan. Large results are paged without losing your selection.
+
+The Catalogue tab shows cache age and coverage, including paging limits and imported snapshot metadata. Updating it does not send any downloads.

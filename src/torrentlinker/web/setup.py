@@ -197,6 +197,10 @@ class Setup:
                     self.secrets.get(self.settings.secret_name(name + "-password"))
                 ),
                 "has_api_key": bool(self.secrets.get(self.settings.secret_name("qbit-api-key"))),
+                "indexer_categories": {
+                    str(key): asdict(category)
+                    for key, category in self.settings.indexer_categories.items()
+                },
                 "indexer_url": self.settings.indexer.url,
                 "indexer_configured": bool(self.secrets.get("indexer-api-key")),
                 "storage_roots": [str(p) for p in self.roots],

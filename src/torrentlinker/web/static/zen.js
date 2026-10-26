@@ -2,7 +2,7 @@
 
 const zenSeeding = { generation: 0, expanded: new Set(), client: null, groups: [] };
 function zenTab(name) {
-  for (const key of ["seeding", "plan"]) {
+  for (const key of ["seeding", "plan", "catalogue"]) {
     const selected = key === name;
     $(`zen-${key}-panel`).hidden = !selected;
     $(`zen-${key}-tab`).setAttribute("aria-selected", String(selected));
@@ -10,12 +10,13 @@ function zenTab(name) {
     $(`zen-${key}-tab`).classList.toggle("active", selected);
   }
 }
-for (const name of ["seeding", "plan"]) {
+for (const name of ["seeding", "plan", "catalogue"]) {
   $(`zen-${name}-tab`).onclick = () => zenTab(name);
   $(`zen-${name}-tab`).onkeydown = (event) => {
     if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       event.preventDefault();
-      const next = event.key === "Home" ? "seeding" : event.key === "End" ? "plan" : name === "plan" ? "seeding" : "plan";
+      const tabs = ["seeding", "plan", "catalogue"];
+      const next = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs[2] : tabs[(tabs.indexOf(name) + (event.key === "ArrowRight" ? 1 : 2)) % 3];
       zenTab(next); $(`zen-${next}-tab`).focus();
     }
   };
