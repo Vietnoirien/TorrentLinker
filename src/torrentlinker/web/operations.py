@@ -53,6 +53,7 @@ class JobRequest(BaseModel):
     client_budgets: dict[str, int] = Field(default_factory=dict, max_length=32)
     kind: Literal[
         "manage",
+        "feed-action",
         "refresh",
         "select-torrents",
         "select-catalogue",
@@ -83,6 +84,11 @@ class JobRequest(BaseModel):
         "verify",
         "configure-download-folder",
     ]
+    feed_operation: Literal["save", "delete", "mark", "process", "enqueue"] = "save"
+    feed_definition: dict = Field(default_factory=dict)
+    feed_id: str = ""
+    feed_selection_id: str = ""
+    feed_mark: Literal["read", "unread", "save", "unsave", "dismiss", "restore"] = "read"
     action: Literal["pause", "resume", "recheck", "remove", "delete"] = "pause"
     hashes: list[str] = Field(default_factory=list, max_length=1000)
     confirmation: str = ""
@@ -150,6 +156,7 @@ class Operations:
         self.candidates: dict[str, Candidate] = {}
         self.rows: list[dict[str, Any]] = []
         self.observed: list[Torrent] = []
+        self.feed_observed_at: float = 0
         self.connection_error = ""
         self.zen: dict[str, Any] = {}
 
@@ -358,6 +365,7 @@ class Operations:
                     if e.reason
                     else ""
                 ),
+                "origin": e.origin,
                 "priority": e.priority,
                 "added_at": e.added_at,
                 "retry_safe": e.retry_safe,

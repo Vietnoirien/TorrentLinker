@@ -332,6 +332,11 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.upload_tab, self.tr("Upload"))
         self.search_tab = SearchTab(store, settings, self.indexer, self.qbit)
         self.tabs.addTab(self.search_tab, self.tr("Search"))
+        from torrentlinker.gui.feeds import FeedsTab
+
+        self.feeds_tab = FeedsTab(lambda: self.assistant_service().agent.feed_control)
+        self.tabs.addTab(self.feeds_tab, self.tr("RSS"))
+        self.search_tab.subscribe_requested.connect(lambda query: self.feeds_tab.edit(query=query))
         self.torrents_tab = TorrentsTab(self.qbit)
         from torrentlinker.gui.client_overview import ClientOverview
 
@@ -374,6 +379,7 @@ class MainWindow(QMainWindow):
                 self.tr("Library"),
                 self.tr("Upload"),
                 self.tr("Search"),
+                self.tr("RSS"),
                 self.tr("Torrents"),
                 self.tr("Assistant"),
             ]
@@ -633,6 +639,8 @@ class MainWindow(QMainWindow):
         if self._startup_complete or not self._has_indexer_key():
             return
         self._startup_complete = True
+        if (self.settings_path.parent / "feeds.sqlite").exists():
+            QTimer.singleShot(0, self.assistant_service)
         self.setup_notice.hide()
         self.tabs.setEnabled(True)
         self.band.setEnabled(True)
@@ -660,7 +668,7 @@ class MainWindow(QMainWindow):
             self.client_overview.refresh()
 
     def open_torrents(self, hash: str = "") -> None:
-        self.tabs.setCurrentIndex(4)
+        self.tabs.setCurrentIndex(self.tabs.indexOf(self.feeds_tab) + 1)
         self.torrents_tab.focus_torrent(hash)
 
     def _workspace_changed(self, index: int) -> None:
@@ -672,18 +680,19 @@ class MainWindow(QMainWindow):
             self.tr("Find Orphans, compare Candidates and Reseed your files."),
             self.tr("Prepare an Upload, then review and publish its Draft on c411."),
             self.tr("Search torrents and queue the ones you want to download."),
+            self.tr("Review RSS releases and manage subscription rules."),
             self.tr("Manage downloads and seeds in your Torrent Client."),
             self.tr("Discuss tasks, review proposals and schedule automations."),
             self.tr("Ten thousand books kept alive. Take a moment to read one."),
         ]
         if 0 <= index < len(descriptions):
             self.page_description.setText(descriptions[index])
-        self.band.setVisible(index < self.navigation.count() and index not in {4, 5})
+        self.band.setVisible(index < self.navigation.count() and index not in {5, 6})
         self.page_title.setVisible(index < self.navigation.count())
         self.page_description.setVisible(index < self.navigation.count())
         policy = (
             QSizePolicy.Policy.Ignored
-            if index >= self.navigation.count() or index in {4, 5}
+            if index >= self.navigation.count() or index in {5, 6}
             else QSizePolicy.Policy.Preferred
         )
         self.tabs.setSizePolicy(policy, policy)

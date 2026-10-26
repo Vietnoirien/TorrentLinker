@@ -6,7 +6,7 @@ import hashlib
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -41,6 +41,7 @@ class QueueEntry:
     priority: int = 0
     added_at: float = 0
     retry_safe: bool = False
+    origin: dict = field(default_factory=dict)
 
 
 def entries(store: Store, *, all_clients: bool = False) -> list[QueueEntry]:
@@ -63,6 +64,7 @@ def entries(store: Store, *, all_clients: bool = False) -> list[QueueEntry]:
                 int(cast(Any, payload.get("priority", 0))),
                 float(cast(Any, payload.get("added_at", 0))),
                 bool(payload.get("retry_safe", False)),
+                cast(dict, payload.get("origin", {})),
             )
         )
     return result
@@ -75,7 +77,10 @@ def queue_key(indexer: Indexer, candidate: Candidate) -> str:
     return hashlib.sha256((indexer.url + "\n" + identity).encode()).hexdigest()
 
 
-def enqueue(store: Store, indexer: Indexer, candidate: Candidate, folder: Path) -> bool:
+def enqueue(
+    store: Store, indexer: Indexer, candidate: Candidate, folder: Path,
+    *, origin: dict | None = None
+) -> bool:
     if not candidate.download_url:
         raise ValueError("This torrent has no download link.")
     clean = replace(
@@ -93,6 +98,7 @@ def enqueue(store: Store, indexer: Indexer, candidate: Candidate, folder: Path) 
             "folder": str(folder),
             "indexer_url": indexer.url,
             "client_id": store.client_id,
+            **({"origin": origin} if origin else {}),
         },
     )
 
@@ -127,7 +133,8 @@ def run_queue(
             report.stopped = True
             break
         c = entry.candidate
-        store.download_outcome(entry.key, "sending")
+        if not store.claim_download(entry.key):
+            continue
 
         def show(retry_at: float | None = None, title: str = c.title) -> None:
             progress(

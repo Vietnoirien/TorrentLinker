@@ -134,6 +134,7 @@ class Candidate:
     details_url: str = ""
     categories: tuple[int, ...] = field(default=())
     published_at: float | None = None  # UTC Unix timestamp, when supplied by the Indexer.
+    metadata: dict = field(default_factory=dict)  # Verified source attributes only.
 
 
 def publication_time(value: str | None) -> float | None:
@@ -561,6 +562,9 @@ def _parse_items(xml: str) -> list[Candidate]:
                 details_url=item.findtext("link", "") or item.findtext("guid", ""),
                 categories=tuple(int(c) for c in attrs.get("category", []) if c.isdigit()),
                 published_at=publication_time(item.findtext("pubDate")),
+                metadata={name: values[0] for name, values in attrs.items()
+                          if name in {"imdbid", "tmdbid", "season", "episode", "quality",
+                                      "codec", "audio", "subtitles", "format", "bitrate"}},
             )
         )
     return candidates

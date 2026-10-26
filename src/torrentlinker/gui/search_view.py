@@ -49,6 +49,7 @@ PAGE_SIZE = 100
 
 class SearchTab(QWidget):
     manage_requested = Signal(str)
+    subscribe_requested = Signal(str)
 
     def __init__(
         self,
@@ -102,6 +103,11 @@ class SearchTab(QWidget):
         search.addWidget(self.query, 2)
         search.addWidget(self.category, 1)
         search.addWidget(self.search_button)
+        self.subscribe = QPushButton(self.tr("Subscribe to RSS"))
+        self.subscribe.clicked.connect(
+            lambda: self.subscribe_requested.emit(self.query.text().strip())
+        )
+        search.addWidget(self.subscribe)
         layout.addLayout(search)
         self.filters = SearchFilters(self.category)
         layout.addWidget(self.filters)

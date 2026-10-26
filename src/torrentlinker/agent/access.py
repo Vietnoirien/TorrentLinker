@@ -125,6 +125,13 @@ class Access:
             )
         self.event(identifier, "permissions updated")
 
+    def set_internal_active(self, identifier: str, active: bool) -> None:
+        """Pause owner-managed internal authority while retaining its usage ledger."""
+        if not identifier.startswith("assistant-"):
+            raise ValueError("Only internal permissions can be resumed here.")
+        with self.lock, self.db:
+            self.db.execute("UPDATE grants SET revoked=? WHERE id=?", (not active, identifier))
+
     def authenticate(self, token: str) -> str:
         with self.lock:
             row = self.db.execute(

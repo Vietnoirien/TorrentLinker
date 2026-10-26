@@ -703,3 +703,9 @@ dialog .description img {
   .upload-review-header { grid-template-columns: 1fr; }
   .upload-review-header .selection-artwork { display: none; }
 }
+.feed-layout {display:grid;grid-template-columns:200px minmax(0,1fr);gap:1rem}
+#feeds-sidebar {display:flex;flex-direction:column;gap:.4rem}
+.feed-form {display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.8rem;max-height:55vh;overflow:auto}
+.feed-form label {display:flex;flex-direction:column;gap:.25rem}
+.feed-form p {grid-column:1 / -1}
+@media(max-width:700px){.feed-layout{grid-template-columns:1fr}#feeds-sidebar{flex-direction:row;flex-wrap:wrap}}

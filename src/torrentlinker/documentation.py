@@ -18,6 +18,7 @@ GUIDES = (
     ("torrents", "torrents", "Gérer les torrents", "Manage torrents"),
     ("bibliotheque", "library", "Bibliothèque et reseed", "Library and reseeding"),
     ("recherche", "search", "Recherche et téléchargements", "Search and downloads"),
+    ("rss", "rss", "Abonnements RSS", "RSS subscriptions"),
     ("zen", "zen", "Zen et Plans", "Zen and Plans"),
     ("upload", "upload", "Préparer un upload", "Prepare an Upload"),
     ("upload-categories", "upload-categories", "Règles des uploads", "Upload category rules"),

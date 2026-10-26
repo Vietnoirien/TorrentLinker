@@ -1708,6 +1708,14 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
 <context>
     <name>MainWindow</name>
     <message>
+        <source>RSS</source>
+        <translation>RSS</translation>
+    </message>
+    <message>
+        <source>Review RSS releases and manage subscription rules.</source>
+        <translation>Examiner les torrents RSS et gérer les règles d'abonnement.</translation>
+    </message>
+    <message>
         <source>Fetch the Indexer categories in Settings before choosing a Download Folder.</source>
         <translation>Récupérez les catégories de l'Indexeur dans les Paramètres avant de choisir un Dossier de téléchargement.</translation>
     </message>
@@ -3577,6 +3585,10 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 </context>
 <context>
     <name>SearchTab</name>
+    <message>
+        <source>Subscribe to RSS</source>
+        <translation>S'abonner au RSS</translation>
+    </message>
     <message>
         <location filename="../gui/search_view.py" line="95"/>
         <source>Search torrents by title…</source>
@@ -6896,6 +6908,261 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Draft changed. Review the current revision before sending.</source>
         <translation>Brouillon modifié. Relisez la révision actuelle avant tout envoi.</translation>
+    </message>
+</context>
+<context>
+    <name>FeedsTab</name>
+    <message>
+        <source>Add seeders to the ranking priorities to prefer more seeders; move it before quality or codec to give availability priority.</source>
+        <translation>Ajoutez seeders aux priorités de classement pour privilégier les torrents les mieux partagés ; placez-le avant quality ou codec pour donner priorité à la disponibilité.</translation>
+    </message>
+    <message>
+        <source>Saved selections</source>
+        <translation>Sélections enregistrées</translation>
+    </message>
+    <message>
+        <source>RSS review</source>
+        <translation>Examen RSS</translation>
+    </message>
+    <message>
+        <source>Torrent Client</source>
+        <translation>Client torrent</translation>
+    </message>
+    <message>
+        <source>Download Folder</source>
+        <translation>Dossier de téléchargement</translation>
+    </message>
+    <message>
+        <source>RSS subscription</source>
+        <translation>Abonnement RSS</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Title query</source>
+        <translation>Recherche par titre</translation>
+    </message>
+    <message>
+        <source>Torznab category IDs</source>
+        <translation>Identifiants de catégorie Torznab</translation>
+    </message>
+    <message>
+        <source>Film 2030, TV 5000, Music 3010, Books 7020, all 3D 8010. Native Search filters are not copied. Advanced criteria use verified metadata only.</source>
+        <translation>Film 2030, Série 5000, Musique 3010, Livres 7020, toute la 3D 8010. Les filtres natifs de Recherche ne sont pas copiés. Les critères avancés utilisent uniquement les métadonnées vérifiées.</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>Mode</translation>
+    </message>
+    <message>
+        <source>Allowed UTC hours</source>
+        <translation>Heures UTC autorisées</translation>
+    </message>
+    <message>
+        <source>Include currently available releases</source>
+        <translation>Inclure les torrents actuels</translation>
+    </message>
+    <message>
+        <source>Replace better matches while still pending</source>
+        <translation>Remplacer par un meilleur choix uniquement en attente</translation>
+    </message>
+    <message>
+        <source>Prefer smaller releases</source>
+        <translation>Préférer les petits torrents</translation>
+    </message>
+    <message>
+        <source>required/excluded are hard constraints; preferred lists rank acceptable releases. Fields: quality, codec, audio, subtitles, format, bitrate, platform, license. priorities sets ranking order; prefer_small ranks size. Unknown required metadata blocks rules. Work identity must be verified.</source>
+        <translation>required/excluded sont des contraintes obligatoires ; preferred classe les versions acceptables. Champs : quality, codec, audio, subtitles, format, bitrate, platform, license. priorities fixe leur ordre ; prefer_small classe la taille. Une métadonnée requise inconnue bloque la règle. L'identité de l'œuvre doit être vérifiée.</translation>
+    </message>
+    <message>
+        <source>I explicitly authorize automatic downloads under these limits</source>
+        <translation>J'autorise explicitement les téléchargements automatiques selon ces limites</translation>
+    </message>
+    <message>
+        <source>New subscription</source>
+        <translation>Nouvel abonnement</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Modifier</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation>Actualiser</translation>
+    </message>
+    <message>
+        <source>Pause / resume</source>
+        <translation>Suspendre / reprendre</translation>
+    </message>
+    <message>
+        <source>Compare clients</source>
+        <translation>Comparer les clients</translation>
+    </message>
+    <message>
+        <source>Process rules</source>
+        <translation>Évaluer les règles</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>All</source>
+        <translation>Tous</translation>
+    </message>
+    <message>
+        <source>Unread</source>
+        <translation>Non lus</translation>
+    </message>
+    <message>
+        <source>Saved</source>
+        <translation>Enregistrés</translation>
+    </message>
+    <message>
+        <source>In client</source>
+        <translation>Dans un client</translation>
+    </message>
+    <message>
+        <source>Queued</source>
+        <translation>En file</translation>
+    </message>
+    <message>
+        <source>Mark read</source>
+        <translation>Marquer lus</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>Dismiss</source>
+        <translation>Masquer</translation>
+    </message>
+    <message>
+        <source>Save selection</source>
+        <translation>Enregistrer la sélection</translation>
+    </message>
+    <message>
+        <source>Queue selected</source>
+        <translation>Mettre la sélection en file</translation>
+    </message>
+    <message>
+        <source>Decisions</source>
+        <translation>Décisions</translation>
+    </message>
+    <message>
+        <source>Title</source>
+        <translation>Titre</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Seeds</source>
+        <translation>Seeders</translation>
+    </message>
+    <message>
+        <source>Discovered</source>
+        <translation>Découvert</translation>
+    </message>
+    <message>
+        <source>Published</source>
+        <translation>Publié</translation>
+    </message>
+    <message>
+        <source>State</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>All feeds</source>
+        <translation>Tous les flux</translation>
+    </message>
+    <message>
+        <source>Review only</source>
+        <translation>Lecture seule</translation>
+    </message>
+    <message>
+        <source>App queue only</source>
+        <translation>File de l'application</translation>
+    </message>
+    <message>
+        <source>Automatic downloads</source>
+        <translation>Téléchargements automatiques</translation>
+    </message>
+    <message>
+        <source>Poll interval, minutes</source>
+        <translation>Intervalle d'actualisation, minutes</translation>
+    </message>
+    <message>
+        <source>Wait for alternatives, minutes</source>
+        <translation>Attente des alternatives, minutes</translation>
+    </message>
+    <message>
+        <source>Daily download bytes</source>
+        <translation>Octets téléchargés par jour</translation>
+    </message>
+    <message>
+        <source>Daily download count</source>
+        <translation>Nombre de téléchargements par jour</translation>
+    </message>
+    <message>
+        <source>Disk reserve bytes</source>
+        <translation>Réserve disque en octets</translation>
+    </message>
+    <message>
+        <source>Minimum bytes</source>
+        <translation>Octets minimum</translation>
+    </message>
+    <message>
+        <source>Maximum bytes, blank for unlimited</source>
+        <translation>Octets maximum, vide pour illimité</translation>
+    </message>
+    <message>
+        <source>Minimum seeders</source>
+        <translation>Seeders minimum</translation>
+    </message>
+    <message>
+        <source>Ranking priorities, comma separated</source>
+        <translation>Priorités de classement, séparées par des virgules</translation>
+    </message>
+    <message>
+        <source>Preview</source>
+        <translation>Prévisualiser</translation>
+    </message>
+    <message>
+        <source>Save subscription</source>
+        <translation>Enregistrer l'abonnement</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Limited RSS discovery. History and gap-free updates are not guaranteed.</source>
+        <translation>Découverte RSS limitée. Historique et mises à jour sans lacunes non garantis.</translation>
+    </message>
+    <message>
+        <source>Required / accepted</source>
+        <translation>Requis / acceptés</translation>
+    </message>
+    <message>
+        <source>Preferred in order</source>
+        <translation>Préférés par ordre</translation>
+    </message>
+    <message>
+        <source>Excluded</source>
+        <translation>Exclus</translation>
+    </message>
+    <message>
+        <source>Preview this definition before saving.</source>
+        <translation>Prévisualisez cette définition avant de l'enregistrer.</translation>
+    </message>
+    <message>
+        <source>Last success</source>
+        <translation>Dernier succès</translation>
     </message>
 </context>
 </TS>

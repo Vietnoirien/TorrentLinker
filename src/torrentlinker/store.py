@@ -371,6 +371,38 @@ class Store:
                 (status, reason, int(retry_safe), key),
             )
 
+    def claim_download(self, key: str) -> bool:
+        """A removed/replaced or already claimed pending row can never be sent."""
+        with self._lock, self._db:
+            return (
+                self._db.execute(
+                    "UPDATE download_queue SET status='sending' WHERE id=? AND status='queued'",
+                    (key,),
+                ).rowcount
+                == 1
+            )
+
+    def replace_pending_download(self, old_key: str, new_key: str, payload: dict) -> bool:
+        with self._lock, self._db:
+            # Lock across connections before reading; a sender must not claim the
+            # old row between this status check and replacement.
+            self._db.execute("BEGIN IMMEDIATE")
+            old = self._db.execute(
+                "SELECT status FROM download_queue WHERE id=?", (old_key,)
+            ).fetchone()
+            if old is None or old[0] != "queued":
+                return False
+            inserted = (
+                self._db.execute(
+                    "INSERT OR IGNORE INTO download_queue(id,payload,added_at) VALUES(?,?,?)",
+                    (new_key, json.dumps(payload), time.time()),
+                ).rowcount
+                == 1
+            )
+            if inserted:
+                self._db.execute("DELETE FROM download_queue WHERE id=?", (old_key,))
+            return inserted
+
     def remove_downloads(self, keys: list[str]) -> None:
         with self._lock, self._db:
             self._db.executemany("DELETE FROM download_queue WHERE id=?", [(key,) for key in keys])

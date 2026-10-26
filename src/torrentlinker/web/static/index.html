@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="static/app.css" />
     <script src="static/app.js" defer></script>
     <script src="static/zen.js" defer></script>
+    <script src="static/feeds.js" defer></script>
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
   </head>
@@ -39,6 +40,7 @@
           <button data-view="torrents" data-i18n="torrents">Torrents</button
           ><button data-view="zen">Zen</button
           ><button data-view="search" data-i18n="search">Search</button
+          ><button data-view="feeds">RSS</button
           ><button data-view="queue" data-i18n="queue">Download queue</button
           ><button data-view="library" data-i18n="library">Library</button
           ><button data-view="upload">Upload</button
@@ -469,6 +471,15 @@
             </button>
           </section>
         </section>
+        <section id="view-feeds" class="view" hidden>
+          <div id="feeds-toolbar" class="toolbar"></div>
+          <div class="feed-layout"><aside id="feeds-sidebar"></aside><div>
+            <p id="feeds-status" class="muted"></p>
+            <div id="feeds-filters" class="toolbar"></div>
+            <div id="feeds-actions" class="toolbar"></div>
+            <div id="feeds-results" class="table-wrap"></div>
+          </div></div>
+        </section>
         <section id="view-search" class="view" hidden>
           <form id="search-form" class="toolbar">
             <input
@@ -479,6 +490,7 @@
               <option value="">All categories</option></select
             ><button class="primary" data-i18n="search">Search</button>
           </form>
+          <button id="subscribe-search">RSS</button>
           <div id="search-facets" class="toolbar"></div>
           <details>
             <summary data-i18n="moreFilters">More filters</summary>

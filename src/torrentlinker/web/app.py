@@ -154,6 +154,7 @@ def create_app(
         if monitor_verifications:
             monitor.start()
         assistant.start_scheduler()
+        agent_service.feed_control.start()
         try:
             async with mcp_server.session_manager.run():
                 yield
@@ -161,6 +162,7 @@ def create_app(
             shutdown.set()
             if monitor_verifications:
                 monitor.join(timeout=2)
+            agent_service.feed_control.close()
             assistant.close()
             jobs.close()
 
@@ -184,6 +186,9 @@ def create_app(
     assistant_routes(app, assistant)
     app.state.assistant = assistant
     app.state.agent_service = agent_service
+    from torrentlinker.web.feeds import feed_routes
+
+    feed_routes(app, agent_service)
     app.state.reset_clients = reset_clients
 
     def idle() -> None:

@@ -122,6 +122,117 @@ def make_server(service: AgentService):
         return guarded
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def list_feeds() -> dict[str, object]:
+        """List allowed RSS subscriptions, unread counts, errors and limited coverage."""
+        grant = service.access.grant(ACTOR.get())
+        return {
+            "subscriptions": [
+                row
+                for row in service.feed_control.feeds.subscriptions()
+                if row["client_id"] in grant.clients
+            ]
+        }
+
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def refresh_feed(feed_id: str) -> dict[str, object]:
+        """Refresh one accessible feed using bounded overlapping reads, without downloading."""
+        service.target(ACTOR.get(), service.feed_control.feeds.get(feed_id).client_id)
+        return service.feed_control.feeds.refresh(feed_id)
+
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def compare_feed_clients(client_ids: list[str]) -> dict[str, object]:
+        """Read chosen Torrent Clients for exact-hash feed comparison. No downloads."""
+        for client_id in client_ids:
+            service.target(ACTOR.get(), client_id)
+        return service.feed_control.inventory(refresh=True, client_ids=client_ids)
+
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def get_feed_selections(selection_id: str = "") -> dict[str, object]:
+        """Recover durable RSS selection IDs after context loss, or inspect one selection."""
+        actor = ACTOR.get()
+        grant = service.access.grant(actor)
+        if selection_id:
+            return service.feed_control.feeds.selection(
+                selection_id, actor=actor, client_ids=grant.clients
+            )
+        return {"selections": service.feed_control.feeds.selections(
+            actor=actor, client_ids=grant.clients
+        )}
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def preview_feed(subscription: dict) -> dict[str, object]:
+        """Preview a named RSS subscription before saving. Only q and Torznab categories
+        are source filters. Local hard criteria require verified metadata. No download."""
+        from torrentlinker.feeds import Subscription
+
+        feed = Subscription.model_validate(subscription)
+        service.target(ACTOR.get(), feed.client_id)
+        return service.feed_control.feeds.preview(feed)
+
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def feed_inbox(
+        feed_id: str = "", unread: bool = False, saved: bool = False
+    ) -> dict[str, object]:
+        """Read deduplicated RSS inbox rows, with discovery and publication times."""
+        return {"rows": service.feed_inbox(ACTOR.get(), feed_id, unread=unread, saved=saved)}
+
+
+    @mcp.tool(structured_output=True)
+    @safe
+    def select_feed_items(hashes: list[str], name: str = "RSS selection") -> dict[str, object]:
+        """Save exact RSS hashes as a durable selection for review and later enqueue."""
+        allowed = {row["infohash"] for row in service.feed_inbox(ACTOR.get())}
+        if set(hashes) - allowed:
+            raise ValueError("Choose accessible feed inbox rows.")
+        return service.feed_control.feeds.select(
+            hashes, name, actor=ACTOR.get(), client_ids=service.access.grant(ACTOR.get()).clients
+        )
+
+
+    @mcp.tool(structured_output=True)
+    @safe
+    def process_feed_action(
+        request_id: str,
+        client_id: str,
+        operation: Literal["save", "delete", "mark", "process", "enqueue"],
+        subscription: dict | None = None,
+        feed_id: str = "",
+        selection_id: str = "",
+        hashes: list[str] | None = None,
+        mark: Literal["read", "unread", "save", "unsave", "dismiss", "restore"] = "read",
+        folder: str = "",
+    ) -> dict[str, object]:
+        """Create/edit/pause/delete a feed, mark rows, process rules, or enqueue a saved
+        selection through owner permissions. Preview before save. automatic_download
+        always requires owner approval; app_queue never contacts a Torrent Client.
+        Use full subscription definitions when editing and preserve the id."""
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="feed-action",
+                client_id=client_id,
+                feed_operation=operation,
+                feed_definition=subscription or {},
+                feed_id=feed_id,
+                feed_selection_id=selection_id,
+                hashes=hashes or [],
+                feed_mark=mark,
+                path=folder,
+            ),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe(public_urls=True)
     def preview_upload(
         client_id: str, path: str, upload: UploadForm | None = None

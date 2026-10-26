@@ -560,6 +560,7 @@ async function navigate(view) {
   if (view === "documentation") await loadGuides();
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
+  if (view === "feeds") await loadFeeds();
   if (view === "upload") await loadUploadQueue();
   if (view === "library") await loadLibrary();
   if (view === "jobs") await loadJobs();
@@ -902,7 +903,7 @@ async function loadQueue() {
     "key",
   );
 }
-async function details(row) {
+async function details(row, queueAction = null) {
   const content = $("dialog-content");
   content.replaceChildren(
     element("h2", row.title),
@@ -919,7 +920,7 @@ async function details(row) {
     content.append(link);
   }
   content.append(
-    button(say("Add to queue", "Ajouter à la file"), () => enqueue([row.hash])),
+    button(say("Add to queue", "Ajouter à la file"), queueAction || (() => enqueue([row.hash]))),
   );
   $("dialog").showModal();
   if (new URL(state.setup.indexer_url).hostname !== "c411.org") return;
