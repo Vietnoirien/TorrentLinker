@@ -328,3 +328,27 @@ def test_nfo_duration_rounding_and_codec_aliases_are_not_false_conflicts():
     assert not {"nfo.duration", "nfo.video_codec"} & {
         entry["field"] for entry in check["missing_fields"]
     }
+
+
+def test_original_mediainfo_compares_all_video_durations_without_inventing_total_file_count():
+    from torrentlinker.upload_presentation import media_nfo_values
+
+    form = complete_form(1, 6)
+    form["nfo"] = (
+        "General\nFormat : Matroska\nDuration : 1 h 30 min\nVideo\nFormat : AVC\n"
+        "General\nFormat : Matroska\nDuration : 1 h 35 min\nVideo\nFormat : AVC\n"
+    )
+    evidence = {
+        "file_count": 4,  # Two videos, one external subtitle and one cover.
+        "fields": {"duration": {"value": "1:30:00; 1:35:00"}},
+    }
+    result = assess(form, evidence)
+    conflicts = {row["field"] for row in result["missing_fields"] if "conflict:" in row["message"]}
+    assert "nfo.duration" not in conflicts
+    assert "nfo.files" not in conflicts
+    assert media_nfo_values(form["nfo"])["duration"] == "1 h 30 min; 1 h 35 min"
+    form["nfo"] = form["nfo"].replace("1 h 35 min", "1 h 40 min")
+    assert any(
+        row["field"] == "nfo.duration" and "conflict:" in row["message"]
+        for row in assess(form, evidence)["missing_fields"]
+    )

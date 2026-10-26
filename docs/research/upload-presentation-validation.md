@@ -77,5 +77,13 @@ Focused regression validation after these corrections: **66 passed**, including 
 Qt capture seam, independent Qt quaternion/basis comparison, opposite occluding
 surfaces, 109-piece inventory, 25 embedded EPUB covers, malformed provider arguments,
 NFO conflicts/aliases/rounded durations and the web camera controls. Mypy passed for
-158 source files; scoped Ruff and JavaScript syntax checks passed. The final shared
-suite will run after the concurrent RSS implementation settles.
+158 source files; scoped Ruff and JavaScript syntax checks passed. The broader
+Upload/model regression set then passed **270 tests**. The final shared suite will
+run after the concurrent RSS implementation settles.
+
+The standards correction review was clear. The spec correction review found two
+false NFO conflicts: using only the first MediaInfo video duration, and treating
+its inferred video count as a declared count of all files. A regression covering
+two videos plus subtitle/artwork reproduces both and verifies the correction,
+including detection of a genuinely wrong second duration. All 34 completeness tests
+pass after that delta; mypy remains clear.

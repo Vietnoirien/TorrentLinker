@@ -392,6 +392,7 @@ def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> 
     values = _values(description)
     nfo = form.get("nfo") or ""
     nfo_values = _values(nfo)
+    declared_nfo_fields = set(nfo_values)
     if category == 1:
         nfo_values.update(media_nfo_values(nfo))
     expected = dict(values)
@@ -405,6 +406,8 @@ def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> 
         if "file_count" in evidence:
             expected["files"] = str(evidence["file_count"])
     for key in ("codec", "video_codec", "audio_codec", "duration", "files", "tracks"):
+        if key == "files" and key not in declared_nfo_fields:
+            continue  # MediaInfo General blocks count videos, not all Upload files.
         declared, observed = nfo_values.get(key), expected.get(key)
         if declared and observed and _fact_agrees(key, declared, observed) is False:
             add(
@@ -621,6 +624,11 @@ def media_nfo_values(nfo: str) -> dict[str, str]:
     for target, source in (("format", "format"), ("duration", "duration"), ("size", "file size")):
         if general.get(source):
             result[target] = general[source]
+    durations = [block["duration"] for block in blocks["general"] if block.get("duration")]
+    if len(durations) == len(blocks["general"]):
+        result["duration"] = "; ".join(durations)
+    else:
+        result.pop("duration", None)
     result["files"] = _values(nfo).get("files", str(len(blocks["general"])))
     for group, mappings in (
         (
