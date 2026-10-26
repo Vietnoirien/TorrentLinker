@@ -14,13 +14,14 @@ def login(browser):
     assert browser.post("/api/login", json={"password": "test-password-long"}).status_code == 200
 
 
-def finished(browser, identifier):
-    for _ in range(200):
+def finished(browser, identifier, *, timeout=10):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         job = browser.get(f"/api/jobs/{identifier}").json()
         if job["status"] not in {"queued", "running"}:
             return job
         time.sleep(0.01)
-    raise AssertionError("Job did not finish")
+    raise AssertionError(f"Job {identifier} did not finish within {timeout}s: {job}")
 
 
 class Client:

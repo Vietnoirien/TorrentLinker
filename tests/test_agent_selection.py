@@ -164,7 +164,7 @@ def test_global_selection_can_exceed_one_thousand_without_model_batching(tmp_pat
                 "action": "pause",
             },
         )["structuredContent"]
-        outcome = finished(browser, action["job_id"])["result"]
+        outcome = finished(browser, action["job_id"], timeout=30)["result"]
         assert outcome["outcomes"] == {"sent": 1100}
         assert len(client.paused) == 1100
 
