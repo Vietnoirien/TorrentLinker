@@ -78,8 +78,12 @@ def queue_key(indexer: Indexer, candidate: Candidate) -> str:
 
 
 def enqueue(
-    store: Store, indexer: Indexer, candidate: Candidate, folder: Path,
-    *, origin: dict | None = None
+    store: Store,
+    indexer: Indexer,
+    candidate: Candidate,
+    folder: Path,
+    *,
+    origin: dict | None = None,
 ) -> bool:
     if not candidate.download_url:
         raise ValueError("This torrent has no download link.")

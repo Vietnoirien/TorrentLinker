@@ -135,14 +135,12 @@ def make_server(service: AgentService):
             ]
         }
 
-
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
     def refresh_feed(feed_id: str) -> dict[str, object]:
         """Refresh one accessible feed using bounded overlapping reads, without downloading."""
         service.target(ACTOR.get(), service.feed_control.feeds.get(feed_id).client_id)
         return service.feed_control.feeds.refresh(feed_id)
-
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
@@ -151,7 +149,6 @@ def make_server(service: AgentService):
         for client_id in client_ids:
             service.target(ACTOR.get(), client_id)
         return service.feed_control.inventory(refresh=True, client_ids=client_ids)
-
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
@@ -163,9 +160,11 @@ def make_server(service: AgentService):
             return service.feed_control.feeds.selection(
                 selection_id, actor=actor, client_ids=grant.clients
             )
-        return {"selections": service.feed_control.feeds.selections(
-            actor=actor, client_ids=grant.clients
-        )}
+        return {
+            "selections": service.feed_control.feeds.selections(
+                actor=actor, client_ids=grant.clients
+            )
+        }
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
@@ -178,7 +177,6 @@ def make_server(service: AgentService):
         service.target(ACTOR.get(), feed.client_id)
         return service.feed_control.feeds.preview(feed)
 
-
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
     def feed_inbox(
@@ -186,7 +184,6 @@ def make_server(service: AgentService):
     ) -> dict[str, object]:
         """Read deduplicated RSS inbox rows, with discovery and publication times."""
         return {"rows": service.feed_inbox(ACTOR.get(), feed_id, unread=unread, saved=saved)}
-
 
     @mcp.tool(structured_output=True)
     @safe
@@ -198,7 +195,6 @@ def make_server(service: AgentService):
         return service.feed_control.feeds.select(
             hashes, name, actor=ACTOR.get(), client_ids=service.access.grant(ACTOR.get()).clients
         )
-
 
     @mcp.tool(structured_output=True)
     @safe

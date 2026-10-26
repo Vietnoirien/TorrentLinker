@@ -710,7 +710,9 @@ class AgentService:
 
                     def guarded_download(data: bytes, folder: str) -> None:
                         self.feed_control.check_download_authority(
-                            actor, body.client_id, folder,
+                            actor,
+                            body.client_id,
+                            folder,
                             body.hashes[0] if len(body.hashes) == 1 else "",
                         )
                         budget_guard(data, folder)
@@ -1389,9 +1391,13 @@ class AgentService:
             if set(body.hashes) - allowed:
                 raise ValueError("Choose feed rows accessible to this connection.")
             grant = self.access.grant(actor)
-            identifiers = [body.feed_id] if body.feed_id else [
-                row["id"] for row in feeds.subscriptions() if row["client_id"] in grant.clients
-            ]
+            identifiers = (
+                [body.feed_id]
+                if body.feed_id
+                else [
+                    row["id"] for row in feeds.subscriptions() if row["client_id"] in grant.clients
+                ]
+            )
             for identifier in identifiers:
                 feeds.mark(body.hashes, feed_id=identifier, action=body.feed_mark)
             return {"updated": len(body.hashes)}
@@ -1409,7 +1415,6 @@ class AgentService:
             )
         raise ValueError("Unsupported feed action.")
 
-
     def feed_inbox(self, actor: str, identifier: str = "", **filters) -> list[dict]:
         grant = self.access.grant(actor)
         permitted = {
@@ -1420,14 +1425,13 @@ class AgentService:
         if identifier and identifier not in permitted:
             raise ValueError("Subscription is not accessible to this connection.")
         result: dict[str, dict] = {}
-        for feed_id in ([identifier] if identifier else sorted(permitted)):
+        for feed_id in [identifier] if identifier else sorted(permitted):
             for row in self.feed_control.inbox(
                 feed_id=feed_id, client_ids=grant.clients, **filters
             ):
                 row["in_clients"] = [value for value in row["in_clients"] if value in grant.clients]
                 row["client_inventory_unknown"] = [
-                    value for value in row["client_inventory_unknown"]
-                    if value in grant.clients
+                    value for value in row["client_inventory_unknown"] if value in grant.clients
                 ]
                 hash = row["infohash"]
                 if hash in result:

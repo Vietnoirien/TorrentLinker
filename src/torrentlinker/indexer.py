@@ -562,9 +562,23 @@ def _parse_items(xml: str) -> list[Candidate]:
                 details_url=item.findtext("link", "") or item.findtext("guid", ""),
                 categories=tuple(int(c) for c in attrs.get("category", []) if c.isdigit()),
                 published_at=publication_time(item.findtext("pubDate")),
-                metadata={name: values[0] for name, values in attrs.items()
-                          if name in {"imdbid", "tmdbid", "season", "episode", "quality",
-                                      "codec", "audio", "subtitles", "format", "bitrate"}},
+                metadata={
+                    name: values[0]
+                    for name, values in attrs.items()
+                    if name
+                    in {
+                        "imdbid",
+                        "tmdbid",
+                        "season",
+                        "episode",
+                        "quality",
+                        "codec",
+                        "audio",
+                        "subtitles",
+                        "format",
+                        "bitrate",
+                    }
+                },
             )
         )
     return candidates
