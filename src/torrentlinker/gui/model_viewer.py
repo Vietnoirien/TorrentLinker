@@ -543,7 +543,9 @@ class ModelPanel(QWidget):
         def read():
             result = render_models(chosen, states, stop, lambda _: None)
             assets = Assets(self.folder.parent)
-            artifacts = publish_render_pages(result["pages"], assets, item_path)
+            artifacts = publish_render_pages(
+                result["pages"], assets, item_path, selection=[str(path) for path in chosen]
+            )
             ids = [asset["asset_id"] for asset in artifacts]
             saved_paths = []
             output_folder.mkdir(parents=True, exist_ok=True)

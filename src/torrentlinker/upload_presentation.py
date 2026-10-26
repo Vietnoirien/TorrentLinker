@@ -402,6 +402,11 @@ def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> 
                         "Add the duration of each track/chapter, for example 01. Title (03:42).",
                     )
     if evidence:
+        for name in evidence.get("image_coverage", {}).get("missing", []):
+            add(
+                "description.image.coverage",
+                f"Selected piece missing from attached render pages: {name}.",
+            )
         for conflict in evidence.get("conflicting_fields", []):
             if conflict.get("blocks_review"):
                 add(

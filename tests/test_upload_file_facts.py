@@ -58,3 +58,37 @@ def test_audio_preview_has_measured_track_facts_and_complete_generated_labels(tm
     assert "Débit :" in preview["nfo"]
     assert preview["nfo_origin"] == "generated"
     assert "description.source" in {x["field"] for x in preview["presentation"]["missing_fields"]}
+
+
+def test_unreadable_audio_remains_in_count_and_tracklist(tmp_path):
+    from torrentlinker.matching import IgnoreList
+    from torrentlinker.scan import scan_item
+    from torrentlinker.upload import PROFILES, UploadRequest, upload_files
+    from torrentlinker.upload_facts import known_fields
+    from torrentlinker.upload_presentation import file_evidence
+
+    album = tmp_path / "Album"
+    album.mkdir()
+    (album / "broken.flac").write_bytes(b"not an audio stream")
+    item = scan_item(album)
+    profile = PROFILES[3]
+    profile.inspect(item, IgnoreList.default())
+    request = UploadRequest(
+        item,
+        "Album.FLAC-NOTAG",
+        upload_files(item, "Album.FLAC-NOTAG", IgnoreList.default()),
+        "",
+        "",
+        3,
+        18,
+        {},
+        {},
+    )
+    evidence = file_evidence(request)
+    assert evidence["file_count"] == 1
+    assert evidence["audio"] == []
+    assert evidence["unreadable_audio"][0]["file"].endswith("broken.flac")
+    fields = known_fields(request, evidence)
+    assert fields["tracks"] == "1"
+    assert "broken (duration unknown)" in fields["tracklist"]
+    assert "duration" not in fields

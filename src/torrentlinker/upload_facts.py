@@ -63,6 +63,7 @@ def collect(request):
         "size_bytes": sum(f.size for f in request.files),
         "ebooks": [],
         "audio": [],
+        "unreadable_audio": [],
         "video": [],
         "inventory": [],
         "provenance": {"kind": "extracted", "source": "local_files"},
@@ -82,11 +83,36 @@ def collect(request):
             evidence["ebooks"].append(
                 {"file": file.local_path, "format": "EPUB", **epub_metadata(path)}
             )
-        if request.category in {2, 3} and hasattr(profile, "tags"):
+        if (
+            request.category in {2, 3}
+            and hasattr(profile, "tags")
+            and suffix
+            in {
+                ".flac",
+                ".m4a",
+                ".m4b",
+                ".wav",
+                ".wv",
+                ".aif",
+                ".aiff",
+                ".mp3",
+                ".ogg",
+                ".wma",
+                ".aac",
+                ".opus",
+                ".ape",
+                ".ac3",
+                ".dts",
+            }
+        ):
             tags = profile.tags.get(file.local_path, file.size)
             if tags:
                 evidence["audio"].append(
                     {"file": file.local_path, **asdict(tags), "measured_bitrate_kbps": tags.bitrate}
+                )
+            else:
+                evidence["unreadable_audio"].append(
+                    {"file": file.local_path, "reason": "Audio metadata unavailable."}
                 )
         if request.category == 1 and hasattr(profile, "facts"):
             facts = profile.facts.get((file.local_path, file.size))
@@ -120,7 +146,8 @@ def known_fields(request, evidence):
                 fields[target] = "; ".join(values)
         fields["format"] = "; ".join(sorted({row["format"] for row in evidence["inventory"]}))
     audio = evidence["audio"]
-    if audio:
+    unreadable = evidence.get("unreadable_audio", [])
+    if audio or unreadable:
         for source, target, unit in (
             ("artist", "artist", ""),
             ("album", "album", ""),
@@ -131,11 +158,17 @@ def known_fields(request, evidence):
             ("bits", "bit_depth", " bits"),
         ):
             common(audio, source, target, unit)
-        fields["tracks"] = str(len(audio))
-        fields["duration"] = _clock(sum(row["duration"] for row in audio))
+        fields["tracks"] = str(len(audio) + len(unreadable))
+        if not unreadable and all(row["duration"] > 0 for row in audio):
+            fields["duration"] = _clock(sum(row["duration"] for row in audio))
+        ordered = [
+            *sorted(audio, key=lambda x: (x["track"], x["file"])),
+            *[{"file": row["file"], "title": "", "duration": 0} for row in unreadable],
+        ]
         fields["tracklist"] = "\n".join(
-            f"{index:02}. {row['title'] or Path(row['file']).stem} ({_clock(row['duration'])})"
-            for index, row in enumerate(sorted(audio, key=lambda x: (x["track"], x["file"])), 1)
+            f"{index:02}. {row['title'] or Path(row['file']).stem} "
+            f"({_clock(row['duration']) if row['duration'] > 0 else 'duration unknown'})"
+            for index, row in enumerate(ordered, 1)
         )
     videos = evidence["video"]
     if videos:
@@ -194,8 +227,27 @@ def prepare_presentation(
     attached = list(form.get("assets", []))
     if not attached:
         attached = [asset["asset_id"] for asset in assets.extract(request, evidence)]
+    selected_pieces, covered_pieces = set(), set()
+
+    def local_name(value):
+        path = Path(value)
+        if path.is_absolute():
+            try:
+                return path.relative_to(request.item.save_path).as_posix()
+            except ValueError:
+                return value
+        return path.as_posix()
+
     for asset_id in attached:
-        assets.read(asset_id, str(request.item.path))
+        metadata = assets.describe(asset_id, str(request.item.path))["metadata"]
+        if metadata.get("origin") == "model_render":
+            selected_pieces.update(local_name(name) for name in metadata.get("selection", []))
+            covered_pieces.update(local_name(piece["file"]) for piece in metadata.get("pieces", []))
+    evidence["image_coverage"] = {
+        "selected": len(selected_pieces),
+        "covered": len(covered_pieces),
+        "missing": sorted(selected_pieces - covered_pieces),
+    }
     form["assets"] = evidence["assets"] = attached
     facts = known_fields(request, evidence)
     description, nfo = request.description, request.nfo

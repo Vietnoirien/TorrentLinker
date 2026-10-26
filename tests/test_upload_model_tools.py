@@ -95,6 +95,18 @@ def test_mcp_renders_all_parts_then_saves_and_edits_private_review(tmp_path):
             nfo_origin="generated",
             assets=[row["asset_id"] for row in result["artifacts"]],
         )
+        partial = tool(
+            browser,
+            token,
+            "preview_upload",
+            client_id="default",
+            path=str(pack),
+            upload={**form, "assets": form["assets"][:1]},
+        )
+        partial_job = finished(browser, partial["job_id"])
+        assert partial_job["status"] == "completed", partial_job
+        assert len(partial_job["result"]["file_facts"]["image_coverage"]["missing"]) == 4
+        assert partial_job["result"]["presentation"]["local_review_ready"] is False
         saved = tool(
             browser,
             token,

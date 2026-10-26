@@ -43,6 +43,11 @@ probes receives rendered pixels for visual review. Other models use presets and 
 the user to confirm the images. A setup probe is evidence about that connection, not
 a guarantee of every subsequent visual judgement.
 
+Attached render pages retain the complete selected-piece list. Missing pages or
+unsupported selected pieces block a finished presentation instead of silently showing
+a partial Pack as complete. Unreadable audio remains in the track count and tracklist,
+with missing durations explicitly marked unknown.
+
 Review and send checks remain separate. No part of preparing facts, rendering,
 attaching assets or saving a Local Draft creates a torrent, contacts c411 to write,
 or changes source files or Torrent Client torrents.

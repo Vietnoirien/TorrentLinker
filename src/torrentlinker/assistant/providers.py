@@ -212,6 +212,8 @@ class Models:
                     }
                 ],
             }  # parameters are JSON schemas
+            if not tools:
+                body.pop("tools")
             result = self.request(
                 p, key, "/models/" + quote(p.model, safe="") + ":generateContent", body, timeout
             )

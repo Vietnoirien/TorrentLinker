@@ -172,7 +172,7 @@ class Assets:
         return result
 
 
-def publish_render_pages(pages, assets, item_path, renderer="cpu", file_names=None):
+def publish_render_pages(pages, assets, item_path, renderer="cpu", file_names=None, selection=None):
     """Publish immutable camera/geometry artifacts once for every frontend."""
     artifacts = []
     for page in pages:
@@ -185,6 +185,7 @@ def publish_render_pages(pages, assets, item_path, renderer="cpu", file_names=No
             "renderer": renderer,
             "page": page["page"],
             "pieces": pieces,
+            "selection": list(selection or [piece["file"] for piece in pieces]),
         }
         artifacts.append(assets.put(page["png"], "image/png", item_path, metadata))
     return artifacts

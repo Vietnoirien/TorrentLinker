@@ -52,6 +52,7 @@ def test_tool_images_reach_model_as_pixels(kind):
     elif kind == "anthropic":
         assert seen[0]["messages"][-1]["content"][0]["content"][1]["source"]["data"] == pixels
     else:
+        assert "tools" not in seen[0]
         assert seen[0]["contents"][-1]["parts"][1]["inlineData"]["data"] == pixels
 
 

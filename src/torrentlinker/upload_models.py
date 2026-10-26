@@ -52,7 +52,9 @@ def render(uploads, path, pieces, cameras, stop, progress):
     assets = Assets(uploads.setup.store.torrent_dir.parent)
     reverse = {str(value): key for key, value in paths.items()}
     pages = result.pop("pages")
-    artifacts = publish_render_pages(pages, assets, str(item.path), result["renderer"], reverse)
+    artifacts = publish_render_pages(
+        pages, assets, str(item.path), result["renderer"], reverse, pieces
+    )
     images = [
         {"type": "image", "mimeType": "image/png", "data": base64.b64encode(page["png"]).decode()}
         for page in pages
