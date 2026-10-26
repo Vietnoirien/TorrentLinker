@@ -84,9 +84,12 @@ def controlled(tmp_path, monkeypatch, request):
         "https://one.invalid": ControlledClient("Test client"),
         "https://two.invalid": ControlledClient("Forbidden client"),
     }
+    storage = tmp_path / "files"
+    storage.mkdir()
     app = create_app(
-        tmp_path,
+        tmp_path / "config",
         password="test-password-long",
+        roots=(storage,),
         connector=lambda kind, host, *args: clients[host],
         monitor_verifications=False,
     )
