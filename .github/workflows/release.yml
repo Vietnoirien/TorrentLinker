@@ -44,7 +44,10 @@ jobs:
         shell: pwsh
         run: |
           $p = Start-Process -FilePath dist\TorrentLinker.exe -ArgumentList "--smoke-test" -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "smoke test failed with exit code $($p.ExitCode)" }
+          if ($p.ExitCode -ne 0) {
+            Get-ChildItem "$env:APPDATA\TorrentLinker" -Filter torrentlinker.log -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
+            throw "smoke test failed with exit code $($p.ExitCode)"
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: windows

@@ -42,3 +42,9 @@ The screenshots were captured from the real web application using this isolated 
 ## Review
 
 Standards and spec reviews were performed independently. The standards review caught a beta-version packaging smoke-check failure, fixed by validating installed versions with packaging.Version while retaining stable-only update discovery. No unresolved release blocker remained from those reviews. The final source-placeholder fix received an additional review and regression coverage.
+
+## Packaging follow-up: beta.2
+
+The beta.1 tag was pushed, but its release job did not publish a release. Linux packaging and smoke passed. Windows built successfully, then its smoke check failed. The MCP smoke test left feeds.sqlite open at temporary-directory removal. Linux permits that unlink, while Windows rejects it. An open-file check reproduced the leak; a regression verifies the database connection is closed. The smoke cleanup now closes this owned connection, and Windows failure output includes the application log. The corrected release uses v0.13.0-beta.2 rather than moving the existing tag.
+
+CI also found four unformatted RSS integration files. They were formatted in follow-up commit 568210b; AST comparison verified no Python behavior changed. Ruff check and format checks both pass.

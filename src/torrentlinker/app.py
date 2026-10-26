@@ -94,6 +94,7 @@ def agent_smoke_checks() -> None:
         finally:
             runtime.close()
             if runtime.app is not None:
+                runtime.service.feed_control.feeds.db.close()
                 runtime.service.access.db.close()
             store._db.close()  # release the temporary database before removal on Windows
 

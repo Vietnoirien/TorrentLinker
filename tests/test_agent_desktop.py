@@ -18,6 +18,29 @@ from torrentlinker.store import Store
 from torrentlinker.web.app import create_app
 
 
+def test_packaged_smoke_releases_rss_database_before_cleanup(monkeypatch):
+    import sqlite3
+
+    import pytest
+
+    from torrentlinker.app import agent_smoke_checks
+    from torrentlinker.feeds import FeedService
+
+    connections = []
+    original = FeedService.__init__
+
+    def track(self, *args, **kwargs):
+        original(self, *args, **kwargs)
+        connections.append(self.db)
+
+    monkeypatch.setattr(FeedService, "__init__", track)
+    agent_smoke_checks()
+    assert connections
+    for connection in connections:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
+
+
 def test_desktop_mcp_works_without_console_streams(tmp_path, monkeypatch):
     from tests.test_agent_access import rpc
     from torrentlinker.agent.access import Grant
