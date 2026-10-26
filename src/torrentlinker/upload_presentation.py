@@ -186,6 +186,11 @@ def _values(description: str) -> dict[str, str]:
     for line in _plain(description).splitlines():
         label, sep, value = line.partition(":")
         key = aliases.get(_normal(label))
+        if key == "source" and re.match(
+            r"^(?:unknown|inconnue?|non renseigne|non disponible)(?:\s*[:(,;.!?—–-]|$)",
+            _normal(value),
+        ):
+            continue
         if sep and key and _filled(value):
             result[key] = value.strip()
     for key, names in (

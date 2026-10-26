@@ -260,7 +260,7 @@ def test_browser_cover_uses_authenticated_proxy_and_opens_original(
             page.goto(f"http://127.0.0.1:{port}{root_path}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            expect(page.locator('[data-view="assistant"]')).to_be_visible()
+            expect(page.locator("#workspace")).to_be_visible()
             page.evaluate(
                 "html => document.body.append(aMarkdown({html}))",
                 render("![Book cover](https://covers.example/cover.png)"),

@@ -43,6 +43,8 @@ Each preview reports exclusions, unknown fields, deterministic ranks and the wor
 
 **Replace better matches while still pending** can replace a rule's own pending queue entry. Claiming an entry for dispatch is atomic. A started, sent, failed or uncertain entry is never silently upgraded or replaced. These rules do not upgrade existing downloads.
 
+Preferred fields omitted from `priorities` are appended in their declared order, so a format or platform preference is never silently ignored. The same applies to `size` when `prefer_small` is enabled.
+
 ## Assistant and MCP
 
 Use `list_feeds`, `preview_feed`, `refresh_feed`, `feed_inbox` and `compare_feed_clients` to inspect discovery and clients. `select_feed_items` saves an exact durable selection; `get_feed_selections` recovers its ID after context loss. `process_feed_action` handles subscription save/edit/pause/delete, mark actions, rule evaluation and enqueueing a saved selection through existing owner permissions. Supply stable request IDs for mutations. Native search filters are not RSS parameters. Automatic polling and dispatch do not call an LLM.

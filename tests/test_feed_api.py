@@ -366,3 +366,18 @@ def test_mcp_recovers_owned_snapshot_after_feed_deletion_but_not_other_connectio
     ).json()
     denied = call(browser, other["token"], "get_feed_selections", {"selection_id": saved["id"]})
     assert denied["structuredContent"].get("error")
+
+
+def test_mcp_exposes_subscription_fields_and_preferences(tmp_path):
+    import asyncio
+
+    app = create_app(tmp_path, password="test-password-long")
+    tools = asyncio.run(app.state.assistant.mcp.list_tools())
+    for name in ("preview_feed", "process_feed_action"):
+        schema = next(tool.input_schema for tool in tools if tool.name == name)
+        definitions = schema.get("$defs", {})
+        subscription = definitions["Subscription"]["properties"]
+        assert "categories" in subscription and "interval_minutes" in subscription
+        assert subscription["mode"]["enum"] == ["review_only", "app_queue", "automatic_download"]
+        preferences = definitions["Preferences"]["properties"]
+        assert {"max_size", "preferred", "priorities", "min_seeders"} <= preferences.keys()

@@ -146,9 +146,13 @@ def test_browser_missing_folder_custom_answer_approval_and_resume(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
+            page.locator("#navigation-toggle").click()
             page.locator('[data-view="assistant"]').click()
+            page.locator("#navigation-close").click()
             # The first chat was created through the same public owner endpoints.
+            page.get_by_role("button", name="Discussions", exact=True).click()
             page.locator(".assistant-conversations button").last.click()
+            page.get_by_role("button", name="Discussions", exact=True).click()
             question = page.locator(".assistant-question")
             expect(question).to_be_visible(timeout=10000)
             expect(question).to_contain_text("Ebook")

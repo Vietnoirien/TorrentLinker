@@ -404,3 +404,16 @@ def test_saved_feed_selection_freezes_reviewed_rows_and_indexer(tmp_path):
         service.enqueue_selection(
             saved["id"], Store(tmp_path / "catalogue.sqlite"), "default", str(tmp_path)
         )
+
+
+def test_preferred_format_and_small_size_are_ranked_without_explicit_priorities():
+    from torrentlinker.feeds import Preferences, evaluate
+
+    prefs = Preferences(preferred={"format": ["EPUB", "PDF"]}, prefer_small=True, priorities=[])
+    epub = release("a", metadata={"format": "EPUB"})
+    pdf = release("b", metadata={"format": "PDF"})
+    assert evaluate(epub, prefs)["rank"] < evaluate(pdf, prefs)["rank"]
+    from dataclasses import replace
+
+    assert evaluate(epub, prefs)["rank"] < evaluate(replace(epub, size=2000), prefs)["rank"]
+    assert prefs.priorities == ["format", "size"]

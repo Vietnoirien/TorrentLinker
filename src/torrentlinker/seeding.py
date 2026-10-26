@@ -77,13 +77,15 @@ def observe_swarm(
 def indexer_torrents(
     torrents: Iterable[Torrent], indexer_url: str, known: Collection[str] = ()
 ) -> list[Torrent]:
-    """Torrents from the Indexer: by their tracker, or, since a torrent that has not
-    announced yet has none, by their infohash in `known` (the Catalogue) or this app's tag.
+    """Torrents from the Indexer: by any configured tracker, their known infohash
+    or this app's tag. A stopped torrent may have no current tracker even though
+    its announce list identifies the Indexer.
     """
     return [
         t
         for t in torrents
         if is_indexer_torrent(t.tracker, indexer_url)
+        or any(is_indexer_torrent(url, indexer_url) for url in t.trackers)
         or t.hash.lower() in known
         or any(tag == TAG or tag.startswith(TAG + ":") for tag in t.tags)
     ]

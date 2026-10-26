@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from torrentlinker.domain import ItemState, LocalItem, Torrent
 from torrentlinker.reconcile import classify
 
@@ -96,3 +98,132 @@ def test_only_indexer_torrents_make_items_seeded_and_only_their_files_are_read(
         music.path: ItemState.ORPHAN,  # seeded for another tracker: searched on c411
         show.path: ItemState.SEEDED,
     }
+
+
+@pytest.mark.parametrize("active_tracker", ["", "https://other.example/announce"])
+def test_c411_pack_files_are_seeded_when_only_the_tracker_list_identifies_c411(
+    tmp_path, active_tracker
+):
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import ContentKind, LibraryFolder
+    from torrentlinker.library import build_library, indexer_contents
+    from torrentlinker.store import Store
+
+    folder = tmp_path / "models"
+    part = folder / "Enemy - Ravenous Reapers x3"
+    part.mkdir(parents=True)
+    (part / "model.stl").write_bytes(b"mesh")
+    source = Torrent(
+        "a" * 40,
+        "A differently named c411 pack",
+        folder,
+        {"Enemy - Ravenous Reapers x3/model.stl": 4},
+        state="stoppedUP",
+        tracker=active_tracker,
+        trackers=("https://other.example/announce", "https://tk.c411.tw/announce/private"),
+    )
+    client = FakeQbit(by_hash={source.hash: source})
+    # No Catalogue entry and no TorrentLinker tag: the client's announce list is evidence.
+    contents = indexer_contents(client, Store(tmp_path / "state.db"), "https://c411.org/api")
+    entries = build_library([LibraryFolder(folder, kind=ContentKind.MODEL_3D)], contents)
+
+    assert len(entries) == 1
+    assert entries[0].state is ItemState.SEEDED
+    assert entries[0].torrent_hashes == frozenset({source.hash})
+
+
+@pytest.mark.parametrize("client_location_updated", [False, True])
+def test_app_download_moved_files_follow_the_current_client_location(
+    tmp_path, client_location_updated
+):
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import ContentKind, LibraryFolder
+    from torrentlinker.library import build_library, indexer_contents
+    from torrentlinker.store import Store
+
+    downloads, destination = tmp_path / "downloads", tmp_path / "library"
+    downloads.mkdir()
+    destination.mkdir()
+    original = downloads / "model.stl"
+    original.write_bytes(b"mesh")
+    moved = destination / original.name
+    original.rename(moved)
+    source = Torrent(
+        "a" * 40,
+        "Downloaded pack",
+        destination if client_location_updated else downloads,
+        {moved.name: 4},
+        tags=frozenset({"torrentlinker:search"}),
+    )
+    client = FakeQbit(by_hash={source.hash: source})
+    contents = indexer_contents(client, Store(tmp_path / "state.db"), "https://c411.org/api")
+    entries = build_library([LibraryFolder(destination, kind=ContentKind.MODEL_3D)], contents)
+
+    assert entries[0].item.path == moved
+    assert entries[0].state is (ItemState.SEEDED if client_location_updated else ItemState.ORPHAN)
+    assert entries[0].torrent_hashes == (
+        frozenset({source.hash}) if client_location_updated else frozenset()
+    )
+
+
+def test_extracted_app_download_is_not_mislabelled_as_seeding_the_archive(tmp_path):
+    import zipfile
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import ContentKind, LibraryFolder
+    from torrentlinker.library import build_library, indexer_contents
+    from torrentlinker.store import Store
+
+    downloads, library = tmp_path / "downloads", tmp_path / "library"
+    downloads.mkdir()
+    library.mkdir()
+    archive = downloads / "c411-pack.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("Enemy - Ravenous Reapers x3/model.stl", b"mesh")
+    with zipfile.ZipFile(archive) as zipped:
+        zipped.extractall(library)
+    source = Torrent(
+        "a" * 40,
+        "c411-pack.zip",
+        downloads,
+        {archive.name: archive.stat().st_size},
+        tags=frozenset({"torrentlinker:search"}),
+    )
+    client = FakeQbit(by_hash={source.hash: source})
+    contents = indexer_contents(client, Store(tmp_path / "state.db"), "https://c411.org/api")
+    entries = build_library([LibraryFolder(library, kind=ContentKind.MODEL_3D)], contents)
+
+    assert entries[0].item.files == {"Enemy - Ravenous Reapers x3/model.stl": 4}
+    assert entries[0].state is ItemState.ORPHAN
+    assert entries[0].torrent_hashes == frozenset()
+
+
+def test_mapped_app_download_pack_is_recognized_inside_a_library_subfolder(tmp_path):
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping
+    from torrentlinker.library import build_library, indexer_contents
+    from torrentlinker.paths import MappedQbit, PathMapper
+    from torrentlinker.store import Store
+
+    folder = tmp_path / "mapped"
+    pack = folder / "Bundle"
+    model = pack / "Enemy - Ravenous Reapers x3"
+    model.mkdir(parents=True)
+    (model / "model.stl").write_bytes(b"mesh")
+    source = Torrent(
+        "a" * 40,
+        "Bundle",
+        Path("/remote/downloads"),
+        {"Bundle/Enemy - Ravenous Reapers x3/model.stl": 4},
+        tags=frozenset({"torrentlinker:search"}),
+    )
+    client = MappedQbit(
+        FakeQbit(by_hash={source.hash: source}),
+        PathMapper([PathMapping(str(folder), "/remote/downloads")]),
+    )
+    contents = indexer_contents(client, Store(tmp_path / "state.db"), "https://c411.org/api")
+    entries = build_library([LibraryFolder(pack, kind=ContentKind.MODEL_3D)], contents)
+
+    assert entries[0].item.path == model
+    assert entries[0].state is ItemState.SEEDED
+    assert entries[0].torrent_hashes == frozenset({source.hash})

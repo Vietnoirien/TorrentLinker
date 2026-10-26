@@ -344,7 +344,7 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
             page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}{root_path}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            expect(page.locator('[data-view="assistant"]')).to_be_visible()
+            expect(page.locator("#workspace")).to_be_visible()
             page.evaluate(
                 """run => {
                 document.querySelectorAll('body > :not(script)').forEach(e => e.remove());

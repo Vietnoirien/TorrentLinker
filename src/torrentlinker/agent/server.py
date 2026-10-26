@@ -20,6 +20,7 @@ from torrentlinker.agent.service import AgentRequest, AgentService
 from torrentlinker.agent.torrent_lists import ListFilter
 from torrentlinker.agent.upload_presentations import DraftRevision, IncompletePresentation
 from torrentlinker.catalogue_selection import CatalogueCriteria
+from torrentlinker.feeds import Subscription
 from torrentlinker.indexer_search import IndexerFilters
 from torrentlinker.queue_selection import QueueCriteria
 from torrentlinker.torrent_selection import SelectionCriteria
@@ -168,12 +169,12 @@ def make_server(service: AgentService):
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
-    def preview_feed(subscription: dict) -> dict[str, object]:
+    def preview_feed(subscription: Subscription) -> dict[str, object]:
         """Preview a named RSS subscription before saving. Only q and Torznab categories
-        are source filters. Local hard criteria require verified metadata. No download."""
-        from torrentlinker.feeds import Subscription
-
-        feed = Subscription.model_validate(subscription)
+        are source filters. Use categories [2030] for films, [5000] for TV, [3010] for
+        music, [7020] for books, [8010] for all 3D models. These are not native Search IDs.
+        Local hard criteria require verified metadata. No download."""
+        feed = subscription
         service.target(ACTOR.get(), feed.client_id)
         return service.feed_control.feeds.preview(feed)
 
@@ -205,7 +206,7 @@ def make_server(service: AgentService):
         request_id: str,
         client_id: str,
         operation: Literal["save", "delete", "mark", "process", "enqueue"],
-        subscription: dict | None = None,
+        subscription: Subscription | None = None,
         feed_id: str = "",
         selection_id: str = "",
         hashes: list[str] | None = None,
@@ -223,7 +224,7 @@ def make_server(service: AgentService):
                 kind="feed-action",
                 client_id=client_id,
                 feed_operation=operation,
-                feed_definition=subscription or {},
+                feed_definition=subscription.model_dump() if subscription else {},
                 feed_id=feed_id,
                 feed_selection_id=selection_id,
                 hashes=hashes or [],

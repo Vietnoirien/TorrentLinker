@@ -325,10 +325,17 @@ class Models:
     def results(cls, p, messages, results):
         outputs, visuals = [], []
         for call, result in results:
-            images = [b for b in result.get("content", []) if b.get("type") == "image"]
+            content = result.get("content")
+            images = (
+                [b for b in content if isinstance(b, dict) and b.get("type") == "image"]
+                if isinstance(content, list)
+                else []
+            )
             clean = {**result}
             if images:
-                clean["content"] = [b for b in result["content"] if b.get("type") != "image"]
+                clean["content"] = [
+                    b for b in content if not isinstance(b, dict) or b.get("type") != "image"
+                ]
             text = json.dumps(clean)
             pixels = cls.image_blocks(p, images)
             if p.kind == "anthropic":

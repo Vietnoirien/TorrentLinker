@@ -1564,3 +1564,64 @@ def test_chat_recovers_malformed_tool_arguments_without_executing_them(tmp_path)
         assert result["status"] == "completed", result["error"]
         assert count == 2
         assert result["events"] == []
+
+
+def test_documentation_text_receipt_is_not_treated_as_image_blocks(tmp_path):
+    seen_receipts = []
+
+    def provider(request):
+        body = json.loads(request.content)
+        receipts = [m for m in body["messages"] if m["role"] == "tool"]
+        if receipts:
+            seen_receipts.extend(json.loads(m["content"]) for m in receipts)
+            message = {"role": "assistant", "content": "The RSS guide was read successfully."}
+        else:
+            message = {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "guide",
+                        "type": "function",
+                        "function": {
+                            "name": "read_documentation",
+                            "arguments": json.dumps({"document_id": "rss", "language": "en"}),
+                        },
+                    }
+                ],
+            }
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=generation_transport(provider)
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        saved = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Documentation test",
+                "context_window": 131072,
+                "context_auto": False,
+                "kind": "compatible",
+                "url": "http://localhost:1234/v1",
+                "model": "test",
+            },
+        ).json()
+        conversation = browser.post(
+            "/api/assistant/conversations",
+            json={
+                "provider_id": saved["id"],
+                "policy": {"name": "Read", "clients": ["default"]},
+            },
+        ).json()
+        job = browser.post(
+            "/api/assistant/jobs",
+            json={
+                "conversation_id": conversation["id"],
+                "message": "Read the RSS guide.",
+            },
+        ).json()
+        result = wait_run(browser, job["id"])
+        assert result["status"] == "completed", result
+        assert seen_receipts and isinstance(seen_receipts[-1]["content"], str)
+        assert "RSS subscriptions" in seen_receipts[-1]["content"]

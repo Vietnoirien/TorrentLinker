@@ -6319,8 +6319,8 @@ Seeders annoncés par le tracker : {1}</translation>
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="1022"/>
-        <source>Already on c411</source>
-        <translation>Déjà sur c411</translation>
+        <source>Search for existing releases on c411</source>
+        <translation>Recherche de releases existantes sur c411</translation>
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="1027"/>
@@ -6334,8 +6334,8 @@ Seeders annoncés par le tracker : {1}</translation>
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="1034"/>
-        <source>Nothing found on c411.</source>
-        <translation>Rien trouvé sur c411.</translation>
+        <source>No release found by this search. These files may still belong to a c411 torrent, especially inside a differently named Pack. Rescan the Library to check the configured Torrent Client and Path Mappings.</source>
+        <translation>Aucune release trouvée par cette recherche. Ces fichiers peuvent tout de même appartenir à un torrent c411, notamment à un Pack portant un autre nom. Relancez l’analyse de la Bibliothèque pour vérifier le Client torrent configuré et les Correspondances de chemins.</translation>
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="1038"/>

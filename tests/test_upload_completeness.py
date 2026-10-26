@@ -72,6 +72,27 @@ def test_placeholder_is_not_a_filled_field(placeholder):
     assert "description.author" in {x["field"] for x in assess(form)["missing_fields"]}
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Inconnue (aucune origine de rip documentée dans le dossier)",
+        "Unknown: the original rip source was not supplied",
+        "Non renseigné — aucune preuve disponible",
+        "Inconnue. Aucune origine de rip documentée",
+        "Unknown? No provenance was supplied",
+    ],
+)
+def test_unknown_source_with_explanation_is_still_missing(source):
+    form = complete_form(3, 18)
+    for key in ("description", "nfo"):
+        label = "Source :" + ("[/b]" if key == "description" else "")
+        form[key] = form[key].replace(
+            label + " Verified facts from this release", label + " " + source
+        )
+    missing = {x["field"] for x in assess(form)["missing_fields"]}
+    assert {"description.source", "nfo.source"} <= missing
+
+
 def test_foreign_ebook_language_is_not_accepted_as_french():
     form = complete_form()
     form["description"] = form["description"].replace("Français", "English")

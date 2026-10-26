@@ -59,6 +59,16 @@ def test_only_indexer_torrents_are_listed_and_only_seeding_ones_earn() -> None:
     assert view.day.total == pytest.approx(1.7 / 7)
 
 
+def test_announce_list_does_not_accept_lookalike_domains():
+    from torrentlinker.seeding import indexer_torrents
+
+    foreign = replace(
+        torrent("foreign", ""),
+        trackers=("https://c411.org.other.test/announce", "https://notc411.org/announce"),
+    )
+    assert indexer_torrents([foreign], URL) == []
+
+
 @pytest.mark.parametrize(
     "state,seeds,expected",
     [("uploading", 5, 4), ("downloading", 5, 5), ("uploading", -1, 100), ("downloading", 0, 0)],

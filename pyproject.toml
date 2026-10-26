@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torrentlinker"
-version = "0.12.2"
+version = "0.13.0-beta.1"
 description = "Reconcile local files with private-tracker torrents and reseed them in qBittorrent, Deluge or Transmission"
 requires-python = ">=3.11"
 dependencies = [
+  "packaging>=24",  # validate installed stable and prerelease package metadata
   "qbittorrent-api>=2026.10",
   "httpx[socks]>=0.27",
   "requests[socks]",  # SOCKS proxies for qBittorrent's adapter

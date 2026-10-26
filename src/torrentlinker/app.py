@@ -13,7 +13,7 @@ from torrentlinker.config import Settings
 from torrentlinker.gui.main_window import MainWindow
 from torrentlinker.gui.theme import apply_theme
 from torrentlinker.store import Store
-from torrentlinker.updates import CHECK_INTERVAL, installed_version, release_version
+from torrentlinker.updates import CHECK_INTERVAL, installed_version
 
 
 def data_dir() -> Path:
@@ -24,6 +24,7 @@ def smoke_checks() -> None:
     """Exercise what a broken bundle would miss: guessit data, translations, assets, and
     the SOCKS support imported only once a SOCKS proxy is set."""
     import httpx
+    from packaging.version import Version
 
     from torrentlinker import documentation
     from torrentlinker.domain import LocalItem
@@ -37,7 +38,9 @@ def smoke_checks() -> None:
     assert info.get("title") == "Amelie" and info.get("year") == 2001, info
     assert (Path(i18n.__file__).parent / "torrentlinker_fr.qm").exists()
     assert (Path(__file__).parent / "assets" / "icon.png").exists()
-    assert release_version(installed_version()) is not None, "missing application version metadata"
+    # Installed package metadata follows PEP 440, including normalized beta labels.
+    # Stable update-channel filtering is a separate concern.
+    Version(installed_version())
     for language in ("fr", "en"):
         for guide in documentation.guides(language):
             assert documentation.document_path(guide["path"]).read_text(encoding="utf-8")

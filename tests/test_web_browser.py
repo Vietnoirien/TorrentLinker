@@ -224,6 +224,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
     from fastapi.testclient import TestClient
     from playwright.sync_api import expect, sync_playwright
 
+    from tests.test_upload_completeness import complete_description
     from tests.test_upload_queue import UploadClient
     from tests.test_web_jobs import finished, login
     from torrentlinker.web.app import create_app
@@ -305,13 +306,18 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
+            page.locator("#navigation-toggle").click()
             page.locator('[data-view="upload"]').click()
             expect(page.locator("#upload-local-queue")).to_contain_text("Cable.Holder.NOTAG.STL")
             page.get_by_role("button", name="Review / edit").click()
             expect(page.locator("#upload-description")).to_have_value(
                 re.compile("A small cable holder")
             )
-            page.locator("#upload-description").fill("[b]Reviewed cable holder description[/b]")
+            page.locator("#upload-description").fill(
+                complete_description(
+                    text="Reviewed cable holder description for a generated test object."
+                )
+            )
             page.locator("#upload-save-local").click()
             expect(page.locator("#toast")).to_contain_text("Saved locally")
             assert posted == []

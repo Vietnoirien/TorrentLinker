@@ -519,7 +519,11 @@ def test_nothing_found_says_so_and_a_failed_search_is_tried_again(qtbot, tmp_pat
     view.items.clearSelection()
     view.items.selectRow(0)
 
-    qtbot.waitUntil(lambda: "Nothing found on c411" in view.existing_status.text(), timeout=5000)
+    qtbot.waitUntil(
+        lambda: "No release found by this search" in view.existing_status.text(), timeout=5000
+    )
+    assert "may still belong to a c411 torrent" in view.existing_status.text()
+    assert "Rescan the Library" in view.existing_status.text()
     assert len(indexer.searches) == 2
     assert view.existing_view.isHidden()
 
@@ -537,6 +541,39 @@ def test_the_list_of_existing_releases_collapses(qtbot, tmp_path: Path) -> None:
     view.existing_box.setChecked(False)
 
     assert not view.existing_view.isVisible()
+
+
+@pytest.mark.parametrize("evidence", ["announce_list", "app_download", "catalogue"])
+def test_client_pack_contents_are_not_offered_for_upload_after_scan(qtbot, tmp_path, evidence):
+    from torrentlinker.domain import Torrent
+    from torrentlinker.library import build_library, indexer_contents
+    from torrentlinker.store import CatalogueRow
+
+    view, _, client = tab(qtbot, tmp_path)
+    entry = model(tmp_path)
+    infohash = "b" * 40
+    client.by_hash[infohash] = Torrent(
+        infohash,
+        "Pack with a different title",
+        entry.item.save_path,
+        dict(entry.item.files),
+        tags=frozenset({"torrentlinker:search"}) if evidence == "app_download" else frozenset(),
+        trackers=("https://tk.c411.tw/announce/private",) if evidence == "announce_list" else (),
+    )
+    if evidence == "catalogue":
+        view.store.save_catalogue(
+            [CatalogueRow(infohash, "Pack", entry.item.size, 1, 8010, "u", "d", 0)]
+        )
+    # An earlier empty name search must not override current client-file evidence.
+    view.set_entries([entry])
+    view.remember(entry, [])
+    assert view.shown == [entry]
+
+    contents = indexer_contents(client, view.store, "https://c411.org/api")
+    view.set_entries(build_library([entry.folder], contents))
+
+    assert view.entries[0].state is ItemState.SEEDED
+    assert view.shown == []
 
 
 class FilmProfile:

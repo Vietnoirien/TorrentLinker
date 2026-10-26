@@ -22,19 +22,42 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from torrentlinker.indexer import Candidate, Indexer, SearchQuery
 
+MetadataField = Literal[
+    "quality", "codec", "audio", "subtitles", "format", "bitrate", "platform", "license"
+]
+RankingField = Literal[MetadataField, "size", "seeders"]
+
+
+def _default_priorities() -> list[RankingField]:
+    return ["quality", "codec", "audio", "subtitles", "size"]
+
 
 class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     min_size: int = Field(default=0, ge=0)
     max_size: int | None = Field(default=None, ge=0)
     min_seeders: int = Field(default=0, ge=0)
-    required: dict[str, list[str]] = Field(default_factory=dict)
-    excluded: dict[str, list[str]] = Field(default_factory=dict)
-    preferred: dict[str, list[str]] = Field(default_factory=dict)
-    priorities: list[str] = Field(
-        default_factory=lambda: ["quality", "codec", "audio", "subtitles", "size"]
+    required: dict[MetadataField, list[str]] = Field(
+        default_factory=dict,
+        description="Hard requirements: reject releases without these verified facts.",
     )
-    prefer_small: bool = False
+    excluded: dict[MetadataField, list[str]] = Field(default_factory=dict)
+    preferred: dict[MetadataField, list[str]] = Field(
+        default_factory=dict,
+        description="Soft preferences in descending order, e.g. quality: [1080p, 720p], "
+        "codec: [HEVC, H264], format: [EPUB]. Do not turn preferences into required filters.",
+    )
+    priorities: list[RankingField] = Field(
+        default_factory=_default_priorities,
+        description="Ranking order. Include seeders to prefer more seeders. Put size after "
+        "seeders and set prefer_small=true to use smaller size as a later tie-breaker. "
+        "Any preferred fields omitted here are appended in their declared order.",
+    )
+    prefer_small: bool = Field(
+        default=False,
+        description="Prefer smaller releases at the size "
+        "priority position. A maximum size alone is only a hard limit.",
+    )
 
     @model_validator(mode="after")
     def valid(self):
@@ -57,6 +80,11 @@ class Preferences(BaseModel):
         for values in (self.required, self.excluded, self.preferred):
             if set(values) - (allowed - {"size", "seeders"}):
                 raise ValueError("Unsupported release metadata criterion.")
+        # Every requested preference must affect ranking, including non-video
+        # fields absent from the default priority order.
+        for key in [*self.preferred, *(["size"] if self.prefer_small else [])]:
+            if key not in self.priorities:
+                self.priorities.append(key)
         return self
 
 
@@ -177,7 +205,7 @@ def evaluate(row: Candidate, prefs: Preferences) -> dict:
             )
         ):
             unknown.append("quality.source")
-    scores = {}
+    scores: dict[str, int] = {}
     for key, preferred in prefs.preferred.items():
         values = row.metadata.get(key)
         actual = {str(v).casefold() for v in (values if isinstance(values, list) else [values])}

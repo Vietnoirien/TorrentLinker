@@ -1025,7 +1025,7 @@ class UploadTab(QWidget):
 
     def _render_existing(self, found: list[Candidate] | None, error: str = "") -> None:
         """`found` None: still searching, or failed with `error`."""
-        title = self.tr("Already on c411")
+        title = self.tr("Search for existing releases on c411")
         self.existing_view.hide()
         if found is None:
             self.existing_box.setTitle(title)
@@ -1037,7 +1037,13 @@ class UploadTab(QWidget):
             return
         if not found:
             self.existing_box.setTitle(title)
-            self.existing_status.setText(self.tr("Nothing found on c411."))
+            self.existing_status.setText(
+                self.tr(
+                    "No release found by this search. These files may still belong to a c411 "
+                    "torrent, especially inside a differently named Pack. Rescan the Library "
+                    "to check the configured Torrent Client and Path Mappings."
+                )
+            )
             return
         self.existing_box.setTitle(f"{title} ({len(found)})")
         self.existing_status.setText(

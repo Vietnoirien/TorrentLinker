@@ -45,6 +45,8 @@ La comparaison reconnaît les infohashes dans les clients configurés et activé
 
 **Remplacer par un meilleur choix uniquement en attente** peut remplacer une entrée encore en attente créée par la même règle. La prise en charge avant envoi est atomique. Aucun téléchargement démarré, envoyé, en échec ou incertain n'est remplacé silencieusement. Les règles n'effectuent aucune mise à niveau des téléchargements existants.
 
+Les critères préférés absents de `priorities` sont ajoutés à la fin, dans leur ordre déclaré : une préférence de format ou de plateforme reste donc effective. Il en va de même pour `size` lorsque `prefer_small` est activé.
+
 ## Assistant et MCP
 
 `list_feeds`, `preview_feed`, `refresh_feed`, `feed_inbox` et `compare_feed_clients` permettent l'inspection. `select_feed_items` conserve une sélection exacte et durable ; `get_feed_selections` retrouve son identifiant après une perte de contexte. `process_feed_action` enregistre, modifie, suspend ou supprime les abonnements, marque les lignes, évalue les règles et met une sélection en file selon les permissions existantes. Utilisez des identifiants de requête stables pour les modifications. Les filtres natifs de Recherche ne sont pas des paramètres RSS. L'actualisation et l'envoi automatiques ne font aucun appel à un modèle de langage.

@@ -624,6 +624,12 @@ class Assistant:
             system = (
                 "You are TorrentLinker Assistant. Use tools for facts and actions."
                 " Call overview first. "
+                "For RSS subscriptions use preview_feed then process_feed_action(save), "
+                "and list_feeds to verify the saved definition. Follow the Subscription schema. "
+                "Preserve soft preferences in preferences.preferred, never turn them into "
+                "required filters or silently drop them after validation errors. Use quality "
+                "for resolution and codec for encoding. Pausing/editing retains the same id "
+                "and all other fields from list_feeds. "
                 "Use explicit client IDs. Never claim success without a successful job result. "
                 "When the user requests an authorized list edit, execute its tool calls in this "
                 "same turn and verify the returned revision/totals before your final answer. "
@@ -1254,11 +1260,19 @@ class Assistant:
                             target = target[key_name]
                         else:
                             content = source.get("content", [])
-                            images = [block for block in content if block.get("type") == "image"]
+                            if not isinstance(content, list):
+                                continue
+                            images = [
+                                block
+                                for block in content
+                                if isinstance(block, dict) and block.get("type") == "image"
+                            ]
                             if images:
                                 image_content.extend(images)
                                 target["content"] = [
-                                    block for block in content if block.get("type") != "image"
+                                    block
+                                    for block in content
+                                    if not isinstance(block, dict) or block.get("type") != "image"
                                 ]
                     receipt = model_receipt(receipt_source, identifier, len(events) - 1)
                     if image_content and vision:
