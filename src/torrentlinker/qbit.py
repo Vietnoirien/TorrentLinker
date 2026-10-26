@@ -308,6 +308,29 @@ class QbitApi:
     def recheck(self, hash: str) -> None:
         self._client.torrents_recheck(torrent_hashes=hash)
 
+    def media_preview_state(self, hash: str) -> dict[str, Any]:
+        """Read live sequential mode and verified pieces. Never changes download priorities."""
+        found = self._client.torrents_info(torrent_hashes=hash)
+        if not found:
+            raise ValueError("Torrent is no longer present in qBittorrent.")
+        info = found[0]
+        properties = self._client.torrents_properties(torrent_hash=hash)
+        files = self._client.torrents_files(torrent_hash=hash)
+        return {
+            "sequential": info.get("seq_dl") is True,
+            "state": str(info.get("state") or ""),
+            "piece_size": int(properties.get("piece_size") or 0),
+            "files": [
+                {
+                    "name": str(f["name"]),
+                    "size": int(f["size"]),
+                    "piece_range": list(f.get("piece_range") or []),
+                }
+                for f in files
+            ],
+            "piece_states": self.piece_states(hash),
+        }
+
     def piece_states(self, hash: str) -> list[int]:
         return [int(s) for s in self._client.torrents_piece_states(torrent_hash=hash)]
 

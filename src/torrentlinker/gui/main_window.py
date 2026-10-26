@@ -356,6 +356,14 @@ class MainWindow(QMainWindow):
 
         self.assistant_tab = AssistantTab(self.assistant_service)
         self.tabs.addTab(self.assistant_tab, self.tr("Assistant"))
+        from torrentlinker.gui.media import MediaTab
+
+        self.media_tab = MediaTab(
+            self.assistant_service,
+            lambda: self.settings.active_client_id,
+            self.add_library_folder,
+        )
+        self.tabs.addTab(self.media_tab, self.tr("Media"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
         self.band.refresh_requested.connect(self.refresh_profile)
@@ -382,6 +390,7 @@ class MainWindow(QMainWindow):
                 self.tr("RSS"),
                 self.tr("Torrents"),
                 self.tr("Assistant"),
+                self.tr("Media"),
             ]
         )
         self.navigation.setCurrentRow(0)
@@ -615,7 +624,9 @@ class MainWindow(QMainWindow):
 
     def _await_setup(self) -> None:
         self.setup_notice.show()
-        self.tabs.setEnabled(False)
+        self.tabs.setEnabled(True)
+        for index in range(self.tabs.count()):
+            self.tabs.setTabEnabled(index, self.tabs.widget(index) is self.media_tab)
         self.band.setEnabled(False)
         self.seeding_timer.stop()
         self._startup_complete = False
@@ -648,6 +659,8 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.assistant_service)
         self.setup_notice.hide()
         self.tabs.setEnabled(True)
+        for index in range(self.tabs.count()):
+            self.tabs.setTabEnabled(index, True)
         self.band.setEnabled(True)
         self.statusBar().showMessage(self.tr("Ready"))
         self.seeding_timer.start()
@@ -688,21 +701,24 @@ class MainWindow(QMainWindow):
             self.tr("Review RSS releases and manage subscription rules."),
             self.tr("Manage downloads and seeds in your Torrent Client."),
             self.tr("Discuss tasks, review proposals and schedule automations."),
+            self.tr("Play videos and music from your Library Folders."),
             self.tr("Ten thousand books kept alive. Take a moment to read one."),
         ]
         if 0 <= index < len(descriptions):
             self.page_description.setText(descriptions[index])
-        self.band.setVisible(index < self.navigation.count() and index not in {5, 6})
+        self.band.setVisible(index < self.navigation.count() and index not in {5, 6, 7})
         self.page_title.setVisible(index < self.navigation.count())
         self.page_description.setVisible(index < self.navigation.count())
         policy = (
             QSizePolicy.Policy.Ignored
-            if index >= self.navigation.count() or index in {5, 6}
+            if index >= self.navigation.count() or index in {5, 6, 7}
             else QSizePolicy.Policy.Preferred
         )
         self.tabs.setSizePolicy(policy, policy)
         if self.tabs.currentWidget() is self.assistant_tab:
             self.assistant_tab.activate()
+        if self.tabs.currentWidget() is self.media_tab:
+            self.media_tab.activate()
         if self.reading_room is not None and self.tabs.currentWidget() is self.reading_room:
             self.reading_room.activate()
 
@@ -1720,6 +1736,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.reseed_consent.cancel()
+        if self.media_tab.window() is self:
+            self.media_tab.stop()
         if self.reading_room is not None:
             self.reading_room.stop()
         self.search_tab.stop()
@@ -1828,7 +1846,10 @@ class MainWindow(QMainWindow):
         self.library_search.clear()
         self.state_filter.setCurrentIndex(0)
         self.folder_filter.setCurrentIndex(self.folder_filter.findData(path))
-        self.scan()
+        if self.tabs.currentWidget() is self.media_tab:
+            self.media_tab.start_scan()
+        else:
+            self.scan()
 
     def _select_client(self) -> None:
         identifier = self.client_selector.currentData()
@@ -1857,12 +1878,38 @@ class MainWindow(QMainWindow):
             return
         settings.save(self.settings_path)
         self.verify_timer.stop()
+        tab_title = self.tabs.tabText(self.tabs.currentIndex())
         replacement = MainWindow(settings, self.settings_path, self.store)
         replacement.agent_runtime = self.agent_runtime
+        same_client = settings.active_client_id == self.settings.active_client_id
+        if same_client:
+            media_index = replacement.tabs.indexOf(replacement.media_tab)
+            replacement.tabs.removeTab(media_index)
+            replacement.media_tab.deleteLater()
+            with QSignalBlocker(self.tabs):
+                self.tabs.removeTab(self.tabs.indexOf(self.media_tab))
+            replacement.media_tab = self.media_tab
+            replacement.tabs.insertTab(media_index, self.media_tab, self.tr("Media"))
+        else:
+            self.media_tab.stop()
         if self.agent_runtime:
             self.agent_runtime.reset(settings)
+        if same_client:
+            replacement.media_tab.rebind(
+                replacement.assistant_service,
+                lambda: replacement.settings.active_client_id,
+                replacement.add_library_folder,
+            )
         replacement.restoreGeometry(self.saveGeometry())
-        replacement.tabs.setCurrentIndex(min(self.tabs.currentIndex(), 4))
+        replacement_index = next(
+            (
+                i
+                for i in range(replacement.tabs.count())
+                if replacement.tabs.tabText(i) == tab_title
+            ),
+            0,
+        )
+        replacement.tabs.setCurrentIndex(replacement_index)
         replacement.show()
         from PySide6.QtWidgets import QApplication
 
@@ -1871,7 +1918,7 @@ class MainWindow(QMainWindow):
             app.torrentlinker_window = replacement  # type: ignore[attr-defined]
         self.close()
         self.deleteLater()
-        QTimer.singleShot(0, replacement.startup)
+        QTimer.singleShot(0, replacement, replacement.startup)
 
     @agent_settings_change
     def open_client_profiles(self) -> None:

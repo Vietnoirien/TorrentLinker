@@ -167,6 +167,11 @@
         <source>Start downloads</source>
         <translation>Démarrer les téléchargements</translation>
     </message>
+    <message>
+        <location filename="../gui/agent_access.py" line="82" />
+        <source>Media playback, queues and playlists</source>
+        <translation>Lecture multimédia, files de lecture et playlists</translation>
+    </message>
 </context>
 <context>
     <name>AssistantEditor</name>
@@ -413,6 +418,11 @@
     <message>
         <source>Start downloads</source>
         <translation>Démarrer les téléchargements</translation>
+    </message>
+    <message>
+        <location filename="../gui/assistant.py" line="123" />
+        <source>Media playback, queues and playlists</source>
+        <translation>Lecture multimédia, files de lecture et playlists</translation>
     </message>
 </context>
 <context>
@@ -2485,6 +2495,18 @@ La mettre à la corbeille ?</translation>
     <message>
         <source>Partial Catalogue coverage: the Indexer limits how far back pages can be read. Cached torrents remain usable.</source>
         <translation>Couverture partielle : l'Indexeur limite l'accès aux pages anciennes. Les torrents en cache restent utilisables.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="366" />
+        <location filename="../gui/main_window.py" line="393" />
+        <location filename="../gui/main_window.py" line="1891" />
+        <source>Media</source>
+        <translation>Médias</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="704" />
+        <source>Play videos and music from your Library Folders.</source>
+        <translation>Lisez les vidéos et la musique de vos Dossiers de bibliothèque.</translation>
     </message>
 </context>
 <context>
@@ -6799,6 +6821,16 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>%1–%2 of %3 · saved Upload drafts</source>
         <translation>%1–%2 sur %3 · brouillons Upload enregistrés</translation>
     </message>
+    <message>
+        <location filename="../gui/selection_cards.py" line="93" />
+        <source>Availability unknown</source>
+        <translation>Disponibilité inconnue</translation>
+    </message>
+    <message>
+        <location filename="../gui/selection_cards.py" line="364" />
+        <source>%1–%2 of %3 · saved Media selection</source>
+        <translation>%1–%2 sur %3 · sélection de médias enregistrée</translation>
+    </message>
 </context>
 <context>
     <name>PlanDiagnostics</name>
@@ -7167,6 +7199,336 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Last success</source>
         <translation>Dernier succès</translation>
+    </message>
+</context>
+<context>
+    <name>MediaTab</name>
+    <message>
+        <location filename="../gui/media.py" line="155" />
+        <source>Video</source>
+        <translation>Vidéo</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="156" />
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="159" />
+        <source>Search saved media</source>
+        <translation>Rechercher dans les médias enregistrés</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="160" />
+        <source>Refresh folders</source>
+        <translation>Actualiser les dossiers</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="161" />
+        <source>Cancel scan</source>
+        <translation>Annuler l’analyse</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="163" />
+        <source>Add folder…</source>
+        <translation>Ajouter un dossier…</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="180" />
+        <source>Any genre</source>
+        <translation>Tous les genres</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="181" />
+        <source>Any year</source>
+        <translation>Toutes les années</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="182" />
+        <source>Any language</source>
+        <translation>Toutes les langues</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="183" />
+        <source>Any availability</source>
+        <translation>Toutes les disponibilités</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="200" />
+        <source>Add a Library Folder, then Refresh folders to find videos and music. Media discovery does not need an Indexer connection.</source>
+        <translation>Ajoutez un Dossier de bibliothèque, puis actualisez les dossiers pour trouver vos vidéos et votre musique. Aucune connexion à un Indexeur n’est nécessaire.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="215" />
+        <source>Previous page</source>
+        <translation>Page précédente</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="216" />
+        <source>Next page</source>
+        <translation>Page suivante</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="235" />
+        <source>More episodes</source>
+        <translation>Plus d’épisodes</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="237" />
+        <source>More releases</source>
+        <translation>Plus de releases</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="239" />
+        <source>Watched</source>
+        <translation>Vu</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="241" />
+        <source>Play selected</source>
+        <translation>Lire la sélection</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="243" />
+        <source>Preview downloaded portion</source>
+        <translation>Lire un aperçu de la partie téléchargée</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="245" />
+        <source>Refresh preview</source>
+        <translation>Actualiser l’aperçu</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="251" />
+        <source>Add to queue</source>
+        <translation>Ajouter à la file de lecture</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="284" />
+        <location filename="../gui/media.py" line="975" />
+        <source>Nothing playing</source>
+        <translation>Aucune lecture en cours</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="287" />
+        <source>Previous</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="289" />
+        <source>Play / pause</source>
+        <translation>Lecture / pause</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="291" />
+        <source>Next</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="301" />
+        <source>Volume</source>
+        <translation>Volume</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="305" />
+        <source>Shuffle</source>
+        <translation>Lecture aléatoire</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="309" />
+        <source>Repeat off</source>
+        <translation>Sans répétition</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="310" />
+        <source>Repeat all</source>
+        <translation>Tout répéter</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="311" />
+        <source>Repeat one</source>
+        <translation>Répéter la piste</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="318" />
+        <location filename="../gui/media.py" line="1179" />
+        <source>Subtitles off</source>
+        <translation>Sans sous-titres</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="345" />
+        <source>Open in external player</source>
+        <translation>Ouvrir dans un lecteur externe</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="355" />
+        <source>Remove from queue</source>
+        <translation>Retirer de la file de lecture</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="357" />
+        <source>Save queue as playlist…</source>
+        <translation>Enregistrer la file comme playlist…</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="360" />
+        <source>Load playlist</source>
+        <translation>Charger la playlist</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="362" />
+        <source>Delete playlist</source>
+        <translation>Supprimer la playlist</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="364" />
+        <source>Chat</source>
+        <translation>Discussion</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="493" />
+        <source>All</source>
+        <translation>Tout</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="494" />
+        <source>Recent</source>
+        <translation>Ajouts récents</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="495" />
+        <source>Continue watching</source>
+        <translation>Reprendre la lecture</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="496" />
+        <source>Films</source>
+        <translation>Films</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="497" />
+        <source>Series</source>
+        <translation>Séries</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="501" />
+        <source>Tracks</source>
+        <translation>Pistes</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="502" />
+        <source>Albums</source>
+        <translation>Albums</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="503" />
+        <source>Artists</source>
+        <translation>Artistes</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="540" />
+        <source>Loading saved media…</source>
+        <translation>Chargement des médias enregistrés…</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="563" />
+        <source>{0} saved items</source>
+        <translation>{0} éléments enregistrés</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="573" />
+        <source> · {0} tracks</source>
+        <translation> · {0} pistes</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="577" />
+        <source> · unavailable</source>
+        <translation> · indisponible</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="602" />
+        <source>No media matches this view. Add a Library Folder or Refresh folders to discover local files, then adjust the search and filters.</source>
+        <translation>Aucun média ne correspond à cette vue. Ajoutez un Dossier de bibliothèque ou actualisez les dossiers pour trouver vos fichiers, puis ajustez la recherche et les filtres.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="642" />
+        <source>Title and release details guessed from filename</source>
+        <translation>Titre et détails de la release déduits du nom du fichier</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="648" />
+        <source>Filename metadata: season {0}, episode {1}</source>
+        <translation>D’après le nom du fichier : saison {0}, épisode {1}</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="657" />
+        <source>Choose releases</source>
+        <translation>Choisir une release</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="659" />
+        <source>Choose episodes</source>
+        <translation>Choisir un épisode</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="767" />
+        <source>Checking downloaded pieces with qBittorrent…</source>
+        <translation>Vérification des blocs téléchargés auprès de qBittorrent…</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="794" />
+        <source>Preview of downloaded portion · {0}% verified</source>
+        <translation>Aperçu de la partie téléchargée · {0} % vérifiés</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="800" />
+        <source>Only downloaded pieces are exposed to the player. Refresh preview after more pieces arrive. Some formats need the missing end before they can play.</source>
+        <translation>Le lecteur n’accède qu’aux blocs téléchargés. Actualisez l’aperçu après le téléchargement de nouveaux blocs. Certains formats nécessitent la fin du fichier pour être lus.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1005" />
+        <source>Unavailable media</source>
+        <translation>Média indisponible</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1048" />
+        <source>Playlist</source>
+        <translation>Playlist</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1048" />
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1135" />
+        <source>End of downloaded portion. Refresh preview after more pieces arrive.</source>
+        <translation>Fin de la partie téléchargée. Actualisez l’aperçu après le téléchargement de nouveaux blocs.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1181" />
+        <source>Embedded subtitle {0}</source>
+        <translation>Sous-titre intégré {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1191" />
+        <source>Preview cannot play yet. This format may need the missing end of the file. Wait and refresh preview. </source>
+        <translation>L’aperçu ne peut pas encore être lu. Ce format peut nécessiter la fin du fichier. Attendez, puis actualisez l’aperçu. </translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1196" />
+        <source>Playback failed. This format or codec may be unsupported. </source>
+        <translation>Échec de la lecture. Ce format ou codec n’est peut-être pas pris en charge. </translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1217" />
+        <source>Scanning Library Folders…</source>
+        <translation>Analyse des Dossiers de bibliothèque…</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1251" />
+        <source>Close chat</source>
+        <translation>Fermer la discussion</translation>
     </message>
 </context>
 </TS>

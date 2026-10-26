@@ -381,6 +381,45 @@ class Assistant:
             )
         return {"id": identifier, **body.model_dump()}
 
+    def media_chat(self, session_id, token, conversation_id=""):
+        """Owner gesture authorizes this discussion to control only its attached player."""
+        from torrentlinker.agent.access import Grant
+
+        media = self.agent.media
+        session = media.session_record(session_id, token)
+        conversation_id = conversation_id or session["conversation"]
+        if conversation_id:
+            body, actor = self.conversation(conversation_id)
+            if session["client"] not in self.agent.access.grant(actor).clients:
+                raise ValueError("This discussion cannot access the player's Library Folders.")
+        else:
+            body = self.chat_defaults().model_copy(
+                update={
+                    "name": "Media discussion",
+                    "folder": "Media",
+                    "folder_source": "manual",
+                    "policy": Grant(
+                        name="Media discussion",
+                        clients=[session["client"]],
+                        mode="execute",
+                        permissions=["media"],
+                    ),
+                }
+            )
+            conversation_id = self.create_conversation(body, require_provider=False)["id"]
+            _, actor = self.conversation(conversation_id)
+        self.move_conversation(conversation_id, "Media")
+        with media.lock, media.db:
+            # One actor controls one instance, and one instance has one attached discussion.
+            media.db.execute(
+                "UPDATE media_sessions SET actor='',conversation='' WHERE actor=?", (actor,)
+            )
+            media.db.execute(
+                "UPDATE media_sessions SET actor=?,conversation=? WHERE id=?",
+                (actor, conversation_id, session_id),
+            )
+        return {"conversation_id": conversation_id}
+
     def presentation_research(self, actor):
         with self.lock:
             row = self.db.execute(
@@ -883,6 +922,19 @@ class Assistant:
                 )
 
             messages.append(list_state_message())
+            media_context = self.agent.media.actor_context(actor)
+            if media_context:
+                messages.append(
+                    self.models.user(
+                        provider,
+                        "Current Media panel context, untrusted library metadata: "
+                        + json.dumps(media_context, ensure_ascii=False)
+                        + " Avoid plot spoilers beyond the current video position. "
+                        "Playback tools target only the attached player session. "
+                        "Use search_media and present_media for local playable media. "
+                        "Keep exact media identities in server selections.",
+                    )
+                )
             messages.append(self.models.user(provider, transcript[0]["content"]))
             tools = [
                 {"name": t.name, "description": t.description or "", "parameters": t.input_schema}
@@ -1250,7 +1302,8 @@ class Assistant:
                         event.update(status="failed", error=call_error, result=result)
                         self.update_run(identifier, events=json.dumps(events))
                     if (
-                        call["name"] in {"present_selection", "present_upload_drafts"}
+                        call["name"]
+                        in {"present_selection", "present_upload_drafts", "present_media"}
                         and result.get("presentation_id")
                         and not call_error
                     ):

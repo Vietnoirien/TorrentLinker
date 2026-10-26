@@ -13,6 +13,7 @@ Retrouvez les torrents qui correspondent à vos fichiers et remettez-les en seed
 ## Ce que l’application permet
 
 - **Assistant intégré** : modèles locaux ou API, discussion, recherche Web et tâches programmées. [Guide](docs/guide/fr/assistant.md).
+- **Médias** : lecture vidéo et musicale intégrée, reprise, playlists et discussion avec l’Assistant depuis le lecteur, sur bureau et sur le Web. [Guide](docs/guide/fr/media.md).
 - **Agents MCP** : connecter un assistant, préparer des Plans et approuver ses actions. [Guide](docs/guide/fr/agents.md).
 - **Clients nommés** : plusieurs connexions, une vue commune et des Plans répartis entre les clients choisis.
 - **Bibliothèque** : repérer les fichiers qui ne sont plus partagés, rechercher et vérifier les correspondances, puis les remettre en seed.

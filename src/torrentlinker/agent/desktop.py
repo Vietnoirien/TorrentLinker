@@ -224,6 +224,7 @@ class DesktopServer:
             if self.app is not None:
                 self.app.state.assistant.close()
                 self.service.jobs.close()
+                self.service.media.close()
                 self.service.access.db.close()
                 self.app = None
             raise

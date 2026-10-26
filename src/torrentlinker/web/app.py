@@ -165,6 +165,7 @@ def create_app(
             agent_service.feed_control.close()
             assistant.close()
             jobs.close()
+            agent_service.media.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
@@ -189,6 +190,9 @@ def create_app(
     from torrentlinker.web.feeds import feed_routes
 
     feed_routes(app, agent_service)
+    from torrentlinker.web.media import media_routes
+
+    media_routes(app, agent_service, assistant)
     app.state.reset_clients = reset_clients
 
     def idle() -> None:

@@ -97,7 +97,9 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
     assert not calls
     assert not window.seeding_timer.isActive()
     assert not window.setup_notice.isHidden()
-    assert not window.tabs.isEnabled()
+    assert window.tabs.isEnabled()
+    assert window.tabs.isTabEnabled(window.tabs.indexOf(window.media_tab))
+    assert not window.tabs.isTabEnabled(window.tabs.indexOf(window.search_tab))
     save[0] = True
     window.open_settings()
     qtbot.waitUntil(lambda: len(calls) == 6)

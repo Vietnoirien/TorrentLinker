@@ -120,6 +120,7 @@ class AssistantEditor(QDialog):
             ("controls", self.tr("Torrent controls")),
             ("reseed", self.tr("Reseeds")),
             ("uploads", self.tr("Uploads")),
+            ("media", self.tr("Media playback, queues and playlists")),
         ]:
             check = QCheckBox(label)
             check.setChecked(value in policy.get("permissions", []))

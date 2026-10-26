@@ -37,7 +37,7 @@ hiddenimports = (
     + collect_submodules("uvicorn")
     # Imported only when a SOCKS proxy is set (httpx, and requests for qBittorrent)
     + collect_submodules("socksio")
-    + ["socks", "sockshandler"]
+    + ["socks", "sockshandler", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets"]
     # The Upload tab's 3D view is a QML scene, which PyInstaller cannot see from imports
     + ["PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.QtQuickWidgets", "PySide6.QtQml"]
 )

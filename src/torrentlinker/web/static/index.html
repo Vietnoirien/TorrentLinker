@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TorrentLinker</title>
     <link rel="stylesheet" href="static/app.css" />
+    <link rel="stylesheet" href="static/media.css" />
     <script src="static/app.js" defer></script>
     <script src="static/zen.js" defer></script>
     <script src="static/feeds.js" defer></script>
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
+    <script src="static/media.js" defer></script>
   </head>
   <body>
     <section id="login-screen" class="welcome">
@@ -42,6 +44,7 @@
           ><button data-view="search" data-i18n="search">Search</button
           ><button data-view="feeds">RSS</button
           ><button data-view="queue" data-i18n="queue">Download queue</button
+          ><button data-view="media">Media</button
           ><button data-view="library" data-i18n="library">Library</button
           ><button data-view="upload">Upload</button
           ><button data-view="assistant">Assistant</button><button data-view="jobs" data-i18n="activity">Activity</button>
@@ -75,6 +78,23 @@
             <select id="target-client" aria-label="Target client"></select></label>
           <span id="work-status" class="badge" role="status"></span>
         </header>
+        <section id="media-player-shell" aria-label="Media player" hidden>
+          <div class="toolbar"><h2 id="media-now-playing">Now playing</h2><button id="media-chat" data-i18n="mediaChat">Chat about this</button></div>
+          <p id="media-preview-state" class="media-preview-state" role="status" hidden></p>
+          <div class="toolbar"><button id="media-refresh-preview" data-i18n="mediaRefreshPreview" hidden>Refresh preview</button><button id="media-stop" data-i18n="mediaStop">Stop</button></div>
+          <video id="media-video" controls playsinline preload="metadata" hidden></video><audio id="media-audio" controls preload="metadata" hidden></audio>
+          <p id="media-codec-error" role="alert" hidden><span id="media-codec-message"></span> <a id="media-external" data-i18n="mediaExternal" target="_blank" rel="noopener" download>Open / download for an external player</a></p>
+          <div class="toolbar"><button id="media-previous" data-i18n="mediaPrevious">Previous</button><button id="media-next" data-i18n="mediaNext">Next</button><button id="media-shuffle" data-i18n="mediaShuffle" aria-pressed="false">Shuffle</button><label>Repeat <select id="media-repeat"><option value="off">Off</option><option value="all">All</option><option value="one">One</option></select></label></div>
+          <details><summary>Playback queue</summary><ol id="media-player-queue"></ol><form id="media-save-playlist" class="toolbar"><input id="media-playlist-name" aria-label="Playlist name" placeholder="Playlist name" required maxlength="100"/><button>Save music playlist</button></form></details>
+        </section>
+        <section id="view-media" class="view" hidden>
+          <div class="media-tabs" role="tablist" aria-label="Media kind"><button id="media-video-tab" data-i18n="mediaVideo" role="tab" aria-selected="true">Video</button><button id="media-music-tab" data-i18n="mediaMusic" role="tab" aria-selected="false">Music</button></div>
+          <div class="toolbar media-filters"><input id="media-search" type="search" aria-label="Search media" placeholder="Search your media" /><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup">Add Library Folder</button></div>
+          <p id="media-status" role="status"></p>
+          <section id="media-details" class="card" hidden></section>
+          <div id="media-results" class="media-grid"></div><button id="media-more" data-i18n="mediaMore" hidden>Load more</button>
+          <section id="media-playlists" hidden><h2>Saved playlists</h2><p class="muted">Music playlists are separate from Download Queues.</p><div id="media-playlist-list"></div></section>
+        </section>
         <section id="view-assistant" class="view" hidden></section>
         <section id="view-setup" class="view" hidden>
           <p class="intro" data-i18n="setupIntro">
@@ -330,6 +350,7 @@
               <label><input type="checkbox" value="queue" /><span data-i18n="agentQueue">Prepare and edit download queue</span></label>
               <label><input type="checkbox" value="downloads" /><span data-i18n="agentStartDownloads">Start downloads</span></label>
               <label><input type="checkbox" value="reseed" />Reseed</label>
+              <label><input type="checkbox" value="media" /><span data-i18n="agentMedia">Media playback and playlists</span></label>
               <label><input type="checkbox" value="uploads" /><span data-i18n="agentUploads">Upload drafts and seeding</span></label>
             </fieldset>
             <div class="toolbar">
@@ -632,6 +653,7 @@
           <div id="job-list"></div>
         </section>
       </main>
+      <aside id="media-chat-panel" aria-label="Media Assistant" hidden><button id="media-chat-close" data-i18n="mediaCloseChat">Close chat</button><div id="media-chat-content"></div></aside>
     </div>
     <div id="toast" role="alert" hidden></div>
     <dialog id="dialog">

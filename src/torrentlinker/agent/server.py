@@ -127,6 +127,10 @@ def make_server(service: AgentService):
 
         return guarded
 
+    from torrentlinker.agent.media import register_media_tools
+
+    register_media_tools(mcp, service, ACTOR, safe)
+
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
     def list_feeds() -> dict[str, object]:

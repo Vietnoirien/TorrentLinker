@@ -94,6 +94,9 @@ class AgentService:
     ):
         self.access, self.setup, self.jobs, self.for_client = access, setup, jobs, for_client
         self.suspended = False
+        from torrentlinker.media import MediaLibrary
+
+        self.media = MediaLibrary(self)
         from torrentlinker.agent.torrent_lists import TorrentLists
 
         self.torrent_lists = TorrentLists(self)

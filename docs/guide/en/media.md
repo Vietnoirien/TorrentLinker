@@ -1,0 +1,17 @@
+# Media
+
+[Documentation](../../README.md) · [Français](../fr/media.md)
+
+Open **Media** and choose **Video** or **Music**. **Add media folder** registers an ordinary Library Folder. **Refresh media** reads its media files in the background, including files that have no connection to c411. Refresh again after adding or moving files. Playback never edits the source files.
+
+Video offers recent additions, continue watching, films and series. Select a card for its description, releases, episodes and available subtitles. Play uses TorrentLinker's own player and remembers your position. You can also change watched status. Genre, year and language filters use available metadata; an empty field means unknown. Files with a verified shared identity can share a card. Filename guesses alone do not merge films.
+
+Music offers albums, artists and tracks. Add tracks to the playback queue, use shuffle or repeat, and save a named playlist. Albums in different folders remain separate editions even if their tags match. Music playlists and playback queues are separate from the Download Queue. The player stays alive while you browse other views or open chat.
+
+The desktop player uses the codecs available to QtMultimedia. The web player uses the browser's codecs. An unsupported format shows an error and an explicit external-player fallback. TorrentLinker does not transcode. Normal playback requires a complete file. Missing files and unavailable mounts cannot play; unfinished downloads may qualify for the explicit preview described below. A web browser can only play files accessible to the existing TorrentLinker server through its configured storage roots. Media adds no outside-network access service.
+
+**Chat** opens Assistant beside the player and creates or reuses a discussion in the **Media** folder. It receives the current browsing context or the current video and position, or track and queue. It avoids spoilers beyond the current video position by default. A newly created Media discussion has permission to control its attached player and save playlists or watched status. Existing discussions retain their permission settings; enable **Media playback, queues and playlists** with execute mode to allow these actions. Chat always controls the player instance attached to that discussion. Another browser tab or desktop window keeps its own player session.
+
+Configure a model connection in Assistant settings before sending a message. You can open the panel and browse your library without a model connection.
+
+For an unfinished **single-file qBittorrent sequential download**, open its details and choose **Preview downloaded portion**. This explicit preview reads only verified downloaded pieces at the beginning of the file. Its byte window stays fixed until **Refresh preview**. TorrentLinker never enables sequential mode automatically. Other Torrent Clients and multi-file torrents do not have a proven preview layout yet. Files using qBittorrent's `.!qB` suffix are included. A format that needs the missing end of the file can remain unplayable until more is downloaded. Preview does not transcode or read download gaps.

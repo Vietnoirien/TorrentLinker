@@ -12,6 +12,8 @@ Les guides et leurs captures sont aussi disponibles dans **Documentation**, just
 
 ## Aller plus loin
 
+- [Médias](guide/fr/media.md) : vidéos, musique, playlists et chat pendant la lecture.
+
 - [Assistant et automatisations](guide/fr/assistant.md) : modèles locaux et API, discussion, recherche Web et tâches programmées.
 
 - [Agents et accès MCP](guide/fr/agents.md) : connexions, propositions, permissions et objectifs.
@@ -27,6 +29,8 @@ Les guides et leurs captures sont aussi disponibles dans **Documentation**, just
 Les captures montrent l’interface en français, en thème sombre, avec des données d’exemple. Ce sont des captures des composants de l’application, réalisées hors ligne ; elles ne contiennent aucun compte ni fichier personnel. Les décorations des fenêtres dépendent du système utilisé.
 
 ## English guides
+
+- [Media](guide/en/media.md)
 
 - [Assistant and automations](guide/en/assistant.md)
 

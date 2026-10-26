@@ -21,6 +21,21 @@ const state = {
   localItem: "",
 };
 const french = {
+  mediaRefreshPreview: "Actualiser l’aperçu",
+  mediaStop: "Arrêter",
+  mediaVideo: 'Vidéo',
+  mediaMusic: 'Musique',
+  mediaRefresh: 'Actualiser les médias',
+  mediaCancelScan: 'Annuler l’analyse',
+  mediaMore: 'Afficher la suite',
+  mediaChat: 'Discuter de ce média',
+  mediaCloseChat: 'Fermer la discussion',
+  mediaPrevious: 'Précédent',
+  mediaNext: 'Suivant',
+  mediaShuffle: 'Aléatoire',
+  mediaExternal: 'Ouvrir / télécharger pour un lecteur externe',
+
+  agentMedia: "Lecture des médias et playlists",
   allStates: "Tous les états", seedingState: "En partage", downloadingState: "Téléchargement",
   pausedState: "En pause", checkingState: "Vérification", errorState: "Erreur",
   uploadHelp: "Choisissez un élément local dans la Bibliothèque pour préparer un Upload.",
@@ -540,6 +555,7 @@ async function browse(path = "") {
   if (!$("dialog").open) $("dialog").showModal();
 }
 async function navigate(view) {
+  if (typeof mediaCloseChat === "function" && media.chat) mediaCloseChat();
   state.view = view;
   document.body.classList.toggle("chat-view", view === "assistant");
   document
@@ -556,6 +572,7 @@ async function navigate(view) {
   }
   if (view === "agents") await loadAgents();
   if (view === "assistant") await loadAssistant();
+  if (view === "media") await loadMedia();
   if (view !== "agents") { $("agent-token").value = ""; $("agent-token-box").hidden = true; }
   if (view === "documentation") await loadGuides();
   if (view === "torrents") await loadTorrents();
@@ -1092,6 +1109,7 @@ $("language").onchange = () => {
   localStorage.setItem("tl-language", language);
   translate();
   if (state.view === "zen") guard(loadZenSeeding);
+  if (state.view === "media") { mediaViews(); guard(loadMedia); mediaQueueRender(); }
   $("page-title").textContent =
     document.querySelector(`[data-view="${state.view}"]`)?.textContent ||
     state.view;
@@ -1629,7 +1647,7 @@ $("target-client").onchange = () => guard(async () => {
   $("candidates").hidden = true; $("upload-editor").hidden = true;
   await refreshSetup();
   await navigate(state.clientId === "all" && state.view !== "zen" ? "torrents" : state.view);
-  if (state.setup.configured) await job({kind: "refresh"}, state.view === "zen" ? loadZenSeeding : loadTorrents);
+  if (state.setup.configured && state.view !== "media") await job({kind: "refresh"}, state.view === "zen" ? loadZenSeeding : loadTorrents);
 });
 $("add-client").onclick = () => {
   state.addingClient = true;

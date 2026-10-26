@@ -19,8 +19,8 @@ class Grant(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     clients: list[str] = Field(min_length=1, max_length=32)
     mode: Literal["propose", "execute"] = "propose"
-    permissions: list[Literal["queue", "downloads", "controls", "reseed", "uploads"]] = Field(
-        default_factory=list, max_length=5
+    permissions: list[Literal["queue", "downloads", "controls", "reseed", "uploads", "media"]] = (
+        Field(default_factory=list, max_length=6)
     )
     daily_bytes: int = Field(default=10 * 1024**3, ge=0)
     daily_torrents: int = Field(default=20, ge=0, le=1000)

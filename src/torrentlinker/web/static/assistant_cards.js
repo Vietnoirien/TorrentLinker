@@ -26,6 +26,10 @@ function aCardArtwork(item, large = false) {
   return art;
 }
 function aCardSize(item) {
+  if (item.presentation_type === "media") {
+    const value = item.facts?.Availability || item.availability;
+    return ({available: at("Available", "Disponible"), unavailable: at("Unavailable", "Indisponible"), unfinished: at("Still downloading", "Téléchargement en cours")})[value] || value || "";
+  }
   const size = item.size_bytes == null ? at("Unknown size", "Taille inconnue") : bytes(item.size_bytes);
   return item.presentation_type === "upload_drafts" ? size : size + " · " + (item.seeders ?? "—") + " sources";
 }
@@ -63,10 +67,10 @@ async function aCardDetail(load) {
     const header = element("div", undefined, "selection-detail-header"), info = element("div");
     if (item.presentation_type === "upload_drafts") header.classList.add("upload-review-header");
     info.append(element("p", item.title, "selection-release"), element("p", aCardSize(item), "muted"));
-    info.append(item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
+    if (item.presentation_type !== "media") info.append(item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
     if (item.zen_assumptions) info.append(element("p", item.zen_assumptions, "muted"));
     const facts = element("dl", undefined, "selection-facts");
-    const labels = {Category: at("Category", "Catégorie"), Subcategory: at("Subcategory", "Sous-catégorie"), Source: at("Source", "Source"), Files: at("Files", "Fichiers"), Status: at("Status", "État")};
+    const labels = {Category: at("Category", "Catégorie"), Subcategory: at("Subcategory", "Sous-catégorie"), Source: at("Source", "Source"), Files: at("Files", "Fichiers"), Status: at("Status", "État"), Availability: at("Availability", "Disponibilité"), Artist: at("Artist", "Artiste"), Metadata: at("Metadata", "Métadonnées")};
     for (const [name, value] of Object.entries(item.facts || {})) facts.append(element("dt", labels[name] || name), element("dd", String(value)));
     info.append(facts);
     if (item.note) info.append(element("p", item.note));
@@ -156,7 +160,7 @@ function aSelectionCards(identifier) {
       if (!section.isConnected || offset !== position) return;
       title.textContent = page.title;
       if (page.presentation_type === "upload_drafts") assistantPresentationPages.delete(key);
-      status.textContent = `${page.items.length ? offset + 1 : 0}–${offset + page.items.length} / ${page.count} · ${page.presentation_type === "upload_drafts" ? at("saved Upload drafts", "brouillons Upload enregistrés") : at("saved revision", "révision enregistrée") + " " + (page.revision ?? "")}`;
+      status.textContent = `${page.items.length ? offset + 1 : 0}–${offset + page.items.length} / ${page.count} · ${page.presentation_type === "upload_drafts" ? at("saved Upload drafts", "brouillons Upload enregistrés") : page.presentation_type === "media" ? at("saved media selection", "sélection de médias enregistrée") : at("saved revision", "révision enregistrée") + " " + (page.revision ?? "")}`;
       grid.replaceChildren();
       for (const item of page.items) {
         const card = button("", () => aPresentationItem(identifier, item.item_id), "selection-card");
@@ -164,8 +168,8 @@ function aSelectionCards(identifier) {
         card.setAttribute("aria-label", item.content_title || item.title);
         card.append(aCardArtwork(item), element("strong", item.content_title || item.title));
         if (item.subtitle) card.append(element("span", item.subtitle, "muted"));
-        card.append(element("span", aCardSize(item), "selection-size"),
-          item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
+        card.append(element("span", aCardSize(item), "selection-size"));
+        if (item.presentation_type !== "media") card.append(item.presentation_type === "upload_drafts" ? aUploadSummary(item) : aCardScores(item));
         if (item.note) card.append(element("span", item.note, "selection-note"));
         grid.append(card);
       }

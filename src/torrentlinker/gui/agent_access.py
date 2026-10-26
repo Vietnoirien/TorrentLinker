@@ -79,6 +79,7 @@ class AgentDialog(QDialog):
             ("downloads", self.tr("Start downloads")),
             ("reseed", self.tr("Reseed")),
             ("uploads", self.tr("Upload drafts and seeding")),
+            ("media", self.tr("Media playback, queues and playlists")),
         ):
             check = QCheckBox(title)
             check.setEnabled(False)

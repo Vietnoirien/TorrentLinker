@@ -86,6 +86,12 @@ def upload_summary(item):
 
 
 def card_size(item):
+    if item.get("presentation_type") == "media":
+        facts = item.get("facts") or {}
+        return str(
+            facts.get("Availability")
+            or QCoreApplication.translate("SelectionCards", "Availability unknown")
+        )
     size = item.get("size_bytes")
     text = (
         human_size(size)
@@ -174,7 +180,7 @@ class SelectionDetail(QDialog):
         if upload:
             self.setWindowTitle(self.tr("Upload draft review"))
             info.addWidget(plain_label(upload_summary(item)))
-        else:
+        elif item.get("presentation_type") != "media":
             info.addWidget(scores(item))
         if item.get("zen_assumptions"):
             info.addWidget(plain_label(item["zen_assumptions"]))
@@ -353,6 +359,13 @@ class SelectionCards(QWidget):
                 .replace("%2", str(self.offset + len(items)))
                 .replace("%3", str(total))
             )
+        elif page.get("presentation_type") == "media":
+            self.status.setText(
+                self.tr("%1–%2 of %3 · saved Media selection")
+                .replace("%1", str(self.offset + 1 if items else 0))
+                .replace("%2", str(self.offset + len(items)))
+                .replace("%3", str(total))
+            )
         else:
             self.status.setText(
                 self.tr("%1–%2 of %3 · saved revision %4")
@@ -388,7 +401,7 @@ class SelectionCards(QWidget):
             content.addWidget(plain_label(card_size(item)))
             if item.get("presentation_type") == "upload_drafts":
                 content.addWidget(plain_label(upload_summary(item)))
-            else:
+            elif item.get("presentation_type") != "media":
                 content.addWidget(scores(item))
             if item.get("note"):
                 content.addWidget(plain_label(item["note"]))

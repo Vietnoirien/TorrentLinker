@@ -6,6 +6,20 @@ const assistantDrafts = new Map();
 const assistantCollapsedFolders = new Set();
 const at = (en, fr) => say(en, fr);
 const assistantRoot = () => $("view-assistant");
+let mediaAssistantHome = null;
+async function mountMediaAssistant(container, conversationId) {
+  const root = assistantRoot();
+  if (!mediaAssistantHome) { mediaAssistantHome = document.createComment("assistant home"); root.before(mediaAssistantHome); }
+  container.append(root); root.hidden = false;
+  assistantConversation = conversationId; assistantView = "chat"; assistantRun = "";
+  await loadAssistant();
+}
+function restoreMediaAssistant() {
+  const root = assistantRoot();
+  if (mediaAssistantHome) { mediaAssistantHome.replaceWith(root); mediaAssistantHome = null; }
+  root.hidden = state.view !== "assistant";
+}
+const assistantVisible = () => state.view === "assistant" || (typeof media !== "undefined" && media.chat);
 function aFolderLabel(folder) {
   return ({"": at("General", "Général"), uploads: at("Uploads", "Uploads"), film_research: at("Film research", "Recherche de films"), series_research: at("Series research", "Recherche de séries"), troubleshooting: at("Troubleshooting", "Dépannage")})[folder] ?? folder;
 }
@@ -176,6 +190,7 @@ async function loadAssistant() {
         identifier = chat.id;
         assistantDrafts.set(identifier, message); assistantDrafts.delete("");
       }
+      if (typeof media !== "undefined" && media.chat) await mediaHeartbeat();
       const run = await api("assistant/jobs", {conversation_id: identifier, message});
       assistantDrafts.delete(identifier);
       if (assistantConversation === origin) {
@@ -192,7 +207,7 @@ async function loadAssistant() {
   main.append(form); await aRefreshChat();
 }
 async function aRefreshChat() {
-  if (state.view !== "assistant" || assistantView !== "chat" || !assistantConversation || !$("assistant-transcript") || assistantRefreshBusy) return;
+  if (!assistantVisible() || assistantView !== "chat" || !assistantConversation || !$("assistant-transcript") || assistantRefreshBusy) return;
   assistantRefreshBusy = true;
   const identifier = assistantConversation, transcript = $("assistant-transcript");
   try {
@@ -350,7 +365,7 @@ function aRunCard(run) {
   });
   // Keep activity chronological; place card presentations after the response summary.
   for (const event of run.events) {
-    if (["present_selection", "present_upload_drafts"].includes(event.tool) && event.result?.presentation_id) {
+    if (["present_selection", "present_upload_drafts", "present_media"].includes(event.tool) && event.result?.presentation_id) {
       card.append(aSelectionCards(event.result.presentation_id));
     }
   }
@@ -470,7 +485,7 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
   const clients = element("fieldset"); clients.append(element("legend", at("Allowed Torrent Clients", "Clients torrent autorisés"))); form.append(clients);
   const clientInputs = state.setup.clients.filter(c => c.enabled).map(c => [c.id, aField(clients, c.name, existing ? existing.policy.clients.includes(c.id) : c.id === state.setup.client_id, "checkbox")]);
   const details = element("details"); details.append(element("summary", at("Permissions and limits", "Autorisations et limites"))); form.append(details);
-  const permissions = ["queue", "downloads", "controls", "reseed", "uploads"].map(p => [p, aField(details, ({queue: at("Prepare and edit download queue", "Préparer et modifier la file"), downloads: at("Start downloads", "Démarrer les téléchargements"), controls: at("Torrent controls", "Commandes des torrents"), reseed: at("Reseeds", "Remises en seed"), uploads: "Uploads"})[p], existing?.policy.permissions.includes(p) || false, "checkbox")]);
+  const permissions = ["queue", "downloads", "controls", "reseed", "uploads", "media"].map(p => [p, aField(details, ({queue: at("Prepare and edit download queue", "Préparer et modifier la file"), downloads: at("Start downloads", "Démarrer les téléchargements"), controls: at("Torrent controls", "Commandes des torrents"), reseed: at("Reseeds", "Remises en seed"), uploads: "Uploads", media: at("Media playback and playlists", "Lecture des médias et playlists")})[p], existing?.policy.permissions.includes(p) || false, "checkbox")]);
   const updateMode = () => { for (const [, el] of permissions) el.disabled = mode.value === "propose"; }; mode.onchange = updateMode; updateMode();
   const bytes = aField(details, at("Downloads per day, GiB", "Téléchargements par jour, Gio"), (existing?.policy.daily_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
   const torrents = aField(details, at("Torrents per day", "Torrents par jour"), existing?.policy.daily_torrents ?? 20, "number");
@@ -504,7 +519,7 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
     }
   });
 }
-setInterval(() => { if (state.view === "assistant" && assistantView === "chat") guard(aRefreshChat); }, 1500);
+setInterval(() => { if (assistantVisible() && assistantView === "chat") guard(aRefreshChat); }, 1500);
 
 function aStatus(value) {
   return ({queued: at("Queued", "En attente"), running: at("Running", "En cours"), completed: at("Completed", "Terminée"), failed: at("Failed", "Échec"), cancelled: at("Cancelled", "Annulée"), interrupted: at("Interrupted", "Interrompue"), awaiting_approval: at("Awaiting approval", "Validation requise"), awaiting_user: at("Awaiting your answer", "Réponse requise"), waiting_settings: at("Waiting for settings to finish updating", "Mise à jour des paramètres en cours"), finished: at("Finished", "Terminé")})[value] || value;
