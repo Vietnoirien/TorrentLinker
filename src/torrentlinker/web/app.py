@@ -472,7 +472,7 @@ def create_app(
             raise HTTPException(404, str(error)) from error
         if draft["revision"] != revision:
             raise HTTPException(409, "Draft changed. Refresh the queue and preview it again.")
-        return draft_item(draft, "0")
+        return draft_item(draft, "0", store)
 
     @app.get("/api/library")
     def library(

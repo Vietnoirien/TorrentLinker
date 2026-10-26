@@ -16,6 +16,19 @@ def _mcp_result(answer):
     result = answer.structured_content
     if not isinstance(result, dict):
         result = {"content": [block.model_dump(mode="json") for block in answer.content]}
+    images = [
+        block.model_dump(mode="json")
+        for block in answer.content
+        if getattr(block, "type", "") == "image"
+    ]
+    if images:
+        result = {
+            **result,
+            "content": [
+                *[b for b in result.get("content", []) if b.get("type") != "image"],
+                *images,
+            ],
+        }
     if answer.is_error:
         text = " ".join(getattr(block, "text", "") for block in answer.content)
         result = {
@@ -188,6 +201,7 @@ class Assistant:
     def provider_row(self, row):
         return {
             "id": row["id"],
+            "assessment": self.provider_assessment(row["id"]),
             **Provider.model_validate_json(row["body"]).model_dump(),
             "has_key": bool(self.secrets.get("assistant:" + row["id"])),
         }
@@ -219,6 +233,12 @@ class Assistant:
                             )
                 if previous.url != body.url and body.api_key is None:
                     self.secrets.update({"assistant:" + identifier: ""})
+            if identifier and (previous.kind, previous.url, previous.model) != (
+                body.kind,
+                body.url,
+                body.model,
+            ):
+                self.db.execute("DELETE FROM options WHERE key=?", ("assessment:" + identifier,))
             identifier = identifier or uuid4().hex
             if body.api_key is not None:
                 self.secrets.update({"assistant:" + identifier: body.api_key})
@@ -236,10 +256,35 @@ class Assistant:
                 credential = self.secrets.get("assistant:" + identifier)
         return self.models.context(body, credential)
 
+    def provider_assessment(self, identifier):
+        with self.lock:
+            row = self.db.execute(
+                "SELECT value FROM options WHERE key=?", ("assessment:" + identifier,)
+            ).fetchone()
+            return json.loads(row[0]) if row else None
+
     def test_provider(self, identifier):
-        return self.models.test(
-            self.provider(identifier), self.secrets.get("assistant:" + identifier)
+        from torrentlinker.assistant.capabilities import assess
+
+        provider = self.provider(identifier)
+        result = assess(self.models, provider, self.secrets.get("assistant:" + identifier))
+        result["context"] = self.models.context(
+            provider, self.secrets.get("assistant:" + identifier)
         )
+        result["context"]["verified"] = False
+        with self.lock, self.db:
+            current = self.provider(identifier)
+            if (current.kind, current.url, current.model) != (
+                provider.kind,
+                provider.url,
+                provider.model,
+            ):
+                raise ValueError("Model connection changed during assessment. Retest it.")
+            self.db.execute(
+                "INSERT OR REPLACE INTO options VALUES (?,?)",
+                ("assessment:" + identifier, json.dumps(result)),
+            )
+        return result
 
     def chat_defaults(self):
         from torrentlinker.assistant.models import Conversation
@@ -555,8 +600,8 @@ class Assistant:
             bounded_receipts,
             compact_context,
             current_list_state,
-            encoded_size,
             input_budget,
+            message_size,
             model_receipt,
         )
         from torrentlinker.assistant.providers import ContextTooLong, InvalidModelResponse
@@ -712,7 +757,10 @@ class Assistant:
                 "the new exact revisions. "
                 "Automated tasks must stop after saving to the local review queue. "
                 "Use list_items collection=upload-queue to read saved forms and revisions. "
-                "To edit, use upload-queue with draft_id, revision, path and the full upload form. "
+                "To edit a field, use update_upload_fields with draft_id and exact revision. "
+                "File facts and counts are already extracted; do not ask the user for available "
+                "metadata. Rip source is unknown unless explicitly documented; never infer it "
+                "from codec, bit depth, sample rate or a filename. "
                 "Only request upload-send when the owner explicitly asks to send a saved "
                 "draft_id/revision; it always requires owner approval. It creates a c411 Draft, "
                 "never a published torrent. Do not seed an unsent Local Draft. "
@@ -724,6 +772,18 @@ class Assistant:
                 "Never invent a mount or use a browser computer path as a server path. "
                 "You cannot change permissions, budgets, provider settings or schedules. "
                 "Respect the requested language. Do not execute code or shell commands. "
+            )
+            assessment = self.provider_assessment(config.provider_id)
+            vision = bool(assessment and assessment.get("verified_vision"))
+            system += (
+                " This model passed the generated image and tool-image assessment. For 3D "
+                "visual review inspect the inventory, render candidates, inspect actual pixels, "
+                "refine camera state, create sheets covering every selected piece, validate "
+                "coverage, then present. Never claim review of pixels you did not receive."
+                if vision
+                else " Vision has not been verified for this endpoint/model. Use deterministic "
+                "render presets and request user visual confirmation. Never claim that you "
+                "visually inspected an image. Text drafting and tools remain available."
             )
             messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
             # Completed exchanges give continuity; full receipts remain in the UI history.
@@ -862,7 +922,7 @@ class Assistant:
                 if not pending_calls:
                     self.agent.access.grant(actor)
                     budget = input_budget(provider, tools, output_tokens)
-                    if encoded_size(messages) > budget:
+                    if message_size(messages) > budget:
                         memory = compact_context(
                             previous[-8:] + [self.run(identifier)], budget // 2
                         )
@@ -1178,7 +1238,39 @@ class Assistant:
                         event["result"] = result
                         self.update_run(identifier, events=json.dumps(events))
                     checkpoint = {}
-                    results.append((call, model_receipt(result, identifier, len(events) - 1)))
+                    image_content = []
+                    receipt_source = dict(result)
+                    # Application jobs and job_status wrap their payloads. Move pixels out
+                    # before bounding JSON receipts, or large sheets would be truncated.
+                    for route in ((), ("job", "result"), ("result",)):
+                        source, target = result, receipt_source
+                        for key_name in route:
+                            if not isinstance(source.get(key_name), dict):
+                                break
+                            source = source[key_name]
+                            target[key_name] = dict(target[key_name])
+                            target = target[key_name]
+                        else:
+                            content = source.get("content", [])
+                            images = [block for block in content if block.get("type") == "image"]
+                            if images:
+                                image_content.extend(images)
+                                target["content"] = [
+                                    block for block in content if block.get("type") != "image"
+                                ]
+                    receipt = model_receipt(receipt_source, identifier, len(events) - 1)
+                    if image_content and vision:
+                        receipt = {
+                            **receipt,
+                            "content": [*receipt.get("content", []), *image_content],
+                        }
+                    elif image_content:
+                        receipt = {
+                            **receipt,
+                            "visual_review": "User confirmation required; "
+                            "model vision has not been verified.",
+                        }
+                    results.append((call, receipt))
                 self.models.results(provider, messages, results)
                 pending_calls, results = [], []
                 self.update_run(identifier, checkpoint="{}")

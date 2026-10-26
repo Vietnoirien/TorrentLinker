@@ -81,7 +81,7 @@ def test_local_draft_survives_restart_and_only_explicit_send_contacts_site(tmp_p
         login(browser)
         rows = browser.get("/api/upload/queue").json()
         assert len(rows) == 1
-        assert rows[0]["form"]["description"].endswith("Unreviewed description")
+        assert "Unreviewed description" in rows[0]["form"]["description"]
         assert rows[0]["id"] == saved["id"]
         edited = job(
             browser,
@@ -238,7 +238,7 @@ def test_mcp_automations_queue_locally_and_sending_needs_current_revision_approv
         assert send["requires_owner_approval"] is True
         preview = browser.get(f"/api/agents/proposals/{send['id']}/review").json()
         assert preview["local_draft"]["revision"] == draft["revision"]
-        assert preview["local_draft"]["form"]["description"].endswith("Needs review")
+        assert "Needs review" in preview["local_draft"]["form"]["description"]
         changed = propose(
             "edit",
             kind="upload-queue",

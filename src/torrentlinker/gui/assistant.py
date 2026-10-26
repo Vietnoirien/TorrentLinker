@@ -523,6 +523,14 @@ class AssistantTab(QWidget):
         self.providers.clear()
         for p in self.provider_data:
             self.providers.addItem(p["name"] + " · " + p["model"])
+            assessment = p.get("assessment")
+            self.providers.item(self.providers.count() - 1).setToolTip(
+                "\n".join(
+                    f"{name}: {check['status']}. {check['reason']}"
+                    for name, check in (assessment or {}).get("checks", {}).items()
+                )
+                or self.tr("Capabilities untested")
+            )
         self.providers.setCurrentRow(selected)
         current = next((c for c in self.conversation_data if c["id"] == self.conversation_id), None)
         chosen = (
@@ -1056,9 +1064,23 @@ class AssistantTab(QWidget):
                         context_auto=context_auto.isChecked(),
                     )
                 )
-                self.service.save_provider(p, existing.get("id", ""))
+                saved = self.service.save_provider(p, existing.get("id", ""))
                 dialog.accept()
                 self.refresh()
+                if not existing or any(
+                    existing.get(k) != getattr(p, k) for k in ("kind", "url", "model")
+                ):
+                    self.notice.setText(self.tr("Assessing model capabilities…"))
+                    run_in_background(
+                        lambda: self.service.test_provider(saved["id"]),
+                        lambda result: self.notice.setText(
+                            "\n".join(
+                                f"{name}: {check['status']}. {check['reason']}"
+                                for name, check in result["checks"].items()
+                            )
+                        ),
+                        self.error,
+                    )
             except Exception as error:
                 self.error(error)
 
@@ -1070,10 +1092,15 @@ class AssistantTab(QWidget):
         row = self.providers.currentRow()
         if 0 <= row < len(self.provider_data):
             identifier = self.provider_data[row]["id"]
-            self.notice.setText(self.tr("Testing connection and tool round trip…"))
+            self.notice.setText(self.tr("Assessing model capabilities…"))
             run_in_background(
                 lambda: self.service.test_provider(identifier),
-                lambda result: self.notice.setText(result["message"]),
+                lambda result: self.notice.setText(
+                    "\n".join(
+                        f"{name}: {check['status']}. {check['reason']}"
+                        for name, check in result.get("checks", {}).items()
+                    )
+                ),
                 self.error,
             )
 

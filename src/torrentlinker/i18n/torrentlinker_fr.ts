@@ -767,6 +767,14 @@
         <source>Let the assistant organize this conversation</source>
         <translation>Laisser l’assistant classer cette conversation</translation>
     </message>
+    <message>
+        <source>Assessing model capabilities…</source>
+        <translation>Évaluation des capacités du modèle…</translation>
+    </message>
+    <message>
+        <source>Capabilities untested</source>
+        <translation>Capacités non testées</translation>
+    </message>
 </context>
 <context>
     <name>BookReader</name>
@@ -2566,6 +2574,18 @@ La mettre à la corbeille ?</translation>
         <location filename="../gui/model_viewer.py" line="560"/>
         <source>Saved {0} ({1} × {2} px)</source>
         <translation>{0} enregistré ({1} × {2} px)</translation>
+    </message>
+    <message>
+        <source>Saved {0} pages covering {1} models. Unsupported: {2}.</source>
+        <translation>{0} pages enregistrées couvrant {1} modèles. Non pris en charge : {2}.</translation>
+    </message>
+    <message>
+        <source>Rendering {0} models…</source>
+        <translation>Rendu de {0} modèles…</translation>
+    </message>
+    <message>
+        <source>Save labelled pages covering every model in the Pack</source>
+        <translation>Enregistrer des pages légendées couvrant tous les modèles du Pack</translation>
     </message>
 </context>
 <context>

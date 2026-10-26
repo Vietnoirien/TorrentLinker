@@ -284,37 +284,88 @@ class Models:
         )
 
     @staticmethod
-    def results(p, messages, results):
+    def image_blocks(p, images):
+        """Translate bounded inline pixels without fetching paths or URLs."""
+        import base64
+
+        blocks = []
+        total = 0
+        for image in images:
+            mime, data = image.get("mimeType"), image.get("data", "")
+            if mime not in {"image/png", "image/jpeg", "image/webp"}:
+                continue
+            try:
+                size = len(base64.b64decode(data, validate=True))
+            except (ValueError, TypeError):
+                continue
+            total += size
+            if total > 8_000_000 or len(blocks) >= 12:
+                raise ValueError("Tool images exceed the model input limit.")
+            if p.kind == "anthropic":
+                blocks.append(
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": mime, "data": data},
+                    }
+                )
+            elif p.kind == "gemini":
+                blocks.append({"inlineData": {"mimeType": mime, "data": data}})
+            else:
+                url = f"data:{mime};base64,{data}"
+                blocks.append(
+                    {"type": "input_image", "image_url": url}
+                    if p.kind == "openai"
+                    else {"type": "image_url", "image_url": {"url": url}}
+                )
+        return blocks
+
+    @classmethod
+    def results(cls, p, messages, results):
+        outputs, visuals = [], []
+        for call, result in results:
+            images = [b for b in result.get("content", []) if b.get("type") == "image"]
+            clean = {**result}
+            if images:
+                clean["content"] = [b for b in result["content"] if b.get("type") != "image"]
+            text = json.dumps(clean)
+            pixels = cls.image_blocks(p, images)
+            if p.kind == "anthropic":
+                outputs.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": call["id"],
+                        "content": [{"type": "text", "text": text}, *pixels] if pixels else text,
+                    }
+                )
+            elif p.kind == "gemini":
+                outputs.append(
+                    {"functionResponse": {"name": call["name"], "response": {"result": clean}}}
+                )
+                visuals.extend(pixels)
+            else:
+                outputs.append(
+                    {"type": "function_call_output", "call_id": call["id"], "output": text}
+                    if p.kind == "openai"
+                    else {"role": "tool", "tool_call_id": call["id"], "content": text}
+                )
+                if pixels:
+                    visuals.extend(
+                        [
+                            {
+                                "type": "input_text" if p.kind == "openai" else "text",
+                                "text": f"Images returned by {call['name']} ({call['id']}).",
+                            },
+                            *pixels,
+                        ]
+                    )
         if p.kind == "anthropic":
-            messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "tool_result", "tool_use_id": c["id"], "content": json.dumps(r)}
-                        for c, r in results
-                    ],
-                }
-            )
+            messages.append({"role": "user", "content": outputs})
         elif p.kind == "gemini":
-            messages.append(
-                {
-                    "role": "user",
-                    "parts": [
-                        {"functionResponse": {"name": c["name"], "response": {"result": r}}}
-                        for c, r in results
-                    ],
-                }
-            )
-        elif p.kind == "openai":
-            messages.extend(
-                {"type": "function_call_output", "call_id": c["id"], "output": json.dumps(r)}
-                for c, r in results
-            )
+            messages.append({"role": "user", "parts": [*outputs, *visuals]})
         else:
-            messages.extend(
-                {"role": "tool", "tool_call_id": c["id"], "content": json.dumps(r)}
-                for c, r in results
-            )
+            messages.extend(outputs)
+            if visuals:
+                messages.append({"role": "user", "content": visuals})
 
     def test(self, p, key):
         tools = [

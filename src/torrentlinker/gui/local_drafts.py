@@ -191,9 +191,9 @@ class LocalDrafts(QWidget):
                     *record.get("review", {}).get("refusals", []),
                     *(
                         f"{row['field']}: {row['message']}"
-                        for row in assess(form, record.get("review", {}).get("file_facts"))[
-                            "missing_fields"
-                        ]
+                        for row in assess(
+                            form, record.get("review", {}).get("file_facts"), local=True
+                        )["missing_fields"]
                     ),
                     *record.get("review", {}).get("warnings", []),
                 ]
@@ -227,7 +227,7 @@ class LocalDrafts(QWidget):
             current = self.store.local_draft(identifier)
             if current["revision"] != revision:
                 raise ValueError(self.tr("Draft changed. Refresh the queue and preview it again."))
-            return draft_item(current, "0")
+            return draft_item(current, "0", self.store)
 
         dialog = SelectionDetail("", "0", load, self.images, self)
         dialog.open()
@@ -239,6 +239,9 @@ class LocalDrafts(QWidget):
             "image": self.image.text().strip(),
             "description": self.description.toPlainText(),
             "nfo": self.nfo.toPlainText(),
+            "nfo_origin": "original"
+            if self.nfo.toPlainText() != self.record["form"].get("nfo")
+            else self.record["form"].get("nfo_origin", ""),
             "reviewed": False,
         }
 

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp_types import ToolAnnotations
+from mcp_types import CallToolResult, ImageContent, ToolAnnotations
 from pydantic import Field
 from starlette.responses import JSONResponse
 
@@ -169,6 +169,252 @@ def make_server(service: AgentService):
                 draft_id=draft_id,
                 revision=revision,
             ),
+        )
+
+    @mcp.tool(structured_output=True)
+    @safe(public_urls=True)
+    def update_upload_fields(
+        request_id: str,
+        client_id: str,
+        draft_id: str,
+        revision: int,
+        fields: dict[str, str],
+        synopsis: str | None = None,
+        field_sources: dict[str, str] | None = None,
+    ) -> dict[str, object]:
+        """Edit labelled presentation fields in one exact Local Draft revision.
+
+        Use stable IDs from get_upload_requirements. Keeps unrelated form fields and
+        original release NFOs. Generated NFO fields follow the same edits. Saving may
+        remain incomplete, and always invalidates prior send approvals.
+        """
+        import re
+
+        from torrentlinker.upload_presentation import update_fields
+
+        target = service.target(ACTOR.get(), client_id)
+        record = target.setup.store.local_draft(draft_id)
+        if record["revision"] != revision:
+            raise ValueError("Local Draft changed. Read the current revision before editing.")
+        if not fields and synopsis is None:
+            raise ValueError("Supply at least one field or a synopsis.")
+        if len(fields) > 50 or any(len(value) > 10000 for value in fields.values()):
+            raise ValueError("Presentation field update exceeds the size limit.")
+        form = dict(record["form"])
+        provenance = dict(form.get("field_provenance", {}))
+        if set(field_sources or {}) - set(fields):
+            raise ValueError("Supply sources only for fields being edited.")
+        from torrentlinker.assistant.images import image_url
+
+        for key in fields:
+            source = (field_sources or {}).get(key, "")
+            if source and source != "owner" and not image_url(source):
+                raise ValueError("Field source must be a public HTTP(S) URL or owner.")
+            provenance[key] = {
+                "kind": "user_supplied"
+                if source == "owner"
+                else "research"
+                if source
+                else "unknown",
+                "source": source,
+            }
+        form["field_provenance"] = provenance
+        if "title" in fields:
+            form["title"] = fields["title"]
+        form["description"] = update_fields(form.get("description", ""), fields)
+        if form.get("nfo_origin") == "generated":
+            form["nfo"] = update_fields(form.get("nfo", ""), fields, bbcode=False)
+        if synopsis is not None:
+            if len(synopsis) > 10000:
+                raise ValueError("Synopsis exceeds the size limit.")
+            pattern = r"(\[h3]Présentation\[/h3]).*?(?=\[h3]|\Z)"
+            if not re.search(pattern, form["description"], re.I | re.S):
+                form["description"] = "[h3]Présentation[/h3]\n\n" + form["description"]
+            form["description"] = re.sub(
+                pattern,
+                lambda match: match[1] + "\n" + synopsis + "\n",
+                form["description"],
+                count=1,
+                flags=re.I | re.S,
+            )
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="upload-queue",
+                client_id=client_id,
+                path=record["path"],
+                upload=UploadForm.model_validate(form),
+                draft_id=draft_id,
+                revision=revision,
+            ),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def inspect_3d_models(client_id: str, path: str) -> dict[str, object]:
+        """Read all model filenames, groups and variant hints in a registered Local Item.
+
+        Supported/scale/merge names are hints only. Never infer assembly from filenames.
+        This is an application job. Wait with job_status before selecting exact pieces.
+        """
+        return service.request(
+            ACTOR.get(),
+            uuid4().hex,
+            AgentRequest(
+                kind="model-inspect",
+                client_id=client_id,
+                path=path,
+            ),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def render_3d_preview(
+        client_id: str,
+        path: str,
+        piece: str,
+        camera: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        """Render one inspected piece in an isolated CPU worker; source geometry is read only.
+
+        camera accepts preset isometric/front/back/left/right/top/bottom, custom yaw,
+        pitch, roll in degrees, zoom 0.2–5 and center_x/center_y framing -0.8–0.8.
+        job_status returns actual image pixels, immutable asset IDs and reproducible camera.
+        Render candidate orientations and inspect pixels before claiming visual review.
+        """
+        return service.request(
+            ACTOR.get(),
+            uuid4().hex,
+            AgentRequest(
+                kind="model-render",
+                client_id=client_id,
+                path=path,
+                model_files=[piece],
+                model_cameras={piece: camera or {}},
+            ),
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe(public_urls=True)
+    def create_3d_contact_sheet(
+        client_id: str,
+        path: str,
+        pieces: list[str],
+        cameras: dict[str, dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        """Render ALL 1–108 selected pieces across labelled pages of at most nine each.
+
+        Pass exact names from inspect_3d_models and per-piece cameras chosen after preview.
+        No silent truncation: covered, selected, unsupported and complete report coverage.
+        Every page has immutable asset metadata and actual pixels in the job result.
+        Use cancel_job to stop the bounded worker. Never automatically upload artwork.
+        """
+        if not pieces:
+            raise ValueError("Select at least one inspected piece.")
+        return service.request(
+            ACTOR.get(),
+            uuid4().hex,
+            AgentRequest(
+                kind="model-render",
+                client_id=client_id,
+                path=path,
+                model_files=pieces,
+                model_cameras=cameras or {},
+            ),
+        )
+
+    @mcp.tool(structured_output=True)
+    @safe(public_urls=True)
+    def attach_upload_assets(
+        request_id: str,
+        client_id: str,
+        draft_id: str,
+        revision: int,
+        asset_ids: list[str],
+    ) -> dict[str, object]:
+        """Attach private artwork/render IDs to an exact Local Draft revision for local review.
+
+        Assets must belong to the same Local Item. Saves a new revision through normal
+        Upload authority. No public hosting, source writes, torrent creation or sending.
+        """
+        from torrentlinker.upload_assets import Assets
+
+        target = service.target(ACTOR.get(), client_id)
+        record = target.setup.store.local_draft(draft_id)
+        if record["revision"] != revision:
+            raise ValueError("Local Draft changed. Read the current revision before attaching.")
+        assets = Assets(target.setup.store.torrent_dir.parent)
+        if not 1 <= len(asset_ids) <= 24 or len(set(asset_ids)) != len(asset_ids):
+            raise ValueError("Attach 1–24 distinct asset IDs.")
+        for identifier in asset_ids:
+            assets.read(identifier, record["path"])
+        form = UploadForm.model_validate({**record["form"], "assets": asset_ids})
+        return service.request(
+            ACTOR.get(),
+            request_id,
+            AgentRequest(
+                kind="upload-queue",
+                client_id=client_id,
+                path=record["path"],
+                upload=form,
+                draft_id=draft_id,
+                revision=revision,
+            ),
+        )
+
+    @mcp.tool(structured_output=True)
+    @safe(public_urls=True)
+    def import_upload_image(
+        request_id: str,
+        client_id: str,
+        draft_id: str,
+        revision: int,
+        url: str,
+    ) -> dict[str, object]:
+        """Verify and privately copy a public image into an exact Local Draft.
+
+        Fetches only public HTTP(S) with DNS/redirect checks and image size limits. Never
+        publishes local artwork. Keeps the remote origin in the immutable asset metadata.
+        """
+        from torrentlinker.assistant.images import fetch_image
+        from torrentlinker.upload_assets import Assets
+
+        target = service.target(ACTOR.get(), client_id)
+        record = target.setup.store.local_draft(draft_id)
+        if record["revision"] != revision:
+            raise ValueError("Local Draft changed. Read the current revision before importing.")
+        data, mime = fetch_image(url)
+        assets = Assets(target.setup.store.torrent_dir.parent)
+        asset = assets.put(data, mime, record["path"], {"origin": "remote_image", "url": url})
+        return attach_upload_assets(
+            request_id,
+            client_id,
+            draft_id,
+            revision,
+            [*record["form"].get("assets", []), asset["asset_id"]],
+        )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
+    @safe(public_urls=True)
+    def read_upload_asset(client_id: str, path: str, asset_id: str) -> CallToolResult:
+        """Return a private image as native MCP pixels for an authorized Library Local Item.
+
+        Use a returned render/cover asset ID. Does not read arbitrary filesystem paths.
+        The same pixels can be inspected by external vision-capable MCP clients.
+        """
+        import base64
+
+        from torrentlinker.upload_assets import Assets
+
+        target = service.target(ACTOR.get(), client_id)
+        target.library.entry(path)
+        data, mime = Assets(target.setup.store.torrent_dir.parent).read(asset_id, path)
+        return CallToolResult(
+            content=[
+                ImageContent(type="image", mime_type=mime, data=base64.b64encode(data).decode())
+            ],
+            structured_content={"asset_id": asset_id, "mime_type": mime},
         )
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)

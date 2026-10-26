@@ -34,6 +34,8 @@ READ_JOBS = {
     "details",
     "search-options",
     "upload-preview",
+    "model-inspect",
+    "model-render",
 }
 PERMISSIONS = {
     "configure-download-folder": "download-folder",

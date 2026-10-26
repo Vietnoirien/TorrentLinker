@@ -1468,6 +1468,7 @@ class UploadTab(QWidget):
             title=self.name.text().strip(),
             description=self.description.toPlainText(),
             nfo=self.nfo.toPlainText(),
+            nfo_origin="original" if "nfo" in self._edited else "generated",
             options=self.chosen_options(),
         ).model_dump()
         record = {"path": str(entry.item.path), "form": form, "id": "", "revision": 0}
@@ -1539,6 +1540,8 @@ class UploadTab(QWidget):
         form = edited_form(record.get("form", {}), form)
         request, refusals = self._local_request(record, form)
         profile = PROFILES[request.category]
+        if self.model_panel.item and self.model_panel.item.path == request.item.path:
+            form = {**form, "assets": self.model_panel.asset_ids or form.get("assets", [])}
         return save_local(
             self.store,
             request,

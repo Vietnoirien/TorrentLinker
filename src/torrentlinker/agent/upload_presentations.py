@@ -33,7 +33,7 @@ class DraftRevision(BaseModel):
     revision: int = Field(ge=1)
 
 
-def draft_item(draft, item_id):
+def draft_item(draft, item_id, store=None):
     form = draft["form"]
     category, subcategory = form.get("category"), form.get("subcategory")
     mapped = SUBCATS.get(category, {}).get(subcategory, ROOTS.get(category))
@@ -49,9 +49,30 @@ def draft_item(draft, item_id):
         item_id,
     )
     markup, artwork = draft_preview(form)
+    local_images = []
+    if store is not None:
+        from torrentlinker.upload_assets import Assets
+
+        assets = Assets(store.torrent_dir.parent)
+        for identifier in form.get("assets", []):
+            try:
+                local_images.append(assets.inline(identifier, draft["path"]))
+            except ValueError:
+                continue
+    if local_images:
+        start = len(artwork)
+        markup = (
+            "".join(
+                f'<img src="preview-image:{i}" width="300">'
+                for i in range(start, start + len(local_images))
+            )
+            + markup
+        )
+        artwork = (*artwork, *local_images)
     image = next((url for url in [form.get("image", ""), *artwork] if image_url(url)), "")
+    image = image or next(iter(local_images), "")
     review = dict(draft.get("review") or {})
-    completeness = assess(form, review.get("file_facts"))
+    completeness = assess(form, review.get("file_facts"), local=True)
     review["presentation"] = completeness
     review["refusals"] = list(
         dict.fromkeys(
@@ -95,7 +116,19 @@ def draft_preview(form):
 def current_state(item, store):
     """Keep the reviewed contents frozen while marking edits/removal since capture."""
     # Render old snapshots from their frozen form too; never substitute current edits.
+    from torrentlinker.upload_assets import inline_image
+
     markup, images = draft_preview(item.get("upload_form") or {})
+    local_images = [url for url in item.get("description_images", []) if inline_image(url)]
+    if local_images:
+        markup = (
+            "".join(
+                f'<img src="preview-image:{i}" width="300">'
+                for i in range(len(images), len(images) + len(local_images))
+            )
+            + markup
+        )
+        images = (*images, *local_images)
     item = {**item, "description_html": markup, "description_images": list(images)}
     try:
         current = store.local_draft(item["draft_id"])
@@ -138,7 +171,7 @@ def present(service, actor, request_id, client_id, drafts, title="", offset=0, l
             records.append(record)
         incomplete = []
         for record in records:
-            check = assess(record["form"], record.get("review", {}).get("file_facts"))
+            check = assess(record["form"], record.get("review", {}).get("file_facts"), local=True)
             if check["missing_fields"]:
                 incomplete.append(
                     {"draft_id": record["id"], "revision": record["revision"], **check}
@@ -146,7 +179,7 @@ def present(service, actor, request_id, client_id, drafts, title="", offset=0, l
         if incomplete:
             raise IncompletePresentation(incomplete)
         # All items are captured before insertion; page/detail reads never enrich or fetch c411.
-        items = [draft_item(record, str(i)) for i, record in enumerate(records)]
+        items = [draft_item(record, str(i), store) for i, record in enumerate(records)]
         identifier = uuid4().hex
         body = dict(
             presentation_type="upload_drafts",

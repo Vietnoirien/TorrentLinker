@@ -317,3 +317,18 @@ def model_receipt(result, run_id, index, budget=24000):
         if size({**bounded, "job": bounded_job}) <= budget:
             bounded["job"] = bounded_job
     return bounded
+
+
+def message_size(messages):
+    """Estimate text plus image token cost, rather than treating base64 as prose."""
+
+    def bounded(value):
+        if isinstance(value, list):
+            return [bounded(item) for item in value]
+        if isinstance(value, dict):
+            if value.get("type") in {"image", "input_image", "image_url"} or "inlineData" in value:
+                return "image " * 1024
+            return {key: bounded(item) for key, item in value.items()}
+        return value
+
+    return encoded_size(bounded(messages))

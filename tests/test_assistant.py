@@ -108,7 +108,11 @@ def test_provider_setup_keeps_key_private_and_checks_real_tool_round_trip(tmp_pa
         body = json.loads(request.content)
         seen.append(body)
         assert request.headers["authorization"] == "Bearer provider-secret-123"
-        if len(seen) == 1:
+        prompt = body["messages"][-1].get("content", "")
+        if isinstance(prompt, str) and "exact arguments:" in prompt:
+            import ast
+
+            arguments = ast.literal_eval(prompt.split("arguments: ", 1)[1].rstrip("."))
             message = {
                 "role": "assistant",
                 "content": None,
@@ -117,15 +121,17 @@ def test_provider_setup_keeps_key_private_and_checks_real_tool_round_trip(tmp_pa
                         "id": "probe",
                         "type": "function",
                         "function": {
-                            "name": "connection_probe",
-                            "arguments": '{"value":"torrentlinker"}',
+                            "name": "assessment_probe",
+                            "arguments": json.dumps(arguments),
                         },
                     }
                 ],
             }
+        elif body["messages"][-1]["role"] == "tool":
+            result = json.loads(prompt)
+            message = {"role": "assistant", "content": result.get("receipt", "Cannot correct")}
         else:
-            assert body["messages"][-1]["role"] == "tool"
-            message = {"role": "assistant", "content": "Connected."}
+            message = {"role": "assistant", "content": "No image support"}
         return httpx.Response(
             200, json={"choices": [{"message": message}], "usage": {"total_tokens": 12}}
         )
@@ -152,7 +158,11 @@ def test_provider_setup_keeps_key_private_and_checks_real_tool_round_trip(tmp_pa
         checked = browser.post(f"/api/setup/assistant/providers/{identifier}/test", json={})
         assert checked.is_success, checked.text
         assert checked.json()["tool_calling"] is True
-        assert len(seen) == 2
+        assert checked.json()["checks"]["tool_results"]["status"] == "passed"
+        assert checked.json()["verified_vision"] is False
+        assert len(seen) <= 8
+        persisted = browser.get("/api/setup/assistant").json()["providers"][0]
+        assert persisted["assessment"]["checks"] == checked.json()["checks"]
         assert "provider-secret-123" not in browser.get("/api/setup/assistant").text
     assert b"provider-secret-123" not in (tmp_path / "assistant.sqlite").read_bytes()
 
@@ -527,22 +537,13 @@ def test_native_provider_tool_round_trips_preserve_protocol_blocks(tmp_path):
                 },
             )
 
-        with TestClient(
-            create_app(
-                tmp_path / kind,
-                password="test-password-long",
-                assistant_transport=generation_transport(provider),
-            )
-        ) as browser:
-            login(browser)
-            p = browser.post(
-                "/api/setup/assistant/providers",
-                json={"name": kind, "kind": kind, "model": "test", "api_key": "test-provider-key"},
-            ).json()
-            result = browser.post("/api/setup/assistant/providers/" + p["id"] + "/test", json={})
-            assert result.is_success, result.text
-            assert result.json()["tokens"] == 14
-            assert len(seen) == 2
+        from torrentlinker.assistant.providers import Models, Provider
+
+        result = Models(generation_transport(provider)).test(
+            Provider(name=kind, kind=kind, model="test"), "test-provider-key"
+        )
+        assert result["tokens"] == 14
+        assert len(seen) == 2
 
 
 def test_oversized_provider_response_stops_before_json_parsing(tmp_path):

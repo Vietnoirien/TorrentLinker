@@ -141,7 +141,9 @@ def test_capture_saves_a_png_of_at_least_1000_px_in_the_uploads_folder(
     view.saved.connect(saved.append)
 
     view.capture()
+    qtbot.waitUntil(lambda: len(saved) == 1, timeout=20000)
     view.capture()
+    qtbot.waitUntil(lambda: len(saved) == 2, timeout=20000)
 
     first, second = view.upload_folder() / f"{TITLE}.png", view.upload_folder() / f"{TITLE}-2.png"
     assert saved == [first, second]  # a new capture never overwrites the previous one
@@ -164,12 +166,14 @@ def test_capture_follows_the_view_the_user_turned_it_to(qtbot, tmp_path: Path, g
     view.set_item(scan_item(folder / "Boite.stl"))
     loaded(qtbot, view)
     view.capture()
+    qtbot.waitUntil(lambda: not view._busy, timeout=20000)
     assert view.viewer.root is not None
     view.viewer.root.setProperty("yaw", 200.0)
     view.viewer.root.setProperty("zoom", 0.5)
     assert view.viewer.view_state() == (200.0, ISO_PITCH, 0.5)
 
     view.capture()
+    qtbot.waitUntil(lambda: not view._busy, timeout=20000)
 
     near = QImage(str(view.upload_folder() / f"{TITLE}-2.png"))
     far = QImage(str(view.upload_folder() / f"{TITLE}.png"))

@@ -385,8 +385,18 @@ async function aConnections(root) {
   root.append(button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aTaskEditor(false, await api("setup/assistant/chat"), true)));
   for (const p of assistantSnapshot.providers) {
     const card = element("div", undefined, "card"); card.append(element("h3", p.name), element("p", `${p.kind} · ${p.model} · ${p.url}`));
-    card.append(button(at("Edit", "Modifier"), () => aProvider(p)), button(at("Test tool connection", "Tester les outils"), async () => {
-      const result = await api(`setup/assistant/providers/${p.id}/test`, {}); card.append(element("p", result.message));
+    const assessment = element("div");
+    const showAssessment = result => {
+      assessment.replaceChildren();
+      if (!result) { assessment.append(element("p", at("Capabilities untested", "Capacités non testées"))); return; }
+      for (const [name, check] of Object.entries(result.checks || {})) {
+        assessment.append(element("p", `${name}: ${check.status}. ${check.reason}`));
+      }
+      if (result.context) assessment.append(element("p", `${at("Reported context, not verified", "Contexte déclaré, non vérifié")}: ${result.context.context_window} (${result.context.source})`));
+    };
+    showAssessment(p.assessment);
+    card.append(assessment, button(at("Edit", "Modifier"), () => aProvider(p)), button(at("Retest capabilities", "Retester les capacités"), async () => {
+      showAssessment(await api(`setup/assistant/providers/${p.id}/test`, {}));
     })); root.append(card);
   }
   const research = await api("setup/assistant/research"), form = element("form", undefined, "card");
@@ -434,7 +444,10 @@ function aProvider(existing = null) {
     form.append(list); model.setAttribute("list", list.id); if (!model.value && models.length) model.value = models[0];
   }));
   aActions(dialog, form, async () => {
-    await api("setup/assistant/providers" + (existing ? `/${existing.id}` : ""), {name: name.value, kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, ...(key.value ? {api_key: key.value} : {})}, existing ? "PUT" : "POST");
+    const saved = await api("setup/assistant/providers" + (existing ? `/${existing.id}` : ""), {name: name.value, kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, ...(key.value ? {api_key: key.value} : {})}, existing ? "PUT" : "POST");
+    if (!existing || existing.kind !== kind.value || existing.url !== url.value || existing.model !== model.value) {
+      await api(`setup/assistant/providers/${saved.id}/test`, {});
+    }
   });
 }
 async function aTasks(root) {

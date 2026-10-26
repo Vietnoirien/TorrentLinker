@@ -8,8 +8,10 @@ own. Files are parsed and decimated off the GUI thread (torrentlinker.mesh).
 
 from __future__ import annotations
 
+import json
 import multiprocessing
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -61,12 +63,10 @@ from torrentlinker.mesh import (
     prepare_display,
     previewable,
     sheet_layout,
-    sheet_models,
 )
 
 QML = Path(__file__).with_name("model_view.qml")
 CAPTURE_SIZE = QSize(1200, 900)  # c411 wants at least 1000 px wide
-SHEET_CAP = 60_000  # triangles per model on a contact sheet
 BACKGROUND = QColor("#eceff1")
 
 # The offscreen renderer draws through an OpenGL context, so Qt Quick must use RHI on OpenGL
@@ -342,6 +342,10 @@ class ModelPanel(QWidget):
         self.files: list[Path] = []  # the models the viewer can draw, by path
         self._generation = 0  # which load is current: a late result of an old one is dropped
         self._busy = False
+        self.asset_ids: list[str] = []
+        self.cameras: dict[Path, object] = {}
+        self._render_stop = threading.Event()
+        self._shown_path: Path | None = None
 
         layout = QVBoxLayout(self)
         self.message = QLabel()
@@ -360,7 +364,7 @@ class ModelPanel(QWidget):
         self.capture_button.clicked.connect(self.capture)
         self.sheet_button = QPushButton(self.tr("Capture the Pack sheet"))
         self.sheet_button.setToolTip(
-            self.tr("Save a grid of up to 9 models, each with its file name, as a PNG")
+            self.tr("Save labelled pages covering every model in the Pack")
         )
         self.sheet_button.clicked.connect(self.capture_sheet)
         self.reset_button = QPushButton(self.tr("Reset the view"))
@@ -390,6 +394,10 @@ class ModelPanel(QWidget):
 
     def set_item(self, item: LocalItem | None) -> None:
         """Show this Local Item's model, if it holds one the viewer can read."""
+        self._render_stop.set()
+        self.asset_ids = []
+        self.cameras = {}
+        self._shown_path = None
         self.item = item
         self._generation += 1
         self.files = []
@@ -444,10 +452,19 @@ class ModelPanel(QWidget):
         self.message.setText(text)
         self.message.setVisible(bool(text))
 
+    def _remember_camera(self):
+        from torrentlinker.model_rendering import Camera
+
+        if self._shown_path is not None and self.viewer.display is not None:
+            yaw, pitch, zoom = self.viewer.view_state()
+            self.cameras[self._shown_path] = Camera(yaw=yaw, pitch=90 - pitch, zoom=zoom)
+
     def _model_chosen(self) -> None:
+        self._remember_camera()
         path = self.models.currentData()
         if path is None:
             return
+        self._shown_path = path
         self._generation += 1
         generation = self._generation
         self.viewer.show_mesh(None)
@@ -495,56 +512,70 @@ class ModelPanel(QWidget):
         return path
 
     def capture(self) -> None:
-        """Save the view as it is now, at CAPTURE_SIZE, in the Upload's folder."""
-        display = self.viewer.display
-        if display is None or not self.title():
-            return
-        yaw, pitch, zoom = self.viewer.view_state()
-        try:
-            with OffscreenScene() as scene:
-                image = scene.render(display, yaw, pitch, zoom, CAPTURE_SIZE)
-        except RenderUnavailable as e:
-            self._say(self.tr("The image cannot be rendered here: {0}").format(e))
-            return
-        self._save(image, self._next_png(self.title()))
+        path = self.models.currentData()
+        if path is not None and self.title() and not self._busy:
+            self._capture_models([path])
 
     def capture_sheet(self) -> None:
-        """Read the Pack's first models off the GUI thread, then lay them out in a grid."""
-        if not self.files or not self.title() or self._busy:
-            return
-        by_path = (
-            {str(p.relative_to(self.item.save_path)): p for p in self.files} if self.item else {}
-        )
-        chosen = [by_path[p] for p in sheet_models(list(by_path))]
+        if self.files and self.title() and not self._busy:
+            self._capture_models(list(self.files))
+
+    def _capture_models(self, chosen):
+        from torrentlinker.model_rendering import Camera, render_models
+        from torrentlinker.upload_assets import Assets
+
+        self._remember_camera()
+        states = [self.cameras.get(path, Camera()) for path in chosen]
+        self._render_stop = stop = threading.Event()
+        generation = self._generation
         self._busy = True
-        self._say(self.tr("Reading {0} models…").format(len(chosen)))
+        self._say(self.tr("Rendering {0} models…").format(len(chosen)))
         self.refresh()
+        item_path = str(self.item.path) if self.item else ""
+        output_folder = self.upload_folder()
+        stem = self.title() + ("-pack" if len(chosen) > 1 else "")
 
-        def read() -> list[tuple[str, DisplayMesh]]:
-            found = []
-            for path in chosen:
-                try:
-                    found.append((path.name, prepare_display(path, SHEET_CAP)))
-                except (ValueError, OSError):
-                    continue  # one unreadable model leaves its cell out, not the sheet
-            return found
+        def read():
+            result = render_models(chosen, states, stop, lambda _: None)
+            assets = Assets(self.folder.parent)
+            ids, saved_paths = [], []
+            output_folder.mkdir(parents=True, exist_ok=True)
+            for page in result["pages"]:
+                metadata = {
+                    "origin": "model_render",
+                    "page": page["page"],
+                    "pieces": page["pieces"],
+                    "renderer": "cpu",
+                }
+                asset = assets.put(page["png"], "image/png", item_path, metadata)
+                ids.append(asset["asset_id"])
+                path = output_folder / (stem + ".png")
+                number = 2
+                while path.exists():
+                    path = output_folder / f"{stem}-{number}.png"
+                    number += 1
+                saved_paths.append(path)
+                path.write_bytes(page["png"])
+                path.with_suffix(".json").write_text(json.dumps(metadata))
+            return result, ids, saved_paths
 
-        run_in_background(read, self._sheet_read, self._sheet_failed)
-
-    def _sheet_read(self, models: list[tuple[str, DisplayMesh]]) -> None:
-        self._busy = False
-        if not models:
-            self._say(self.tr("None of the models could be read."))
+        def loaded(answer):
+            self._busy = False
+            if generation != self._generation:
+                self.refresh()
+                return
+            result, ids, saved_paths = answer
+            self.asset_ids = ids
+            for path in saved_paths:
+                self.saved.emit(path)
+            self._say(
+                self.tr("Saved {0} pages covering {1} models. Unsupported: {2}.").format(
+                    len(ids), len(result["covered"]), len(result["unsupported"])
+                )
+            )
             self.refresh()
-            return
-        try:
-            with OffscreenScene() as scene:
-                image = contact_sheet(scene, models)
-        except RenderUnavailable as e:
-            self._say(self.tr("The image cannot be rendered here: {0}").format(e))
-            self.refresh()
-            return
-        self._save(image, self.upload_folder() / f"{self.title()}-pack.png")
+
+        run_in_background(read, loaded, self._sheet_failed)
 
     def _sheet_failed(self, error: Exception) -> None:
         self._busy = False

@@ -310,7 +310,7 @@ def requirements(category: int, subcategory: int = 0, description: str = "") -> 
     }
 
 
-def assess(form: dict, evidence: dict | None = None) -> dict[str, Any]:
+def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> dict[str, Any]:
     """Recompute from content every time; never accept a saved 'reviewed' flag as evidence."""
     missing: list[dict[str, str]] = []
 
@@ -353,7 +353,9 @@ def assess(form: dict, evidence: dict | None = None) -> dict[str, Any]:
     if not _filled(form.get("nfo") or ""):
         add("nfo", "Add the NFO describing these exact files.")
     artwork = re.findall(r"\[img(?:=[^]]*)?](.*?)\[/img]", description, re.I | re.S)
-    if not any(image_url(url.strip()) for url in artwork):
+    hosted = any(image_url(url.strip()) for url in artwork)
+    local_image = bool(evidence and evidence.get("assets"))
+    if not hosted and not (local and local_image):
         add(
             "description.image",
             "Add a public HTTP(S) cover/image inside the description: [img]URL[/img].",
@@ -415,7 +417,21 @@ def assess(form: dict, evidence: dict | None = None) -> dict[str, Any]:
                     )
     return {
         "status": "incomplete" if missing else "complete",
+        "local_review_ready": not missing,
+        "send_ready": not missing and hosted,
+        "hosting_required": not hosted,
         "missing_fields": missing,
+        "send_missing_fields": missing
+        + (
+            [
+                {
+                    "field": "description.image",
+                    "message": "Public image hosting required before sending.",
+                }
+            ]
+            if local and local_image and not hosted
+            else []
+        ),
         "requirements": contract,
         "scope": "Presentation completeness only; category refusals and tracker "
         "review still apply.",
@@ -444,18 +460,9 @@ def request_form(request: UploadRequest) -> dict:
 
 
 def file_evidence(request: UploadRequest) -> dict:
-    """Read bounded EPUB metadata; no network, extraction, or file mutation."""
-    ebooks = []
-    if request.category == 2:
-        for file in request.files:
-            path = request.item.save_path / file.local_path
-            if path.suffix.lower() == ".epub":
-                ebooks.append({"file": file.local_path, "languages": epub_languages(path)})
-    return {
-        "file_count": len(request.files),
-        "size_bytes": sum(f.size for f in request.files),
-        "ebooks": ebooks,
-    }
+    from torrentlinker.upload_facts import collect
+
+    return collect(request)
 
 
 def epub_languages(path: Path) -> list[str]:
@@ -557,3 +564,35 @@ def media_nfo_values(nfo: str) -> dict[str, str]:
                 result[target] = "Aucun"
     result["subtitles"] = "Présents" if blocks.get("text") else "Aucun"
     return result
+
+
+def update_fields(text: str, fields: dict[str, str], *, bbcode: bool = True) -> str:
+    """Edit labelled fields consistently, preserving all unrelated editorial text."""
+    unknown = set(fields) - set(FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown presentation fields: {', '.join(sorted(unknown))}.")
+    for key, value in fields.items():
+        name, others = FIELDS[key]
+        labels = "|".join(re.escape(x) for x in (key, name, *others.split("|")) if x)
+        replacement = f"[b]{name} :[/b] {value}" if bbcode else f"{name} : {value}"
+        if bbcode and key in {"tracklist", "contents", "installation"}:
+            section = rf"\[spoiler=(?:{labels})].*?\[/spoiler]"
+            if re.search(section, text, re.I | re.S):
+
+                def replace_section(
+                    match: re.Match[str], label: str = name, body: str = value
+                ) -> str:
+                    return f"[spoiler={label}]{body}[/spoiler]"
+
+                text = re.sub(section, replace_section, text, count=1, flags=re.I | re.S)
+                continue
+        pattern = rf"^(?:\[b])?(?:{labels})\s*[. ]*:\s*(?:\[/b])?[^\n]*"
+        if re.search(pattern, text, re.I | re.M):
+
+            def replace_line(match: re.Match[str], value: str = replacement) -> str:
+                return value
+
+            text = re.sub(pattern, replace_line, text, count=1, flags=re.I | re.M)
+        elif value:
+            text = text.rstrip() + "\n" + replacement
+    return text

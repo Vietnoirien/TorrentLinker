@@ -878,7 +878,9 @@ def test_local_upload_queue_keeps_edited_description_without_remote_draft(qtbot,
     view.local_drafts.description.setPlainText("[b]Corrected locally[/b]")
     view.local_drafts.save_button.click()
     qtbot.waitUntil(lambda: not view.local_drafts.busy, timeout=5000)
-    assert view.store.local_drafts()[0]["form"]["description"] == "[b]Corrected locally[/b]"
+    assert view.store.local_drafts()[0]["form"]["description"].startswith(
+        "[b]Corrected locally[/b]"
+    )
     assert view.store.local_drafts()[0]["revision"] == 2
     assert indexer.saved == []
     assert not list((tmp_path / "uploads").glob("*.torrent"))

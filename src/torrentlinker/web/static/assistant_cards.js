@@ -5,16 +5,20 @@ const aCardKinds = {
   comic: ["Comic", "BD"], music: ["Music", "Musique"], game: ["Game", "Jeu"],
   software: ["Software", "Logiciel"], model3d: ["3D model", "Modèle 3D"], other: ["Content", "Contenu"]
 };
+function aSavedImage(value) {
+  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value || "") && value.length <= 10666800) return value;
+  return /^https?:\/\//i.test(value || "") ? "api/assistant/image?url=" + encodeURIComponent(value) : "";
+}
 function aCardArtwork(item, large = false) {
   const art = element("div", undefined, "selection-artwork" + (large ? " large" : ""));
   art.dataset.kind = item.kind;
   const label = at(...(aCardKinds[item.kind] || aCardKinds.other));
   art.append(element("span", label));
-  if (item.image_url && /^https?:\/\//i.test(item.image_url)) {
+  if (aSavedImage(item.image_url)) {
     const img = element("img");
     img.alt = item.content_title || item.title;
     img.loading = "lazy"; img.decoding = "async"; img.referrerPolicy = "no-referrer";
-    img.src = "api/assistant/image?url=" + encodeURIComponent(item.image_url);
+    img.src = aSavedImage(item.image_url);
     img.addEventListener("load", () => art.querySelector("span")?.remove(), {once: true});
     img.addEventListener("error", () => img.remove(), {once: true});
     art.append(img);
@@ -89,8 +93,8 @@ async function aCardDetail(load) {
         if (/^\d{1,2}px$/.test(fontSize)) node.style.fontSize = `${Math.min(36, Math.max(8, parseInt(fontSize)))}px`;
         if (node.tagName === "IMG") {
           const url = imageIndex ? item.description_images?.[Number(imageIndex[1])] : "";
-          if (!/^https?:\/\//i.test(url || "")) { node.remove(); continue; }
-          node.src = "api/assistant/image?url=" + encodeURIComponent(url);
+          if (!aSavedImage(url)) { node.remove(); continue; }
+          node.src = aSavedImage(url);
           node.alt = at("Presentation image", "Image de présentation");
           node.loading = "lazy"; node.referrerPolicy = "no-referrer";
           if (/^\d+$/.test(width || "")) node.width = Math.min(600, Math.max(1, Number(width)));

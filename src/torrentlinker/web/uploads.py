@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -24,10 +24,16 @@ from torrentlinker.upload import (
     seed_upload,
     upload_files,
 )
-from torrentlinker.upload_presentation import assess, extend_template, file_evidence
+from torrentlinker.upload_presentation import assess, extend_template, file_evidence, update_fields
 from torrentlinker.upload_queue import edited_form, save_local, send_local, sent_result
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
+
+
+class FieldProvenance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["research", "user_supplied", "unknown"] = "unknown"
+    source: str = Field(default="", max_length=2048)
 
 
 class UploadForm(BaseModel):
@@ -51,7 +57,10 @@ class UploadForm(BaseModel):
     title: str = Field(default="", max_length=200)
     description: str = Field(default="", max_length=15000)
     nfo: str = Field(default="", max_length=100000)
+    nfo_origin: Literal["", "generated", "original"] = ""
     options: dict[int, list[int]] = Field(default_factory=dict, max_length=50)
+    assets: list[str] = Field(default_factory=list, max_length=24)
+    field_provenance: dict[str, FieldProvenance] = Field(default_factory=dict, max_length=50)
     reviewed: bool = False
 
 
@@ -145,7 +154,39 @@ class Uploads:
                 f"{w.judgement.value}: {w.detail}" for w in profile.warnings(item, ignore, sub)
             ],
         }
+        from torrentlinker.upload_facts import known_fields
+
         evidence = file_evidence(request)
+        from torrentlinker.upload_assets import Assets
+
+        assets = Assets(self.setup.store.torrent_dir.parent)
+        attached = list(form.assets)
+        if not attached:
+            attached = [a["asset_id"] for a in assets.extract(request, evidence)]
+        for identifier in attached:
+            assets.read(identifier, str(request.item.path))
+        evidence["assets"] = attached
+        preview["assets"] = attached
+        facts = known_fields(request, evidence)
+        if request.category in {1, 3}:
+            if not form.description:
+                description = update_fields(description, {"source": ""})
+            if not form.nfo:
+                nfo = update_fields(nfo, {"source": ""}, bbcode=False)
+        # Populate extracted technical facts before the model writes editorial sections.
+        description = update_fields(description, facts)
+        if not form.nfo or form.nfo_origin == "generated":
+            nfo = update_fields(nfo, facts, bbcode=False)
+        request = replace(request, description=description, nfo=nfo)
+        preview.update(
+            description=description,
+            nfo=nfo,
+            nfo_origin=form.nfo_origin or ("original" if form.nfo else "generated"),
+        )
+        evidence["fields"] = {
+            key: {"value": value, "kind": "extracted", "source": "local_files"}
+            for key, value in facts.items()
+        }
         completeness = assess(
             {
                 **form.model_dump(),
@@ -155,6 +196,7 @@ class Uploads:
                 },
             },
             evidence,
+            local=True,
         )
         preview["presentation"] = completeness
         preview["file_facts"] = evidence
@@ -185,6 +227,8 @@ class Uploads:
             }
         )
         values["options"] = preview["chosen"]
+        values["nfo_origin"] = preview["nfo_origin"]
+        values["assets"] = preview["assets"]
         return save_local(
             self.setup.store,
             request,

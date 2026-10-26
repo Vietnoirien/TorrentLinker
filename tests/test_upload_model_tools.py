@@ -1,0 +1,140 @@
+"""External MCP and web review share saved image assets and exact revisions."""
+
+from fastapi.testclient import TestClient
+
+from tests.test_agent_torrent_lists import tool
+from tests.test_upload_completeness import complete_form
+from tests.test_upload_queue import UploadClient
+from tests.test_web_jobs import finished, login
+from torrentlinker.web.app import create_app
+
+OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 2 3\nf 1 2 4\n"
+
+
+def test_mcp_renders_all_parts_then_saves_and_edits_private_review(tmp_path):
+    media = tmp_path / "media"
+    pack = media / "Pack"
+    pack.mkdir(parents=True)
+    for index in range(13):
+        (pack / f"piece-{index}.obj").write_text(OBJ)
+    app = create_app(
+        tmp_path / "config",
+        password="test-password-long",
+        roots=(media,),
+        connector=lambda *args: UploadClient(),
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        browser.post(
+            "/api/setup/client", json={"client": "qbittorrent", "host": "https://box.example"}
+        )
+        browser.post(
+            "/api/setup/folder",
+            json={
+                "local": str(media),
+                "client_path": "/models",
+                "kind": "3d-model",
+            },
+        )
+        scan = browser.post("/api/jobs", json={"kind": "scan"}).json()
+        assert finished(browser, scan["id"])["status"] == "completed"
+        grant = browser.post(
+            "/api/agents",
+            json={
+                "name": "Upload editor",
+                "clients": ["default"],
+                "mode": "execute",
+                "permissions": ["uploads"],
+            },
+        ).json()
+        browser.put("/api/agents", json={"enabled": True})
+        token = grant["token"]
+        inspected = tool(browser, token, "inspect_3d_models", client_id="default", path=str(pack))
+        inventory = finished(browser, inspected["job_id"])
+        assert inventory["status"] == "completed", inventory
+        models = inventory["result"]["models"]
+        assert len(models) == 13
+        assert models[0]["triangles"] == 2
+        pieces = [row["file"] for row in models]
+        rendered = tool(
+            browser,
+            token,
+            "create_3d_contact_sheet",
+            client_id="default",
+            path=str(pack),
+            pieces=pieces,
+            cameras={pieces[0]: {"preset": "front", "roll": 90}},
+        )
+        render_job = finished(browser, rendered["job_id"])
+        assert render_job["status"] == "completed", render_job
+        result = render_job["result"]
+        assert result["complete"] is True
+        assert result["covered"] == pieces
+        assert len(result["artifacts"]) == 2
+        from tests.test_agent_access import call
+        pixels = call(browser, token, "read_upload_asset", {
+            "client_id": "default", "path": str(pack),
+            "asset_id": result["artifacts"][0]["asset_id"],
+        })
+        assert pixels["content"][0]["type"] == "image"
+        assert pixels["content"][0]["mimeType"] == "image/png"
+        assert result["artifacts"][0]["metadata"]["pieces"][0]["camera"]["roll"] == 90
+        form = complete_form(10, 53)
+        form["description"] = form["description"].replace(
+            "[img]https://example.org/cover.jpg[/img]", ""
+        )
+        form.update(
+            image="",
+            nfo_origin="generated",
+            assets=[row["asset_id"] for row in result["artifacts"]],
+        )
+        saved = tool(
+            browser,
+            token,
+            "save_upload_draft",
+            request_id="save",
+            client_id="default",
+            path=str(pack),
+            upload=form,
+        )
+        saved_job = finished(browser, saved["job_id"])
+        assert saved_job["status"] == "completed", saved_job
+        draft = saved_job["result"]
+        assert draft["review"]["presentation"]["local_review_ready"] is True
+        assert draft["review"]["presentation"]["send_ready"] is False
+        page = tool(
+            browser,
+            token,
+            "present_upload_drafts",
+            request_id="present",
+            client_id="default",
+            drafts=[{"draft_id": draft["id"], "revision": 1}],
+        )
+        detail = tool(
+            browser,
+            token,
+            "get_presentation_item",
+            presentation_id=page["presentation_id"],
+            item_id="0",
+        )
+        queue_preview = browser.get(f"/api/upload/queue/{draft['id']}/preview?revision=1").json()
+        assert detail["description_images"] == queue_preview["description_images"]
+        assert len(detail["description_images"]) == 2
+        edited = tool(
+            browser,
+            token,
+            "update_upload_fields",
+            request_id="edit",
+            client_id="default",
+            draft_id=draft["id"],
+            revision=1,
+            fields={"title": "Edited.Pack.OBJ-NOTAG"},
+            synopsis="Une collection de treize pièces pour impression 3D.",
+            field_sources={"title": "owner"},
+        )
+        changed = finished(browser, edited["job_id"])
+        assert changed["status"] == "completed", changed
+        assert changed["result"]["revision"] == 2
+        assert changed["result"]["form"]["title"] == "Edited.Pack.OBJ-NOTAG"
+        assert changed["result"]["form"]["assets"] == form["assets"]
+        assert all(path.read_text() == OBJ for path in pack.glob("*.obj"))

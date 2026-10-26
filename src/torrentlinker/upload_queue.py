@@ -59,7 +59,29 @@ def save_local(
 ) -> dict:
     review = dict(review or {})
     evidence = file_evidence(request)
-    completeness = assess(form, evidence)
+    from torrentlinker.upload_assets import Assets
+    from torrentlinker.upload_facts import known_fields
+    from torrentlinker.upload_presentation import update_fields
+
+    form = dict(form)
+    facts = known_fields(request, evidence)
+    evidence["fields"] = {
+        **form.get("field_provenance", {}),
+        **{
+            key: {"value": value, "kind": "extracted", "source": "local_files"}
+            for key, value in facts.items()
+        },
+    }
+    form["description"] = update_fields(form.get("description", ""), facts)
+    if form.get("nfo_origin") == "generated":
+        form["nfo"] = update_fields(form.get("nfo", ""), facts, bbcode=False)
+    assets = Assets(store.torrent_dir.parent)
+    if not form.get("assets"):
+        form["assets"] = [a["asset_id"] for a in assets.extract(request, evidence)]
+    for asset_id in form.get("assets", []):
+        assets.read(asset_id, str(request.item.path))
+    evidence["assets"] = form.get("assets", [])
+    completeness = assess(form, evidence, local=True)
     review["file_facts"] = evidence
     review["presentation"] = completeness
     review["refusals"] = list(

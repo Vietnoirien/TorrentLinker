@@ -71,6 +71,8 @@ class JobRequest(BaseModel):
         "details",
         "search-options",
         "upload-preview",
+        "model-inspect",
+        "model-render",
         "upload-draft",
         "upload-queue",
         "upload-send",
@@ -85,6 +87,8 @@ class JobRequest(BaseModel):
     hashes: list[str] = Field(default_factory=list, max_length=1000)
     confirmation: str = ""
     upload: UploadForm = Field(default_factory=UploadForm)
+    model_files: list[str] = Field(default_factory=list, max_length=108)
+    model_cameras: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=108)
     draft_id: str = Field(default="", max_length=64)
     revision: int = Field(default=0, ge=0)
     maximum_bytes: int = Field(default=0, ge=0)
@@ -410,6 +414,19 @@ class Operations:
         if request.kind == "configure-download-folder":
             return self.setup.configure_download_folder(
                 request.path, request.category, request.client_path, save=True
+            )
+        if request.kind in {"model-inspect", "model-render"}:
+            from torrentlinker import upload_models
+
+            if request.kind == "model-inspect":
+                return upload_models.inspect(self.uploads, request.path, stop)
+            return upload_models.render(
+                self.uploads,
+                request.path,
+                request.model_files,
+                request.model_cameras,
+                stop,
+                progress,
             )
         if request.kind == "upload-preview":
             if request.draft_id:

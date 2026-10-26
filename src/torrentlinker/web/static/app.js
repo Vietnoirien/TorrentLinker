@@ -1230,6 +1230,8 @@ guard(async () => {
   }
 });
 
+$("upload-nfo").addEventListener("input", () => { state.uploadNfoOrigin = "original"; });
+
 function uploadForm() {
   const options = {};
   $("upload-options")
@@ -1248,12 +1250,17 @@ function uploadForm() {
     description: $("upload-description").value,
     nfo: $("upload-nfo").value,
     options,
+    assets: state.uploadAssets || [],
+    nfo_origin: state.uploadNfoOrigin || "",
     reviewed: $("upload-reviewed").checked,
   };
 }
 async function prepareUpload(row, saved = null) {
   state.uploadDraft = saved;
+  state.uploadAssets = saved?.form.assets || [];
+  state.uploadNfoOrigin = saved?.form.nfo_origin || "";
   state.uploadPath = row.path;
+  $("upload-model-tools")?.remove();
   $("upload-save-local").disabled = false;
   await navigate("upload");
   $("upload-editor").hidden = false;
@@ -1293,7 +1300,10 @@ async function previewUpload() {
     { kind: "upload-preview", path: state.uploadPath, upload: form,
       draft_id: state.uploadDraft?.id || "", revision: state.uploadDraft?.revision || 0 },
     (r) => {
+      state.uploadAssets = r.assets || [];
+      state.uploadNfoOrigin = r.nfo_origin || "";
       $("upload-category").value = r.category;
+      if (r.category === 10 && !$("upload-model-tools")) uploadModelTools();
       $("upload-title").value = r.title;
       $("upload-description").value = r.description;
       $("upload-nfo").value = r.nfo;
@@ -1339,6 +1349,48 @@ async function previewUpload() {
       );
     },
   );
+}
+function uploadModelTools() {
+  const box = element("div", undefined, "card"); box.id = "upload-model-tools";
+  const path = state.uploadPath, client = state.clientId;
+  const inventory = element("div"), output = element("div");
+  const choices = [];
+  const current = () => path === state.uploadPath && client === state.clientId;
+  const show = result => {
+    if (!current()) return;
+    output.replaceChildren(element("p", `${result.covered.length}/${result.selected} ${say("pieces rendered", "pièces rendues")}`));
+    for (const problem of result.unsupported) output.append(element("p", `${problem.file}: ${problem.reason}`, "danger"));
+    for (const content of result.content || []) {
+      const img = element("img"); img.src = `data:${content.mimeType};base64,${content.data}`;
+      img.alt = say("Local 3D presentation image", "Image de présentation 3D locale");
+      img.style.maxWidth = "100%"; output.append(img);
+    }
+    output.append(button(say("Use these private images", "Utiliser ces images privées"), () => {
+      if (current()) state.uploadAssets = result.artifacts.map(asset => asset.asset_id);
+      toast(say("Images selected. Save the Local Draft to keep them.", "Images sélectionnées. Enregistrez le brouillon local pour les conserver."));
+    }));
+  };
+  box.append(button(say("Inspect 3D pieces", "Inspecter les pièces 3D"), () => job({kind: "model-inspect", path}, result => {
+    if (!current()) return;
+    inventory.replaceChildren(); choices.length = 0;
+    inventory.append(element("p", say("Folder and assembled names are hints. Keep scale/support variants distinct.", "Les noms de dossiers et d’assemblage sont des indices. Distinguez les échelles et supports.")));
+    for (const model of result.models) {
+      const row = element("div"), check = element("input"); check.type = "checkbox"; check.checked = model.previewable;
+      const preset = element("select");
+      for (const name of ["isometric", "front", "back", "left", "right", "top", "bottom"]) preset.append(new Option(name, name));
+      choices.push({file: model.file, check, preset});
+      row.append(check, element("span", model.file), preset, button(say("Preview", "Aperçu"), () => job({
+        kind: "model-render", path, model_files: [model.file], model_cameras: {[model.file]: {preset: preset.value}}
+      }, show)));
+      inventory.append(row);
+    }
+  })), inventory, button(say("Render all selected pieces", "Rendre toutes les pièces sélectionnées"), () => {
+    const selected = choices.filter(choice => choice.check.checked);
+    if (!selected.length) throw Error(say("Select inspected pieces first.", "Sélectionnez d’abord les pièces inspectées."));
+    return job({kind: "model-render", path, model_files: selected.map(choice => choice.file),
+      model_cameras: Object.fromEntries(selected.map(choice => [choice.file, {preset: choice.preset.value}]))}, show);
+  }), output);
+  $("upload-result").before(box);
 }
 async function loadUploadQueue() {
   const rows = await api("upload/queue");
