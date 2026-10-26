@@ -744,6 +744,8 @@ class Assistant:
                 "exact Library item. "
                 "Use get_upload_requirements for its upload category, then "
                 "save_upload_draft to save or repair it. "
+                "Set upload.nfo_origin=generated for an NFO you create from facts; use original "
+                "for an existing release NFO, which field edits must preserve. "
                 "Keep the required labels in the BBCode and fill each field from "
                 "files/NFO or reliable sources. "
                 "Never invent missing facts or assume language. Call preview_upload, inspect "

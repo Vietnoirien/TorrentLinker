@@ -156,7 +156,9 @@ def make_server(service: AgentService):
         Use preview_upload first. path is outside upload metadata. For edits pass draft_id,
         exact revision and the FULL updated form from list_items(upload-queue). Incomplete
         drafts are saveable: inspect returned review.presentation.missing_fields and repair
-        them before present_upload_drafts. Existing upload permissions/approvals still apply.
+        them before present_upload_drafts. Set nfo_origin="generated" for an NFO you create;
+        use "original" for an existing release NFO that must be preserved. Existing upload
+        permissions/approvals still apply.
         """
         return service.request(
             ACTOR.get(),
