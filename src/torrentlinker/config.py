@@ -118,6 +118,7 @@ class Settings:
     kind_categories: dict[ContentKind, list[int]] = field(default_factory=dict)
     language: str = "auto"  # auto | en | fr
     theme: str = "auto"  # auto | light | dark
+    media_layout: str = "cinematic"  # cinematic | focus | collection
 
     def categories(self, kind: ContentKind) -> tuple[int, ...]:
         return tuple(self.kind_categories.get(kind, []))
@@ -233,6 +234,7 @@ class Settings:
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
             "theme": self.theme,
+            "media_layout": self.media_layout,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
             "path_mappings": [asdict(m) for m in self.path_mappings],
             "zen": asdict(self.zen),
@@ -271,6 +273,11 @@ class Settings:
             matching=MatchingSettings(**data.get("matching", {})),
             language=str(data.get("language", "auto")),
             theme=str(data.get("theme", "auto")),
+            media_layout=(
+                data["media_layout"]
+                if data.get("media_layout") in ("cinematic", "focus", "collection")
+                else "cinematic"
+            ),
             kind_categories={
                 ContentKind(k): [int(c) for c in v]
                 for k, v in data.get("kind_categories", {}).items()

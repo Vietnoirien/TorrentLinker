@@ -48,6 +48,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
         ],
         check=True,
     )
+    (root / "Validation.Film.2026.en.srt").write_text(
+        "1\n00:00:00,000 --> 00:00:02,000\nValidation subtitle\n"
+    )
     shutil.copy(Path(__file__).parent / "fixtures/audio/track16.flac", root / "Validation.flac")
     shutil.copy(Path(__file__).parent / "fixtures/audio/track24.flac", root / "Second.flac")
     (root / "Unsupported.Video.mp4").write_bytes(b"An unsupported local media container")
@@ -83,14 +86,62 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.locator('[data-view="media"]').click()
+            expect(page.locator("#view-media")).to_have_attribute("data-layout", "cinematic")
+            page.locator("#media-library-options summary").click()
             page.locator("#media-refresh").click()
             expect(page.locator("#media-results")).to_contain_text("Validation", timeout=15000)
+            page.locator(".media-card").filter(has_text="Validation Film").get_by_role(
+                "button", name="Details", exact=True
+            ).click()
+            expect(page.locator("#media-details")).to_contain_text("External subtitle files")
+            expect(page.locator("#media-details")).to_contain_text("Validation.Film.2026.en")
+            assert page.locator("#media-video").get_attribute("src") is None
+            page.get_by_role("button", name="Close details", exact=True).click()
+            page.locator(".media-card").filter(has_text="Unsupported Video").get_by_role(
+                "button", name="Details", exact=True
+            ).click()
+            expect(page.locator("#media-details")).to_contain_text(
+                "No external subtitle files are known for this release."
+            )
+            expect(page.locator("#media-details")).to_contain_text("Embedded subtitle tracks")
+            page.get_by_role("button", name="Close details", exact=True).click()
             page.locator(".media-card").filter(has_text="Validation Film").get_by_role(
                 "button", name="Play", exact=True
             ).click()
             video = page.locator("#media-video")
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0.1")
             source = video.get_attribute("src")
+            for layout in ("focus", "collection", "cinematic"):
+                page.locator("#media-layout-switch").select_option(layout)
+                expect(page.locator("#view-media")).to_have_attribute("data-layout", layout)
+                if layout == "collection":
+                    expect(page.locator("#media-feature")).to_be_hidden()
+                else:
+                    expect(page.locator("#media-feature")).to_be_visible()
+                assert video.get_attribute("src") == source
+                if layout == "focus":
+                    page.locator("#media-focus-strip").get_by_role(
+                        "button", name="Unsupported Video", exact=True
+                    ).click()
+                    expect(page.locator("#media-feature h2")).to_have_text("Unsupported Video")
+                    assert video.get_attribute("src") == source
+                    page.locator("#media-search").fill("No matching local title")
+                    expect(page.locator(".media-empty")).to_be_visible()
+                    expect(
+                        page.locator("#media-results").get_by_role(
+                            "button", name="Add Library Folder", exact=True
+                        )
+                    ).to_be_visible()
+                    page.locator("#media-search").fill("")
+                    expect(page.locator("#view-media")).to_have_attribute("data-empty", "false")
+            page.locator('[data-view="setup"][data-i18n="settings"]').click()
+            page.locator("#settings-media-layout").select_option("collection")
+            page.reload()
+            page.locator('[data-view="media"]').click()
+            expect(page.locator("#view-media")).to_have_attribute("data-layout", "collection")
+            page.locator("#media-layout-switch").select_option("cinematic")
+            expect(video).to_have_attribute("src", source)
+
             page.locator("#media-chat").click()
             expect(page.locator("#media-chat-panel")).to_be_visible()
             expect(page.locator("#assistant-prompt")).to_be_visible()
@@ -112,6 +163,19 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "() => document.querySelector('#media-video').currentTime >= 4.9"
             )
             assert video.evaluate("node => node.paused") is True
+            if screenshots:
+                for layout in ("cinematic", "focus", "collection"):
+                    page.locator("#media-layout-switch").select_option(layout)
+                    page.evaluate("window.scrollTo(0, 0)")
+                    page.screenshot(
+                        path=str(Path(screenshots) / f"media-layout-{layout}.png"), full_page=True
+                    )
+                page.locator("#media-layout-switch").select_option("cinematic")
+                page.locator("#theme").select_option("light")
+                page.wait_for_timeout(250)
+                page.screenshot(path=str(Path(screenshots) / "media-layout-light.png"))
+                page.locator("#theme").select_option("dark")
+
             with page.expect_popup() as opening:
                 page.evaluate("() => window.open(location.href)")
             other = opening.value
@@ -129,6 +193,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.locator(".media-card").filter(has_text="2 tracks").get_by_role(
                 "button", name="Details", exact=True
             ).click()
+            expect(page.get_by_role("dialog", name="Media details")).to_be_visible()
             expect(page.locator("#media-details li")).to_have_count(2)
             page.get_by_role("button", name="Close details").click()
             page.locator(".media-card").filter(has_text="1 track").get_by_role(
@@ -277,12 +342,19 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.locator('[data-view="media"]').click()
+            expect(page.locator("#view-media")).to_have_attribute("data-layout", "cinematic")
+            page.locator("#media-library-options summary").click()
             page.locator("#media-refresh").click()
             card = page.locator(".media-card").filter(has_text="Preview Film")
             expect(card).to_be_visible(timeout=15000)
             expect(card.get_by_role("button", name="Play", exact=True)).to_be_disabled()
-            card.get_by_role("button", name="Details", exact=True).click()
-            page.get_by_role("button", name="Preview downloaded portion", exact=True).click()
+
+            def start_preview():
+                if not page.locator("#media-details").is_visible():
+                    card.get_by_role("button", name="Details", exact=True).click()
+                page.get_by_role("button", name="Preview downloaded portion", exact=True).click()
+
+            start_preview()
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > .1")
             expect(page.locator("#media-preview-state")).to_contain_text("fixed")
             screenshots = os.getenv("TL_WEB_SCREENSHOTS")
@@ -312,7 +384,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             )
             expect(page.locator("#media-preview-state")).to_be_hidden()
             assert page.request.get(refreshed).status >= 400
-            page.get_by_role("button", name="Preview downloaded portion", exact=True).click()
+            start_preview()
             expect(page.locator("#media-preview-state")).to_be_visible()
             stopped_source = page.locator("#media-video").evaluate("node => node.src")
             page.get_by_role("button", name="Stop", exact=True).click()
@@ -344,6 +416,9 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                     "button", name="Play", exact=True
                 ).click()
                 expect(page.locator("#media-now-playing")).to_have_text("Other Film")
+                expect(page.locator("#media-video")).to_have_attribute(
+                    "src", re.compile("/items/[^/]+/stream")
+                )
                 replacement_source = page.locator("#media-video").get_attribute("src")
                 page.locator(".media-card").filter(has_text="Complete Film").get_by_role(
                     "button", name="Play", exact=True
@@ -377,9 +452,12 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                 page.locator(".media-card").filter(has_text="Complete Film").get_by_role(
                     "button", name="Play", exact=True
                 ).click()
-                expect(page.locator("#media-now-playing")).to_have_text("Complete Film")
+                expect(page.locator("#media-player-shell")).to_be_visible()
+                expect(page.locator("#media-video")).to_have_attribute(
+                    "src", re.compile(f"/items/{normal_id}/stream")
+                )
                 normal_source = page.locator("#media-video").get_attribute("src")
-                page.get_by_role("button", name="Preview downloaded portion", exact=True).click()
+                start_preview()
                 for _ in range(100):
                     if held:
                         break
@@ -395,7 +473,6 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                     ).click()
                 else:
                     page.locator("#target-client").select_option("all")
-                print("before fulfill", decision, page.evaluate("() => ({generation: media.playbackGeneration, source: document.querySelector('#media-video').getAttribute('src'), queue: media.queue.length})"))
                 with page.expect_response(
                     lambda reply, expected=preview_id: (
                         reply.request.method == "DELETE" and f"/previews/{expected}" in reply.url
@@ -403,7 +480,6 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                     timeout=4000,
                 ):
                     route.fulfill(response=response)
-                print("after fulfill", decision, page.evaluate("() => ({generation: media.playbackGeneration, source: document.querySelector('#media-video').getAttribute('src'), queue: media.queue.length})"))
                 expect(page.locator("#media-preview-state")).to_be_hidden()
                 assert page.locator("#media-video").get_attribute("src") == (
                     None if decision == "stop" else normal_source

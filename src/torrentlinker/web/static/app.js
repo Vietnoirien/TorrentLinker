@@ -21,6 +21,12 @@ const state = {
   localItem: "",
 };
 const french = {
+  interfaceSettings: "Interface", mediaLayout: "Disposition des médias", mediaLayoutShort: "Disposition",
+  mediaLayoutCinematic: "Accueil cinéma", mediaLayoutFocus: "Focus", mediaLayoutCollection: "Collection",
+  mediaLayoutHelp: "Choisissez la présentation de la médiathèque dans ce navigateur. La lecture continue lorsque vous changez de disposition.",
+  mediaHome: "Accueil", mediaFilms: "Films", mediaSeries: "Séries", mediaContinue: "Reprendre la lecture",
+  mediaLibraryOptions: "Options de bibliothèque", mediaYourLibrary: "Votre médiathèque", mediaYourCollection: "Votre collection",
+  mediaExpandPlayer: "Agrandir le lecteur", mediaAddFolder: "Ajouter un dossier de bibliothèque",
   mediaRefreshPreview: "Actualiser l’aperçu",
   mediaStop: "Arrêter",
   mediaVideo: 'Vidéo',
@@ -557,6 +563,7 @@ async function browse(path = "") {
 async function navigate(view) {
   if (typeof mediaCloseChat === "function" && media.chat) mediaCloseChat();
   state.view = view;
+  document.body.classList.toggle("media-view", view === "media");
   document.body.classList.toggle("chat-view", view === "assistant");
   document
     .querySelectorAll(".view")

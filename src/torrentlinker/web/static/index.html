@@ -81,19 +81,30 @@
         <section id="media-player-shell" aria-label="Media player" hidden>
           <div class="toolbar"><h2 id="media-now-playing">Now playing</h2><button id="media-chat" data-i18n="mediaChat">Chat about this</button></div>
           <p id="media-preview-state" class="media-preview-state" role="status" hidden></p>
-          <div class="toolbar"><button id="media-refresh-preview" data-i18n="mediaRefreshPreview" hidden>Refresh preview</button><button id="media-stop" data-i18n="mediaStop">Stop</button></div>
+          <div class="toolbar"><button id="media-refresh-preview" data-i18n="mediaRefreshPreview" hidden>Refresh preview</button><button id="media-stop" data-i18n="mediaStop">Stop</button><button id="media-player-expand" data-i18n="mediaExpandPlayer">Expand player</button></div>
           <video id="media-video" controls playsinline preload="metadata" hidden></video><audio id="media-audio" controls preload="metadata" hidden></audio>
           <p id="media-codec-error" role="alert" hidden><span id="media-codec-message"></span> <a id="media-external" data-i18n="mediaExternal" target="_blank" rel="noopener" download>Open / download for an external player</a></p>
           <div class="toolbar"><button id="media-previous" data-i18n="mediaPrevious">Previous</button><button id="media-next" data-i18n="mediaNext">Next</button><button id="media-shuffle" data-i18n="mediaShuffle" aria-pressed="false">Shuffle</button><label>Repeat <select id="media-repeat"><option value="off">Off</option><option value="all">All</option><option value="one">One</option></select></label></div>
           <details><summary>Playback queue</summary><ol id="media-player-queue"></ol><form id="media-save-playlist" class="toolbar"><input id="media-playlist-name" aria-label="Playlist name" placeholder="Playlist name" required maxlength="100"/><button>Save music playlist</button></form></details>
         </section>
-        <section id="view-media" class="view" hidden>
-          <div class="media-tabs" role="tablist" aria-label="Media kind"><button id="media-video-tab" data-i18n="mediaVideo" role="tab" aria-selected="true">Video</button><button id="media-music-tab" data-i18n="mediaMusic" role="tab" aria-selected="false">Music</button></div>
-          <div class="toolbar media-filters"><input id="media-search" type="search" aria-label="Search media" placeholder="Search your media" /><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup">Add Library Folder</button></div>
-          <p id="media-status" role="status"></p>
-          <section id="media-details" class="card" hidden></section>
-          <div id="media-results" class="media-grid"></div><button id="media-more" data-i18n="mediaMore" hidden>Load more</button>
-          <section id="media-playlists" hidden><h2>Saved playlists</h2><p class="muted">Music playlists are separate from Download Queues.</p><div id="media-playlist-list"></div></section>
+        <section id="view-media" class="view" data-layout="cinematic" data-kind="video" hidden>
+          <div class="media-topbar">
+            <div class="media-tabs" role="tablist" aria-label="Media kind"><button id="media-video-tab" data-i18n="mediaVideo" role="tab" aria-selected="true">Video</button><button id="media-music-tab" data-i18n="mediaMusic" role="tab" aria-selected="false">Music</button></div>
+            <nav class="media-browse-nav" aria-label="Video browsing"><button data-media-view="recent" data-i18n="mediaHome">Home</button><button data-media-view="films" data-i18n="mediaFilms">Films</button><button data-media-view="series" data-i18n="mediaSeries">Series</button><button data-media-view="continue" data-i18n="mediaContinue">Continue watching</button></nav>
+            <input id="media-search" type="search" aria-label="Search media" placeholder="Search your media" />
+            <label class="media-layout-control"><span data-i18n="mediaLayoutShort">Layout</span><select id="media-layout-switch" aria-label="Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label>
+          </div>
+          <section id="media-feature" class="media-feature" aria-label="Featured title" hidden></section>
+          <div class="media-shelves">
+            <div class="media-collection-heading"><p class="media-eyebrow" data-i18n="mediaYourLibrary">Your library</p><h2 data-i18n="mediaYourCollection">Your collection</h2></div>
+            <details id="media-library-options" class="media-library-options"><summary data-i18n="mediaLibraryOptions">Library options</summary><div class="toolbar media-filters"><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup" data-i18n="mediaAddFolder">Add Library Folder</button></div></details>
+            <p id="media-status" role="status" class="media-inventory-status"></p>
+            <section id="media-continue" class="media-continue" aria-label="Continue watching" hidden><h2 data-i18n="mediaContinue">Continue watching</h2><div id="media-continue-items" class="media-continue-row"></div></section>
+            <div class="media-section-heading"><h2 id="media-shelf-title">Recently added</h2><span id="media-shelf-count"></span></div>
+            <div id="media-results" class="media-grid"></div><button id="media-more" data-i18n="mediaMore" hidden>Load more</button>
+            <section id="media-playlists" hidden><h2>Saved playlists</h2><p class="muted">Music playlists are separate from Download Queues.</p><div id="media-playlist-list"></div></section>
+          </div>
+          <dialog id="media-details" class="media-detail-dialog" aria-label="Media details"></dialog>
         </section>
         <section id="view-assistant" class="view" hidden></section>
         <section id="view-setup" class="view" hidden>
@@ -101,6 +112,7 @@
             Connect your client, check its folders, then add c411. You can
             change each connection later.
           </p>
+          <section class="card interface-settings" aria-labelledby="interface-settings-title"><h2 id="interface-settings-title" data-i18n="interfaceSettings">Interface</h2><label><span data-i18n="mediaLayout">Media layout</span><select id="settings-media-layout" aria-label="Settings Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><p class="muted" data-i18n="mediaLayoutHelp">Choose how your media library opens in this browser. Playback continues when you change layouts.</p></section>
           <button data-view="agents" data-i18n="agentAccess">Agent access (MCP)</button>
           <div class="steps" role="group" aria-label="Setup steps">
             <button data-step="client" data-i18n="stepClient">

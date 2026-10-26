@@ -6,12 +6,15 @@ import random
 import re
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import (
+    QEvent,
     QFile,
     QIODevice,
+    QRectF,
     QSettings,
     QSignalBlocker,
     QSize,
@@ -21,10 +24,13 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
+    QColor,
     QDesktopServices,
     QFont,
     QIcon,
+    QImage,
     QImageReader,
+    QLinearGradient,
     QPainter,
     QPainterPath,
     QPalette,
@@ -34,8 +40,10 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QBoxLayout,
     QCheckBox,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -43,6 +51,7 @@ from PySide6.QtWidgets import (
     QListView,
     QListWidget,
     QListWidgetItem,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSlider,
@@ -98,10 +107,131 @@ class VerifiedPrefixDevice(QIODevice):
         self.file.close()
 
 
+class MediaTileButton(QPushButton):
+    def sizeHint(self):
+        return self.layout().sizeHint() if self.layout() else super().sizeHint()
+
+    def minimumSizeHint(self):
+        return self.layout().minimumSize() if self.layout() else super().minimumSizeHint()
+
+
+class MediaHero(QWidget):
+    """Artwork stays behind a readable, native title and action composition."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.picture = QImage()
+        self.mode = "cinematic"
+        self.setObjectName("mediaHero")
+        self.setMinimumHeight(440)
+        self.box = QHBoxLayout(self)
+        self.box.setContentsMargins(34, 34, 34, 34)
+        self.box.setSpacing(28)
+        self.copy = QWidget()
+        self.copy.setMaximumWidth(620)
+        text = QVBoxLayout(self.copy)
+        text.setContentsMargins(0, 0, 0, 0)
+        text.addStretch()
+        self.kicker = QLabel(self.tr("FROM YOUR LIBRARY FOLDERS"))
+        self.kicker.setStyleSheet("color: #85d8cb; font-size: 10px; letter-spacing: 2px;")
+        text.addWidget(self.kicker)
+        self.title = QLabel()
+        self.title.setTextFormat(Qt.TextFormat.PlainText)
+        self.title.setWordWrap(True)
+        self.title.setStyleSheet("font-size: 48px; font-weight: 750; color: #f3f4ef;")
+        text.addWidget(self.title)
+        self.metadata = QLabel()
+        self.metadata.setTextFormat(Qt.TextFormat.PlainText)
+        self.metadata.setWordWrap(True)
+        self.metadata.setStyleSheet("color: #c7d0d2; font-size: 12px;")
+        text.addWidget(self.metadata)
+        self.synopsis = QLabel()
+        self.synopsis.setTextFormat(Qt.TextFormat.PlainText)
+        self.synopsis.setWordWrap(True)
+        self.synopsis.setStyleSheet("color: #c7d0d2; font-size: 13px; line-height: 1.7;")
+        text.addSpacing(12)
+        text.addWidget(self.synopsis)
+        self.action_layout = QHBoxLayout()
+        self.action_layout.setSpacing(10)
+        text.addSpacing(16)
+        text.addLayout(self.action_layout)
+        text.addStretch()
+        self.box.addWidget(self.copy, 3, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.strip = QListWidget()
+        self.strip.setObjectName("mediaFocusStrip")
+        self.strip.setViewMode(QListView.ViewMode.IconMode)
+        self.strip.setFlow(QListView.Flow.LeftToRight)
+        self.strip.setWrapping(False)
+        self.strip.setMovement(QListView.Movement.Static)
+        self.strip.setResizeMode(QListView.ResizeMode.Adjust)
+        self.strip.setWordWrap(True)
+        self.strip.setGridSize(QSize(130, 196))
+        self.strip.setIconSize(QSize(112, 148))
+        self.strip.setFixedHeight(208)
+        self.strip.setMinimumWidth(200)
+        self.strip.setMaximumWidth(430)
+        self.box.addWidget(self.strip, 2, Qt.AlignmentFlag.AlignBottom)
+        self.strip.hide()
+
+    def set_picture(self, picture):
+        self.picture = picture
+        self.update()
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self.strip.setVisible(mode == "focus")
+        self._arrange()
+
+    def _arrange(self):
+        narrow_focus = self.mode == "focus" and self.width() < 900
+        self.box.setDirection(
+            QBoxLayout.Direction.TopToBottom if narrow_focus else QBoxLayout.Direction.LeftToRight
+        )
+        self.setMinimumHeight(630 if narrow_focus else 490 if self.mode == "focus" else 440)
+        self.title.setStyleSheet(
+            "font-size: "
+            + ("36" if self.width() < 700 else "48")
+            + "px; font-weight: 750; color: #f3f4ef;"
+        )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._arrange()
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.fillRect(self.rect(), QColor("#12212a"))
+        if not self.picture.isNull():
+            scale = max(self.width() / self.picture.width(), self.height() / self.picture.height())
+            width, height = self.width() / scale, self.height() / scale
+            source = QRectF(
+                (self.picture.width() - width) / 2,
+                (self.picture.height() - height) / 2,
+                width,
+                height,
+            )
+            painter.drawImage(QRectF(self.rect()), self.picture, source)
+        horizontal = QLinearGradient(0, 0, self.width(), 0)
+        horizontal.setColorAt(0, QColor(12, 18, 22, 245))
+        horizontal.setColorAt(0.55, QColor(12, 18, 22, 172))
+        horizontal.setColorAt(1, QColor(12, 18, 22, 28))
+        painter.fillRect(self.rect(), horizontal)
+        vertical = QLinearGradient(0, 0, 0, self.height())
+        vertical.setColorAt(0, QColor(16, 19, 21, 40))
+        vertical.setColorAt(0.65, QColor(16, 19, 21, 0))
+        vertical.setColorAt(1, QColor("#101315"))
+        painter.fillRect(self.rect(), vertical)
+        painter.end()
+
+
 class MediaTab(QWidget):
     """One native player session whose lifetime is independent of browsing and chat."""
 
+    PICTURE_CACHE_LIMIT = 24 * 1024 * 1024
+
     scan_progress = Signal(object)
+    layout_changed = Signal(str)
 
     def __init__(
         self,
@@ -155,61 +285,129 @@ class MediaTab(QWidget):
         self.audio: Any = None
         self.video = QVideoWidget(self)
 
-        layout = QVBoxLayout(self)
+        self._build_presentation(add_folder)
+
+    def _build_presentation(self, add_folder) -> None:
+        self.media_layout = "cinematic"
+        self.featured_id = ""
+        self.picture_cache: OrderedDict[str, QImage] = OrderedDict()
+        self._picture_cache_bytes = 0
+        self.continue_rows: list[dict[str, Any]] = []
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        self.setObjectName("mediaWorkspace")
+        self.setStyleSheet("""
+            QWidget#mediaWorkspace, QWidget#mediaCanvas { background: #101315; color: #f1f3ef; }
+            QListWidget#mediaPosters, QListWidget#mediaFocusStrip {
+                background: transparent; color: #edf0ee; border: none; outline: 0;
+            }
+            QListWidget#mediaPosters::item:selected,
+            QListWidget#mediaFocusStrip::item:selected {
+                background: rgba(121, 211, 197, 43); border-radius: 7px; }
+            QListWidget#mediaPosters::item:hover,
+            QListWidget#mediaFocusStrip::item:hover {
+                background: rgba(255, 255, 255, 14); border-radius: 7px; }
+            QPushButton#mediaPrimary { background: #eff3ed; color: #13211f;
+                border: 0; border-radius: 6px; padding: 10px 18px; font-weight: 650; }
+            QPushButton#mediaSecondary { background: rgba(255, 255, 255, 29); color: #f3f4ef;
+                border: 0; border-radius: 6px; padding: 10px 16px; }
+            QPushButton#mediaDisclosure { padding: 7px 12px; }
+            QLabel#mediaSection { color: #f1f3ef; font-size: 20px; font-weight: 600; }
+        """)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        layout.addWidget(self.splitter)
-        content = QWidget()
+        root.addWidget(self.splitter)
+        left = QWidget()
+        left_box = QVBoxLayout(left)
+        left_box.setContentsMargins(0, 0, 0, 0)
+        left_box.setSpacing(0)
+        self.splitter.addWidget(left)
         self.content_scroll = QScrollArea()
         self.content_scroll.setWidgetResizable(True)
         self.content_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.content_scroll.setWidget(content)
-        self.splitter.addWidget(self.content_scroll)
-        body = QVBoxLayout(content)
-        browse = QHBoxLayout()
+        self.content_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.canvas = QWidget()
+        self.canvas.setObjectName("mediaCanvas")
+        self.body = QVBoxLayout(self.canvas)
+        self.body.setContentsMargins(24, 18, 24, 24)
+        self.body.setSpacing(18)
+        self.content_scroll.setWidget(self.canvas)
+        left_box.addWidget(self.content_scroll, 1)
+        widget: QWidget
+        self.header_box = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        navigation = QWidget()
+        header = QHBoxLayout(navigation)
+        header.setContentsMargins(0, 0, 0, 0)
+        tools = QWidget()
+        tools_box = QHBoxLayout(tools)
+        tools_box.setContentsMargins(0, 0, 0, 0)
         self.kind = QComboBox()
         self.kind.addItem(self.tr("Video"), "video")
         self.kind.addItem(self.tr("Music"), "music")
         self.view = QComboBox()
         self.search = QLineEdit()
         self.search.setPlaceholderText(self.tr("Search saved media"))
+        self.search.setMaximumWidth(240)
+        self.layout_combo = QComboBox()
+        self.layout_combo.setObjectName("media-layout")
+        self.layout_combo.setAccessibleName(self.tr("Media layout"))
+        self.layout_combo.addItem(self.tr("Cinematic home"), "cinematic")
+        self.layout_combo.addItem(self.tr("Focus"), "focus")
+        self.layout_combo.addItem(self.tr("Collection"), "collection")
+        self.library_disclosure = QPushButton(self.tr("Library options"))
+        self.library_disclosure.setObjectName("mediaDisclosure")
+        self.library_disclosure.setCheckable(True)
+        self.chat = QPushButton(self.tr("Chat"))
+        for widget in (self.kind, self.view, self.search):
+            header.addWidget(widget)
+        header.addStretch()
+        for widget in (self.layout_combo, self.library_disclosure, self.chat):
+            tools_box.addWidget(widget)
+        self.header_box.addWidget(navigation, 1)
+        self.header_box.addWidget(tools)
+        self.body.addLayout(self.header_box)
+        self.content_scroll.viewport().installEventFilter(self)
+        self.library_panel = QWidget()
+        maintenance = QVBoxLayout(self.library_panel)
+        maintenance.setContentsMargins(0, 0, 0, 0)
+        folder_row = QHBoxLayout()
         self.refresh_button = QPushButton(self.tr("Refresh folders"))
         self.cancel_scan = QPushButton(self.tr("Cancel scan"))
         self.cancel_scan.setEnabled(False)
-        folder = QPushButton(self.tr("Add folder…"))
-        folder.clicked.connect(add_folder)
-        self.folder_button = folder
-        widget: QWidget
-        for widget in (
-            self.search,
-            self.refresh_button,
-            self.cancel_scan,
-            folder,
-        ):
-            browse.addWidget(widget)
-        body.addLayout(browse)
-        filters = QHBoxLayout()
-        filters.addWidget(self.kind)
-        filters.addWidget(self.view)
-        extra_filters = QHBoxLayout()
-        filter_labels = {
+        self.folder_button = QPushButton(self.tr("Add folder…"))
+        self.folder_button.clicked.connect(add_folder)
+        for widget in (self.refresh_button, self.cancel_scan, self.folder_button):
+            folder_row.addWidget(widget)
+        folder_row.addStretch()
+        maintenance.addLayout(folder_row)
+        filters_row = QHBoxLayout()
+        self.filter_labels = {
             "genre": self.tr("Any genre"),
             "year": self.tr("Any year"),
             "language": self.tr("Any language"),
             "availability": self.tr("Any availability"),
         }
-        self.filter_labels = filter_labels
         self.filters: dict[str, QComboBox] = {}
         for name in ("genre", "year", "language", "availability"):
             combo = QComboBox()
             combo.addItem(self.filter_labels[name], "")
             combo.currentIndexChanged.connect(self.refresh)
             self.filters[name] = combo
-            (filters if name == "genre" else extra_filters).addWidget(combo)
-        body.addLayout(filters)
-        body.addLayout(extra_filters)
+            filters_row.addWidget(combo)
+        self.filter_panel = QWidget()
+        self.filter_panel.setLayout(filters_row)
+        filters_row.setContentsMargins(0, 0, 0, 0)
+        self.library_panel.hide()
+        self.library_disclosure.toggled.connect(self.library_panel.setVisible)
+        self.library_disclosure.toggled.connect(
+            lambda checked: self.filter_panel.setVisible(
+                checked or self.media_layout == "collection" or self.kind.currentData() == "music"
+            )
+        )
+        self.body.addWidget(self.library_panel)
+        self.body.addWidget(self.filter_panel)
         self.notice = QLabel()
         self.notice.setWordWrap(True)
-        body.addWidget(self.notice)
+        self.body.addWidget(self.notice)
         self.empty = QLabel(
             self.tr(
                 "Add a Library Folder, then Refresh folders to find videos and music. "
@@ -217,85 +415,144 @@ class MediaTab(QWidget):
             )
         )
         self.empty.setWordWrap(True)
-        self.empty.setProperty("role", "muted")
-        body.addWidget(self.empty)
-        self.results = QListWidget()
-        self.results.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.results.itemSelectionChanged.connect(self.show_detail)
-        self.results.itemDoubleClicked.connect(lambda _item: self.play_selected())
-        body.addWidget(self.results, 2)
-        pagination = QHBoxLayout()
-        self.previous_page = QPushButton(self.tr("Previous page"))
-        self.next_page = QPushButton(self.tr("Next page"))
-        self.page_count = QLabel()
-        self.previous_page.clicked.connect(lambda: self._page(max(0, self.offset - 100)))
-        self.next_page.clicked.connect(lambda: self._page(self.next_offset or 0))
-        pagination.addWidget(self.previous_page)
-        pagination.addWidget(self.page_count)
-        pagination.addWidget(self.next_page)
-        body.addLayout(pagination)
-        self.artwork = QLabel()
-        self.artwork.setMaximumHeight(160)
-        self.artwork.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        body.addWidget(self.artwork)
-        self.description = QLabel()
-        self.description.setWordWrap(True)
-        self.description.setTextFormat(Qt.TextFormat.PlainText)
-        body.addWidget(self.description)
-        detail_controls = QHBoxLayout()
-        self.releases = QComboBox()
-        self.episodes = QComboBox()
-        self.more_episodes = QPushButton(self.tr("More episodes"))
-        self.more_episodes.clicked.connect(lambda: self._more_detail("episodes"))
-        self.more_releases = QPushButton(self.tr("More releases"))
-        self.more_releases.clicked.connect(lambda: self._more_detail("releases"))
-        self.watched = QCheckBox(self.tr("Watched"))
-        self.watched.clicked.connect(self._watched)
+        self.empty.setStyleSheet("color: #a7b3b6; padding: 24px 0;")
+        self.body.addWidget(self.empty)
+        self.hero = MediaHero()
         self.play_button = QPushButton(self.tr("Play selected"))
+        self.play_button.setObjectName("mediaPrimary")
         self.play_button.clicked.connect(self.play_selected)
+        self.info_button = QPushButton(self.tr("More info"))
+        self.info_button.setObjectName("mediaSecondary")
+        self.info_button.clicked.connect(self.open_details)
+        self.enqueue_button = QPushButton(self.tr("Add to queue"))
+        self.enqueue_button.setObjectName("mediaSecondary")
+        self.enqueue_button.clicked.connect(self.enqueue_selected)
         self.preview_button = QPushButton(self.tr("Preview downloaded portion"))
+        self.preview_button.setObjectName("mediaPrimary")
         self.preview_button.clicked.connect(self.start_preview)
         self.refresh_preview = QPushButton(self.tr("Refresh preview"))
         self.refresh_preview.clicked.connect(self.start_preview)
-        self.preview_button.hide()
-        self.refresh_preview.hide()
-        body.addWidget(self.preview_button)
-        body.addWidget(self.refresh_preview)
-        self.enqueue_button = QPushButton(self.tr("Add to queue"))
-        self.enqueue_button.clicked.connect(self.enqueue_selected)
+        self.action_bar = QWidget()
+        actions_box = QHBoxLayout(self.action_bar)
+        actions_box.setContentsMargins(0, 0, 0, 0)
         for widget in (
-            self.releases,
-            self.episodes,
-            self.watched,
+            self.play_button,
+            self.preview_button,
+            self.info_button,
+            self.enqueue_button,
+            self.refresh_preview,
         ):
-            detail_controls.addWidget(widget)
-        body.addLayout(detail_controls)
-        play_controls = QHBoxLayout()
-        play_controls.addWidget(self.play_button)
-        play_controls.addWidget(self.enqueue_button)
-        body.addLayout(play_controls)
-        detail_more = QHBoxLayout()
-        detail_more.addWidget(self.more_releases)
-        detail_more.addWidget(self.more_episodes)
-        body.addLayout(detail_more)
+            actions_box.addWidget(widget)
+        actions_box.addStretch()
+        self.hero.action_layout.addWidget(self.action_bar)
+        self.body.addWidget(self.hero)
+        self.collection_heading = QLabel(self.tr("Your collection"))
+        self.collection_heading.setStyleSheet("font-size: 34px; font-weight: 650; color: #f2f4f0;")
+        self.body.addWidget(self.collection_heading)
+        self.collection_selection = QWidget()
+        collection_box = QVBoxLayout(self.collection_selection)
+        collection_box.setContentsMargins(0, 0, 0, 0)
+        self.collection_title = QLabel()
+        self.collection_title.setStyleSheet("font-size: 20px; color: #f1f3ef; font-weight: 600;")
+        self.collection_title.setTextFormat(Qt.TextFormat.PlainText)
+        collection_box.addWidget(self.collection_title)
+        self.collection_actions = QHBoxLayout()
+        collection_box.addLayout(self.collection_actions)
+        self.body.addWidget(self.collection_selection)
+        self.continue_heading = QLabel(self.tr("Continue watching"))
+        self.continue_heading.setObjectName("mediaSection")
+        self.body.addWidget(self.continue_heading)
+        self.continue_panel = QWidget()
+        self.continue_box = QHBoxLayout(self.continue_panel)
+        self.continue_box.setContentsMargins(0, 0, 0, 0)
+        self.continue_box.setSpacing(16)
+        self.body.addWidget(self.continue_panel)
+        shelf_header = QHBoxLayout()
+        self.shelf_heading = QLabel(self.tr("Recently added"))
+        self.shelf_heading.setObjectName("mediaSection")
+        self.page_count = QLabel()
+        self.page_count.setStyleSheet("color: #9aa9ad; font-size: 11px;")
+        shelf_header.addWidget(self.shelf_heading)
+        shelf_header.addStretch()
+        shelf_header.addWidget(self.page_count)
+        self.body.addLayout(shelf_header)
+        self.results = QListWidget()
+        self.results.setObjectName("mediaPosters")
+        self.results.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.results.itemSelectionChanged.connect(self.show_detail)
+        self.results.itemDoubleClicked.connect(lambda _item: self.play_selected())
+        self.hero.strip.itemSelectionChanged.connect(self._focus_selection)
+        self.body.addWidget(self.results)
+        pages = QHBoxLayout()
+        self.previous_page = QPushButton(self.tr("Previous page"))
+        self.next_page = QPushButton(self.tr("Next page"))
+        self.previous_page.clicked.connect(lambda: self._page(max(0, self.offset - 100)))
+        self.next_page.clicked.connect(lambda: self._page(self.next_offset or 0))
+        pages.addStretch()
+        pages.addWidget(self.previous_page)
+        pages.addWidget(self.next_page)
+        self.body.addLayout(pages)
+        self.body.addStretch()
+        self.details = QDialog(self)
+        self.details.setWindowTitle(self.tr("Media details"))
+        self.details.resize(620, 560)
+        detail_box = QVBoxLayout(self.details)
+        self.artwork = QLabel()
+        self.artwork.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        detail_box.addWidget(self.artwork)
+        self.description = QLabel()
+        self.description.setWordWrap(True)
+        self.description.setTextFormat(Qt.TextFormat.PlainText)
+        detail_box.addWidget(self.description)
+        self.releases = QComboBox()
+        self.episodes = QComboBox()
+        self.more_releases = QPushButton(self.tr("More releases"))
+        self.more_episodes = QPushButton(self.tr("More episodes"))
+        self.more_releases.clicked.connect(lambda: self._more_detail("releases"))
+        self.more_episodes.clicked.connect(lambda: self._more_detail("episodes"))
+        for combo, more in (
+            (self.releases, self.more_releases),
+            (self.episodes, self.more_episodes),
+        ):
+            line = QHBoxLayout()
+            line.addWidget(combo, 1)
+            line.addWidget(more)
+            detail_box.addLayout(line)
+        self.watched = QCheckBox(self.tr("Watched"))
+        self.watched.clicked.connect(self._watched)
+        detail_box.addWidget(self.watched)
+        detail_actions = QHBoxLayout()
+        detail_play = QPushButton(self.tr("Play selected"))
+        detail_play.clicked.connect(self.play_selected)
+        detail_play.clicked.connect(self.details.hide)
+        detail_preview = QPushButton(self.tr("Preview downloaded portion"))
+        detail_preview.clicked.connect(self.start_preview)
+        detail_preview.clicked.connect(self.details.hide)
+        close_details = QPushButton(self.tr("Close"))
+        close_details.clicked.connect(self.details.hide)
+        for widget in (detail_play, detail_preview, close_details):
+            detail_actions.addWidget(widget)
+        detail_box.addLayout(detail_actions)
         self.detail_widgets = [
             self.artwork,
             self.description,
             self.releases,
             self.episodes,
             self.watched,
-            self.play_button,
-            self.enqueue_button,
         ]
-        self.video.setMinimumHeight(180)
-        body.addWidget(self.video, 2)
+        self.player_panel = QWidget()
+        player_box = QVBoxLayout(self.player_panel)
+        player_box.setContentsMargins(12, 8, 12, 8)
+        player_box.setSpacing(6)
+        self.video.setMinimumHeight(160)
+        self.video.setMaximumHeight(240)
+        player_box.addWidget(self.video)
         self.caption = QLabel()
         self.caption.setTextFormat(Qt.TextFormat.PlainText)
-        self.caption.setWordWrap(True)
         self.caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        body.addWidget(self.caption)
+        self.caption.setWordWrap(True)
+        player_box.addWidget(self.caption)
         self.now_playing = QLabel(self.tr("Nothing playing"))
-        body.addWidget(self.now_playing)
         transport = QHBoxLayout()
         previous = QPushButton(self.tr("Previous"))
         previous.clicked.connect(lambda: self.command("previous"))
@@ -310,11 +567,23 @@ class MediaTab(QWidget):
         self.volume = QSlider(Qt.Orientation.Horizontal)
         self.volume.setRange(0, 100)
         self.volume.setValue(100)
-        self.volume.setMaximumWidth(100)
+        self.volume.setMaximumWidth(90)
         self.volume.setAccessibleName(self.tr("Volume"))
         self.volume.sliderReleased.connect(
             lambda: self.command("volume", volume=self.volume.value() / 100)
         )
+        for widget in (
+            previous,
+            self.pause,
+            next_button,
+            self.now_playing,
+            self.seek,
+            self.elapsed,
+            self.volume,
+        ):
+            transport.addWidget(widget)
+        player_box.addLayout(transport)
+        options = QHBoxLayout()
         self.shuffle = QCheckBox(self.tr("Shuffle"))
         self.shuffle.clicked.connect(lambda on: self.command("shuffle", shuffle=on))
         self.repeat = QComboBox()
@@ -330,19 +599,45 @@ class MediaTab(QWidget):
         self.subtitles = QComboBox()
         self.subtitles.addItem(self.tr("Subtitles off"), -1)
         self.subtitles.currentIndexChanged.connect(self._select_subtitle)
-        for widget in (
-            previous,
-            self.pause,
-            next_button,
-            self.seek,
-            self.elapsed,
-        ):
-            transport.addWidget(widget)
-        body.addLayout(transport)
-        options = QHBoxLayout()
-        for widget in (self.volume, self.shuffle, self.repeat, self.subtitles):
+        self.queue_disclosure = QPushButton(self.tr("Queue & playlists"))
+        self.queue_disclosure.setCheckable(True)
+        for widget in (self.shuffle, self.repeat, self.subtitles):
             options.addWidget(widget)
-        body.addLayout(options)
+        options.addStretch()
+        options.addWidget(self.queue_disclosure)
+        player_box.addLayout(options)
+        self.external = QPushButton(self.tr("Open in external player"))
+        self.external.clicked.connect(self.open_external)
+        self.external.hide()
+        player_box.addWidget(self.external)
+        self.queue_panel = QWidget()
+        queue_box = QHBoxLayout(self.queue_panel)
+        self.queue = QListWidget()
+        self.queue.setMaximumHeight(150)
+        self.queue.itemDoubleClicked.connect(self._queue_play)
+        queue_box.addWidget(self.queue, 1)
+        queue_controls = QVBoxLayout()
+        remove = QPushButton(self.tr("Remove from queue"))
+        remove.clicked.connect(self.remove_from_queue)
+        self.save_playlist = QPushButton(self.tr("Save queue as playlist…"))
+        self.save_playlist.clicked.connect(self._save_playlist)
+        self.playlists = QComboBox()
+        self.load_playlist = QPushButton(self.tr("Load playlist"))
+        self.load_playlist.clicked.connect(self._load_playlist)
+        delete_playlist = QPushButton(self.tr("Delete playlist"))
+        delete_playlist.clicked.connect(self._delete_playlist)
+        for widget in (
+            remove,
+            self.save_playlist,
+            self.playlists,
+            self.load_playlist,
+            delete_playlist,
+        ):
+            queue_controls.addWidget(widget)
+        queue_box.addLayout(queue_controls)
+        self.queue_panel.hide()
+        self.queue_disclosure.toggled.connect(self.queue_panel.setVisible)
+        player_box.addWidget(self.queue_panel)
         self.playback_widgets = [
             self.now_playing,
             previous,
@@ -355,37 +650,6 @@ class MediaTab(QWidget):
             self.repeat,
             self.subtitles,
         ]
-        self.external = QPushButton(self.tr("Open in external player"))
-        self.external.clicked.connect(self.open_external)
-        self.external.hide()
-        body.addWidget(self.external)
-        queue_row = QHBoxLayout()
-        self.queue = QListWidget()
-        self.queue.itemDoubleClicked.connect(self._queue_play)
-        queue_row.addWidget(self.queue, 1)
-        queue_actions = QVBoxLayout()
-        remove = QPushButton(self.tr("Remove from queue"))
-        remove.clicked.connect(self.remove_from_queue)
-        self.save_playlist = QPushButton(self.tr("Save queue as playlist…"))
-        self.save_playlist.clicked.connect(self._save_playlist)
-        self.playlists = QComboBox()
-        self.load_playlist = QPushButton(self.tr("Load playlist"))
-        self.load_playlist.clicked.connect(self._load_playlist)
-        delete_playlist = QPushButton(self.tr("Delete playlist"))
-        delete_playlist.clicked.connect(self._delete_playlist)
-        self.chat = QPushButton(self.tr("Chat"))
-        self.chat.clicked.connect(self.open_chat)
-        for widget in (
-            remove,
-            self.save_playlist,
-            self.playlists,
-            self.load_playlist,
-            delete_playlist,
-            self.chat,
-        ):
-            queue_actions.addWidget(widget)
-        queue_row.addLayout(queue_actions)
-        body.addLayout(queue_row)
         self.queue_widgets = [
             self.queue,
             remove,
@@ -394,17 +658,190 @@ class MediaTab(QWidget):
             self.load_playlist,
             delete_playlist,
         ]
+        left_box.addWidget(self.player_panel)
         self.refresh_button.clicked.connect(self.start_scan)
-        self.cancel_scan.clicked.connect(lambda: self.scan_stop and self.scan_stop.set())
+        self.cancel_scan.clicked.connect(self._cancel_media_scan)
         self.scan_progress.connect(lambda value: self.notice.setText(str(value)))
         self.kind.currentIndexChanged.connect(self._kind_changed)
         self.view.currentIndexChanged.connect(self.refresh)
         self.search.textChanged.connect(self.refresh)
+        self.chat.clicked.connect(self.open_chat)
+        self.layout_combo.currentIndexChanged.connect(self._layout_selected)
         self._kind_changed()
         self.heartbeat = QTimer(self)
         self.heartbeat.setInterval(1000)
         self.heartbeat.timeout.connect(self.report)
+        self.set_media_layout("cinematic")
         self._update_panes()
+
+    def _cancel_media_scan(self) -> None:
+        if self.scan_stop:
+            self.scan_stop.set()
+
+    def _layout_selected(self) -> None:
+        value = self.layout_combo.currentData()
+        self.set_media_layout(value)
+        self.layout_changed.emit(value)
+
+    def set_media_layout(self, value: str) -> None:
+        value = value if value in {"cinematic", "focus", "collection"} else "cinematic"
+        self.media_layout = value
+        with QSignalBlocker(self.layout_combo):
+            self.layout_combo.setCurrentIndex(self.layout_combo.findData(value))
+        self.hero.set_mode(value)
+        collection = value == "collection" or self.kind.currentData() == "music"
+        if collection:
+            self.collection_actions.addWidget(self.action_bar)
+        else:
+            self.hero.action_layout.addWidget(self.action_bar)
+        self.library_disclosure.setChecked(False)
+        self.filter_panel.setVisible(collection)
+        self._configure_browse_layout()
+        self._refresh_focus_strip()
+        self._update_panes()
+
+    def open_details(self) -> None:
+        if self.selected_ids():
+            self.details.show()
+            self.details.raise_()
+
+    def _focus_selection(self) -> None:
+        items = self.hero.strip.selectedItems()
+        if not items:
+            return
+        identifier = items[0].data(Qt.ItemDataRole.UserRole)
+        for index in range(self.results.count()):
+            item = self.results.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) == identifier:
+                with QSignalBlocker(self.results):
+                    self.results.clearSelection()
+                    item.setSelected(True)
+                self.show_detail()
+                break
+
+    def _refresh_focus_strip(self) -> None:
+        with QSignalBlocker(self.hero.strip):
+            self.hero.strip.clear()
+            rows = list(self.rows)
+            featured = next((row for row in rows if row["id"] == self.featured_id), None)
+            if featured:
+                rows = [featured, *[row for row in rows if row["id"] != self.featured_id]]
+            for row in rows:
+                item = QListWidgetItem(self._card_title(row))
+                item.setData(Qt.ItemDataRole.UserRole, row["id"])
+                picture = self.picture_cache.get(row["id"])
+                item.setIcon(
+                    self._cover_icon(picture, QSize(112, 148))
+                    if picture is not None
+                    else self._placeholder_icon(row["kind"])
+                )
+                item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
+                self.hero.strip.addItem(item)
+                item.setSelected(row["id"] == self.featured_id)
+
+    @staticmethod
+    def _time_label(seconds: float) -> str:
+        seconds = max(0, int(seconds))
+        return (
+            f"{seconds // 3600}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+            if seconds >= 3600
+            else f"{seconds // 60}:{seconds % 60:02d}"
+        )
+
+    def _show_feature(self, row: dict[str, Any]) -> None:
+        self.featured_id = row["id"]
+        self.hero.title.setText(row["title"])
+        self.collection_title.setText(row["title"])
+        facts = [
+            str(row[key])
+            for key in ("year", "artist", "album", "genre", "language")
+            if row.get(key)
+        ]
+        if row.get("identity_source") == "filename":
+            facts.insert(0, self.tr("Filename metadata"))
+        if row.get("duration"):
+            facts.append(self._time_label(float(row["duration"])))
+        if row.get("position"):
+            facts.append(self.tr("Resume at {0}").format(self._time_label(float(row["position"]))))
+        self.hero.metadata.setText(" · ".join(facts))
+        synopsis = str(row.get("description") or "")
+        self.hero.synopsis.setText(synopsis[:360] + ("…" if len(synopsis) > 360 else ""))
+        self.hero.set_picture(self.picture_cache.get(row["id"], QImage()))
+        self.play_button.setText(
+            self.tr("Resume") if row.get("position") else self.tr("Play selected")
+        )
+        self._refresh_focus_strip()
+
+    def _render_continue(self) -> None:
+        while self.continue_box.count():
+            item = self.continue_box.takeAt(0)
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+        self.continue_heading.setText(
+            self.tr("Continue watching")
+            if self.kind.currentData() == "video"
+            else self.tr("Continue listening")
+        )
+        for row in self.continue_rows[:4]:
+            button = MediaTileButton()
+            button.setMinimumHeight(165)
+            button.setStyleSheet(
+                "QPushButton { border: 0; background: transparent; padding: 0; "
+                "text-align: left; color: #edf1ef; }"
+            )
+            button.setMinimumWidth(140)
+            column = QVBoxLayout(button)
+            column.setContentsMargins(0, 0, 0, 0)
+            column.setSpacing(5)
+            still = QLabel()
+            still.setFixedHeight(105)
+            still.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            still.setStyleSheet("background: #17242b; border-radius: 6px;")
+            picture = self.picture_cache.get(row["id"])
+            if picture is not None:
+                still.setPixmap(
+                    QPixmap.fromImage(picture).scaled(
+                        240,
+                        105,
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+            else:
+                still.setPixmap(self._placeholder_icon(row["kind"]).pixmap(80, 90))
+            column.addWidget(still)
+            progress = QProgressBar()
+            progress.setTextVisible(False)
+            progress.setFixedHeight(3)
+            progress.setRange(0, 100)
+            duration = float(row.get("duration") or 0)
+            progress.setValue(
+                min(100, round(100 * float(row.get("position") or 0) / duration)) if duration else 0
+            )
+            progress.setStyleSheet(
+                "QProgressBar { background: rgba(255, 255, 255, 37); border: none; } "
+                "QProgressBar::chunk { background: #79d3c5; }"
+            )
+            column.addWidget(progress)
+            label = QLabel(row["title"])
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            label.setStyleSheet("color: #e9eeeb; font-size: 12px;")
+            column.addWidget(label)
+            position = QLabel(self._time_label(float(row.get("position") or 0)))
+            position.setStyleSheet("color: #9eacb0; font-size: 10px;")
+            column.addWidget(position)
+            for child in button.findChildren(QWidget):
+                child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            button.clicked.connect(
+                lambda _checked=False, identifier=row["id"]: self.command(
+                    "play", media_ids=[identifier], index=0
+                )
+            )
+            self.continue_box.addWidget(button, 1)
+        self.continue_box.addStretch()
 
     def rebind(
         self,
@@ -520,6 +957,7 @@ class MediaTab(QWidget):
             self.view.clear()
             for label, value in values:
                 self.view.addItem(label, value)
+        self.set_media_layout(self.media_layout)
         self.refresh()
 
     def _configure_browse_layout(self) -> bool:
@@ -537,11 +975,36 @@ class MediaTab(QWidget):
         self.results.setWordWrap(cards)
         self.results.setUniformItemSizes(cards)
         self.results.setSpacing(8 if cards else 2)
-        self.results.setGridSize(QSize(180, 248) if cards else QSize())
-        self.results.setIconSize(QSize(128, 170) if cards else QSize(40, 40))
-        self.results.setMinimumHeight(280 if cards else 120)
-        self.results.setMaximumHeight(560 if cards else 240)
+        dense = self.media_layout == "collection"
+        self.results.setGridSize(
+            QSize(156, 226) if cards and dense else QSize(180, 248) if cards else QSize()
+        )
+        self.results.setIconSize(
+            QSize(116, 154) if cards and dense else QSize(128, 170) if cards else QSize(40, 40)
+        )
+        self.results.setMinimumHeight(470 if dense and cards else 280 if cards else 120)
+        self.results.setMaximumHeight(1200 if dense else 560 if cards else 240)
         return cards
+
+    def eventFilter(self, watched, event):
+        if watched is self.content_scroll.viewport() and event.type() == QEvent.Type.Resize:
+            self.header_box.setDirection(
+                QBoxLayout.Direction.TopToBottom
+                if event.size().width() < 950
+                else QBoxLayout.Direction.LeftToRight
+            )
+        return super().eventFilter(watched, event)
+
+    def _cover_icon(self, picture: QImage, size: QSize | None = None) -> QIcon:
+        size = size or self.results.iconSize()
+        pixmap = QPixmap.fromImage(picture).scaled(
+            size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        left = max(0, (pixmap.width() - size.width()) // 2)
+        top = max(0, (pixmap.height() - size.height()) // 2)
+        return QIcon(pixmap.copy(left, top, size.width(), size.height()))
 
     def _placeholder_icon(self, kind: str) -> QIcon:
         cover = QPixmap(128, 170)
@@ -627,7 +1090,12 @@ class MediaTab(QWidget):
         self.notice.setText(self.tr("Loading saved media…"))
 
         def work():
-            return library.listing(client, offset=offset, **context), library.playlists(client)
+            continuation = {**context, "view": "continue"}
+            return (
+                library.listing(client, offset=offset, **context),
+                library.playlists(client),
+                library.listing(client, limit=4, **continuation)["rows"],
+            )
 
         def done(payload):
             if not isValid(self) or generation != self.browse_generation:
@@ -642,8 +1110,15 @@ class MediaTab(QWidget):
 
         run_in_background(work, done, failed)
 
-    def _show_listing(self, result: dict[str, Any], playlists: list[dict[str, Any]]) -> None:
+    def _show_listing(
+        self,
+        result: dict[str, Any],
+        playlists: list[dict[str, Any]],
+        continuation: list[dict[str, Any]],
+    ) -> None:
         try:
+            selected = self.selected_ids()
+            self.continue_rows = continuation
             self.next_offset = result.get("next_offset")
             self.previous_page.setEnabled(self.offset > 0)
             self.next_page.setEnabled(bool(result.get("has_more")))
@@ -669,10 +1144,30 @@ class MediaTab(QWidget):
                 item.setIcon(placeholder)
                 if cards:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-                    item.setSizeHint(QSize(176, 240))
+                    grid = self.results.gridSize()
+                    item.setSizeHint(QSize(grid.width() - 4, grid.height() - 8))
                 item.setData(Qt.ItemDataRole.UserRole, row["id"])
                 self.results.addItem(item)
-            self._load_artwork(self.rows)
+            if self.rows:
+                identifier = next(
+                    (value for value in selected if any(row["id"] == value for row in self.rows)),
+                    self.featured_id,
+                )
+                for index in range(self.results.count()):
+                    item = self.results.item(index)
+                    if item.data(Qt.ItemDataRole.UserRole) == identifier:
+                        item.setSelected(True)
+                if not self.selected_ids():
+                    self.results.item(0).setSelected(True)
+            else:
+                self.detail_row = {}
+                self.featured_id = ""
+                self.hero.title.setText(self.tr("Your library"))
+                self.hero.synopsis.clear()
+                self.hero.metadata.clear()
+                self.hero.set_picture(QImage())
+            self._render_continue()
+            self._load_artwork([*self.rows, *continuation])
             for name, combo in self.filters.items():
                 current = combo.currentData()
                 values = result.get("filters", {}).get(name, [])
@@ -704,21 +1199,49 @@ class MediaTab(QWidget):
     def _update_panes(self) -> None:
         chosen = bool(self.selected_ids())
         active = bool(self.last_source)
+        video = self.kind.currentData() == "video"
+        collection = self.media_layout == "collection" or not video
+        focus = self.media_layout == "focus" and video
+        self.hero.setVisible(not collection and bool(self.rows) and chosen)
+        self.collection_heading.setVisible(collection)
+        self.collection_heading.setText(self.tr("Your collection") if video else self.tr("Music"))
+        self.collection_selection.setVisible(collection and chosen)
+        self.results.setVisible(not focus and bool(self.rows))
+        self.shelf_heading.setVisible(not focus and bool(self.rows))
+        self.shelf_heading.setText(
+            self.tr("Recently added")
+            if self.view.currentData() == "all"
+            else self.view.currentText()
+        )
+        self.page_count.setVisible(bool(self.rows))
+        self.previous_page.setVisible(self.offset > 0)
+        self.next_page.setVisible(self.next_offset is not None)
+        continuation = bool(self.continue_rows) and not collection
+        self.continue_heading.setVisible(continuation)
+        self.continue_panel.setVisible(continuation)
         for widget in self.detail_widgets:
             widget.setVisible(chosen)
         self.more_episodes.setVisible(chosen and bool(self.detail_row.get("episodes_has_more")))
         self.more_releases.setVisible(chosen and bool(self.detail_row.get("releases_has_more")))
-        for widget in self.playback_widgets:
-            widget.setVisible(active)
-        self.video.setVisible(active and self.current_row.get("kind") == "video")
-        self.caption.setVisible(active and bool(self.subtitle_cues))
-        for widget in self.queue_widgets:
-            widget.setVisible(bool(self.state["queue"]) or self.kind.currentData() == "music")
+        self.action_bar.setVisible(chosen)
+        self.play_button.setVisible(bool(self.detail_row.get("available")))
         self.play_button.setEnabled(bool(self.detail_row.get("available")))
         self.enqueue_button.setEnabled(bool(self.detail_row.get("available")))
-        if not chosen:
-            self.preview_button.hide()
-            self.refresh_preview.hide()
+        self.preview_button.setVisible(
+            chosen
+            and self.detail_row.get("kind") == "video"
+            and self.detail_row.get("availability") == "unfinished"
+        )
+        self.refresh_preview.setVisible(
+            chosen and self.preview_item == self.detail_row.get("id") and bool(self.preview_id)
+        )
+        self.player_panel.setVisible(active or bool(self.state["queue"]))
+        self.video.setVisible(active and self.current_row.get("kind") == "video")
+        self.caption.setVisible(active and bool(self.subtitle_cues))
+        for widget in self.playback_widgets:
+            widget.setVisible(active)
+        for widget in self.queue_widgets:
+            widget.setVisible(bool(self.state["queue"]) or self.kind.currentData() == "music")
 
     def selected_ids(self) -> list[str]:
         return [item.data(Qt.ItemDataRole.UserRole) for item in self.results.selectedItems()]
@@ -731,6 +1254,7 @@ class MediaTab(QWidget):
         try:
             row = self.library.detail(self.session_client, ids[0])
             self.detail_row = row
+            self._show_feature(row)
             info = [row["title"]]
             if row.get("identity_source") == "filename":
                 info.append(self.tr("Title and release details guessed from filename"))
@@ -743,6 +1267,14 @@ class MediaTab(QWidget):
                         row.get("season", "?"), row.get("episode", "?")
                     )
                 )
+            if row["kind"] == "video":
+                labels = [str(track["label"]) for track in row.get("subtitles", [])]
+                info.append(
+                    self.tr("External subtitles: {0}").format(", ".join(labels))
+                    if labels
+                    else self.tr("No known external subtitles.")
+                )
+                info.append(self.tr("Embedded subtitle tracks are discovered during playback."))
             self.description.setText("\n".join(info))
             self.watched.setChecked(bool(row.get("watched")))
             for combo, name in ((self.releases, "releases"), (self.episodes, "episodes")):
@@ -798,6 +1330,22 @@ class MediaTab(QWidget):
 
         run_in_background(work, done, failed)
 
+    def _cache_picture(self, identifier: str, picture: QImage) -> QImage:
+        previous = self.picture_cache.pop(identifier, None)
+        if previous is not None:
+            self._picture_cache_bytes -= previous.sizeInBytes()
+            if previous.width() * previous.height() >= picture.width() * picture.height():
+                picture = previous
+        size = picture.sizeInBytes()
+        if size <= self.PICTURE_CACHE_LIMIT:
+            self.picture_cache[identifier] = picture
+            self._picture_cache_bytes += size
+        while self._picture_cache_bytes > self.PICTURE_CACHE_LIMIT:
+            _, evicted = self.picture_cache.popitem(last=False)
+            self._picture_cache_bytes -= evicted.sizeInBytes()
+        # Displayed QImages and QPixmaps own their shared pixels after cache eviction.
+        return picture
+
     def _load_artwork(self, rows: list[dict[str, Any]], *, detail: bool = False) -> None:
         if not detail:
             self.art_stop.set()
@@ -823,7 +1371,11 @@ class MediaTab(QWidget):
                     if dimensions.width() * dimensions.height() > 32_000_000:
                         continue
                     reader.setScaledSize(
-                        dimensions.scaled(256, 340, Qt.AspectRatioMode.KeepAspectRatio)
+                        dimensions.scaled(
+                            1600 if detail else 256,
+                            900 if detail else 340,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                        )
                     )
                     picture = reader.read()
                     if not picture.isNull():
@@ -836,6 +1388,9 @@ class MediaTab(QWidget):
             if not isValid(self) or generation != self.art_generation or stop.is_set():
                 return
             for identifier, picture in images:
+                cached = self._cache_picture(identifier, picture)
+                if identifier == self.featured_id:
+                    self.hero.set_picture(cached)
                 if detail:
                     if selected == self.selected_ids():
                         self.artwork.setPixmap(
@@ -850,8 +1405,10 @@ class MediaTab(QWidget):
                     for index in range(self.results.count()):
                         item = self.results.item(index)
                         if item.data(Qt.ItemDataRole.UserRole) == identifier:
-                            item.setIcon(QIcon(QPixmap.fromImage(picture)))
+                            item.setIcon(self._cover_icon(picture))
                             break
+            self._refresh_focus_strip()
+            self._render_continue()
 
         run_in_background(work, done, lambda _error: None)
 
@@ -1025,6 +1582,7 @@ class MediaTab(QWidget):
         try:
             ids = self._chosen_ids()
             if ids:
+                self.queue_disclosure.setChecked(True)
                 self.command(
                     "queue", media_ids=[*self.state["queue"], *ids], index=self.state["index"]
                 )

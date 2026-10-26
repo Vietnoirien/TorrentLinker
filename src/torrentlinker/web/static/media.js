@@ -1,7 +1,7 @@
 /* The player lives outside navigation views, so browsing never replaces its DOM. */
 const media = {kind: "video", view: "recent", rows: [], selected: null, session: null,
   playerClient: "", queue: [], index: 0, shuffle: false, repeat: "off", ack: 0,
-  busy: false, preview: null, playbackGeneration: 0, next: null, chat: false, scan: "", request: 0};
+  busy: false, preview: null, playbackGeneration: 0, featureId: null, continueRows: [], next: null, chat: false, scan: "", request: 0};
 const mediaTab = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
 const mediaChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("torrentlinker-media") : null;
 const mediaClaims = new Set();
@@ -18,6 +18,15 @@ async function mediaSessionClaimed(id) {
   return mediaClaims.delete(id);
 }
 const mediaItems = new Map();
+const mediaLayouts = ["cinematic", "focus", "collection"];
+media.layout = mediaLayouts.includes(localStorage.getItem("tl-media-layout")) ? localStorage.getItem("tl-media-layout") : "cinematic";
+function mediaSetLayout(value) {
+  media.layout = mediaLayouts.includes(value) ? value : "cinematic";
+  localStorage.setItem("tl-media-layout", media.layout);
+  $("view-media").dataset.layout = media.layout;
+  $("media-layout-switch").value = media.layout; $("settings-media-layout").value = media.layout;
+  mediaRender();
+}
 const mediaClient = () => state.clientId === "all" ? state.setup?.default_client_id || "default" : state.clientId || "default";
 const mediaQuery = values => new URLSearchParams({client_id: mediaClient(), ...values}).toString();
 const mediaURL = (id, suffix = "stream") => `api/media/items/${encodeURIComponent(id)}/${suffix}?${new URLSearchParams({client_id: media.playerClient || mediaClient()})}`;
@@ -26,6 +35,8 @@ const mediaTime = n => { const seconds = Math.max(0, Math.floor(Number(n) || 0))
 function mediaStatus(text) { $("media-status").textContent = text; }
 function mediaOption(select, value, label) { const option = element("option", label); option.value = value; select.append(option); }
 function mediaViews() {
+  $("media-layout-switch").setAttribute("aria-label", say("Media layout", "Disposition des médias"));
+  $("settings-media-layout").setAttribute("aria-label", say("Settings Media layout", "Disposition des médias dans les paramètres"));
   $("media-search").placeholder = say("Search your media", "Rechercher dans vos médias");
   $("media-playlist-name").placeholder = say("Playlist name", "Nom de la playlist");
   const select = $("media-view"); select.replaceChildren();
@@ -41,9 +52,13 @@ async function loadMedia(append = false) {
   const version = ++media.request;
   const query = {kind: media.kind, view: media.view, q: $("media-search").value, offset: append ? media.next || 0 : 0, limit: 100};
   for (const key of ["genre", "year", "language", "availability"]) if ($(`media-${key}`).value) query[key] = $(`media-${key}`).value;
-  const result = await api(`media?${mediaQuery(query)}`);
+  const [result, continuing] = await Promise.all([
+    api(`media?${mediaQuery(query)}`),
+    media.kind === "video" ? api(`media?${mediaQuery({...query, view: "continue", offset: 0, limit: 8})}`) : Promise.resolve({rows: []}),
+  ]);
   if (version !== media.request) return;
-  for (const row of result.rows) mediaItems.set(row.id, row);
+  media.continueRows = continuing.rows;
+  for (const row of [...result.rows, ...continuing.rows]) mediaItems.set(row.id, row);
   media.rows = append ? [...media.rows, ...result.rows] : result.rows;
   media.next = result.has_more ? result.next_offset : null;
   $("media-more").hidden = !result.has_more;
@@ -59,26 +74,81 @@ async function loadMedia(append = false) {
   if (!media.session && sessionStorage.getItem(`tl-media-session:${mediaClient()}`)) await mediaSession();
   if (media.kind === "music") await mediaPlaylists();
 }
+function mediaArt(row, className = "") {
+  const art = element("div", undefined, `media-art ${className}`);
+  if (row.artwork_url) {
+    const image = element("img"); image.src = row.artwork_url; image.alt = ""; image.loading = "lazy";
+    image.onerror = () => { image.remove(); art.classList.add("missing-art"); };
+    art.append(image);
+  } else art.classList.add("missing-art");
+  const fallback = element("span", row.title || row.album || say("Artwork unavailable", "Illustration indisponible"), "media-art-title");
+  art.append(fallback); return art;
+}
+function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); }
+function mediaRenderFeature() {
+  const root = $("media-feature");
+  const candidates = [...media.rows, ...media.continueRows];
+  const row = candidates.find(item => item.id === media.featureId) || candidates.find(item => item.available !== false && item.artwork_url) || candidates.find(item => item.available !== false) || candidates[0];
+  root.hidden = media.kind !== "video" || !row;
+  if (root.hidden) { media.selected = null; return; }
+  media.featureId = row.id; media.selected = row;
+  const scroll = root.querySelector(".media-focus-strip")?.scrollLeft || 0;
+  root.replaceChildren();
+  const art = mediaArt(row, "media-feature-art"); root.append(art);
+  const copy = element("div", undefined, "media-feature-copy");
+  copy.append(element("p", say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
+  const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language].filter(Boolean);
+  copy.append(element("p", facts.join(" · "), "media-feature-meta"));
+  if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
+  copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
+  const actions = element("div", undefined, "media-feature-actions");
+  const play = button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false;
+  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"), button(say("Assistant", "Assistant"), async () => { media.selected = row; await mediaOpenChat(); }, "media-secondary"));
+  copy.append(actions);
+  if (row.available === false) copy.append(element("p", row.reason || say("Unavailable", "Indisponible"), "media-availability-note"));
+  root.append(copy);
+  const strip = element("div", undefined, "media-focus-strip"); strip.id = "media-focus-strip"; strip.setAttribute("aria-label", say("Select a featured title", "Choisir le titre mis en avant"));
+  for (const item of media.rows) {
+    const choice = button("", () => mediaSelectFeature(item), "media-focus-choice");
+    choice.setAttribute("aria-label", item.title); choice.setAttribute("aria-pressed", String(item.id === row.id));
+    choice.append(mediaArt(item), element("span", item.title)); strip.append(choice);
+  }
+  root.append(strip); strip.scrollLeft = scroll;
+}
+function mediaRenderContinue() {
+  const root = $("media-continue-items"); root.replaceChildren();
+  $("media-continue").hidden = media.kind !== "video" || !media.continueRows.length;
+  for (const row of media.continueRows) {
+    const choice = button("", () => mediaStart([row.id]), "media-resume-card"); choice.setAttribute("aria-label", `${say("Resume", "Reprendre")} ${row.title}`);
+    const art = mediaArt(row); const progress = element("progress"); progress.max = row.duration || Math.max(row.position, 1); progress.value = row.position || 0;
+    choice.append(art, progress, element("strong", row.title), element("span", mediaTime(row.position), "media-resume-position")); root.append(choice);
+  }
+}
 function mediaRender() {
+  $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout;
+  $("view-media").dataset.empty = String(media.rows.length === 0);
+  for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
+  mediaRenderFeature(); mediaRenderContinue();
+  $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries")})[media.view] || say("Your videos", "Vos vidéos");
+  $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
   const root = $("media-results"); root.replaceChildren();
-  if (!media.rows.length) { root.append(element("p", "No media found. Add a Library Folder in Settings, then refresh the inventory.", "muted")); return; }
+  if (!media.rows.length) { root.append(element("p", say("No media found. Add a Library Folder in Library options, then refresh the inventory.", "Aucun média trouvé. Ajoutez un dossier dans les options de bibliothèque, puis actualisez les médias."), "media-empty")); root.append(button(say("Add Library Folder", "Ajouter un dossier de bibliothèque"), () => navigate("setup"))); return; }
   const groups = new Map();
   for (const row of media.rows) {
     const key = media.kind === "music" && media.view === "albums" ? row.album_id || row.id : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : media.kind === "video" ? row.content_id || row.id : row.id;
     if (!groups.has(key)) groups.set(key, []); groups.get(key).push(row);
   }
   for (const rows of groups.values()) {
-    const row = rows[0], card = element("article", undefined, "media-card");
-    if (row.artwork_url) { const img = element("img"); img.src = row.artwork_url; img.alt = ""; img.loading = "lazy"; card.append(img); }
-    else card.append(element("div", media.kind === "music" ? "♫" : "▷", "media-artwork-fallback"));
+    const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
     const title = media.kind === "music" && media.view === "albums" ? row.album || "Unknown album" : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : row.title;
-    card.append(element("h3", title), element("p", [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "muted"));
-    if (media.kind === "music" && media.view === "albums" && row.track_count) card.append(element("p", `${row.track_count} track${row.track_count === 1 ? "" : "s"}`, "muted"));
-    if (row.identity_source === "filename") card.append(element("p", "Filename metadata", "muted"));
-    if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""} · Filename metadata`, "muted"));
-    if (row.position > 0) card.append(element("p", `${row.watched ? "Watched" : `Continue at ${mediaTime(row.position)}`}`, "muted"));
-    if (row.available === false) card.append(element("p", row.reason || "Unavailable", "media-error"));
-    const actions = element("div", undefined, "toolbar");
+    const artwork = button("", () => mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`); artwork.append(mediaArt({...row, title}));
+    const badge = element("span", row.available === false ? row.availability === "unfinished" ? say("Downloading", "Téléchargement") : say("Unavailable", "Indisponible") : say("Available", "Disponible"), "media-poster-badge");
+    artwork.append(badge); card.append(artwork, element("h3", title));
+    card.append(element("p", [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
+    if (media.kind === "music" && media.view === "albums" && row.track_count) card.append(element("p", `${row.track_count} track${row.track_count === 1 ? "" : "s"}`, "media-card-meta"));
+    if (row.identity_source === "filename") card.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-card-source"));
+    if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""}`, "media-card-meta"));
+    const actions = element("div", undefined, "media-card-actions");
     const play = button(say("Play", "Lire"), () => mediaStart(mediaGroupIds(rows))); play.disabled = row.available === false;
     actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id)));
     if (media.kind === "music") actions.append(button(say("Add to queue", "Ajouter à la file"), async () => mediaEnqueue(await mediaGroupIds(rows))));
@@ -103,14 +173,33 @@ async function mediaGroupIds(rows) {
 async function mediaDetails(id) {
   const row = await api(`media/items/${encodeURIComponent(id)}?${mediaQuery({})}`); media.selected = row;
   const root = $("media-details"); root.replaceChildren(); root.hidden = false;
-  root.append(button(say("Close details", "Fermer les détails"), () => { root.hidden = true; media.selected = null; }), element("h2", row.title));
+  root.append(mediaArt(row, "media-detail-art"));
+  if (!root.open) root.showModal();
+  root.append(button(say("Close details", "Fermer les détails"), () => { root.close(); media.selected = null; }), element("h2", row.title));
   root.append(element("p", row.description || "No local synopsis available."));
   if (row.identity_source) root.append(element("p", `Metadata: ${row.identity_source}`, "muted"));
   if (row.release) root.append(element("p", `Release: ${row.release}`, "muted"));
+  if (row.kind === "video") {
+    const subtitles = element("section", undefined, "media-subtitle-availability");
+    subtitles.append(element("h3", say("External subtitle files", "Fichiers de sous-titres externes")));
+    if (row.subtitles?.length) {
+      const list = element("ul");
+      for (const subtitle of row.subtitles) list.append(element("li", subtitle.label || subtitle.language || say("Unknown language", "Langue inconnue")));
+      subtitles.append(list);
+    } else subtitles.append(element("p", say("No external subtitle files are known for this release.", "Aucun fichier de sous-titres externe n’est connu pour cette version.")));
+    if (row.embedded_subtitles?.length) {
+      subtitles.append(element("h3", say("Embedded subtitle tracks", "Pistes de sous-titres intégrées")));
+      const embedded = element("ul");
+      for (const track of row.embedded_subtitles) embedded.append(element("li", [track.label || track.language || say("Unknown language", "Langue inconnue"), track.format].filter(Boolean).join(" · ")));
+      subtitles.append(embedded, element("p", say("Embedded subtitle selection depends on the player during playback.", "La sélection des sous-titres intégrés dépend du lecteur pendant la lecture.")));
+    } else subtitles.append(element("p", say("Embedded subtitle tracks may also be available during playback, depending on the file and player.", "Des pistes de sous-titres intégrées peuvent aussi être disponibles pendant la lecture, selon le fichier et le lecteur.")));
+    root.append(subtitles);
+  }
   if (row.kind === "video" && row.availability === "unfinished") {
     root.append(element("p", say("Preview is optional. Only a verified downloaded prefix from a sequential qBittorrent single-file download can play. Some formats require the missing end of the file.", "L’aperçu est facultatif. Seul le début vérifié d’un téléchargement séquentiel qBittorrent à fichier unique peut être lu. Certains formats exigent la fin du fichier."), "muted"));
-    root.append(button(say("Preview downloaded portion", "Prévisualiser la partie téléchargée"), () => mediaPreview(id)));
+    root.append(button(say("Preview downloaded portion", "Prévisualiser la partie téléchargée"), () => { root.close(); return mediaPreview(id); }));
   }
+  if (row.kind === "video" && row.available !== false) root.append(button(say("Play", "Lire"), () => { root.close(); return mediaStart([id]); }, "media-primary"));
   if (row.kind === "video") root.append(button(row.watched ? say("Mark unwatched", "Marquer comme non vu") : say("Mark watched", "Marquer comme vu"), async () => { await api(`media/items/${encodeURIComponent(id)}/watched`, {client_id: mediaClient(), watched: !row.watched}); await mediaDetails(id); await loadMedia(); }));
   for (const [key, label] of [["releases", say("Releases", "Versions")], ["episodes", say("Episodes", "Épisodes")]]) {
     if (!row[key]?.length) continue;
@@ -118,7 +207,7 @@ async function mediaDetails(id) {
     group.append(element("h3", label), list); root.append(group);
     const append = items => {
       for (const item of items) {
-        const choice = button(item.release || item.title, () => mediaStart([item.id]));
+        const choice = button(item.release || item.title, () => { root.close(); return mediaStart([item.id]); });
         choice.disabled = item.available === false; choice.title = item.reason || ""; list.append(choice);
       }
     };
@@ -128,7 +217,7 @@ async function mediaDetails(id) {
       more.disabled = true;
       try {
         const page = await api(`media/items/${encodeURIComponent(id)}?${mediaQuery({[`${key}_offset`]: next, limit: 200})}`);
-        if (media.selected?.id !== id || !group.isConnected || root.hidden) return;
+        if (media.selected?.id !== id || !group.isConnected || !root.open) return;
         append(page[key] || []); next = page[`${key}_next_offset`]; more.hidden = !page[`${key}_has_more`];
       } finally { more.disabled = false; }
     });
@@ -137,11 +226,11 @@ async function mediaDetails(id) {
   if (row.kind === "music") {
     const artistView = media.view === "artists";
     const tracks = await mediaTrackGroup(row, artistView ? "artists" : "albums");
-    if (media.selected?.id !== id || root.hidden) return;
+    if (media.selected?.id !== id || !root.open) return;
     const ids = tracks.map(item => item.id);
-    root.append(element("h3", artistView ? row.artist || "Unknown artist" : row.album || "Track"), button(artistView ? say("Play artist", "Lire cet artiste") : say("Play album", "Lire cet album"), () => mediaStart(ids)), button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue(ids)));
+    root.append(element("h3", artistView ? row.artist || "Unknown artist" : row.album || "Track"), button(artistView ? say("Play artist", "Lire cet artiste") : say("Play album", "Lire cet album"), () => { root.close(); return mediaStart(ids); }), button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue(ids)));
     const list = element("ol");
-    tracks.forEach((item, index) => { const entry = element("li"); entry.append(button(`${item.title}${artistView ? ` · ${item.album || "Unknown album"}` : ""}`, () => mediaStart(ids, index)), element("span", item.duration > 0 ? ` ${mediaTime(item.duration)}` : " Duration unknown", "muted")); list.append(entry); });
+    tracks.forEach((item, index) => { const entry = element("li"); entry.append(button(`${item.title}${artistView ? ` · ${item.album || "Unknown album"}` : ""}`, () => { root.close(); return mediaStart(ids, index); }), element("span", item.duration > 0 ? ` ${mediaTime(item.duration)}` : " Duration unknown", "muted")); list.append(entry); });
     root.append(list);
   }
 }
@@ -153,7 +242,8 @@ async function mediaSession() {
   try { return await mediaSessionPending; } finally { mediaSessionPending = null; }
 }
 async function mediaOpenSession() {
-  media.playerClient = mediaClient();
+  const restoreRequest = {generation: media.playbackGeneration, client: mediaClient(), selectedClient: state.clientId, session: null};
+  media.playerClient = restoreRequest.client;
   const key = `tl-media-session:${media.playerClient}`;
   let saved;
   try { saved = JSON.parse(sessionStorage.getItem(key)); } catch (_) { /* Invalid local credentials are replaced. */ }
@@ -165,11 +255,14 @@ async function mediaOpenSession() {
   if (!result) result = await api("media/sessions", {client_id: media.playerClient, platform: "web"});
   media.session = {id: result.id, token: result.token};
   sessionStorage.setItem(key, JSON.stringify(media.session));
+  restoreRequest.session = {...media.session};
+  if (!mediaRequestCurrent(restoreRequest)) return media.session;
   const restored = result.state || {};
   media.queue = restored.queue || []; media.index = restored.index || 0;
   media.shuffle = !!restored.shuffle; media.repeat = restored.repeat || "off"; media.ack = restored.command_ack || 0;
-  if (restored.current_id && !restored.context?.preview) await mediaLoad(restored.current_id, restored.position || 0, true, null, null, false);
+  if (restored.current_id && !restored.context?.preview) await mediaLoad(restored.current_id, restored.position || 0, true, null, restoreRequest, false);
   else if (restored.context?.preview) mediaStatus(say("Select Preview downloaded portion again to create a new verified partial preview.", "Sélectionnez à nouveau Prévisualiser la partie téléchargée pour créer un nouvel aperçu partiel vérifié."));
+  if (!mediaRequestCurrent(restoreRequest)) return media.session;
   for (const player of [$("media-video"), $("media-audio")]) player.volume = restored.volume ?? 1;
   await mediaCommands(result.commands || []);
   return media.session;
@@ -363,6 +456,12 @@ async function mediaOpenChat() {
   $("assistant-prompt")?.focus();
 }
 function mediaCloseChat() { media.chat = false; $("media-chat-panel").hidden = true; document.body.classList.remove("media-chat-open"); restoreMediaAssistant(); }
+$("media-layout-switch").onchange = event => mediaSetLayout(event.target.value);
+$("settings-media-layout").onchange = event => mediaSetLayout(event.target.value);
+for (const item of document.querySelectorAll("[data-media-view]")) item.onclick = () => guard(async () => { media.view = item.dataset.mediaView; $("media-view").value = media.view; await loadMedia(); });
+$("media-details").addEventListener("click", event => { if (event.target === $("media-details")) { const box = event.target.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) event.target.close(); } });
+$("media-player-expand").onclick = () => { const expanded = $("media-player-shell").classList.toggle("media-player-expanded"); $("media-player-expand").textContent = expanded ? say("Compact player", "Réduire le lecteur") : say("Expand player", "Agrandir le lecteur"); };
+mediaSetLayout(media.layout);
 $("logout").addEventListener("click", () => { mediaInvalidatePlayback(); mediaPlayer().pause(); });
 $("target-client").addEventListener("change", mediaInvalidatePlayback);
 $("media-stop").onclick = () => guard(mediaStop);

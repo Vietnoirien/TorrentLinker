@@ -26,6 +26,25 @@ def test_existing_settings_without_key_do_not_start_network_work(qtbot, tmp_path
     assert not window.seeding_timer.isActive()
 
 
+def test_media_layout_shortcut_is_restored_when_the_app_reopens(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QComboBox
+
+    window, calls, _ = setup_window(qtbot, tmp_path, monkeypatch)
+    selector = window.media_tab.findChild(QComboBox, "media-layout")
+    assert selector.currentData() == "cinematic"
+    selector.setCurrentIndex(selector.findData("focus"))
+    saved = Settings.load(window.settings_path)
+    assert saved.media_layout == "focus"
+
+    reopened = main_window.MainWindow(saved, window.settings_path, window.store)
+    qtbot.addWidget(reopened)
+    restored = reopened.media_tab.findChild(QComboBox, "media-layout")
+    assert restored.currentData() == "focus"
+    restored.setCurrentIndex(restored.findData("collection"))
+    assert Settings.load(window.settings_path).media_layout == "collection"
+    assert not calls
+
+
 def setup_window(qtbot, tmp_path, monkeypatch, *, saved=True, key=""):
     from torrentlinker.domain import LibraryFolder
 

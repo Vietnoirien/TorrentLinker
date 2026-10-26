@@ -89,6 +89,17 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     qtbot.waitUntil(lambda: tab.playlists.currentText() == "Evening")
     assert len(service.agent.media.playlists("default")[0]["media_ids"]) == 3
     source = tab.player.source()
+    selected = tab.selected_ids()
+    for layout in ("focus", "collection", "cinematic"):
+        tab.layout_combo.setCurrentIndex(tab.layout_combo.findData(layout))
+        assert tab.media_layout == layout
+        assert tab.player.source() == source
+        assert tab.selected_ids() == selected
+        assert tab.hero.isHidden()
+        assert tab.results.isVisible()
+    tab.set_media_layout("collection")
+    tab.set_media_layout("cinematic")
+    assert tab.selected_ids() == selected
     tab.search.setText("no such track")
     tab.kind.setCurrentIndex(tab.kind.findData("video"))
     qtbot.waitUntil(lambda: tab.results.count() == 0)
@@ -167,6 +178,8 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
         check=True,
         capture_output=True,
     )
+    for index in range(3):
+        shutil.copy(root / "Clip.mp4", root / f"Other {index}.mp4")
     (root / "Clip.srt").write_text("1\n00:00:01,000 --> 00:00:05,000\nA local caption\n")
     config = tmp_path / "config"
     config.mkdir()
@@ -187,7 +200,29 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert tab.results.gridSize().width() >= 180
     assert tab.results.iconSize().height() >= 170
     assert not tab.results.item(0).icon().isNull()
-    tab.results.item(0).setSelected(True)
+    tab.set_media_layout("focus")
+    assert tab.hero.strip.count() == 4
+    fourth = tab.hero.strip.item(3)
+    fourth_id = fourth.data(Qt.ItemDataRole.UserRole)
+    tab.hero.strip.clearSelection()
+    fourth.setSelected(True)
+    assert tab.selected_ids() == [fourth_id]
+    tab.set_media_layout("cinematic")
+    tab.results.clearSelection()
+    other = next(index for index, row in enumerate(tab.rows) if row["release"] == "Other 0.mp4")
+    tab.results.item(other).setSelected(True)
+    qtbot.mouseClick(tab.info_button, Qt.LeftButton)
+    assert "No known external subtitles." in tab.description.text()
+    tab.details.close()
+    tab.results.clearSelection()
+    clip = next(index for index, row in enumerate(tab.rows) if row["release"] == "Clip.mp4")
+    tab.results.item(clip).setSelected(True)
+    qtbot.mouseClick(tab.info_button, Qt.LeftButton)
+    assert tab.details.isVisible()
+    assert "External subtitles: Clip" in tab.description.text()
+    assert "Embedded subtitle tracks are discovered during playback." in tab.description.text()
+    assert "Filename metadata" in tab.hero.metadata.text()
+    tab.details.close()
     qtbot.mouseClick(tab.play_button, Qt.LeftButton)
     qtbot.waitUntil(lambda: tab.player.hasVideo(), timeout=15000)
     qtbot.waitUntil(lambda: tab.subtitles.count() == 2)
@@ -391,3 +426,20 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_pa
     assert tab.shuffle.isChecked()
     assert tab.repeat.currentData() == "all"
     cleanup()
+
+
+def test_native_media_layout_shortcut_emits_only_user_changes(qtbot):
+    from torrentlinker.gui.media import MediaTab
+
+    tab = MediaTab(lambda: None, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    assert tab.media_layout == "cinematic"
+    assert tab.layout_combo.objectName() == "media-layout"
+    changes = []
+    tab.layout_changed.connect(changes.append)
+    tab.set_media_layout("collection")
+    assert changes == []
+    assert tab.hero.isHidden()
+    tab.layout_combo.setCurrentIndex(tab.layout_combo.findData("focus"))
+    assert changes == ["focus"]
+    assert tab.hero.isHidden()

@@ -363,6 +363,8 @@ class MainWindow(QMainWindow):
             lambda: self.settings.active_client_id,
             self.add_library_folder,
         )
+        self.media_tab.set_media_layout(settings.media_layout)
+        self.media_tab.layout_changed.connect(self._save_media_layout)
         self.tabs.addTab(self.media_tab, self.tr("Media"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
@@ -708,7 +710,9 @@ class MainWindow(QMainWindow):
             self.page_description.setText(descriptions[index])
         self.band.setVisible(index < self.navigation.count() and index not in {5, 6, 7})
         self.page_title.setVisible(index < self.navigation.count())
-        self.page_description.setVisible(index < self.navigation.count())
+        self.page_description.setVisible(
+            index < self.navigation.count() and self.tabs.currentWidget() is not self.media_tab
+        )
         policy = (
             QSizePolicy.Policy.Ignored
             if index >= self.navigation.count() or index in {5, 6, 7}
@@ -1851,6 +1855,12 @@ class MainWindow(QMainWindow):
         else:
             self.scan()
 
+    def _save_media_layout(self, value: str) -> None:
+        if value not in ("cinematic", "focus", "collection"):
+            return
+        self.settings.media_layout = value
+        self.settings.save(self.settings_path)
+
     def _select_client(self) -> None:
         identifier = self.client_selector.currentData()
         if identifier == self.settings.active_client_id:
@@ -1888,7 +1898,10 @@ class MainWindow(QMainWindow):
             replacement.media_tab.deleteLater()
             with QSignalBlocker(self.tabs):
                 self.tabs.removeTab(self.tabs.indexOf(self.media_tab))
+            self.media_tab.layout_changed.disconnect(self._save_media_layout)
             replacement.media_tab = self.media_tab
+            replacement.media_tab.layout_changed.connect(replacement._save_media_layout)
+            replacement.media_tab.set_media_layout(settings.media_layout)
             replacement.tabs.insertTab(media_index, self.media_tab, self.tr("Media"))
         else:
             self.media_tab.stop()
@@ -1957,6 +1970,7 @@ class MainWindow(QMainWindow):
             log.info("settings written to %s", self.settings_path)
             self.apply_proxy()
             set_theme(self.settings.theme)
+            self.media_tab.set_media_layout(self.settings.media_layout)
             self._fill_folder_filter()
             if not self._has_indexer_key():
                 self._await_setup()

@@ -57,3 +57,30 @@ def test_theme_setting_is_saved_and_old_settings_default_to_auto(tmp_path, qtbot
     assert settings.theme == "dark"
     settings.save(path)
     assert Settings.load(path).theme == "dark"
+
+
+def test_media_interface_choice_survives_settings_reopen_and_cancel(tmp_path, qtbot):
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    from torrentlinker.gui.settings_dialog import SettingsDialog
+
+    path = tmp_path / "settings.json"
+    path.write_text("{}")
+    settings = Settings.load(path)
+    assert settings.media_layout == "cinematic"
+    for choice in ("focus", "collection", "cinematic"):
+        dialog = SettingsDialog(settings)
+        qtbot.addWidget(dialog)
+        dialog.media_layout.setCurrentIndex(dialog.media_layout.findData(choice))
+        dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
+        settings.save(path)
+        settings = Settings.load(path)
+        reopened = SettingsDialog(settings)
+        qtbot.addWidget(reopened)
+        assert reopened.media_layout.currentData() == choice
+        reopened.media_layout.setCurrentIndex((reopened.media_layout.currentIndex() + 1) % 3)
+        reopened.reject()
+        assert settings.media_layout == choice
+
+    path.write_text('{"media_layout": "removed-experimental-layout"}')
+    assert Settings.load(path).media_layout == "cinematic"

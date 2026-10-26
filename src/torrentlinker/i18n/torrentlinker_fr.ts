@@ -4998,6 +4998,26 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Finish or remove this client&apos;s pending work before changing its connection. You can add another client instead.</source>
         <translation>Terminez ou retirez les opérations en attente de ce client avant de modifier sa connexion. Vous pouvez ajouter un autre client.</translation>
     </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="246" />
+        <source>Cinematic home</source>
+        <translation>Accueil cinéma</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="247" />
+        <source>Focus</source>
+        <translation>Focus</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="248" />
+        <source>Collection</source>
+        <translation>Collection</translation>
+    </message>
+    <message>
+        <location filename="../gui/settings_dialog.py" line="252" />
+        <source>Media interface</source>
+        <translation>Interface des médias</translation>
+    </message>
 </context>
 <context>
     <name>Subcategory</name>
@@ -7529,6 +7549,111 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <location filename="../gui/media.py" line="1251" />
         <source>Close chat</source>
         <translation>Fermer la discussion</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="761" />
+        <source>Filename metadata</source>
+        <translation>Métadonnées déduites du nom de fichier</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1273" />
+        <source>External subtitles: {0}</source>
+        <translation>Sous-titres externes : {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1275" />
+        <source>No known external subtitles.</source>
+        <translation>Aucun sous-titre externe connu.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1277" />
+        <source>Embedded subtitle tracks are discovered during playback.</source>
+        <translation>Les pistes de sous-titres intégrées sont détectées pendant la lecture.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="356" />
+        <source>Library options</source>
+        <translation>Options de la bibliothèque</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="352" />
+        <source>Media layout</source>
+        <translation>Disposition des médias</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="353" />
+        <source>Cinematic home</source>
+        <translation>Accueil cinéma</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="354" />
+        <source>Focus</source>
+        <translation>Focus</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="355" />
+        <source>Collection</source>
+        <translation>Collection</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="424" />
+        <source>More info</source>
+        <translation>Plus d’informations</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="449" />
+        <location filename="../gui/media.py" line="1207" />
+        <source>Your collection</source>
+        <translation>Votre collection</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="471" />
+        <location filename="../gui/media.py" line="1212" />
+        <source>Recently added</source>
+        <translation>Ajouts récents</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="497" />
+        <source>Media details</source>
+        <translation>Fiche du média</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="531" />
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="602" />
+        <source>Queue &amp; playlists</source>
+        <translation>File et playlists</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="765" />
+        <source>Resume at {0}</source>
+        <translation>Reprendre à {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="771" />
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="785" />
+        <source>Continue listening</source>
+        <translation>Reprendre l’écoute</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1165" />
+        <source>Your library</source>
+        <translation>Votre médiathèque</translation>
+    </message>
+</context>
+<context>
+    <name>MediaHero</name>
+    <message>
+        <location filename="../gui/media.py" line="135" />
+        <source>FROM YOUR LIBRARY FOLDERS</source>
+        <translation>DANS VOTRE MÉDIATHÈQUE</translation>
     </message>
 </context>
 </TS>

@@ -242,6 +242,14 @@ class SettingsDialog(QDialog):
         self.theme.addItem(self.tr("Dark"), "dark")
         self.theme.setCurrentIndex(max(self.theme.findData(self.settings.theme), 0))
         form.addRow(self.tr("Theme"), self.theme)
+        self.media_layout = QComboBox()
+        self.media_layout.addItem(self.tr("Cinematic home"), "cinematic")
+        self.media_layout.addItem(self.tr("Focus"), "focus")
+        self.media_layout.addItem(self.tr("Collection"), "collection")
+        self.media_layout.setCurrentIndex(
+            max(self.media_layout.findData(self.settings.media_layout), 0)
+        )
+        form.addRow(self.tr("Media interface"), self.media_layout)
         return box
 
     # Zen -------------------------------------------------------------------
@@ -1328,6 +1336,7 @@ class SettingsDialog(QDialog):
         s.proxy.torrent_client = self.proxy_client.isChecked()
         s.language = self.language.currentData()
         s.theme = self.theme.currentData()
+        s.media_layout = self.media_layout.currentData()
         s.client = self._chosen_client()
         s.deluge.host = self.deluge_host.text().strip()
         s.transmission.host = self.transmission_host.text().strip()
