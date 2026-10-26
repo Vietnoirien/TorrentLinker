@@ -48,3 +48,13 @@ Standards and spec reviews were performed independently. The standards review ca
 The beta.1 tag was pushed, but its release job did not publish a release. Linux packaging and smoke passed. Windows built successfully, then its smoke check failed. The MCP smoke test left feeds.sqlite open at temporary-directory removal. Linux permits that unlink, while Windows rejects it. An open-file check reproduced the leak; a regression verifies the database connection is closed. The smoke cleanup now closes this owned connection, and Windows failure output includes the application log. The corrected release uses v0.13.0-beta.2 rather than moving the existing tag.
 
 CI also found four unformatted RSS integration files. They were formatted in follow-up commit 568210b; AST comparison verified no Python behavior changed. Ruff check and format checks both pass.
+
+## Published result
+
+v0.13.0-beta.2 was published from b9d41cc. Its exact-tag CI passed with 1,462 tests passed and 115 skipped; browser and live-model coverage was run separately as described above. All client integration jobs passed: qBittorrent 4.6 and 5.2.4, qBittorrent Docker Path Mappings, Deluge 2.1.1 and 2.2.0, and Transmission 4.1.3. Both packaged Windows and Linux smoke tests passed, and both binaries are attached to the public prerelease. The stable latest release remains v0.12.2.
+
+An earlier CI run timed out while waiting for the 1,100-torrent test action. Follow-up main commit 2d18aa8 adds a bounded wall-clock wait and permits 30 seconds for this bulk case without changing its outcome assertions or application code. All 30 affected local job/selection tests passed. The exact beta.2 tag also passed CI independently.
+
+- Release workflow: https://github.com/Vietnoirien/TorrentLinker/actions/runs/40371985744
+- Exact-tag CI: https://github.com/Vietnoirien/TorrentLinker/actions/runs/40371985355
+- Public prerelease: https://github.com/Vietnoirien/TorrentLinker/releases/tag/v0.13.0-beta.2
