@@ -792,12 +792,19 @@ class MediaTab(QWidget):
         self.fullscreen_layout.setContentsMargins(0, 0, 0, 0)
         self.fullscreen_dialog.finished.connect(self._leave_fullscreen)
         player_box = QVBoxLayout(self.player_panel)
+        self.player_box = player_box
         player_box.setContentsMargins(12, 8, 12, 8)
         player_box.setSpacing(6)
         self.video.setMinimumHeight(300)
         player_box.addWidget(self.video, 1)
         self.video_overlay_box = QVBoxLayout(self.video.overlay)
         self.video_overlay_box.setContentsMargins(0, 0, 0, 0)
+        self.player_back = QToolButton()
+        self.player_back.setText("←")
+        self.player_back.setToolTip(self.tr("Home"))
+        self.player_back.setAccessibleName(self.tr("Home"))
+        self.player_back.clicked.connect(self.stop)
+        self.video_overlay_box.addWidget(self.player_back, 0, Qt.AlignmentFlag.AlignLeft)
         self.video_overlay_box.addStretch()
         self.caption = QLabel()
         self.caption.setTextFormat(Qt.TextFormat.PlainText)
@@ -1012,6 +1019,7 @@ class MediaTab(QWidget):
         self.cancel_scan.clicked.connect(self._cancel_media_scan)
         self.scan_progress.connect(lambda value: self._set_notice(str(value)))
         self.kind.currentIndexChanged.connect(self._kind_changed)
+        self.view.currentIndexChanged.connect(self._leave_video_for_navigation)
         self.view.currentIndexChanged.connect(self.refresh)
         self.view.currentIndexChanged.connect(self._sync_music_tabs)
         self.search.textChanged.connect(self.refresh)
@@ -1277,7 +1285,10 @@ class MediaTab(QWidget):
             button.setAccessibleName(label)
         if active_video and not self.fullscreen_dialog.isVisible():
             self.video.setFixedHeight(
-                min(520, max(300, self.content_scroll.viewport().width() * 9 // 16))
+                min(
+                    max(300, self.content_scroll.viewport().height() - 90),
+                    max(300, self.content_scroll.viewport().width() * 9 // 16),
+                )
             )
         self._show_video_controls()
         if entering_video:
@@ -1311,6 +1322,7 @@ class MediaTab(QWidget):
         elif self.last_source:
             self._player_home_index = self.player_home_layout.indexOf(self.player_panel)
             self.fullscreen_layout.addWidget(self.player_panel)
+            self.player_box.setContentsMargins(0, 0, 0, 0)
             self.video.setMinimumHeight(0)
             self.video.setMaximumHeight(16777215)
             self.fullscreen_button.setToolTip(self.tr("Exit fullscreen"))
@@ -1320,6 +1332,7 @@ class MediaTab(QWidget):
             self.fullscreen_button.setFocus()
 
     def _leave_fullscreen(self) -> None:
+        self.player_box.setContentsMargins(12, 8, 12, 8)
         self.player_home_layout.insertWidget(self._player_home_index, self.player_panel)
         self._arrange_player()
         self.fullscreen_button.setToolTip(self.tr("Fullscreen"))
@@ -1591,7 +1604,12 @@ class MediaTab(QWidget):
         except Exception as error:
             self._set_notice(str(error))
 
+    def _leave_video_for_navigation(self, *_args) -> None:
+        if self._player_video_mode:
+            self.stop()
+
     def _kind_changed(self) -> None:
+        self._leave_video_for_navigation()
         values = (
             (
                 (self.tr("All"), "all"),

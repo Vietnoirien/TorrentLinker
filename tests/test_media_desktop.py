@@ -307,6 +307,8 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
     assert tab.caption.isVisible()
     assert tab.subtitles.currentIndex() == 1
+    assert tab.video.mapTo(tab.fullscreen_dialog, tab.video.rect().topLeft()).isNull()
+    assert tab.video.size() == tab.fullscreen_dialog.size()
     assert tab.player.source() == source
     assert tab.player.position() == position
     qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)
@@ -317,7 +319,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
     assert tab.player_panel.parentWidget() is original_parent
     qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
-    tab.stop()
+    qtbot.mouseClick(tab.player_back, Qt.LeftButton)
     assert not tab.fullscreen_dialog.isVisible()
     assert tab.player_panel.parentWidget() is original_parent
 

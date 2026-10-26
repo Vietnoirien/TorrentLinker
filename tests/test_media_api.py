@@ -429,3 +429,15 @@ def test_invalid_player_command_does_not_poison_later_commands(tmp_path):
         )
         result = browser.post(endpoint, json={"token": player["token"], "action": "pause"}).json()
         assert [command["action"] for command in result["commands"]] == ["pause"]
+
+
+def test_refresh_removes_moved_files_from_available_folder(tmp_path):
+    app, root = media_app(tmp_path)
+    with TestClient(app) as browser:
+        login(browser)
+        scan(browser)
+        (root / "track.flac").rename(tmp_path / "moved.flac")
+        scan(browser)
+        page = browser.get("/api/media?client_id=default&kind=music").json()
+        assert page["total"] == 0
+        assert page["rows"] == []

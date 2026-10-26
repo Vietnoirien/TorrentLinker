@@ -315,17 +315,10 @@ class MediaLibrary:
         with self.lock, self.db:
             # Replace only successfully scanned folders. Missing folders retain their cards.
             for folder in successful:
-                previous = self.db.execute(
-                    "SELECT id,body FROM media_items WHERE client=? AND folder=?",
+                self.db.execute(
+                    "DELETE FROM media_items WHERE client=? AND folder=?",
                     (client_id, folder),
-                ).fetchall()
-                for old in previous:
-                    missing = json.loads(old["body"])
-                    missing["missing"] = True
-                    self.db.execute(
-                        "UPDATE media_items SET body=? WHERE client=? AND id=?",
-                        (json.dumps(missing), client_id, old["id"]),
-                    )
+                )
             self.db.executemany(
                 "INSERT OR REPLACE INTO media_items VALUES (?,?,?,?,?,?,?,?)", found
             )
