@@ -726,16 +726,9 @@ class MediaTab(QWidget):
         self.results.itemDoubleClicked.connect(lambda _item: self.play_selected())
         self.hero.strip.itemSelectionChanged.connect(self._focus_selection)
         self.body.addWidget(self.results)
-        pages = QHBoxLayout()
-        self.previous_page = QPushButton(self.tr("Previous page"))
-        self.next_page = QPushButton(self.tr("Next page"))
-        self.previous_page.clicked.connect(lambda: self._page(max(0, self.offset - 100)))
-        self.next_page.clicked.connect(lambda: self._page(self.next_offset or 0))
-        pages.addStretch()
-        pages.addWidget(self.previous_page)
-        pages.addWidget(self.next_page)
-        self.body.addLayout(pages)
-        self.body.addStretch()
+        self.results.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.content_scroll.verticalScrollBar().valueChanged.connect(self._load_more_media)
         self.details = QDialog(self)
         self.details.setWindowTitle(self.tr("Media details"))
         self.details.resize(620, 560)
@@ -1690,13 +1683,13 @@ class MediaTab(QWidget):
             if cards
             else QSize(44, 44)
         )
-        self.results.setMinimumHeight(470 if dense and cards else 280 if cards else 120)
-        self.results.setMaximumHeight(1200 if dense else 560 if cards else 240)
+        QTimer.singleShot(0, self._resize_media_grid)
         return cards
 
     def eventFilter(self, watched, event):
         if watched is self.content_scroll.viewport() and event.type() == QEvent.Type.Resize:
             self._arrange_toolbar()
+            QTimer.singleShot(0, self._resize_media_grid)
             if hasattr(self, "controls_timer"):
                 self._arrange_player()
         if hasattr(self, "controls_timer"):
@@ -1829,9 +1822,26 @@ class MediaTab(QWidget):
             "playlist": self.current_playlist,
         }
 
-    def _page(self, offset: int) -> None:
-        self.offset = offset
-        self.refresh(keep_page=True)
+    def _resize_media_grid(self) -> None:
+        if not isValid(self) or not hasattr(self, "results"):
+            return
+        self.results.doItemsLayout()
+        last = self.results.item(self.results.count() - 1)
+        height = self.results.visualItemRect(last).bottom() + 24 if last else 120
+        remaining = self.content_scroll.viewport().height() - self.results.y() - 24
+        self.results.setFixedHeight(max(120, remaining, height))
+
+    def _load_more_media(self, _value: int) -> None:
+        scroll = self.content_scroll.verticalScrollBar()
+        if (
+            self.next_offset is not None
+            and self.results.isEnabled()
+            and self.results.isVisible()
+            and scroll.maximum() > 0
+            and scroll.maximum() - scroll.value() < 320
+        ):
+            self.offset = self.next_offset
+            self.refresh(keep_page=True)
 
     def refresh(self, *_args: Any, keep_page: bool = False) -> None:
         if self.library is None:
@@ -1842,6 +1852,7 @@ class MediaTab(QWidget):
         context.pop("playlist")
         if not keep_page:
             self.offset = 0
+            self.next_offset = None
         self.browse_generation += 1
         generation = self.browse_generation
         library, client, offset = self.library, self.session_client, self.offset
@@ -1859,8 +1870,8 @@ class MediaTab(QWidget):
         def done(payload):
             if not isValid(self) or generation != self.browse_generation:
                 return
+            self._show_listing(*payload, append=keep_page)
             self.results.setEnabled(True)
-            self._show_listing(*payload)
 
         def failed(error):
             if isValid(self) and generation == self.browse_generation:
@@ -1874,19 +1885,26 @@ class MediaTab(QWidget):
         result: dict[str, Any],
         playlists: list[dict[str, Any]],
         continuation: list[dict[str, Any]],
+        *,
+        append: bool = False,
     ) -> None:
         try:
             selected = self.selected_ids()
             self.continue_rows = continuation
             self.next_offset = result.get("next_offset")
-            self.previous_page.setEnabled(self.offset > 0)
-            self.next_page.setEnabled(bool(result.get("has_more")))
             self.page_count.setText(self.tr("{0} saved items").format(result["total"]))
-            self.rows = result["rows"]
+            if append:
+                seen = {row["id"] for row in self.rows}
+                added = [row for row in result["rows"] if row["id"] not in seen]
+                self.rows.extend(added)
+            else:
+                added = result["rows"]
+                self.rows = added
             cards = self._configure_browse_layout()
             placeholder = self._placeholder_icon(self.kind.currentData())
-            self.results.clear()
-            for row in self.rows:
+            if not append:
+                self.results.clear()
+            for row in added:
                 title = row["title"]
                 if row.get("artist"):
                     title = f"{row['artist']} · {title}"
@@ -2015,8 +2033,6 @@ class MediaTab(QWidget):
             else self.view.currentText()
         )
         self.page_count.setVisible(bool(self.rows))
-        self.previous_page.setVisible(self.offset > 0)
-        self.next_page.setVisible(self.next_offset is not None)
         continuation = bool(self.continue_rows) and not collection
         self.continue_heading.setVisible(continuation)
         self.continue_panel.setVisible(continuation)

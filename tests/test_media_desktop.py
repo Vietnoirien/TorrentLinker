@@ -868,3 +868,52 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
     stopped = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"]
     assert not stopped["ready"]
     assert stopped["source_token"] == ""
+
+
+def test_media_grid_scroll_appends_and_filter_resets(qtbot):
+    from torrentlinker.gui.media import MediaTab
+
+    rows = [
+        {"id": str(i), "title": f"Film {i}", "kind": "video", "available": True} for i in range(205)
+    ]
+
+    class Library:
+        def listing(self, _client, *, offset=0, view="all", q="", **_kwargs):
+            entries = [] if view == "continue" else rows[:1] if q else rows
+            end = min(offset + 100, len(entries))
+            return {
+                "rows": entries[offset:end],
+                "total": len(entries),
+                "next_offset": end if end < len(entries) else None,
+            }
+
+        def playlists(self, _client):
+            return []
+
+        def detail(self, _client, identifier):
+            return rows[int(identifier)]
+
+    tab = MediaTab(lambda: None, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    tab.library = Library()
+    tab.resize(1100, 850)
+    tab.show()
+    tab.refresh()
+    qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 100)
+    qtbot.waitUntil(lambda: tab.results.height() > 850)
+    assert not tab.results.verticalScrollBar().isVisible()
+    selected = tab.selected_ids()
+    scroll = tab.content_scroll.verticalScrollBar()
+    scroll.setValue(scroll.maximum())
+    qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 200)
+    assert tab.selected_ids() == selected
+    qtbot.waitUntil(lambda: scroll.value() < scroll.maximum())
+    scroll.setValue(scroll.maximum())
+    qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 205)
+    assert len({row["id"] for row in tab.rows}) == 205
+    assert tab.next_offset is None
+    tab.search.setText("Film 0")
+    tab.refresh()
+    qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 1)
+    assert tab.rows == rows[:1]
+    assert tab.next_offset is None
