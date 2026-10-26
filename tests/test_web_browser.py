@@ -180,6 +180,8 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#torrent-table")).to_contain_text("Remote Deluge")
             page.locator("#target-client").select_option("default")
             page.locator("[data-view=zen]").click()
+            expect(page.locator("#zen-seeding-panel")).to_be_visible()
+            page.locator("#zen-plan-tab").click()
             expect(page.locator("#plan-clients")).to_contain_text("Remote Deluge")
             if screenshot:
                 page.set_viewport_size({"width": 1100, "height": 850})

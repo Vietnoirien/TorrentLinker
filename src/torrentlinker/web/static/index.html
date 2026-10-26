@@ -6,6 +6,7 @@
     <title>TorrentLinker</title>
     <link rel="stylesheet" href="static/app.css" />
     <script src="static/app.js" defer></script>
+    <script src="static/zen.js" defer></script>
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
   </head>
@@ -394,7 +395,33 @@
               <strong id="zen-count">—</strong>
             </div>
           </div>
-          <section class="card">
+          <div class="toolbar" role="tablist" aria-label="Zen">
+            <button id="zen-seeding-tab" role="tab" aria-selected="true" aria-controls="zen-seeding-panel" data-i18n="seedingTab">Seeding</button>
+            <button id="zen-plan-tab" role="tab" aria-selected="false" aria-controls="zen-plan-panel" tabindex="-1" data-i18n="planTab">Plan</button>
+          </div>
+          <section id="zen-seeding-panel" role="tabpanel" aria-labelledby="zen-seeding-tab">
+            <div class="toolbar">
+              <input id="seeding-query" aria-label="Filter torrents or categories" placeholder="Filter torrents or categories…" />
+              <button id="seeding-expand" data-i18n="expandAll">Expand all</button>
+              <button id="seeding-collapse" data-i18n="collapseAll">Collapse all</button>
+              <button id="seeding-refresh" data-i18n="refresh">Refresh</button>
+            </div>
+            <div class="toolbar">
+              <label><span data-i18n="seedingSort">Sort torrents by</span><select id="seeding-sort">
+                <option value="zen" data-i18n="zenPerDay">≈ Zen/day</option><option value="name" data-i18n="torrentName">Torrent</option>
+                <option value="size" data-i18n="torrentSize">Size</option><option value="seeders">Seeders</option>
+                <option value="seed_days" data-i18n="seedAge">Seed age (days)</option><option value="note">≈ Note</option>
+              </select></label>
+              <label><span data-i18n="seedingOrder">Order</span><select id="seeding-order">
+                <option value="desc" data-i18n="descending">Descending</option><option value="asc" data-i18n="ascending">Ascending</option>
+              </select></label>
+            </div>
+            <p id="seeding-status" role="status"></p>
+            <div id="seeding-groups"></div>
+            <p id="seeding-total"></p>
+            <section class="card"><h2 data-i18n="classComparison">Class comparison</h2><div id="seeding-classes" class="toolbar"></div></section>
+          </section>
+          <section class="card" id="zen-plan-panel" role="tabpanel" aria-labelledby="zen-plan-tab" hidden>
             <h2 data-i18n="planner">Planner</h2>
             <p data-i18n="planHelp">
               Build a proposal using the catalogue and verified mounted storage.

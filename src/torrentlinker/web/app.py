@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -500,6 +501,54 @@ def create_app(
             service.store.remove_downloads(keys[:1000])
         return {"ok": True}
 
+    @app.get("/api/zen/seeding")
+    def zen_seeding(
+        client_id: str = "",
+        q: str = "",
+        group: str = "",
+        sort: Literal["name", "size", "seeders", "seed_days", "zen", "note"] = "zen",
+        descending: bool = True,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=200),
+    ) -> dict:
+        from torrentlinker.seeding import combined_seeding
+        from torrentlinker.web.seeding import seeding_page
+
+        targets = (
+            [for_client(p.id) for p in service.settings.client_profiles if p.enabled]
+            if client_id == "all"
+            else [for_client(client_id)]
+        )
+        observed = [t for target in targets for t in target.observed]
+        settings = service.settings
+        view = combined_seeding(
+            settings.zen,
+            observed,
+            settings.indexer.url,
+            settings.uploads,
+            catalogue={
+                r.infohash: r for r in service.store.catalogue([t.hash.lower() for t in observed])
+            },
+            categories=settings.indexer_categories,
+        )
+        result = seeding_page(
+            view,
+            settings.zen,
+            settings.uploads,
+            query=q,
+            group=group,
+            sort=sort,
+            descending=descending,
+            offset=offset,
+            limit=limit,
+        )
+        result["client_errors"] = [
+            {"name": target.setup.settings.profile().name, "message": target.connection_error}
+            for target in targets
+            if target.connection_error
+        ]
+        return result
+
     @app.get("/api/torrents")
     def torrents(
         client_id: str = "",
@@ -619,9 +668,18 @@ def create_app(
                 and not consent(body.client_id).consume(body)
             ):
                 raise HTTPException(409, "Review and confirm the selected torrents first.")
+
+            def execute(stop, progress):
+                try:
+                    return target.run(body, stop, progress)
+                except Exception as error:
+                    if body.kind == "refresh":
+                        target.connection_error = error_message(error)
+                    raise
+
             identifier = jobs.submit(
                 body.kind,
-                lambda stop, progress: target.run(body, stop, progress),
+                execute,
                 client_id=body.client_id,
             )
         return {"id": identifier}

@@ -629,3 +629,17 @@ dialog .description img {
 }
 
 .selection-scores { font-weight: 600; font-size: .82rem; color: var(--accent); }
+
+/* Zen uses native disclosure controls and bounded pages for large seeding libraries. */
+.seeding-group { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
+.seeding-group > summary { display: list-item; padding: 12px; cursor: pointer; }
+.seeding-group > summary strong { display: inline-block; min-width: 240px; max-width: 100%; overflow-wrap: anywhere; }
+.seeding-group > summary span { display: inline-block; margin-left: 20px; }
+.seeding-group > .seeding-group { margin: 8px 12px; }
+.seeding-rows { padding: 0 12px; }
+.seeding-rows:empty { padding: 0; }
+.seeding-rows td:first-child { min-width: 230px; max-width: 540px; overflow-wrap: anywhere; white-space: normal; }
+#seeding-query { flex: 1; min-width: 180px; }
+#seeding-classes { gap: 24px; }
+#zen-seeding-panel .error { color: var(--danger); }
+#view-zen [role="tab"][aria-selected="true"] { border-color: var(--accent); background: var(--tint); }

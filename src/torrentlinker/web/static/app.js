@@ -21,6 +21,11 @@ const state = {
   localItem: "",
 };
 const french = {
+  seedingTab: "En partage", planTab: "Plan", expandAll: "Tout développer", collapseAll: "Tout réduire",
+  seedingSort: "Trier les torrents par", torrentName: "Torrent", torrentSize: "Taille",
+  seedAge: "Âge du seed (jours)", seedingOrder: "Ordre", descending: "Décroissant", ascending: "Croissant",
+  classComparison: "Comparaison des classes",
+  zenPerDay: "≈ Zen/jour",
   agentAccess: "Accès agent (MCP)", enableAgents: "Activer l’accès agent",
   agentHelp: "Les nouvelles connexions proposent uniquement des changements. Approuvez-les ci-dessous ou autorisez certaines actions dans les limites quotidiennes. Le retrait et la suppression de fichiers nécessitent toujours votre accord.",
   agentEndpoint: "Adresse MCP", agentClients: "Clients autorisés", agentMode: "Mode",
@@ -534,7 +539,7 @@ async function navigate(view) {
   if (view === "upload") await loadUploadQueue();
   if (view === "library") await loadLibrary();
   if (view === "jobs") await loadJobs();
-  if (view === "zen") await loadTorrents();
+  if (view === "zen") await loadZenSeeding();
   if (
     view === "search" &&
     state.setup.indexer_configured &&
@@ -565,7 +570,10 @@ async function pollJobs() {
       if (["completed", "partial"].includes(full.status)) {
         if (pending.done && (pending.body.client_id === state.clientId || pending.body.kind === "enqueue")) await pending.done(full.result);
         if (full.status === "partial") toast(say("Scan incomplete. Some paths could not be read; previous items were kept. See job details.", "Analyse incomplète. Certains chemins sont inaccessibles ; les éléments précédents ont été conservés. Consultez les détails de la tâche."));
-      } else toast(full.error || say("Job cancelled", "Tâche annulée"));
+      } else {
+        if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
+        toast(full.error || say("Job cancelled", "Tâche annulée"));
+      }
     }
   }
   $("work-status").textContent = running
@@ -1055,6 +1063,7 @@ $("language").onchange = () => {
   language = $("language").value;
   localStorage.setItem("tl-language", language);
   translate();
+  if (state.view === "zen") guard(loadZenSeeding);
   $("page-title").textContent =
     document.querySelector(`[data-view="${state.view}"]`)?.textContent ||
     state.view;
@@ -1389,7 +1398,7 @@ $("refresh-profile").onclick = () =>
   guard(() =>
     job({ kind: "profile" }, (r) => {
       toast(`${r.balance} Zen · ${r.class || ""}`);
-      return job({ kind: "refresh" }, loadTorrents);
+      return job({ kind: "refresh" }, state.view === "zen" ? loadZenSeeding : loadTorrents);
     }),
   );
 
@@ -1483,8 +1492,8 @@ $("target-client").onchange = () => guard(async () => {
   state.offset = 0; state.libraryOffset = 0; state.localItem = "";
   $("candidates").hidden = true; $("upload-editor").hidden = true;
   await refreshSetup();
-  await navigate(state.clientId === "all" ? "torrents" : state.view);
-  if (state.setup.configured) await job({kind: "refresh"}, loadTorrents);
+  await navigate(state.clientId === "all" && state.view !== "zen" ? "torrents" : state.view);
+  if (state.setup.configured) await job({kind: "refresh"}, state.view === "zen" ? loadZenSeeding : loadTorrents);
 });
 $("add-client").onclick = () => {
   state.addingClient = true;
