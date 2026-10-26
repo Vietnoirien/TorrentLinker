@@ -106,7 +106,7 @@ A release c411 already has for the item being uploaded, found by its title words
 _Avoid_: Duplicate (that is Team Pending's verdict)
 
 **Presentation Image**:
-The picture of an Upload that its description needs and c411's image upload refuses an API key for; the app renders the model itself (one capture of the 3D view, or for a Pack a contact sheet of up to 9 models with their file names) and saves a PNG for the user to add on c411 while reviewing the Draft.
+The picture of an Upload that its description needs and c411's image upload refuses an API key for; the app renders the model itself and keeps private PNG assets for local review. A Pack's selected models appear on labelled contact-sheet pages of up to nine models each, with explicit coverage and saved camera settings. Public image hosting is required before sending the Draft; the app does not upload artwork publicly on its own.
 _Avoid_: Screenshot, thumbnail, cover
 
 **Announce URL**:

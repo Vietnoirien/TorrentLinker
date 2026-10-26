@@ -72,10 +72,17 @@ def test_mcp_renders_all_parts_then_saves_and_edits_private_review(tmp_path):
         assert result["covered"] == pieces
         assert len(result["artifacts"]) == 2
         from tests.test_agent_access import call
-        pixels = call(browser, token, "read_upload_asset", {
-            "client_id": "default", "path": str(pack),
-            "asset_id": result["artifacts"][0]["asset_id"],
-        })
+
+        pixels = call(
+            browser,
+            token,
+            "read_upload_asset",
+            {
+                "client_id": "default",
+                "path": str(pack),
+                "asset_id": result["artifacts"][0]["asset_id"],
+            },
+        )
         assert pixels["content"][0]["type"] == "image"
         assert pixels["content"][0]["mimeType"] == "image/png"
         assert result["artifacts"][0]["metadata"]["pieces"][0]["camera"]["roll"] == 90
@@ -137,4 +144,23 @@ def test_mcp_renders_all_parts_then_saves_and_edits_private_review(tmp_path):
         assert changed["result"]["revision"] == 2
         assert changed["result"]["form"]["title"] == "Edited.Pack.OBJ-NOTAG"
         assert changed["result"]["form"]["assets"] == form["assets"]
+        conflicted = tool(
+            browser,
+            token,
+            "update_upload_fields",
+            request_id="conflict",
+            client_id="default",
+            draft_id=draft["id"],
+            revision=2,
+            fields={"format": "STEP"},
+            field_sources={"format": "owner"},
+        )
+        conflict_job = finished(browser, conflicted["job_id"])
+        assert conflict_job["status"] == "completed", conflict_job
+        saved_conflict = conflict_job["result"]
+        assert "[b]Format :[/b] STEP" in saved_conflict["form"]["description"]
+        assert saved_conflict["form"]["field_provenance"]["format"]["kind"] == "user_supplied"
+        evidence = saved_conflict["review"]["file_facts"]
+        assert evidence["fields"]["format"]["extracted_value"] == "obj"
+        assert saved_conflict["review"]["presentation"]["local_review_ready"] is False
         assert all(path.read_text() == OBJ for path in pack.glob("*.obj"))

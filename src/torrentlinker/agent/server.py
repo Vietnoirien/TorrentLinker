@@ -409,12 +409,14 @@ def make_server(service: AgentService):
 
         target = service.target(ACTOR.get(), client_id)
         target.library.entry(path)
-        data, mime = Assets(target.setup.store.torrent_dir.parent).read(asset_id, path)
+        assets = Assets(target.setup.store.torrent_dir.parent)
+        data, mime = assets.read(asset_id, path)
+        metadata = assets.describe(asset_id, path)
         return CallToolResult(
             content=[
                 ImageContent(type="image", mime_type=mime, data=base64.b64encode(data).decode())
             ],
-            structured_content={"asset_id": asset_id, "mime_type": mime},
+            structured_content=metadata,
         )
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)

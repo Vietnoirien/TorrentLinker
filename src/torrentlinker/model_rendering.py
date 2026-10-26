@@ -68,9 +68,11 @@ def inspect_models(paths, stop=None, progress=None):
                 "format": path.suffix.lower().removeprefix("."),
                 "group": str(path.parent),
                 "size_bytes": path.stat().st_size,
-                "scale_hints": re.findall(r"1[ /_-](?:4|9|12)\b", text),
+                "scale_hints": re.findall(r"1[ ,/_.-](?:4|9|12)\b", text),
                 "supported_hint": any("support" in part.lower() for part in parts),
-                "assembled_hint": bool(re.search(r"\b(merge[d]?|assembled|uncut)\b", text, re.I)),
+                "assembled_hint": bool(
+                    re.search(r"(?:^|[^a-z])(merge[d]?|assembled|uncut)(?:[^a-z]|$)", text, re.I)
+                ),
                 "assembled_verified": False,
                 "previewable": path.suffix.lower() in {".stl", ".obj", ".3mf"},
             }
@@ -224,10 +226,10 @@ def _worker(connection, paths, cameras, inspect_only):
             output = io.BytesIO()
             sheet.save(output, format="PNG")
             pages.append({"png": output.getvalue(), "pieces": metadata, "page": len(pages) + 1})
+            connection.send({"page": pages[-1], "covered": covered, "unsupported": unsupported})
         connection.send(
             {
                 "result": {
-                    "pages": pages,
                     "covered": covered,
                     "unsupported": unsupported,
                     "selected": len(paths),
@@ -255,6 +257,25 @@ def render_models(paths, cameras, stop, progress, *, inspect_only=False):
         target=_worker, args=(child, list(paths), list(cameras), inspect_only), daemon=True
     )
     started_worker = False
+    pages, covered, unsupported = [], [], []
+
+    def interrupted_coverage(reason):
+        if inspect_only:
+            raise ValueError(reason)
+        resolved = set(covered) | {row["file"] for row in unsupported}
+        remaining = [
+            {"file": str(path), "reason": reason} for path in paths if str(path) not in resolved
+        ]
+        return {
+            "pages": pages,
+            "covered": covered,
+            "unsupported": [*unsupported, *remaining],
+            "selected": len(paths),
+            "renderer": "cpu",
+            "complete": False,
+            "resource_error": reason,
+        }
+
     try:
         worker.start()
         started_worker = True
@@ -264,18 +285,31 @@ def render_models(paths, cameras, stop, progress, *, inspect_only=False):
             if stop.is_set():
                 raise InterruptedError("Rendering cancelled.")
             if time.monotonic() - started > 120:
-                raise ValueError("Preview exceeded its 120 second resource limit.")
+                return interrupted_coverage("Preview exceeded its 120 second resource limit.")
             if parent.poll(0.1):
-                message = parent.recv()
+                try:
+                    message = parent.recv()
+                except EOFError:
+                    return interrupted_coverage(
+                        "Rendering worker stopped before completing "
+                        "coverage. CPU or memory limit may be reached."
+                    )
                 if "progress" in message:
                     progress(message["progress"])
+                elif "page" in message:
+                    pages.append(message["page"])
+                    covered, unsupported = message["covered"], message["unsupported"]
                 elif "result" in message:
                     progress({"done": len(paths), "total": len(paths)})
-                    return message["result"]
+                    return (
+                        message["result"] if inspect_only else {**message["result"], "pages": pages}
+                    )
                 else:
                     raise ValueError("Rendering unavailable: " + message["error"])
             elif not worker.is_alive():
-                raise ValueError("Rendering worker stopped. Check memory and image dependencies.")
+                return interrupted_coverage(
+                    "Rendering worker stopped. Check memory and dependencies."
+                )
     finally:
         if worker.is_alive():
             worker.terminate()

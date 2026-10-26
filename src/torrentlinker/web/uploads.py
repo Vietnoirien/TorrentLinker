@@ -24,7 +24,7 @@ from torrentlinker.upload import (
     seed_upload,
     upload_files,
 )
-from torrentlinker.upload_presentation import assess, extend_template, file_evidence, update_fields
+from torrentlinker.upload_presentation import assess, extend_template
 from torrentlinker.upload_queue import edited_form, save_local, send_local, sent_result
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
@@ -154,39 +154,22 @@ class Uploads:
                 f"{w.judgement.value}: {w.detail}" for w in profile.warnings(item, ignore, sub)
             ],
         }
-        from torrentlinker.upload_facts import known_fields
-
-        evidence = file_evidence(request)
         from torrentlinker.upload_assets import Assets
+        from torrentlinker.upload_facts import prepare_presentation
 
-        assets = Assets(self.setup.store.torrent_dir.parent)
-        attached = list(form.assets)
-        if not attached:
-            attached = [a["asset_id"] for a in assets.extract(request, evidence)]
-        for identifier in attached:
-            assets.read(identifier, str(request.item.path))
-        evidence["assets"] = attached
-        preview["assets"] = attached
-        facts = known_fields(request, evidence)
-        if request.category in {1, 3}:
-            if not form.description:
-                description = update_fields(description, {"source": ""})
-            if not form.nfo:
-                nfo = update_fields(nfo, {"source": ""}, bbcode=False)
-        # Populate extracted technical facts before the model writes editorial sections.
-        description = update_fields(description, facts)
-        if not form.nfo or form.nfo_origin == "generated":
-            nfo = update_fields(nfo, facts, bbcode=False)
-        request = replace(request, description=description, nfo=nfo)
-        preview.update(
-            description=description,
-            nfo=nfo,
-            nfo_origin=form.nfo_origin or ("original" if form.nfo else "generated"),
+        request, prepared_form, evidence = prepare_presentation(
+            request,
+            form.model_dump(),
+            Assets(self.setup.store.torrent_dir.parent),
+            generated_description=not form.description,
+            generated_nfo=not form.nfo,
         )
-        evidence["fields"] = {
-            key: {"value": value, "kind": "extracted", "source": "local_files"}
-            for key, value in facts.items()
-        }
+        preview.update(
+            description=request.description,
+            nfo=request.nfo,
+            nfo_origin=prepared_form["nfo_origin"],
+            assets=prepared_form["assets"],
+        )
         completeness = assess(
             {
                 **form.model_dump(),

@@ -89,6 +89,10 @@ class Assets:
             raise ValueError("Saved Presentation Image is invalid.")
         return data, metadata["mime_type"]
 
+    def describe(self, identifier, item_path):
+        self.read(identifier, item_path)
+        return json.loads((self.directory / (identifier + ".json")).read_text())
+
     def inline(self, identifier, item_path):
         data, mime = self.read(identifier, item_path)
         return f"data:{mime};base64,{base64.b64encode(data).decode()}"
@@ -166,3 +170,21 @@ class Assets:
                 except Exception:
                     continue
         return result
+
+
+def publish_render_pages(pages, assets, item_path, renderer="cpu", file_names=None):
+    """Publish immutable camera/geometry artifacts once for every frontend."""
+    artifacts = []
+    for page in pages:
+        pieces = [
+            {**piece, "file": (file_names or {}).get(piece["file"], piece["file"])}
+            for piece in page["pieces"]
+        ]
+        metadata = {
+            "origin": "model_render",
+            "renderer": renderer,
+            "page": page["page"],
+            "pieces": pieces,
+        }
+        artifacts.append(assets.put(page["png"], "image/png", item_path, metadata))
+    return artifacts

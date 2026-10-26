@@ -174,6 +174,7 @@ def test_mediainfo_nfo_is_recognized_without_rewriting_original_text():
     form["nfo"] = (
         form["title"]
         + """
+Source : WEB-DL
 General
 Complete name : Movie.WEB-DL.mkv
 Format : Matroska
@@ -217,3 +218,37 @@ def test_inline_first_track_does_not_hide_later_missing_durations():
         "description.tracklist[2].duration",
         "nfo.tracklist[2].duration",
     }
+
+
+def test_label_edits_preserve_following_fields_and_replace_entire_tracklist():
+    from torrentlinker.upload_presentation import update_fields
+
+    text = (
+        "Titre : \nFichiers : 2\nListe des pistes :\n01. Old (01:00)\n"
+        "02. Old (02:00)\nTaille totale : 12 MiB"
+    )
+    changed = update_fields(
+        text, {"title": "Correct title", "tracklist": "01. New (03:00)"}, bbcode=False
+    )
+    assert "Fichiers : 2" in changed
+    assert "Old" not in changed
+    assert "Taille totale : 12 MiB" in changed
+    assert "Liste des pistes : 01. New (03:00)" in changed
+
+
+def test_incidental_filename_does_not_establish_rip_source():
+    from torrentlinker.upload_presentation import media_nfo_values
+
+    facts = media_nfo_values(
+        "General\nComplete name : Movie.BluRay.mkv\nFormat : Matroska\nVideo\nFormat : AVC"
+    )
+    assert "source" not in facts
+
+
+def test_send_readiness_requires_the_hosted_image_form_field():
+    form = complete_form()
+    form["image"] = ""
+    result = assess(form, local=True)
+    assert result["local_review_ready"] is True
+    assert result["send_ready"] is False
+    assert any(row["field"] == "image" for row in result["send_missing_fields"])

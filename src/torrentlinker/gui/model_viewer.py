@@ -64,6 +64,7 @@ from torrentlinker.mesh import (
     previewable,
     sheet_layout,
 )
+from torrentlinker.model_rendering import Camera
 
 QML = Path(__file__).with_name("model_view.qml")
 CAPTURE_SIZE = QSize(1200, 900)  # c411 wants at least 1000 px wide
@@ -343,7 +344,7 @@ class ModelPanel(QWidget):
         self._generation = 0  # which load is current: a late result of an old one is dropped
         self._busy = False
         self.asset_ids: list[str] = []
-        self.cameras: dict[Path, object] = {}
+        self.cameras: dict[Path, Camera] = {}
         self._render_stop = threading.Event()
         self._shown_path: Path | None = None
 
@@ -453,7 +454,6 @@ class ModelPanel(QWidget):
         self.message.setVisible(bool(text))
 
     def _remember_camera(self):
-        from torrentlinker.model_rendering import Camera
 
         if self._shown_path is not None and self.viewer.display is not None:
             yaw, pitch, zoom = self.viewer.view_state()
@@ -479,6 +479,11 @@ class ModelPanel(QWidget):
         if generation != self._generation:
             return
         self.viewer.show_mesh(display)
+        state = self.cameras.get(self._shown_path) if self._shown_path is not None else None
+        if state is not None and self.viewer.root is not None:
+            self.viewer.root.setProperty("yaw", state.yaw)
+            self.viewer.root.setProperty("pitch", 90 - state.pitch)
+            self.viewer.root.setProperty("zoom", state.zoom)
         if display.shown < display.triangles:
             self._say(
                 self.tr("Shown with {0} of its {1} triangles.").format(
@@ -521,8 +526,8 @@ class ModelPanel(QWidget):
             self._capture_models(list(self.files))
 
     def _capture_models(self, chosen):
-        from torrentlinker.model_rendering import Camera, render_models
-        from torrentlinker.upload_assets import Assets
+        from torrentlinker.model_rendering import render_models
+        from torrentlinker.upload_assets import Assets, publish_render_pages
 
         self._remember_camera()
         states = [self.cameras.get(path, Camera()) for path in chosen]
@@ -538,17 +543,12 @@ class ModelPanel(QWidget):
         def read():
             result = render_models(chosen, states, stop, lambda _: None)
             assets = Assets(self.folder.parent)
-            ids, saved_paths = [], []
+            artifacts = publish_render_pages(result["pages"], assets, item_path)
+            ids = [asset["asset_id"] for asset in artifacts]
+            saved_paths = []
             output_folder.mkdir(parents=True, exist_ok=True)
-            for page in result["pages"]:
-                metadata = {
-                    "origin": "model_render",
-                    "page": page["page"],
-                    "pieces": page["pieces"],
-                    "renderer": "cpu",
-                }
-                asset = assets.put(page["png"], "image/png", item_path, metadata)
-                ids.append(asset["asset_id"])
+            for page, asset in zip(result["pages"], artifacts, strict=True):
+                metadata = asset["metadata"]
                 path = output_folder / (stem + ".png")
                 number = 2
                 while path.exists():

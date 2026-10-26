@@ -7,7 +7,7 @@ from pathlib import Path
 
 from torrentlinker.model_rendering import Camera, inspect_models, render_models
 from torrentlinker.scan import scan_item
-from torrentlinker.upload_assets import Assets
+from torrentlinker.upload_assets import Assets, publish_render_pages
 
 
 def local_models(uploads, path, stop):
@@ -50,26 +50,13 @@ def render(uploads, path, pieces, cameras, stop, progress):
         states.append(Camera.preset(preset, **values))
     result = render_models([paths[name] for name in pieces], states, stop, progress)
     assets = Assets(uploads.setup.store.torrent_dir.parent)
-    artifacts, images = [], []
     reverse = {str(value): key for key, value in paths.items()}
-    for page in result.pop("pages"):
-        for row in page["pieces"]:
-            row["file"] = reverse[row["file"]]
-        metadata = {
-            "origin": "model_render",
-            "renderer": result["renderer"],
-            "page": page["page"],
-            "pieces": page["pieces"],
-        }
-        asset = assets.put(page["png"], "image/png", str(item.path), metadata)
-        artifacts.append(asset)
-        images.append(
-            {
-                "type": "image",
-                "mimeType": "image/png",
-                "data": base64.b64encode(page["png"]).decode(),
-            }
-        )
+    pages = result.pop("pages")
+    artifacts = publish_render_pages(pages, assets, str(item.path), result["renderer"], reverse)
+    images = [
+        {"type": "image", "mimeType": "image/png", "data": base64.b64encode(page["png"]).decode()}
+        for page in pages
+    ]
     result["covered"] = [reverse[name] for name in result["covered"]]
     for row in result["unsupported"]:
         row["file"] = reverse[row["file"]]

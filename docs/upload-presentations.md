@@ -24,13 +24,17 @@ The shared 3D tools are `inspect_3d_models`, `render_3d_preview`,
 inspection, per-piece presets and sheet capture. Desktop captures use the same CPU
 renderer. Inspection preserves folders, scale/support variants and assembled-name hints;
 filenames never prove that a mesh is assembled. Geometry reports bounds and triangle
-counts, without inferring physical units.
+counts, without inferring physical units. Large binary STL bounds are deferred until
+a successful render to keep inventory inspection bounded. `read_upload_asset` returns
+native MCP pixels together with the saved camera/artifact metadata.
 
 Rendering runs in a disposable process with cancellation and a 120-second deadline.
 One operation accepts at most 108 pieces, nine per labelled sheet, and reports every
 covered or unsupported piece. Input meshes are bounded to 256 MB per file, with a
 4 GB worker address-space limit on platforms supporting resource limits. Renders use
-at most 20,000 display triangles per piece and never rewrite source geometry. Pillow
+at most 20,000 display triangles per piece and never rewrite source geometry. If a
+worker reaches its limit, completed pages remain available and every remaining piece
+is explicitly reported as unsupported for that attempt. Pillow
 and NumPy support the same renderer without Qt or a GPU on headless servers.
 
 Camera state includes yaw, pitch, roll, zoom and framing offsets. Each render asset

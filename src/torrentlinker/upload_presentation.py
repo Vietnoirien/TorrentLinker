@@ -402,6 +402,14 @@ def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> 
                         "Add the duration of each track/chapter, for example 01. Title (03:42).",
                     )
     if evidence:
+        for conflict in evidence.get("conflicting_fields", []):
+            if conflict.get("blocks_review"):
+                add(
+                    conflict["field"],
+                    "Conflicting facts: extracted "
+                    f"{conflict['extracted_value']!r}, declared {conflict['declared_value']!r}. "
+                    "Verify and correct the value or use the extracted fact.",
+                )
         if values.get("files") and values["files"].strip() != str(evidence["file_count"]):
             add("description.files", f"Use the actual file count: {evidence['file_count']}.")
         if category == 2:
@@ -418,10 +426,15 @@ def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> 
     return {
         "status": "incomplete" if missing else "complete",
         "local_review_ready": not missing,
-        "send_ready": not missing and hosted,
+        "send_ready": not missing and hosted and bool(image_url(form.get("image", ""))),
         "hosting_required": not hosted,
         "missing_fields": missing,
         "send_missing_fields": missing
+        + (
+            [{"field": "image", "message": "Set the hosted image URL before sending."}]
+            if hosted and not image_url(form.get("image", ""))
+            else []
+        )
         + (
             [
                 {
@@ -522,10 +535,6 @@ def media_nfo_values(nfo: str) -> dict[str, str]:
     for target, source in (("format", "format"), ("duration", "duration"), ("size", "file size")):
         if general.get(source):
             result[target] = general[source]
-    if source_match := re.search(
-        r"\b(WEB(?:[ .-]?(?:DL|RIP))?|BluRay|DVD(?:Rip)?|HDTV)\b", nfo, re.I
-    ):
-        result["source"] = source_match[1]
     result["files"] = _values(nfo).get("files", str(len(blocks["general"])))
     for group, mappings in (
         (
@@ -586,7 +595,15 @@ def update_fields(text: str, fields: dict[str, str], *, bbcode: bool = True) -> 
 
                 text = re.sub(section, replace_section, text, count=1, flags=re.I | re.S)
                 continue
-        pattern = rf"^(?:\[b])?(?:{labels})\s*[. ]*:\s*(?:\[/b])?[^\n]*"
+        pattern = rf"^(?:\[b])?(?:{labels})[ \t.]*:[ \t]*(?:\[/b])?[^\n]*"
+        if key in {"tracklist", "contents", "installation"}:
+            all_labels = "|".join(
+                re.escape(label)
+                for field, (label, aliases) in FIELDS.items()
+                for label in (field, label, *aliases.split("|"))
+                if label
+            )
+            pattern += rf"(?:\n(?!(?:\[b])?(?:{all_labels})[ \t.]*:)[^\n]*)*"
         if re.search(pattern, text, re.I | re.M):
 
             def replace_line(match: re.Match[str], value: str = replacement) -> str:

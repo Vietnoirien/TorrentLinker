@@ -179,3 +179,93 @@ def known_fields(request, evidence):
         fields["format"] = "; ".join(sorted({row["format"] for row in evidence["inventory"]}))
         fields["contents"] = "\n".join(row["file"] for row in evidence["inventory"])
     return fields
+
+
+def prepare_presentation(
+    request, form, assets, *, generated_description=False, generated_nfo=False
+):
+    """One preparation path for preview and saved desktop/web/MCP Local Drafts."""
+    from dataclasses import replace
+
+    from torrentlinker.upload_presentation import _normal, _values, update_fields
+
+    form = dict(form)
+    evidence = collect(request)
+    attached = list(form.get("assets", []))
+    if not attached:
+        attached = [asset["asset_id"] for asset in assets.extract(request, evidence)]
+    for asset_id in attached:
+        assets.read(asset_id, str(request.item.path))
+    form["assets"] = evidence["assets"] = attached
+    facts = known_fields(request, evidence)
+    description, nfo = request.description, request.nfo
+    if request.category in {1, 3}:
+        if generated_description:
+            description = update_fields(description, {"source": ""})
+        if generated_nfo:
+            nfo = update_fields(nfo, {"source": ""}, bbcode=False)
+    # Explicit owner/research edits survive extraction; show their conflicts instead
+    # of silently replacing them. Files/count/codec contradictions still block review.
+    declared = form.get("field_provenance", {})
+    chosen = _values(description)
+    overrides = {
+        key
+        for key, source in declared.items()
+        if source.get("kind") in {"research", "user_supplied"} and chosen.get(key)
+    }
+    evidence["fields"] = {}
+    evidence["conflicting_fields"] = []
+    technical = {
+        "files",
+        "size",
+        "format",
+        "duration",
+        "tracks",
+        "codec",
+        "bitrate",
+        "sample_rate",
+        "bit_depth",
+        "video_codec",
+        "video_bitrate",
+        "video_resolution",
+        "audio_codec",
+        "audio_bitrate",
+        "audio_channels",
+        "audio_languages",
+        "subtitles",
+        "subtitle_languages",
+        "subtitle_formats",
+        "subtitle_types",
+    }
+    for key, value in facts.items():
+        if key in overrides:
+            different = _normal(chosen[key]) != _normal(value)
+            evidence["fields"][key] = {
+                **declared[key],
+                "value": chosen[key],
+                "extracted_value": value,
+                "conflict": different,
+            }
+            if different:
+                evidence["conflicting_fields"].append(
+                    {
+                        "field": f"description.{key}",
+                        "extracted_value": value,
+                        "declared_value": chosen[key],
+                        "blocks_review": key in technical,
+                    }
+                )
+        else:
+            evidence["fields"][key] = {"value": value, "kind": "extracted", "source": "local_files"}
+    evidence["fields"].update({key: value for key, value in declared.items() if key not in facts})
+    updates = {key: value for key, value in facts.items() if key not in overrides}
+    description = update_fields(description, updates)
+    origin = form.get("nfo_origin") or ("generated" if generated_nfo else "original")
+    if generated_nfo or origin == "generated":
+        nfo = update_fields(
+            nfo,
+            {**updates, **{key: chosen[key] for key in overrides if key in facts}},
+            bbcode=False,
+        )
+    form.update(description=description, nfo=nfo, nfo_origin=origin)
+    return replace(request, description=description, nfo=nfo), form, evidence

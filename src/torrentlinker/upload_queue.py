@@ -8,7 +8,7 @@ from typing import Any
 
 from torrentlinker.store import Store
 from torrentlinker.upload import PreparedUpload, UploadRequest
-from torrentlinker.upload_presentation import assess, file_evidence, request_form, require_complete
+from torrentlinker.upload_presentation import assess, require_complete
 
 # Desktop and MCP can share a database through separate Store objects in this process.
 _active_lock = threading.Lock()
@@ -58,29 +58,14 @@ def save_local(
     review: dict | None = None,
 ) -> dict:
     review = dict(review or {})
-    evidence = file_evidence(request)
     from torrentlinker.upload_assets import Assets
-    from torrentlinker.upload_facts import known_fields
-    from torrentlinker.upload_presentation import update_fields
+    from torrentlinker.upload_facts import prepare_presentation
 
-    form = dict(form)
-    facts = known_fields(request, evidence)
-    evidence["fields"] = {
-        **form.get("field_provenance", {}),
-        **{
-            key: {"value": value, "kind": "extracted", "source": "local_files"}
-            for key, value in facts.items()
-        },
-    }
-    form["description"] = update_fields(form.get("description", ""), facts)
-    if form.get("nfo_origin") == "generated":
-        form["nfo"] = update_fields(form.get("nfo", ""), facts, bbcode=False)
-    assets = Assets(store.torrent_dir.parent)
-    if not form.get("assets"):
-        form["assets"] = [a["asset_id"] for a in assets.extract(request, evidence)]
-    for asset_id in form.get("assets", []):
-        assets.read(asset_id, str(request.item.path))
-    evidence["assets"] = form.get("assets", [])
+    request, form, evidence = prepare_presentation(
+        request,
+        form,
+        Assets(store.torrent_dir.parent),
+    )
     completeness = assess(form, evidence, local=True)
     review["file_facts"] = evidence
     review["presentation"] = completeness
@@ -113,7 +98,6 @@ def send_local(
     request: UploadRequest,
     send: Callable[[], PreparedUpload],
 ) -> PreparedUpload:
-    require_complete(request_form(request), file_evidence(request))
     key = _key(store, identifier)
     with _active_lock:
         if key in _active_sends:
@@ -123,6 +107,15 @@ def send_local(
             raise ValueError("Local Draft changed. Review the current revision before sending.")
         if record["files"] != file_state(request):
             raise ValueError("Local files changed. Save and review the Local Draft again.")
+        from torrentlinker.upload_assets import Assets
+        from torrentlinker.upload_facts import prepare_presentation
+
+        _, checked_form, evidence = prepare_presentation(
+            request,
+            record["form"],
+            Assets(store.torrent_dir.parent),
+        )
+        require_complete(checked_form, evidence)
         store.claim_local_draft(identifier, revision)
         _active_sends.add(key)
     try:
