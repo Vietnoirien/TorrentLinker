@@ -282,3 +282,49 @@ html[data-theme="light"] #media-playlists .media-eyebrow { color: #17685c; }
 html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30px #183d3024; }
 .media-track-support { color: var(--muted); font-size: 11px; line-height: 1.6; }
 .media-track-support a { color: var(--accent); }
+
+/* Video transport remains on the picture; extra actions share one options surface. */
+.media-video-stage { position: relative; min-width: 0; background: #000; border-radius: 10px; }
+.media-video-overlay { position: absolute; top: 10px; right: 10px; z-index: 2; opacity: 1; transition: opacity .18s; }
+#media-player-shell #media-player-menu-toggle { width: 36px; height: 36px; padding: 0; font-size: 25px; line-height: 1; border-radius: 50%; color: #fff; background: #141b21bc; border-color: #ffffff38; backdrop-filter: blur(8px); }
+#media-video-stage[data-playing="true"] .media-video-overlay { opacity: 0; pointer-events: none; }
+#media-video-stage[data-playing="true"]:focus-within .media-video-overlay, #media-video-stage[data-menu-open="true"] .media-video-overlay, #media-video-stage.media-controls-revealed .media-video-overlay { opacity: 1; pointer-events: auto; }
+@media (hover: hover) { #media-video-stage:hover .media-video-overlay { opacity: 1; pointer-events: auto; } }
+#media-player-menu { position: fixed; width: min(310px,calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; z-index: 20; padding: 12px; border: 1px solid #ffffff26; border-radius: 12px; background: #20282ef5; color: #f0f5f3; box-shadow: 0 15px 55px #0008; backdrop-filter: blur(18px); color-scheme: dark; }
+.media-player-menu-heading { display: flex; align-items: center; gap: 16px; justify-content: space-between; padding: 0 2px 10px; border-bottom: 1px solid #ffffff19; margin-bottom: 8px; font-size: 12px; }
+#media-player-shell #media-player-menu button, #media-player-shell #media-player-menu select { color: #f0f5f3; background: #ffffff08; border-color: #ffffff19; font-size: 12px; min-height: 34px; }
+#media-player-shell #media-player-menu button:hover { background: #ffffff14; border-color: #80d6c578; }
+#media-player-menu > #media-chat { width: 100%; text-align: left; margin: 8px 0 5px; }
+#media-player-menu .media-player-actions, #media-player-menu .media-player-transport { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 7px 0; margin: 0; }
+#media-player-menu .media-player-actions { border-bottom: 1px solid #ffffff19; }
+#media-player-menu .media-player-actions button, #media-player-menu .media-player-transport button { text-align: left; border-color: transparent; background: none; }
+#media-player-shell #media-player-menu label { display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin: 6px 0; gap: 12px; font-size: 11px; max-width: none; }
+#media-player-menu label select { width: auto; max-width: 175px; }
+#media-player-tracks:not(:has(label:not([hidden]))) { display: none; }
+#media-player-tracks { border-bottom: 1px solid #ffffff19; padding: 4px 0 9px; }
+#media-player-menu #media-queue-details { border-top: 1px solid #ffffff19; padding-top: 10px; font-size: 12px; }
+#media-player-menu summary { cursor: pointer; padding: 4px 0; }
+#media-player-menu #media-player-queue { margin: 8px 0; padding-left: 0; }
+#media-player-menu #media-player-queue li { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+#media-player-menu #media-player-queue li button:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+#media-player-menu .media-track-support { border-top: 1px solid #ffffff19; margin: 12px 0 0; padding-top: 12px; color: #a6b8bd; font-size: 10px; }
+#media-player-menu .media-track-support a { color: #8cddce; }
+#media-player-shell[data-kind="video"] { display: flex; flex-direction: column; gap: 0; }
+.media-view #media-player-shell[data-kind="video"]:not(:fullscreen) { width: 420px; padding: 0; overflow: visible; }
+#media-player-shell[data-kind="video"] #media-video-stage { order: 0; }
+#media-player-shell[data-kind="video"] > .media-player-heading { order: 1; margin: 0; padding: 11px 14px 2px; }
+#media-player-shell[data-kind="video"] #media-playing-description { order: 2; margin: 0; padding: 3px 14px 12px; font-size: 11px; color: var(--muted); line-height: 1.7; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+#media-player-shell[data-kind="video"] > #media-preview-state, #media-player-shell[data-kind="video"] > #media-codec-error, #media-player-shell[data-kind="video"] > #media-track-request-error { order: 3; margin: 6px 14px 12px; }
+.media-view #media-player-shell[data-kind="video"] #media-video { border-radius: 10px 10px 0 0; object-fit: contain; max-height: 260px; }
+.media-view #media-player-shell[data-kind="video"].media-player-expanded { width: min(900px,calc(100vw - 260px)); }
+.media-view #media-player-shell[data-kind="video"].media-player-expanded #media-video { max-height: 65dvh; }
+@media (max-width: 850px) { .media-view #media-player-shell[data-kind="video"].media-player-expanded { width: calc(100vw - 32px); } }
+@media (pointer: coarse) { #media-player-shell #media-player-menu-toggle { width: 44px; height: 44px; } #media-player-shell #media-player-menu button, #media-player-shell #media-player-menu select { min-height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .media-video-overlay { transition: none; } }
+#media-player-shell #media-player-menu .media-player-actions button, #media-player-shell #media-player-menu > #media-chat { border-color: transparent; background: none; }
+#media-player-shell #media-player-menu .media-player-actions button:hover, #media-player-shell #media-player-menu > #media-chat:hover { background: #ffffff12; }
+#media-player-menu .media-player-menu-heading #media-player-menu-close { min-height: 30px; border-color: transparent; background: none; color: #b6c7cb; }
+:root #media-player-shell[data-kind="video"]:fullscreen { padding: 0; }
+:root #media-player-shell[data-kind="video"]:fullscreen > .media-player-heading, :root #media-player-shell[data-kind="video"]:fullscreen #media-playing-description { display: none; }
+:root #media-player-shell:fullscreen #media-video-stage { flex: 1 1 0; min-height: 0; display: block; border-radius: 0; }
+:root #media-player-shell[data-kind="video"]:fullscreen #media-video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; }

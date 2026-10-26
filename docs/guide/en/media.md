@@ -8,6 +8,8 @@ Open **Media** and choose **Video** or **Music**. **Add media folder** registers
 
 Choose **Media Center mode** in Media to make the whole app fullscreen and hide its normal navigation. Video and music browsing, the player and chat stay available. Use **Return to TorrentLinker** or **Escape** to restore the normal interface. This mode is separate from player-only fullscreen.
 
+Video controls sit inside the picture. Move the pointer over the player or focus its controls to reveal them. Open the player menu, or right-click the video, for audio tracks, subtitles and secondary actions. The title and available description stay outside the picture. Music keeps a compact persistent playback bar.
+
 Use **Fullscreen** in the player to fill the screen. Press **Escape** or **Exit fullscreen** to return, keeping playback and subtitles. The web button is available when the browser supports fullscreen.
 
 Video offers recent additions, continue watching, films and series. Select a card for its description, releases, episodes and available subtitles. Play uses TorrentLinker's own player and remembers your position. You can also change watched status. Genre, year and language filters use available metadata; an empty field means unknown. Files with a verified shared identity can share a card. Filename guesses alone do not merge films.

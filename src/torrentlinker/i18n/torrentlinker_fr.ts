@@ -7745,6 +7745,37 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>Exit fullscreen</source>
         <translation>Quitter le plein écran</translation>
     </message>
+    <message>
+        <location filename="../gui/media.py" line="827" />
+        <source>Seek</source>
+        <translation>Position de lecture</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="872" />
+        <location filename="../gui/media.py" line="873" />
+        <source>Player options</source>
+        <translation>Options du lecteur</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1140" />
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1140" />
+        <source>Play</source>
+        <translation>Lire</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1256" />
+        <source>Back 10 seconds</source>
+        <translation>Reculer de 10 secondes</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1261" />
+        <source>Forward 10 seconds</source>
+        <translation>Avancer de 10 secondes</translation>
+    </message>
 </context>
 <context>
     <name>MediaHero</name>

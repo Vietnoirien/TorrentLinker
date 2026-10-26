@@ -8,6 +8,8 @@ L'**Accueil cinéma** est l'interface vidéo par défaut : un titre mis en avant
 
 Choisissez **Mode Media Center** dans Médias pour afficher toute l’application en plein écran et masquer sa navigation habituelle. La navigation vidéo et musique, le lecteur et la discussion restent accessibles. Utilisez **Revenir à TorrentLinker** ou **Échap** pour retrouver l’interface normale. Ce mode est distinct du plein écran du lecteur seul.
 
+Les commandes vidéo sont intégrées à l’image. Survolez le lecteur ou donnez le focus à ses commandes pour les afficher. Ouvrez le menu du lecteur, ou faites un clic droit sur la vidéo, pour choisir les pistes audio, les sous-titres et les actions secondaires. Le titre et la description disponible restent en dehors de l’image. La musique conserve une barre de lecture compacte et permanente.
+
 Utilisez **Plein écran** dans le lecteur pour occuper tout l’écran. Appuyez sur **Échap** ou **Quitter le plein écran** pour revenir, sans interrompre la lecture ni les sous-titres. Le bouton web est disponible si le navigateur prend en charge le plein écran.
 
 La vue Vidéo propose les ajouts récents, la reprise de lecture, les films et les séries. Une carte donne accès à la description, aux versions, aux épisodes et aux sous-titres disponibles. Le lecteur intégré mémorise la position. Vous pouvez aussi changer le statut « vu ». Les filtres de genre, d'année et de langue utilisent les métadonnées disponibles. Un champ vide signifie que l'information est inconnue. Des versions portant une même identité vérifiée peuvent partager une carte. Un nom de fichier seul ne suffit pas pour fusionner deux films.

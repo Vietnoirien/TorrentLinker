@@ -25,3 +25,9 @@ The user clarified that fullscreen should apply to the entire Media interface, n
 ## Music presentation
 
 The user also requested a visual pass for music. Give music its own presentation with visible Albums, Artists and Tracks navigation, square album artwork, compact track information, and clear playback queue and playlist actions. Use the registered library's actual metadata and artwork; unknown tags remain unknown. Music presentation must preserve album editions, group pagination, playback and queued track identities. It does not reuse the video's giant featured-title layout or change the saved video layout preference.
+
+## Integrated video controls
+
+The user requested controls inside the video, inspired by YouTube and GNOME Videos, instead of the separate rows of transport buttons and track selectors. Video transport and seeking belong over the image. Controls hide during playback, return on pointer activity or keyboard focus, and remain accessible while paused or while a menu is open. A compact options menu and right-click menu expose audio tracks, subtitles and secondary actions. Keyboard and touch users must have an equivalent menu entry point. Fullscreen uses the same player and controls. Title and description remain outside the video, using actual library metadata. Music retains its compact persistent audio bar.
+
+The visual change must preserve the source-bound Assistant/MCP track workflow, paused preparation, command acknowledgments, queue, playback position and subtitle rendering. Browser menus expose only tracks supported by the actual browser player. Native controls must render over decoded video and be verifiable in a real screenshot.

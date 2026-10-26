@@ -35,6 +35,11 @@ const mediaTime = n => { const seconds = Math.max(0, Math.floor(Number(n) || 0))
 function mediaStatus(text) { $("media-status").textContent = text; }
 function mediaOption(select, value, label) { const option = element("option", label); option.value = value; select.append(option); }
 function mediaViews() {
+  $("media-player-menu-toggle").setAttribute("aria-label", say("Player options", "Options du lecteur"));
+  $("media-player-menu-toggle").title = say("Player options", "Options du lecteur");
+  $("media-player-menu").setAttribute("aria-label", say("Player options", "Options du lecteur"));
+  $("media-player-audio-track").setAttribute("aria-label", say("Audio track", "Piste audio"));
+  $("media-player-subtitle-track").setAttribute("aria-label", say("Subtitle track", "Piste de sous-titres"));
   $("media-layout-switch").setAttribute("aria-label", say("Media layout", "Disposition des médias"));
   $("settings-media-layout").setAttribute("aria-label", say("Settings Media layout", "Disposition des médias dans les paramètres"));
   $("media-search").placeholder = say("Search your media", "Rechercher dans vos médias");
@@ -352,8 +357,51 @@ function mediaSelectTrack(command) {
       if (off ? selected.length !== 0 : selected.length !== 1 || selected[0].id !== command.track_id) error = "The browser did not apply the requested track.";
     } catch (_) { error = "The browser could not switch that track."; }
   }
-  media.trackResult = {sequence: command.sequence, applied: !error, error};
+  if (command.sequence) media.trackResult = {sequence: command.sequence, applied: !error, error};
   if (error) mediaStatus(error);
+}
+function mediaClosePlayerMenu(focus = false) {
+  $("media-player-menu").hidden = true; $("media-video-stage").dataset.menuOpen = "false";
+  $("media-player-menu-toggle").setAttribute("aria-expanded", "false");
+  if (focus) $("media-player-menu-toggle").focus();
+}
+function mediaPositionPlayerMenu(point) {
+  const menu = $("media-player-menu"), box = $("media-video-stage").getBoundingClientRect();
+  if (menu.hidden) return;
+  const width = menu.offsetWidth, height = menu.offsetHeight;
+  menu.style.left = `${Math.max(12, Math.min(point?.x ?? box.right - width - 8, innerWidth - width - 12))}px`;
+  menu.style.top = `${Math.max(12, Math.min(point?.y ?? box.top + 42, innerHeight - height - 12))}px`;
+}
+function mediaRenderPlayerTracks() {
+  const state = mediaTrackState();
+  for (const kind of ["audio", "subtitle"]) {
+    const select = $(`media-player-${kind}-track`), rows = state[kind === "audio" ? "audio" : "subtitles"];
+    $(`media-player-${kind}-control`).hidden = !state.ready || !state[`${kind}_supported`] || !rows.length;
+    const signature = JSON.stringify([state.source_token, rows.map(row => [row.id, row.label, row.language])]);
+    if (select.dataset.signature !== signature) {
+      select.replaceChildren();
+      if (kind === "subtitle") mediaOption(select, "off", say("Off", "Désactivés"));
+      for (const row of rows) mediaOption(select, row.id, [row.label, row.language].filter(Boolean).join(" · ") || row.id);
+      select.dataset.signature = signature; select.dataset.sourceToken = state.source_token; select.dataset.mediaId = state.media_id;
+    }
+    select.value = rows.find(row => row.selected)?.id || (kind === "subtitle" ? "off" : "");
+  }
+}
+function mediaOpenPlayerMenu(point) {
+  if ($("media-video-stage").hidden) return;
+  mediaRenderPlayerTracks(); $("media-player-menu").hidden = false; $("media-video-stage").dataset.menuOpen = "true";
+  $("media-player-menu-toggle").setAttribute("aria-expanded", "true"); mediaPositionPlayerMenu(point);
+  $("media-player-menu-close").focus();
+}
+function mediaPlayerComposition(kind) {
+  mediaClosePlayerMenu();
+  const shell = $("media-player-shell"), menu = $("media-player-menu"), video = kind === "video";
+  $("media-video-stage").hidden = !video;
+  $("media-playing-description").hidden = !video;
+  (video ? menu : shell.querySelector(".media-player-heading")).append($("media-chat"));
+  const transport = shell.querySelector(".media-player-transport");
+  for (const item of [shell.querySelector(".media-player-actions"), $("media-queue-details"), $("media-track-support")]) (video ? menu : shell).append(item);
+  (video ? $("media-queue-details") : shell).append(transport);
 }
 function mediaRequestCurrent(request) {
   return request.generation === media.playbackGeneration && (request.browsingClient || request.client) === mediaClient()
@@ -390,6 +438,7 @@ async function mediaPreview(id, refresh = false) {
 }
 async function mediaStop() {
   mediaInvalidatePlayback();
+  mediaClosePlayerMenu();
   if (document.fullscreenElement === $("media-player-shell")) await document.exitFullscreen().catch(() => {});
   for (const player of [$("media-video"), $("media-audio")]) { player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; player.removeAttribute("src"); player.load(); }
   media.trackResult = null;
@@ -415,12 +464,15 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   if (preview) { media.queue = [id]; media.index = 0; }
   else if (request.queue) { media.queue = request.queue; media.index = request.index; }
   $("media-player-shell").dataset.kind = row.kind;
+  mediaPlayerComposition(row.kind);
   const player = $(row.kind === "music" ? "media-audio" : "media-video");
   $("media-audio").hidden = row.kind !== "music"; $("media-video").hidden = row.kind === "music";
   player.volume = old.volume; player.dataset.mediaId = id; player.dataset.sourceToken = request.sourceToken || mediaNewSourceToken(); media.trackResult = null;
   $("media-track-request-error")?.remove();
   player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();
   $("media-player-shell").hidden = false; $("media-player-shell").scrollIntoView({block: "nearest"}); $("media-now-playing").textContent = [row.title, row.artist].filter(Boolean).join(" · ");
+  $("media-playing-description").textContent = [[row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language].filter(Boolean).join(" · "), row.description].filter(Boolean).join(" · ");
+  $("media-playing-description").hidden = row.kind !== "video" || !$("media-playing-description").textContent;
   $("media-player-shell").querySelector(".media-playing-art")?.remove();
   if (row.kind === "music") $("media-player-shell").prepend(mediaArt(row, "media-playing-art"));
   $("media-codec-error").hidden = true;
@@ -492,7 +544,9 @@ function mediaQueueRender() {
   $("media-show-queue").textContent = say(`Playback queue · ${media.queue.length}`, `File de lecture · ${media.queue.length}`);
   // Restored queues can contain uncached tracks; the server validates every saved item.
   $("media-save-playlist").querySelector("button").disabled = !media.queue.length || media.queue.some(id => { const row = mediaItems.get(id); return row && row.kind !== "music"; });
-  const list = $("media-player-queue"); list.replaceChildren();
+  const list = $("media-player-queue"), signature = JSON.stringify([language, media.index, media.queue.map(id => [id, mediaItems.get(id)?.title])]);
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature; list.replaceChildren();
   media.queue.forEach((id, index) => {
     const row = mediaItems.get(id), item = element("li");
     const select = button(`${index + 1}. ${row?.title || "Unavailable item"}`, async () => { media.index = index; await mediaLoad(id, 0); });
@@ -546,6 +600,7 @@ async function mediaHeartbeat() {
     const response = await api(`media/sessions/${encodeURIComponent(media.session.id)}`, {token: media.session.token, report, context: {preview: media.preview ? {item_id: media.preview.item_id, verified_bytes: media.preview.verified_bytes, total_bytes: media.preview.total_bytes} : null, kind: media.kind, view: media.view, selection: media.selected?.id || null, filters: {q: $("media-search").value, genre: $("media-genre").value, year: $("media-year").value, language: $("media-language").value}}});
     mediaTrackRequestFailure(response.state?.track_request);
     await mediaCommands(response.commands || []);
+    if (!$("media-player-menu").hidden && !$("media-player-tracks").contains(document.activeElement)) { mediaRenderPlayerTracks(); mediaPositionPlayerMenu(); }
   } finally { media.busy = false; }
 }
 async function mediaPlaylists() {
@@ -643,8 +698,34 @@ $("media-chat").onclick = () => guard(mediaOpenChat); $("media-chat-close").oncl
 $("media-previous").onclick = () => guard(() => mediaAdvance(-1)); $("media-next").onclick = () => guard(() => mediaAdvance(1));
 $("media-shuffle").onclick = () => { media.shuffle = !media.shuffle; mediaQueueRender(); guard(mediaHeartbeat); };
 $("media-repeat").onchange = () => { media.repeat = $("media-repeat").value; guard(mediaHeartbeat); };
-$("media-player-shell").querySelector("details").ontoggle = event => { if (event.target.open) guard(mediaQueueMetadata); };
-$("media-show-queue").onclick = () => { if (!media.queue.length) return; $("media-player-shell").querySelector("details").open = true; $("media-player-shell").scrollIntoView({block: "nearest"}); };
+$("media-queue-details").ontoggle = event => { if (event.target.open) { guard(mediaQueueMetadata); mediaPositionPlayerMenu(); } };
+$("media-show-queue").onclick = () => { if (!media.queue.length) return; if (mediaPlayer() === $("media-video")) mediaOpenPlayerMenu(); $("media-queue-details").open = true; $("media-player-shell").scrollIntoView({block: "nearest"}); };
+$("media-player-menu-toggle").onclick = () => $("media-player-menu").hidden ? mediaOpenPlayerMenu() : mediaClosePlayerMenu(true);
+$("media-player-menu-close").onclick = () => mediaClosePlayerMenu(true);
+$("media-video-stage").oncontextmenu = event => { event.preventDefault(); mediaOpenPlayerMenu({x: event.clientX, y: event.clientY}); };
+$("media-video-stage").addEventListener("keydown", event => {
+  if (event.key === "Escape" && !$("media-player-menu").hidden) { event.preventDefault(); event.stopPropagation(); mediaClosePlayerMenu(true); }
+  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); mediaOpenPlayerMenu(); }
+});
+document.addEventListener("pointerdown", event => { if (!$("media-player-menu").hidden && !$("media-player-menu").contains(event.target) && event.target !== $("media-player-menu-toggle")) mediaClosePlayerMenu(); });
+$("media-player-menu").addEventListener("click", event => { if (["media-stop", "media-fullscreen", "media-player-expand", "media-chat", "media-previous", "media-next", "media-refresh-preview"].includes(event.target.id)) mediaClosePlayerMenu(); });
+for (const kind of ["audio", "subtitle"]) $(`media-player-${kind}-track`).onchange = event => {
+  const select = event.target;
+  mediaSelectTrack({kind, track_id: select.value, source_token: select.dataset.sourceToken, media_id: select.dataset.mediaId});
+  guard(mediaHeartbeat);
+};
+let mediaOverlayTimer;
+$("media-video-stage").addEventListener("pointermove", () => {
+  $("media-video-stage").classList.add("media-controls-revealed"); clearTimeout(mediaOverlayTimer);
+  mediaOverlayTimer = setTimeout(() => $("media-video-stage").classList.remove("media-controls-revealed"), 1600);
+});
+$("media-video-stage").addEventListener("pointerdown", () => {
+  $("media-video-stage").classList.add("media-controls-revealed"); clearTimeout(mediaOverlayTimer);
+  mediaOverlayTimer = setTimeout(() => $("media-video-stage").classList.remove("media-controls-revealed"), 1600);
+});
+for (const event of ["play", "pause", "ended", "emptied"]) $("media-video").addEventListener(event, () => { $("media-video-stage").dataset.playing = String(!$("media-video").paused && !$("media-video").ended); });
+window.addEventListener("resize", () => mediaPositionPlayerMenu());
+document.addEventListener("fullscreenchange", () => mediaPositionPlayerMenu());
 $("media-save-playlist").onsubmit = e => { e.preventDefault(); guard(async () => { await api("media/playlists", {client_id: media.playerClient || mediaClient(), name: $("media-playlist-name").value, media_ids: media.queue}); $("media-playlist-name").value = ""; await mediaPlaylists(); }); };
 for (const player of [$("media-video"), $("media-audio")]) { player.onerror = mediaCodecError; player.onwaiting = () => { if (media.preview && player.currentTime > 0) mediaStatus(say("The fixed partial preview has no more playable data here. Wait for more download progress, then refresh preview.", "L’aperçu partiel fixe ne contient plus de données lisibles à cet endroit. Attendez la progression du téléchargement, puis actualisez l’aperçu.")); }; player.onended = () => guard(async () => { if (media.preview) { mediaStatus(say("End of fixed partial preview. Wait for more data, then refresh preview.", "Fin de l’aperçu partiel fixe. Attendez davantage de données, puis actualisez l’aperçu.")); } else if (media.repeat === "one") { player.currentTime = 0; await mediaTryPlay(player); } else await mediaAdvance(1); await mediaHeartbeat(); }); }
 setInterval(() => { guard(mediaHeartbeat); guard(mediaPollScan); }, 1000);

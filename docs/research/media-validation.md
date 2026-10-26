@@ -43,3 +43,11 @@ Authenticated range requests returned the requested bytes for all three files. A
 ## Verification scope
 
 The full automated suite passed with 1,517 tests and 116 skips after the track-selection workflow was added. The two opt-in browser scenarios passed separately in Chromium, including external subtitle cues and complete MCP preparation. The final long-track-title fix also passed focused native and browser tests. Ruff, formatting checks and mypy passed; the French catalog has no unfinished translations. Acceptance on this Linux Qt/Chromium installation does not establish codec support on every operating system or browser.
+
+## Integrated player controls
+
+Desktop video now uses a composited video surface with its transport controls inside the image and track choices in the player/context menu. Regression checks verify decoded video pixels behind controls, visible embedded captions, pointer auto-hide/reveal, keyboard pause, context-menu access and fullscreen. The real Running Man capture contains decoded film pixels, one decoded French caption and the native menu in the same screenshot. Music retains its persistent transport bar. A cue-gap regression caught a subtitle that remained visible after expiry; the player now preserves decoder subtitle state and forwards only video frames to the display sink. The regression verifies that the caption disappears in the blank interval.
+
+Browser checks cover keyboard, right-click and touch access, external subtitle selection, menu focus across heartbeat updates, source changes and fullscreen geometry. Real Pulp Fiction playback was captured with the options menu. The existing browser codec and embedded-track limitations still apply.
+
+The integrated-controls full suite passed with 1,517 tests and 116 skips. After the final subtitle-expiry correction, all seven native playback tests passed again, including the blank cue interval. Both focused browser scenarios passed separately. Static checks passed.

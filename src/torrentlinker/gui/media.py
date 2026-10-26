@@ -8,6 +8,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 from uuid import uuid4
 
@@ -20,6 +21,7 @@ from PySide6.QtCore import (
     QSettings,
     QSignalBlocker,
     QSize,
+    QSizeF,
     Qt,
     QTimer,
     QUrl,
@@ -38,16 +40,20 @@ from PySide6.QtGui import (
     QPainterPath,
     QPalette,
     QPixmap,
+    QTextDocumentFragment,
 )
-from PySide6.QtMultimedia import QAudioOutput, QMediaMetaData, QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtMultimedia import QAudioOutput, QMediaMetaData, QMediaPlayer, QVideoSink
+from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
+    QGraphicsScene,
+    QGraphicsView,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -61,6 +67,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSplitter,
+    QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -231,6 +238,36 @@ class MediaHero(QWidget):
         painter.end()
 
 
+class VideoSurface(QGraphicsView):
+    """Qt video rendering and ordinary widget controls share one composited surface."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        scene = QGraphicsScene(self)
+        self.setScene(scene)
+        self.item = QGraphicsVideoItem()
+        scene.addItem(self.item)
+        self.setFrameShape(QGraphicsView.Shape.NoFrame)
+        self.setBackgroundBrush(QColor("black"))
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+        self.overlay = QWidget(self.viewport())
+        self.overlay.setObjectName("mediaVideoOverlay")
+        self.overlay.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.overlay.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        rect = self.viewport().rect()
+        self.setSceneRect(QRectF(rect))
+        self.item.setSize(QSizeF(rect.size()))
+        self.overlay.setGeometry(rect)
+        self.overlay.raise_()
+
+
 class MediaTab(QWidget):
     """One native player session whose lifetime is independent of browsing and chat."""
 
@@ -296,7 +333,9 @@ class MediaTab(QWidget):
         self.art_stop = threading.Event()
         self.player: Any = None
         self.audio: Any = None
-        self.video = QVideoWidget(self)
+        self.video = VideoSurface(self)
+        self.embedded_caption = ""
+        self._player_video_mode = False
 
         self._build_presentation(add_folder)
 
@@ -746,6 +785,7 @@ class MediaTab(QWidget):
         ]
         self.player_panel = QWidget()
         self.player_home_layout = left_box
+        self.player_base_layout = left_box
         self.fullscreen_dialog = QDialog(self)
         self.fullscreen_dialog.setWindowTitle(self.tr("Media player"))
         self.fullscreen_layout = QVBoxLayout(self.fullscreen_dialog)
@@ -754,49 +794,124 @@ class MediaTab(QWidget):
         player_box = QVBoxLayout(self.player_panel)
         player_box.setContentsMargins(12, 8, 12, 8)
         player_box.setSpacing(6)
-        self.video.setMinimumHeight(160)
-        self.video.setMaximumHeight(240)
-        player_box.addWidget(self.video)
+        self.video.setMinimumHeight(300)
+        player_box.addWidget(self.video, 1)
+        self.video_overlay_box = QVBoxLayout(self.video.overlay)
+        self.video_overlay_box.setContentsMargins(0, 0, 0, 0)
+        self.video_overlay_box.addStretch()
         self.caption = QLabel()
         self.caption.setTextFormat(Qt.TextFormat.PlainText)
         self.caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.caption.setWordWrap(True)
-        player_box.addWidget(self.caption)
-        self.now_playing = QLabel(self.tr("Nothing playing"))
-        transport = QHBoxLayout()
-        previous = QPushButton(self.tr("Previous"))
-        previous.clicked.connect(lambda: self.command("previous"))
-        self.pause = QPushButton(self.tr("Play / pause"))
-        self.pause.clicked.connect(self.toggle_pause)
-        next_button = QPushButton(self.tr("Next"))
-        next_button.clicked.connect(lambda: self.command("next"))
+        self.caption.setStyleSheet(
+            "color: white; background: rgba(0,0,0,180);"
+            "font-size: 20px; padding: 5px 10px; border-radius: 4px;"
+        )
+        self.caption.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.video_overlay_box.addWidget(self.caption, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.video_controls = QWidget()
+        self.video_controls.setObjectName("mediaVideoControls")
+        self.video_controls.setStyleSheet("""
+            QWidget#mediaVideoControls { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                stop:0 rgba(0,0,0,50),stop:1 rgba(0,0,0,210)); color: white; }
+            QPushButton#mediaPlayerIcon, QToolButton#mediaPlayerIcon {
+                background: transparent; color: white; border: 0; border-radius: 4px; padding: 0; }
+            QPushButton#mediaPlayerIcon:hover, QToolButton#mediaPlayerIcon:hover {
+                background: rgba(255,255,255,35); }
+            QToolButton#mediaPlayerIcon::menu-indicator { image: none; width: 0; }
+        """)
+        controls_box = QVBoxLayout(self.video_controls)
+        controls_box.setContentsMargins(14, 10, 14, 8)
+        controls_box.setSpacing(5)
         self.seek = QSlider(Qt.Orientation.Horizontal)
+        self.seek.setAccessibleName(self.tr("Seek"))
         self.seek.setRange(0, 0)
         self.seek.sliderReleased.connect(lambda: self.command("seek", position=self.seek.value()))
+        controls_box.addWidget(self.seek)
+        self.transport = QHBoxLayout()
+        controls_box.addLayout(self.transport)
+        self.previous_button = QPushButton()
+        self.previous_button.clicked.connect(lambda: self._transport_step(-1))
+        self.pause = QPushButton()
+        self.pause.setAccessibleName(self.tr("Play / pause"))
+        self.pause.clicked.connect(self.toggle_pause)
+        self.next_button = QPushButton()
+        self.next_button.clicked.connect(lambda: self._transport_step(1))
+        previous, next_button = self.previous_button, self.next_button
+        self.now_playing = QLabel(self.tr("Nothing playing"))
+        self.now_playing.setTextFormat(Qt.TextFormat.PlainText)
+        self.player_heading = QWidget()
+        self.player_heading_box = QVBoxLayout(self.player_heading)
+        self.player_heading_box.setContentsMargins(8, 8, 8, 8)
+        self.player_heading_box.addWidget(self.now_playing)
+        self.playing_description = QLabel()
+        self.playing_description.setTextFormat(Qt.TextFormat.PlainText)
+        self.playing_description.setWordWrap(True)
+        self.player_heading_box.addWidget(self.playing_description)
+        self.preview_refresh_home = QHBoxLayout()
+        self.player_heading_box.addLayout(self.preview_refresh_home)
+        player_box.addWidget(self.player_heading)
         self.elapsed = QLabel("0:00 / 0:00")
         self.volume = QSlider(Qt.Orientation.Horizontal)
         self.volume.setRange(0, 100)
         self.volume.setValue(100)
         self.volume.setMaximumWidth(90)
         self.volume.setAccessibleName(self.tr("Volume"))
+        self.volume.setToolTip(self.tr("Volume"))
         self.volume.sliderReleased.connect(
             lambda: self.command("volume", volume=self.volume.value() / 100)
         )
+        for widget in (previous, self.pause, next_button, self.elapsed, self.volume):
+            self.transport.addWidget(widget)
+        self.transport.addStretch()
+        self.fullscreen_button = QPushButton()
+        self.fullscreen_button.setObjectName("media-fullscreen")
+        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
+        self.player_options = QToolButton()
+        self.player_options.setText("⋯")
+        self.player_options.setAccessibleName(self.tr("Player options"))
+        self.player_options.setToolTip(self.tr("Player options"))
+        self.player_options.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.player_menu = QMenu(self.player_options)
+        self.player_options.setMenu(self.player_menu)
+        self.audio_menu = self.player_menu.addMenu(self.tr("Audio track"))
+        self.subtitle_menu = self.player_menu.addMenu(self.tr("Subtitle track"))
+        self.repeat_menu = self.player_menu.addMenu(self.tr("Repeat off"))
+        self.shuffle_action = self.player_menu.addAction(self.tr("Shuffle"))
+        self.shuffle_action.setCheckable(True)
+        self.shuffle_action.triggered.connect(
+            lambda checked: self.command("shuffle", shuffle=checked)
+        )
+        self.queue_action = self.player_menu.addAction(self.tr("Queue & playlists"))
+        self.queue_action.setCheckable(True)
+        self.player_menu.aboutToShow.connect(self._build_player_menu)
+        self.player_menu.aboutToShow.connect(self._show_video_controls)
+        self.player_menu.aboutToHide.connect(self._show_video_controls)
+        self.transport.addWidget(self.player_options)
+        self.transport.addWidget(self.fullscreen_button)
         for widget in (
             previous,
             self.pause,
             next_button,
-            self.now_playing,
-            self.seek,
-            self.elapsed,
-            self.volume,
+            self.player_options,
+            self.fullscreen_button,
         ):
-            transport.addWidget(widget)
-        player_box.addLayout(transport)
-        options = QHBoxLayout()
-        self.shuffle = QCheckBox(self.tr("Shuffle"))
+            widget.setObjectName("mediaPlayerIcon")
+            widget.setFixedSize(34, 32)
+            widget.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self.fullscreen_button.setObjectName("media-fullscreen")
+        self.fullscreen_button.setIcon(
+            self._player_icon(QStyle.StandardPixmap.SP_TitleBarMaxButton)
+        )
+        self.fullscreen_button.setToolTip(self.tr("Fullscreen"))
+        self.fullscreen_button.setAccessibleName(self.tr("Fullscreen"))
+        self.video_overlay_box.addWidget(self.video_controls)
+        self.music_controls_home = QVBoxLayout()
+        self.music_controls_home.setContentsMargins(0, 0, 0, 0)
+        player_box.addLayout(self.music_controls_home)
+        self.shuffle = QCheckBox(self.tr("Shuffle"), self.player_panel)
         self.shuffle.clicked.connect(lambda on: self.command("shuffle", shuffle=on))
-        self.repeat = QComboBox()
+        self.repeat = QComboBox(self.player_panel)
         for label, value in (
             (self.tr("Repeat off"), "off"),
             (self.tr("Repeat all"), "all"),
@@ -806,33 +921,37 @@ class MediaTab(QWidget):
         self.repeat.currentIndexChanged.connect(
             lambda: self.command("repeat", repeat=self.repeat.currentData())
         )
-        self.audio_tracks = QComboBox()
+        self.audio_tracks = QComboBox(self.player_panel)
         self.audio_tracks.setAccessibleName(self.tr("Audio track"))
-        self.audio_tracks.setToolTip(self.tr("Audio track"))
-        self.audio_tracks.setMaximumWidth(230)
         self.audio_tracks.currentIndexChanged.connect(self._select_audio)
-        self.subtitles = QComboBox()
+        self.subtitles = QComboBox(self.player_panel)
         self.subtitles.setAccessibleName(self.tr("Subtitle track"))
-        self.subtitles.setToolTip(self.tr("Subtitle track"))
-        self.subtitles.setMaximumWidth(230)
         self.subtitles.addItem(self.tr("Subtitles off"), -1)
         self.subtitles.currentIndexChanged.connect(self._select_subtitle)
-        self.queue_disclosure = QPushButton(self.tr("Queue & playlists"))
+        self.queue_disclosure = QPushButton(self.tr("Queue & playlists"), self.player_panel)
         self.queue_disclosure.setCheckable(True)
-        for widget in (self.shuffle, self.repeat):
-            options.addWidget(widget)
-        options.addStretch()
-        self.fullscreen_button = QPushButton(self.tr("Fullscreen"))
-        self.fullscreen_button.setObjectName("media-fullscreen")
-        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
-        options.addWidget(self.fullscreen_button)
-        options.addWidget(self.queue_disclosure)
-        player_box.addLayout(options)
-        tracks = QHBoxLayout()
-        tracks.addWidget(self.audio_tracks, 1)
-        tracks.addWidget(self.subtitles, 1)
-        tracks.addStretch()
-        player_box.addLayout(tracks)
+        self.queue_action.triggered.connect(self.queue_disclosure.setChecked)
+        for widget in (
+            self.shuffle,
+            self.repeat,
+            self.audio_tracks,
+            self.subtitles,
+            self.queue_disclosure,
+        ):
+            widget.hide()
+        self.controls_timer = QTimer(self)
+        self.controls_timer.setSingleShot(True)
+        self.controls_timer.setInterval(2200)
+        self.controls_timer.timeout.connect(self._hide_video_controls)
+        for widget in (
+            self.video,
+            self.video.viewport(),
+            self.video.overlay,
+            self.video_controls,
+            *self.video_controls.findChildren(QWidget),
+        ):
+            widget.installEventFilter(self)
+        self._playback_controls_changed()
         self.external = QPushButton(self.tr("Open in external player"))
         self.external.clicked.connect(self.open_external)
         self.external.hide()
@@ -1000,21 +1119,211 @@ class MediaTab(QWidget):
         self.brand.setVisible(enabled)
         self._arrange_toolbar()
 
+    def _transport_step(self, direction: int) -> None:
+        if self._player_video_mode:
+            self.command("seek", position=max(0, self.player.position() / 1000 + direction * 10))
+        else:
+            self.command("next" if direction > 0 else "previous")
+
+    def _player_icon(self, standard: QStyle.StandardPixmap) -> QIcon:
+        pixmap = self.style().standardIcon(standard).pixmap(24, 24)
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor("white"))
+        painter.end()
+        return QIcon(pixmap)
+
+    def _playback_controls_changed(self, *_args) -> None:
+        playing = (
+            self.player is not None
+            and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        )
+        self.pause.setIcon(
+            self._player_icon(
+                QStyle.StandardPixmap.SP_MediaPause
+                if playing
+                else QStyle.StandardPixmap.SP_MediaPlay
+            )
+        )
+        self.pause.setToolTip(self.tr("Pause") if playing else self.tr("Play"))
+        self._show_video_controls()
+
+    def _show_video_controls(self) -> None:
+        self.video_controls.show()
+        if self._player_video_mode:
+            self.video.viewport().unsetCursor()
+            self.controls_timer.start()
+
+    def _hide_video_controls(self) -> None:
+        focus = QApplication.focusWidget()
+        if not self._player_video_mode:
+            self.controls_timer.stop()
+            return
+        if (
+            self.player is None
+            or self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+            or self.player_menu.isVisible()
+            or (focus is not None and self.video_controls.isAncestorOf(focus))
+        ):
+            self.controls_timer.start()
+            return
+        self.video_controls.hide()
+        self.video.viewport().setCursor(Qt.CursorShape.BlankCursor)
+
+    def _choose_menu_track(
+        self, kind: str, identifier: str, token: str, media_id: str, _checked: bool = False
+    ) -> None:
+        if token != self.track_source_token or media_id != self.last_source:
+            self.player_menu.close()
+            return
+        self.report()
+        if token == self.track_source_token and media_id == self.last_source:
+            self.command("select_track", kind=kind, track_id=identifier, source_token=token)
+
+    def _build_player_menu(self) -> None:
+        snapshot = self._track_state()
+        token, media_id = snapshot["source_token"], snapshot["media_id"]
+        for kind, menu, rows in (
+            ("audio", self.audio_menu, snapshot["audio"]),
+            ("subtitle", self.subtitle_menu, snapshot["subtitles"]),
+        ):
+            menu.clear()
+            for previous_group in menu.findChildren(QActionGroup):
+                previous_group.deleteLater()
+            group = QActionGroup(menu)
+            choices = (
+                [
+                    {
+                        "id": "off",
+                        "label": self.tr("Subtitles off"),
+                        "selected": not any(row["selected"] for row in rows),
+                    }
+                ]
+                if kind == "subtitle"
+                else []
+            ) + rows
+            for row in choices:
+                action = menu.addAction(row["label"])
+                action.setCheckable(True)
+                action.setChecked(row["selected"])
+                action.setData(row["id"])
+                group.addAction(action)
+                action.triggered.connect(
+                    partial(self._choose_menu_track, kind, row["id"], token, media_id)
+                )
+            menu.setEnabled(snapshot[f"{kind}_supported"])
+        self.repeat_menu.clear()
+        for previous_group in self.repeat_menu.findChildren(QActionGroup):
+            previous_group.deleteLater()
+        repeat_group = QActionGroup(self.repeat_menu)
+        for index in range(self.repeat.count()):
+            action = self.repeat_menu.addAction(self.repeat.itemText(index))
+            action.setCheckable(True)
+            action.setChecked(index == self.repeat.currentIndex())
+            repeat_group.addAction(action)
+            action.triggered.connect(lambda _checked=False, i=index: self.repeat.setCurrentIndex(i))
+        self.shuffle_action.setChecked(self.shuffle.isChecked())
+        self.queue_action.setChecked(self.queue_disclosure.isChecked())
+
+    def _arrange_player(self) -> None:
+        active_video = bool(self.last_source) and self.current_row.get("kind") == "video"
+        entering_video = active_video and not self._player_video_mode
+        self._player_video_mode = active_video
+        if active_video:
+            if not self.fullscreen_dialog.isVisible() and self.player_home_layout is not self.body:
+                self.body.insertWidget(0, self.player_panel)
+                self.player_home_layout = self.body
+            if self.video_overlay_box.indexOf(self.video_controls) < 0:
+                self.video_overlay_box.addWidget(self.video_controls)
+            if self.player_heading_box.indexOf(self.now_playing) < 0:
+                self.player_heading_box.insertWidget(0, self.now_playing)
+            self.now_playing.setStyleSheet("font-size: 23px; font-weight: 600; color: #f1f3ef;")
+            self.playing_description.setText(str(self.current_row.get("description") or ""))
+            self.playing_description.setVisible(bool(self.playing_description.text()))
+        else:
+            if (
+                not self.fullscreen_dialog.isVisible()
+                and self.player_home_layout is not self.player_base_layout
+            ):
+                self.player_base_layout.addWidget(self.player_panel)
+                self.player_home_layout = self.player_base_layout
+            if self.music_controls_home.indexOf(self.video_controls) < 0:
+                self.music_controls_home.addWidget(self.video_controls)
+            if self.transport.indexOf(self.now_playing) < 0:
+                self.transport.insertWidget(3, self.now_playing, 1)
+            self.now_playing.setStyleSheet("color: #e7eeeb;")
+        if self.preview_id:
+            self.preview_refresh_home.addWidget(self.refresh_preview)
+        elif self.preview_refresh_home.indexOf(self.refresh_preview) >= 0:
+            actions = self.action_bar.layout()
+            if isinstance(actions, QBoxLayout):
+                actions.insertWidget(4, self.refresh_preview)
+        self.player_heading.setVisible(active_video and not self.fullscreen_dialog.isVisible())
+        self.fullscreen_button.setVisible(active_video)
+        for button, icon, label in (
+            (
+                self.previous_button,
+                QStyle.StandardPixmap.SP_MediaSeekBackward,
+                self.tr("Back 10 seconds") if active_video else self.tr("Previous"),
+            ),
+            (
+                self.next_button,
+                QStyle.StandardPixmap.SP_MediaSeekForward,
+                self.tr("Forward 10 seconds") if active_video else self.tr("Next"),
+            ),
+        ):
+            button.setIcon(self._player_icon(icon))
+            button.setToolTip(label)
+            button.setAccessibleName(label)
+        if active_video and not self.fullscreen_dialog.isVisible():
+            self.video.setFixedHeight(
+                min(520, max(300, self.content_scroll.viewport().width() * 9 // 16))
+            )
+        self._show_video_controls()
+        if entering_video:
+            self.content_scroll.verticalScrollBar().setValue(0)
+            QTimer.singleShot(0, self._reveal_player)
+
+    def _reveal_player(self) -> None:
+        if isValid(self) and self._player_video_mode:
+            self.content_scroll.verticalScrollBar().setValue(0)
+
+    def _embedded_subtitle_text(self, text: str) -> None:
+        self.embedded_caption = (
+            QTextDocumentFragment.fromHtml(text).toPlainText() if "<" in text else text
+        )
+        self._render_caption()
+
+    def _render_caption(self) -> None:
+        if isinstance(self.subtitle_choice, str):
+            seconds = self.player.position() / 1000
+            text = "\n".join(
+                caption for start, end, caption in self.subtitle_cues if start <= seconds < end
+            )
+        else:
+            text = self.embedded_caption if self.subtitle_choice >= 0 else ""
+        self.caption.setText(text)
+        self.caption.setVisible(bool(text) and self._player_video_mode)
+
     def toggle_fullscreen(self) -> None:
         if self.fullscreen_dialog.isVisible():
             self.fullscreen_dialog.reject()
         elif self.last_source:
             self._player_home_index = self.player_home_layout.indexOf(self.player_panel)
             self.fullscreen_layout.addWidget(self.player_panel)
+            self.video.setMinimumHeight(0)
             self.video.setMaximumHeight(16777215)
-            self.fullscreen_button.setText(self.tr("Exit fullscreen"))
+            self.fullscreen_button.setToolTip(self.tr("Exit fullscreen"))
+            self.fullscreen_button.setAccessibleName(self.tr("Exit fullscreen"))
+            self.player_heading.hide()
             self.fullscreen_dialog.showFullScreen()
             self.fullscreen_button.setFocus()
 
     def _leave_fullscreen(self) -> None:
         self.player_home_layout.insertWidget(self._player_home_index, self.player_panel)
-        self.video.setMaximumHeight(240)
-        self.fullscreen_button.setText(self.tr("Fullscreen"))
+        self._arrange_player()
+        self.fullscreen_button.setToolTip(self.tr("Fullscreen"))
+        self.fullscreen_button.setAccessibleName(self.tr("Fullscreen"))
         self.player_panel.show()
         self.fullscreen_button.setFocus()
 
@@ -1253,7 +1562,13 @@ class MediaTab(QWidget):
                 self.player = QMediaPlayer(self)
                 self.audio = QAudioOutput(self)
                 self.player.setAudioOutput(self.audio)
-                self.player.setVideoOutput(self.video)
+                self.decoder_sink = QVideoSink(self.player)
+                self.decoder_sink.videoFrameChanged.connect(
+                    self.video.item.videoSink().setVideoFrame
+                )
+                self.decoder_sink.subtitleTextChanged.connect(self._embedded_subtitle_text)
+                self.player.setVideoSink(self.decoder_sink)
+                self.player.playbackStateChanged.connect(self._playback_controls_changed)
                 self.player.errorOccurred.connect(self._codec_error)
                 self.player.positionChanged.connect(self._position_changed)
                 self.player.durationChanged.connect(self._duration_changed)
@@ -1342,6 +1657,45 @@ class MediaTab(QWidget):
     def eventFilter(self, watched, event):
         if watched is self.content_scroll.viewport() and event.type() == QEvent.Type.Resize:
             self._arrange_toolbar()
+            if hasattr(self, "controls_timer"):
+                self._arrange_player()
+        if hasattr(self, "controls_timer"):
+            surface = watched in (self.video, self.video.viewport(), self.video.overlay)
+            if (
+                event.type()
+                in {
+                    QEvent.Type.MouseMove,
+                    QEvent.Type.Enter,
+                    QEvent.Type.FocusIn,
+                    QEvent.Type.KeyPress,
+                }
+                and watched is not self.content_scroll.viewport()
+            ):
+                self._show_video_controls()
+            if surface and event.type() == QEvent.Type.ContextMenu:
+                self.player_menu.popup(event.globalPos())
+                return True
+            if (
+                surface
+                and event.type() == QEvent.Type.MouseButtonRelease
+                and event.button() == Qt.MouseButton.LeftButton
+            ):
+                self.video.setFocus()
+                self.toggle_pause()
+                return True
+            if surface and event.type() == QEvent.Type.KeyPress:
+                if event.key() == Qt.Key.Key_Space:
+                    self.toggle_pause()
+                    return True
+                if event.key() in {Qt.Key.Key_Left, Qt.Key.Key_Right}:
+                    self._transport_step(1 if event.key() == Qt.Key.Key_Right else -1)
+                    return True
+                if event.key() == Qt.Key.Key_F:
+                    self.toggle_fullscreen()
+                    return True
+                if event.key() == Qt.Key.Key_Escape and self.fullscreen_dialog.isVisible():
+                    self.fullscreen_dialog.reject()
+                    return True
         return super().eventFilter(watched, event)
 
     def _cover_icon(self, picture: QImage, size: QSize | None = None) -> QIcon:
@@ -1608,7 +1962,8 @@ class MediaTab(QWidget):
         )
         collection = self.media_layout == "collection" or not video
         focus = self.media_layout == "focus" and video
-        self.hero.setVisible(not collection and bool(self.rows) and chosen)
+        active_video = active and self.current_row.get("kind") == "video"
+        self.hero.setVisible(not collection and bool(self.rows) and chosen and not active_video)
         self.collection_heading.setVisible(collection)
         self.collection_heading.setText(self.tr("Your collection") if video else self.tr("Music"))
         self.collection_selection.setVisible(collection and chosen)
@@ -1644,10 +1999,15 @@ class MediaTab(QWidget):
         self.player_panel.setVisible(
             active or bool(self.state["queue"]) or (not video and self.queue_disclosure.isChecked())
         )
-        self.video.setVisible(active and self.current_row.get("kind") == "video")
-        self.caption.setVisible(active and bool(self.subtitle_cues))
+        self.video.setVisible(active_video)
+        self._arrange_player()
+        self._render_caption()
         for widget in self.playback_widgets:
-            widget.setVisible(active)
+            widget.setVisible(
+                active
+                and widget not in {self.shuffle, self.repeat, self.audio_tracks, self.subtitles}
+            )
+        self.fullscreen_button.setVisible(active_video)
         for widget in self.queue_widgets:
             widget.setVisible(bool(self.state["queue"]) or self.kind.currentData() == "music")
 
@@ -2258,10 +2618,7 @@ class MediaTab(QWidget):
             self._set_notice(str(error))
 
     def _position_changed(self, position: int) -> None:
-        seconds = position / 1000
-        self.caption.setText(
-            "\n".join(text for start, end, text in self.subtitle_cues if start <= seconds < end)
-        )
+        self._render_caption()
         if not self.seek.isSliderDown():
             self.seek.setValue(position // 1000)
         self.elapsed.setText(
@@ -2299,6 +2656,7 @@ class MediaTab(QWidget):
             return False
         self.subtitle_error = ""
         if isinstance(value, int):
+            self.embedded_caption = ""
             self.subtitle_choice = value
             self.subtitle_cues = []
             self.caption.clear()
@@ -2339,6 +2697,7 @@ class MediaTab(QWidget):
             return False
 
     def _prepare_track_source(self, token: str = "") -> None:
+        self.player_menu.close()
         self.track_source_token = token or str(uuid4())
         self.track_result = {}
         self.tracks_ready = False
@@ -2483,6 +2842,7 @@ class MediaTab(QWidget):
     def _reset_track_choices(self) -> None:
         self.audio_choice = None
         self.subtitle_choice = -1
+        self.embedded_caption = ""
         self.subtitle_cues = []
         self.caption.clear()
         with QSignalBlocker(self.audio_tracks), QSignalBlocker(self.subtitles):

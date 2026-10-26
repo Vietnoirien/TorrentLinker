@@ -14,6 +14,14 @@ import pytest
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
+def player_action(page, identifier):
+    control = page.locator(identifier)
+    if not control.is_visible():
+        page.locator("#media-player-menu-toggle").focus()
+        page.locator("#media-player-menu-toggle").press("Enter")
+    control.click()
+
+
 def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
 
@@ -82,7 +90,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             time.sleep(0.02)
         with ThreadPoolExecutor(max_workers=1) as model, sync_playwright() as pw:
             browser = pw.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
-            page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+            page = browser.new_page(
+                viewport={"width": 1280, "height": 900}, locale="en-US", has_touch=True
+            )
 
             def choose_layout(value):
                 options = page.locator("#media-library-options")
@@ -158,6 +168,65 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             video = page.locator("#media-video")
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0.1")
             source = video.get_attribute("src")
+            video_element = video.element_handle()
+            control_screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv(
+                "TL_WEB_SCREENSHOTS"
+            )
+            if control_screenshots:
+                Path(control_screenshots).mkdir(parents=True, exist_ok=True)
+            video.evaluate("node => node.pause()")
+            expect(page.locator("#media-player-menu-toggle")).to_be_visible()
+            page.locator("#media-player-menu-toggle").focus()
+            page.keyboard.press("Enter")
+            expect(page.get_by_role("dialog", name="Player options", exact=True)).to_be_visible()
+            expect(page.get_by_label("Subtitle track", exact=True)).to_be_visible()
+            expect(page.get_by_label("Audio track", exact=True)).to_be_hidden()
+            page.get_by_label("Subtitle track", exact=True).select_option("subtitle:0")
+            assert video.evaluate("node => node.textTracks[0].mode") == "showing"
+            video.evaluate("node => { node.currentTime = 1; }")
+            page.wait_for_function(
+                "() => document.querySelector('#media-video').textTracks[0].activeCues?.length > 0"
+            )
+            page.keyboard.press("Escape")
+            expect(page.locator("#media-player-menu")).to_be_hidden()
+            expect(page.locator("#media-player-menu-toggle")).to_be_focused()
+            if control_screenshots:
+                page.screenshot(path=str(Path(control_screenshots) / "player-caption-controls.png"))
+            video.evaluate("node => node.play()")
+            page.locator("#media-search").focus()
+            page.mouse.move(20, 20)
+            expect(page.locator(".media-video-overlay")).to_have_css("opacity", "0")
+            video.evaluate("node => node.pause()")
+            expect(page.locator(".media-video-overlay")).to_have_css("opacity", "1")
+            video.click(button="right", position={"x": 40, "y": 40})
+            expect(page.locator("#media-player-menu")).to_be_visible()
+            page.keyboard.press("Tab")
+            expect(page.get_by_label("Subtitle track", exact=True)).to_be_focused()
+            page.get_by_label("Subtitle track", exact=True).select_option("off")
+            assert video.evaluate("node => node.textTracks[0].mode") == "disabled"
+            page.locator("#media-queue-details summary").click()
+            queue_remove = page.locator("#media-player-queue").get_by_role("button", name="Remove")
+            queue_remove.focus()
+            page.wait_for_timeout(1200)
+            expect(queue_remove).to_be_focused()
+            page.locator("#media-queue-details summary").click()
+            if control_screenshots:
+                page.screenshot(path=str(Path(control_screenshots) / "player-context-menu.png"))
+            page.locator("#media-player-menu-close").click()
+            page.locator("#media-player-menu-toggle").tap()
+            expect(page.locator("#media-player-menu")).to_be_visible()
+            page.locator("#media-player-menu-close").click()
+            page.locator("#media-video-stage").focus()
+            page.keyboard.press("Shift+F10")
+            expect(page.locator("#media-player-menu")).to_be_visible()
+            page.keyboard.press("Escape")
+            assert video_element.evaluate("node => node === document.querySelector('#media-video')")
+            assert video.get_attribute("src") == source
+            expect(page.locator("#media-playing-description")).to_contain_text("0:20")
+            assert (
+                not page.locator("#media-video-stage").locator("#media-playing-description").count()
+            )
+            video.evaluate("node => node.play()")
             expect(page.locator("#media-track-support")).to_contain_text(
                 "If sound or a track is missing"
             )
@@ -234,6 +303,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
 
             subtitle_pattern = "**/api/media/items/*/subtitles/*?*"
             page.route(subtitle_pattern, hold_subtitles)
+            page.locator("#media-player-menu-toggle").focus()
+            page.locator("#media-player-menu-toggle").press("Enter")
+            expect(page.locator("#media-player-menu")).to_be_visible()
             load_token = "00000000-0000-4000-8000-000000000001"
             prepared = send_player_command(
                 {
@@ -245,6 +317,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 }
             )
             assert prepared["paused"]
+            expect(page.locator("#media-player-menu")).to_be_hidden()
             assert prepared["track_state"]["source_token"] == load_token
             assert not prepared["track_state"]["ready"]
             assert loading_subtitles
@@ -309,7 +382,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.unroute("**/api/media/sessions/*", player_transport)
             # Complete a real MCP -> player -> backend preparation, without injected commands.
             with page.expect_response(lambda reply: reply.url.endswith("/chat")) as attached:
-                page.locator("#media-chat").click()
+                player_action(page, "#media-chat")
             discussion = attached.value.json()["conversation_id"]
             actor = app.state.assistant.conversation(discussion)[1]
             page.locator("#media-chat-close").click()
@@ -359,7 +432,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.locator("#media-music-tab").click()
             expect(page.locator("#media-results article")).to_have_count(2)
             page.locator("#media-video-tab").click()
-            page.locator("#media-chat").click()
+            player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
             page.locator("#media-chat-close").click()
             assert video.get_attribute("src") == source
@@ -373,38 +446,55 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("main > header")).to_be_visible()
             page.locator("#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === document.documentElement")
-            page.locator("#media-fullscreen").click()
+            player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
-            page.locator("#media-fullscreen").click()
+            player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement === document.documentElement")
             expect(page.locator("#media-center-mode")).to_have_text("Return to TorrentLinker")
             expect(page.locator("#app-sidebar")).to_be_hidden()
             assert video.get_attribute("src") == source
             page.locator("#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === null")
-            page.locator("#media-fullscreen").click()
+            player_action(page, "#media-player-expand")
+            player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
             expect(page.locator("#media-fullscreen")).to_have_text("Exit fullscreen")
+            video.click(button="right", position={"x": 40, "y": 40})
+            expect(page.locator("#media-player-menu")).to_be_visible()
+            expect(page.get_by_label("Subtitle track", exact=True)).to_be_visible()
+            page.wait_for_function(
+                "node => { const r = node.getBoundingClientRect(); "
+                "return r.x === 0 && r.y === 0 && r.width === innerWidth "
+                "&& r.height === innerHeight; }",
+                arg=video_element,
+            )
+            expect(page.locator("#media-now-playing")).to_be_hidden()
+            expect(page.locator("#media-playing-description")).to_be_hidden()
+            if control_screenshots:
+                page.screenshot(path=str(Path(control_screenshots) / "player-fullscreen-menu.png"))
+            page.locator("#media-player-menu-close").click()
+            assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
             assert video.evaluate("node => !node.paused && node.currentTime > 0")
-            page.locator("#media-fullscreen").click()
+            player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement === null")
             expect(page.locator("#media-fullscreen")).to_have_text("Fullscreen")
-            page.locator("#media-fullscreen").click()
+            player_action(page, "#media-player-expand")
+            player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement !== null")
             page.keyboard.press("Escape")
             page.wait_for_function("() => document.fullscreenElement === null", timeout=3000)
             for layout in ("focus", "collection", "cinematic"):
                 choose_layout(layout)
                 expect(page.locator("#view-media")).to_have_attribute("data-layout", layout)
-                page.locator("#media-fullscreen").click()
+                player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement !== null")
                 assert page.locator("#media-player-shell").evaluate(
                     "node => { const r = node.getBoundingClientRect(); "
                     "return r.x === 0 && r.y === 0 && r.width === innerWidth "
                     "&& r.height === innerHeight; }"
                 )
-                page.locator("#media-fullscreen").click()
+                player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement === null")
                 if layout == "collection":
                     expect(page.locator("#media-feature")).to_be_hidden()
@@ -434,7 +524,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             choose_layout("cinematic")
             expect(video).to_have_attribute("src", source)
 
-            page.locator("#media-chat").click()
+            player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
             expect(page.locator("#assistant-prompt")).to_be_visible()
             assert video.get_attribute("src") == source
@@ -579,9 +669,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             ).click()
             expect(page.locator("#media-codec-error")).to_be_visible()
             expect(page.locator("#media-external")).to_have_attribute("href", re.compile("/stream"))
-            page.locator("#media-fullscreen").click()
+            player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement !== null")
-            page.locator("#media-stop").click()
+            player_action(page, "#media-stop")
             page.wait_for_function("() => document.fullscreenElement === null")
             expect(page.locator("#media-player-shell")).to_be_hidden()
             assert not errors, errors
@@ -725,7 +815,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             client.verified += 1
             # The old preview remains fixed even when the Torrent Client downloads more.
             assert len(page.request.get(preview_source).body()) == len(prefix.body())
-            page.get_by_role("button", name="Refresh preview", exact=True).click()
+            player_action(page, "#media-refresh-preview")
             page.wait_for_function(
                 "old => document.querySelector('#media-video').src !== "
                 "new URL(old, location.href).href",
@@ -744,7 +834,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             start_preview()
             expect(page.locator("#media-preview-state")).to_be_visible()
             stopped_source = page.locator("#media-video").evaluate("node => node.src")
-            page.get_by_role("button", name="Stop", exact=True).click()
+            player_action(page, "#media-stop")
             expect(page.locator("#media-preview-state")).to_be_hidden()
             assert page.request.get(stopped_source).status >= 400
             assert page.locator("#media-video").get_attribute("src") is None
@@ -787,7 +877,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                 assert normal_metadata, "Ordinary playback metadata was not requested"
                 route, response = normal_metadata.pop()
                 if decision == "stop":
-                    page.get_by_role("button", name="Stop", exact=True).click()
+                    player_action(page, "#media-stop")
                 else:
                     page.locator(".media-card").filter(has_text="Other Film").get_by_role(
                         "button", name="Play", exact=True
@@ -823,7 +913,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                 route, response = held.pop()
                 preview_id = response.json()["preview_id"]
                 if decision == "stop":
-                    page.get_by_role("button", name="Stop", exact=True).click()
+                    player_action(page, "#media-stop")
                 elif decision == "play":
                     page.locator(".media-card").filter(has_text="Complete Film").get_by_role(
                         "button", name="Play", exact=True

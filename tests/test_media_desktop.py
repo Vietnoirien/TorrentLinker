@@ -210,7 +210,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
             "-i",
             "color=c=blue:s=160x120:r=10",
             "-t",
-            "6",
+            "12",
             "-c:v",
             "mpeg4",
             str(root / "Clip.mp4"),
@@ -220,7 +220,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     )
     for index in range(3):
         shutil.copy(root / "Clip.mp4", root / f"Other {index}.mp4")
-    (root / "Clip.srt").write_text("1\n00:00:01,000 --> 00:00:05,000\nA local caption\n")
+    (root / "Clip.srt").write_text("1\n00:00:01,000 --> 00:00:10,000\nA local caption\n")
     config = tmp_path / "config"
     config.mkdir()
     settings = Settings()
@@ -270,7 +270,37 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     tab.command("seek", position=2)
     qtbot.waitUntil(lambda: tab.caption.text() == "A local caption")
     qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=10000)
+    assert tab.video_controls.isVisible()
+    assert tab.video.rect().contains(
+        tab.video_controls.mapTo(tab.video, tab.video_controls.rect().center())
+    )
+    rendered = tab.video.grab().toImage()
+    sample = rendered.pixelColor(rendered.width() // 2, rendered.height() // 3)
+    assert sample.blue() > 150 and sample.red() < 80
+    from PySide6.QtCore import QCoreApplication, QPoint
+    from PySide6.QtGui import QContextMenuEvent
+
+    tab.video.setFocus()
+    tab.controls_timer.setInterval(120)
+    qtbot.mouseMove(tab.video.viewport(), QPoint(20, 20))
+    qtbot.waitUntil(lambda: tab.video_controls.isHidden(), timeout=2000)
+    qtbot.mouseMove(tab.video.viewport(), QPoint(35, 20))
+    qtbot.waitUntil(lambda: tab.video_controls.isVisible())
+    qtbot.keyClick(tab.video, Qt.Key_Space)
+    assert tab.video_controls.isVisible()
+    local = QPoint(60, 60)
+    context = QContextMenuEvent(
+        QContextMenuEvent.Reason.Mouse, local, tab.video.viewport().mapToGlobal(local)
+    )
+    QCoreApplication.sendEvent(tab.video.viewport(), context)
+    assert tab.player_menu.isVisible()
+    tab.player.play()
+    qtbot.wait(180)
+    assert tab.video_controls.isVisible()
     tab.player.pause()
+    qtbot.keyClick(tab.player_menu, Qt.Key_Escape)
+    qtbot.waitUntil(lambda: not tab.player_menu.isVisible())
+    assert tab.player.playbackState() != tab.player.PlaybackState.PlayingState
     source, position = tab.player.source(), tab.player.position()
     original_parent = tab.player_panel.parentWidget()
     qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
@@ -536,7 +566,9 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
     french, english = tmp_path / "fr.srt", tmp_path / "en.srt"
     for path, caption in ((french, "French fixture caption"), (english, "English fixture caption")):
         path.write_text(
-            "\n".join(f"{i}\n00:00:0{i},000 --> 00:00:0{i},900\n{caption}\n" for i in range(1, 9))
+            "\n".join(
+                f"{i}\n00:00:0{i},000 --> 00:00:0{i},900\n{caption}\n" for i in range(1, 9, 2)
+            )
         )
     source = root / "Multitrack.mkv"
     subprocess.run(
@@ -699,6 +731,20 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
     qtbot.waitUntil(
         lambda: any("English fixture caption" in text for text in captions), timeout=10000
     )
+    qtbot.waitUntil(lambda: "English fixture caption" in tab.caption.text(), timeout=10000)
+    assert tab.caption.isVisible()
+    assert tab.video.rect().contains(tab.caption.mapTo(tab.video, tab.caption.rect().center()))
+    caption_pixels = tab.caption.grab().toImage()
+    white_pixels = sum(
+        caption_pixels.pixelColor(x, y).lightness() > 200
+        for x in range(caption_pixels.width())
+        for y in range(caption_pixels.height())
+    )
+    assert white_pixels > 15
+    qtbot.waitUntil(lambda: tab.player.position() >= 4050, timeout=3000)
+    assert tab.player.position() < 4800
+    assert tab.caption.text() == ""
+    assert not tab.caption.isVisible()
     deliver("seek", position=3)
     tab.player.tracksChanged.emit()
     tab.toggle_fullscreen()
@@ -707,7 +753,14 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
     assert tab.player.activeAudioTrack() == 1
     assert tab.player.activeSubtitleTrack() == 1
     tab.toggle_fullscreen()
-    tab.audio_tracks.setCurrentIndex(0)
+    tab.player_menu.popup(tab.video.mapToGlobal(tab.video.rect().center()))
+    qtbot.waitUntil(lambda: tab.player_menu.isVisible())
+    french_action = next(
+        action for action in tab.audio_menu.actions() if action.data() == "audio:0"
+    )
+    french_action.trigger()
+    tab.player_menu.close()
+    qtbot.waitUntil(lambda: tab.player.activeAudioTrack() == 0)
     tab.subtitles.setCurrentIndex(1)
     frequencies.clear()
     qtbot.waitUntil(lambda: any(400 < value < 480 for value in frequencies), timeout=10000)
@@ -723,6 +776,9 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
     tab.report()
     replacement = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"]
     assert replacement["source_token"] != "prepared-fixture"
+    stale_track = tab.player.activeAudioTrack()
+    french_action.trigger()
+    assert tab.player.activeAudioTrack() == stale_track
     deliver("pause")
     stale_resume = deliver("play", media_id=media_id, source_token="prepared-fixture")
     assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
