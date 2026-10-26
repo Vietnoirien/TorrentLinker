@@ -7647,6 +7647,104 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>Your library</source>
         <translation>Votre médiathèque</translation>
     </message>
+    <message>
+        <location filename="../gui/media.py" line="2327" />
+        <source>Subtitle file has no readable timed cues.</source>
+        <translation>Le fichier de sous-titres ne contient aucun texte minuté lisible.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="2421" />
+        <source>Player source changed before track selection.</source>
+        <translation>Le média a changé avant la sélection de la piste.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="2429" />
+        <source>Player did not resume playback.</source>
+        <translation>Le lecteur n’a pas repris la lecture.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="2439" />
+        <source>Track metadata is not ready.</source>
+        <translation>Les métadonnées des pistes ne sont pas encore disponibles.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="2445" />
+        <source>Requested track is unavailable.</source>
+        <translation>La piste demandée est indisponible.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="2465" />
+        <source>Player did not apply the requested track.</source>
+        <translation>Le lecteur n’a pas sélectionné la piste demandée.</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="810" />
+        <location filename="../gui/media.py" line="811" />
+        <source>Audio track</source>
+        <translation>Piste audio</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="815" />
+        <location filename="../gui/media.py" line="816" />
+        <source>Subtitle track</source>
+        <translation>Piste de sous-titres</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="2379" />
+        <location filename="../gui/media.py" line="2524" />
+        <source>Audio {0}</source>
+        <translation>Audio {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="403" />
+        <location filename="../gui/media.py" line="511" />
+        <source>Home</source>
+        <translation>Accueil</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="634" />
+        <location filename="../gui/media.py" line="1596" />
+        <source>Queue ({0})</source>
+        <translation>File ({0})</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="636" />
+        <source>Playlists</source>
+        <translation>Playlists</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="852" />
+        <source>Saved playlists</source>
+        <translation>Playlists enregistrées</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="446" />
+        <location filename="../gui/media.py" line="447" />
+        <location filename="../gui/media.py" line="997" />
+        <source>Media Center mode</source>
+        <translation>Mode Media Center</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="997" />
+        <source>Return to TorrentLinker</source>
+        <translation>Revenir à TorrentLinker</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="750" />
+        <source>Media player</source>
+        <translation>Lecteur multimédia</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="825" />
+        <location filename="../gui/media.py" line="1017" />
+        <source>Fullscreen</source>
+        <translation>Plein écran</translation>
+    </message>
+    <message>
+        <location filename="../gui/media.py" line="1010" />
+        <source>Exit fullscreen</source>
+        <translation>Quitter le plein écran</translation>
+    </message>
 </context>
 <context>
     <name>MediaHero</name>

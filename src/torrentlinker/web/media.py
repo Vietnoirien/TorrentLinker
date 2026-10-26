@@ -31,6 +31,9 @@ class SessionUpdate(BaseModel):
     repeat: Literal["off", "one", "all"] | None = None
     context: dict[str, Any] | None = None
     command_ack: int | None = Field(default=None, ge=0)
+    kind: Literal["audio", "subtitle"] | None = None
+    track_id: str | None = Field(default=None, max_length=128)
+    source_token: str | None = Field(default=None, max_length=128)
 
 
 class PlaylistSave(MediaClient):

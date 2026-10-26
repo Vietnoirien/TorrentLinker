@@ -45,6 +45,39 @@ def test_media_layout_shortcut_is_restored_when_the_app_reopens(qtbot, tmp_path,
     assert not calls
 
 
+def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtCore import Qt
+
+    window, _, _ = setup_window(qtbot, tmp_path, monkeypatch)
+    window.show()
+    window.tabs.setCurrentWidget(window.media_tab)
+    player = window.media_tab.player
+    qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
+    assert window.isFullScreen()
+    assert not window.navigation.isVisible()
+    assert not window.page_title.isVisible()
+    assert window.media_tab.kind_tabs["video"].isVisible()
+    assert window.media_tab.chat.isVisible()
+    assert window.media_tab.player is player
+    qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
+    assert not window.isFullScreen()
+    assert window.navigation.isVisible()
+    assert window.page_title.isVisible()
+    qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
+    qtbot.keyClick(window.media_tab.center_button, Qt.Key_Escape)
+    qtbot.waitUntil(lambda: not window.isFullScreen())
+    assert window.navigation.isVisible()
+    window.showMaximized()
+    qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
+    qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
+    assert window.isMaximized()
+    qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
+    window.tabs.setCurrentIndex(0)
+    assert not window.media_center_active
+    assert not window.isFullScreen()
+    assert window.navigation.isVisible()
+
+
 def setup_window(qtbot, tmp_path, monkeypatch, *, saved=True, key=""):
     from torrentlinker.domain import LibraryFolder
 

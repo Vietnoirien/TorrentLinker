@@ -15,9 +15,12 @@ pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-
 
 
 def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
+    from tests.test_agent_media import invoke
     from torrentlinker.config import Settings
     from torrentlinker.domain import LibraryFolder
     from torrentlinker.web.app import create_app
@@ -77,9 +80,53 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             if server.started:
                 break
             time.sleep(0.02)
-        with sync_playwright() as pw:
+        with ThreadPoolExecutor(max_workers=1) as model, sync_playwright() as pw:
             browser = pw.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
             page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+
+            def choose_layout(value):
+                options = page.locator("#media-library-options")
+                if not options.evaluate("node => node.open"):
+                    options.locator("summary").click()
+                page.locator("#media-layout-switch").select_option(value)
+                options.locator("summary").click()
+
+            reports = []
+            report_statuses = []
+            pending_commands = []
+            response_failure = {}
+            command_sequence = 0
+
+            def player_transport(route):
+                body = route.request.post_data_json
+                response = route.fetch()
+                if body and body.get("report"):
+                    reports.append(body["report"])
+                    report_statuses.append(response.status)
+                    payload = response.json()
+                    payload["commands"] = [*payload.get("commands", []), *pending_commands]
+                    pending_commands.clear()
+                    if response_failure:
+                        payload["state"]["track_request"] = dict(response_failure)
+                        response_failure.clear()
+                    route.fulfill(response=response, json=payload)
+                else:
+                    route.fulfill(response=response)
+
+            def wait_report(predicate):
+                for _ in range(120):
+                    if reports and predicate(reports[-1]):
+                        return reports[-1]
+                    page.wait_for_timeout(50)
+                raise AssertionError(f"Expected player report, received {reports[-1:]}")
+
+            def send_player_command(command):
+                nonlocal command_sequence
+                command_sequence = max(command_sequence, reports[-1]["command_ack"]) + 1
+                pending_commands.append({"sequence": command_sequence, **command})
+                return wait_report(lambda report: report["command_ack"] >= command_sequence)
+
+            page.route("**/api/media/sessions/*", player_transport)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(f"http://127.0.0.1:{port}/")
@@ -111,9 +158,254 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             video = page.locator("#media-video")
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0.1")
             source = video.get_attribute("src")
+            expect(page.locator("#media-track-support")).to_contain_text(
+                "If sound or a track is missing"
+            )
+            expect(page.locator("#media-track-external")).to_have_attribute("href", source)
+            track_report = wait_report(lambda report: report.get("track_state", {}).get("ready"))
+            track_state = track_report["track_state"]
+            assert track_state["subtitle_supported"]
+            assert re.fullmatch(
+                r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+                track_state["source_token"],
+            )
+            assert track_state["subtitles"][0]["language"] == "en"
+            assert track_state["subtitles"][0]["id"] == "subtitle:0"
+            original_label = video.locator("track").get_attribute("label")
+            long_label = "Long track " + "𝄞" * 320
+            video.locator("track").evaluate(
+                "(track, label) => { track.label = label; }", long_label
+            )
+            bounded = wait_report(
+                lambda report: report["track_state"]["subtitles"][0]["label"].startswith(
+                    "Long track"
+                )
+            )
+            assert bounded["track_state"]["subtitles"][0]["label"] == long_label[:300]
+            assert report_statuses[-1] == 200
+            assert video.locator("track").get_attribute("label") == long_label
+            video.locator("track").evaluate(
+                "(track, label) => { track.label = label; }", original_label
+            )
+            selected = send_player_command(
+                {
+                    "action": "select_track",
+                    "kind": "subtitle",
+                    "track_id": "subtitle:0",
+                    "source_token": track_state["source_token"],
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert selected["track_result"]["applied"]
+            assert selected["track_state"]["subtitles"][0]["selected"]
+            video.evaluate("v => { v.currentTime = 1; }")
+            page.wait_for_function(
+                "() => document.querySelector('#media-video').textTracks[0].activeCues?.length > 0"
+            )
+            assert (
+                video.evaluate("v => v.textTracks[0].activeCues[0].text") == "Validation subtitle"
+            )
+            rejected = send_player_command(
+                {
+                    "action": "select_track",
+                    "kind": "audio",
+                    "track_id": "audio:0",
+                    "source_token": track_state["source_token"],
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert not rejected["track_result"]["applied"]
+            assert "unavailable" in rejected["track_result"]["error"].lower()
+            off = send_player_command(
+                {
+                    "action": "select_track",
+                    "kind": "subtitle",
+                    "track_id": "off",
+                    "source_token": track_state["source_token"],
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert off["track_result"]["applied"]
+            assert video.evaluate("v => v.textTracks[0].mode") == "disabled"
+            loading_subtitles = []
+
+            def hold_subtitles(route):
+                loading_subtitles.append((route, route.fetch()))
+
+            subtitle_pattern = "**/api/media/items/*/subtitles/*?*"
+            page.route(subtitle_pattern, hold_subtitles)
+            load_token = "00000000-0000-4000-8000-000000000001"
+            prepared = send_player_command(
+                {
+                    "action": "play",
+                    "media_ids": [track_state["media_id"]],
+                    "start_paused": True,
+                    "load_token": load_token,
+                    "position": 1,
+                }
+            )
+            assert prepared["paused"]
+            assert prepared["track_state"]["source_token"] == load_token
+            assert not prepared["track_state"]["ready"]
+            assert loading_subtitles
+            subtitle_route, subtitle_response = loading_subtitles.pop()
+            subtitle_route.fulfill(response=subtitle_response)
+            page.unroute(subtitle_pattern, hold_subtitles)
+            prepared = wait_report(lambda report: report["track_state"]["ready"])
+            assert prepared["paused"]
+            assert prepared["track_state"]["subtitles"][0]["id"] == "subtitle:0"
+            stale = send_player_command(
+                {
+                    "action": "select_track",
+                    "kind": "subtitle",
+                    "track_id": "subtitle:0",
+                    "source_token": track_state["source_token"],
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert not stale["track_result"]["applied"]
+            assert "source changed" in stale["track_result"]["error"].lower()
+            assert not stale["track_state"]["subtitles"][0]["selected"]
+            selected = send_player_command(
+                {
+                    "action": "select_track",
+                    "kind": "subtitle",
+                    "track_id": "subtitle:0",
+                    "source_token": load_token,
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert selected["track_result"]["applied"]
+            stale_resume = send_player_command(
+                {
+                    "action": "play",
+                    "source_token": track_state["source_token"],
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert not stale_resume["track_result"]["applied"]
+            assert stale_resume["paused"]
+            response_failure.update(
+                {
+                    "status": "failed",
+                    "source_token": load_token,
+                    "media_id": track_state["media_id"],
+                    "error": "Requested audio language is unavailable.",
+                }
+            )
+            expect(page.locator("#media-track-request-error")).to_have_text(
+                "Requested audio language is unavailable."
+            )
+            resumed = send_player_command(
+                {
+                    "action": "play",
+                    "source_token": load_token,
+                    "media_id": track_state["media_id"],
+                }
+            )
+            assert resumed["track_result"]["sequence"] == command_sequence
+            assert resumed["track_result"]["applied"]
+            assert not resumed["paused"]
+            page.unroute("**/api/media/sessions/*", player_transport)
+            # Complete a real MCP -> player -> backend preparation, without injected commands.
+            with page.expect_response(lambda reply: reply.url.endswith("/chat")) as attached:
+                page.locator("#media-chat").click()
+            discussion = attached.value.json()["conversation_id"]
+            actor = app.state.assistant.conversation(discussion)[1]
+            page.locator("#media-chat-close").click()
+
+            def model_tool(name, **arguments):
+                return model.submit(invoke, app, actor, name, **arguments).result(timeout=10)
+
+            selection = model_tool(
+                "search_media", client_id="default", kind="video", q="Validation Film"
+            )["selection_id"]
+            assert model_tool("play_media", selection_id=selection, subtitle_language="en")[
+                "queued"
+            ]
+            for _ in range(100):
+                player_state = model_tool("get_media_player")
+                if player_state.get("track_request", {}).get("status") == "completed":
+                    break
+                page.wait_for_timeout(100)
+            assert player_state["track_request"]["status"] == "completed", player_state
+            tracks = model_tool("read_media_tracks")
+            assert tracks["preparation"]["status"] == "completed"
+            assert tracks["subtitles"][0]["selected"]
+            assert tracks["last_result"]["applied"]
+            assert video.evaluate("node => !node.paused")
+            # An unavailable requested audio track fails preparation and stays paused.
+            assert model_tool("play_media", selection_id=selection, audio_language="en")["queued"]
+            for _ in range(100):
+                tracks = model_tool("read_media_tracks")
+                if tracks.get("preparation", {}).get("status") == "failed":
+                    break
+                page.wait_for_timeout(100)
+            assert tracks["preparation"]["status"] == "failed", tracks
+            expect(page.locator("#media-track-request-error")).to_have_text(
+                tracks["preparation"]["error"]
+            )
+            assert video.evaluate("node => node.paused")
+            page.locator(".media-card").filter(has_text="Validation Film").get_by_role(
+                "button", name="Play", exact=True
+            ).click()
+            page.wait_for_function("() => !document.querySelector('#media-video').paused")
+            page.locator("#media-center-mode").click()
+            page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            expect(page.locator("#app-sidebar")).to_be_hidden()
+            expect(page.locator("main > header")).to_be_hidden()
+            expect(page.locator("#media-search")).to_be_visible()
+            expect(page.locator("#media-center-mode")).to_have_text("Return to TorrentLinker")
+            page.locator("#media-music-tab").click()
+            expect(page.locator("#media-results article")).to_have_count(2)
+            page.locator("#media-video-tab").click()
+            page.locator("#media-chat").click()
+            expect(page.locator("#media-chat-panel")).to_be_visible()
+            page.locator("#media-chat-close").click()
+            assert video.get_attribute("src") == source
+            page.locator("#media-center-mode").click()
+            page.wait_for_function("() => document.fullscreenElement === null")
+            expect(page.locator("#app-sidebar")).to_be_visible()
+            page.locator("#media-center-mode").click()
+            page.wait_for_function("() => document.fullscreenElement !== null")
+            page.keyboard.press("Escape")
+            page.wait_for_function("() => document.fullscreenElement === null")
+            expect(page.locator("main > header")).to_be_visible()
+            page.locator("#media-center-mode").click()
+            page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            page.locator("#media-fullscreen").click()
+            page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
+            page.locator("#media-fullscreen").click()
+            page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            expect(page.locator("#media-center-mode")).to_have_text("Return to TorrentLinker")
+            expect(page.locator("#app-sidebar")).to_be_hidden()
+            assert video.get_attribute("src") == source
+            page.locator("#media-center-mode").click()
+            page.wait_for_function("() => document.fullscreenElement === null")
+            page.locator("#media-fullscreen").click()
+            page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
+            expect(page.locator("#media-fullscreen")).to_have_text("Exit fullscreen")
+            assert video.get_attribute("src") == source
+            assert video.evaluate("node => !node.paused && node.currentTime > 0")
+            page.locator("#media-fullscreen").click()
+            page.wait_for_function("() => document.fullscreenElement === null")
+            expect(page.locator("#media-fullscreen")).to_have_text("Fullscreen")
+            page.locator("#media-fullscreen").click()
+            page.wait_for_function("() => document.fullscreenElement !== null")
+            page.keyboard.press("Escape")
+            page.wait_for_function("() => document.fullscreenElement === null", timeout=3000)
             for layout in ("focus", "collection", "cinematic"):
-                page.locator("#media-layout-switch").select_option(layout)
+                choose_layout(layout)
                 expect(page.locator("#view-media")).to_have_attribute("data-layout", layout)
+                page.locator("#media-fullscreen").click()
+                page.wait_for_function("() => document.fullscreenElement !== null")
+                assert page.locator("#media-player-shell").evaluate(
+                    "node => { const r = node.getBoundingClientRect(); "
+                    "return r.x === 0 && r.y === 0 && r.width === innerWidth "
+                    "&& r.height === innerHeight; }"
+                )
+                page.locator("#media-fullscreen").click()
+                page.wait_for_function("() => document.fullscreenElement === null")
                 if layout == "collection":
                     expect(page.locator("#media-feature")).to_be_hidden()
                 else:
@@ -139,14 +431,14 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.reload()
             page.locator('[data-view="media"]').click()
             expect(page.locator("#view-media")).to_have_attribute("data-layout", "collection")
-            page.locator("#media-layout-switch").select_option("cinematic")
+            choose_layout("cinematic")
             expect(video).to_have_attribute("src", source)
 
             page.locator("#media-chat").click()
             expect(page.locator("#media-chat-panel")).to_be_visible()
             expect(page.locator("#assistant-prompt")).to_be_visible()
             assert video.get_attribute("src") == source
-            screenshots = os.getenv("TL_WEB_SCREENSHOTS")
+            screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv("TL_WEB_SCREENSHOTS")
             if screenshots:
                 Path(screenshots).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(screenshots) / "media-contextual-chat.png"))
@@ -165,12 +457,12 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             assert video.evaluate("node => node.paused") is True
             if screenshots:
                 for layout in ("cinematic", "focus", "collection"):
-                    page.locator("#media-layout-switch").select_option(layout)
+                    choose_layout(layout)
                     page.evaluate("window.scrollTo(0, 0)")
                     page.screenshot(
                         path=str(Path(screenshots) / f"media-layout-{layout}.png"), full_page=True
                     )
-                page.locator("#media-layout-switch").select_option("cinematic")
+                choose_layout("cinematic")
                 page.locator("#theme").select_option("light")
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshots) / "media-layout-light.png"))
@@ -190,6 +482,20 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.locator("#media-music-tab").click()
             expect(page.locator("#media-results article")).to_have_count(2)
             assert video.get_attribute("src") == source
+            music_nav = page.get_by_role("navigation", name="Music browsing")
+            expect(music_nav.get_by_role("button", name="Albums", exact=True)).to_be_visible()
+            music_nav.get_by_role("button", name="Artists", exact=True).click()
+            expect(page.locator("#media-results article")).to_have_count(1)
+            expect(page.locator("#media-results")).to_contain_text("Daft Punk")
+            music_nav.get_by_role("button", name="Tracks", exact=True).click()
+            expect(page.locator(".media-track-row")).to_have_count(3)
+            expect(page.locator(".media-track-row").first).to_contain_text("Discovery")
+            expect(page.locator(".media-track-row").first).to_contain_text("Daft Punk")
+            expect(
+                page.locator(".media-track-row").first.locator(".media-track-duration")
+            ).to_have_text("<0:01")
+            music_nav.get_by_role("button", name="Albums", exact=True).click()
+            expect(page.locator("#media-results article")).to_have_count(2)
             page.locator(".media-card").filter(has_text="2 tracks").get_by_role(
                 "button", name="Details", exact=True
             ).click()
@@ -215,10 +521,56 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.locator("#media-playlist-name").fill("Evening listening")
             page.locator("#media-save-playlist button").click()
             expect(page.locator("#media-playlist-list")).to_contain_text("Evening listening")
+            if screenshots:
+                page.locator("#media-player-shell summary").click()
+                page.evaluate("window.scrollTo(0, 0)")
+                page.screenshot(path=str(Path(screenshots) / "media-music-albums.png"))
+            music_nav.get_by_role("button", name="Artists", exact=True).click()
+            expect(page.locator(".media-artist-card")).to_have_count(1)
+            if screenshots:
+                page.screenshot(path=str(Path(screenshots) / "media-music-artists.png"))
+            music_nav.get_by_role("button", name="Tracks", exact=True).click()
+            expect(page.locator(".media-track-row")).to_have_count(3)
+            page.locator(".media-track-row").first.get_by_role(
+                "button", name="Add to queue"
+            ).click()
+            expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 2")
+            assert page.locator("#media-audio").evaluate("node => node.paused") is True
+            if screenshots:
+                page.screenshot(path=str(Path(screenshots) / "media-music-tracks.png"))
+                page.locator("#theme").select_option("light")
+                page.wait_for_timeout(250)
+                page.screenshot(path=str(Path(screenshots) / "media-music-light.png"))
+                page.locator("#theme").select_option("dark")
+                page.wait_for_timeout(250)
+                page.locator("#media-center-mode").click()
+                page.wait_for_function(
+                    "() => document.fullscreenElement === document.documentElement"
+                )
+                music_nav.get_by_role("button", name="Albums", exact=True).click()
+                expect(page.locator("#media-results article")).to_have_count(2)
+                page.screenshot(path=str(Path(screenshots) / "media-music-center.png"))
+                page.locator("#media-center-mode").click()
+                page.wait_for_function("() => document.fullscreenElement === null")
+            music_nav.get_by_role("button", name="Tracks", exact=True).click()
+            page.locator(".media-track-row").filter(has_text="Aerodynamic").get_by_role(
+                "button", name="Add to queue"
+            ).click()
+            expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 3")
+            page.locator("#media-playlist-name").fill("Full listening")
+            page.locator("#media-save-playlist button").click()
+            expect(page.locator("#media-playlist-list")).to_contain_text("Full listening")
+            page.wait_for_timeout(1300)
             page.reload()
             page.locator('[data-view="media"]').click()
             page.locator("#media-music-tab").click()
             expect(page.locator("#media-playlist-list")).to_contain_text("Evening listening")
+            expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 3")
+            assert not page.locator("#media-player-shell details").evaluate("node => node.open")
+            expect(page.locator("#media-save-playlist button")).to_be_enabled()
+            page.locator("#media-playlist-name").fill("Restored listening")
+            page.locator("#media-save-playlist button").click()
+            expect(page.locator("#media-playlist-list")).to_contain_text("Restored listening")
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.locator("#media-video-tab").click()
@@ -227,6 +579,11 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             ).click()
             expect(page.locator("#media-codec-error")).to_be_visible()
             expect(page.locator("#media-external")).to_have_attribute("href", re.compile("/stream"))
+            page.locator("#media-fullscreen").click()
+            page.wait_for_function("() => document.fullscreenElement !== null")
+            page.locator("#media-stop").click()
+            page.wait_for_function("() => document.fullscreenElement === null")
+            expect(page.locator("#media-player-shell")).to_be_hidden()
             assert not errors, errors
             browser.close()
     finally:
@@ -357,7 +714,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             start_preview()
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > .1")
             expect(page.locator("#media-preview-state")).to_contain_text("fixed")
-            screenshots = os.getenv("TL_WEB_SCREENSHOTS")
+            screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv("TL_WEB_SCREENSHOTS")
             if screenshots:
                 Path(screenshots).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(screenshots) / "media-partial-preview.png"))

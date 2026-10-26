@@ -932,6 +932,11 @@ class Assistant:
                         + " Avoid plot spoilers beyond the current video position. "
                         "Playback tools target only the attached player session. "
                         "Use search_media and present_media for local playable media. "
+                        "To start a film with requested audio/subtitles, use play_media's "
+                        "language and optional label preferences. For changes during playback, "
+                        "read_media_tracks then select_media_track with its exact source token "
+                        "and track ID. Ask which track when several match. Read back the player "
+                        "result before claiming success; queued commands are not applied yet. "
                         "Keep exact media identities in server selections.",
                     )
                 )

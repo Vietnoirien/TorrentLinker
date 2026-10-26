@@ -17,6 +17,8 @@ from xml.etree import ElementTree
 
 from guessit import guessit
 
+from torrentlinker import media_tracks
+
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
 AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wma", ".wv"}
 PARTIAL = (".part", ".partial", ".!qb", ".!ut", ".crdownload", ".tmp")
@@ -840,8 +842,16 @@ class MediaLibrary:
         if len(commands) >= 100:
             raise ValueError("This player is not consuming commands. Reopen its Media view.")
         command["sequence"] = (
-            max([state.get("command_ack", 0), *[c["sequence"] for c in commands]]) + 1
+            max(
+                [
+                    state.get("command_ack", 0),
+                    state.get("command_sequence", 0),
+                    *[c["sequence"] for c in commands],
+                ]
+            )
+            + 1
         )
+        state["command_sequence"] = command["sequence"]
         return [*commands, command]
 
     def session(
@@ -859,6 +869,9 @@ class MediaLibrary:
         repeat=None,
         context=None,
         command_ack=None,
+        kind=None,
+        track_id=None,
+        source_token=None,
     ):
         with self.lock, self.db:
             row = self.session_record(identifier, token)
@@ -871,7 +884,7 @@ class MediaLibrary:
                     raise ValueError("Playback queues accept at most 1,000 items.")
                 for item in queue:
                     self.record(row["client"], item)
-                current = report.get("current_id", state["current_id"])
+                current = report.get("current_id", state["current_id"]) or ""
                 if current and current not in queue:
                     raise ValueError("The current media must belong to this player's queue.")
                 player_index = report.get("index", state["index"])
@@ -890,7 +903,20 @@ class MediaLibrary:
                 for key in ("index", "paused", "shuffle", "repeat"):
                     if key in report:
                         state[key] = report[key]
+                if current != state["current_id"]:
+                    state.pop("track_state", None)
+                    state.pop("track_result", None)
                 state.update(queue=queue, current_id=current)
+                if "track_state" in report:
+                    tracks = media_tracks.inventory(report["track_state"], current)
+                    if tracks["source_token"] != state.get("track_state", {}).get("source_token"):
+                        state.pop("track_result", None)
+                    state["track_state"] = tracks
+                if "track_result" in report:
+                    if report["track_result"] is None:
+                        state.pop("track_result", None)
+                    else:
+                        state["track_result"] = media_tracks.result_report(report["track_result"])
                 for key in ("position", "duration", "volume"):
                     if key in report:
                         state[key] = bounded_number(report[key], 1 if key == "volume" else 8640000)
@@ -928,15 +954,47 @@ class MediaLibrary:
                     raise ValueError("Player browsing context is too large.")
                 state["context"] = context
             if action:
-                command = self.command(
-                    row["client"], action, media_ids, index, position, volume, shuffle, repeat
+                commands = self.cancel_track_request(state, commands)
+                command = (
+                    media_tracks.selection(state, kind, track_id, source_token)
+                    if action == "select_track"
+                    else self.command(
+                        row["client"], action, media_ids, index, position, volume, shuffle, repeat
+                    )
                 )
                 commands = self.append_command(state, commands, command)
+            allowed = False
+            if state.get("track_request"):
+                try:
+                    grant = self.agent.access.grant(row["actor"])
+                    allowed = (
+                        grant.mode == "execute"
+                        and "media" in grant.permissions
+                        and row["client"] in grant.clients
+                        and row["actor"] == state["track_request"]["actor"]
+                    )
+                except PermissionError:
+                    pass
+                commands = media_tracks.advance(state, commands, self.append_command, allowed)
             self.db.execute(
                 "UPDATE media_sessions SET body=?,commands=?,updated=? WHERE id=?",
                 (json.dumps(state), json.dumps(commands), time.time(), identifier),
             )
             return {"id": identifier, "state": state, "commands": commands}
+
+    @staticmethod
+    def cancel_track_request(state, commands):
+        request = state.get("track_request")
+        if request and request["status"] in {"failed", "completed"}:
+            state.pop("track_request", None)
+            return commands
+        if request and request["status"] not in {"failed", "completed"}:
+            request.update(
+                status="failed",
+                error="Another player command cancelled automatic track preparation.",
+            )
+            commands = [c for c in commands if c.get("request_token") != request["source_token"]]
+        return commands
 
     def command(self, client_id, action, media_ids, index, position, volume, shuffle, repeat):
         if action not in {
@@ -1038,6 +1096,12 @@ class MediaLibrary:
             }
         result["client_id"] = session["client"]
         result["queue_count"] = len(state["queue"])
+        if state.get("track_request"):
+            result["track_request"] = {
+                key: state["track_request"][key]
+                for key in ("status", "error", "preferences")
+                if key in state["track_request"]
+            }
         if state["current_id"]:
             try:
                 item = self.row(self.record(session["client"], state["current_id"]))

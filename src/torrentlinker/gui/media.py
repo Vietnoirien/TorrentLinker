@@ -9,11 +9,13 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 from PySide6.QtCore import (
     QEvent,
     QFile,
     QIODevice,
+    QLocale,
     QRectF,
     QSettings,
     QSignalBlocker,
@@ -24,6 +26,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
+    QActionGroup,
     QColor,
     QDesktopServices,
     QFont,
@@ -36,11 +39,12 @@ from PySide6.QtGui import (
     QPalette,
     QPixmap,
 )
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import QAudioOutput, QMediaMetaData, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QBoxLayout,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -51,11 +55,13 @@ from PySide6.QtWidgets import (
     QListView,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QProgressBar,
     QPushButton,
     QScrollArea,
     QSlider,
     QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -232,6 +238,7 @@ class MediaTab(QWidget):
 
     scan_progress = Signal(object)
     layout_changed = Signal(str)
+    center_mode_requested = Signal(bool)
 
     def __init__(
         self,
@@ -269,6 +276,12 @@ class MediaTab(QWidget):
         self.last_source = ""
         self.current_row: dict[str, Any] = {}
         self.subtitle_cues: list[tuple[float, float, str]] = []
+        self.track_source_token = ""
+        self.tracks_ready = False
+        self.track_result: dict[str, Any] = {}
+        self.last_track_failure: tuple[str, str] | None = None
+        self.audio_choice: int | None = None
+        self.subtitle_choice: int | str = -1
         self.offset = 0
         self.next_offset: int | None = None
         self.preview_id = ""
@@ -312,6 +325,21 @@ class MediaTab(QWidget):
             QPushButton#mediaSecondary { background: rgba(255, 255, 255, 29); color: #f3f4ef;
                 border: 0; border-radius: 6px; padding: 10px 16px; }
             QPushButton#mediaDisclosure { padding: 7px 12px; }
+            QPushButton#mediaKindTab, QPushButton#mediaBrowseTab {
+                background: transparent; color: #b8c2c1; border: 0;
+                border-bottom: 2px solid transparent; border-radius: 0; padding: 4px 0; }
+            QPushButton#mediaKindTab:checked, QPushButton#mediaBrowseTab:checked {
+                color: #f0f5f1; border-bottom: 2px solid #79d3c5; }
+            QPushButton#mediaCompactControl, QToolButton#mediaCompactControl {
+                padding: 0; font-size: 19px; border-radius: 6px; }
+            QToolButton#mediaCompactControl::menu-indicator { image: none; width: 0; }
+            QLineEdit#mediaSearch { background: #172024; color: #e6eeeb;
+                border: 1px solid #354644; border-radius: 8px; padding: 6px 10px; }
+            QPushButton#mediaCategoryCard { background: #1b3436; color: #eef5ee;
+                border: 1px solid #304f4e; border-radius: 8px; font-size: 15px; }
+            QPushButton#musicNavigation { border: 0; border-radius: 18px; padding: 9px 18px;
+                color: #adbbbd; background: transparent; font-size: 14px; }
+            QPushButton#musicNavigation:checked { color: #93dfce; background: #203d39; }
             QLabel#mediaSection { color: #f1f3ef; font-size: 20px; font-weight: 600; }
         """)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -328,47 +356,176 @@ class MediaTab(QWidget):
         self.canvas = QWidget()
         self.canvas.setObjectName("mediaCanvas")
         self.body = QVBoxLayout(self.canvas)
-        self.body.setContentsMargins(24, 18, 24, 24)
+        self.body.setContentsMargins(0, 0, 0, 24)
         self.body.setSpacing(18)
         self.content_scroll.setWidget(self.canvas)
         left_box.addWidget(self.content_scroll, 1)
         widget: QWidget
         self.header_box = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self.header_box.setSpacing(12)
+        self.brand = QLabel("TL")
+        self.brand.setStyleSheet("font-size: 17px; font-weight: 750; color: #86d8cb;")
+        self.brand.hide()
+        self.header_box.addWidget(self.brand)
         navigation = QWidget()
         header = QHBoxLayout(navigation)
         header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(4)
+        self.kind = QComboBox(self)
+        self.kind.addItem(self.tr("Video"), "video")
+        self.kind.addItem(self.tr("Music"), "music")
+        self.kind.hide()
+        self.kind_tabs: dict[str, QPushButton] = {}
+        self.kind_tab_group = QButtonGroup(self)
+        for value, label in (("video", self.tr("Video")), ("music", self.tr("Music"))):
+            button = QPushButton(label)
+            button.setObjectName("mediaKindTab")
+            button.setCheckable(True)
+            button.setFixedWidth(button.fontMetrics().horizontalAdvance(label) + 24)
+            button.setFixedHeight(32)
+            button.clicked.connect(
+                lambda _checked=False, name=value: self.kind.setCurrentIndex(
+                    self.kind.findData(name)
+                )
+            )
+            self.kind_tab_group.addButton(button)
+            self.kind_tabs[value] = button
+            header.addWidget(button)
+        self.view = QComboBox(self)
+        self.view.hide()
+        self.video_navigation = QWidget()
+        video_navigation_box = QHBoxLayout(self.video_navigation)
+        video_navigation_box.setContentsMargins(12, 0, 0, 0)
+        video_navigation_box.setSpacing(4)
+        self.video_tabs: dict[str, QPushButton] = {}
+        self.video_tab_group = QButtonGroup(self)
+        for value, label in (
+            ("all", self.tr("Home")),
+            ("films", self.tr("Films")),
+            ("series", self.tr("Series")),
+        ):
+            button = QPushButton(label)
+            button.setObjectName("mediaBrowseTab")
+            button.setCheckable(True)
+            button.setFixedWidth(button.fontMetrics().horizontalAdvance(label) + 20)
+            button.setFixedHeight(32)
+            button.clicked.connect(
+                lambda _checked=False, name=value: self.view.setCurrentIndex(
+                    self.view.findData(name)
+                )
+            )
+            self.video_tab_group.addButton(button)
+            self.video_tabs[value] = button
+            video_navigation_box.addWidget(button)
+        header.addWidget(self.video_navigation)
+        header.addStretch()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(self.tr("Search saved media"))
+        self.search.setObjectName("mediaSearch")
+        self.search.setMaximumWidth(220)
+        self.search.setMinimumWidth(120)
+        self.search.hide()
+        header.addWidget(self.search)
+        self.header_box.addWidget(navigation, 1)
         tools = QWidget()
         tools_box = QHBoxLayout(tools)
         tools_box.setContentsMargins(0, 0, 0, 0)
-        self.kind = QComboBox()
-        self.kind.addItem(self.tr("Video"), "video")
-        self.kind.addItem(self.tr("Music"), "music")
-        self.view = QComboBox()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(self.tr("Search saved media"))
-        self.search.setMaximumWidth(240)
-        self.layout_combo = QComboBox()
+        tools_box.setSpacing(6)
+        self.search_toggle = QToolButton()
+        self.search_toggle.setIcon(self._navigation_icon("search"))
+        self.search_toggle.setIconSize(QSize(22, 22))
+        self.search_toggle.setCheckable(True)
+        self.search_toggle.setAccessibleName(self.tr("Search saved media"))
+        self.search_toggle.setToolTip(self.tr("Search saved media"))
+        self.search_toggle.toggled.connect(self._toggle_search)
+        self.chat = QPushButton("✦")
+        self.chat.setAccessibleName(self.tr("Chat"))
+        self.chat.setToolTip(self.tr("Chat"))
+        self.center_button = QPushButton("⤢")
+        self.center_button.setCheckable(True)
+        self.center_button.setAccessibleName(self.tr("Media Center mode"))
+        self.center_button.setToolTip(self.tr("Media Center mode"))
+        self.center_button.clicked.connect(lambda checked: self.center_mode_requested.emit(checked))
+        self.layout_combo = QComboBox(self)
         self.layout_combo.setObjectName("media-layout")
         self.layout_combo.setAccessibleName(self.tr("Media layout"))
         self.layout_combo.addItem(self.tr("Cinematic home"), "cinematic")
         self.layout_combo.addItem(self.tr("Focus"), "focus")
         self.layout_combo.addItem(self.tr("Collection"), "collection")
-        self.library_disclosure = QPushButton(self.tr("Library options"))
-        self.library_disclosure.setObjectName("mediaDisclosure")
+        self.layout_combo.hide()
+        self.library_disclosure = QPushButton(self.tr("Library options"), self)
         self.library_disclosure.setCheckable(True)
-        self.chat = QPushButton(self.tr("Chat"))
-        for widget in (self.kind, self.view, self.search):
-            header.addWidget(widget)
-        header.addStretch()
-        for widget in (self.layout_combo, self.library_disclosure, self.chat):
+        self.library_disclosure.hide()
+        self.options_button = QToolButton()
+        self.options_button.setText("⋯")
+        self.options_button.setAccessibleName(self.tr("Library options"))
+        self.options_button.setToolTip(self.tr("Library options"))
+        self.options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.options_menu = QMenu(self.options_button)
+        self.layout_menu = self.options_menu.addMenu(self.tr("Media layout"))
+        self.layout_actions = []
+        self.layout_action_group = QActionGroup(self)
+        for index in range(self.layout_combo.count()):
+            action = self.layout_menu.addAction(self.layout_combo.itemText(index))
+            action.setCheckable(True)
+            self.layout_action_group.addAction(action)
+            action.triggered.connect(
+                lambda _checked=False, i=index: self.layout_combo.setCurrentIndex(i)
+            )
+            self.layout_actions.append(action)
+        self.library_action = self.options_menu.addAction(self.tr("Library options"))
+        self.library_action.setCheckable(True)
+        self.library_action.toggled.connect(self.library_disclosure.setChecked)
+        self.library_disclosure.toggled.connect(self.library_action.setChecked)
+        self.options_menu.addSeparator()
+        self.view_actions = []
+        for value, label in (
+            ("recent", self.tr("Recent")),
+            ("continue", self.tr("Continue watching")),
+        ):
+            action = self.options_menu.addAction(label)
+            action.triggered.connect(
+                lambda _checked=False, name=value: self.view.setCurrentIndex(
+                    self.view.findData(name)
+                )
+            )
+            self.view_actions.append(action)
+        self.options_button.setMenu(self.options_menu)
+        for widget in (self.search_toggle, self.chat, self.center_button, self.options_button):
+            widget.setObjectName("mediaCompactControl")
+            widget.setFixedSize(32, 32)
             tools_box.addWidget(widget)
-        self.header_box.addWidget(navigation, 1)
         self.header_box.addWidget(tools)
-        self.body.addLayout(self.header_box)
+        self.media_toolbar = QWidget()
+        self.media_toolbar.setLayout(self.header_box)
+        self.media_toolbar.setFixedHeight(58)
+        self.header_box.setContentsMargins(20, 10, 20, 10)
+        left_box.insertWidget(0, self.media_toolbar)
         self.content_scroll.viewport().installEventFilter(self)
         self.library_panel = QWidget()
         maintenance = QVBoxLayout(self.library_panel)
-        maintenance.setContentsMargins(0, 0, 0, 0)
+        maintenance.setContentsMargins(24, 12, 24, 12)
+        category_row = QHBoxLayout()
+        self.category_cards = {}
+        for value, label in (
+            ("all", self.tr("Home")),
+            ("films", self.tr("Films")),
+            ("series", self.tr("Series")),
+            ("albums", self.tr("Albums")),
+            ("artists", self.tr("Artists")),
+            ("tracks", self.tr("Tracks")),
+        ):
+            button = QPushButton(label)
+            button.setMinimumHeight(64)
+            button.setObjectName("mediaCategoryCard")
+            button.clicked.connect(
+                lambda _checked=False, name=value: self.view.setCurrentIndex(
+                    self.view.findData(name)
+                )
+            )
+            self.category_cards[value] = button
+            category_row.addWidget(button)
+        maintenance.addLayout(category_row)
         folder_row = QHBoxLayout()
         self.refresh_button = QPushButton(self.tr("Refresh folders"))
         self.cancel_scan = QPushButton(self.tr("Cancel scan"))
@@ -395,18 +552,20 @@ class MediaTab(QWidget):
             filters_row.addWidget(combo)
         self.filter_panel = QWidget()
         self.filter_panel.setLayout(filters_row)
-        filters_row.setContentsMargins(0, 0, 0, 0)
+        filters_row.setContentsMargins(24, 0, 24, 0)
         self.library_panel.hide()
         self.library_disclosure.toggled.connect(self.library_panel.setVisible)
         self.library_disclosure.toggled.connect(
             lambda checked: self.filter_panel.setVisible(
-                checked or self.media_layout == "collection" or self.kind.currentData() == "music"
+                checked
+                or (self.media_layout == "collection" and self.kind.currentData() == "video")
             )
         )
         self.body.addWidget(self.library_panel)
         self.body.addWidget(self.filter_panel)
         self.notice = QLabel()
         self.notice.setWordWrap(True)
+        self.notice.hide()
         self.body.addWidget(self.notice)
         self.empty = QLabel(
             self.tr(
@@ -447,27 +606,72 @@ class MediaTab(QWidget):
         self.hero.action_layout.addWidget(self.action_bar)
         self.body.addWidget(self.hero)
         self.collection_heading = QLabel(self.tr("Your collection"))
+        self.collection_heading.setContentsMargins(24, 12, 24, 0)
         self.collection_heading.setStyleSheet("font-size: 34px; font-weight: 650; color: #f2f4f0;")
         self.body.addWidget(self.collection_heading)
+        self.music_navigation = QWidget()
+        music_navigation_box = QHBoxLayout(self.music_navigation)
+        music_navigation_box.setContentsMargins(24, 0, 24, 0)
+        self.music_tabs: dict[str, QPushButton] = {}
+        self.music_tab_group = QButtonGroup(self)
+        for value, label in (
+            ("albums", self.tr("Albums")),
+            ("artists", self.tr("Artists")),
+            ("tracks", self.tr("Tracks")),
+        ):
+            button = QPushButton(label)
+            button.setObjectName("musicNavigation")
+            button.setCheckable(True)
+            self.music_tab_group.addButton(button)
+            button.clicked.connect(
+                lambda _checked=False, view=value: self.view.setCurrentIndex(
+                    self.view.findData(view)
+                )
+            )
+            music_navigation_box.addWidget(button)
+            self.music_tabs[value] = button
+        music_navigation_box.addStretch()
+        self.music_queue = QPushButton(self.tr("Queue ({0})").format(0))
+        self.music_queue.clicked.connect(self._open_music_queue)
+        self.music_playlists = QPushButton(self.tr("Playlists"))
+        self.music_playlists.clicked.connect(self._open_music_playlists)
+        music_navigation_box.addWidget(self.music_queue)
+        music_navigation_box.addWidget(self.music_playlists)
+        self.body.addWidget(self.music_navigation)
         self.collection_selection = QWidget()
-        collection_box = QVBoxLayout(self.collection_selection)
-        collection_box.setContentsMargins(0, 0, 0, 0)
+        self.collection_selection.setObjectName("mediaSelection")
+        collection_box = QHBoxLayout(self.collection_selection)
+        collection_box.setContentsMargins(20, 20, 20, 20)
+        collection_box.setSpacing(24)
+        self.music_cover = QLabel()
+        self.music_cover.setFixedSize(160, 160)
+        self.music_cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        collection_box.addWidget(self.music_cover)
+        selection_copy = QVBoxLayout()
+        collection_box.addLayout(selection_copy, 1)
         self.collection_title = QLabel()
         self.collection_title.setStyleSheet("font-size: 20px; color: #f1f3ef; font-weight: 600;")
         self.collection_title.setTextFormat(Qt.TextFormat.PlainText)
-        collection_box.addWidget(self.collection_title)
+        selection_copy.addWidget(self.collection_title)
+        self.music_metadata = QLabel()
+        self.music_metadata.setTextFormat(Qt.TextFormat.PlainText)
+        self.music_metadata.setWordWrap(True)
+        self.music_metadata.setStyleSheet("color: #b4c9c6; font-size: 13px;")
+        selection_copy.addWidget(self.music_metadata)
         self.collection_actions = QHBoxLayout()
-        collection_box.addLayout(self.collection_actions)
+        selection_copy.addLayout(self.collection_actions)
         self.body.addWidget(self.collection_selection)
         self.continue_heading = QLabel(self.tr("Continue watching"))
         self.continue_heading.setObjectName("mediaSection")
+        self.continue_heading.setContentsMargins(24, 12, 24, 0)
         self.body.addWidget(self.continue_heading)
         self.continue_panel = QWidget()
         self.continue_box = QHBoxLayout(self.continue_panel)
-        self.continue_box.setContentsMargins(0, 0, 0, 0)
+        self.continue_box.setContentsMargins(24, 0, 24, 0)
         self.continue_box.setSpacing(16)
         self.body.addWidget(self.continue_panel)
         shelf_header = QHBoxLayout()
+        shelf_header.setContentsMargins(24, 0, 24, 0)
         self.shelf_heading = QLabel(self.tr("Recently added"))
         self.shelf_heading.setObjectName("mediaSection")
         self.page_count = QLabel()
@@ -541,6 +745,12 @@ class MediaTab(QWidget):
             self.watched,
         ]
         self.player_panel = QWidget()
+        self.player_home_layout = left_box
+        self.fullscreen_dialog = QDialog(self)
+        self.fullscreen_dialog.setWindowTitle(self.tr("Media player"))
+        self.fullscreen_layout = QVBoxLayout(self.fullscreen_dialog)
+        self.fullscreen_layout.setContentsMargins(0, 0, 0, 0)
+        self.fullscreen_dialog.finished.connect(self._leave_fullscreen)
         player_box = QVBoxLayout(self.player_panel)
         player_box.setContentsMargins(12, 8, 12, 8)
         player_box.setSpacing(6)
@@ -596,16 +806,33 @@ class MediaTab(QWidget):
         self.repeat.currentIndexChanged.connect(
             lambda: self.command("repeat", repeat=self.repeat.currentData())
         )
+        self.audio_tracks = QComboBox()
+        self.audio_tracks.setAccessibleName(self.tr("Audio track"))
+        self.audio_tracks.setToolTip(self.tr("Audio track"))
+        self.audio_tracks.setMaximumWidth(230)
+        self.audio_tracks.currentIndexChanged.connect(self._select_audio)
         self.subtitles = QComboBox()
+        self.subtitles.setAccessibleName(self.tr("Subtitle track"))
+        self.subtitles.setToolTip(self.tr("Subtitle track"))
+        self.subtitles.setMaximumWidth(230)
         self.subtitles.addItem(self.tr("Subtitles off"), -1)
         self.subtitles.currentIndexChanged.connect(self._select_subtitle)
         self.queue_disclosure = QPushButton(self.tr("Queue & playlists"))
         self.queue_disclosure.setCheckable(True)
-        for widget in (self.shuffle, self.repeat, self.subtitles):
+        for widget in (self.shuffle, self.repeat):
             options.addWidget(widget)
         options.addStretch()
+        self.fullscreen_button = QPushButton(self.tr("Fullscreen"))
+        self.fullscreen_button.setObjectName("media-fullscreen")
+        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
+        options.addWidget(self.fullscreen_button)
         options.addWidget(self.queue_disclosure)
         player_box.addLayout(options)
+        tracks = QHBoxLayout()
+        tracks.addWidget(self.audio_tracks, 1)
+        tracks.addWidget(self.subtitles, 1)
+        tracks.addStretch()
+        player_box.addLayout(tracks)
         self.external = QPushButton(self.tr("Open in external player"))
         self.external.clicked.connect(self.open_external)
         self.external.hide()
@@ -622,6 +849,7 @@ class MediaTab(QWidget):
         self.save_playlist = QPushButton(self.tr("Save queue as playlist…"))
         self.save_playlist.clicked.connect(self._save_playlist)
         self.playlists = QComboBox()
+        self.playlists.setPlaceholderText(self.tr("Saved playlists"))
         self.load_playlist = QPushButton(self.tr("Load playlist"))
         self.load_playlist.clicked.connect(self._load_playlist)
         delete_playlist = QPushButton(self.tr("Delete playlist"))
@@ -648,7 +876,9 @@ class MediaTab(QWidget):
             self.volume,
             self.shuffle,
             self.repeat,
+            self.audio_tracks,
             self.subtitles,
+            self.fullscreen_button,
         ]
         self.queue_widgets = [
             self.queue,
@@ -661,9 +891,10 @@ class MediaTab(QWidget):
         left_box.addWidget(self.player_panel)
         self.refresh_button.clicked.connect(self.start_scan)
         self.cancel_scan.clicked.connect(self._cancel_media_scan)
-        self.scan_progress.connect(lambda value: self.notice.setText(str(value)))
+        self.scan_progress.connect(lambda value: self._set_notice(str(value)))
         self.kind.currentIndexChanged.connect(self._kind_changed)
         self.view.currentIndexChanged.connect(self.refresh)
+        self.view.currentIndexChanged.connect(self._sync_music_tabs)
         self.search.textChanged.connect(self.refresh)
         self.chat.clicked.connect(self.open_chat)
         self.layout_combo.currentIndexChanged.connect(self._layout_selected)
@@ -673,6 +904,59 @@ class MediaTab(QWidget):
         self.heartbeat.timeout.connect(self.report)
         self.set_media_layout("cinematic")
         self._update_panes()
+
+    def _navigation_icon(self, name: str) -> QIcon:
+        pixmap = QPixmap(22, 22)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QColor("#dbe5e2"))
+        if name == "search":
+            painter.drawEllipse(3, 3, 11, 11)
+            painter.drawLine(12, 12, 19, 19)
+        painter.end()
+        return QIcon(pixmap)
+
+    def _set_notice(self, text: str) -> None:
+        self.notice.setText(text)
+        self.notice.setVisible(bool(text))
+
+    def _toggle_search(self, checked: bool) -> None:
+        self.search.setVisible(checked)
+        if checked:
+            self.search.setFocus()
+        self._arrange_toolbar()
+
+    def _arrange_toolbar(self) -> None:
+        width = self.content_scroll.viewport().width()
+        self.header_box.setDirection(QBoxLayout.Direction.LeftToRight)
+        self.video_navigation.setVisible(
+            self.kind.currentData() == "video"
+            and width >= 760
+            and not (self.search.isVisible() and width < 1000)
+        )
+        self.search.setMaximumWidth(220 if width >= 1100 else 150)
+        self.brand.setText("TorrentLinker" if width >= 1100 else "TL")
+
+    def _sync_music_tabs(self) -> None:
+        for name, button in self.kind_tabs.items():
+            with QSignalBlocker(button):
+                button.setChecked(self.kind.currentData() == name)
+        for name, button in self.video_tabs.items():
+            with QSignalBlocker(button):
+                button.setChecked(self.view.currentData() == name)
+        for name, button in self.music_tabs.items():
+            with QSignalBlocker(button):
+                button.setChecked(self.view.currentData() == name)
+
+    def _open_music_queue(self) -> None:
+        self.queue_disclosure.setChecked(True)
+        self._update_panes()
+        self.queue.setFocus()
+
+    def _open_music_playlists(self) -> None:
+        self._open_music_queue()
+        self.playlists.setFocus()
 
     def _cancel_media_scan(self) -> None:
         if self.scan_stop:
@@ -686,6 +970,8 @@ class MediaTab(QWidget):
     def set_media_layout(self, value: str) -> None:
         value = value if value in {"cinematic", "focus", "collection"} else "cinematic"
         self.media_layout = value
+        for index, action in enumerate(self.layout_actions):
+            action.setChecked(self.layout_combo.itemData(index) == value)
         with QSignalBlocker(self.layout_combo):
             self.layout_combo.setCurrentIndex(self.layout_combo.findData(value))
         self.hero.set_mode(value)
@@ -695,7 +981,7 @@ class MediaTab(QWidget):
         else:
             self.hero.action_layout.addWidget(self.action_bar)
         self.library_disclosure.setChecked(False)
-        self.filter_panel.setVisible(collection)
+        self.filter_panel.setVisible(value == "collection" and self.kind.currentData() == "video")
         self._configure_browse_layout()
         self._refresh_focus_strip()
         self._update_panes()
@@ -704,6 +990,33 @@ class MediaTab(QWidget):
         if self.selected_ids():
             self.details.show()
             self.details.raise_()
+
+    def set_center_mode(self, enabled: bool) -> None:
+        self.center_button.setChecked(enabled)
+        self.center_button.setText("↩" if enabled else "⤢")
+        label = self.tr("Return to TorrentLinker") if enabled else self.tr("Media Center mode")
+        self.center_button.setAccessibleName(label)
+        self.center_button.setToolTip(label)
+        self.brand.setVisible(enabled)
+        self._arrange_toolbar()
+
+    def toggle_fullscreen(self) -> None:
+        if self.fullscreen_dialog.isVisible():
+            self.fullscreen_dialog.reject()
+        elif self.last_source:
+            self._player_home_index = self.player_home_layout.indexOf(self.player_panel)
+            self.fullscreen_layout.addWidget(self.player_panel)
+            self.video.setMaximumHeight(16777215)
+            self.fullscreen_button.setText(self.tr("Exit fullscreen"))
+            self.fullscreen_dialog.showFullScreen()
+            self.fullscreen_button.setFocus()
+
+    def _leave_fullscreen(self) -> None:
+        self.player_home_layout.insertWidget(self._player_home_index, self.player_panel)
+        self.video.setMaximumHeight(240)
+        self.fullscreen_button.setText(self.tr("Fullscreen"))
+        self.player_panel.show()
+        self.fullscreen_button.setFocus()
 
     def _focus_selection(self) -> None:
         items = self.hero.strip.selectedItems()
@@ -752,6 +1065,31 @@ class MediaTab(QWidget):
         self.featured_id = row["id"]
         self.hero.title.setText(row["title"])
         self.collection_title.setText(row["title"])
+        if row["kind"] == "music":
+            view = self.view.currentData()
+            title = (
+                row.get("album")
+                if view == "albums"
+                else row.get("artist")
+                if view == "artists"
+                else row["title"]
+            ) or row["title"]
+            self.collection_title.setText(str(title))
+            tags = [str(row[key]) for key in ("artist", "year") if row.get(key)]
+            if view == "tracks" and row.get("album"):
+                tags.append(str(row["album"]))
+            if row.get("track_count"):
+                tags.append(self.tr(" · {0} tracks").format(row["track_count"]).lstrip(" ·"))
+            if view == "tracks" and row.get("duration"):
+                tags.append(self._time_label(float(row["duration"])))
+            self.music_metadata.setText(" · ".join(tags))
+            picture = self.picture_cache.get(row["id"])
+            icon = (
+                self._cover_icon(picture, QSize(160, 160))
+                if picture is not None
+                else self._placeholder_icon("music")
+            )
+            self.music_cover.setPixmap(icon.pixmap(160, 160))
         facts = [
             str(row[key])
             for key in ("year", "artist", "album", "genre", "language")
@@ -865,7 +1203,7 @@ class MediaTab(QWidget):
                 self.player.setSource(QUrl())
                 self.state["current_id"] = ""
                 self.last_source = ""
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
     def activate(self) -> None:
         try:
@@ -920,7 +1258,8 @@ class MediaTab(QWidget):
                 self.player.positionChanged.connect(self._position_changed)
                 self.player.durationChanged.connect(self._duration_changed)
                 self.player.mediaStatusChanged.connect(self._media_status)
-                self.player.tracksChanged.connect(self._subtitle_tracks)
+                self.player.tracksChanged.connect(self._playback_tracks)
+                self.player.sourceChanged.connect(self._track_source_changed)
                 self.audio.setVolume(float(self.state["volume"]))
                 self.volume.setValue(round(float(self.state["volume"]) * 100))
                 with QSignalBlocker(self.shuffle), QSignalBlocker(self.repeat):
@@ -930,12 +1269,12 @@ class MediaTab(QWidget):
                 try:
                     self._load_current(play=False)
                 except (OSError, ValueError) as error:
-                    self.notice.setText(str(error))
+                    self._set_notice(str(error))
                     self._render_queue()
-                self._apply_commands(session.get("commands", []))
+                self.apply_player_commands(session.get("commands", []))
             self.refresh()
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def _kind_changed(self) -> None:
         values = (
@@ -948,15 +1287,16 @@ class MediaTab(QWidget):
             )
             if self.kind.currentData() == "video"
             else (
-                (self.tr("Tracks"), "tracks"),
                 (self.tr("Albums"), "albums"),
                 (self.tr("Artists"), "artists"),
+                (self.tr("Tracks"), "tracks"),
             )
         )
         with QSignalBlocker(self.view):
             self.view.clear()
             for label, value in values:
                 self.view.addItem(label, value)
+        self._sync_music_tabs()
         self.set_media_layout(self.media_layout)
         self.refresh()
 
@@ -975,12 +1315,25 @@ class MediaTab(QWidget):
         self.results.setWordWrap(cards)
         self.results.setUniformItemSizes(cards)
         self.results.setSpacing(8 if cards else 2)
-        dense = self.media_layout == "collection"
+        music = self.kind.currentData() == "music"
+        dense = self.media_layout == "collection" and not music
         self.results.setGridSize(
-            QSize(156, 226) if cards and dense else QSize(180, 248) if cards else QSize()
+            QSize(180, 220)
+            if music and cards
+            else QSize(156, 226)
+            if cards and dense
+            else QSize(180, 248)
+            if cards
+            else QSize()
         )
         self.results.setIconSize(
-            QSize(116, 154) if cards and dense else QSize(128, 170) if cards else QSize(40, 40)
+            QSize(148, 148)
+            if music and cards
+            else QSize(116, 154)
+            if cards and dense
+            else QSize(128, 170)
+            if cards
+            else QSize(44, 44)
         )
         self.results.setMinimumHeight(470 if dense and cards else 280 if cards else 120)
         self.results.setMaximumHeight(1200 if dense else 560 if cards else 240)
@@ -988,11 +1341,7 @@ class MediaTab(QWidget):
 
     def eventFilter(self, watched, event):
         if watched is self.content_scroll.viewport() and event.type() == QEvent.Type.Resize:
-            self.header_box.setDirection(
-                QBoxLayout.Direction.TopToBottom
-                if event.size().width() < 950
-                else QBoxLayout.Direction.LeftToRight
-            )
+            self._arrange_toolbar()
         return super().eventFilter(watched, event)
 
     def _cover_icon(self, picture: QImage, size: QSize | None = None) -> QIcon:
@@ -1004,18 +1353,35 @@ class MediaTab(QWidget):
         )
         left = max(0, (pixmap.width() - size.width()) // 2)
         top = max(0, (pixmap.height() - size.height()) // 2)
-        return QIcon(pixmap.copy(left, top, size.width(), size.height()))
+        cropped = pixmap.copy(left, top, size.width(), size.height())
+        if self.kind.currentData() == "music" and self.view.currentData() == "artists":
+            rounded = QPixmap(size)
+            rounded.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            mask = QPainterPath()
+            mask.addEllipse(QRectF(rounded.rect()))
+            painter.setClipPath(mask)
+            painter.drawPixmap(0, 0, cropped)
+            painter.end()
+            cropped = rounded
+        return QIcon(cropped)
 
     def _placeholder_icon(self, kind: str) -> QIcon:
-        cover = QPixmap(128, 170)
+        music = kind == "music"
+        cover = QPixmap(160, 160) if music else QPixmap(128, 170)
         palette = self.palette()
-        cover.fill(palette.color(QPalette.ColorRole.AlternateBase))
+        cover.fill(Qt.GlobalColor.transparent)
         painter = QPainter(cover)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(palette.color(QPalette.ColorRole.Mid))
-        painter.drawRoundedRect(1, 1, 125, 167, 8, 8)
+        painter.setBrush(palette.color(QPalette.ColorRole.AlternateBase))
+        if music and self.view.currentData() == "artists":
+            painter.drawEllipse(cover.rect().adjusted(2, 2, -2, -2))
+        else:
+            painter.drawRoundedRect(cover.rect().adjusted(1, 1, -2, -2), 8, 8)
         painter.setPen(palette.color(QPalette.ColorRole.Text))
-        if kind == "video":
+        if not music:
             triangle = QPainterPath()
             triangle.moveTo(48, 53)
             triangle.lineTo(48, 105)
@@ -1026,16 +1392,14 @@ class MediaTab(QWidget):
             font = QFont(painter.font())
             font.setPointSize(40)
             painter.setFont(font)
-            painter.drawText(
-                cover.rect().adjusted(0, 12, 0, -40), Qt.AlignmentFlag.AlignCenter, "♪"
-            )
+            painter.drawText(cover.rect().adjusted(0, 0, 0, -32), Qt.AlignmentFlag.AlignCenter, "♪")
         font = QFont(painter.font())
         font.setPointSize(10)
         painter.setFont(font)
         painter.drawText(
-            cover.rect().adjusted(0, 128, 0, -12),
+            cover.rect().adjusted(0, 124, 0, -10),
             Qt.AlignmentFlag.AlignCenter,
-            self.tr("Video") if kind == "video" else self.tr("Music"),
+            self.tr("Music") if music else self.tr("Video"),
         )
         painter.end()
         return QIcon(cover)
@@ -1054,7 +1418,8 @@ class MediaTab(QWidget):
             title = title[:49] + "…"
         subtitle = str(row.get("artist") or "") if view == "albums" else str(row.get("year") or "")
         if row.get("track_count"):
-            subtitle = self.tr(" · {0} tracks").format(row["track_count"]).lstrip(" ·")
+            count = self.tr(" · {0} tracks").format(row["track_count"]).lstrip(" ·")
+            subtitle = subtitle + "\n" + count if view == "albums" and subtitle else count
         if not row.get("available", True):
             subtitle += self.tr(" · unavailable")
         return title + ("\n" + subtitle[:30] if subtitle else "")
@@ -1087,7 +1452,7 @@ class MediaTab(QWidget):
         generation = self.browse_generation
         library, client, offset = self.library, self.session_client, self.offset
         self.results.setEnabled(False)
-        self.notice.setText(self.tr("Loading saved media…"))
+        self._set_notice(self.tr("Loading saved media…"))
 
         def work():
             continuation = {**context, "view": "continue"}
@@ -1106,7 +1471,7 @@ class MediaTab(QWidget):
         def failed(error):
             if isValid(self) and generation == self.browse_generation:
                 self.results.setEnabled(True)
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
         run_in_background(work, done, failed)
 
@@ -1139,6 +1504,11 @@ class MediaTab(QWidget):
                     title += f" · {row['release']}"
                 if not row.get("available", True):
                     title += self.tr(" · unavailable")
+                if row["kind"] == "music" and not cards:
+                    tags = [str(row[key]) for key in ("artist", "album") if row.get(key)]
+                    if row.get("duration"):
+                        tags.append(self._time_label(float(row["duration"])))
+                    title = row["title"] + ("\n" + " · ".join(tags) if tags else "")
                 item = QListWidgetItem(self._card_title(row) if cards else title)
                 item.setToolTip(title)
                 item.setIcon(placeholder)
@@ -1146,6 +1516,8 @@ class MediaTab(QWidget):
                     item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
                     grid = self.results.gridSize()
                     item.setSizeHint(QSize(grid.width() - 4, grid.height() - 8))
+                if row["kind"] == "music" and not cards:
+                    item.setSizeHint(QSize(0, 62))
                 item.setData(Qt.ItemDataRole.UserRole, row["id"])
                 self.results.addItem(item)
             if self.rows:
@@ -1179,11 +1551,14 @@ class MediaTab(QWidget):
                     for value in values:
                         combo.addItem(str(value), str(value))
                     combo.setCurrentIndex(max(0, combo.findData(current)))
-            self.notice.setText("; ".join(str(error) for error in result.get("errors", [])))
+            self._set_notice("; ".join(str(error) for error in result.get("errors", [])))
+            playlist_name = self.current_playlist or self.playlists.currentText()
             with QSignalBlocker(self.playlists):
                 self.playlists.clear()
                 for playlist in playlists:
                     self.playlists.addItem(playlist["name"], playlist)
+                if playlists:
+                    self.playlists.setCurrentIndex(max(0, self.playlists.findText(playlist_name)))
             self.empty.setVisible(not bool(self.rows))
             if not self.rows:
                 self.empty.setText(
@@ -1194,12 +1569,43 @@ class MediaTab(QWidget):
                 )
             self._update_panes()
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def _update_panes(self) -> None:
         chosen = bool(self.selected_ids())
         active = bool(self.last_source)
+        if not active and self.fullscreen_dialog.isVisible():
+            self.fullscreen_dialog.reject()
         video = self.kind.currentData() == "video"
+        self.music_navigation.setVisible(not video)
+        self.music_cover.setVisible(not video)
+        self.music_metadata.setVisible(not video)
+        self.view.hide()
+        self.kind.hide()
+        self.layout_combo.hide()
+        self.layout_menu.menuAction().setVisible(video)
+        for action in self.view_actions:
+            action.setVisible(video)
+        for name, button in self.category_cards.items():
+            button.setVisible(
+                name in {"all", "films", "series"}
+                if video
+                else name in {"albums", "artists", "tracks"}
+            )
+        self._arrange_toolbar()
+        self.music_queue.setText(self.tr("Queue ({0})").format(len(self.state["queue"])))
+        self.collection_title.setStyleSheet(
+            "font-size: 30px; color: #f1f3ef; font-weight: 650;"
+            if not video
+            else "font-size: 20px; color: #f1f3ef; font-weight: 600;"
+        )
+        self.collection_selection.setStyleSheet(
+            "QWidget#mediaSelection { background: qlineargradient("
+            "x1:0,y1:0,x2:1,y2:1,stop:0 #284441,stop:1 #142321);"
+            "border-radius: 10px; }"
+            if not video
+            else ""
+        )
         collection = self.media_layout == "collection" or not video
         focus = self.media_layout == "focus" and video
         self.hero.setVisible(not collection and bool(self.rows) and chosen)
@@ -1235,7 +1641,9 @@ class MediaTab(QWidget):
         self.refresh_preview.setVisible(
             chosen and self.preview_item == self.detail_row.get("id") and bool(self.preview_id)
         )
-        self.player_panel.setVisible(active or bool(self.state["queue"]))
+        self.player_panel.setVisible(
+            active or bool(self.state["queue"]) or (not video and self.queue_disclosure.isChecked())
+        )
         self.video.setVisible(active and self.current_row.get("kind") == "video")
         self.caption.setVisible(active and bool(self.subtitle_cues))
         for widget in self.playback_widgets:
@@ -1298,7 +1706,7 @@ class MediaTab(QWidget):
             self._update_panes()
 
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def _more_detail(self, name: str) -> None:
         ids = self.selected_ids()
@@ -1326,7 +1734,7 @@ class MediaTab(QWidget):
         def failed(error):
             if isValid(self):
                 button.setEnabled(True)
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
         run_in_background(work, done, failed)
 
@@ -1391,6 +1799,10 @@ class MediaTab(QWidget):
                 cached = self._cache_picture(identifier, picture)
                 if identifier == self.featured_id:
                     self.hero.set_picture(cached)
+                    if self.kind.currentData() == "music":
+                        self.music_cover.setPixmap(
+                            self._cover_icon(cached, QSize(160, 160)).pixmap(160, 160)
+                        )
                 if detail:
                     if selected == self.selected_ids():
                         self.artwork.setPixmap(
@@ -1422,7 +1834,7 @@ class MediaTab(QWidget):
         library, client, session_id = self.library, self.session_client, self.session_id
         self.preview_button.setEnabled(False)
         self.refresh_preview.setEnabled(False)
-        self.notice.setText(self.tr("Checking downloaded pieces with qBittorrent…"))
+        self._set_notice(self.tr("Checking downloaded pieces with qBittorrent…"))
 
         def work():
             preview = library.create_preview(client, identifier)
@@ -1455,13 +1867,14 @@ class MediaTab(QWidget):
             self.caption.clear()
             self.state.update(current_id=identifier, queue=[identifier], index=0)
             self.pending_seek = None
+            self._prepare_track_source()
             self.player.setSourceDevice(self.preview_device, QUrl("verified-preview.mp4"))
             self.now_playing.setText(
                 self.tr("Preview of downloaded portion · {0}% verified").format(
                     round(100 * preview["progress"])
                 )
             )
-            self.notice.setText(
+            self._set_notice(
                 self.tr(
                     "Only downloaded pieces are exposed to the player. "
                     "Refresh preview after more pieces arrive. "
@@ -1487,7 +1900,7 @@ class MediaTab(QWidget):
 
         def failed(error):
             if isValid(self) and generation == self.preview_generation:
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
                 self.preview_button.setEnabled(True)
                 self.refresh_preview.setEnabled(True)
 
@@ -1528,7 +1941,7 @@ class MediaTab(QWidget):
                     self._close_preview()
                     self.state["current_id"] = ""
                     self.last_source = ""
-                    self.notice.setText(str(error))
+                    self._set_notice(str(error))
 
         run_in_background(lambda: library.preview_source(client, preview_id), done, failed)
 
@@ -1576,7 +1989,7 @@ class MediaTab(QWidget):
             if ids:
                 self.command("play", media_ids=ids, index=0)
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def enqueue_selected(self) -> None:
         try:
@@ -1587,7 +2000,7 @@ class MediaTab(QWidget):
                     "queue", media_ids=[*self.state["queue"], *ids], index=self.state["index"]
                 )
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def toggle_pause(self) -> None:
         self.command(
@@ -1605,23 +2018,41 @@ class MediaTab(QWidget):
             ):
                 self._invalidate_preview_request()
             result = self.library.session(self.session_id, self.token, action=action, **values)
-            self._apply_commands(result.get("commands", []))
+            self.apply_player_commands(result.get("commands", []))
             self.report()
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
-    def _apply_commands(self, commands: list[dict[str, Any]]) -> None:
+    def apply_player_commands(self, commands: list[dict[str, Any]]) -> None:
+        """Apply sequenced commands from the attached authenticated player session."""
         for command in commands:
             sequence = int(command["sequence"])
             if sequence <= self.command_ack:
                 continue
             action = command["action"]
+            scoped_resume = (
+                action == "play"
+                and "media_ids" not in command
+                and ("source_token" in command or "media_id" in command)
+            )
+            if scoped_resume:
+                error = self._track_command_source_error(command)
+                if error:
+                    self.track_result = {"sequence": sequence, "applied": False, "error": error}
+                    self.command_ack = sequence
+                    continue
             if action in {"queue", "pause", "next", "previous"} or (
                 action == "play" and (not self.preview_id or "media_ids" in command)
             ):
                 self._invalidate_preview_request()
+            if action == "select_track":
+                self._apply_track_command(command)
+                self.command_ack = sequence
+                continue
             if action == "play" and self.preview_id and "media_ids" not in command:
-                self.player.play()
+                self.player.pause() if command.get("start_paused") else self.player.play()
+                if scoped_resume:
+                    self._track_resume_result(sequence)
                 self.command_ack = sequence
                 continue
             if action in {"play", "queue"}:
@@ -1629,9 +2060,15 @@ class MediaTab(QWidget):
                 if "media_ids" in command:
                     self.state["queue"] = command["media_ids"]
                     self.state["index"] = command.get("index", 0)
-                self._load_current(play=action == "play" or was_playing)
+                start_paused = bool(command.get("start_paused")) and action == "play"
+                if start_paused:
+                    self.player.pause()
+                self._load_current(
+                    play=(action == "play" or was_playing) and not start_paused,
+                    load_token=str(command.get("load_token") or ""),
+                )
                 if action == "play":
-                    self.player.play()
+                    self.player.pause() if start_paused else self.player.play()
             elif action == "pause":
                 self.player.pause()
             elif action == "seek":
@@ -1649,11 +2086,14 @@ class MediaTab(QWidget):
                 self.state["repeat"] = command["repeat"]
                 with QSignalBlocker(self.repeat):
                     self.repeat.setCurrentIndex(max(0, self.repeat.findData(command["repeat"])))
+            if scoped_resume:
+                self._track_resume_result(sequence)
             self.command_ack = sequence
 
-    def _load_current(self, play: bool) -> None:
+    def _load_current(self, play: bool, load_token: str = "") -> None:
         queue = self.state["queue"]
         if not queue:
+            self._clear_track_source()
             self._close_preview()
             self.player.stop()
             self.player.setSource(QUrl())
@@ -1666,7 +2106,7 @@ class MediaTab(QWidget):
         index = max(0, min(int(self.state["index"]), len(queue) - 1))
         self.state["index"] = index
         identifier = queue[index]
-        if identifier != self.last_source or self.preview_id:
+        if identifier != self.last_source or self.preview_id or load_token:
             self._invalidate_preview_request()
             path = self.library.resolve(self.session_client, identifier)
             row = self.library.detail(self.session_client, identifier)
@@ -1679,8 +2119,17 @@ class MediaTab(QWidget):
             self.pending_seek = round(float(row.get("position") or 0) * 1000)
             self.external.hide()
             self.now_playing.setText(row["title"])
+            self._prepare_track_source(load_token)
             self.player.setSource(QUrl.fromLocalFile(str(path)))
+            if self.player.mediaStatus() in {
+                QMediaPlayer.MediaStatus.LoadedMedia,
+                QMediaPlayer.MediaStatus.BufferedMedia,
+            }:
+                self._playback_tracks()
             self.video.setVisible(row["kind"] == "video")
+        if not self.track_source_token:
+            self._prepare_track_source(load_token)
+            self._playback_tracks()
         if play:
             self.player.play()
         self._render_queue()
@@ -1741,7 +2190,7 @@ class MediaTab(QWidget):
                 self.current_playlist = name.strip()
                 self.refresh()
             except Exception as error:
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
     def _load_playlist(self) -> None:
         playlist = self.playlists.currentData()
@@ -1756,7 +2205,7 @@ class MediaTab(QWidget):
                 self.library.delete_playlist(self.session_client, playlist["id"])
                 self.refresh()
             except Exception as error:
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
     def _watched(self, watched: bool) -> None:
         ids = self.selected_ids()
@@ -1764,7 +2213,7 @@ class MediaTab(QWidget):
             try:
                 self.library.watched(self.session_client, ids[0], watched)
             except Exception as error:
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
     def report(self) -> None:
         if not self.library:
@@ -1790,12 +2239,23 @@ class MediaTab(QWidget):
             result = self.library.session(
                 self.session_id,
                 self.token,
-                report={**self.state, "command_ack": self.command_ack},
+                report={
+                    **self.state,
+                    "command_ack": self.command_ack,
+                    "track_state": self._track_state(),
+                    **({"track_result": self.track_result} if self.track_result else {}),
+                },
                 context=self._context(),
             )
-            self._apply_commands(result.get("commands", []))
+            self.apply_player_commands(result.get("commands", []))
+            request = result.get("state", {}).get("track_request", {})
+            if request.get("status") == "failed":
+                failure = (str(request.get("source_token") or ""), str(request.get("error") or ""))
+                if failure != self.last_track_failure:
+                    self.last_track_failure = failure
+                    self._set_notice(failure[1])
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def _position_changed(self, position: int) -> None:
         seconds = position / 1000
@@ -1814,13 +2274,14 @@ class MediaTab(QWidget):
 
     def _media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         if status in {QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia}:
+            self.tracks_ready = bool(self.track_source_token)
             if self.pending_seek is not None:
                 self.player.setPosition(self.pending_seek)
                 self.pending_seek = None
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             if self.preview_id:
                 self.player.pause()
-                self.notice.setText(
+                self._set_notice(
                     self.tr("End of downloaded portion. Refresh preview after more pieces arrive.")
                 )
                 return
@@ -1830,19 +2291,24 @@ class MediaTab(QWidget):
             else:
                 self._advance(1)
 
-    def _select_subtitle(self) -> None:
+    def _select_subtitle(self) -> bool:
         if self.player is None:
-            return
+            return False
         value = self.subtitles.currentData()
-        self.subtitle_cues = []
-        self.caption.clear()
-        self.player.setActiveSubtitleTrack(value if isinstance(value, int) else -1)
-        if not isinstance(value, str):
-            return
+        if value is None:
+            return False
+        self.subtitle_error = ""
+        if isinstance(value, int):
+            self.subtitle_choice = value
+            self.subtitle_cues = []
+            self.caption.clear()
+            self.player.setActiveSubtitleTrack(value)
+            return self.player.activeSubtitleTrack() == value
         try:
             data, _mime = self.library.subtitle(self.session_client, self.last_source, value)
             text = data.decode("utf-8-sig", errors="replace").replace("\r", "")
             timing = re.compile(r"(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})")
+            cues = []
             for block in re.split(r"\n\s*\n", text):
                 lines = block.splitlines()
                 for index, line in enumerate(lines):
@@ -1856,25 +2322,232 @@ class MediaTab(QWidget):
                         for hour, minute, second, ms in times
                     ]
                     caption = re.sub(r"<[^>]*>", "", "\n".join(lines[index + 1 :]))
-                    self.subtitle_cues.append((seconds[0], seconds[1], caption))
+                    cues.append((seconds[0], seconds[1], caption))
+            if not cues:
+                raise ValueError(self.tr("Subtitle file has no readable timed cues."))
+            self.subtitle_choice = value
+            self.subtitle_cues = cues
+            self.player.setActiveSubtitleTrack(-1)
             self._position_changed(self.player.position())
             self._update_panes()
+            return True
         except Exception as error:
-            self.notice.setText(str(error))
+            self.subtitle_error = str(error)
+            self._set_notice(str(error))
+            with QSignalBlocker(self.subtitles):
+                self.subtitles.setCurrentIndex(self.subtitles.findData(self.subtitle_choice))
+            return False
 
-    def _subtitle_tracks(self) -> None:
+    def _prepare_track_source(self, token: str = "") -> None:
+        self.track_source_token = token or str(uuid4())
+        self.track_result = {}
+        self.tracks_ready = False
+        self._reset_track_choices()
+
+    def _clear_track_source(self) -> None:
+        self.track_source_token = ""
+        self.track_result = {}
+        self.tracks_ready = False
+
+    def _track_source_changed(self) -> None:
+        self._reset_track_choices()
+        if self.player.source().isEmpty() and not self.preview_id:
+            self._clear_track_source()
+
+    @staticmethod
+    def _track_language(metadata: QMediaMetaData) -> str:
+        language = metadata.value(QMediaMetaData.Key.Language)
+        if isinstance(language, QLocale.Language):
+            if language in {QLocale.Language.AnyLanguage, QLocale.Language.C}:
+                return ""
+            return QLocale.languageToCode(language)
+        return language if isinstance(language, str) else ""
+
+    def _track_state(self) -> dict[str, Any]:
+        ready = (
+            self.tracks_ready
+            and bool(self.track_source_token)
+            and self.player is not None
+            and self.player.error() == QMediaPlayer.Error.NoError
+        )
+        audio, subtitles = [], []
+        if ready:
+            for index, track in enumerate(self.player.audioTracks()[:100]):
+                audio.append(
+                    {
+                        "id": f"audio:{index}",
+                        "label": self._track_label(track, self.tr("Audio {0}").format(index + 1)),
+                        "language": self._track_language(track),
+                        "selected": self.player.activeAudioTrack() == index,
+                    }
+                )
+            for index, track in enumerate(self.player.subtitleTracks()[:100]):
+                subtitles.append(
+                    {
+                        "id": f"embedded:{index}",
+                        "label": self._track_label(
+                            track, self.tr("Embedded subtitle {0}").format(index + 1)
+                        ),
+                        "language": self._track_language(track),
+                        "selected": self.player.activeSubtitleTrack() == index,
+                    }
+                )
+            for track in self.current_row.get("subtitles", [])[: max(0, 100 - len(subtitles))]:
+                subtitles.append(
+                    {
+                        "id": "external:" + track["id"],
+                        "label": track["label"],
+                        "language": str(track.get("language") or ""),
+                        "selected": self.subtitle_choice == track["id"]
+                        and self.player.activeSubtitleTrack() == -1,
+                    }
+                )
+        for entry in audio + subtitles:
+            entry["label"] = str(entry["label"])[:300]
+            entry["language"] = str(entry["language"])[:300]
+        return {
+            "media_id": self.last_source,
+            "source_token": self.track_source_token,
+            "ready": ready,
+            "audio_supported": ready and bool(audio),
+            "subtitle_supported": ready,
+            "audio": audio,
+            "subtitles": subtitles[:100],
+        }
+
+    def _track_command_source_error(self, command: dict[str, Any]) -> str:
+        if (
+            not self.track_source_token
+            or command.get("source_token") != self.track_source_token
+            or command.get("media_id") != self.last_source
+        ):
+            return self.tr("Player source changed before track selection.")
+        return ""
+
+    def _track_resume_result(self, sequence: int) -> None:
+        applied = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        self.track_result = {
+            "sequence": sequence,
+            "applied": applied,
+            "error": "" if applied else self.tr("Player did not resume playback."),
+        }
+        if applied:
+            self._clear_track_failure_notice()
+
+    def _apply_track_command(self, command: dict[str, Any]) -> None:
+        error = self._track_command_source_error(command)
+        inventory = self._track_state()
+        kind, identifier = command.get("kind"), str(command.get("track_id") or "")
+        if not error and not inventory["ready"]:
+            error = self.tr("Track metadata is not ready.")
+        if not error:
+            options = inventory["audio"] if kind == "audio" else inventory["subtitles"]
+            supported = inventory.get(f"{kind}_supported", False)
+            valid = any(track["id"] == identifier for track in options)
+            if not supported or (not valid and not (kind == "subtitle" and identifier == "off")):
+                error = self.tr("Requested track is unavailable.")
+        if not error:
+            if kind == "audio":
+                index = int(identifier.removeprefix("audio:"))
+                with QSignalBlocker(self.audio_tracks):
+                    self.audio_tracks.setCurrentIndex(self.audio_tracks.findData(index))
+                self._select_audio()
+                applied = self.player.activeAudioTrack() == index
+            else:
+                value = (
+                    -1
+                    if identifier == "off"
+                    else int(identifier.removeprefix("embedded:"))
+                    if identifier.startswith("embedded:")
+                    else identifier.removeprefix("external:")
+                )
+                with QSignalBlocker(self.subtitles):
+                    self.subtitles.setCurrentIndex(self.subtitles.findData(value))
+                applied = self._select_subtitle()
+            if not applied:
+                error = self.tr("Player did not apply the requested track.")
+                if kind == "subtitle":
+                    error = getattr(self, "subtitle_error", "") or error
+        self.track_result = {
+            "sequence": int(command["sequence"]),
+            "applied": not bool(error),
+            "error": error,
+        }
+        if not error:
+            self._clear_track_failure_notice()
+
+    def _clear_track_failure_notice(self) -> None:
+        if self.last_track_failure and self.notice.text() == self.last_track_failure[1]:
+            self._set_notice("")
+
+    def _reset_track_choices(self) -> None:
+        self.audio_choice = None
+        self.subtitle_choice = -1
+        self.subtitle_cues = []
+        self.caption.clear()
+        with QSignalBlocker(self.audio_tracks), QSignalBlocker(self.subtitles):
+            self.audio_tracks.clear()
+            self.subtitles.clear()
+            self.subtitles.addItem(self.tr("Subtitles off"), -1)
+
+    def _track_label(self, metadata: QMediaMetaData, fallback: str) -> str:
+        labels = [fallback]
+        language = metadata.value(QMediaMetaData.Key.Language)
+        if isinstance(language, QLocale.Language) and language not in {
+            QLocale.Language.AnyLanguage,
+            QLocale.Language.C,
+        }:
+            labels.append(QLocale.languageToString(language))
+        elif isinstance(language, str) and language:
+            labels.append(language)
+        title = metadata.stringValue(QMediaMetaData.Key.Title)
+        if title and title not in labels:
+            labels.append(title)
+        return " · ".join(labels)
+
+    def _select_audio(self) -> None:
+        choice = self.audio_tracks.currentData()
+        if self.player is not None and isinstance(choice, int):
+            self.audio_choice = choice
+            self.player.setActiveAudioTrack(choice)
+
+    def _playback_tracks(self) -> None:
+        self.tracks_ready = bool(self.track_source_token) and bool(
+            self.player.audioTracks() or self.player.subtitleTracks() or self.player.videoTracks()
+        )
+        audio = self.player.audioTracks()
+        if audio:
+            choice = self.audio_choice
+            if choice is None or not 0 <= choice < len(audio):
+                choice = max(0, self.player.activeAudioTrack())
+            with QSignalBlocker(self.audio_tracks):
+                self.audio_tracks.clear()
+                for index, track in enumerate(audio):
+                    self.audio_tracks.addItem(
+                        self._track_label(track, self.tr("Audio {0}").format(index + 1)), index
+                    )
+                self.audio_tracks.setCurrentIndex(self.audio_tracks.findData(choice))
+            self.audio_choice = choice
+            if self.player.activeAudioTrack() != choice:
+                self.player.setActiveAudioTrack(choice)
         with QSignalBlocker(self.subtitles):
             self.subtitles.clear()
             self.subtitles.addItem(self.tr("Subtitles off"), -1)
-            for index, _track in enumerate(self.player.subtitleTracks()):
-                self.subtitles.addItem(self.tr("Embedded subtitle {0}").format(index + 1), index)
+            for index, track in enumerate(self.player.subtitleTracks()[:100]):
+                self.subtitles.addItem(
+                    self._track_label(track, self.tr("Embedded subtitle {0}").format(index + 1)),
+                    index,
+                )
             for subtitle in self.current_row.get("subtitles", []):
                 self.subtitles.addItem(subtitle["label"], subtitle["id"])
-        self.player.setActiveSubtitleTrack(-1)
+            self.subtitles.setCurrentIndex(max(0, self.subtitles.findData(self.subtitle_choice)))
+        choice = self.subtitle_choice if isinstance(self.subtitle_choice, int) else -1
+        if self.player.activeSubtitleTrack() != choice:
+            self.player.setActiveSubtitleTrack(choice)
 
     def _codec_error(self, *_args: Any) -> None:
         if self.player.error() != QMediaPlayer.Error.NoError:
-            self.notice.setText(
+            self._set_notice(
                 (
                     self.tr(
                         "Preview cannot play yet. "
@@ -1894,7 +2567,7 @@ class MediaTab(QWidget):
                 path = self.library.resolve(self.session_client, self.state["current_id"])
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
             except Exception as error:
-                self.notice.setText(str(error))
+                self._set_notice(str(error))
 
     def start_scan(self) -> None:
         if self.library is None or self.scan_stop is not None:
@@ -1903,7 +2576,7 @@ class MediaTab(QWidget):
         stop = self.scan_stop
         self.refresh_button.setEnabled(False)
         self.cancel_scan.setEnabled(True)
-        self.notice.setText(self.tr("Scanning Library Folders…"))
+        self._set_notice(self.tr("Scanning Library Folders…"))
         run_in_background(
             lambda: self.library.scan(self.session_client, stop, self.scan_progress.emit),
             self._scan_done,
@@ -1922,7 +2595,7 @@ class MediaTab(QWidget):
         if not isValid(self):
             return
         self._scan_done(None)
-        self.notice.setText(str(error))
+        self._set_notice(str(error))
 
     def open_chat(self) -> None:
         if self.library is None:
@@ -1951,15 +2624,18 @@ class MediaTab(QWidget):
             self.assistant.select_conversation(self.conversation_id)
             self.assistant.prompt.setFocus()
         except Exception as error:
-            self.notice.setText(str(error))
+            self._set_notice(str(error))
 
     def stop(self) -> None:
+        if self.fullscreen_dialog.isVisible():
+            self.fullscreen_dialog.reject()
         self._invalidate_preview_request()
         if self.player is None or not self.heartbeat.isActive():
             return
         if self.scan_stop:
             self.scan_stop.set()
         self.player.pause()
+        self._clear_track_source()
         self.report()
         self.heartbeat.stop()
         self.player.stop()

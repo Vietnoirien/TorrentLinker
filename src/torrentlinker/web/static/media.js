@@ -45,6 +45,9 @@ function mediaViews() {
   select.value = media.view;
   $("media-video-tab").setAttribute("aria-selected", String(media.kind === "video"));
   $("media-music-tab").setAttribute("aria-selected", String(media.kind === "music"));
+  $("media-music-nav").hidden = media.kind !== "music";
+  $("media-music-nav").setAttribute("aria-label", say("Music browsing", "Navigation musicale"));
+  for (const item of document.querySelectorAll("[data-media-music-view]")) item.textContent = ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[item.dataset.mediaMusicView];
   $("media-playlists").hidden = media.kind !== "music";
 }
 async function loadMedia(append = false) {
@@ -126,13 +129,16 @@ function mediaRenderContinue() {
 }
 function mediaRender() {
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout;
+  $("view-media").dataset.musicView = media.view;
   $("view-media").dataset.empty = String(media.rows.length === 0);
   for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
+  for (const item of document.querySelectorAll("[data-media-music-view]")) { item.classList.toggle("active", item.dataset.mediaMusicView === media.view); item.setAttribute("aria-current", item.dataset.mediaMusicView === media.view ? "page" : "false"); }
   mediaRenderFeature(); mediaRenderContinue();
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries")})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
   const root = $("media-results"); root.replaceChildren();
   if (!media.rows.length) { root.append(element("p", say("No media found. Add a Library Folder in Library options, then refresh the inventory.", "Aucun média trouvé. Ajoutez un dossier dans les options de bibliothèque, puis actualisez les médias."), "media-empty")); root.append(button(say("Add Library Folder", "Ajouter un dossier de bibliothèque"), () => navigate("setup"))); return; }
+  if (media.kind === "music" && media.view === "tracks") { mediaRenderTracks(root); return; }
   const groups = new Map();
   for (const row of media.rows) {
     const key = media.kind === "music" && media.view === "albums" ? row.album_id || row.id : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : media.kind === "video" ? row.content_id || row.id : row.id;
@@ -141,11 +147,16 @@ function mediaRender() {
   for (const rows of groups.values()) {
     const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
     const title = media.kind === "music" && media.view === "albums" ? row.album || "Unknown album" : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : row.title;
-    const artwork = button("", () => mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`); artwork.append(mediaArt({...row, title}));
+    const artwork = button("", () => mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`);
+    if (media.kind === "music" && media.view === "artists") {
+      const initials = title.split(/\s+/).slice(0, 2).map(part => [...part][0]).join("");
+      const portrait = element("div", undefined, "media-artist-art"); portrait.append(element("span", initials)); artwork.append(portrait); card.classList.add("media-artist-card");
+    } else artwork.append(mediaArt({...row, title}));
     const badge = element("span", row.available === false ? row.availability === "unfinished" ? say("Downloading", "Téléchargement") : say("Unavailable", "Indisponible") : say("Available", "Disponible"), "media-poster-badge");
-    artwork.append(badge); card.append(artwork, element("h3", title));
-    card.append(element("p", [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
-    if (media.kind === "music" && media.view === "albums" && row.track_count) card.append(element("p", `${row.track_count} track${row.track_count === 1 ? "" : "s"}`, "media-card-meta"));
+    if (media.kind === "video" || row.available === false) artwork.append(badge);
+    card.append(artwork, element("h3", title));
+    card.append(element("p", media.kind === "music" && media.view === "artists" ? say("Artist", "Artiste") : [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
+    if (media.kind === "music" && row.track_count) card.append(element("p", say(`${row.track_count} track${row.track_count === 1 ? "" : "s"}`, `${row.track_count} piste${row.track_count === 1 ? "" : "s"}`), "media-card-meta"));
     if (row.identity_source === "filename") card.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-card-source"));
     if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""}`, "media-card-meta"));
     const actions = element("div", undefined, "media-card-actions");
@@ -153,6 +164,23 @@ function mediaRender() {
     actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id)));
     if (media.kind === "music") actions.append(button(say("Add to queue", "Ajouter à la file"), async () => mediaEnqueue(await mediaGroupIds(rows))));
     card.append(actions); root.append(card);
+  }
+}
+function mediaRenderTracks(root) {
+  const heading = element("div", undefined, "media-track-heading");
+  for (const label of [say("Play", "Lire"), say("Title / artist", "Titre / artiste"), say("Album", "Album"), say("Duration", "Durée"), say("Actions", "Actions")]) heading.append(element("span", label));
+  root.append(heading);
+  for (const row of media.rows) {
+    const item = element("article", undefined, "media-track-row");
+    const play = button("▶", () => mediaStart([row.id]), "media-track-play"); play.setAttribute("aria-label", `${say("Play", "Lire")} ${row.title}`); play.disabled = row.available === false;
+    const title = element("div", undefined, "media-track-title"), copy = element("div");
+    const details = button(row.title, () => mediaDetails(row.id), "media-track-name");
+    copy.append(details, element("span", row.artist || say("Unknown artist", "Artiste inconnu")));
+    title.append(mediaArt(row), copy);
+    const actions = element("div", undefined, "media-track-actions");
+    actions.append(button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue([row.id])));
+    if (row.available === false) copy.append(element("span", row.reason || say("Unavailable", "Indisponible"), "media-error"));
+    item.append(play, title, element("span", row.album || say("Unknown album", "Album inconnu"), "media-track-album"), element("span", row.duration > 0 ? row.duration < 1 ? "<0:01" : mediaTime(row.duration) : "—", "media-track-duration"), actions); root.append(item);
   }
 }
 async function mediaTrackGroup(row, view) {
@@ -191,9 +219,14 @@ async function mediaDetails(id) {
       subtitles.append(element("h3", say("Embedded subtitle tracks", "Pistes de sous-titres intégrées")));
       const embedded = element("ul");
       for (const track of row.embedded_subtitles) embedded.append(element("li", [track.label || track.language || say("Unknown language", "Langue inconnue"), track.format].filter(Boolean).join(" · ")));
-      subtitles.append(embedded, element("p", say("Embedded subtitle selection depends on the player during playback.", "La sélection des sous-titres intégrés dépend du lecteur pendant la lecture.")));
+      subtitles.append(embedded, element("p", say("These embedded tracks are file metadata. They may not appear in this browser’s subtitle controls. Use an external player for tracks the browser does not expose.", "Ces pistes intégrées sont des métadonnées du fichier. Elles peuvent ne pas apparaître dans les commandes de sous-titres de ce navigateur. Utilisez un lecteur externe pour les pistes non proposées.")));
     } else subtitles.append(element("p", say("Embedded subtitle tracks may also be available during playback, depending on the file and player.", "Des pistes de sous-titres intégrées peuvent aussi être disponibles pendant la lecture, selon le fichier et le lecteur.")));
     root.append(subtitles);
+    if (row.language) root.append(element("p", say(`Audio languages from file metadata: ${row.language}. Browser playback may not support every audio track.`, `Langues audio d’après les métadonnées du fichier : ${row.language}. Le navigateur peut ne pas prendre en charge toutes les pistes audio.`)));
+    if (row.available !== false) {
+      const external = element("a", say("Open / download the original for an external player", "Ouvrir / télécharger l’original pour un lecteur externe"));
+      external.href = `api/media/items/${encodeURIComponent(id)}/stream?${mediaQuery({})}`; external.target = "_blank"; external.rel = "noopener"; external.download = ""; root.append(external);
+    }
   }
   if (row.kind === "video" && row.availability === "unfinished") {
     root.append(element("p", say("Preview is optional. Only a verified downloaded prefix from a sequential qBittorrent single-file download can play. Some formats require the missing end of the file.", "L’aperçu est facultatif. Seul le début vérifié d’un téléchargement séquentiel qBittorrent à fichier unique peut être lu. Certains formats exigent la fin du fichier."), "muted"));
@@ -268,6 +301,60 @@ async function mediaOpenSession() {
   return media.session;
 }
 function mediaInvalidatePlayback() { return ++media.playbackGeneration; }
+function mediaNewSourceToken() {
+  // getRandomValues also works when the owner opens the app over plain HTTP on a LAN.
+  const data = crypto.getRandomValues(new Uint8Array(16)); data[6] = (data[6] & 15) | 64; data[8] = (data[8] & 63) | 128;
+  const hex = Array.from(data, value => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+function mediaTrackState() {
+  const player = mediaPlayer(), active = !!player.dataset.sourceToken && !!player.dataset.mediaId;
+  const trackText = value => Array.from(value || "").slice(0, 300).join("");
+  const external = [...player.querySelectorAll("track")];
+  const ready = active && player.readyState >= 1 && external.every(track => track.readyState >= 2);
+  return {media_id: player.dataset.mediaId || "", source_token: player.dataset.sourceToken || "", ready,
+    audio_supported: active && !!player.audioTracks, subtitle_supported: active && !!player.textTracks,
+    audio: active ? Array.from(player.audioTracks || []).slice(0, 100).map((track, index) => ({id: `audio:${index}`, label: trackText(track.label), language: trackText(track.language), selected: !!track.enabled})) : [],
+    subtitles: active ? Array.from(player.textTracks || [], (track, index) => ({track, index}))
+      .filter(({track}) => { const source = external.find(item => item.track === track); return !source || source.readyState === 2; })
+      .slice(0, 100).map(({track, index}) => ({id: `subtitle:${index}`, label: trackText(track.label), language: trackText(track.language), selected: track.mode === "showing"})) : []};
+}
+function mediaSourceMatches(command) {
+  const player = mediaPlayer();
+  return !!command.source_token && command.source_token === player.dataset.sourceToken && command.media_id === player.dataset.mediaId;
+}
+function mediaTrackRequestFailure(request) {
+  if (request?.status !== "failed" || !mediaSourceMatches(request) || media.failedTrackSource === request.source_token) return;
+  media.failedTrackSource = request.source_token;
+  const message = element("p", request.error || say("The requested playback tracks are unavailable.", "Les pistes demandées ne sont pas disponibles."), "media-error");
+  message.id = "media-track-request-error"; message.setAttribute("role", "alert");
+  $("media-track-request-error")?.remove(); $("media-player-shell").append(message);
+}
+function mediaSelectTrack(command) {
+  let error = "";
+  const state = mediaTrackState(), player = mediaPlayer();
+  if (!mediaSourceMatches(command)) error = "The playback source changed. Refresh its tracks before selecting.";
+  else if (!state.ready) error = "Playback tracks are not ready yet.";
+  else if (command.kind !== "audio" && command.kind !== "subtitle") error = "Choose audio or subtitle tracks.";
+  else if (!state[command.kind === "audio" ? "audio_supported" : "subtitle_supported"]) error = `${command.kind === "audio" ? "Audio" : "Subtitle"} track switching is unavailable in this browser.`;
+  else {
+    const tracks = state[command.kind === "audio" ? "audio" : "subtitles"];
+    const off = command.kind === "subtitle" && command.track_id === "off";
+    if (!off && !tracks.some(track => track.id === command.track_id)) error = "That track is unavailable in the current browser player.";
+    else try {
+      const available = command.kind === "audio" ? player.audioTracks : player.textTracks;
+      Array.from(available).forEach((track, index) => {
+        const selected = command.track_id === `${command.kind}:${index}`;
+        if (command.kind === "audio") track.enabled = selected;
+        else track.mode = selected ? "showing" : "disabled";
+      });
+      const selected = mediaTrackState()[command.kind === "audio" ? "audio" : "subtitles"].filter(track => track.selected);
+      if (off ? selected.length !== 0 : selected.length !== 1 || selected[0].id !== command.track_id) error = "The browser did not apply the requested track.";
+    } catch (_) { error = "The browser could not switch that track."; }
+  }
+  media.trackResult = {sequence: command.sequence, applied: !error, error};
+  if (error) mediaStatus(error);
+}
 function mediaRequestCurrent(request) {
   return request.generation === media.playbackGeneration && (request.browsingClient || request.client) === mediaClient()
     && request.selectedClient === state.clientId && (!request.session || (
@@ -303,7 +390,10 @@ async function mediaPreview(id, refresh = false) {
 }
 async function mediaStop() {
   mediaInvalidatePlayback();
-  for (const player of [$("media-video"), $("media-audio")]) { player.pause(); delete player.dataset.mediaId; player.removeAttribute("src"); player.load(); }
+  if (document.fullscreenElement === $("media-player-shell")) await document.exitFullscreen().catch(() => {});
+  for (const player of [$("media-video"), $("media-audio")]) { player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; player.removeAttribute("src"); player.load(); }
+  media.trackResult = null;
+  $("media-track-request-error")?.remove();
   const closing = mediaReleasePreview(); media.queue = []; media.index = 0;
   $("media-player-shell").hidden = true; mediaQueueRender();
   await closing; await mediaHeartbeat();
@@ -324,13 +414,19 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   media.preview = preview;
   if (preview) { media.queue = [id]; media.index = 0; }
   else if (request.queue) { media.queue = request.queue; media.index = request.index; }
-  $("media-save-playlist").hidden = row.kind !== "music";
+  $("media-player-shell").dataset.kind = row.kind;
   const player = $(row.kind === "music" ? "media-audio" : "media-video");
   $("media-audio").hidden = row.kind !== "music"; $("media-video").hidden = row.kind === "music";
-  player.volume = old.volume; player.dataset.mediaId = id; player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();
+  player.volume = old.volume; player.dataset.mediaId = id; player.dataset.sourceToken = request.sourceToken || mediaNewSourceToken(); media.trackResult = null;
+  $("media-track-request-error")?.remove();
+  player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();
   $("media-player-shell").hidden = false; $("media-player-shell").scrollIntoView({block: "nearest"}); $("media-now-playing").textContent = [row.title, row.artist].filter(Boolean).join(" · ");
+  $("media-player-shell").querySelector(".media-playing-art")?.remove();
+  if (row.kind === "music") $("media-player-shell").prepend(mediaArt(row, "media-playing-art"));
   $("media-codec-error").hidden = true;
   const fallback = $("media-external"); fallback.href = player.src;
+  $("media-track-support").hidden = row.kind !== "video" || !!preview;
+  $("media-track-external").href = mediaURL(id);
   fallback.textContent = preview ? say("Download fixed partial preview for an external player", "Télécharger l’aperçu partiel fixe pour un lecteur externe") : say("Open / download for an external player", "Ouvrir / télécharger pour un lecteur externe");
   if (preview) {
     $("media-preview-state").hidden = false; $("media-refresh-preview").hidden = false;
@@ -340,6 +436,8 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   for (const subtitle of row.subtitles || []) {
     const track = element("track"); track.kind = "subtitles"; track.label = subtitle.label || subtitle.language || "Subtitles"; track.srclang = subtitle.language || "en";
     track.src = subtitle.url || mediaURL(id, `subtitles/${encodeURIComponent(subtitle.id)}`); $("media-video").append(track);
+    // A prepared paused player must load external cues before reporting its selectable tracks.
+    track.track.mode = "hidden";
   }
   player.onloadedmetadata = () => { const seek = position === null ? row.position || 0 : position; if (seek > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(seek, player.duration); };
   if (!paused) await mediaTryPlay(player);
@@ -347,8 +445,8 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   mediaQueueRender(); return true;
 }
 async function mediaTryPlay(player = mediaPlayer()) {
-  try { await player.play(); }
-  catch (error) { if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); }
+  try { await player.play(); return true; }
+  catch (error) { if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); return false; }
 }
 function mediaCodecError() { $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : "This browser could not play the file. Its codec may be unsupported. Open or download the file for an external player."; }
 async function mediaStart(ids, index = 0) {
@@ -378,7 +476,7 @@ async function mediaRemoveAt(index) {
   else if (index === previous) {
     mediaPlayer().pause(); media.index = Math.min(index, Math.max(0, media.queue.length - 1));
     if (media.queue.length) await mediaLoad(media.queue[media.index], 0);
-    else { delete mediaPlayer().dataset.mediaId; mediaPlayer().removeAttribute("src"); mediaPlayer().load(); await mediaReleasePreview(); }
+    else { delete mediaPlayer().dataset.mediaId; delete mediaPlayer().dataset.sourceToken; media.trackResult = null; mediaPlayer().removeAttribute("src"); mediaPlayer().load(); await mediaReleasePreview(); }
   }
   mediaQueueRender(); await mediaHeartbeat();
 }
@@ -391,6 +489,9 @@ async function mediaQueueMetadata() {
 }
 function mediaQueueRender() {
   $("media-shuffle").setAttribute("aria-pressed", String(media.shuffle)); $("media-repeat").value = media.repeat;
+  $("media-show-queue").textContent = say(`Playback queue · ${media.queue.length}`, `File de lecture · ${media.queue.length}`);
+  // Restored queues can contain uncached tracks; the server validates every saved item.
+  $("media-save-playlist").querySelector("button").disabled = !media.queue.length || media.queue.some(id => { const row = mediaItems.get(id); return row && row.kind !== "music"; });
   const list = $("media-player-queue"); list.replaceChildren();
   media.queue.forEach((id, index) => {
     const row = mediaItems.get(id), item = element("li");
@@ -403,14 +504,30 @@ async function mediaCommands(commands) {
   for (const command of [...commands].sort((a, b) => a.sequence - b.sequence)) {
     if (command.sequence <= media.ack) continue;
     const player = mediaPlayer();
-    if (command.action === "play") { if (command.media_ids?.length) { media.queue = command.media_ids; media.index = command.index || 0; await mediaLoad(media.queue[media.index], command.position ?? null); } else await mediaTryPlay(); }
+    if (command.action === "play") {
+      if (command.media_ids?.length) {
+        const request = {generation: mediaInvalidatePlayback(), client: media.playerClient || mediaClient(), selectedClient: state.clientId,
+          session: media.session ? {...media.session} : null, queue: [...command.media_ids], index: command.index || 0, sourceToken: command.load_token};
+        await mediaLoad(request.queue[request.index], command.position ?? null, !!command.start_paused, null, request);
+      } else if ((command.media_id || command.source_token) && !mediaSourceMatches(command)) {
+        const error = "The playback source changed. The prepared player was not resumed.";
+        media.trackResult = {sequence: command.sequence, applied: false, error}; mediaStatus(error);
+      } else {
+        const played = await mediaTryPlay();
+        if (command.source_token) {
+          const applied = played && mediaSourceMatches(command);
+          media.trackResult = {sequence: command.sequence, applied, error: applied ? "" : "The browser did not resume the prepared media source."};
+        }
+      }
+    }
+    if (command.action === "select_track") mediaSelectTrack(command);
     if (command.action === "pause") player.pause();
     if (command.action === "seek") { const seek = () => { player.currentTime = Math.max(0, command.position || 0); }; if (player.readyState) seek(); else player.addEventListener("loadedmetadata", seek, {once: true}); }
     if (command.action === "volume") for (const output of [$("media-video"), $("media-audio")]) output.volume = Math.min(1, Math.max(0, command.volume));
     if (command.action === "queue") {
       media.queue = command.media_ids || []; media.index = command.index || 0;
       if (media.queue.length && media.queue[media.index] !== player.dataset.mediaId) await mediaLoad(media.queue[media.index], 0, player.paused);
-      else if (!media.queue.length) { player.pause(); delete player.dataset.mediaId; player.removeAttribute("src"); player.load(); await mediaReleasePreview(); }
+      else if (!media.queue.length) { player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; media.trackResult = null; player.removeAttribute("src"); player.load(); await mediaReleasePreview(); }
     }
     if (command.action === "next") await mediaAdvance(1);
     if (command.action === "previous") await mediaAdvance(-1);
@@ -425,19 +542,29 @@ async function mediaHeartbeat() {
   media.busy = true;
   try {
     const player = mediaPlayer();
-    const report = {current_id: player.dataset.mediaId || null, queue: media.queue, index: media.index, position: player.currentTime || 0, duration: Number.isFinite(player.duration) ? player.duration : 0, paused: player.paused, volume: player.volume, shuffle: media.shuffle, repeat: media.repeat, command_ack: media.ack};
+    const report = {current_id: player.dataset.mediaId || null, queue: media.queue, index: media.index, position: player.currentTime || 0, duration: Number.isFinite(player.duration) ? player.duration : 0, paused: player.paused, volume: player.volume, shuffle: media.shuffle, repeat: media.repeat, command_ack: media.ack, track_state: mediaTrackState(), track_result: media.trackResult || null};
     const response = await api(`media/sessions/${encodeURIComponent(media.session.id)}`, {token: media.session.token, report, context: {preview: media.preview ? {item_id: media.preview.item_id, verified_bytes: media.preview.verified_bytes, total_bytes: media.preview.total_bytes} : null, kind: media.kind, view: media.view, selection: media.selected?.id || null, filters: {q: $("media-search").value, genre: $("media-genre").value, year: $("media-year").value, language: $("media-language").value}}});
+    mediaTrackRequestFailure(response.state?.track_request);
     await mediaCommands(response.commands || []);
   } finally { media.busy = false; }
 }
 async function mediaPlaylists() {
   const rows = await api(`media/playlists?${mediaQuery({})}`), root = $("media-playlist-list"); root.replaceChildren();
-  for (const row of rows.rows || rows) {
-    const item = element("div", undefined, "toolbar");
-    item.append(element("span", row.name), button(say("Play", "Lire"), () => mediaStart(row.media_ids || [])), button(say("Replace with queue", "Remplacer par la file"), async () => { await api("media/playlists", {client_id: mediaClient(), id: row.id, name: row.name, media_ids: media.queue}); await mediaPlaylists(); }), button(say("Delete", "Supprimer"), async () => { await api(`media/playlists/${encodeURIComponent(row.id)}?${mediaQuery({})}`, undefined, "DELETE"); await mediaPlaylists(); })); root.append(item);
+  const playlists = rows.rows || rows;
+  if (!playlists.length) root.append(element("p", say("Your saved playlists will appear here. Start with a track or album, then save its queue.", "Vos playlists apparaîtront ici. Lancez une piste ou un album, puis enregistrez la file."), "media-playlist-empty"));
+  for (const row of playlists) {
+    const item = element("article", undefined, "media-playlist-card"), actions = element("div", undefined, "media-card-actions");
+    const count = row.media_ids?.length || 0;
+    item.append(element("h3", row.name), element("p", say(`${count} track${count === 1 ? "" : "s"}`, `${count} piste${count === 1 ? "" : "s"}`), "media-card-meta"));
+    actions.append(button(say("Play", "Lire"), () => mediaStart(row.media_ids || [])), button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue(row.media_ids || [])));
+    const options = element("details"), more = element("summary", say("Edit playlist", "Modifier la playlist"));
+    options.append(more, button(say("Replace with queue", "Remplacer par la file"), async () => { await api("media/playlists", {client_id: mediaClient(), id: row.id, name: row.name, media_ids: media.queue}); await mediaPlaylists(); }), button(say("Delete", "Supprimer"), async () => { await api(`media/playlists/${encodeURIComponent(row.id)}?${mediaQuery({})}`, undefined, "DELETE"); await mediaPlaylists(); }));
+    item.append(actions, options); root.append(item);
   }
+  mediaQueueRender();
 }
 async function mediaScan() {
+  $("media-library-options").open = false;
   const job = await api("media/scan", {client_id: mediaClient()}); media.scan = job.id;
   $("media-cancel-scan").hidden = false; $("media-refresh").disabled = true;
   mediaStatus("Scanning Library Folders...");
@@ -456,11 +583,47 @@ async function mediaOpenChat() {
   $("assistant-prompt")?.focus();
 }
 function mediaCloseChat() { media.chat = false; $("media-chat-panel").hidden = true; document.body.classList.remove("media-chat-open"); restoreMediaAssistant(); }
+function mediaCenterAppearance(enabled) {
+  document.body.classList.toggle("media-center-mode", enabled);
+  $("media-center-mode").textContent = enabled ? say("Return to TorrentLinker", "Revenir à TorrentLinker") : say("Media Center mode", "Mode Media Center");
+  $("media-center-mode").dataset.i18n = enabled ? "mediaCenterReturn" : "mediaCenterMode";
+  $("media-center-mode").setAttribute("aria-pressed", String(enabled));
+}
+async function mediaExitCenter() {
+  if (document.fullscreenElement === document.documentElement) await document.exitFullscreen();
+  mediaCenterAppearance(false);
+}
+$("media-center-mode").onclick = () => guard(async () => {
+  if (document.body.classList.contains("media-center-mode")) await mediaExitCenter();
+  else {
+    if (document.fullscreenEnabled) await document.documentElement.requestFullscreen();
+    mediaCenterAppearance(true);
+  }
+});
 $("media-layout-switch").onchange = event => mediaSetLayout(event.target.value);
 $("settings-media-layout").onchange = event => mediaSetLayout(event.target.value);
 for (const item of document.querySelectorAll("[data-media-view]")) item.onclick = () => guard(async () => { media.view = item.dataset.mediaView; $("media-view").value = media.view; await loadMedia(); });
 $("media-details").addEventListener("click", event => { if (event.target === $("media-details")) { const box = event.target.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) event.target.close(); } });
 $("media-player-expand").onclick = () => { const expanded = $("media-player-shell").classList.toggle("media-player-expanded"); $("media-player-expand").textContent = expanded ? say("Compact player", "Réduire le lecteur") : say("Expand player", "Agrandir le lecteur"); };
+$("media-fullscreen").hidden = !document.fullscreenEnabled;
+$("media-fullscreen").onclick = () => guard(async () => {
+  if (document.fullscreenElement === $("media-player-shell")) await document.exitFullscreen();
+  else await $("media-player-shell").requestFullscreen();
+});
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement) mediaCenterAppearance(false);
+  const fullscreen = document.fullscreenElement === $("media-player-shell");
+  $("media-fullscreen").textContent = fullscreen ? say("Exit fullscreen", "Quitter le plein écran") : say("Fullscreen", "Plein écran");
+  $("media-fullscreen").dataset.i18n = fullscreen ? "mediaExitFullscreen" : "mediaFullscreen";
+  $("media-fullscreen").setAttribute("aria-pressed", String(fullscreen));
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && document.fullscreenElement === $("media-player-shell")) {
+    guard(() => document.exitFullscreen());
+  } else if (event.key === "Escape" && document.body.classList.contains("media-center-mode")) {
+    guard(mediaExitCenter);
+  }
+});
 mediaSetLayout(media.layout);
 $("logout").addEventListener("click", () => { mediaInvalidatePlayback(); mediaPlayer().pause(); });
 $("target-client").addEventListener("change", mediaInvalidatePlayback);
@@ -469,6 +632,7 @@ $("media-refresh-preview").onclick = () => guard(() => { if (media.preview) retu
 $("media-video-tab").onclick = () => guard(async () => { media.kind = "video"; media.view = "recent"; mediaViews(); await loadMedia(); });
 $("media-music-tab").onclick = () => guard(async () => { media.kind = "music"; media.view = "albums"; mediaViews(); await loadMedia(); });
 $("media-view").onchange = () => guard(async () => { media.view = $("media-view").value; await loadMedia(); });
+for (const item of document.querySelectorAll("[data-media-music-view]")) item.onclick = () => guard(async () => { media.view = item.dataset.mediaMusicView; $("media-view").value = media.view; await loadMedia(); });
 for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}`).onchange = () => guard(loadMedia);
 let mediaSearchTimer;
 $("media-search").oninput = () => { clearTimeout(mediaSearchTimer); mediaSearchTimer = setTimeout(() => guard(loadMedia), 250); };
@@ -480,6 +644,7 @@ $("media-previous").onclick = () => guard(() => mediaAdvance(-1)); $("media-next
 $("media-shuffle").onclick = () => { media.shuffle = !media.shuffle; mediaQueueRender(); guard(mediaHeartbeat); };
 $("media-repeat").onchange = () => { media.repeat = $("media-repeat").value; guard(mediaHeartbeat); };
 $("media-player-shell").querySelector("details").ontoggle = event => { if (event.target.open) guard(mediaQueueMetadata); };
+$("media-show-queue").onclick = () => { if (!media.queue.length) return; $("media-player-shell").querySelector("details").open = true; $("media-player-shell").scrollIntoView({block: "nearest"}); };
 $("media-save-playlist").onsubmit = e => { e.preventDefault(); guard(async () => { await api("media/playlists", {client_id: media.playerClient || mediaClient(), name: $("media-playlist-name").value, media_ids: media.queue}); $("media-playlist-name").value = ""; await mediaPlaylists(); }); };
 for (const player of [$("media-video"), $("media-audio")]) { player.onerror = mediaCodecError; player.onwaiting = () => { if (media.preview && player.currentTime > 0) mediaStatus(say("The fixed partial preview has no more playable data here. Wait for more download progress, then refresh preview.", "L’aperçu partiel fixe ne contient plus de données lisibles à cet endroit. Attendez la progression du téléchargement, puis actualisez l’aperçu.")); }; player.onended = () => guard(async () => { if (media.preview) { mediaStatus(say("End of fixed partial preview. Wait for more data, then refresh preview.", "Fin de l’aperçu partiel fixe. Attendez davantage de données, puis actualisez l’aperçu.")); } else if (media.repeat === "one") { player.currentTime = 0; await mediaTryPlay(player); } else await mediaAdvance(1); await mediaHeartbeat(); }); }
 setInterval(() => { guard(mediaHeartbeat); guard(mediaPollScan); }, 1000);

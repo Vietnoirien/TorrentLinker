@@ -21,6 +21,8 @@ const state = {
   localItem: "",
 };
 const french = {
+  mediaFullscreen: "Plein écran", mediaExitFullscreen: "Quitter le plein écran",
+  mediaCenterMode: "Mode Media Center", mediaCenterReturn: "Revenir à TorrentLinker",
   interfaceSettings: "Interface", mediaLayout: "Disposition des médias", mediaLayoutShort: "Disposition",
   mediaLayoutCinematic: "Accueil cinéma", mediaLayoutFocus: "Focus", mediaLayoutCollection: "Collection",
   mediaLayoutHelp: "Choisissez la présentation de la médiathèque dans ce navigateur. La lecture continue lorsque vous changez de disposition.",
@@ -561,6 +563,7 @@ async function browse(path = "") {
   if (!$("dialog").open) $("dialog").showModal();
 }
 async function navigate(view) {
+  if (view !== "media" && document.body.classList.contains("media-center-mode")) await mediaExitCenter();
   if (typeof mediaCloseChat === "function" && media.chat) mediaCloseChat();
   state.view = view;
   document.body.classList.toggle("media-view", view === "media");

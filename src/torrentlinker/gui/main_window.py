@@ -10,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QFile, QItemSelection, QSignalBlocker, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtCore import QEvent, QFile, QItemSelection, QSignalBlocker, Qt, QTimer
+from PySide6.QtGui import QAction, QCloseEvent, QKeyEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -365,6 +365,7 @@ class MainWindow(QMainWindow):
         )
         self.media_tab.set_media_layout(settings.media_layout)
         self.media_tab.layout_changed.connect(self._save_media_layout)
+        self.media_tab.center_mode_requested.connect(self.set_media_center)
         self.tabs.addTab(self.media_tab, self.tr("Media"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
@@ -402,6 +403,7 @@ class MainWindow(QMainWindow):
         )
         self.tabs.currentChanged.connect(self._sync_navigation)
         sidebar = QFrame()
+        self.sidebar = sidebar
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(172)
         side = QVBoxLayout(sidebar)
@@ -432,8 +434,14 @@ class MainWindow(QMainWindow):
         shell.addWidget(sidebar)
         content = QWidget()
         central_layout = QVBoxLayout(content)
+        self.content_layout = central_layout
         central_layout.setContentsMargins(24, 20, 24, 12)
         central_layout.setSpacing(16)
+        self.app_header = QWidget()
+        header_layout = QVBoxLayout(self.app_header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(16)
+        central_layout.addWidget(self.app_header)
         self.page_title = QLabel()
         self.page_title.setProperty("role", "heading")
         self.page_description = QLabel()
@@ -455,18 +463,18 @@ class MainWindow(QMainWindow):
         clients_button = QPushButton(self.tr("Clients…"))
         clients_button.clicked.connect(self.open_client_profiles)
         title_row.addWidget(clients_button)
-        central_layout.addLayout(title_row)
-        central_layout.addWidget(self.page_description)
+        header_layout.addLayout(title_row)
+        header_layout.addWidget(self.page_description)
         self.update_notice = UpdateNotice()
-        central_layout.addWidget(self.update_notice)
+        header_layout.addWidget(self.update_notice)
         self.setup_notice = QLabel(
             self.tr('Add your Indexer API key to get started. <a href="settings">Open settings</a>')
         )
         self.setup_notice.setWordWrap(True)
         self.setup_notice.linkActivated.connect(lambda _link: self.open_settings())
         self.setup_notice.hide()
-        central_layout.addWidget(self.setup_notice)
-        central_layout.addWidget(self.band)
+        header_layout.addWidget(self.setup_notice)
+        header_layout.addWidget(self.band)
         # A wide workspace must not impose its minimum size on the desktop window.
         # Keep navigation and the status band visible; scroll only the workspace.
         self.workspace_scroll = QScrollArea()
@@ -478,6 +486,7 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._workspace_changed)
         self._workspace_changed(0)
         self.setCentralWidget(central)
+        self.media_center_active = False
         settings_action.setShortcut("Ctrl+,")
         self.addAction(settings_action)
         for index in range(self.tabs.count()):
@@ -692,6 +701,11 @@ class MainWindow(QMainWindow):
         self.torrents_tab.focus_torrent(hash)
 
     def _workspace_changed(self, index: int) -> None:
+        if (
+            getattr(self, "media_center_active", False)
+            and self.tabs.widget(index) is not self.media_tab
+        ):
+            self.set_media_center(False)
         self.workspace_scroll.horizontalScrollBar().setValue(0)
         self.workspace_scroll.verticalScrollBar().setValue(0)
         self.page_title.setText(self.tabs.tabText(index))
@@ -1855,6 +1869,43 @@ class MainWindow(QMainWindow):
         else:
             self.scan()
 
+    def set_media_center(self, enabled: bool) -> None:
+        if enabled == self.media_center_active:
+            return
+        if enabled:
+            self.tabs.setCurrentWidget(self.media_tab)
+            self._media_normal_geometry = self.saveGeometry()
+            self._media_normal_state = self.windowState()
+            self._media_status_visible = not self.statusBar().isHidden()
+        self.media_center_active = enabled
+        self.media_tab.set_center_mode(enabled)
+        self.sidebar.setVisible(not enabled)
+        self.app_header.setVisible(not enabled)
+        self.statusBar().setVisible(not enabled and self._media_status_visible)
+        self.content_layout.setContentsMargins(*((0, 0, 0, 0) if enabled else (24, 20, 24, 12)))
+        self.content_layout.setSpacing(0 if enabled else 16)
+        if enabled:
+            self.showFullScreen()
+        else:
+            self.restoreGeometry(self._media_normal_geometry)
+            self.setWindowState(self._media_normal_state)
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if (
+            event.type() == QEvent.Type.WindowStateChange
+            and getattr(self, "media_center_active", False)
+            and not self.isFullScreen()
+        ):
+            self.set_media_center(False)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape and self.media_center_active:
+            self.set_media_center(False)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
     def _save_media_layout(self, value: str) -> None:
         if value not in ("cinematic", "focus", "collection"):
             return
@@ -1886,6 +1937,7 @@ class MainWindow(QMainWindow):
         if self.agent_runtime and self.agent_runtime.busy():
             self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
             return
+        self.set_media_center(False)
         settings.save(self.settings_path)
         self.verify_timer.stop()
         tab_title = self.tabs.tabText(self.tabs.currentIndex())
@@ -1899,8 +1951,11 @@ class MainWindow(QMainWindow):
             with QSignalBlocker(self.tabs):
                 self.tabs.removeTab(self.tabs.indexOf(self.media_tab))
             self.media_tab.layout_changed.disconnect(self._save_media_layout)
+            self.media_tab.center_mode_requested.disconnect(self.set_media_center)
             replacement.media_tab = self.media_tab
             replacement.media_tab.layout_changed.connect(replacement._save_media_layout)
+            replacement.media_tab.center_mode_requested.connect(replacement.set_media_center)
+            replacement.media_tab.set_center_mode(False)
             replacement.media_tab.set_media_layout(settings.media_layout)
             replacement.tabs.insertTab(media_index, self.media_tab, self.tr("Media"))
         else:

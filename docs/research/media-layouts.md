@@ -17,3 +17,11 @@ Changing layout must preserve the current media source, playback position, queue
 ## Validation
 
 Use the previously user-approved desktop/web UI and streaming seams. Cover default layout, saved selection after reopening, switching all layouts during playback, empty or missing-art libraries, detail and partial-preview actions, and chat. Run focused tests during implementation, then the full suite once, static checks, visual inspection and separate standards/spec review. Commit on the current branch; publication is not part of this request.
+
+## Media Center mode
+
+The user clarified that fullscreen should apply to the entire Media interface, not only the playing video. A persistent Media toolbar offers **Media Center mode** and **Return to TorrentLinker**. Desktop hides the application sidebar, workspace header and status bar, enters fullscreen and restores the earlier window geometry on exit. Web hides the same application navigation and uses browser fullscreen when supported. Browsing video and music, changing layouts, playback and contextual chat remain available. Escape returns to the normal interface; leaving Media for another workspace exits the mode. The separate player fullscreen control remains available and retains captions and transport controls.
+
+## Music presentation
+
+The user also requested a visual pass for music. Give music its own presentation with visible Albums, Artists and Tracks navigation, square album artwork, compact track information, and clear playback queue and playlist actions. Use the registered library's actual metadata and artwork; unknown tags remain unknown. Music presentation must preserve album editions, group pagination, playback and queued track identities. It does not reuse the video's giant featured-title layout or change the saved video layout preference.

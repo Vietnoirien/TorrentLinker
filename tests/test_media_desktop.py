@@ -40,6 +40,17 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
 
     shutil.copy(root / "tone.wav", root / "second.wav")
     shutil.copy(root / "tone.wav", root / "third.wav")
+    from mutagen.id3 import TALB, TIT2, TPE1, TRCK
+    from mutagen.wave import WAVE
+
+    for index, name in enumerate(("tone.wav", "second.wav", "third.wav"), 1):
+        tags = WAVE(root / name)
+        tags.add_tags()
+        tags.tags.add(TIT2(encoding=3, text=[f"Tone {index}"]))
+        tags.tags.add(TPE1(encoding=3, text=["Fixture Artist"]))
+        tags.tags.add(TALB(encoding=3, text=["Fixture Album"]))
+        tags.tags.add(TRCK(encoding=3, text=[str(index)]))
+        tags.save()
     settings = Settings()
     settings.library_folders = [LibraryFolder(root)]
     config = tmp_path / "config"
@@ -52,12 +63,33 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     service.agent.media.scan("default", threading.Event(), lambda _progress: None)
     tab = MediaTab(lambda: service, lambda: "default", lambda: None)
     qtbot.addWidget(tab)
+    tab.resize(800, 800)
     tab.show()
     tab.activate()
-    tab.kind.setCurrentIndex(tab.kind.findData("music"))
+    qtbot.mouseClick(tab.kind_tabs["music"], Qt.LeftButton)
+    assert tab.media_toolbar.height() <= 70
+    assert (
+        tab.kind_tabs["music"].mapTo(tab.media_toolbar, tab.kind_tabs["music"].rect().center()).y()
+        == tab.chat.mapTo(tab.media_toolbar, tab.chat.rect().center()).y()
+    )
+    assert not tab.kind.isVisible()
+    qtbot.mouseClick(tab.search_toggle, Qt.LeftButton)
+    assert tab.search.isVisible()
+    qtbot.mouseClick(tab.search_toggle, Qt.LeftButton)
+    assert not tab.search.isVisible()
+    tab.library_action.trigger()
+    assert tab.category_cards["albums"].isVisible()
+    tab.library_action.trigger()
+    assert not tab.library_panel.isVisible()
+    assert all(button.isVisible() for button in tab.music_tabs.values())
+    qtbot.mouseClick(tab.music_tabs["tracks"], Qt.LeftButton)
     qtbot.waitUntil(lambda: tab.results.count() == 3)
     qtbot.waitUntil(lambda: tab.results.count() > 0 and tab.results.isEnabled())
     assert tab.results.viewMode() == QListView.ViewMode.ListMode
+    assert "Fixture Artist" in tab.results.item(0).text()
+    assert "Fixture Album" in tab.results.item(0).text()
+    assert "0:12" in tab.results.item(0).text()
+    assert tab.music_playlists.isVisible()
     for view in ("albums", "artists"):
         tab.view.setCurrentIndex(tab.view.findData(view))
         qtbot.waitUntil(
@@ -67,6 +99,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
         )
         assert not tab.results.item(0).icon().isNull()
         assert tab.results.iconSize().width() >= 128
+        assert tab.results.iconSize().width() == tab.results.iconSize().height()
     tab.view.setCurrentIndex(tab.view.findData("tracks"))
     qtbot.waitUntil(
         lambda: tab.results.isEnabled() and tab.results.viewMode() == QListView.ViewMode.ListMode
@@ -85,6 +118,13 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     from PySide6.QtWidgets import QInputDialog
 
     monkeypatch.setattr(QInputDialog, "getText", lambda *_args: ("Evening", True))
+    qtbot.wait(20)  # Let the newly opened queue panel finish its layout and paint.
+    assert tab.queue_panel.isVisible()
+    assert tab.save_playlist.visibleRegion().contains(tab.save_playlist.rect().center()), (
+        tab.size(),
+        tab.save_playlist.geometry(),
+        tab.queue_panel.geometry(),
+    )
     qtbot.mouseClick(tab.save_playlist, Qt.LeftButton)
     qtbot.waitUntil(lambda: tab.playlists.currentText() == "Evening")
     assert len(service.agent.media.playlists("default")[0]["media_ids"]) == 3
@@ -230,7 +270,26 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     tab.command("seek", position=2)
     qtbot.waitUntil(lambda: tab.caption.text() == "A local caption")
     qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=10000)
+    tab.player.pause()
+    source, position = tab.player.source(), tab.player.position()
+    original_parent = tab.player_panel.parentWidget()
+    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
+    assert tab.caption.isVisible()
+    assert tab.subtitles.currentIndex() == 1
+    assert tab.player.source() == source
+    assert tab.player.position() == position
+    qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)
+    qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
+    assert tab.player.source() == source
+    assert tab.player.position() == position
+    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
+    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
+    assert tab.player_panel.parentWidget() is original_parent
+    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
     tab.stop()
+    assert not tab.fullscreen_dialog.isVisible()
+    assert tab.player_panel.parentWidget() is original_parent
 
 
 def test_native_explicit_preview_decodes_h264_without_reading_missing_pieces(qtbot, tmp_path):
@@ -410,6 +469,9 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_pa
     tab.command("shuffle", shuffle=True)
     tab.command("repeat", repeat="all")
     player = tab.player
+    window.set_media_center(True)
+    qtbot.waitUntil(window.isFullScreen)
+    assert window.media_center_active
 
     def save_editor():
         dialog = QApplication.activeModalWidget()
@@ -421,6 +483,9 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_pa
     replacement = QApplication.instance().torrentlinker_window
     windows.append(replacement)
     assert replacement.tabs.currentWidget() is tab
+    assert not replacement.isFullScreen()
+    assert not replacement.media_center_active
+    assert not tab.center_button.isChecked()
     assert replacement.media_tab.player is player
     assert tab.heartbeat.isActive()
     assert tab.shuffle.isChecked()
@@ -443,3 +508,285 @@ def test_native_media_layout_shortcut_emits_only_user_changes(qtbot):
     tab.layout_combo.setCurrentIndex(tab.layout_combo.findData("focus"))
     assert changes == ["focus"]
     assert tab.hero.isHidden()
+
+
+def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choices(qtbot, tmp_path):
+    import shutil
+    import struct
+    import subprocess
+    import threading
+
+    import pytest
+    from PySide6 import QtMultimedia
+    from PySide6.QtMultimedia import QAudioFormat
+
+    QAudioBufferOutput = getattr(QtMultimedia, "QAudioBufferOutput", None)
+    if QAudioBufferOutput is None:
+        pytest.skip("Decoded audio observation requires Qt 6.8 or later")
+
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.gui.media import MediaTab
+    from torrentlinker.web.app import create_app
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg fixture generator unavailable")
+    root = tmp_path / "tracks"
+    root.mkdir()
+    french, english = tmp_path / "fr.srt", tmp_path / "en.srt"
+    for path, caption in ((french, "French fixture caption"), (english, "English fixture caption")):
+        path.write_text(
+            "\n".join(f"{i}\n00:00:0{i},000 --> 00:00:0{i},900\n{caption}\n" for i in range(1, 9))
+        )
+    source = root / "Multitrack.mkv"
+    subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=160x120:r=10",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=880:sample_rate=48000",
+            "-i",
+            str(french),
+            "-i",
+            str(english),
+            "-map",
+            "0",
+            "-map",
+            "1",
+            "-map",
+            "2",
+            "-map",
+            "3",
+            "-map",
+            "4",
+            "-t",
+            "10",
+            "-c:v",
+            "mpeg4",
+            "-c:a",
+            "pcm_s16le",
+            "-c:s",
+            "srt",
+            "-metadata:s:a:0",
+            "language=fra",
+            "-metadata:s:a:0",
+            "title=Low tone",
+            "-metadata:s:a:1",
+            "language=eng",
+            "-metadata:s:a:1",
+            "title=High tone " + "x" * 450,
+            "-metadata:s:s:0",
+            "language=fra",
+            "-metadata:s:s:1",
+            "language=eng",
+            str(source),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    shutil.copy(source, root / "Other.mkv")
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings()
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    web = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    service = web.state.assistant
+    service.agent.media.scan("default", threading.Event(), lambda _: None)
+    tab = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    tab.resize(1000, 800)
+    tab.show()
+    tab.activate()
+    tab.audio.setMuted(True)
+    output = QAudioBufferOutput(tab)
+    tab.player.setAudioBufferOutput(output)
+    frequencies = []
+
+    def decoded(buffer):
+        formats = {
+            QAudioFormat.SampleFormat.Int16: "h",
+            QAudioFormat.SampleFormat.Int32: "i",
+            QAudioFormat.SampleFormat.Float: "f",
+        }
+        code = formats.get(buffer.format().sampleFormat())
+        if not code or buffer.frameCount() < 100:
+            return
+        samples = [row[0] for row in struct.iter_unpack("<" + code, bytes(buffer.constData()))]
+        samples = samples[:: buffer.format().channelCount()]
+        crossings = sum(a <= 0 < b for a, b in zip(samples, samples[1:], strict=False))
+        frequencies.append(crossings * buffer.format().sampleRate() / len(samples))
+
+    output.audioBufferReceived.connect(decoded)
+    captions = []
+    tab.player.videoSink().subtitleTextChanged.connect(lambda text: captions.append(text))
+    tab.player.videoSink().videoFrameChanged.connect(
+        lambda frame: captions.append(frame.subtitleText())
+    )
+    qtbot.waitUntil(lambda: tab.results.count() == 2 and tab.results.isEnabled())
+
+    def deliver(action, **values):
+        sequence = tab.command_ack + 1
+        tab.apply_player_commands([{"sequence": sequence, "action": action, **values}])
+        return sequence
+
+    media_id = tab.selected_ids()[0]
+    deliver("play", media_ids=[media_id], index=0, start_paused=True, load_token="prepared-fixture")
+    qtbot.waitUntil(lambda: tab.audio_tracks.count() == 2 and tab.subtitles.count() == 3)
+    from PySide6.QtMultimedia import QMediaPlayer
+
+    assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+    tab.report()
+    reported = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"]
+    assert reported["ready"]
+    assert reported["media_id"] == media_id
+    assert reported["source_token"] == "prepared-fixture"
+    assert reported["audio"][1]["id"] == "audio:1"
+    assert reported["audio"][1]["language"] == "en"
+    assert len(reported["audio"][1]["label"]) == 300
+    assert len(tab.audio_tracks.itemText(1)) > 400
+    rejected = deliver(
+        "select_track",
+        kind="audio",
+        track_id="audio:1",
+        media_id=media_id,
+        source_token="old-source",
+    )
+    tab.report()
+    failure = service.agent.media.session(tab.session_id, tab.token)["state"]["track_result"]
+    assert failure["sequence"] == rejected
+    assert not failure["applied"]
+    assert tab.player.activeAudioTrack() == 0
+    assert "French" in tab.audio_tracks.itemText(0)
+    assert "Low tone" in tab.audio_tracks.itemText(0)
+    assert "English" in tab.audio_tracks.itemText(1)
+    assert "French" in tab.subtitles.itemText(1)
+    deliver("play", media_id=media_id, source_token="prepared-fixture")
+    qtbot.waitUntil(lambda: any(400 < value < 480 for value in frequencies), timeout=10000)
+    selected_sequence = deliver(
+        "select_track",
+        kind="audio",
+        track_id="audio:1",
+        media_id=media_id,
+        source_token="prepared-fixture",
+    )
+    tab.report()
+    selection = service.agent.media.session(tab.session_id, tab.token)["state"]["track_result"]
+    assert selection == {"sequence": selected_sequence, "applied": True, "error": ""}
+    deliver(
+        "select_track",
+        kind="subtitle",
+        track_id="embedded:1",
+        media_id=media_id,
+        source_token="prepared-fixture",
+    )
+    qtbot.waitUntil(lambda: tab.player.activeAudioTrack() == 1)
+    qtbot.waitUntil(lambda: any(830 < value < 930 for value in frequencies), timeout=10000)
+    deliver("seek", position=2)
+    qtbot.waitUntil(
+        lambda: any("English fixture caption" in text for text in captions), timeout=10000
+    )
+    deliver("seek", position=3)
+    tab.player.tracksChanged.emit()
+    tab.toggle_fullscreen()
+    assert tab.audio_tracks.currentData() == 1
+    assert tab.subtitles.currentData() == 1
+    assert tab.player.activeAudioTrack() == 1
+    assert tab.player.activeSubtitleTrack() == 1
+    tab.toggle_fullscreen()
+    tab.audio_tracks.setCurrentIndex(0)
+    tab.subtitles.setCurrentIndex(1)
+    frequencies.clear()
+    qtbot.waitUntil(lambda: any(400 < value < 480 for value in frequencies), timeout=10000)
+    qtbot.waitUntil(
+        lambda: any("French fixture caption" in text for text in captions), timeout=10000
+    )
+    qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid())
+    tab.audio_tracks.setCurrentIndex(1)
+    assert tab.player.activeAudioTrack() == 1
+    current = tab.state["current_id"]
+    other = next(row["id"] for row in tab.rows if row["id"] != current)
+    deliver("play", media_ids=[other], index=0)
+    tab.report()
+    replacement = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"]
+    assert replacement["source_token"] != "prepared-fixture"
+    deliver("pause")
+    stale_resume = deliver("play", media_id=media_id, source_token="prepared-fixture")
+    assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+    tab.report()
+    failure = service.agent.media.session(tab.session_id, tab.token)["state"]["track_result"]
+    assert failure["sequence"] == stale_resume
+    assert not failure["applied"]
+    qtbot.waitUntil(lambda: tab.player.duration() == 10000 and tab.audio_tracks.count() == 2)
+    assert tab.audio_tracks.currentData() == 0
+    assert tab.player.activeAudioTrack() == 0
+    assert tab.subtitles.currentData() == -1
+    assert tab.player.activeSubtitleTrack() == -1
+    from tests.test_agent_media import invoke
+
+    discussion = service.media_chat(tab.session_id, tab.token)["conversation_id"]
+    actor = service.conversation(discussion)[1]
+    saved = invoke(
+        web, actor, "search_media", client_id="default", kind="video", query="Multitrack"
+    )
+    prepared = invoke(
+        web,
+        actor,
+        "play_media",
+        selection_id=saved["selection_id"],
+        audio_language="en",
+        subtitle_language="en",
+    )
+    assert prepared["queued"]
+    tab.report()
+    assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+
+    def request_status():
+        return (
+            service.agent.media.session(tab.session_id, tab.token)["state"]
+            .get("track_request", {})
+            .get("status")
+        )
+
+    qtbot.waitUntil(lambda: request_status() == "completed", timeout=10000)
+    assert tab.player.activeAudioTrack() == 1
+    assert tab.player.activeSubtitleTrack() == 1
+    assert tab.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+    bad_preference = invoke(
+        web, actor, "play_media", selection_id=saved["selection_id"], audio_language="zz"
+    )
+    assert bad_preference["queued"]
+    qtbot.waitUntil(lambda: request_status() == "failed", timeout=10000)
+    assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+    assert "No available track matches" in tab.notice.text()
+    current_token = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"][
+        "source_token"
+    ]
+    corrected = invoke(
+        web,
+        actor,
+        "select_media_track",
+        kind="audio",
+        track_id="audio:0",
+        source_token=current_token,
+    )
+    assert corrected["queued"]
+    qtbot.waitUntil(lambda: not tab.notice.text(), timeout=5000)
+    assert tab.player.activeAudioTrack() == 0
+    tab.stop()
+    stopped = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"]
+    assert not stopped["ready"]
+    assert stopped["source_token"] == ""
