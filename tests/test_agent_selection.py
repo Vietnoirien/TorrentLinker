@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -100,6 +101,606 @@ def test_mcp_selects_exactly_1000_across_the_entire_client_not_one_page(tmp_path
         assert len(client.paused) == len(set(client.paused)) == 1000
         assert f"{5:040x}" not in client.paused
         assert f"{2000:040x}" not in client.paused
+
+
+def test_global_selection_can_exceed_one_thousand_without_model_batching(tmp_path):
+    client = SelectionClient([book(i, i * 1024) for i in range(1, 1202)])
+    with TestClient(
+        create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+    ) as browser:
+        token = connect(browser, mode="execute", permissions=["controls"])
+        selected = call(
+            browser,
+            token,
+            "select_torrents",
+            {
+                "request_id": "global-1100",
+                "client_ids": ["default"],
+                "count_scope": "global",
+                "criteria": {
+                    "category": "Ebook",
+                    "ranking": "largest_size",
+                    "count": 1100,
+                },
+            },
+        )["structuredContent"]
+        result = finished(browser, selected["job_id"])["result"]
+        assert result["selected_count"] == 1100
+        assert result["unique_hash_count"] == 1100
+        assert result["requested_count"] == 1100
+        compared = call(
+            browser,
+            token,
+            "compare_clients",
+            {
+                "selection_id": selected["job_id"],
+                "offset": 1099,
+                "limit": 1,
+            },
+        )["structuredContent"]
+        assert len(compared["rows"]) == 1
+        assert compared["has_more"] is False
+        assert compared["counts_by_client"]["default"]["actively_seeding"] == 1100
+        assert compared["single_client_hash_count"] == 1100
+        saved = call(
+            browser,
+            token,
+            "create_torrent_list",
+            {
+                "request_id": "save-global-1100",
+                "client_id": "default",
+                "name": "Single client global",
+                "selection_id": selected["job_id"],
+            },
+        )["structuredContent"]
+        assert saved["torrent_instance_count"] == 1100
+        action = call(
+            browser,
+            token,
+            "manage_selection",
+            {
+                "request_id": "pause-global-1100",
+                "selection_id": selected["job_id"],
+                "action": "pause",
+            },
+        )["structuredContent"]
+        outcome = finished(browser, action["job_id"])["result"]
+        assert outcome["outcomes"] == {"sent": 1100}
+        assert len(client.paused) == 1100
+
+
+def test_multi_client_selection_keeps_same_hash_as_two_instances(tmp_path):
+    first = SelectionClient([book(1, 1024), book(2, 2048)])
+    second = SelectionClient([book(1, 1024), book(3, 4096)])
+    clients = {"https://box.example": first, "https://nas.example": second}
+    with TestClient(
+        create_app(
+            tmp_path, password="test-password-long", connector=lambda _, host, *args: clients[host]
+        )
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        added = browser.post(
+            "/api/clients", json={"name": "NAS", "client": "deluge", "host": "https://nas.example"}
+        )
+        assert added.status_code == 200, added.text
+        nas = added.json()["client_id"]
+        grant = browser.post(
+            "/api/agents",
+            json={
+                "name": "Selector",
+                "clients": ["default", nas],
+                "mode": "execute",
+                "permissions": ["controls"],
+            },
+        ).json()
+        browser.put("/api/agents", json={"enabled": True})
+        response = call(
+            browser,
+            grant["token"],
+            "select_torrents",
+            {
+                "request_id": "both",
+                "client_ids": ["default", nas],
+                "criteria": {"category": "Ebook", "ranking": "largest_size", "count": 4},
+                "count_scope": "global",
+            },
+        )["structuredContent"]
+        result = finished(browser, response["job_id"])["result"]
+        assert result["selected_count"] == 4
+        assert {(r["client_id"], r["hash"]) for r in result["rows"]} == {
+            ("default", f"{1:040x}"),
+            ("default", f"{2:040x}"),
+            (nas, f"{1:040x}"),
+            (nas, f"{3:040x}"),
+        }
+        assert result["unique_hash_count"] == 3
+        action = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "pause-both",
+                "selection_id": response["job_id"],
+                "action": "pause",
+            },
+        )["structuredContent"]
+        completed = finished(browser, action["job_id"])["result"]
+        assert completed["outcomes"] == {"sent": 4}
+        assert sorted(first.paused) == [f"{1:040x}", f"{2:040x}"]
+        assert sorted(second.paused) == [f"{1:040x}", f"{3:040x}"]
+        repeated = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "pause-both-again",
+                "selection_id": response["job_id"],
+                "action": "pause",
+            },
+        )["structuredContent"]
+        assert finished(browser, repeated["job_id"])["result"]["outcomes"] == {"already_sent": 4}
+        assert len(first.paused) == len(second.paused) == 2
+        comparison = call(
+            browser,
+            grant["token"],
+            "compare_clients",
+            {
+                "selection_id": response["job_id"],
+            },
+        )["structuredContent"]
+        assert comparison["complete"] is True
+        assert comparison["shared_hash_count"] == 1
+        assert comparison["single_client_hash_count"] == 2
+        only_nas = next(row for row in comparison["rows"] if row["hash"] == f"{3:040x}")
+        assert only_nas["clients"] == {"default": "absent", nas: "actively_seeding"}
+        legacy = select(browser, grant["token"], category="Ebook", ranking="largest_size", count=1)
+        narrowed = call(
+            browser,
+            grant["token"],
+            "refine_selection",
+            {
+                "request_id": "subtract-legacy",
+                "selection_id": response["job_id"],
+                "exclude_selection_id": legacy,
+            },
+        )["structuredContent"]
+        narrowed_result = finished(browser, narrowed["job_id"])["result"]
+        assert narrowed_result["selected_count"] == 3
+        assert narrowed_result["requested_count"] == 3
+        assert narrowed_result["shortfall"] == 0
+        assert narrowed_result["estimated_zen_per_day"] == sum(
+            r["zen"] for r in narrowed_result["rows"] if r["zen"] is not None
+        )
+        refined = call(
+            browser,
+            grant["token"],
+            "refine_selection",
+            {
+                "request_id": "without-nas-only",
+                "selection_id": response["job_id"],
+                "exclude_only_on_client_id": nas,
+            },
+        )["structuredContent"]
+        filtered = finished(browser, refined["job_id"])["result"]
+        assert filtered["selected_count"] == 3
+        saved = call(
+            browser,
+            grant["token"],
+            "create_torrent_list",
+            {
+                "request_id": "save-both",
+                "client_id": "all",
+                "name": "Across clients",
+                "selection_id": refined["job_id"],
+            },
+        )["structuredContent"]
+        assert saved["torrent_instance_count"] == 3
+        assert saved["unique_hash_count"] == 2
+        durable_comparison = call(
+            browser,
+            grant["token"],
+            "compare_torrent_list_client",
+            {"list_id": saved["id"], "expected_revision": 1},
+        )["structuredContent"]
+        assert durable_comparison["groups"]["actively_seeding"]["count"] == 3
+        assert {(row["client_id"], row["hash"]) for row in durable_comparison["rows"]} == {
+            ("default", f"{1:040x}"),
+            (nas, f"{1:040x}"),
+            ("default", f"{2:040x}"),
+        }
+        materialized = call(
+            browser,
+            grant["token"],
+            "select_torrent_list",
+            {
+                "request_id": "materialize-both",
+                "list_id": saved["id"],
+                "expected_revision": 1,
+                "source": "clients",
+            },
+        )["structuredContent"]
+        assert materialized["selected_count"] == 3
+    with TestClient(
+        create_app(
+            tmp_path, password="test-password-long", connector=lambda _, host, *args: clients[host]
+        )
+    ) as browser:
+        lists = call(
+            browser,
+            grant["token"],
+            "list_torrent_lists",
+            {
+                "client_id": "all",
+            },
+        )["structuredContent"]
+        assert lists["total"] == 1
+        assert lists["lists"][0]["torrent_instance_count"] == 3
+        restored = call(
+            browser,
+            grant["token"],
+            "select_torrent_list",
+            {
+                "request_id": "after-restart",
+                "list_id": saved["id"],
+                "expected_revision": 1,
+                "source": "clients",
+            },
+        )["structuredContent"]
+        assert restored["selected_count"] == 3
+
+
+def test_multi_client_count_scope_and_unavailable_client_are_explicit(tmp_path):
+    class Disconnectable(SelectionClient):
+        online = True
+
+        def torrents(self, **kwargs):
+            if not self.online:
+                raise ConnectionError("Offline")
+            return super().torrents(**kwargs)
+
+    first = SelectionClient([book(1, 1024), book(2, 2048)])
+    second = Disconnectable([book(3, 4096)])
+    clients = {"https://box.example": first, "https://nas.example": second}
+    with TestClient(
+        create_app(
+            tmp_path, password="test-password-long", connector=lambda _, host, *args: clients[host]
+        )
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        nas = browser.post(
+            "/api/clients",
+            json={
+                "name": "NAS",
+                "client": "deluge",
+                "host": "https://nas.example",
+            },
+        ).json()["client_id"]
+        grant = browser.post(
+            "/api/agents",
+            json={
+                "name": "Both",
+                "clients": ["default", nas],
+                "mode": "execute",
+                "permissions": ["controls"],
+            },
+        ).json()
+        default_only = browser.post(
+            "/api/agents",
+            json={
+                "name": "Default",
+                "clients": ["default"],
+            },
+        ).json()
+        browser.put("/api/agents", json={"enabled": True})
+        params = {
+            "client_ids": ["default", nas],
+            "criteria": {
+                "category": "Ebook",
+                "ranking": "largest_size",
+                "count": 1,
+            },
+        }
+        denied = call(
+            browser,
+            default_only["token"],
+            "select_torrents",
+            {
+                "request_id": "denied",
+                **params,
+            },
+        )["structuredContent"]
+        assert "error" in denied
+        global_job = call(
+            browser,
+            grant["token"],
+            "select_torrents",
+            {
+                "request_id": "global",
+                **params,
+            },
+        )["structuredContent"]
+        global_result = finished(browser, global_job["job_id"])["result"]
+        assert global_result["selected_count"] == 1
+        assert global_result["rows"][0]["client_id"] == nas
+        each_job = call(
+            browser,
+            grant["token"],
+            "select_torrents",
+            {
+                "request_id": "each",
+                **params,
+                "count_scope": "per_client",
+            },
+        )["structuredContent"]
+        each_result = finished(browser, each_job["job_id"])["result"]
+        assert each_result["selected_count"] == 2
+        assert each_result["requested_count"] == 2
+        refined = call(
+            browser,
+            grant["token"],
+            "refine_selection",
+            {
+                "request_id": "exclude-nas-only",
+                "selection_id": each_job["job_id"],
+                "exclude_only_on_client_id": nas,
+            },
+        )["structuredContent"]
+        assert finished(browser, refined["job_id"])["result"]["selected_count"] == 1
+        exact = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "pause-refined",
+                "selection_id": refined["job_id"],
+                "action": "pause",
+            },
+        )["structuredContent"]
+        assert finished(browser, exact["job_id"])["result"]["outcomes"] == {"sent": 1}
+        assert first.paused == [f"{2:040x}"]
+        assert second.paused == []
+        wrong_scope = call(
+            browser,
+            grant["token"],
+            "create_torrent_list",
+            {
+                "request_id": "wrong-scope",
+                "client_id": "default",
+                "name": "Wrong scope",
+                "selection_id": each_job["job_id"],
+            },
+        )["structuredContent"]
+        assert "client_id=all" in wrong_scope["error"]
+        saved = call(
+            browser,
+            grant["token"],
+            "create_torrent_list",
+            {
+                "request_id": "durable",
+                "client_id": "all",
+                "name": "One each",
+                "selection_id": each_job["job_id"],
+            },
+        )["structuredContent"]
+        edited = call(
+            browser,
+            grant["token"],
+            "edit_torrent_list",
+            {
+                "request_id": "edit",
+                "list_id": saved["id"],
+                "expected_revision": 1,
+                "action": "remove",
+                "subset": {"query": "Book 2"},
+            },
+        )["structuredContent"]
+        assert edited["revision"] == 2
+        stale = call(
+            browser,
+            grant["token"],
+            "edit_torrent_list",
+            {
+                "request_id": "stale",
+                "list_id": saved["id"],
+                "expected_revision": 1,
+                "action": "clear",
+            },
+        )["structuredContent"]
+        assert "revision changed" in stale["error"]
+        second.online = False
+        offline_job = call(
+            browser,
+            grant["token"],
+            "select_torrents",
+            {
+                "request_id": "offline",
+                **params,
+            },
+        )["structuredContent"]
+        offline = finished(browser, offline_job["job_id"])["result"]
+        assert offline["ranking_complete"] is False
+        assert offline["shortfall"] is None
+        assert any(not o["available"] for o in offline["observations"])
+        compared = call(
+            browser,
+            grant["token"],
+            "compare_clients",
+            {
+                "selection_id": each_job["job_id"],
+            },
+        )["structuredContent"]
+        assert compared["complete"] is False
+        assert compared["shared_hash_count"] is None
+        assert compared["counts_by_client"][nas]["unavailable"] == 2
+        assert all(row["clients"][nas] == "unavailable" for row in compared["rows"])
+        refine = call(
+            browser,
+            grant["token"],
+            "refine_selection",
+            {
+                "request_id": "offline-refine",
+                "selection_id": each_job["job_id"],
+                "exclude_only_on_client_id": nas,
+            },
+        )["structuredContent"]
+        assert finished(browser, refine["job_id"])["status"] == "failed"
+        blocked = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "offline-pause",
+                "selection_id": offline_job["job_id"],
+                "action": "pause",
+            },
+        )["structuredContent"]
+        assert "unavailable" in blocked["error"]
+        cleared = call(
+            browser,
+            grant["token"],
+            "edit_torrent_list",
+            {
+                "request_id": "clear-after",
+                "list_id": saved["id"],
+                "expected_revision": 2,
+                "action": "clear",
+            },
+        )["structuredContent"]
+        assert cleared["revision"] == 3
+        db = browser.app.state.agent_service.access.db
+        grant_fields = {
+            "name",
+            "clients",
+            "mode",
+            "permissions",
+            "daily_bytes",
+            "daily_torrents",
+            "reserve_bytes",
+        }
+        narrowed = {key: value for key, value in grant.items() if key in grant_fields}
+        narrowed["clients"] = ["default"]
+        with db:
+            db.execute("UPDATE grants SET body=? WHERE id=?", (json.dumps(narrowed), grant["id"]))
+        current = call(
+            browser,
+            grant["token"],
+            "get_torrent_list",
+            {
+                "list_id": saved["id"],
+                "revision": 3,
+            },
+        )["structuredContent"]
+        assert current["count"] == 0
+        older = call(
+            browser,
+            grant["token"],
+            "get_torrent_list",
+            {
+                "list_id": saved["id"],
+                "revision": 1,
+            },
+        )["structuredContent"]
+        assert "allowed client" in older["error"]
+
+
+def test_multi_client_partial_failure_is_not_replayed_and_delete_is_grouped(tmp_path):
+    class AcceptedThenFailed(SelectionClient):
+        attempts = 0
+
+        def pause(self, hash):
+            self.attempts += 1
+            super().pause(hash)
+            raise ConnectionError("Response lost after acceptance")
+
+    first = SelectionClient([book(1, 1024)])
+    second = AcceptedThenFailed([book(1, 1024)])
+    clients = {"https://box.example": first, "https://nas.example": second}
+    with TestClient(
+        create_app(
+            tmp_path, password="test-password-long", connector=lambda _, host, *args: clients[host]
+        )
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        nas = browser.post(
+            "/api/clients",
+            json={
+                "name": "NAS",
+                "client": "deluge",
+                "host": "https://nas.example",
+            },
+        ).json()["client_id"]
+        grant = browser.post(
+            "/api/agents",
+            json={
+                "name": "Both",
+                "clients": ["default", nas],
+                "mode": "execute",
+                "permissions": ["controls"],
+            },
+        ).json()
+        browser.put("/api/agents", json={"enabled": True})
+        selection = call(
+            browser,
+            grant["token"],
+            "select_torrents",
+            {
+                "request_id": "both",
+                "client_ids": ["default", nas],
+                "criteria": {"category": "Ebook", "ranking": "largest_size", "count": 2},
+            },
+        )["structuredContent"]["job_id"]
+        finished(browser, selection)
+        deletion = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "delete-both",
+                "selection_id": selection,
+                "action": "delete",
+            },
+        )["structuredContent"]
+        assert deletion["requires_owner_approval"] is True
+        review = browser.get(f"/api/agents/proposals/{deletion['id']}/review").json()
+        assert {g["client_id"]: g["torrent_instance_count"] for g in review["groups"]} == {
+            "default": 1,
+            nas: 1,
+        }
+        assert "share these files" in review["warning"]
+        assert all(
+            target["folder"] == "/media"
+            for group in review["groups"]
+            for target in group["targets"]
+        )
+        paused = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "pause-both",
+                "selection_id": selection,
+                "action": "pause",
+            },
+        )["structuredContent"]
+        result = finished(browser, paused["job_id"])["result"]
+        assert result["outcomes"] == {"sent": 1, "failed": 1}
+        retry = call(
+            browser,
+            grant["token"],
+            "manage_selection",
+            {
+                "request_id": "pause-retry",
+                "selection_id": selection,
+                "action": "pause",
+            },
+        )["structuredContent"]
+        repeated = finished(browser, retry["job_id"])["result"]
+        assert repeated["outcomes"] == {"already_sent": 1, "uncertain": 1}
+        assert first.paused == second.paused == [f"{1:040x}"]
+        assert second.attempts == 1
 
 
 def test_selection_action_uses_saved_hashes_and_existing_owner_approval(tmp_path):

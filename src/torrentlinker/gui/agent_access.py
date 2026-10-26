@@ -285,12 +285,27 @@ class AgentDialog(QDialog):
             return
 
         def reviewed(preview):
-            if "local_draft" in preview:
+            if "local_draft" in preview or "groups" in preview:
                 dialog = QDialog(self)
                 dialog.setWindowTitle(self.tr("Approve proposal"))
                 dialog.resize(720, 520)
                 layout = QVBoxLayout(dialog)
-                text = QPlainTextEdit(json.dumps(preview, indent=2, ensure_ascii=False))
+                if "groups" in preview:
+                    lines = [preview.get("warning", "")]
+                    for group in preview["groups"]:
+                        lines.append(
+                            f"\n{group['client']} ({group['client_id']}): "
+                            f"{group['torrent_instance_count']} torrents, "
+                            f"{group['metadata_size_bytes']:,} metadata bytes"
+                        )
+                        lines.extend(
+                            f"{target['name']} [{target['hash']}]\n{target['folder']}"
+                            for target in group["targets"]
+                        )
+                    content = "\n".join(lines)
+                else:
+                    content = json.dumps(preview, indent=2, ensure_ascii=False)
+                text = QPlainTextEdit(content)
                 text.setReadOnly(True)
                 layout.addWidget(text)
                 buttons = QDialogButtonBox(

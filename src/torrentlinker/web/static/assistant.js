@@ -351,7 +351,21 @@ function aRunCard(run) {
 
 async function aReview(id, completed = aRefreshChat) {
   const review = await api(`agents/proposals/${id}/review`), {dialog, form} = aDialog(at("Review action", "Vérifier l’action"));
-  form.append(element("pre", JSON.stringify(review, null, 2)));
+  if (review.groups?.length) {
+    form.append(element("p", `${review.action}: ${review.torrent_instance_count} ${at("torrent instances", "instances de torrent")}`));
+    for (const group of review.groups) {
+      form.append(element("h3", `${group.client} (${group.client_id})`));
+      form.append(element("p", `${group.torrent_instance_count} ${at("torrent instances", "instances de torrent")} · ${group.metadata_size_bytes.toLocaleString()} ${at("metadata bytes", "octets selon les métadonnées")}`));
+      const targets = element("details"), names = group.targets || [];
+      targets.append(element("summary", `${at("Exact targets and folders", "Cibles et dossiers exacts")} (${names.length})`));
+      const targetList = element("ul");
+      for (const target of names) targetList.append(element("li", `${target.name} [${target.hash}] — ${target.folder || ""}`));
+      targets.append(targetList); form.append(targets);
+    }
+    form.append(element("p", review.warning || "", "warning"));
+    form.append(element("p", at("Metadata sizes are not reclaimable disk space.", "Les tailles des métadonnées ne sont pas de l’espace récupérable."), "muted"));
+    const details = element("details"); details.append(element("summary", at("Full review", "Revue complète")), element("pre", JSON.stringify(review, null, 2))); form.append(details);
+  } else form.append(element("pre", JSON.stringify(review, null, 2)));
   form.append(button(at("Approve this action", "Approuver cette action"), async () => { await api(`agents/proposals/${id}/approve`, {}); dialog.close(); await completed(); }, "primary"), button(at("Reject", "Refuser"), async () => { await api(`agents/proposals/${id}/reject`, {}); dialog.close(); await completed(); }), button(at("Close", "Fermer"), () => dialog.close()));
 }
 async function aConnections(root) {

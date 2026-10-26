@@ -1,3 +1,5 @@
+import json
+
 from tests import test_catalogue_selection
 from tests.test_agent_access import call
 from tests.test_agent_queue_capabilities import approve
@@ -108,6 +110,47 @@ def test_durable_list_composes_refines_and_keeps_materialized_revision(catalogue
         selection_id=books,
     )
     assert retry == added
+
+
+def test_preexisting_list_rows_without_client_ids_remain_editable(catalogue_app):
+    app, browser, token = catalogue_app
+    selection = selected(browser, token, "legacy-source", categories=[2030])
+    created = tool(
+        browser,
+        token,
+        "create_torrent_list",
+        request_id="legacy-list",
+        client_id="default",
+        name="Before upgrade",
+        selection_id=selection,
+    )
+    db = app.state.agent_service.access.db
+    original = json.loads(
+        db.execute(
+            "SELECT body FROM torrent_list_revisions WHERE list_id=? AND revision=1",
+            (created["id"],),
+        ).fetchone()[0]
+    )
+    for row in original:
+        row.pop("client_id")
+    with db:
+        db.execute(
+            "UPDATE torrent_list_revisions SET body=? WHERE list_id=? AND revision=1",
+            (json.dumps(original), created["id"]),
+        )
+    shown = tool(browser, token, "get_torrent_list", list_id=created["id"], revision=1)
+    assert all(row["client_id"] == "default" for row in shown["rows"])
+    changed = tool(
+        browser,
+        token,
+        "edit_torrent_list",
+        request_id="legacy-edit",
+        list_id=created["id"],
+        expected_revision=1,
+        action="remove",
+        subset={"query": "Film B"},
+    )
+    assert changed["revision"] == 2
 
 
 def test_list_revision_conflicts_and_planning_has_no_budget_side_effects(catalogue_app):

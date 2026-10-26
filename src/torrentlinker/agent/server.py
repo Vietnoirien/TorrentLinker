@@ -404,6 +404,7 @@ def make_server(service: AgentService):
         exclude_queued: bool = False,
         exclude_seeded: bool = False,
         exclude_selection_id: str = "",
+        exclude_only_on_client_id: str = "",
     ) -> dict[str, object]:
         """Save a new subset, excluding queued, seeded or another saved selection's hashes.
 
@@ -418,7 +419,25 @@ def make_server(service: AgentService):
             exclude_queued=exclude_queued,
             exclude_seeded=exclude_seeded,
             exclude_selection_id=exclude_selection_id,
+            exclude_only_on_client_id=exclude_only_on_client_id,
         )
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def compare_clients(
+        selection_id: str,
+        client_ids: list[str] | None = None,
+        offset: Page = 0,
+        limit: Limit = 50,
+    ) -> dict[str, object]:
+        """Compare exact selected infohashes across authorized clients with fresh observations.
+
+        Reports full-set counts and a bounded hash page; seeding, paused, incomplete,
+        absent and unavailable remain separate.
+        An unavailable client never counts as missing. Use refine_selection with
+        exclude_only_on_client_id to save a server-side subset without copying hashes.
+        """
+        return service.compare_clients(ACTOR.get(), selection_id, client_ids or [], offset, limit)
 
     @mcp.tool(structured_output=True)
     @safe
@@ -569,7 +588,8 @@ def make_server(service: AgentService):
         """Save an exact durable named planning list from a catalogue/queue snapshot, or empty.
 
         No queue, download or budget mutation. Survives restarts and snapshot expiry.
-        Actor/client owned, deduplicated by infohash; returns exact revision and full totals.
+        Use client_id=all for a selection spanning clients. Rows retain client IDs and
+        duplicate infohashes on different clients as separate torrent instances.
         """
         return service.torrent_lists.create(ACTOR.get(), request_id, client_id, name, selection_id)
 
@@ -625,7 +645,7 @@ def make_server(service: AgentService):
         request_id: str,
         list_id: str,
         expected_revision: Annotated[int, Field(ge=1)],
-        source: Literal["catalogue", "queue"],
+        source: Literal["catalogue", "queue", "clients"],
         criteria: ListFilter = ListFilter(),
         offset: Page = 0,
         count: Annotated[int, Field(ge=1, le=1000)] = 1000,
@@ -726,9 +746,13 @@ def make_server(service: AgentService):
     @mcp.tool(structured_output=True)
     @safe
     def select_torrents(
-        request_id: str, client_id: str, criteria: SelectionCriteria
+        request_id: str,
+        client_id: str = "",
+        criteria: SelectionCriteria = SelectionCriteria(),
+        client_ids: list[str] | None = None,
+        count_scope: Literal["global", "per_client"] = "global",
     ) -> dict[str, object]:
-        """Refresh and select up to 1000 torrents on the server, without changing torrents.
+        """Refresh and select up to 10,000 torrent instances on the server.
 
         Default: seeding ebooks, lowest Note first, largest size on equal Notes.
         Empty category/tracker means all; category includes descendants. Unknown ranking
@@ -736,10 +760,21 @@ def make_server(service: AgentService):
         for exact totals and paginated rows. The returned job_id is the selection_id.
         Never manually count pages or reconstruct the selection's hashes.
         """
+        selected_clients = list(dict.fromkeys(client_ids or []))
+        if selected_clients and client_id and client_id not in selected_clients:
+            raise ValueError("client_id must belong to client_ids when both are supplied.")
+        if not selected_clients and not client_id:
+            raise ValueError("Choose client_id or client_ids.")
         result = service.request(
             ACTOR.get(),
             request_id,
-            AgentRequest(kind="select-torrents", client_id=client_id, selection=criteria),
+            AgentRequest(
+                kind="select-torrents",
+                client_id=client_id or selected_clients[0],
+                client_ids=selected_clients,
+                selection=criteria,
+                count_scope=count_scope,
+            ),
         )
         return {**result, "selection_id": result["job_id"]}
 
@@ -758,6 +793,8 @@ def make_server(service: AgentService):
         Pause keeps files; remove keeps files; delete deletes files and always needs owner
         approval. Poll job_status for per-torrent outcomes, including failures and skips.
         Reuse request_id only for exact retries to avoid running an action twice.
+        If a refined selection fails, correct or retry that exact subset. Never act on
+        its wider parent selection instead.
         """
         return service.manage_selection(ACTOR.get(), request_id, selection_id, action)
 

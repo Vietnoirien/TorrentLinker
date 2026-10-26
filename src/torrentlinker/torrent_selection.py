@@ -25,7 +25,7 @@ class SelectionCriteria(BaseModel):
         "lowest_zen_per_gib",
         "highest_zen_per_gib",
     ] = "lowest_note_largest_size"
-    count: int = Field(default=1000, ge=1, le=1000)
+    count: int = Field(default=1000, ge=1, le=10_000)
     query: str = Field(default="", max_length=500)
     min_size_bytes: int = Field(default=0, ge=0)
     max_size_bytes: int | None = Field(default=None, ge=0)
@@ -62,9 +62,10 @@ def select_rows(rows: list[dict[str, Any]], criteria: SelectionCriteria) -> dict
     excluded = {"filters": 0, "verifying": 0, "unknown_metric": 0, "provisional": 0}
     seen = set()
     for row in rows:
-        if row["hash"] in seen:
+        identity = (row.get("client_id", "default"), row["hash"])
+        if identity in seen:
             continue
-        seen.add(row["hash"])
+        seen.add(identity)
         paths = [" / ".join(path).casefold() for path in row["categories"]]
         if (
             (criteria.status != "any" and row["status"] != criteria.status)
@@ -107,15 +108,20 @@ def select_rows(rows: list[dict[str, Any]], criteria: SelectionCriteria) -> dict
 
     def order(row):
         if criteria.ranking == "lowest_note_largest_size":
-            return row["note"], -row["size"], row["hash"]
+            return row["note"], -row["size"], row["hash"], row.get("client_id", "")
         if criteria.ranking == "highest_note":
-            return -row["note"], -row["size"], row["hash"]
+            return -row["note"], -row["size"], row["hash"], row.get("client_id", "")
         if criteria.ranking in {"lowest_zen_per_gib", "highest_zen_per_gib"}:
             direction = -1 if criteria.ranking == "highest_zen_per_gib" else 1
-            return direction * row["zen"] / (row["size"] / 1024**3), -row["size"], row["hash"]
+            return (
+                direction * row["zen"] / (row["size"] / 1024**3),
+                -row["size"],
+                row["hash"],
+                row.get("client_id", ""),
+            )
         if criteria.ranking == "smallest_size":
-            return row["size"], row["hash"]
-        return -row["size"], row["hash"]
+            return row["size"], row["hash"], row.get("client_id", "")
+        return -row["size"], row["hash"], row.get("client_id", "")
 
     chosen = sorted(eligible, key=order)[: criteria.count]
     known_zen = [row["zen"] for row in chosen if row["zen"] is not None]

@@ -50,7 +50,10 @@ def request_summary(event: dict, language: str = "en") -> list[str]:
     action = operation.get("action", "")
     selection = review.get("selection") or {}
     hashes = operation.get("hashes") or []
-    count = selection.get("selected_count", len(hashes) or len(review.get("torrents", [])))
+    count = review.get(
+        "torrent_instance_count",
+        selection.get("selected_count", len(hashes) or len(review.get("torrents", []))),
+    )
     titles = {
         "enqueue": (
             f"Add {count} torrents to the download queue.",
@@ -145,9 +148,37 @@ def request_summary(event: dict, language: str = "en") -> list[str]:
             + (kind or event.get("tool", ""))
         ]
     )
+    groups = review.get("groups") or []
     client = review.get("client") or operation.get("client") or operation.get("client_id")
-    if client:
+    if client and not groups:
         lines.append(say("Torrent Client: ", "Client torrent : ") + str(client))
+    for group in groups:
+        size = group.get("metadata_size_bytes", 0)
+        lines.append(
+            f"{group.get('client', group.get('client_id'))} "
+            f"({group.get('client_id')}): {group.get('torrent_instance_count', 0)} "
+            + say("torrent instances", "instances de torrent")
+            + f", {size:,} "
+            + say("metadata bytes", "octets selon les métadonnées")
+        )
+        targets = group.get("targets") or []
+        for target in targets[:20]:
+            lines.append(
+                f"  {target.get('name', '')} [{target.get('hash', '')}] {target.get('folder', '')}"
+            )
+        if len(targets) > 20:
+            lines.append(
+                f"  +{len(targets) - 20} "
+                + say("more targets in the full review", "autres cibles dans la revue complète")
+            )
+    if groups:
+        lines.append(
+            say(
+                "Metadata sizes may include shared files; they are not reclaimable disk space.",
+                "Les tailles des métadonnées peuvent inclure des fichiers partagés ; "
+                "ce n'est pas de l'espace récupérable.",
+            )
+        )
     if kind == "configure-download-folder":
         category = operation.get("category_name") or operation.get("category")
         if operation.get("category") is None:
@@ -259,6 +290,10 @@ def tool_description(event: dict, language: str = "en") -> str:
         "select_torrents": (
             "Select and rank Torrent Client torrents.",
             "Sélectionner et classer les torrents du client.",
+        ),
+        "compare_clients": (
+            "Compare selected torrents across clients.",
+            "Comparer les torrents sélectionnés entre clients.",
         ),
         "select_queue": (
             "Select entries from the download queue.",

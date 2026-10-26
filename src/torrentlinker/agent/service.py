@@ -13,6 +13,8 @@ from uuid import uuid4
 from pydantic import ConfigDict, Field, model_validator
 
 from torrentlinker.agent.access import Access, Grant
+from torrentlinker.torrent_management import comparison_status
+from torrentlinker.torrent_selection import select_rows
 from torrentlinker.web.jobs import Jobs
 from torrentlinker.web.operations import JobRequest, Operations
 from torrentlinker.web.setup import Setup
@@ -49,12 +51,16 @@ PERMISSIONS = {
 
 
 class AgentRequest(JobRequest):
+    count_scope: Literal["global", "per_client"] = "global"
+    hashes: list[str] = Field(default_factory=list, max_length=10_000)
+    selection_rows: list[dict[str, Any]] = Field(default_factory=list, max_length=10_000)
     source_selection_id: str = ""
     batch_bytes: int = Field(default=0, ge=0)
     batch_torrents: int = Field(default=0, ge=0, le=1000)
     exclude_queued: bool = False
     exclude_seeded: bool = False
     exclude_selection_id: str = Field(default="", max_length=64)
+    exclude_only_on_client_id: str = Field(default="", max_length=64)
     model_config = ConfigDict(extra="forbid")
 
     def same_intent(self, other: AgentRequest) -> bool:
@@ -91,6 +97,12 @@ class AgentService:
         from torrentlinker.agent.selection_presentations import Presentations
 
         self.presentations = Presentations(self)
+        with self.access.lock, self.access.db:
+            self.access.db.execute(
+                "CREATE TABLE IF NOT EXISTS managed_targets ("
+                "actor TEXT, selection_id TEXT, action TEXT, client_id TEXT, hash TEXT, "
+                "outcome TEXT, detail TEXT, PRIMARY KEY(actor,selection_id,action,client_id,hash))"
+            )
 
     def target(self, actor: str, client_id: str) -> Operations:
         grant = self.access.grant(actor)
@@ -204,6 +216,366 @@ class AgentService:
             "download_folder_required": self.download_folder_options(
                 actor, error.client_id, error.category
             ),
+        }
+
+    def select_clients(self, actor: str, body: AgentRequest, stop, progress) -> dict:
+        client_ids = list(dict.fromkeys(body.client_ids))
+        if len(client_ids) != len(body.client_ids):
+            raise ValueError("Choose each Torrent Client once.")
+        if body.count_scope == "per_client" and body.selection.count * len(client_ids) > 10_000:
+            raise ValueError("Select at most 10,000 torrent instances in one job.")
+        all_rows: list[dict[str, Any]] = []
+        observations = []
+        for client_id in client_ids:
+            target = self.target(actor, client_id)
+            if stop.is_set():
+                break
+            try:
+                target.run(JobRequest(kind="refresh", client_id=client_id), stop, progress)
+                all_rows.extend({**row, "client_id": client_id} for row in target.rows)
+                observations.append(
+                    {
+                        "client_id": client_id,
+                        "available": True,
+                        "observed_at": time.time(),
+                        "scanned_count": len(target.rows),
+                    }
+                )
+            except Exception:
+                target.connection_error = "Refresh failed. Cached estimates are unavailable."
+                observations.append(
+                    {
+                        "client_id": client_id,
+                        "available": False,
+                        "error": "Torrent Client unavailable.",
+                    }
+                )
+        if body.count_scope == "global":
+            result = select_rows(all_rows, body.selection)
+        else:
+            parts = [
+                select_rows([r for r in all_rows if r["client_id"] == client_id], body.selection)
+                for client_id in client_ids
+                if any(o["client_id"] == client_id and o["available"] for o in observations)
+            ]
+            selected = [r for part in parts for r in part["rows"]]
+            result = {
+                "criteria": body.selection.model_dump(),
+                "snapshot_at": time.time(),
+                "requested_count": body.selection.count * len(client_ids),
+                "scanned_count": len(all_rows),
+                "eligible_count": sum(p["eligible_count"] for p in parts),
+                "selected_count": len(selected),
+                "shortfall": sum(p["shortfall"] for p in parts),
+                "excluded": {
+                    key: sum(p["excluded"][key] for p in parts)
+                    for key in ("filters", "verifying", "unknown_metric", "provisional")
+                },
+                "total_size_bytes": sum(r["size"] for r in selected),
+                "estimated_zen_per_day": sum(r["zen"] for r in selected if r["zen"] is not None),
+                "unknown_zen_count": sum(r["zen"] is None for r in selected),
+                "estimates_are_provisional": True,
+                "space_note": (
+                    "Metadata sizes may include shared files; no reclaimable bytes are inferred."
+                ),
+                "rows": selected,
+            }
+        result.update(
+            client_ids=client_ids,
+            count_scope=body.count_scope,
+            observations=observations,
+            ranking_complete=not stop.is_set()
+            and all(o["available"] for o in observations)
+            and len(observations) == len(client_ids),
+            torrent_instance_count=len(result["rows"]),
+            unique_hash_count=len({r["hash"] for r in result["rows"]}),
+            metadata_size_bytes=result["total_size_bytes"],
+            source="torrent-clients",
+        )
+        if not result["ranking_complete"]:
+            result["shortfall"] = None
+            result["note"] = (
+                "At least one requested client was unavailable; ranking and totals are incomplete."
+            )
+        return result
+
+    def manage_clients(self, actor: str, body: AgentRequest, stop, progress) -> dict:
+        from collections import Counter
+        from dataclasses import asdict
+
+        from torrentlinker.torrent_management import manage
+
+        rows = []
+        by_client: dict[str, list[dict[str, Any]]] = {
+            client_id: [] for client_id in body.client_ids
+        }
+        for row in body.selection_rows:
+            by_client[row["client_id"]].append(row)
+        for client_id, selected in by_client.items():
+            target = self.target(actor, client_id)
+            try:
+                target.run(JobRequest(kind="refresh", client_id=client_id), stop, progress)
+                current = {r["hash"]: r for r in target.rows}
+                observed = {t.hash.lower(): t for t in target.observed}
+            except Exception:
+                current, observed = {}, {}
+                unavailable = True
+            else:
+                unavailable = False
+            for row in selected:
+                if stop.is_set():
+                    break
+                self.target(actor, client_id)
+                key = (actor, body.selection_id, body.action, client_id, row["hash"])
+                with self.access.lock:
+                    previous = self.access.db.execute(
+                        "SELECT outcome,detail FROM managed_targets WHERE actor=? AND "
+                        "selection_id=? AND action=? AND client_id=? AND hash=?",
+                        key,
+                    ).fetchone()
+                if previous:
+                    outcome = "already_sent" if previous["outcome"] == "sent" else "uncertain"
+                    item = {
+                        "client_id": client_id,
+                        "hash": row["hash"],
+                        "outcome": outcome,
+                        "detail": previous["detail"],
+                    }
+                elif unavailable:
+                    item = {
+                        "client_id": client_id,
+                        "hash": row["hash"],
+                        "outcome": "unavailable",
+                        "detail": "Torrent Client unavailable.",
+                    }
+                elif row["hash"] not in current or any(
+                    current[row["hash"]][field] != row[field]
+                    for field in ("name", "size", "status")
+                ):
+                    item = {
+                        "client_id": client_id,
+                        "hash": row["hash"],
+                        "outcome": "changed",
+                        "detail": "Torrent changed; select and review it again.",
+                    }
+                elif body.action == "resume" and observed[row["hash"]].progress < 1:
+                    item = {
+                        "client_id": client_id,
+                        "hash": row["hash"],
+                        "outcome": "skipped",
+                        "detail": "Incomplete download cannot be resumed by MCP.",
+                    }
+                else:
+                    with self.access.lock, self.access.db:
+                        self.access.db.execute(
+                            "INSERT INTO managed_targets VALUES (?,?,?,?,?,?,?)",
+                            (
+                                *key,
+                                "attempting",
+                                "Check the client before retrying an interrupted action.",
+                            ),
+                        )
+                    action_result = manage(target.setup.client(), [row["hash"]], body.action)[0]
+                    item = {**asdict(action_result), "client_id": client_id}
+                    if item["outcome"] == "failed":
+                        item["detail"] = (
+                            "Client response uncertain; check the client before retrying."
+                        )
+                    with self.access.lock, self.access.db:
+                        self.access.db.execute(
+                            "UPDATE managed_targets SET outcome=?,detail=? WHERE actor=? AND "
+                            "selection_id=? AND action=? AND client_id=? AND hash=?",
+                            (item["outcome"], item["detail"], *key),
+                        )
+                rows.append(item)
+                progress({"done": len(rows), "total": len(body.selection_rows)})
+        return {
+            "rows": rows,
+            "requested_count": len(body.selection_rows),
+            "attempted_count": sum(r["outcome"] in {"sent", "failed"} for r in rows),
+            "outcomes": dict(Counter(r["outcome"] for r in rows)),
+            "cancelled": stop.is_set(),
+        }
+
+    def client_presence(self, actor: str, client_ids: list[str], hashes: set[str]) -> dict:
+        observations = {}
+        for client_id in client_ids:
+            target = self.target(actor, client_id)
+            try:
+                live = {t.hash.lower(): t for t in target.setup.client().torrents(with_files=False)}
+            except Exception:
+                observations[client_id] = {
+                    "available": False,
+                    "error": "Torrent Client unavailable.",
+                }
+                continue
+            observations[client_id] = {
+                "available": True,
+                "observed_at": time.time(),
+                "statuses": {h: comparison_status(live.get(h)) for h in hashes},
+                "completed": {h: h in live and live[h].progress >= 1 for h in hashes},
+            }
+        return observations
+
+    def compare_clients(
+        self,
+        actor: str,
+        selection_id: str,
+        client_ids: list[str],
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict:
+        source_client, saved = self.selection(actor, selection_id, kind="select-torrents")
+        selected_clients = list(dict.fromkeys(client_ids or saved.get("client_ids", [])))
+        if not selected_clients:
+            selected_clients = list(
+                dict.fromkeys(r.get("client_id", source_client) for r in saved["rows"])
+            )
+        hashes = {r["hash"] for r in saved["rows"]}
+        observed = self.client_presence(actor, selected_clients, hashes)
+        rows = [
+            {
+                "hash": h,
+                "clients": {
+                    cid: observed[cid].get("statuses", {}).get(h, "unavailable")
+                    for cid in selected_clients
+                },
+            }
+            for h in sorted(hashes)
+        ]
+        counts_by_client = {
+            cid: {
+                status: sum(row["clients"][cid] == status for row in rows)
+                for status in (
+                    "actively_seeding",
+                    "completed_paused",
+                    "completed_other",
+                    "incomplete",
+                    "absent",
+                    "unavailable",
+                )
+            }
+            for cid in selected_clients
+        }
+        for counts in counts_by_client.values():
+            counts["present"] = sum(
+                counts[status]
+                for status in (
+                    "actively_seeding",
+                    "completed_paused",
+                    "completed_other",
+                    "incomplete",
+                )
+            )
+        complete = all(observed[cid]["available"] for cid in selected_clients)
+        presence_counts = [
+            sum(row["clients"][cid] not in {"absent", "unavailable"} for cid in selected_clients)
+            for row in rows
+        ]
+        return {
+            "selection_id": selection_id,
+            "client_ids": selected_clients,
+            "observations": [
+                {
+                    "client_id": cid,
+                    "available": observed[cid]["available"],
+                    "observed_at": observed[cid].get("observed_at"),
+                    "error": observed[cid].get("error"),
+                }
+                for cid in selected_clients
+            ],
+            "rows": rows[offset : offset + limit],
+            "has_more": offset + limit < len(rows),
+            "next_offset": offset + limit if offset + limit < len(rows) else None,
+            "counts_by_client": counts_by_client,
+            "shared_hash_count": sum(count > 1 for count in presence_counts) if complete else None,
+            "single_client_hash_count": sum(count == 1 for count in presence_counts)
+            if complete
+            else None,
+            "absent_everywhere_hash_count": sum(count == 0 for count in presence_counts)
+            if complete
+            else None,
+            "torrent_instance_count": len(saved["rows"]),
+            "unique_hash_count": len(hashes),
+            "complete": complete,
+        }
+
+    def refine_clients(self, actor: str, body: AgentRequest) -> dict:
+        _, saved = self.selection(actor, body.source_selection_id, kind="select-torrents")
+        client_ids = saved["client_ids"]
+        if body.exclude_only_on_client_id and body.exclude_only_on_client_id not in client_ids:
+            raise ValueError("Choose a client in the saved selection.")
+        hashes = {r["hash"] for r in saved["rows"]}
+        observed = (
+            self.client_presence(actor, client_ids, hashes)
+            if body.exclude_seeded or body.exclude_only_on_client_id
+            else {}
+        )
+        if any(not result["available"] for result in observed.values()):
+            raise ValueError("A requested client is unavailable. Refine after reconnecting it.")
+        excluded: set[tuple[str, str]] = set()
+        if body.exclude_queued:
+            from torrentlinker.download_queue import entries
+
+            for client_id in client_ids:
+                target = self.target(actor, client_id)
+                excluded.update(
+                    (client_id, e.candidate.infohash)
+                    for e in entries(target.setup.store)
+                    if e.candidate.infohash
+                )
+        if body.exclude_seeded:
+            excluded.update(
+                (r["client_id"], r["hash"])
+                for r in saved["rows"]
+                if observed[r["client_id"]]["completed"][r["hash"]]
+            )
+        if body.exclude_only_on_client_id:
+            only = body.exclude_only_on_client_id
+            sole_hashes = {
+                h
+                for h in hashes
+                if observed[only]["statuses"][h] != "absent"
+                and all(
+                    observed[cid]["statuses"][h] == "absent" for cid in client_ids if cid != only
+                )
+            }
+            excluded.update(
+                (r["client_id"], r["hash"]) for r in saved["rows"] if r["hash"] in sole_hashes
+            )
+        if body.exclude_selection_id:
+            other_client, other = self.selection(
+                actor, body.exclude_selection_id, kind="select-torrents"
+            )
+            excluded.update((r.get("client_id", other_client), r["hash"]) for r in other["rows"])
+        rows = [
+            r
+            for r in saved["rows"]
+            if (r.get("client_id", client_ids[0]), r["hash"]) not in excluded
+        ]
+        known_zen = [r["zen"] for r in rows if r.get("zen") is not None]
+        return {
+            **saved,
+            "snapshot_at": time.time(),
+            "rows": rows,
+            "selected_count": len(rows),
+            "torrent_instance_count": len(rows),
+            "unique_hash_count": len({r["hash"] for r in rows}),
+            "total_size_bytes": sum(r["size"] for r in rows),
+            "metadata_size_bytes": sum(r["size"] for r in rows),
+            "estimated_zen_per_day": sum(known_zen),
+            "unknown_zen_count": len(rows) - len(known_zen),
+            "requested_count": len(rows),
+            "shortfall": 0,
+            "observations": [
+                {"client_id": cid, "available": True, "observed_at": observed[cid]["observed_at"]}
+                for cid in client_ids
+            ]
+            if observed
+            else saved.get("observations", []),
+            "parent_selection_id": body.source_selection_id,
+            "excluded_count": len(saved["rows"]) - len(rows),
+            "source": "torrent-clients",
         }
 
     def download_folder_options(
@@ -330,6 +702,8 @@ class AgentService:
                 try:
                     self.validate_selection(actor, body)
                     if body.kind == "refine-selection":
+                        if body.client_ids:
+                            return self.refine_clients(actor, body)
                         from torrentlinker.download_queue import entries
                         from torrentlinker.queue_selection import snapshot, validate_snapshot
 
@@ -400,6 +774,10 @@ class AgentService:
                             maximum_torrents=body.batch_torrents,
                         )
                         return result
+                    if body.kind == "select-torrents" and body.client_ids:
+                        return self.select_clients(actor, body, stop, progress)
+                    if body.kind == "manage" and body.client_ids:
+                        return self.manage_clients(actor, body, stop, progress)
                     return target.run(body, stop, progress)
                 except Exception:
                     if body.kind in {"refresh", "select-torrents"}:
@@ -438,19 +816,23 @@ class AgentService:
             if proposal is None:
                 raise ValueError("Selection not found for this connection.")
             body = AgentRequest.model_validate_json(proposal["body"])
-            if (kind is not None and body.kind != kind) or (
+            wrong_kind = (kind is not None and body.kind != kind) or (
                 kind is None
                 and body.kind
                 not in {
+                    "select-torrents",
                     "select-catalogue",
                     "search",
                     "select-queue",
                     "prepare-download-batch",
                     "refine-selection",
                 }
-            ):
+            )
+            if wrong_kind and not (kind == "select-torrents" and body.kind == "refine-selection"):
                 raise ValueError(f"Use a completed {kind or 'selection'} job as the selection_id.")
             self.target(actor, body.client_id)
+            for client_id in body.client_ids:
+                self.target(actor, client_id)
             result = self.jobs.get(identifier)
             if result["status"] != "completed" or not isinstance(result["result"], dict):
                 raise ValueError("Wait for the selection job to complete successfully.")
@@ -459,9 +841,24 @@ class AgentService:
                 kind == "select-torrents" and proposal["fingerprint"] != self.fingerprint()
             ):
                 raise ValueError("Selection expired or settings changed. Select torrents again.")
+            if body.kind == "select-torrents" and "source" not in snapshot:
+                snapshot = {**snapshot, "source": "torrent-clients"}
             return body.client_id, snapshot
 
     def validate_selection(self, actor: str, body: AgentRequest) -> None:
+        if body.kind == "manage" and body.client_ids:
+            _, snapshot = self.selection(actor, body.selection_id)
+            if (
+                snapshot.get("client_ids") != body.client_ids
+                or not snapshot.get("ranking_complete")
+                or snapshot["rows"] != body.selection_rows
+                or body.selection.model_dump() != snapshot["criteria"]
+                or body.hashes != list(dict.fromkeys(r["hash"] for r in body.selection_rows))
+                or len({(r["client_id"], r["hash"]) for r in body.selection_rows})
+                != len(body.selection_rows)
+            ):
+                raise ValueError("The operation does not match a complete saved selection.")
+            return
         if body.kind == "edit-queue-selection" and (
             not body.selection_id or body.selection_source != "queue" or not body.selection_rows
         ):
@@ -469,8 +866,13 @@ class AgentService:
         if body.selection_source != "catalogue" and not body.selection_id:
             raise ValueError("A saved selection ID is required.")
         if body.kind in {"prepare-download-batch", "refine-selection"}:
-            client_id, _ = self.selection(actor, body.source_selection_id, kind=None)
-            if body.client_id != client_id:
+            client_id, saved = self.selection(actor, body.source_selection_id, kind=None)
+            expected_client = (
+                saved["client_ids"][0]
+                if body.kind == "refine-selection" and saved.get("client_ids")
+                else client_id
+            )
+            if body.client_id != expected_client:
                 raise ValueError("The operation must use the saved selection's Torrent Client.")
         if not body.selection_id:
             return
@@ -544,6 +946,29 @@ class AgentService:
                     raise ValueError("This request_id already belongs to a different operation.")
                 return self.proposal(previous["id"])
             client_id, snapshot = self.selection(actor, selection_id)
+            if snapshot.get("client_ids"):
+                if not snapshot.get("ranking_complete"):
+                    raise ValueError("A requested client was unavailable. Select and review again.")
+                if not snapshot["rows"]:
+                    raise ValueError("The saved selection is empty.")
+                return self.request(
+                    actor,
+                    request_id,
+                    AgentRequest.model_validate(
+                        {
+                            "kind": "manage",
+                            "client_id": client_id,
+                            "client_ids": snapshot["client_ids"],
+                            "action": action,
+                            "selection_id": selection_id,
+                            "selection_rows": snapshot["rows"],
+                            "hashes": list(dict.fromkeys(r["hash"] for r in snapshot["rows"])),
+                            "selection": snapshot["criteria"],
+                        }
+                    ),
+                )
+            if not snapshot["rows"]:
+                raise ValueError("The saved selection is empty.")
             return self.request(
                 actor,
                 request_id,
@@ -652,10 +1077,14 @@ class AgentService:
             client_id, saved = self.selection(actor, selection_id, kind=None)
             values = {
                 "kind": kind,
-                "client_id": client_id,
+                "client_id": saved["client_ids"][0]
+                if kind == "refine-selection" and saved.get("client_ids")
+                else client_id,
                 reference_field: selection_id,
                 **parameters,
             }
+            if kind == "refine-selection" and saved.get("client_ids"):
+                values["client_ids"] = saved["client_ids"]
             if kind == "edit-queue-selection":
                 if saved["source"] != "queue" or not saved["rows"]:
                     raise ValueError("Select a nonempty queue selection first.")
@@ -688,6 +1117,17 @@ class AgentService:
     ) -> None:
         # Further checks run before submission, under the same reservation lock.
         if body.kind == "manage" and body.action == "resume":
+            if body.client_ids:
+                for row in body.selection_rows:
+                    torrent = (
+                        self.target(actor, row["client_id"]).setup.client().torrent(row["hash"])
+                    )
+                    if torrent is None or torrent.progress < 1:
+                        raise ValueError(
+                            "Resume incomplete downloads in TorrentLinker; MCP controls only "
+                            "resume completed torrents, to respect download budgets."
+                        )
+                return
             torrents = [target.setup.client().torrent(h) for h in body.hashes]
             if any(t is None or t.progress < 1 for t in torrents):
                 raise ValueError(
@@ -719,6 +1159,53 @@ class AgentService:
                 raise ValueError("Proposal not found.")
             body = AgentRequest.model_validate_json(row["body"])
             target = self.target(row["grant_id"], body.client_id)
+        if body.kind == "manage" and body.client_ids:
+            groups = []
+            for client_id in body.client_ids:
+                scoped = self.target(row["grant_id"], client_id)
+                selected = [r for r in body.selection_rows if r["client_id"] == client_id]
+                live = (
+                    {t.hash.lower(): t for t in scoped.setup.client().torrents(with_files=False)}
+                    if body.action in {"remove", "delete"}
+                    else {}
+                )
+                if body.action in {"remove", "delete"} and any(
+                    r["hash"] not in live for r in selected
+                ):
+                    raise ValueError("A selected torrent no longer exists. Review the selection.")
+                groups.append(
+                    {
+                        "client_id": client_id,
+                        "client": scoped.setup.settings.profile().name,
+                        "torrent_instance_count": len(selected),
+                        "metadata_size_bytes": sum(r["size"] for r in selected),
+                        "targets": [
+                            {
+                                "hash": r["hash"],
+                                "name": live[r["hash"]].name if live else r["name"],
+                                "folder": str(live[r["hash"]].save_path)
+                                if live
+                                else r.get("folder", ""),
+                            }
+                            for r in selected
+                        ],
+                    }
+                )
+            return {
+                "operation": body.model_dump(),
+                "action": body.action,
+                "groups": groups,
+                "torrent_instance_count": len(body.selection_rows),
+                "unique_hash_count": len({r["hash"] for r in body.selection_rows}),
+                "warning": (
+                    "Delete torrents and their files on each named Torrent Client? "
+                    "Other torrents may share these files."
+                    if body.action == "delete"
+                    else "Remove keeps files; pause keeps files and frees no disk space."
+                    if body.action == "remove"
+                    else "Review each named Torrent Client and target before approval."
+                ),
+            }
         if body.kind == "manage" and body.action in {"remove", "delete"}:
             preview = Confirmations(target.setup).preview(body)
             preview.pop("token")
@@ -726,7 +1213,7 @@ class AgentService:
             preview["client"] = target.setup.settings.profile().name
             return preview
         if body.kind == "configure-download-folder":
-            details = {
+            details: dict[str, Any] = {
                 "kind": body.kind,
                 "client": target.setup.settings.profile().name,
                 "client_id": body.client_id,
@@ -809,6 +1296,42 @@ class AgentService:
 
     def overview(self, actor: str) -> dict[str, Any]:
         grant = self.access.grant(actor)
+        clients = []
+        for profile in self.setup.settings.client_profiles:
+            if profile.id not in grant.clients:
+                continue
+            details = {
+                "id": profile.id,
+                "name": profile.name,
+                "type": profile.client,
+                "enabled": profile.enabled,
+            }
+            if not profile.enabled:
+                details["connection"] = {"available": False, "reason": "disabled"}
+            else:
+                target = self.target(actor, profile.id)
+                capabilities = {
+                    "read_torrents": target.setup.configured,
+                    "manage": target.setup.configured and "controls" in grant.permissions,
+                }
+                details["capabilities"] = capabilities
+                try:
+                    client = target.setup.client()
+                    capabilities["category_tags"] = bool(
+                        getattr(client, "supports_category_tags", False)
+                    )
+                    count = len(client.torrents(with_files=False))
+                    details["connection"] = {
+                        "available": True,
+                        "observed_at": time.time(),
+                        "torrent_instance_count": count,
+                    }
+                except Exception:
+                    details["connection"] = {
+                        "available": False,
+                        "error": "Torrent Client unavailable.",
+                    }
+            clients.append(details)
         return {
             "mode": grant.mode,
             "permissions": grant.permissions,
@@ -817,11 +1340,7 @@ class AgentService:
                 "daily_torrents": grant.daily_torrents,
                 "reserve_bytes": grant.reserve_bytes,
             },
-            "clients": [
-                {"id": p.id, "name": p.name, "type": p.client, "enabled": p.enabled}
-                for p in self.setup.settings.client_profiles
-                if p.id in grant.clients
-            ],
+            "clients": clients,
             "zen_profile": asdict(self.setup.settings.zen),
             "estimates_are_provisional": True,
             "publication": "Review and publish Upload Drafts on c411.",

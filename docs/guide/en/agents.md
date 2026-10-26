@@ -71,7 +71,16 @@ Other rankings are `largest_size`, `smallest_size`, `highest_note`,
 `lowest_zen_per_gib` and `highest_zen_per_gib`. Use `query` for a title substring and
 `min_size_bytes`/`max_size_bytes` for a size range. A category includes descendants;
 an empty category selects all categories. The optional `tracker` filter takes a hostname,
-such as `c411.org`, and groups its known mirror `tk.c411.tw`. Each selection targets one client.
+such as `c411.org`, and groups its known mirror `tk.c411.tw`. The count limit is 10,000.
+
+For several authorized clients, pass `client_ids`. With `count_scope: "global"`, `count: 200`
+selects 200 torrent instances across them in one ranking. With `count_scope: "per_client"`,
+it selects up to 200 on each client. A hash present on two clients is two instances. An
+unavailable client makes the global ranking incomplete; its torrents are never treated as
+absent. `compare_clients` and `refine_selection` can exclude torrents present only on one
+client without copying hashes through the assistant. Comparison returns full-set counts by
+client and pages the hash details with `offset`/`limit`. Save the exact result in a torrent list
+with `client_id: "all"`; list edits use the current revision and can narrow by `client_ids`.
 
 After review, call `manage_selection` with the returned `selection_id`, a new stable
 `request_id`, and an explicit `action`: `pause`, `resume`, `recheck`, `remove` or `delete`.
@@ -80,8 +89,9 @@ Normal permissions and approvals apply, including mandatory approval for removal
 The action job reports counts per outcome as well as individual results.
 
 Selections expire after 15 minutes or a settings change. Before acting, TorrentLinker refreshes
-the list again. If the ranking selects different torrents, the action fails before changing
-anything; create and review a new selection. Failed refreshes never reuse old cached data.
+the list again. Changed targets are rejected or skipped without substituting newly matching
+torrents. Failed refreshes never reuse old cached data. An uncertain client response needs
+reconciliation before retrying that target.
 
 Pausing keeps files and frees **no disk space**. Total size may count shared files more than
 once. The Zen total is the selected torrents' current estimate, not an exact prediction of the

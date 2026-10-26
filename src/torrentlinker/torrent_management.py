@@ -84,6 +84,19 @@ def status(torrent: Torrent) -> str:
     return "other"
 
 
+def comparison_status(torrent: Torrent | None) -> str:
+    """Classify an exact client instance for read-only cross-client comparison."""
+    if torrent is None:
+        return "absent"
+    if torrent.progress < 1:
+        return "incomplete"
+    if torrent.state.casefold().startswith(("paused", "stopped")):
+        return "completed_paused"
+    if torrent.state.casefold() in {"uploading", "stalledup", "forcedup", "seeding"}:
+        return "actively_seeding"
+    return "completed_other"
+
+
 def safe_error(error: Exception) -> str:
     # HTTP exceptions often include a full request URL, including private announce keys.
     return re.sub(r"(?:https?|udp|wss?)://[^\s<>\"']+", "[URL]", str(error)) or type(error).__name__

@@ -31,6 +31,38 @@ def queued_event():
     }
 
 
+def test_grouped_destructive_summary_shows_clients_targets_folders_and_warning():
+    event = {
+        "tool": "manage_selection",
+        "review": {
+            "operation": {"kind": "manage", "action": "delete"},
+            "torrent_instance_count": 2,
+            "groups": [
+                {
+                    "client": "NAS",
+                    "client_id": "nas",
+                    "torrent_instance_count": 1,
+                    "metadata_size_bytes": 1024,
+                    "targets": [{"name": "Shared film", "hash": "a" * 40, "folder": "/srv/media"}],
+                },
+                {
+                    "client": "Seedbox",
+                    "client_id": "seedbox",
+                    "torrent_instance_count": 1,
+                    "metadata_size_bytes": 1024,
+                    "targets": [{"name": "Shared film", "hash": "a" * 40, "folder": "/data/media"}],
+                },
+            ],
+            "warning": "Other torrents may share these files.",
+        },
+    }
+    summary = "\n".join(request_summary(event))
+    assert "Delete 2" in summary
+    assert "NAS" in summary and "Seedbox" in summary
+    assert "/srv/media" in summary and "/data/media" in summary
+    assert "Other torrents may share these files" in summary
+
+
 def test_large_approval_stays_compact_and_full_command_survives_refresh(qtbot):
     widget = ChatTranscript()
     qtbot.addWidget(widget)

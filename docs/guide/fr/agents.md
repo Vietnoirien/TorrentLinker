@@ -74,7 +74,14 @@ Les autres classements sont `largest_size`, `smallest_size`, `highest_note`,
 `min_size_bytes` et `max_size_bytes` délimitent la taille. Une catégorie inclut ses
 sous-catégories ; une catégorie vide inclut toutes les catégories. Le filtre facultatif
 `tracker` prend un nom d'hôte, par exemple `c411.org`, et regroupe son miroir connu `tk.c411.tw`.
-Une sélection concerne un seul client.
+La limite est de 10 000 instances. Pour plusieurs clients autorisés, utilisez `client_ids`.
+Avec `count_scope: "global"`, `count: 200` sélectionne 200 instances au total ; avec
+`count_scope: "per_client"`, jusqu'à 200 par client. Un même hash sur deux clients compte
+pour deux instances. Un client indisponible rend le classement global incomplet. Les outils
+`compare_clients` et `refine_selection` permettent d'exclure les torrents présents seulement
+sur un client. La comparaison donne les totaux complets par client et pagine les détails avec
+`offset`/`limit`. Une liste durable multi-client utilise `client_id: "all"` et des révisions pour
+les modifications ; le filtre `client_ids` permet de restreindre une liste.
 
 Après examen, appelez `manage_selection` avec le `selection_id` obtenu, un nouveau `request_id`
 stable et une action explicite : `pause`, `resume`, `recheck`, `remove` ou `delete`. Le serveur
@@ -84,8 +91,9 @@ toujours votre confirmation. Le résultat donne le nombre d'actions réussies, i
 ainsi que le détail par torrent.
 
 Une sélection expire après 15 minutes ou une modification des paramètres. Avant d'agir,
-TorrentLinker actualise à nouveau la liste. Si le classement sélectionne d'autres torrents,
-l'action échoue avant toute modification : il faut refaire et examiner la sélection.
+TorrentLinker actualise à nouveau la liste. Une cible modifiée est ignorée ou rejetée, sans
+être remplacée par un autre torrent. Une réponse incertaine du client nécessite une
+vérification avant réessai.
 Un échec d'actualisation ne réutilise jamais les anciennes données en cache.
 
 Mettre en pause conserve les fichiers et ne libère **aucun espace disque**. La taille totale peut
