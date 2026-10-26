@@ -183,6 +183,12 @@ class Uploads:
         )
         preview["presentation"] = completeness
         preview["file_facts"] = evidence
+        extraction = evidence.get("artwork_extraction", {})
+        if extraction.get("remaining") or extraction.get("error_count"):
+            preview["warnings"].append(
+                f"Artwork extraction: {extraction.get('remaining', 0)} candidates deferred, "
+                f"{extraction.get('error_count', 0)} unreadable. See file_facts.artwork_extraction."
+            )
         preview["refusals"].extend(
             f"{f['field']}: {f['message']}" for f in completeness["missing_fields"]
         )

@@ -252,3 +252,79 @@ def test_send_readiness_requires_the_hosted_image_form_field():
     assert result["local_review_ready"] is True
     assert result["send_ready"] is False
     assert any(row["field"] == "image" for row in result["send_missing_fields"])
+
+
+@pytest.mark.parametrize(
+    "field,label",
+    [("tracklist", "Tracklist"), ("contents", "Contents"), ("installation", "Installation")],
+)
+def test_multiline_field_edit_preserves_following_editorial_sections(field, label):
+    from torrentlinker.upload_presentation import update_fields
+
+    text = f"[b]{label} :[/b] 01. Old (02:00)\n[h3]Notes[/h3]\nOwner editorial text to preserve"
+    changed = update_fields(text, {field: "Replacement"})
+    assert "[h3]Notes[/h3]\nOwner editorial text to preserve" in changed
+    assert "Old" not in changed
+
+
+def test_original_nfo_conflicts_with_extracted_codec_duration_and_counts_without_rewriting():
+    from torrentlinker.upload_presentation import update_fields
+
+    form = complete_form(3, 18)
+    form["description"] = update_fields(
+        form["description"],
+        {
+            "codec": "FLAC",
+            "duration": "01:00",
+            "tracks": "2",
+        },
+    )
+    form["nfo"] = update_fields(
+        form["nfo"],
+        {
+            "codec": "MP3",
+            "duration": "02:00",
+            "files": "9",
+            "tracks": "3",
+        },
+        bbcode=False,
+    )
+    form["nfo_origin"] = "original"
+    original = form["nfo"]
+    evidence = {
+        "file_count": 1,
+        "fields": {
+            key: {"value": value, "kind": "extracted"}
+            for key, value in {
+                "codec": "FLAC",
+                "duration": "01:00",
+                "files": "1",
+                "tracks": "2",
+            }.items()
+        },
+    }
+    check = assess(form, evidence, local=True)
+    fields = {entry["field"] for entry in check["missing_fields"]}
+    assert {"nfo.codec", "nfo.duration", "nfo.files", "nfo.tracks"} <= fields
+    assert check["local_review_ready"] is False
+    assert form["nfo"] == original
+
+
+def test_nfo_duration_rounding_and_codec_aliases_are_not_false_conflicts():
+    from torrentlinker.upload_presentation import update_fields
+
+    form = complete_form(1, 6)
+    form["nfo"] = update_fields(
+        form["nfo"], {"duration": "1 h 30 min", "video_codec": "AVC"}, bbcode=False
+    )
+    evidence = {
+        "file_count": 1,
+        "fields": {
+            "duration": {"value": "1:30:28"},
+            "video_codec": {"value": "H.264"},
+        },
+    }
+    check = assess(form, evidence)
+    assert not {"nfo.duration", "nfo.video_codec"} & {
+        entry["field"] for entry in check["missing_fields"]
+    }

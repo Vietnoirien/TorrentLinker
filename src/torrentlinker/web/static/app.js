@@ -1350,6 +1350,39 @@ async function previewUpload() {
     },
   );
 }
+function uploadCameraControls(preset) {
+  const details = element("details"), fields = new Map();
+  details.append(element("summary", say("Advanced camera", "Caméra avancée")));
+  const initial = {yaw: 45, pitch: 55, roll: 0, zoom: 1, center_x: 0, center_y: 0};
+  const specs = [
+    ["yaw", say("Yaw (degrees)", "Azimut (degrés)"), null, null, 1],
+    ["pitch", say("Polar pitch (degrees)", "Angle polaire (degrés)"), null, null, 1],
+    ["roll", say("Roll (degrees)", "Roulis (degrés)"), null, null, 1],
+    ["zoom", say("Zoom (larger means closer)", "Zoom (plus grand signifie plus près)"), 0.1, 10, 0.1],
+    ["center_x", say("Horizontal framing", "Cadrage horizontal"), -0.8, 0.8, 0.05],
+    ["center_y", say("Vertical framing", "Cadrage vertical"), -0.8, 0.8, 0.05],
+  ];
+  for (const [field, text, min, max, step] of specs) {
+    const label = element("label"), input = element("input");
+    input.type = "number"; input.value = initial[field]; input.step = step;
+    input.required = true; input.dataset.cameraField = field;
+    if (min !== null) input.min = min;
+    if (max !== null) input.max = max;
+    if (["yaw", "pitch", "roll"].includes(field)) input.addEventListener("input", () => { preset.value = "custom"; });
+    label.append(element("span", text), input); details.append(label); fields.set(field, input);
+  }
+  const presets = {isometric: [45, 55, 0], front: [0, 90, 0], back: [180, 90, 0],
+    left: [-90, 90, 0], right: [90, 90, 0], top: [0, 0, 0], bottom: [0, 180, 0]};
+  preset.addEventListener("change", () => {
+    const angles = presets[preset.value];
+    if (angles) ["yaw", "pitch", "roll"].forEach((field, index) => { fields.get(field).value = angles[index]; });
+  });
+  return {element: details, read: () => Object.fromEntries([...fields].map(([field, input]) => {
+    if (!input.checkValidity() || input.value === "" || !Number.isFinite(Number(input.value)))
+      throw Error(say("Invalid camera value: ", "Valeur de caméra incorrecte : ") + field);
+    return [field, Number(input.value)];
+  }))};
+}
 function uploadModelTools() {
   const box = element("div", undefined, "card"); box.id = "upload-model-tools";
   const path = state.uploadPath, client = state.clientId;
@@ -1377,10 +1410,11 @@ function uploadModelTools() {
     for (const model of result.models) {
       const row = element("div"), check = element("input"); check.type = "checkbox"; check.checked = model.previewable;
       const preset = element("select");
-      for (const name of ["isometric", "front", "back", "left", "right", "top", "bottom"]) preset.append(new Option(name, name));
-      choices.push({file: model.file, check, preset});
-      row.append(check, element("span", model.file), preset, button(say("Preview", "Aperçu"), () => job({
-        kind: "model-render", path, model_files: [model.file], model_cameras: {[model.file]: {preset: preset.value}}
+      for (const name of ["isometric", "front", "back", "left", "right", "top", "bottom", "custom"]) preset.append(new Option(name, name));
+      const camera = uploadCameraControls(preset);
+      choices.push({file: model.file, check, camera});
+      row.append(check, element("span", model.file), preset, camera.element, button(say("Preview", "Aperçu"), () => job({
+        kind: "model-render", path, model_files: [model.file], model_cameras: {[model.file]: camera.read()}
       }, show)));
       inventory.append(row);
     }
@@ -1388,7 +1422,7 @@ function uploadModelTools() {
     const selected = choices.filter(choice => choice.check.checked);
     if (!selected.length) throw Error(say("Select inspected pieces first.", "Sélectionnez d’abord les pièces inspectées."));
     return job({kind: "model-render", path, model_files: selected.map(choice => choice.file),
-      model_cameras: Object.fromEntries(selected.map(choice => [choice.file, {preset: choice.preset.value}]))}, show);
+      model_cameras: Object.fromEntries(selected.map(choice => [choice.file, choice.camera.read()]))}, show);
   }), output);
   $("upload-result").before(box);
 }

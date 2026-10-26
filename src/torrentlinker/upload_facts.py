@@ -226,7 +226,11 @@ def prepare_presentation(
     evidence = collect(request)
     attached = list(form.get("assets", []))
     if not attached:
-        attached = [asset["asset_id"] for asset in assets.extract(request, evidence)]
+        extraction = assets.extract(request, evidence)
+        attached = [asset["asset_id"] for asset in extraction["assets"]]
+        evidence["artwork_extraction"] = {
+            key: value for key, value in extraction.items() if key != "assets"
+        }
     selected_pieces, covered_pieces = set(), set()
 
     def local_name(value):

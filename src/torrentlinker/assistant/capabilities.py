@@ -8,6 +8,8 @@ import struct
 import time
 import zlib
 
+from torrentlinker.assistant.providers import InvalidModelResponse
+
 
 def probe_image():
     """Random stripe order, with no answer in the bytes or prompt metadata."""
@@ -72,6 +74,12 @@ def assess(models, provider, key):
                 "status": "passed" if ok else "failed",
                 "reason": reason,
                 "failure_kind": None if ok else "model_behavior",
+            }
+        except InvalidModelResponse as error:
+            checks[name] = {
+                "status": "failed",
+                "reason": str(error)[:400],
+                "failure_kind": "model_behavior",
             }
         except (ValueError, KeyError, TypeError, IndexError) as error:
             checks[name] = {

@@ -2,8 +2,8 @@
 
 c411's image upload refuses an API key, so the app renders the model itself and saves a
 PNG the user adds on c411's upload page while reviewing the Draft. The live view is a
-QtQuick3D scene in a widget; captures render the same scene offscreen at a size of their
-own. Files are parsed and decimated off the GUI thread (torrentlinker.mesh).
+QtQuick3D scene in a widget. Captures use the shared CPU worker with the same camera
+basis, perspective distance and view framing. Source geometry is never modified.
 """
 
 from __future__ import annotations
@@ -457,7 +457,15 @@ class ModelPanel(QWidget):
 
         if self._shown_path is not None and self.viewer.display is not None:
             yaw, pitch, zoom = self.viewer.view_state()
-            self.cameras[self._shown_path] = Camera(yaw=yaw, pitch=90 - pitch, zoom=zoom)
+            root = self.viewer.root
+            if root is not None:
+                self.cameras[self._shown_path] = Camera.from_viewer(
+                    yaw,
+                    pitch,
+                    zoom,
+                    float(root.property("baseDistance")),
+                    max(root.width(), 1) / max(root.height(), 1),
+                )
 
     def _model_chosen(self) -> None:
         self._remember_camera()
@@ -483,7 +491,7 @@ class ModelPanel(QWidget):
         if state is not None and self.viewer.root is not None:
             self.viewer.root.setProperty("yaw", state.yaw)
             self.viewer.root.setProperty("pitch", 90 - state.pitch)
-            self.viewer.root.setProperty("zoom", state.zoom)
+            self.viewer.root.setProperty("zoom", 1 / state.zoom)
         if display.shown < display.triangles:
             self._say(
                 self.tr("Shown with {0} of its {1} triangles.").format(

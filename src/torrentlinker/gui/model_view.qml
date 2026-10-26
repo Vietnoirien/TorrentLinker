@@ -1,6 +1,6 @@
 // The Upload tab's 3D view: one model, an orbiting camera, neutral light, a plain
-// background. The widget (live) and the offscreen renderer (captures) load this same scene,
-// and set its properties from Python.
+// background. The interactive widget and optional OpenGL preview use this scene.
+// Saved captures use the shared CPU renderer with the same Y-up camera transform.
 import QtQuick
 import QtQuick3D
 

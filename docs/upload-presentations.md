@@ -7,25 +7,32 @@ changing either invalidates them. A failed probe leaves chat and drafting availa
 Context discovery reports server/provider metadata, not a verified usable limit.
 
 Upload preparation returns structured file facts and copies extracted technical fields
-into the description and generated NFO. Original NFOs are preserved. Unknown rip source
+into the description and generated NFO. Original NFOs are preserved; recognized codec,
+duration and file/track count contradictions block a finished presentation with the
+conflicting values identified. Unknown rip source
 stays unknown. Research and owner-supplied fields can carry separate provenance through
 `update_upload_fields`. This tool edits an exact saved revision and preserves unrelated
 form values. Incomplete work remains saveable.
 
 Presentation Images are private immutable assets in application data. EPUB and audio
 covers, local artwork, explicitly imported public images and generated model renders
-can be attached by ID. Asset access is scoped to the Local Item; IDs cannot select
+can be attached by ID. Automatic extraction copies at most 12 images and 24 MB,
+attempts at most 48 candidates, and reports invalid or deferred artwork in the file
+facts and preparation warnings. Asset access is scoped to the Local Item; IDs cannot select
 arbitrary paths. Saved cards retain the captured images and camera metadata when later
 revisions change. Local artwork satisfies local review, while sending still requires
 a public hosted image. TorrentLinker does not automatically publish images.
 
 The shared 3D tools are `inspect_3d_models`, `render_3d_preview`,
 `create_3d_contact_sheet` and `attach_upload_assets`. The web Upload editor also exposes
-inspection, per-piece presets and sheet capture. Desktop captures use the same CPU
+inspection, per-piece presets, custom angles/roll/zoom/framing and sheet capture.
+Desktop captures use the same CPU
 renderer. Inspection preserves folders, scale/support variants and assembled-name hints;
 filenames never prove that a mesh is assembled. Geometry reports bounds and triangle
 counts, without inferring physical units. Large binary STL bounds are deferred until
-a successful render to keep inventory inspection bounded. `read_upload_asset` returns
+a successful render to keep inventory inspection bounded. Inventory retains every
+file, inspecting geometry for the first 108 and explicitly deferring later pieces
+until selected in another batch. `read_upload_asset` returns
 native MCP pixels together with the saved camera/artifact metadata.
 
 Rendering runs in a disposable process with cancellation and a 120-second deadline.
@@ -38,7 +45,10 @@ is explicitly reported as unsupported for that attempt. Pillow
 and NumPy support the same renderer without Qt or a GPU on headless servers.
 
 Camera state includes yaw, pitch, roll, zoom and framing offsets. Each render asset
-records its exact camera and geometry bounds. Only a model that passed both image
+records its exact camera and geometry bounds. Desktop captures normalize orbit angles
+and retain the live perspective distance and aspect ratio; tool/web zoom increases
+magnification. Cardinal cameras follow the same Z-up source basis as the desktop
+viewer. Only a model that passed both image
 probes receives rendered pixels for visual review. Other models use presets and ask
 the user to confirm the images. A setup probe is evidence about that connection, not
 a guarantee of every subsequent visual judgement.

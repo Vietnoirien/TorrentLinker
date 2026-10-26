@@ -119,3 +119,30 @@ def test_image_context_counts_pixels_as_images_not_base64_prose():
         }
     ]
     assert 5000 < message_size(messages) < 10000
+
+
+def test_malformed_model_tool_arguments_fail_behavior_not_adapter():
+    from torrentlinker.assistant.capabilities import assess
+
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "bad",
+                            "type": "function",
+                            "function": {"name": "assessment_probe", "arguments": "{bad"},
+                        }
+                    ],
+                }
+            }
+        ]
+    }
+    models = Models(httpx.MockTransport(lambda request: httpx.Response(200, json=response)))
+    provider = Provider(name="bad json", kind="compatible", url="http://localhost/v1", model="test")
+    result = assess(models, provider, "")
+    assert result["checks"]["structured_arguments"]["status"] == "failed"
+    assert result["checks"]["structured_arguments"]["failure_kind"] == "model_behavior"

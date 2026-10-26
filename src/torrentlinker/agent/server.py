@@ -281,7 +281,7 @@ def make_server(service: AgentService):
         """Render one inspected piece in an isolated CPU worker; source geometry is read only.
 
         camera accepts preset isometric/front/back/left/right/top/bottom, custom yaw,
-        pitch, roll in degrees, zoom 0.2–5 and center_x/center_y framing -0.8–0.8.
+        pitch, roll in degrees, zoom 0.1–10 and center_x/center_y framing -0.8–0.8.
         job_status returns actual image pixels, immutable asset IDs and reproducible camera.
         Render candidate orientations and inspect pixels before claiming visual review.
         """

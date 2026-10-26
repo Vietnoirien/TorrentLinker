@@ -223,3 +223,47 @@ def test_the_folder_opens_even_before_any_capture(qtbot, tmp_path: Path, monkeyp
 
     assert opened == [str(tmp_path / "uploads" / TITLE)]
     assert (tmp_path / "uploads" / TITLE).is_dir()
+
+
+@pytest.mark.parametrize("yaw,zoom", [(1125, 0.15), (-1125, 6.0)])
+def test_capture_preserves_valid_extreme_viewer_camera_state(qtbot, tmp_path, yaw, zoom):
+    import json
+
+    folder = library(tmp_path, "Boite.stl")
+    view = panel(qtbot, tmp_path)
+    view.set_item(scan_item(folder / "Boite.stl"))
+    loaded(qtbot, view)
+    root = view.viewer.root
+    assert root is not None
+    root.setProperty("yaw", yaw)
+    root.setProperty("pitch", 20.0)
+    root.setProperty("zoom", zoom)
+    base_distance = float(root.property("baseDistance"))
+    saved = []
+    view.saved.connect(saved.append)
+    view.capture()
+    qtbot.waitUntil(lambda: bool(saved), timeout=20000)
+    metadata = json.loads(saved[0].with_suffix(".json").read_text())
+    camera = metadata["pieces"][0]["camera"]
+    assert camera["yaw"] == (yaw + 180) % 360 - 180
+    assert camera["pitch"] == 70
+    assert camera["zoom"] == pytest.approx(1 / zoom)
+    assert camera["distance"] == pytest.approx(base_distance * zoom)
+    assert not QImage(str(saved[0])).isNull()
+
+
+def test_shared_camera_basis_matches_qml_orbit_of_y_up_display_geometry():
+    import numpy as np
+    from PySide6.QtGui import QQuaternion, QVector3D
+
+    from torrentlinker.model_rendering import Camera
+
+    raw = np.array([1.0, 2.0, 3.0])
+    display_point = QVector3D(1, 3, -2)  # mesh.display_buffer's Z-up -> Y-up mapping.
+    for yaw, elevation in ((45, 20), (123, -37), (-90, 0)):
+        qml_camera = QQuaternion.fromEulerAngles(-elevation, yaw, 0)
+        expected = qml_camera.conjugated().rotatedVector(display_point)
+        camera = Camera(yaw=yaw, pitch=90 - elevation)
+        np.testing.assert_allclose(
+            camera.view_basis() @ raw, [expected.x(), expected.y(), expected.z()], atol=1e-5
+        )

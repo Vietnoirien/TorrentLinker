@@ -310,6 +310,69 @@ def requirements(category: int, subcategory: int = 0, description: str = "") -> 
     }
 
 
+def _duration_ranges(value: str):
+    ranges: list[tuple[float, float]] = []
+    for part in value.split(";"):
+        clock = re.search(r"\b(?:(\d+):)?(\d{1,3}):(\d{2})\b", part)
+        if clock:
+            seconds = int(clock[1] or 0) * 3600 + int(clock[2]) * 60 + int(clock[3])
+            ranges.append((seconds - 1, seconds + 1))
+            continue
+        units = re.findall(
+            r"(\d+(?:[.,]\d+)?)\s*(hours?|heures?|h|min(?:utes?)?|m|milliseconds?|ms|"
+            r"seconds?|secondes?|secs?|s)\b",
+            part,
+            re.I,
+        )
+        if not units:
+            return None
+        factors = [
+            3600
+            if unit.lower().startswith("h")
+            else 0.001
+            if unit.lower().startswith(("ms", "millisecond"))
+            else 60
+            if unit.lower().startswith("m")
+            else 1
+            for _, unit in units
+        ]
+        seconds_total = sum(
+            float(number.replace(",", ".")) * factor
+            for (number, _), factor in zip(units, factors, strict=True)
+        )
+        ranges.append((seconds_total, seconds_total + min(factors)))
+    return ranges
+
+
+def _fact_agrees(key: str, left: str, right: str) -> bool | None:
+    """Compare only recognized, unambiguous technical facts; unknown syntax proves nothing."""
+    if key in {"files", "tracks"}:
+        pattern = r"^\s*(\d+)(?:\s*(?:files?|fichiers?|tracks?|pistes?))?\s*$"
+        a, b = re.fullmatch(pattern, left, re.I), re.fullmatch(pattern, right, re.I)
+        return int(a[1]) == int(b[1]) if a and b else None
+    if key == "duration":
+        a_ranges, b_ranges = _duration_ranges(left), _duration_ranges(right)
+        if not a_ranges or not b_ranges:
+            return None
+        return len(a_ranges) == len(b_ranges) and all(
+            max(a[0], b[0]) <= min(a[1], b[1]) for a, b in zip(a_ranges, b_ranges, strict=True)
+        )
+    if key in {"codec", "video_codec", "audio_codec"}:
+        aliases = {"avc": "h264", "x264": "h264", "hevc": "h265", "x265": "h265"}
+        pattern = (
+            r"h264|x264|avc|h265|x265|hevc|av1|xvid|mpeg[24]|eac3|ac3|dts|truehd|lpcm|"
+            r"flac|alac|aac|mp3|wav|ogg|wma"
+        )
+
+        def codecs(value):
+            cleaned = re.sub(r"[^a-z0-9]", "", value.casefold())
+            return {aliases.get(match, match) for match in re.findall(pattern, cleaned)}
+
+        a_codecs, b_codecs = codecs(left), codecs(right)
+        return a_codecs == b_codecs if a_codecs and b_codecs else None
+    return None
+
+
 def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> dict[str, Any]:
     """Recompute from content every time; never accept a saved 'reviewed' flag as evidence."""
     missing: list[dict[str, str]] = []
@@ -331,6 +394,24 @@ def assess(form: dict, evidence: dict | None = None, *, local: bool = False) -> 
     nfo_values = _values(nfo)
     if category == 1:
         nfo_values.update(media_nfo_values(nfo))
+    expected = dict(values)
+    if evidence:
+        expected.update(
+            {
+                key: str(fact.get("extracted_value", fact.get("value", "")))
+                for key, fact in evidence.get("fields", {}).items()
+            }
+        )
+        if "file_count" in evidence:
+            expected["files"] = str(evidence["file_count"])
+    for key in ("codec", "video_codec", "audio_codec", "duration", "files", "tracks"):
+        declared, observed = nfo_values.get(key), expected.get(key)
+        if declared and observed and _fact_agrees(key, declared, observed) is False:
+            add(
+                f"nfo.{key}",
+                f"NFO conflict: {declared!r}; file facts/presentation require "
+                f"{observed!r}. Preserve the original NFO and obtain one for these exact files.",
+            )
     # Preserve original NFOs. A release header can supply the title; the remaining
     # facts use stable labels or recognized original MediaInfo sections.
     if _filled(form.get("title") or "") and form["title"] in nfo:
@@ -608,7 +689,8 @@ def update_fields(text: str, fields: dict[str, str], *, bbcode: bool = True) -> 
                 for label in (field, label, *aliases.split("|"))
                 if label
             )
-            pattern += rf"(?:\n(?!(?:\[b])?(?:{all_labels})[ \t.]*:)[^\n]*)*"
+            boundary = rf"[ \t]*(?:$|\[(?:h[1-6]|/?spoiler)\b|(?:\[b])?(?:{all_labels})[ \t.]*:)"
+            pattern += rf"(?:\n(?!{boundary})[^\n]*)*"
         if re.search(pattern, text, re.I | re.M):
 
             def replace_line(match: re.Match[str], value: str = replacement) -> str:

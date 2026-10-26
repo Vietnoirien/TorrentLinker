@@ -21,8 +21,8 @@ PRESETS = {
     "isometric": (45.0, 55.0, 0.0),
     "front": (0.0, 90.0, 0.0),
     "back": (180.0, 90.0, 0.0),
-    "left": (90.0, 90.0, 0.0),
-    "right": (-90.0, 90.0, 0.0),
+    "left": (-90.0, 90.0, 0.0),
+    "right": (90.0, 90.0, 0.0),
     "top": (0.0, 0.0, 0.0),
     "bottom": (0.0, 180.0, 0.0),
 }
@@ -37,14 +37,41 @@ class Camera:
     zoom: float = 1.0
     center_x: float = 0.0
     center_y: float = 0.0
+    distance: float = 0.0  # Positive for a captured perspective camera, zero for auto-framed ortho.
+    aspect: float = 1.0
 
     def __post_init__(self):
         if not all(math.isfinite(v) for v in asdict(self).values()):
             raise ValueError("Camera values must be finite.")
-        if not 0.2 <= self.zoom <= 5 or max(abs(self.center_x), abs(self.center_y)) > 0.8:
-            raise ValueError("Use zoom 0.2–5 and framing offsets between -0.8 and 0.8.")
-        if max(abs(self.yaw), abs(self.pitch), abs(self.roll)) > 360:
-            raise ValueError("Camera angles must be between -360 and 360 degrees.")
+        if not 0.1 <= self.zoom <= 10 or max(abs(self.center_x), abs(self.center_y)) > 0.8:
+            raise ValueError("Use zoom 0.1–10 and framing offsets between -0.8 and 0.8.")
+        if self.distance < 0 or not 0.01 <= self.aspect <= 100:
+            raise ValueError("Camera distance must be nonnegative and aspect between 0.01 and 100.")
+        for field in ("yaw", "pitch", "roll"):
+            object.__setattr__(self, field, (getattr(self, field) + 180) % 360 - 180)
+
+    def view_basis(self):
+        """Right, up and toward-camera vectors in raw Z-up coordinates.
+
+        QML displays [x,z,-y], then orbits its Y-up camera with yaw and elevation.
+        This basis applies that same view transform without rotating source geometry.
+        """
+        yaw, polar, roll = map(math.radians, (self.yaw, self.pitch, self.roll))
+        cy, sy, cp, sp = math.cos(yaw), math.sin(yaw), math.cos(polar), math.sin(polar)
+        basis = np.array([[cy, sy, 0], [-cp * sy, cp * cy, sp], [sp * sy, -sp * cy, cp]])
+        cr, sr = math.cos(roll), math.sin(roll)
+        return np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]]) @ basis
+
+    @classmethod
+    def from_viewer(cls, yaw, elevation, distance_zoom, base_distance, aspect):
+        """Keep the live QML perspective distance and invert its distance zoom."""
+        return cls(
+            yaw=yaw,
+            pitch=90 - elevation,
+            zoom=1 / distance_zoom,
+            distance=base_distance * distance_zoom,
+            aspect=aspect,
+        )
 
     @classmethod
     def preset(cls, name="isometric", **changes):
@@ -58,6 +85,7 @@ def inspect_models(paths, stop=None, progress=None):
     """Inventory preserves every file and folder variant; names supply hints only."""
     import re
 
+    paths = list(paths)
     rows = []
     for path in paths:
         text = str(path)
@@ -79,11 +107,21 @@ def inspect_models(paths, stop=None, progress=None):
         )
     if stop is not None and paths:
         geometry = render_models(
-            paths, [Camera()] * len(paths), stop, progress or (lambda _: None), inspect_only=True
+            paths[:108],
+            [Camera()] * min(len(paths), 108),
+            stop,
+            progress or (lambda _: None),
+            inspect_only=True,
         )
         by_file = {row["file"]: row for row in geometry["geometry"]}
-        for row in rows:
+        for index, row in enumerate(rows):
             row.update(by_file.get(row["file"], {}))
+            if index >= 108:
+                row.update(
+                    geometry_status="deferred",
+                    geometry_reason="Geometry inspection limited to 108 files per inventory; "
+                    "select this piece for a separate preview.",
+                )
     return {
         "models": rows,
         "count": len(rows),
@@ -102,24 +140,21 @@ def _draw(path, camera, size=400):
     mesh = limit_triangles(original, 20000)
     low, high = mesh.bounds()
     points = mesh.vertices.astype(np.float64) - (low + high) / 2
-    yaw, pitch, roll = (math.radians(value) for value in (camera.yaw, camera.pitch, camera.roll))
-    cy, sy, cp, sp, cr, sr = (
-        math.cos(yaw),
-        math.sin(yaw),
-        math.cos(pitch),
-        math.sin(pitch),
-        math.cos(roll),
-        math.sin(roll),
-    )
-    rotation = (
-        np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]])
-        @ np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
-        @ np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
-    )
-    points = points @ rotation.T
+    points = points @ camera.view_basis().T
     xy = points[:, :2]
-    extent = max(float(np.ptp(xy[:, 0])), float(np.ptp(xy[:, 1])), 1e-9)
-    projected = (xy - (xy.min(axis=0) + xy.max(axis=0)) / 2) * (size * 0.82 / extent) * camera.zoom
+    if camera.distance:
+        # Match the live camera's 30 degree vertical FOV and letterbox its aspect.
+        depth = camera.distance - points[:, 2]
+        viewport_height = size / max(1, camera.aspect)
+        projected = (
+            xy
+            * (viewport_height / (2 * math.tan(math.radians(15))))
+            / np.maximum(depth[:, None], 1e-9)
+        )
+    else:
+        extent = max(float(np.ptp(xy[:, 0])), float(np.ptp(xy[:, 1])), 1e-9)
+        projected = xy - (xy.min(axis=0) + xy.max(axis=0)) / 2
+        projected *= (size * 0.82 / extent) * camera.zoom
     projected[:, 0] += size * (0.5 + camera.center_x / 2)
     projected[:, 1] = size * (0.5 + camera.center_y / 2) - projected[:, 1]
     triangles = mesh.triangles
@@ -132,6 +167,8 @@ def _draw(path, camera, size=400):
     image = Image.new("RGB", (size, size), "#f2f3f5")
     draw = ImageDraw.Draw(image)
     for index in np.argsort(corners[:, :, 2].mean(axis=1)):
+        if camera.distance and np.any(camera.distance - corners[index, :, 2] <= 1e-6):
+            continue
         polygon = [tuple(point) for point in projected[triangles[index]]]
         shade = float(brightness[index])
         draw.polygon(polygon, fill=tuple(int(c * shade) for c in (137, 171, 199)))

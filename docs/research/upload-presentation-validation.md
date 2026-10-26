@@ -62,3 +62,20 @@ extraction, incidental NFO text treated as rip source, and inconsistent send rea
 All were corrected and covered by regression tests. Final review also checked the
 selected-piece coverage guard and unreadable audio accounting without finding a
 serious remaining issue.
+
+## Follow-up correction review
+
+The independent follow-up identified eight gaps. The corrections align cardinal
+camera axes with the desktop Z-up conversion and preserve live orbit distance/aspect,
+accept wrapped angles and desktop zoom extremes, classify malformed model tool JSON
+as a failed behavior probe, detect recognized original NFO contradictions without
+rewriting it, add per-piece web camera controls, retain inventory beyond 108 pieces,
+bound artwork extraction across books and local files, and preserve editorial sections
+following multiline field edits.
+
+Focused regression validation after these corrections: **66 passed**, including the
+Qt capture seam, independent Qt quaternion/basis comparison, opposite occluding
+surfaces, 109-piece inventory, 25 embedded EPUB covers, malformed provider arguments,
+NFO conflicts/aliases/rounded durations and the web camera controls. Mypy passed for
+158 source files; scoped Ruff and JavaScript syntax checks passed. The final shared
+suite will run after the concurrent RSS implementation settles.

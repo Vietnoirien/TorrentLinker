@@ -98,53 +98,60 @@ class Assets:
         return f"data:{mime};base64,{base64.b64encode(data).decode()}"
 
     def extract(self, request, evidence):
-        """Copy bounded artwork into application data; never publish it."""
-        result = []
+        """Copy at most 12 covers and 24 MB, reporting deferred and invalid candidates."""
+        result, errors = [], []
+        remaining, error_count, copied, attempted = 0, 0, 0, 0
         source = str(request.item.path)
+
+        def failed(file, error):
+            nonlocal error_count
+            error_count += 1
+            if len(errors) < 50:
+                errors.append({"file": file, "reason": str(error)})
+
+        def keep(data, metadata):
+            nonlocal copied, remaining
+            if copied + len(data) > 24_000_000:
+                remaining += 1
+                return
+            result.append(self.put(data, image_mime(data), source, metadata))
+            copied += len(data)
+
         for book in evidence.get("ebooks", []):
-            path = request.item.save_path / book["file"]
-            try:
-                with zipfile.ZipFile(path) as archive:
-                    for name in book.get("artwork", [])[:4]:
-                        if archive.getinfo(name).file_size <= MAX_IMAGE:
-                            data = archive.read(name)
-                            result.append(
-                                self.put(
-                                    data,
-                                    image_mime(data),
-                                    source,
-                                    {
-                                        "origin": "embedded_epub",
-                                        "file": book["file"],
-                                        "member": name,
-                                    },
-                                )
-                            )
-            except (OSError, ValueError, KeyError, zipfile.BadZipFile):
-                continue
+            for name in book.get("artwork", []):
+                if len(result) >= 12 or copied >= 24_000_000 or attempted >= 48:
+                    remaining += 1
+                    continue
+                path = request.item.save_path / book["file"]
+                attempted += 1
+                try:
+                    with zipfile.ZipFile(path) as archive:
+                        if archive.getinfo(name).file_size > MAX_IMAGE:
+                            raise ValueError("Embedded artwork exceeds 8 MB.")
+                        keep(
+                            archive.read(name),
+                            {"origin": "embedded_epub", "file": book["file"], "member": name},
+                        )
+                except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
+                    failed(book["file"], error)
         for file in request.files:
             path = request.item.save_path / file.local_path
-            if len(result) >= 12:
-                break
             if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
-                if file.size > MAX_IMAGE:
+                if len(result) >= 12 or copied >= 24_000_000 or attempted >= 48:
+                    remaining += 1
                     continue
+                attempted += 1
                 try:
-                    data = path.read_bytes()
-                    result.append(
-                        self.put(
-                            data,
-                            image_mime(data),
-                            source,
-                            {
-                                "origin": "local_artwork",
-                                "file": file.local_path,
-                            },
-                        )
-                    )
-                except (OSError, ValueError):
-                    continue
+                    if file.size > MAX_IMAGE:
+                        raise ValueError("Local artwork exceeds 8 MB.")
+                    keep(path.read_bytes(), {"origin": "local_artwork", "file": file.local_path})
+                except (OSError, ValueError) as error:
+                    failed(file.local_path, error)
             elif request.category == 3 and not result:
+                if attempted >= 48:
+                    remaining += 1
+                    continue
+                attempted += 1
                 try:
                     import mutagen
 
@@ -155,21 +162,18 @@ class Assets:
                             audio.tags.getall("APIC") if hasattr(audio.tags, "getall") else []
                         )
                     for picture in pictures[:1]:
-                        data = picture.data
-                        result.append(
-                            self.put(
-                                data,
-                                image_mime(data),
-                                source,
-                                {
-                                    "origin": "embedded_audio",
-                                    "file": file.local_path,
-                                },
-                            )
-                        )
-                except Exception:
-                    continue
-        return result
+                        keep(picture.data, {"origin": "embedded_audio", "file": file.local_path})
+                except Exception as error:
+                    failed(file.local_path, error)
+        return {
+            "assets": result,
+            "remaining": remaining,
+            "errors": errors,
+            "error_count": error_count,
+            "copied_bytes": copied,
+            "limit": 12,
+            "attempted": attempted,
+        }
 
 
 def publish_render_pages(pages, assets, item_path, renderer="cpu", file_names=None, selection=None):
