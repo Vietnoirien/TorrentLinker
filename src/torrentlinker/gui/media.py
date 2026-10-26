@@ -54,6 +54,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QGraphicsScene,
     QGraphicsView,
+    QGridLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -135,6 +136,7 @@ class MediaHero(QWidget):
         super().__init__(parent)
         self.picture = QImage()
         self.mode = "cinematic"
+        self.height_cap = 10_000
         self.setObjectName("mediaHero")
         self.setMinimumHeight(440)
         self.box = QHBoxLayout(self)
@@ -200,7 +202,9 @@ class MediaHero(QWidget):
         self.box.setDirection(
             QBoxLayout.Direction.TopToBottom if narrow_focus else QBoxLayout.Direction.LeftToRight
         )
-        self.setMinimumHeight(630 if narrow_focus else 490 if self.mode == "focus" else 440)
+        wanted = 630 if narrow_focus else 490 if self.mode == "focus" else 440
+        self.setMinimumHeight(min(wanted, self.height_cap))
+        self.setMaximumHeight(max(wanted, self.height_cap))
         self.title.setStyleSheet(
             "font-size: "
             + ("36" if self.width() < 700 else "48")
@@ -388,6 +392,8 @@ class MediaTab(QWidget):
         left_box.setContentsMargins(0, 0, 0, 0)
         left_box.setSpacing(0)
         self.splitter.addWidget(left)
+        self.media_column = left
+        left.installEventFilter(self)
         self.content_scroll = QScrollArea()
         self.content_scroll.setWidgetResizable(True)
         self.content_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
@@ -643,7 +649,8 @@ class MediaTab(QWidget):
             actions_box.addWidget(widget)
         actions_box.addStretch()
         self.hero.action_layout.addWidget(self.action_bar)
-        self.body.addWidget(self.hero)
+        # The selected-title description stays fixed while the cards scroll beneath it.
+        left_box.insertWidget(left_box.indexOf(self.content_scroll), self.hero)
         self.collection_heading = QLabel(self.tr("Your collection"))
         self.collection_heading.setContentsMargins(24, 12, 24, 0)
         self.collection_heading.setStyleSheet("font-size: 34px; font-weight: 650; color: #f2f4f0;")
@@ -1493,8 +1500,42 @@ class MediaTab(QWidget):
                     "play", media_ids=[identifier], index=0
                 )
             )
-            self.continue_box.addWidget(button, 1)
+            tile = QWidget()
+            tile_box = QGridLayout(tile)
+            tile_box.setContentsMargins(0, 0, 0, 0)
+            tile_box.addWidget(button, 0, 0)
+            remove = QToolButton()
+            remove.setObjectName("continueRemove")
+            remove.setText("✕")
+            label_text = self.tr("Remove from Continue watching")
+            remove.setToolTip(label_text)
+            remove.setAccessibleName(label_text)
+            remove.setStyleSheet(
+                "QToolButton { background: rgba(0, 0, 0, 150); color: #f1f3ef; border: 0; "
+                "border-radius: 11px; min-width: 22px; min-height: 22px; } "
+                "QToolButton:hover { background: #b84a4a; }"
+            )
+            remove.clicked.connect(
+                lambda _checked=False, identifier=row["id"]: self.forget_progress(identifier)
+            )
+            tile_box.addWidget(
+                remove, 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
+            )
+            self.continue_box.addWidget(tile, 1)
         self.continue_box.addStretch()
+
+    def forget_progress(self, identifier: str) -> None:
+        """Drop a title from Continue watching and close it if it is the one loaded."""
+        if not self.library:
+            return
+        if self.last_source == identifier:
+            self.dismiss_video()
+            self.state.update(queue=[], index=0)
+        try:
+            self.library.forget_progress(self.session_client, identifier)
+        except (OSError, ValueError) as error:
+            self._set_notice(str(error))
+        self.refresh()
 
     def rebind(
         self,
@@ -1588,6 +1629,14 @@ class MediaTab(QWidget):
                     self.repeat.setCurrentIndex(max(0, self.repeat.findData(self.state["repeat"])))
                 self.heartbeat.start()
                 try:
+                    # Start on the library; Continue watching keeps the saved video position.
+                    queue, index = self.state["queue"], int(self.state["index"])
+                    current = queue[max(0, min(index, len(queue) - 1))] if queue else ""
+                    if (
+                        current
+                        and self.library.detail(self.session_client, current)["kind"] == "video"
+                    ):
+                        self.state.update(current_id="", queue=[], index=0, position=0)
                     self._load_current(play=False)
                 except (OSError, ValueError) as error:
                     self._set_notice(str(error))
@@ -1687,6 +1736,14 @@ class MediaTab(QWidget):
         return cards
 
     def eventFilter(self, watched, event):
+        if (
+            watched is getattr(self, "media_column", None)
+            and hasattr(self, "hero")
+            and event.type() == QEvent.Type.Resize
+        ):
+            # Leave at least half of short windows to the scrolling cards.
+            self.hero.height_cap = max(220, watched.height() // 2)
+            self.hero._arrange()
         if watched is self.content_scroll.viewport() and event.type() == QEvent.Type.Resize:
             self._arrange_toolbar()
             QTimer.singleShot(0, self._resize_media_grid)
@@ -2647,8 +2704,10 @@ class MediaTab(QWidget):
                     self.state["current_id"] = ""
                     self.last_source = ""
                     raise
+            # Until the saved resume point is applied, the player reports 0; keep the saved one.
+            position = self.player.position() if self.pending_seek is None else self.pending_seek
             self.state.update(
-                position=self.player.position() / 1000,
+                position=position / 1000,
                 duration=self.player.duration() / 1000,
                 paused=self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState,
                 volume=self.audio.volume(),

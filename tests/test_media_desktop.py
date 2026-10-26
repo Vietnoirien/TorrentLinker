@@ -157,6 +157,11 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     tab.report()
     saved = service.agent.media.detail("default", tab.state["current_id"])
     assert saved["position"] >= 5
+    # While a resume point is still pending, the heartbeat must not overwrite it with 0.
+    tab.pending_seek = 9000
+    tab.report()
+    assert service.agent.media.detail("default", tab.state["current_id"])["position"] == 9
+    tab.pending_seek = None
     tab.command("shuffle", shuffle=True)
     tab.command("repeat", repeat="all")
     tab.command("play", media_ids=tab.state["queue"], index=1)
@@ -179,6 +184,11 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     qtbot.waitUntil(lambda: restored.player.duration() == 12000)
     assert restored.player.source() == playing
     assert restored.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+    restored.report()
+    current = restored.state["current_id"]
+    restored.forget_progress(current)
+    assert restored.state["queue"] == []
+    assert service.agent.media.detail("default", current)["position"] == 0
     restored.stop()
 
 
@@ -342,6 +352,13 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert tab.state["queue"] == saved_queue
     assert tab.heartbeat.isActive()
     tab.stop()
+    # A restart opens the library, not the dismissed film still in the saved queue.
+    restarted = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(restarted)
+    restarted.activate()
+    assert not restarted.last_source
+    assert restarted.player.source().isEmpty()
+    restarted.stop()
 
 
 def test_native_explicit_preview_decodes_h264_without_reading_missing_pieces(qtbot, tmp_path):
@@ -907,6 +924,10 @@ def test_media_grid_scroll_appends_and_filter_resets(qtbot):
     scroll.setValue(scroll.maximum())
     qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 200)
     assert tab.selected_ids() == selected
+    # The description sits outside the scroll area, so card scrolling never moves it.
+    assert not tab.content_scroll.isAncestorOf(tab.hero)
+    assert tab.hero.isVisible()
+    assert tab.hero.height() <= tab.media_column.height() // 2 or tab.hero.height() <= 440
     qtbot.waitUntil(lambda: scroll.value() < scroll.maximum())
     scroll.setValue(scroll.maximum())
     qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 205)

@@ -754,6 +754,14 @@ class MediaLibrary:
             )
         return self.row(self.record(client_id, identifier))
 
+    def forget_progress(self, client_id, identifier):
+        """Reset playback progress so the title leaves Continue watching."""
+        self.setup(client_id)
+        with self.lock, self.db:
+            self.db.execute(
+                "DELETE FROM media_progress WHERE client=? AND item=?", (client_id, identifier)
+            )
+
     def playlists(self, client_id):
         self.setup(client_id)
         with self.lock:
