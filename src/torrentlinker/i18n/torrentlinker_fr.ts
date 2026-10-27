@@ -4469,6 +4469,10 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>← Back to results</source>
         <translation>← Retour aux résultats</translation>
     </message>
+    <message>
+        <source>Comm.</source>
+        <translation>Comm.</translation>
+    </message>
 </context>
 <context>
     <name>SeedingTree</name>
@@ -5799,6 +5803,130 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <location filename="../gui/torrent_details.py" line="416"/>
         <source>Image unavailable ({0}, HTTP {1}).</source>
         <translation>Image indisponible ({0}, HTTP {1}).</translation>
+    </message>
+    <message>
+        <source>({0} votes required)</source>
+        <translation>({0} votes requis)</translation>
+    </message>
+    <message>
+        <source>Community trust</source>
+        <translation>Confiance communautaire</translation>
+    </message>
+    <message>
+        <source>Director: {0}</source>
+        <translation>Réalisateur : {0}</translation>
+    </message>
+    <message>
+        <source>Exclusive</source>
+        <translation>Exclusivité</translation>
+    </message>
+    <message>
+        <source>Files: {0}</source>
+        <translation>Fichiers : {0}</translation>
+    </message>
+    <message>
+        <source>Film</source>
+        <translation>Film</translation>
+    </message>
+    <message>
+        <source>Hash: {0}</source>
+        <translation>Hash : {0}</translation>
+    </message>
+    <message>
+        <source>Low bitrate</source>
+        <translation>Bitrate faible</translation>
+    </message>
+    <message>
+        <source>Not tested</source>
+        <translation>Non testé</translation>
+    </message>
+    <message>
+        <source>Published {0}</source>
+        <translation>Publié le {0}</translation>
+    </message>
+    <message>
+        <source>Seeds wanted</source>
+        <translation>Demande de seeds</translation>
+    </message>
+    <message>
+        <source>Sent by {0}</source>
+        <translation>Envoyé par {0}</translation>
+    </message>
+    <message>
+        <source>Show the NFO</source>
+        <translation>Afficher le NFO</translation>
+    </message>
+    <message>
+        <source>Show the files</source>
+        <translation>Afficher les fichiers</translation>
+    </message>
+    <message>
+        <source>Show the files ({0})</source>
+        <translation>Afficher les fichiers ({0})</translation>
+    </message>
+    <message>
+        <source>TV series</source>
+        <translation>Série TV</translation>
+    </message>
+    <message>
+        <source>Team {0}</source>
+        <translation>Team {0}</translation>
+    </message>
+    <message>
+        <source>Tested</source>
+        <translation>Testé</translation>
+    </message>
+    <message>
+        <source>This torrent has not yet received enough trust votes. Be careful and check the content before use.</source>
+        <translation>Ce torrent n'a pas encore reçu suffisamment de votes de confiance. Soyez prudent et vérifiez le contenu avant utilisation.</translation>
+    </message>
+    <message>
+        <source>Torrent not tested by the community</source>
+        <translation>Torrent non testé par la communauté</translation>
+    </message>
+    <message>
+        <source>View on IMDb</source>
+        <translation>Voir sur IMDb</translation>
+    </message>
+    <message>
+        <source>View on TMDB</source>
+        <translation>Voir sur TMDB</translation>
+    </message>
+    <message>
+        <source>Vote on the website</source>
+        <translation>Voter sur le site</translation>
+    </message>
+    <message>
+        <source>With {0}…</source>
+        <translation>Avec {0}…</translation>
+    </message>
+    <message>
+        <source>{0}  ·  👍 {1}  ·  👎 {2}</source>
+        <translation>{0}  ·  👍 {1}  ·  👎 {2}</translation>
+    </message>
+    <message>
+        <source>{0} Zen/day</source>
+        <translation>{0} Zen/jour</translation>
+    </message>
+    <message>
+        <source>{0} completed</source>
+        <translation>{0} complétés</translation>
+    </message>
+    <message>
+        <source>{0} leechers</source>
+        <translation>{0} leechers</translation>
+    </message>
+    <message>
+        <source>{0} min</source>
+        <translation>{0} min</translation>
+    </message>
+    <message>
+        <source>{0} seeders</source>
+        <translation>{0} seeders</translation>
+    </message>
+    <message>
+        <source>Torrents  ›  {0}</source>
+        <translation>Torrents  ›  {0}</translation>
     </message>
 </context>
 <context>
@@ -8913,6 +9041,13 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Clear</source>
         <translation>Effacer</translation>
+    </message>
+</context>
+<context>
+    <name>CompactNameDelegate</name>
+    <message>
+        <source>EXCLU</source>
+        <translation>EXCLU</translation>
     </message>
 </context>
 </TS>

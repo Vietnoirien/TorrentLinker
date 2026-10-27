@@ -9,9 +9,12 @@ from urllib.parse import urlsplit
 
 from PySide6.QtCore import (
     QDateTime,
+    QEvent,
     QLocale,
     QModelIndex,
+    QObject,
     QPersistentModelIndex,
+    QRect,
     QSettings,
     QStandardPaths,
     Qt,
@@ -19,7 +22,7 @@ from PySide6.QtCore import (
     QUrl,
     Signal,
 )
-from PySide6.QtGui import QAction, QDesktopServices, QShowEvent
+from PySide6.QtGui import QAction, QDesktopServices, QMouseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -44,18 +47,22 @@ from torrentlinker.gui.browser_tabs import BrowserTabs
 from torrentlinker.gui.category_picker import CategoryPicker
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
+from torrentlinker.gui.hover_card import BACKDROP, POSTER, HoverCard
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.pagination import PageBar
 from torrentlinker.gui.poster_loader import PosterLoader
 from torrentlinker.gui.search_filters import SearchFilters
 from torrentlinker.gui.search_rows import (
+    COMPACT_HEIGHT,
     ROW_HEIGHT,
     AgeDelegate,
-    CompactMarkDelegate,
+    ColoredNumberDelegate,
+    CompactNameDelegate,
     DownloadDelegate,
     RowView,
     StatsDelegate,
     TitleDelegate,
+    TypeBadgeDelegate,
     ZenDelegate,
 )
 from torrentlinker.gui.search_widgets import CategoryPills
@@ -71,15 +78,31 @@ from torrentlinker.seeding import Seeding
 from torrentlinker.send import SendProgress, SendReport
 from torrentlinker.store import Store
 from torrentlinker.torrent_details import website_url
-from torrentlinker.torrent_search import SearchPage, native_search
+from torrentlinker.torrent_search import ListingRow, SearchPage, native_search
 from torrentlinker.zen import ZenTorrent, added_values, note
 
 PAGE_SIZE = 100
-RESULT_WIDTHS = (420, 100, 80, 240, 150, 110, 90, 160, 80, 90, 120, 60)
+RESULT_WIDTHS = (420, 100, 80, 240, 150, 110, 90, 160, 80, 90, 120, 60, 70)
 DOWNLOAD_COLUMN = 11
 # Comfortable rows fold seeders, leechers, completed and uploader into painted cells.
-COMFORTABLE_HIDDEN = (2, 3, 4, 6, 8, 9, 10)
-COMPACT_HIDDEN = (9, 10, 11)
+COMFORTABLE_HIDDEN = (2, 3, 4, 6, 8, 9, 10, 12)
+COMPACT_HIDDEN = (4, 10)
+# Compact follows c411's table: type, name with tags, comments, age, size, completed, seeders,
+# leechers; then our Zen columns and the download button.
+COMPACT_ORDER = (3, 0, 12, 7, 1, 9, 2, 8, 5, 6, 11)
+COMFORTABLE_ORDER = (0, 1, 7, 5, 11)
+COMPACT_WIDTHS = {3: 110, 12: 70, 7: 90, 1: 90, 9: 80, 2: 70, 8: 70, 5: 100, 6: 80, 11: 56}
+# The sort each table header applies on c411 (the same as the sort chips).
+HEADER_SORTS = {
+    3: "category",
+    0: "name",
+    12: "comments",
+    7: "createdAt",
+    1: "size",
+    9: "completions",
+    2: "seeders",
+    8: "leechers",
+}
 
 
 class SearchTab(QWidget):
@@ -229,6 +252,7 @@ class SearchTab(QWidget):
                 self.tr("Completed"),
                 self.tr("Uploader"),
                 "",
+                self.tr("Comm."),
             ]
         )
         for column, width in enumerate(RESULT_WIDTHS):
@@ -250,6 +274,7 @@ class SearchTab(QWidget):
         self.results.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.results.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.results.cellClicked.connect(self._cell_clicked)
+        self.results.horizontalHeader().sectionClicked.connect(self._header_clicked)
         self.results_card = QFrame()
         self.results_card.setObjectName("resultsCard")
         card = QVBoxLayout(self.results_card)
@@ -391,6 +416,15 @@ class SearchTab(QWidget):
         self.refresh_categories()
         self.refresh_queue()
         self._default_delegate = self.results.itemDelegate()
+        self.hover = HoverCard()
+        self._hover_row = -1
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(450)
+        self._hover_timer.timeout.connect(self._show_hover)
+        self.results.viewport().setMouseTracking(True)
+        self.results.viewport().installEventFilter(self)
+        self.results.verticalScrollBar().valueChanged.connect(lambda _: self._hide_hover())
         self._delegates = {
             0: TitleDelegate(self._row_view, self.results),
             1: StatsDelegate(self._row_view, self.results),
@@ -399,11 +433,20 @@ class SearchTab(QWidget):
             DOWNLOAD_COLUMN: DownloadDelegate(self._row_view, self.results),
         }
         self.posters = PosterLoader(self._poster_cache(), self)
-        self.posters.loaded.connect(lambda _url: self.results.viewport().update())
+        self.posters.loaded.connect(lambda _url: self._posters_arrived())
         shown = bool(self._ui_settings().value("search/posters", True, bool))
         self.posters.enabled = shown
         self.posters_button.setChecked(shown)
-        self._compact_title = CompactMarkDelegate(self._row_view, self.results)
+        self._compact_title = CompactNameDelegate(self._row_view, self.results)
+        self._compact_delegates = {
+            3: TypeBadgeDelegate(self._row_view, self.results),
+            0: self._compact_title,
+            2: ColoredNumberDelegate("#22b573", self.results),
+            8: ColoredNumberDelegate("#ef4444", self.results),
+            9: ColoredNumberDelegate(None, self.results),
+            12: ColoredNumberDelegate(None, self.results),
+            DOWNLOAD_COLUMN: DownloadDelegate(self._row_view, self.results),
+        }
         saved = self._ui_settings().value("search/density", "comfortable")
         self.set_density(saved if saved in self.density_buttons else "comfortable")
         self.queue_timer = QTimer(self)
@@ -572,7 +615,9 @@ class SearchTab(QWidget):
         for row, c in enumerate(rows):
             item = QTableWidgetItem(c.title)
             item.setData(Qt.ItemDataRole.UserRole, row)
-            item.setToolTip(c.title)
+            # c411's rows open a card on hover; the plain tooltip is for rows without details.
+            if not (self._native_page and (c.infohash or "") in self._native_page.details):
+                item.setToolTip(c.title)
             self.results.setItem(row, 0, item)
             self.results.setItem(row, 1, NumberItem(human_size(c.size), c.size))
             self.results.setItem(row, 2, NumberItem(str(c.seeders), c.seeders))
@@ -598,6 +643,13 @@ class SearchTab(QWidget):
                     else NumberItem(str(value), value or 0),
                 )
             self.results.setItem(row, 10, QTableWidgetItem(listing.uploader if listing else ""))
+            self.results.setItem(
+                row,
+                12,
+                NumberItem("–", float("-inf"))
+                if listing is None
+                else NumberItem(str(listing.comments), listing.comments),
+            )
             action = QTableWidgetItem()
             action.setToolTip(self.tr("Add to the download queue"))
             self.results.setItem(row, 11, action)
@@ -610,6 +662,7 @@ class SearchTab(QWidget):
             self.tr("No torrent matches. Try fewer filters, or another spelling of the title.")
         )
         self._fit_table()
+        self._sync_header_indicator()
         self.result_status.setText(
             self.tr("{0} results · page {1}").format(len(rows), self._offset // PAGE_SIZE + 1)
         )
@@ -646,12 +699,11 @@ class SearchTab(QWidget):
             self._ui_settings().setValue("search/density", density)
         comfortable = density == "comfortable"
         table, header = self.results, self.results.horizontalHeader()
-        for column, delegate in self._delegates.items():
-            table.setItemDelegateForColumn(
-                column, delegate if comfortable else self._default_delegate
-            )
-        if not comfortable:
-            table.setItemDelegateForColumn(0, self._compact_title)
+        chosen = self._delegates if comfortable else self._compact_delegates
+        for column in range(table.columnCount()):
+            table.setItemDelegateForColumn(column, chosen.get(column, self._default_delegate))
+        for position, column in enumerate(COMFORTABLE_ORDER if comfortable else COMPACT_ORDER):
+            header.moveSection(header.visualIndex(column), position)
         for column in range(table.columnCount()):
             table.setColumnHidden(
                 column, column in (COMFORTABLE_HIDDEN if comfortable else COMPACT_HIDDEN)
@@ -672,11 +724,32 @@ class SearchTab(QWidget):
             for column, width in {1: 130, 5: 150, 7: 130, 11: 64}.items():
                 header.setSectionResizeMode(column, mode.Fixed)
                 table.setColumnWidth(column, width)
-        size = ROW_HEIGHT if comfortable else 34
+        else:
+            header.setSectionResizeMode(0, mode.Stretch)
+            for column, width in COMPACT_WIDTHS.items():
+                header.setSectionResizeMode(column, mode.Fixed)
+                table.setColumnWidth(column, width)
+        size = ROW_HEIGHT if comfortable else COMPACT_HEIGHT
         table.verticalHeader().setDefaultSectionSize(size)
         for row in range(table.rowCount()):
             table.setRowHeight(row, size)
         self._fit_table()
+
+    def _header_clicked(self, column: int) -> None:
+        """On c411 a compact header sorts the whole search, not only this page."""
+        if self.density == "compact" and self._native_page is not None and column in HEADER_SORTS:
+            self.filters.sort.choose(HEADER_SORTS[column])
+
+    def _sync_header_indicator(self) -> None:
+        sort = self.filters.sort
+        column = next((c for c, key in HEADER_SORTS.items() if key == sort.key), -1)
+        header = self.results.horizontalHeader()
+        header.blockSignals(True)
+        order = (
+            Qt.SortOrder.DescendingOrder if sort.order == "desc" else Qt.SortOrder.AscendingOrder
+        )
+        header.setSortIndicator(column if self._native_page is not None else -1, order)
+        header.blockSignals(False)
 
     def _fit_table(self) -> None:
         """The table is as tall as its rows, so the page scrolls instead of the table."""
@@ -716,6 +789,63 @@ class SearchTab(QWidget):
         if key in self._client_hashes:
             return "client"
         return "queued" if key in self._queued_hashes else ""
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self.results.viewport():
+            kind = event.type()
+            if kind == QEvent.Type.MouseMove and isinstance(event, QMouseEvent):
+                row = self.results.rowAt(int(event.position().y()))
+                if row != self._hover_row:
+                    self._hide_hover()
+                    self._hover_row = row
+                    if row >= 0:
+                        self._hover_timer.start()
+            elif kind in (QEvent.Type.Leave, QEvent.Type.Wheel, QEvent.Type.MouseButtonPress):
+                self._hide_hover()
+        return super().eventFilter(watched, event)
+
+    def _hide_hover(self) -> None:
+        self._hover_timer.stop()
+        self._hover_row = -1
+        self.hover.hide()
+
+    def _hover_info(self, row: int) -> tuple[Candidate, ListingRow] | None:
+        item = self.results.item(row, 0)
+        number = item.data(Qt.ItemDataRole.UserRole) if item else None
+        page = self._native_page
+        if page is None or not isinstance(number, int) or not 0 <= number < len(self._results):
+            return None
+        candidate = self._results[number]
+        info = page.details.get(candidate.infohash or "")
+        return (candidate, info) if info is not None and (info.title or info.overview) else None
+
+    def _show_hover(self) -> None:
+        found = self._hover_info(self._hover_row) if self._hover_row >= 0 else None
+        if found is None or not self.isVisible():
+            return
+        candidate, info = found
+        label = self._category_label(candidate).split(" / ")[-1]
+        self.hover.fill(
+            info,
+            candidate.title,
+            label,
+            self.posters.pixmap(info.poster_url, POSTER),
+            self.posters.pixmap(info.backdrop_url, BACKDROP),
+        )
+        model_index = self.results.model().index(self._hover_row, 0)
+        rect = self.results.visualRect(model_index)
+        top_left = self.results.viewport().mapToGlobal(rect.topLeft())
+        anchor = QRect(top_left, rect.size())
+        anchor.setRight(
+            self.results.viewport().mapToGlobal(self.results.viewport().rect().topRight()).x()
+        )
+        self.hover.place(anchor, self.window().frameGeometry() & self.screen().availableGeometry())
+        self.hover.show()
+
+    def _posters_arrived(self) -> None:
+        self.results.viewport().update()
+        if self.hover.isVisible() and self._hover_row >= 0:
+            self._show_hover()
 
     def _cell_clicked(self, row: int, column: int) -> None:
         item = self.results.item(row, 0)

@@ -106,3 +106,11 @@ Same structure on both. Desktop: a `ResultRow` delegate or row widgets in a `QLi
 4. Done: filter chips, palliative and exclusive toggles, empty and error states, In client / Queued marks (both densities).
 5. Done: Year / Team / Uploader dropdowns, automatic search after a pause, one results card, page links above and below, the queue page reached from the header, tab actions in the Open tabs menu, `poster_cache.py` and the poster loader with a Posters switch.
 6. Done: web parity (`index.html`, `search.js`, `app.css`, `/api/poster`, `search_listing` in the search job), real-data check, Torznab test, guides (EN and FR).
+
+## Addendum 2026-10-28: c411's compact table and torrent page
+
+Screenshots of c411's compact mode and its torrent page were supplied after the first build.
+
+- **Compact** now has c411's columns: type badge, release name with EXCLU / language / quality tags, comments, age, size, completed, seeders, leechers, then our Zen columns and the download button. Headers sort the whole search through the same sort state as the chips (`HEADER_SORTS`). `ListingRow` gained `language` and `quality`, the wording c411 prints in its tags.
+- **Detail tab** (`gui/torrent_details.py`, web `details()` in `app.js`): type badge and flags, title, byline (sender, team, date), the not-tested banner, size and live swarm chips, hash and files, c411's facts as chips, NFO and files as disclosures, the TMDB card with IDs, read-only community trust, the description, and a bar that keeps the download actions in view. `parse_details` now reads uploader, team, date, exclusivity, low-bitrate, swarm, facts, trust and the TMDB media block; the web `details` job returns them as `info`.
+- **Left out on purpose:** the **Versions** list needs c411's grouped listing (`/api/torrents/group-children` with a release ID that flat rows do not carry), and trust **voting**, favourites and reports need a website session, not the API key. The detail tab keeps an Open on website / Vote on the website button for them. The previous and next episode link (S10E53) is not in the detail response.

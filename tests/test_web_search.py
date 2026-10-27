@@ -30,7 +30,21 @@ def c411_listing(request):
             "category": {"id": 1, "name": "Films & Vidéos"},
             "subcategory": {"id": 6, "name": "Film"},
             "posterUrl": POSTER if n == 1 else None,
-            "media": {"kind": "movie", "title": f"Title {n}", "year": 2020, "rating": 7.2},
+            "media": {
+                "kind": "movie",
+                "title": f"Title {n}",
+                "year": 2020,
+                "rating": 7.2,
+                "runtime": 119,
+                "genres": ["Aventure", "Comédie"],
+                "overview": "A synopsis.",
+                "cast": ["Dwayne Johnson", "Kevin Hart"],
+                "directors": ["Jake Kasdan"],
+                "originalTitle": "Welcome",
+                "backdropUrl": "https://image.tmdb.org/t/p/w1280/b.jpg",
+            },
+            "language": "Multi (Français inclus)",
+            "quality": "WEB-DL 1080",
             "tech": {"resolution": "1080p", "source": "WEB-DL", "languages": ["MULTI", "VFF"]},
             "palliativeSince": None,
         }
@@ -46,6 +60,39 @@ def c411_listing(request):
         "categories": [{"id": 1, "count": 138013}, {"id": 2, "count": 39239}],
     }
     return {"data": rows, "meta": meta}
+
+
+DETAIL = {
+    "name": "Release.1.2020.MULTI.VFF.1080p.WEB.x264-GRP",
+    "description": "<p>Synopsis</p>",
+    "uploader": "up1",
+    "team": {"id": 9, "name": "BOUBA", "slug": "bouba"},
+    "createdAt": "2026-10-27T10:00:00Z",
+    "seeders": 0,
+    "leechers": 3,
+    "completions": 5,
+    "files": [{"path": ["a.mkv"], "length": 1024}],
+    "metadata": {
+        "hasNfo": True,
+        "nfoContent": "General\nFormat : Matroska",
+        "isExclusive": True,
+        "category": {"id": 1, "name": "Films & Vidéos"},
+        "subcategory": {"id": 6, "name": "Film"},
+        "options": [{"name": "Langue", "values": [{"id": 1, "value": "Multi"}]}],
+        "tmdbData": {
+            "id": 74342,
+            "type": "movie",
+            "title": "Title 1",
+            "year": 2020,
+            "rating": 7.2,
+            "ratingCount": 12,
+            "posterUrl": POSTER,
+            "cast": [{"name": "Ann"}],
+        },
+    },
+    "externalIds": [{"kind": "imdb", "value": "tt1234567"}],
+    "trust": {"status": "untested", "isTested": False, "minVotesRequired": 3},
+}
 
 
 def png():
@@ -78,6 +125,8 @@ def fake_net(monkeypatch, seen):
             return httpx.Response(200, json=FACETS)
         if path == "/api/torrents":
             return httpx.Response(200, json=c411_listing(request))
+        if path.startswith("/api/torrents/"):
+            return httpx.Response(200, json=DETAIL)
         return httpx.Response(200, text="<caps><categories/></caps>")
 
     monkeypatch.setattr(
@@ -116,6 +165,9 @@ def test_search_can_return_the_listing_details_counts_and_known_marks(tmp_path, 
     first = result["listing"][HASHES[0]]
     assert (first["leechers"], first["completions"], first["uploader"]) == (3, 7, "up1")
     assert first["poster_url"] == POSTER and first["year"] == 2020 and first["rating"] == 7.2
+    assert first["genres"] == ["Aventure", "Comédie"] and first["runtime"] == 119
+    assert first["cast"] == ["Dwayne Johnson", "Kevin Hart"] and first["overview"] == "A synopsis."
+    assert first["backdrop_url"].endswith("/w1280/b.jpg") and first["directors"] == ["Jake Kasdan"]
     assert [t for _, t in first["tags"]] == ["MULTI.VFF", "1080p", "WEB-DL"]
     assert result["listing"][HASHES[1]]["exclusive"] is True
     assert result["root_counts"] == {"1": 138013, "2": 39239}
@@ -211,3 +263,18 @@ def test_torznab_search_has_no_listing_but_still_marks_queued(tmp_path, monkeypa
         result = search(browser, search_listing=True)
         assert result["listing"] == {} and result["root_counts"] == {}
         assert result["rows"][0]["title"] == "Book"
+
+
+def test_details_return_the_page_facts_apart_from_the_description(tmp_path, monkeypatch):
+    fake_net(monkeypatch, [])
+    browser = signed_in(tmp_path)
+    created = browser.post("/api/jobs", json={"kind": "details", "hashes": [HASHES[0]]})
+    result = finished(browser, created.json()["id"])["result"]
+    info = result["info"]
+    assert "description" not in info and "nfo" not in info and "files" not in info
+    assert (info["uploader"], info["team"], info["exclusive"]) == ("up1", "BOUBA", True)
+    assert (info["seeders"], info["leechers"], info["completions"]) == (0, 3, 5)
+    assert info["subcategory"] == "Film" and info["facts"] == [["Langue", ["Multi"]]]
+    assert info["trust"]["status"] == "untested" and info["trust"]["required"] == 3
+    assert info["media"]["title"] == "Title 1" and info["media"]["imdb_id"] == "tt1234567"
+    assert info["poster"] == POSTER and result["nfo"].startswith("General")

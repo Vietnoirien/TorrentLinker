@@ -142,6 +142,10 @@ class SortChips(QWidget):
         self.set_relevance_available(False)
         self._paint()
 
+    def choose(self, key: str) -> None:
+        """What clicking the chip of `key` does; the table headers use it too."""
+        self._clicked(key)
+
     def _clicked(self, key: str) -> None:
         if key == self.key:
             self.order = "asc" if self.order == "desc" else "desc"

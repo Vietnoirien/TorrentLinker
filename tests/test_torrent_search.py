@@ -144,7 +144,21 @@ RICH_ROW = {
     "isExclusive": True,
     "isFreeleech": False,
     "posterUrl": "https://image.tmdb.org/t/p/w500/x.jpg",
-    "media": {"kind": "movie", "title": "Ajami", "year": 2009, "rating": 7.1},
+    "media": {
+        "kind": "movie",
+        "title": "Ajami",
+        "year": 2009,
+        "rating": 7.1,
+        "runtime": 120,
+        "originalTitle": "Ajami (original)",
+        "directors": ["Scandar Copti"],
+        "genres": ["Drame", 7],
+        "overview": " A synopsis. ",
+        "cast": ["Shahir Kabaha", {"name": "Ibrahim Frege"}],
+        "backdropUrl": "https://image.tmdb.org/t/p/w1280/b.jpg",
+    },
+    "language": "Multi VF2 (FR + QC inclus)",
+    "quality": "WEB-DL 1080",
     "tech": {
         "resolution": "1080p",
         "source": "BluRay",
@@ -163,6 +177,14 @@ def test_listing_row_reads_the_display_fields():
     assert row.uploader == "Biloute" and row.exclusive and not row.freeleech
     assert (row.title, row.year, row.rating, row.kind) == ("Ajami", 2009, 7.1, "movie")
     assert row.poster_url.startswith("https://image.tmdb.org/")
+    assert (row.language, row.quality) == ("Multi VF2 (FR + QC inclus)", "WEB-DL 1080")
+    assert (row.runtime, row.original_title, row.directors) == (
+        120,
+        "Ajami (original)",
+        ("Scandar Copti",),
+    )
+    assert row.genres == ("Drame",) and row.overview == "A synopsis."
+    assert row.cast == ("Shahir Kabaha", "Ibrahim Frege") and row.backdrop_url.endswith("b.jpg")
     assert row.tags == (
         ("lang", "MULTI.VFF"),
         ("resolution", "1080p"),

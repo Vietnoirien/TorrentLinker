@@ -31,6 +31,7 @@ from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleO
 from torrentlinker.torrent_search import ListingRow
 
 ROW_HEIGHT = 88
+COMPACT_HEIGHT = 56
 TAG_COLORS = {
     "lang": "#10b981",
     "resolution": "#3b82f6",
@@ -391,4 +392,102 @@ class DownloadDelegate(_Delegate):
             [QPointF(cx - 5, cy - 2), QPointF(cx, cy + 4), QPointF(cx + 5, cy - 2)]
         )
         painter.drawLine(QPointF(cx - 8, cy + 9), QPointF(cx + 8, cy + 9))
+        painter.restore()
+
+
+class TypeBadgeDelegate(_Delegate):
+    """The compact view's first column: the subcategory as a colored badge, like c411's."""
+
+    def sizeHint(self, option, index) -> QSize:  # noqa: ANN001
+        return QSize(option.rect.width(), COMPACT_HEIGHT)
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: ANN001
+        view = self.lookup(index)
+        if view is None:
+            return super().paint(painter, option, index)
+        self._background(painter, option)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        box = QRectF(option.rect.left() + 8, option.rect.center().y() - 16, 92, 32)
+        base = QColor(view.color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(base.red(), base.green(), base.blue(), 70))
+        painter.drawRoundedRect(box, 6, 6)
+        font = QFont(option.font)
+        font.setBold(True)
+        font.setPointSizeF(max(8.0, _points(option.font) - 2))
+        painter.setFont(font)
+        painter.setPen(_readable(view.color, option))
+        label = (view.label.split(" / ")[-1] or "?").upper()
+        shown = QFontMetrics(font).elidedText(label, Qt.TextElideMode.ElideRight, 84)
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, shown)
+        painter.restore()
+
+
+class CompactNameDelegate(_Delegate):
+    """The release name, with c411's short tags under it: EXCLU, language, quality."""
+
+    def sizeHint(self, option, index) -> QSize:  # noqa: ANN001
+        return QSize(option.rect.width(), COMPACT_HEIGHT)
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: ANN001
+        view = self.lookup(index)
+        if view is None:
+            return super().paint(painter, option, index)
+        self._background(painter, option)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = option.rect
+        left, right = rect.left() + 8, rect.right() - 8
+        small = QFont(option.font)
+        small.setPointSizeF(max(8.0, _points(option.font) - 2))
+        width = 0
+        if view.state:
+            width = 96
+        painter.setFont(option.font)
+        painter.setPen(option.palette.color(QPalette.ColorRole.Link))
+        name = QFontMetrics(option.font).elidedText(
+            view.title, Qt.TextElideMode.ElideRight, max(40, right - left - width)
+        )
+        painter.drawText(
+            QRect(left, rect.top() + 6, right - left - width, 20),
+            Qt.AlignmentFlag.AlignVCenter,
+            name,
+        )
+        if view.state:
+            state_chip(painter, option, right, rect.top() + 8, view.state, small)
+        x, y = left, rect.top() + 30
+        details = view.details
+        if details and details.exclusive:
+            x = _chip(painter, x, y, self.tr("EXCLU"), QColor(GOLD).darker(110), small)
+        if view.revival:
+            x = _chip(painter, x, y, "♥", QColor(RED), small)
+        if details and details.language:
+            x = _chip(painter, x, y, details.language, _readable("#3b82f6", option), small)
+        if details and details.quality:
+            x = _chip(painter, x, y, details.quality, _readable("#a855f7", option), small)
+        painter.restore()
+
+
+class ColoredNumberDelegate(QStyledItemDelegate):
+    """A centered number in a fixed color: green seeders, red leechers, muted the rest."""
+
+    def __init__(self, color: str | None, parent=None) -> None:
+        super().__init__(parent)
+        self.color = color
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: ANN001
+        QApplication.style().drawPrimitive(
+            QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget
+        )
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        painter.save()
+        if self.color is None:
+            painter.setPen(option.palette.color(QPalette.ColorRole.PlaceholderText))
+        elif text not in ("0", "–"):
+            painter.setPen(_readable(self.color, option))
+        else:
+            painter.setPen(option.palette.color(QPalette.ColorRole.PlaceholderText))
+        painter.setFont(option.font)
+        painter.drawText(option.rect, Qt.AlignmentFlag.AlignCenter, text)
         painter.restore()

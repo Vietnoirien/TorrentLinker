@@ -395,7 +395,7 @@ function richRow(row) {
     line1.append(b);
   }
   const title = button(info?.title || row.title, () => details(row), "sr-title link");
-  title.title = row.title;
+  if (!info) title.title = row.title; // with details, the hover card replaces the tooltip
   line1.append(title);
   if (info?.year) line1.append(element("span", String(info.year), "muted"));
   if (info?.rating) line1.append(element("span", `★ ${info.rating.toFixed(1)}`, "tag rating"));
@@ -438,29 +438,48 @@ function richRow(row) {
   return el;
 }
 
+const COMPACT_SORTS = { type: "category", name: "name", comments: "comments", age: "createdAt", size: "size", done: "completions", seeds: "seeders", leech: "leechers" };
 function compactColumns() {
+  const num0 = (v, cls) => element("span", v === null || v === undefined ? "—" : String(v), v ? cls : "muted");
   return [
     {
-      label: "Torrent",
+      label: say("Type", "Type"),
+      sortKey: "type",
+      render: (r) => {
+        const badge = element("span", ((r.native_category_label || "").split(" / ").pop() || "?").toUpperCase(), "type-badge");
+        badge.style.setProperty("--tag", rootColorByName(r.native_category_label));
+        return badge;
+      },
+    },
+    {
+      label: say("Name", "Nom"),
+      sortKey: "name",
       name: true,
       render: (r) => {
-        const wrap = element("span", undefined, "compact-title");
-        wrap.append(button(r.title, () => details(r), "link"));
+        const info = SS.listing[r.hash];
+        const wrap = element("div", undefined, "compact-name");
+        const line = element("div", undefined, "sr-line");
+        line.append(button(r.title, () => details(r), "link sr-release"));
         const mark = markChip(r.hash);
-        if (mark) wrap.append(mark);
+        if (mark) line.append(element("span", undefined, "spacer"), mark);
+        const tags = element("div", undefined, "sr-line");
+        if (info?.exclusive) tags.append(element("span", say("EXCLU", "EXCLU"), "tag kind-exclusive"));
+        if (r.revival) tags.append(element("span", "♥", "mark-revival"));
+        if (info?.language) tags.append(element("span", info.language, "tag tag-lang"));
+        if (info?.quality) tags.append(element("span", info.quality, "tag tag-hdr"));
+        wrap.append(line, tags);
         return wrap;
       },
     },
-    { label: say("Size", "Taille"), render: (r) => bytes(r.size) },
-    { label: "Seeders", render: (r) => r.seeders },
-    { label: "Leechers", render: (r) => SS.listing[r.hash]?.leechers ?? "—" },
-    { label: say("Category", "Catégorie"), render: (r) => r.native_category_label || "" },
-    { label: say("Revival", "Soins palliatifs"), render: (r) => (r.revival ? say("Soins palliatifs", "Soins palliatifs") : "") },
+    { label: say("Comm.", "Comm."), sortKey: "comments", render: (r) => num0(SS.listing[r.hash]?.comments, "") },
+    { label: say("Age", "Âge"), sortKey: "age", render: (r) => age(r.published_at) },
+    { label: say("Size", "Taille"), sortKey: "size", render: (r) => bytes(r.size) },
+    { label: say("Done", "Compl."), sortKey: "done", render: (r) => num0(SS.listing[r.hash]?.completions, "") },
+    { label: "Seeders", sortKey: "seeds", render: (r) => num0(r.seeders, "up") },
+    { label: "Leechers", sortKey: "leech", render: (r) => num0(SS.listing[r.hash]?.leechers, "down") },
     { label: "≈ Zen / j", render: (r) => num(r.zen) },
     { label: "≈ Note", render: (r) => num(r.note) },
-    { label: say("Age", "Âge"), render: (r) => age(r.published_at) },
-    { label: say("Completed", "Complétés"), render: (r) => SS.listing[r.hash]?.completions ?? "—" },
-    { label: "Uploader", render: (r) => SS.listing[r.hash]?.uploader || "" },
+    { label: "", render: (r) => downloadButton(r) },
   ];
 }
 
@@ -479,6 +498,20 @@ function renderResults() {
     );
   } else if (SS.density === "compact") {
     table("search-table", SS.rows, compactColumns(), state.searchSelected, "hash", syncSelection);
+    // A header sorts the whole search, as on c411, instead of only this page.
+    const heads = [...$("search-table").querySelectorAll("thead th")].slice(1);
+    compactColumns().forEach((column, index) => {
+      const key = COMPACT_SORTS[column.sortKey];
+      if (!key || !SS.native) return;
+      const active = SS.sort.key === key;
+      const b = button(column.label + (active ? (SS.sort.order === "desc" ? " ↓" : " ↑") : ""), () => {
+        if (active) SS.sort.order = SS.sort.order === "desc" ? "asc" : "desc";
+        else SS.sort = { key, order: key === "name" ? "asc" : "desc" };
+        renderSort();
+        return runSearch(1);
+      }, "quiet header-sort");
+      heads[index].replaceChildren(b);
+    });
   } else {
     host.replaceChildren(...SS.rows.map(richRow));
   }
@@ -730,3 +763,80 @@ $("search-details").onclick = () => {
   const row = SS.rows.find((r) => state.searchSelected.has(r.hash));
   if (row) guard(() => details(row));
 };
+
+
+/* The card that opens when the pointer rests on a result, like c411's. */
+const hoverCard = { node: null, timer: null, hash: "" };
+function hideHover() {
+  clearTimeout(hoverCard.timer);
+  hoverCard.hash = "";
+  if (hoverCard.node) hoverCard.node.hidden = true;
+}
+function showHover(row, anchor) {
+  const info = SS.listing[row.hash];
+  if (!info || !(info.title || info.overview)) return;
+  if (!hoverCard.node) {
+    hoverCard.node = element("div", undefined, "hover-card");
+    hoverCard.node.setAttribute("role", "tooltip");
+    document.body.append(hoverCard.node);
+  }
+  const card = hoverCard.node;
+  const proxy = (url) => "api/poster?url=" + encodeURIComponent(url);
+  const kind = (row.native_category_label || "").split(" / ").pop();
+  const head = element("div", undefined, "hc-head");
+  if (info.backdrop_url) {
+    const img = element("img", undefined, "hc-backdrop");
+    img.alt = "";
+    img.src = proxy(info.backdrop_url);
+    img.onerror = () => img.remove();
+    head.append(img);
+  }
+  head.append(element("span", kind.toUpperCase(), "hc-kind"));
+  if (info.rating) head.append(element("span", `★ ${info.rating.toFixed(1)}`, "hc-rating"));
+  const lead = element("div", undefined, "hc-lead");
+  if (info.poster_url) {
+    const poster = element("img", undefined, "hc-poster");
+    poster.alt = "";
+    poster.src = proxy(info.poster_url);
+    poster.onerror = () => poster.remove();
+    lead.append(poster);
+  }
+  const names = element("div", undefined, "hc-names");
+  const runtime = info.runtime ? (info.runtime >= 60 ? `${Math.floor(info.runtime / 60)}h${String(info.runtime % 60).padStart(2, "0")}` : `${info.runtime} min`) : "";
+  names.append(element("strong", row.title, "hc-title"));
+  if (info.original_title && info.original_title !== info.title) names.append(element("span", info.original_title, "muted"));
+  names.append(element("span", [info.year || "", runtime, info.directors?.[0] || ""].filter(Boolean).join(" · "), "muted"));
+  lead.append(names);
+  const body = element("div", undefined, "hc-body");
+  if (info.genres?.length) {
+    const genres = element("div", undefined, "dt-row");
+    info.genres.slice(0, 3).forEach((g) => genres.append(element("span", g, "hc-genre")));
+    body.append(genres);
+  }
+  if (info.overview) body.append(element("p", info.overview.length > 260 ? info.overview.slice(0, 257).replace(/\s+\S*$/, "") + "…" : info.overview));
+  (info.cast || []).slice(0, 3).forEach((n) => body.append(element("div", n, "hc-cast")));
+  card.replaceChildren(head, lead, body);
+  card.hidden = false;
+  const box = anchor.getBoundingClientRect();
+  const width = 360;
+  // Over the right end of the row, inside the page.
+  const left = Math.max(8, Math.min(box.right - width - 12, innerWidth - width - 8));
+  card.style.left = `${left}px`;
+  card.style.top = `${Math.min(Math.max(8, box.top - 20), Math.max(8, innerHeight - card.offsetHeight - 8))}px`;
+  hoverCard.hash = row.hash;
+}
+function watchHover(host) {
+  host.addEventListener("pointerover", (event) => {
+    const el = event.target.closest(".sr-row, tbody tr");
+    if (!el || !host.contains(el) || event.pointerType === "touch") return;
+    const index = [...host.querySelectorAll(el.classList.contains("sr-row") ? ".sr-row" : "tbody tr")].indexOf(el);
+    const row = SS.rows[index];
+    if (!row || hoverCard.hash === row.hash) return;
+    hideHover();
+    hoverCard.timer = setTimeout(() => showHover(row, el), 450);
+  });
+  host.addEventListener("pointerleave", hideHover);
+  host.addEventListener("scroll", hideHover, true);
+}
+watchHover($("search-table"));
+window.addEventListener("scroll", hideHover, true);

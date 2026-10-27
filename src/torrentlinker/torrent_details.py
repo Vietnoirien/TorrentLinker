@@ -154,17 +154,124 @@ def preview_html(description: str, poster: str = "") -> tuple[str, tuple[str, ..
 
 
 @dataclass(frozen=True)
+class Trust:
+    """c411's community trust votes, read-only: voting needs a website session."""
+
+    status: str = ""
+    tested: bool = False
+    positive: int = 0
+    negative: int = 0
+    required: int = 0
+
+
+@dataclass(frozen=True)
+class Media:
+    """The TMDB card c411 shows under the facts."""
+
+    title: str = ""
+    original_title: str = ""
+    year: int | None = None
+    kind: str = ""  # TMDB's "movie" or "tv"
+    genres: tuple[str, ...] = ()
+    rating: float | None = None
+    votes: int = 0
+    runtime: int | None = None
+    directors: tuple[str, ...] = ()
+    cast: tuple[str, ...] = ()
+    tmdb_id: str = ""
+    imdb_id: str = ""
+
+
+@dataclass(frozen=True)
 class TorrentDetails:
     description: str
     nfo: str
     has_nfo: bool
     poster: str = ""
     files: tuple[tuple[str, int], ...] = ()
+    uploader: str = ""
+    team: str = ""
+    created_at: float | None = None
+    exclusive: bool = False
+    low_bitrate: bool = False
+    seeders: int | None = None
+    leechers: int | None = None
+    completions: int | None = None
+    category: str = ""
+    subcategory: str = ""
+    facts: tuple[
+        tuple[str, tuple[str, ...]], ...
+    ] = ()  # ("Language", ("Multi (Français inclus)",))
+    trust: Trust = Trust()
+    media: Media | None = None
+
+
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _names(values: Any, key: str = "") -> tuple[str, ...]:
+    out = []
+    for value in values if isinstance(values, list) else []:
+        text = _text(value.get(key) if isinstance(value, dict) else value)
+        if text:
+            out.append(text)
+    return tuple(out)
+
+
+def _media(data: Any, ids: Any) -> Media | None:
+    if not isinstance(data, dict) or not data:
+        return None
+    imdb = _text(data.get("imdbId"))
+    tmdb = str(data.get("id") or "")
+    for entry in ids if isinstance(ids, list) else []:
+        kind, value = _text(entry.get("kind")), _text(entry.get("value"))
+        if kind.startswith("imdb") and not imdb:
+            imdb = value
+        if kind.startswith("tmdb") and not tmdb:
+            tmdb = value
+    year, rating = data.get("year"), data.get("rating")
+    runtime = data.get("runtime")
+    return Media(
+        _text(data.get("title")),
+        _text(data.get("originalTitle")),
+        year if isinstance(year, int) and 1800 <= year <= 2200 else None,
+        _text(data.get("type")),
+        _names(data.get("genres")),
+        float(rating) if isinstance(rating, int | float) and 0 < rating <= 10 else None,
+        _count(data.get("ratingCount")) or 0,
+        runtime if isinstance(runtime, int) and runtime > 0 else None,
+        _names(data.get("directors")),
+        _names(data.get("cast"), "name")[:4],
+        tmdb if tmdb.isdigit() else "",
+        imdb if re.fullmatch(r"tt\d{4,10}", imdb) else "",
+    )
 
 
 def parse_details(payload: dict[str, Any]) -> TorrentDetails:
     item = payload  # The detail endpoint is flat, unlike the listing endpoint.
     metadata = item.get("metadata") or {}
+    trust: dict[str, Any] = item["trust"] if isinstance(item.get("trust"), dict) else {}
+    team: dict[str, Any] = item["team"] if isinstance(item.get("team"), dict) else {}
+    category: dict[str, Any] = (
+        metadata["category"] if isinstance(metadata.get("category"), dict) else {}
+    )
+    sub: dict[str, Any] = (
+        metadata["subcategory"] if isinstance(metadata.get("subcategory"), dict) else {}
+    )
+    from torrentlinker.indexer import publication_time
+
+    facts = []
+    groups = metadata.get("options")
+    for group in groups if isinstance(groups, list) else []:
+        if isinstance(group, dict) and _text(group.get("name")):
+            values = _names(group.get("values"), "value")
+            if values:
+                facts.append((_text(group["name"]), values))
     return TorrentDetails(
         str(item.get("description") or ""),
         str(metadata.get("nfoContent") or ""),
@@ -175,6 +282,25 @@ def parse_details(payload: dict[str, Any]) -> TorrentDetails:
             for file in item.get("files", [])
             if isinstance(file.get("path"), list)
         ),
+        _text(item.get("uploader")),
+        _text(team.get("name")),
+        publication_time(item.get("createdAt")),
+        metadata.get("isExclusive") is True,
+        metadata.get("lowBitrateWarning") is True,
+        _count(item.get("seeders")),
+        _count(item.get("leechers")),
+        _count(item.get("completions")),
+        _text(category.get("name")),
+        _text(sub.get("name")),
+        tuple(facts),
+        Trust(
+            _text(trust.get("status")),
+            trust.get("isTested") is True,
+            _count(trust.get("positiveCount")) or 0,
+            _count(trust.get("negativeCount")) or 0,
+            _count(trust.get("minVotesRequired")) or 0,
+        ),
+        _media(metadata.get("tmdbData"), item.get("externalIds")),
     )
 
 

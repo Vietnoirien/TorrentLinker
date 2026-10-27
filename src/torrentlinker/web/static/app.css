@@ -907,3 +907,48 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
   .sr-zen { text-align: left; }
   .dl-button { grid-column: 4; grid-row: 1; }
 }
+
+/* Compact results, like c411's table */
+.type-badge { --tag: #3b82f6; display: inline-block; min-width: 88px; text-align: center; font-weight: 700; font-size: .75em; padding: 7px 8px; border-radius: 6px; color: color-mix(in srgb, var(--tag) 75%, var(--ink)); background: color-mix(in srgb, var(--tag) 22%, transparent); white-space: nowrap; }
+.compact-name { display: grid; gap: 4px; min-width: 260px; }
+.compact-name .sr-release { background: transparent; border: 0; padding: 0; font-weight: 400; }
+.tag.kind-exclusive { --tag: #f5b301; }
+.search-results.compact td .up { color: #1f9d63; } .search-results.compact td .down { color: #e0443e; }
+.header-sort { padding: 0; font-weight: 650; color: inherit; }
+/* Torrent details, like c411's page */
+.dt-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.dt-flags, .dt-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.dt-badge { font-weight: 700; font-size: .8em; padding: 6px 12px; border-radius: 6px; background: var(--tint); color: var(--accent); }
+.dt-chip { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 3px 10px; font-size: .92em; }
+.dt-chip.dt-up, .dt-chip.dt-ok { color: #1f9d63; } .dt-chip.dt-down { color: var(--danger); }
+.dt-chip.dt-warn { color: #b27a00; border-color: #b27a00; } .dt-chip.dt-done { color: var(--accent); }
+.dt-chip.dt-id { font-family: ui-monospace, monospace; color: var(--muted); }
+:root[data-theme="dark"] .dt-chip.dt-warn { color: #edbf73; border-color: #edbf73; }
+.dt-title { margin: 6px 0 2px; font-size: 1.4em; overflow-wrap: anywhere; }
+.dt-banner, .dt-trust, .dt-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 12px 0; background: var(--panel); }
+.dt-banner { border-color: var(--accent); }
+.dt-banner p, .dt-trust p { margin: 4px 0 0; }
+.dt-card { display: flex; gap: 14px; }
+.dt-poster { width: 100px; height: 150px; object-fit: cover; border-radius: 6px; flex: none; }
+.dt-card-title { margin: 0 0 4px; }
+.dt-hash { font-family: ui-monospace, monospace; font-size: .85em; overflow-wrap: anywhere; }
+.dt-files { max-height: 240px; overflow: auto; font-family: ui-monospace, monospace; font-size: .85em; }
+.dt-bar { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 0 0; margin-top: 14px; display: flex; gap: 10px; }
+.button-link { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; text-decoration: none; color: inherit; font-weight: 550; }
+
+.hover-card { position: fixed; z-index: 50; width: 360px; background: #0a181c; color: #d7e4e6; border: 1px solid #1f4a4d; border-radius: 12px; box-shadow: 0 18px 50px #000a; overflow: hidden; pointer-events: none; padding-bottom: 12px; }
+.hc-head { position: relative; height: 128px; background: #233c46; }
+.hc-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hc-head::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, #0003, #0a181c); }
+.hc-kind, .hc-rating { position: absolute; top: 12px; z-index: 1; background: #0009; border-radius: 7px; padding: 3px 9px; font-size: .75em; font-weight: 700; }
+.hc-kind { left: 14px; } .hc-rating { right: 14px; color: #f5b301; }
+.hc-lead { display: flex; gap: 12px; padding: 0 14px; margin-top: -72px; position: relative; z-index: 2; align-items: flex-end; }
+.hc-poster { width: 88px; height: 132px; object-fit: cover; border-radius: 6px; flex: none; background: #173238; }
+.hc-names { display: grid; gap: 2px; min-width: 0; padding-bottom: 4px; }
+.hc-title { overflow-wrap: anywhere; font-size: 1.02em; color: #fff; }
+.hc-names .muted { color: #9fb3b6; font-size: .85em; }
+.hc-body { padding: 10px 14px 0; display: grid; gap: 8px; }
+.hc-body p { margin: 0; font-size: .92em; line-height: 1.45; }
+.hc-genre { background: #12343a; border: 1px solid #1f6a64; border-radius: 9px; padding: 1px 9px; color: #7fe3d3; font-size: .85em; }
+.hc-cast { font-size: .9em; }
+@media (hover: none) { .hover-card { display: none; } }

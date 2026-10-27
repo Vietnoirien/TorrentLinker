@@ -79,6 +79,15 @@ class ListingRow:
     kind: str = ""  # movie, tv, game, music, book ...
     poster_url: str = ""  # a TMDB https URL; never fetched by the listing itself
     tags: tuple[tuple[str, str], ...] = ()  # (kind, text): lang, resolution, source, audio, ...
+    original_title: str = ""
+    runtime: int | None = None  # minutes
+    directors: tuple[str, ...] = ()
+    genres: tuple[str, ...] = ()
+    overview: str = ""
+    cast: tuple[str, ...] = ()
+    backdrop_url: str = ""  # a TMDB https URL, for the hover card
+    language: str = ""  # c411's own wording, e.g. "Multi VF2 (FR + QC inclus)"
+    quality: str = ""  # c411's own wording, e.g. "WEB-DL 1080"
 
 
 def _count(value: Any) -> int:
@@ -87,6 +96,12 @@ def _count(value: Any) -> int:
 
 def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _strings(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(s for v in value if (s := _text(v.get("name") if isinstance(v, dict) else v)))
 
 
 def listing_tags(tech: Any) -> tuple[tuple[str, str], ...]:
@@ -115,6 +130,8 @@ def parse_listing_row(item: dict[str, Any]) -> ListingRow:
     media: dict[str, Any] = item["media"] if isinstance(item.get("media"), dict) else {}
     year, rating = media.get("year"), media.get("rating")
     poster = _text(item.get("posterUrl"))
+    backdrop = _text(media.get("backdropUrl"))
+    runtime = media.get("runtime")
     return ListingRow(
         _count(item.get("leechers")),
         _count(item.get("completions")),
@@ -128,6 +145,15 @@ def parse_listing_row(item: dict[str, Any]) -> ListingRow:
         _text(media.get("kind")),
         poster if poster.startswith("https://") else "",
         listing_tags(item.get("tech")),
+        _text(media.get("originalTitle")),
+        runtime if isinstance(runtime, int) and runtime > 0 else None,
+        _strings(media.get("directors")),
+        _strings(media.get("genres")),
+        _text(media.get("overview")),
+        _strings(media.get("cast")),
+        backdrop if backdrop.startswith("https://") else "",
+        _text(item.get("language")),
+        _text(item.get("quality")),
     )
 
 

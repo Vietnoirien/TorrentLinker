@@ -258,3 +258,138 @@ def test_details_window_has_download_actions_bound_to_its_candidate_and_folder(q
     assert actions == [("/tmp/downloads", False), ("/tmp/downloads", True)]
     assert dialog.action_status.text() == "Done"
     dialog.close()
+
+
+RICH = {
+    **DETAILS,
+    "uploader": "Anonyme",
+    "team": {"id": 142, "name": "MTLQC", "slug": "mtlqc"},
+    "createdAt": "2026-10-27T23:07:54Z",
+    "seeders": 0,
+    "leechers": 3,
+    "completions": 4,
+    "metadata": {
+        **DETAILS["metadata"],
+        "isExclusive": True,
+        "lowBitrateWarning": True,
+        "category": {"name": "Films & Vidéos"},
+        "subcategory": {"name": "Émission TV"},
+        "options": [
+            {"name": "Langue", "values": [{"value": "Québecois (VFQ/French)"}]},
+            {"name": "Saison", "values": [{"value": "Saison 10"}]},
+            {"name": "Vide", "values": []},
+        ],
+        "tmdbData": {
+            "id": 74342,
+            "type": "tv",
+            "title": "Occupation Double",
+            "originalTitle": "Occupation Double",
+            "year": 2017,
+            "posterUrl": "https://images.example/poster.png",
+            "genres": ["Reality"],
+            "rating": 4.0,
+            "ratingCount": 3,
+            "cast": [{"name": "Alicia"}, {"name": "Frédérick"}],
+            "directors": ["Jonathan"],
+        },
+    },
+    "externalIds": [{"kind": "imdb", "value": "tt11947282"}, {"kind": "x", "value": "?"}],
+    "trust": {
+        "status": "untested",
+        "isTested": False,
+        "positiveCount": 1,
+        "negativeCount": 2,
+        "minVotesRequired": 3,
+    },
+}
+
+
+def test_details_parse_the_facts_the_page_shows():
+    d = parse_details(RICH)
+    assert (d.uploader, d.team, d.exclusive, d.low_bitrate) == ("Anonyme", "MTLQC", True, True)
+    assert (d.seeders, d.leechers, d.completions) == (0, 3, 4)
+    assert d.category == "Films & Vidéos" and d.subcategory == "Émission TV"
+    assert d.facts == (
+        ("Langue", ("Québecois (VFQ/French)",)),
+        ("Saison", ("Saison 10",)),
+    )
+    assert (d.trust.status, d.trust.positive, d.trust.negative, d.trust.required) == (
+        "untested",
+        1,
+        2,
+        3,
+    )
+    assert d.created_at is not None
+    m = d.media
+    assert m is not None and (m.title, m.year, m.kind, m.rating, m.votes) == (
+        "Occupation Double",
+        2017,
+        "tv",
+        4.0,
+        3,
+    )
+    assert m.tmdb_id == "74342" and m.imdb_id == "tt11947282"
+    assert m.cast == ("Alicia", "Frédérick") and m.directors == ("Jonathan",)
+
+
+def test_details_ignore_malformed_facts():
+    d = parse_details(
+        {
+            "team": "nope",
+            "trust": [],
+            "seeders": "many",
+            "metadata": {
+                "tmdbData": {"id": "x", "imdbId": "not-an-id", "year": 99999, "rating": 50},
+                "options": "bad",
+            },
+        }
+    )
+    assert d.team == "" and d.trust.status == "" and d.seeders is None and d.facts == ()
+    assert d.media is not None and (d.media.year, d.media.rating) == (None, None)
+    assert d.media.tmdb_id == "" and d.media.imdb_id == ""
+    assert parse_details({}).media is None
+
+
+def test_dialog_shows_the_page_structure_like_c411(qtbot, monkeypatch):
+    monkeypatch.setattr("torrentlinker.gui.torrent_details.fetch_image", lambda url: png())
+    dialog = TorrentDetailsDialog(
+        Candidate("Example", 1024, "x", 0, "a" * 40),
+        fake_indexer(lambda r: httpx.Response(200, json=RICH)),
+        "≈ 0.25",
+        "Estimate",
+        torrent_note="1.10",
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitUntil(lambda: dialog.card.isVisible() and not dialog.poster.pixmap().isNull())
+    assert dialog.badge.text() == "ÉMISSION TV" and not dialog.badge.isHidden()
+    assert "Sent by Anonyme" in dialog.byline.text() and "Team MTLQC" in dialog.byline.text()
+    assert not dialog.banner.isHidden() and "not tested" in dialog.banner_title.text()
+    chips = [w.text() for w in dialog.findChildren(type(dialog.badge), "detailChip")]
+    for expected in ("★ Exclusive", "Low bitrate", "Not tested", "3 leechers", "Seeds wanted"):
+        assert expected in chips
+    assert "Langue: Québecois (VFQ/French)" in chips and "Reality" in chips
+    assert "TMDB 74342" in chips and "IMDb tt11947282" in chips
+    assert "Occupation Double (2017)" in dialog.card_title.text()
+    assert "4.0/10" in dialog.card_facts.text() and "Jonathan" in dialog.card_facts.text()
+    assert not dialog.trust_box.isHidden() and "👍 1" in dialog.trust_line.text()
+    assert "Note: 1.10" in dialog.summary.text()
+    assert dialog.files_section.toggle.text() == "Show the files (1)"
+    # The NFO and files stay closed until asked for, as on c411.
+    assert not dialog.nfo.isVisible() and not dialog.files.isVisible()
+    dialog.nfo_section.set_open(True)
+    assert dialog.nfo.isVisible()
+
+
+def test_dialog_without_tmdb_or_trust_data_keeps_those_sections_hidden(qtbot, monkeypatch):
+    monkeypatch.setattr("torrentlinker.gui.torrent_details.fetch_image", lambda url: png())
+    dialog = TorrentDetailsDialog(
+        Candidate("Example", 1024, "x", 2, "a" * 40),
+        fake_indexer(lambda r: httpx.Response(200, json=DETAILS)),
+        "≈ 0.25",
+        "",
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitUntil(lambda: dialog.reload.isEnabled() and not dialog.status.text())
+    assert dialog.card.isHidden() and dialog.trust_box.isHidden() and dialog.banner.isHidden()

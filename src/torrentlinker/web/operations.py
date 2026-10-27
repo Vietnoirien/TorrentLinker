@@ -602,11 +602,15 @@ class Operations:
                 raise ValueError("Select one torrent.")
             detail = parse_details(self.setup.indexer().torrent_json(request.hashes[0]))
             markup, images = preview_html(detail.description, detail.poster)
+            facts = asdict(detail)
+            for key in ("description", "nfo", "files", "has_nfo"):
+                facts.pop(key)
             return {
                 "description": markup,
                 "images": images,
                 "nfo": detail.nfo,
                 "files": detail.files,
+                "info": facts,
             }
         if request.kind == "search-options":
             return self.search_options(request.category)

@@ -107,6 +107,7 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
     error = "#ff9c9c" if dark else "#b42332"
     warning = "#edbf73" if dark else "#8a5800"
     selection = "#254c53" if dark else "#d8eeeb"
+    ok = "#4ad394" if dark else "#1f9d63"
     palette = QPalette()
     for role, color in {
         QPalette.ColorRole.Window: bg,
@@ -210,6 +211,34 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
         QFrame#searchBar QLineEdit {{ background: transparent; border: 0; font-size: 15px;
             padding: 8px 0; }}
         QFrame#searchBar QLineEdit:focus {{ border: 0; }}
+        /* Torrent detail tab (gui/torrent_details.py) */
+        QLabel#detailCrumb {{ color: {muted}; }}
+        QLabel#detailTitle {{ font-size: 22px; font-weight: 600; }}
+        QLabel#detailBadge {{ background: {selection}; border-radius: 6px; padding: 5px 12px;
+            font-weight: 700; color: {accent}; }}
+        QLabel#detailChip {{ background: {panel}; border: 1px solid {border}; border-radius: 8px;
+            padding: 4px 10px; }}
+        QLabel#detailChip[kind="up"] {{ color: {ok}; }}
+        QLabel#detailChip[kind="down"] {{ color: {error}; }}
+        QLabel#detailChip[kind="done"] {{ color: {accent}; }}
+        QLabel#detailChip[kind="wanted"], QLabel#detailChip[kind="warning"],
+        QLabel#detailChip[kind="untested"], QLabel#detailChip[kind="exclusive"] {{
+            color: {warning}; border-color: {warning}; }}
+        QLabel#detailChip[kind="tested"] {{ color: {ok}; border-color: {ok}; }}
+        QLabel#detailChip[kind="id"] {{ font-family: monospace; color: {muted}; }}
+        QFrame#detailBanner {{ background: {panel}; border: 1px solid {accent};
+            border-radius: 10px; }}
+        QFrame#detailBanner QLabel {{ background: transparent; }}
+        QFrame#detailCard {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 {panel}, stop:1 {selection}); border: 1px solid {accent}; border-radius: 10px; }}
+        QFrame#detailTrust {{ background: {panel}; border: 1px solid {border};
+            border-radius: 10px; }}
+        QFrame#detailCard QLabel, QFrame#detailTrust QLabel {{ background: transparent; }}
+        QFrame#detailCard QLabel#detailChip {{ background: {alt}; }}
+        QLabel#detailCardTitle {{ font-size: 17px; font-weight: 600; }}
+        QLabel#detailPoster {{ background: {alt}; border-radius: 6px; }}
+        QFrame#detailBar {{ background: {panel}; border-top: 1px solid {border}; }}
+        QFrame#detailBar QLabel {{ background: transparent; }}
         QFrame#resultsCard {{ background: {panel}; border: 1px solid {border};
             border-radius: 10px; }}
         QFrame#resultsCard QWidget {{ background: transparent; }}

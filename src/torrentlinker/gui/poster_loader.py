@@ -13,13 +13,14 @@ MEMORY = 300
 
 
 class _Signals(QObject):
-    done = Signal(str, object)  # url, QImage or None
+    done = Signal(str, object)  # key, QImage or None
 
 
 class _Job(QRunnable):
-    def __init__(self, cache: PosterCache, url: str) -> None:
+    def __init__(self, cache: PosterCache, url: str, key: str, size: tuple[int, int]) -> None:
         super().__init__()
-        self.cache, self.url, self.signals = cache, url, _Signals()
+        self.cache, self.url, self.key, self.size = cache, url, key, size
+        self.signals = _Signals()
 
     def run(self) -> None:
         image = None
@@ -27,11 +28,11 @@ class _Job(QRunnable):
             decoded = QImage.fromData(data)
             if not decoded.isNull() and decoded.width() * decoded.height() <= 4_000_000:
                 image = decoded.scaled(
-                    *THUMB,
+                    *self.size,
                     Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-        self.signals.done.emit(self.url, image)
+        self.signals.done.emit(self.key, image)
 
 
 class PosterLoader(QObject):
@@ -50,14 +51,15 @@ class PosterLoader(QObject):
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(MAX_IN_FLIGHT)
 
-    def pixmap(self, url: str) -> QPixmap | None:
+    def pixmap(self, url: str, size: tuple[int, int] = THUMB) -> QPixmap | None:
         if not self.enabled or not url:
             return None
-        if url in self._pixmaps:
-            return self._pixmaps[url]
-        if url not in self._pending and valid_poster_url(url):
-            self._pending.add(url)
-            job = _Job(self.cache, url)
+        key = url if size == THUMB else f"{url}@{size[0]}x{size[1]}"
+        if key in self._pixmaps:
+            return self._pixmaps[key]
+        if key not in self._pending and valid_poster_url(url):
+            self._pending.add(key)
+            job = _Job(self.cache, url, key, size)
             job.setAutoDelete(False)
             job.signals.done.connect(self._arrived)
             self._jobs.add(job)
@@ -69,7 +71,7 @@ class PosterLoader(QObject):
         if len(self._pixmaps) >= MEMORY:
             self._pixmaps.pop(next(iter(self._pixmaps)))
         self._pixmaps[url] = QPixmap.fromImage(image) if isinstance(image, QImage) else None
-        self._jobs = {job for job in self._jobs if job.url != url}
+        self._jobs = {job for job in self._jobs if job.key != url}
         self.loaded.emit(url)
 
     def stop(self) -> None:

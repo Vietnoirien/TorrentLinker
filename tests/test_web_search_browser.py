@@ -1,6 +1,7 @@
 """Opt-in browser coverage of the Search page against a fake c411."""
 
 import os
+import re
 import socket
 import threading
 import time
@@ -89,6 +90,17 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             expect(rows.first.locator("img")).to_have_attribute(
                 "src", f"api/poster?url={POSTER.replace(':', '%3A').replace('/', '%2F')}"
             )
+            # Resting the pointer on a row opens c411's card; leaving closes it.
+            rows.first.hover()
+            card = page.locator(".hover-card")
+            expect(card).to_be_visible()
+            expect(card).to_contain_text("Release.1.2020")
+            expect(card).to_contain_text("2020 · 1h59 · Jake Kasdan")
+            expect(card).to_contain_text("Aventure")
+            expect(card).to_contain_text("Dwayne Johnson")
+            expect(card.locator(".hc-poster")).to_have_attribute("src", re.compile("^api/poster"))
+            page.mouse.move(5, 5)
+            expect(card).to_be_hidden()
             # Numbered pages and sort chips search again.
             expect(page.locator("#search-pages-top")).to_contain_text("400")
             page.locator("#search-pages-top").get_by_role("button", name="Page 2").click()
@@ -131,6 +143,25 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             page.locator("#search-density-compact").click()
             expect(page.locator("#search-table table")).to_be_visible()
             expect(page.locator("#search-table th", has_text="Leechers")).to_be_visible()
+            # Compact follows c411: the name carries its tags and a header sorts the search.
+            first = page.locator("#search-table tbody tr").first
+            expect(first.locator(".type-badge")).to_have_text("FILM")
+            expect(first).to_contain_text("Multi (Français inclus)")
+            page.locator("#search-table th").get_by_role("button", name="Leechers").click()
+            until(lambda: listing()[-1].get("sortBy") == "leechers")
+            # The details tab shows c411's page: header, banner, facts, TMDB card, trust.
+            page.locator("#search-table .sr-release").first.click()
+            dialog = page.locator("#dialog-content")
+            expect(dialog).to_contain_text("Sent by up1")
+            expect(dialog).to_contain_text("Team BOUBA")
+            expect(dialog.locator(".dt-banner")).to_contain_text("not tested")
+            expect(dialog.locator(".dt-badge")).to_have_text("FILM")
+            expect(dialog).to_contain_text("Seeds wanted")
+            expect(dialog.locator(".dt-card")).to_contain_text("Title 1 (2020)")
+            expect(dialog.locator(".dt-trust")).to_contain_text("Community trust")
+            expect(dialog.locator("details", has_text="Show the NFO")).to_be_visible()
+            expect(dialog.locator(".dt-poster")).to_have_attribute("src", re.compile("^api/poster"))
+            page.keyboard.press("Escape")
             page.reload()
             page.locator("[data-view=search]").click()
             expect(page.locator("#search-density-compact")).to_have_attribute(

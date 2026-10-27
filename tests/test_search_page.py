@@ -217,14 +217,15 @@ def test_density_switch_changes_columns_and_is_remembered(qtbot, tmp_path, monke
     comfortable_height = table.height()
     view.density_buttons["compact"].click()
     assert view.density == "compact"
-    assert not table.isColumnHidden(2) and not table.isColumnHidden(8) and table.isColumnHidden(11)
+    assert not table.isColumnHidden(2) and not table.isColumnHidden(8)
+    assert table.isColumnHidden(4) and table.isColumnHidden(10) and not table.isColumnHidden(11)
     assert not table.horizontalHeader().isHidden()
     assert table.rowHeight(0) < 60 and table.height() <= comfortable_height
     assert QSettings(ini, QSettings.Format.IniFormat).value("search/density") == "compact"
     # The next page of results keeps the density that was chosen.
     view.page_bar.page_requested.emit(2)
     qtbot.waitUntil(lambda: not view._searching)
-    assert table.isColumnHidden(11) and table.rowHeight(0) < 60
+    assert table.isColumnHidden(4) and table.rowHeight(0) < 60
     restored = SearchTab(Store(tmp_path / "other.db"), Settings(), lambda: None, FakeQbit)
     qtbot.addWidget(restored)
     assert restored.density == "compact"
@@ -568,3 +569,105 @@ def test_a_torznab_indexer_gets_the_page_without_native_controls(qtbot, tmp_path
     view.set_density("compact")
     assert view.results.grab().width() > 0
     assert view.results_summary.text() == ""
+
+
+def test_compact_follows_c411s_table_and_its_headers_sort_the_whole_search(
+    qtbot, tmp_path, monkeypatch
+):
+    seen: list = []
+
+    def handler(request):
+        seen.append(request)
+        if request.url.path == "/api/categories":
+            data = TREE
+        elif request.url.path.endswith("filter-options"):
+            data = FACETS
+        else:
+            data = rich_listing(int(request.url.params["page"]))
+        return httpx.Response(200, json=data)
+
+    from PySide6.QtCore import QSettings
+
+    from torrentlinker.gui.search_view import COMPACT_ORDER, HEADER_SORTS
+
+    monkeypatch.setattr(
+        SearchTab,
+        "_ui_settings",
+        lambda self: QSettings(str(tmp_path / "ui.ini"), QSettings.Format.IniFormat),
+    )
+    indexer = fake_indexer(handler)
+    view = SearchTab(Store(tmp_path / "state.db"), Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.resize(1200, 800)
+    view.show()
+    qtbot.waitUntil(lambda: view.filters.ready)
+    view.search_button.click()
+    qtbot.waitUntil(lambda: view._native_page is not None and not view._searching)
+    view.set_density("compact")
+    header = view.results.horizontalHeader()
+    assert [header.logicalIndex(i) for i in range(len(COMPACT_ORDER))] == list(COMPACT_ORDER)
+    assert view.results.itemDelegateForColumn(3) is view._compact_delegates[3]
+    view.results.grab()
+    # Comments come from the listing; a header click sorts on c411, not just this page.
+    assert view.results.item(0, 12).text() == "0"
+    header.sectionClicked.emit(8)
+    qtbot.waitUntil(lambda: not view._searching and seen[-1].url.params.get("sortBy") == "leechers")
+    assert seen[-1].url.params["sortOrder"] == "desc"
+    assert header.sortIndicatorSection() == 8
+    header.sectionClicked.emit(8)
+    qtbot.waitUntil(lambda: not view._searching and seen[-1].url.params.get("sortOrder") == "asc")
+    assert set(HEADER_SORTS.values()) <= {
+        "category",
+        "name",
+        "comments",
+        "createdAt",
+        "size",
+        "completions",
+        "seeders",
+        "leechers",
+    }
+
+
+def test_resting_on_a_row_opens_c411s_hover_card(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtCore import QEvent, QPoint
+    from PySide6.QtTest import QTest
+
+    original = rich_listing
+
+    def with_media(page=1):
+        data = original(page)
+        for row in data["data"]:
+            row["media"].update(
+                {
+                    "overview": "A long synopsis. " * 40,
+                    "genres": ["Aventure", "Comédie"],
+                    "cast": ["Dwayne Johnson", "Kevin Hart", "Jack Black", "Karen"],
+                    "directors": ["Jake Kasdan"],
+                    "runtime": 119,
+                    "originalTitle": "Welcome to the Jungle",
+                    "backdropUrl": "https://image.tmdb.org/t/p/w1280/b.jpg",
+                }
+            )
+        return data
+
+    monkeypatch.setitem(globals(), "rich_listing", with_media)
+    view, _ = make_rich_view(qtbot, tmp_path, monkeypatch)
+    table = view.results
+    assert table.item(0, 0).toolTip() == ""  # the card replaces the plain tooltip
+    viewport = table.viewport()
+    QTest.mouseMove(viewport, QPoint(200, 30))
+    qtbot.waitUntil(lambda: view.hover.isVisible(), timeout=3000)
+    header = view.hover.header
+    assert header.kind == "FILM" and header.rating == "★ 7.0"
+    assert header.subtitle == "Welcome to the Jungle" and header.meta.endswith(
+        " · 1h59 · Jake Kasdan"
+    )
+    assert header.title.startswith("Release.")
+    assert view.hover.overview.text().endswith("…") and len(view.hover.overview.text()) <= 261
+    assert view.hover.cast.count() == 3  # three names, as c411 shows
+    QApplication_sendLeave = QEvent(QEvent.Type.Leave)
+    view.eventFilter(viewport, QApplication_sendLeave)
+    assert not view.hover.isVisible()
+    # Rows without details keep the plain tooltip and open no card.
+    view._native_page = None
+    assert view._hover_info(0) is None
