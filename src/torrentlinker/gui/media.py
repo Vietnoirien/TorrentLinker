@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     QFile,
     QIODevice,
     QLocale,
+    QRect,
     QRectF,
     QSettings,
     QSignalBlocker,
@@ -1168,11 +1169,25 @@ class MediaTab(QWidget):
     def _scale_caption(self) -> None:
         height = self.video.overlay.height() or 480
         size = max(16, min(64, height // 18))
-        self.caption.setStyleSheet(
-            f"color: white; background: transparent; font-size: {size}px; "
-            f"font-weight: 600; padding: 0 0 {size // 2}px 0;"
-        )
+        font = QFont(self.caption.font())
+        font.setPixelSize(size)
+        font.setWeight(QFont.Weight.DemiBold)
+        self.caption.setFont(font)
+        self.caption.setStyleSheet("color: white; background: transparent;")
+        self.caption.setContentsMargins(0, 0, 0, size // 2)
         self.caption.setMaximumWidth(max(200, self.video.overlay.width() * 9 // 10))
+        self._fit_caption()
+
+    def _fit_caption(self) -> None:
+        """Give every wrapped subtitle line room, so long cues are never cut off."""
+        width = self.caption.maximumWidth()
+        lines = self.caption.fontMetrics().boundingRect(
+            QRect(0, 0, width, 100000),
+            int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
+            self.caption.text(),
+        )
+        margins = self.caption.contentsMargins()
+        self.caption.setFixedHeight(lines.height() + margins.top() + margins.bottom() + 4)
 
     def _show_video_controls(self) -> None:
         self.video_controls.show()
@@ -1333,7 +1348,9 @@ class MediaTab(QWidget):
             )
         else:
             text = self.embedded_caption if self.subtitle_choice >= 0 else ""
-        self.caption.setText(text)
+        if text != self.caption.text():
+            self.caption.setText(text)
+            self._fit_caption()
         self.caption.setVisible(bool(text) and self._player_video_mode)
 
     def toggle_fullscreen(self) -> None:

@@ -324,6 +324,18 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert tab.player.source() == source
     assert tab.player.position() == position
     assert tab.caption.font().pixelSize() == max(16, min(64, tab.video.overlay.height() // 18))
+    # Two, three and wrapped lines all keep their full height inside the picture.
+    for text, lines in (
+        ("Un ange est descendu\ndes sphères célestes", 2),
+        ("Un ange est descendu\ndes sphères célestes\npour nous parler", 3),
+        ("Un ange est descendu des sphères célestes " * 6, 3),
+    ):
+        tab.caption.setText(text)
+        tab._fit_caption()
+        qtbot.wait(20)
+        assert tab.caption.height() >= lines * tab.caption.fontMetrics().lineSpacing()
+        bottom = tab.caption.mapTo(tab.video, tab.caption.rect().bottomLeft())
+        assert tab.video.rect().contains(bottom)
     qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)
     qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
     assert tab.player.source() == source
