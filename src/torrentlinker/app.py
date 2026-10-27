@@ -145,6 +145,9 @@ def main() -> int:
     store = Store(data_dir() / "state.db")
     window = MainWindow(settings, settings_path, store)
     window.show()
+    from torrentlinker.gui.stall_watchdog import install as watch_for_stalls
+
+    watch_for_stalls(window)
     if "--smoke-test" in sys.argv:  # used by CI on packaged builds
         try:
             smoke_checks()

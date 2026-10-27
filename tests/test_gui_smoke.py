@@ -1509,3 +1509,26 @@ def test_packaging_smoke_accepts_stable_and_prerelease_versions(monkeypatch, ver
     monkeypatch.setattr(app, "installed_version", lambda: version)
     monkeypatch.setattr(app, "agent_smoke_checks", lambda: None)
     app.smoke_checks()
+
+
+def test_seeding_views_wait_while_hidden_and_catch_up_when_shown(qtbot):
+    from torrentlinker.domain import Torrent
+    from torrentlinker.gui.zen_view import ZenTab
+    from torrentlinker.seeding import Seeding, SeedingRow
+    from torrentlinker.zen import ZenClass, ZenDay, ZenProfile
+
+    tab = ZenTab(lambda: lambda: Seeding([], ZenDay(), []), lambda: ZenProfile(ZenClass.TANKER))
+    qtbot.addWidget(tab)
+    hidden = [True]
+    tab.defer_while_hidden(lambda: hidden[0])
+    rows = [SeedingRow(Torrent("a", "A film", Path("/data"), size=1024**2), 0.1)]
+    view = Seeding(rows, ZenDay([0.1]), [])
+    tab.seeding_view.show_seeding(view)
+    assert tab.seeding_view.table.torrents == {}  # not rebuilt while out of sight
+    assert "0 torrents" not in tab.seeding_view.total.text()  # the cheap summary still updates
+    assert tab.seeding_view.seeding is view
+    tab.resize(900, 600)
+    hidden[0] = False
+    tab.show()
+    qtbot.waitUntil(lambda: "a" in tab.seeding_view.table.torrents, timeout=3000)
+    qtbot.waitUntil(lambda: "<b>" in tab.comparison.labels[ZenClass.TANKER].text(), timeout=3000)

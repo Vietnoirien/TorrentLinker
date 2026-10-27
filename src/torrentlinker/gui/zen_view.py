@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, Signal
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
@@ -94,6 +95,10 @@ class SeedingView(QWidget):
         self.load = load
         self.seeding: Seeding | None = None
         self._quiet = False
+        # The tree is costly to rebuild. While the main window says it is out of sight, the
+        # newest data waits here and the tree is rebuilt when the page is shown again.
+        self.defer_tree: Callable[[], bool] = lambda: False
+        self._tree_dirty = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
@@ -142,7 +147,11 @@ class SeedingView(QWidget):
     def show_seeding(self, view: Seeding) -> None:
         self.refresh_button.setEnabled(True)
         self.seeding = view
-        self.table.show_seeding(view)
+        if self.defer_tree():
+            self._tree_dirty = True
+        else:
+            self._tree_dirty = False
+            self.table.show_seeding(view)
         report = view.tag_sync
         self.tag_status.setToolTip("")
         if report is None:
@@ -170,6 +179,17 @@ class SeedingView(QWidget):
             self.tag_status.setToolTip("")
         self._show_total()
         self.updated.emit(view)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._tree_dirty:
+            # Let the page appear first; the rebuild follows on the next turn of the event loop.
+            QTimer.singleShot(0, self._rebuild_tree)
+
+    def _rebuild_tree(self) -> None:
+        if self._tree_dirty and self.seeding is not None and self.isVisible():
+            self._tree_dirty = False
+            self.table.show_seeding(self.seeding)
 
     def _show_total(self) -> None:
         view = self.seeding
@@ -201,6 +221,12 @@ class ClassComparison(QGroupBox):
         super().__init__(self.tr("Class comparison"))
         self.profile = profile
         self.seeding: Seeding | None = None
+        # The estimate for every Class takes about a second on a large library. Like the
+        # seeding tree it waits while out of sight, and the page computes it off the GUI thread.
+        self.defer: Callable[[], bool] = lambda: False
+        self.background = False
+        self._dirty = False
+        self._generation = 0
         layout = QHBoxLayout(self)
         self.labels: dict[ZenClass, QLabel] = {}
         for c in ZenClass:
@@ -230,8 +256,36 @@ class ClassComparison(QGroupBox):
 
     def show_seeding(self, view: Seeding | None) -> None:
         self.seeding = view
+        if self.defer():
+            self._dirty = True
+            return
+        self._compute()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._dirty:
+            QTimer.singleShot(0, self._compute)
+
+    def _compute(self) -> None:
+        if not isValid(self):
+            return
+        self._dirty = False
         profile = self.profile()
-        days = compare_classes(profile, view.active if view else [], self.uploads.value())
+        active = self.seeding.active if self.seeding else []
+        uploads = self.uploads.value()
+        if not self.background:
+            self._show_days(profile, compare_classes(profile, active, uploads))
+            return
+        self._generation += 1
+        generation = self._generation
+
+        def done(days) -> None:
+            if isValid(self) and generation == self._generation:
+                self._show_days(profile, days)
+
+        run_in_background(lambda: compare_classes(profile, active, uploads), done, lambda _e: None)
+
+    def _show_days(self, profile: ZenProfile, days) -> None:
         for c, label in self.labels.items():
             text = self.tr("{0}: {1} Zen/day").format(class_label(c), zen_text(days[c].total))
             if c is ZenClass.REUPLOADER:
@@ -869,6 +923,11 @@ def duration_text(seconds: float) -> str:
 class ZenTab(QWidget):
     """Everything about Zen: what the user's seeding earns, and what to seed next."""
 
+    def defer_while_hidden(self, hidden: Callable[[], bool]) -> None:
+        """Hold back the costly seeding views while `hidden()` says the page is out of sight."""
+        self.seeding_view.defer_tree = hidden
+        self.comparison.defer = hidden
+
     def __init__(
         self,
         load_seeding: Callable[[], Callable[[], Seeding]],
@@ -880,6 +939,7 @@ class ZenTab(QWidget):
         self.seeding_view = SeedingView(load_seeding)
         self.comparison = ClassComparison(profile, uploads)
         self.seeding_view.updated.connect(self.comparison.show_seeding)
+        self.comparison.background = True
         self.catalogue = CatalogueBox()
         self.plan_view = PlanView()
         layout.setContentsMargins(0, 0, 0, 0)

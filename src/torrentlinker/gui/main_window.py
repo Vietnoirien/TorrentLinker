@@ -307,6 +307,9 @@ class MainWindow(QMainWindow):
         splitter.setSizes([660, 520])
         self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
         self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
+        self.zen_tab.defer_while_hidden(
+            lambda: self.isVisible() and not self.zen_tab.seeding_view.table.isVisible()
+        )
         self.tabs = QTabWidget()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
         library_page = QWidget()
