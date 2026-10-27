@@ -2783,8 +2783,8 @@ class MediaTab(QWidget):
         if not self.seek.isSliderDown():
             self.seek.setValue(position // 1000)
         self.elapsed.setText(
-            f"{position // 60000}:{position // 1000 % 60:02d} / "
-            f"{self.player.duration() // 60000}:{self.player.duration() // 1000 % 60:02d}"
+            f"{self._time_label(position / 1000)} / "
+            f"{self._time_label(self.player.duration() / 1000)}"
         )
 
     def _duration_changed(self, duration: int) -> None:

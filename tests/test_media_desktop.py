@@ -949,3 +949,10 @@ def test_media_grid_scroll_appends_and_filter_resets(qtbot):
     qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 1)
     assert tab.rows == rows[:1]
     assert tab.next_offset is None
+
+
+def test_player_time_shows_hours_for_long_films():
+    from torrentlinker.gui.media import MediaTab
+
+    assert MediaTab._time_label(56) == "0:56"
+    assert MediaTab._time_label(8034) == "2:13:54"
