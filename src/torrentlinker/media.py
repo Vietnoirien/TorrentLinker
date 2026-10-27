@@ -24,6 +24,21 @@ AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wm
 PARTIAL = (".part", ".partial", ".!qb", ".!ut", ".crdownload", ".tmp")
 
 
+def genres_of(value) -> list[str]:
+    """`Horreur, Mystère` -> each genre; release details list several in one field."""
+    return [genre.strip() for genre in str(value or "").split(",") if genre.strip()]
+
+
+def rating_of(row) -> float:
+    try:
+        return float(row.get("rating") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+HIGHLY_RATED = 7.0  # the "Highly rated" home row and view
+
+
 def identity(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:32]
 
@@ -783,8 +798,9 @@ class MediaLibrary:
         rows = [r for r in rows if (not kind or r["kind"] == kind)]
         filters = {
             name: sorted({str(r.get(name) or "") for r in rows if r.get(name)})
-            for name in ("genre", "year", "language", "artist", "album")
+            for name in ("year", "language", "artist", "album")
         }
+        filters["genre"] = sorted({genre for r in rows for genre in genres_of(r.get("genre"))})
         rows = [
             r
             for r in rows
@@ -792,7 +808,7 @@ class MediaLibrary:
             in " ".join(
                 str(r.get(k) or "") for k in ("title", "artist", "album", "release", "series")
             ).casefold()
-            and (not genre or r["genre"] == genre)
+            and (not genre or genre in genres_of(r["genre"]))
             and (not year or r["year"] == year)
             and (not language or language in r["language"].split(", "))
             and (not availability or r["availability"] == availability)
@@ -801,7 +817,11 @@ class MediaLibrary:
             and (view != "continue" or r["position"] > 0 and not r["watched"])
             and (view != "films" or not r["series"])
             and (view != "series" or r["series"])
+            and (view != "unwatched" or not r["watched"] and not r["position"])
+            and (view != "rated" or rating_of(r) >= HIGHLY_RATED)
         ]
+        if view == "rated":
+            rows.sort(key=rating_of, reverse=True)
         releases_by_content = {}
         for row in rows:
             releases_by_content.setdefault(row["content_id"], []).append(row["id"])
@@ -854,6 +874,46 @@ class MediaLibrary:
             "has_more": offset + limit < total,
             "next_offset": offset + limit if offset + limit < total else None,
         }
+
+    def home_rows(self, client_id, *, kind="video", limit=20, genres=8):
+        """The video home as rows: what to continue, what is new, the main genres, series,
+        the best rated and what is not watched yet. Each row says how to see all of it."""
+        rows = []
+
+        def add(key, title, **filters):
+            page = self.listing(client_id, kind=kind, limit=limit, **filters)
+            if page["rows"]:
+                rows.append(
+                    {
+                        "key": key,
+                        "title": title,
+                        "filters": filters,
+                        "total": page["total"],
+                        "rows": page["rows"],
+                    }
+                )
+
+        add("continue", "", view="continue")
+        add("recent", "", view="recent")
+        films = self.listing(client_id, kind=kind, view="films", limit=200)
+        counts: dict[str, int] = {}
+        while True:
+            for row in films["rows"]:
+                for genre in genres_of(row.get("genre")):
+                    counts[genre] = counts.get(genre, 0) + 1
+            if films["next_offset"] is None:
+                break
+            films = self.listing(
+                client_id, kind=kind, view="films", limit=200, offset=films["next_offset"]
+            )
+        top = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        for genre, count in top[:genres]:
+            if count >= 3:
+                add("genre", genre, view="films", genre=genre)
+        add("series", "", view="series")
+        add("rated", "", view="rated")
+        add("unwatched", "", view="unwatched")
+        return {"rows": rows}
 
     def detail(self, client_id, identifier, *, episodes_offset=0, releases_offset=0, limit=200):
         item = self.row(self.record(client_id, identifier))

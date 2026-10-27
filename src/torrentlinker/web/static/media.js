@@ -1,5 +1,5 @@
 /* The player lives outside navigation views, so browsing never replaces its DOM. */
-const media = {kind: "video", view: "recent", rows: [], selected: null, session: null,
+const media = {kind: "video", view: "recent", rows: [], homeRows: [], selected: null, session: null,
   playerClient: "", queue: [], index: 0, shuffle: false, repeat: "off", ack: 0,
   busy: false, preview: null, playbackGeneration: 0, featureId: null, continueRows: [], next: null, chat: false, scan: "", request: 0};
 const mediaTab = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
@@ -31,7 +31,10 @@ const mediaClient = () => state.clientId === "all" ? state.setup?.default_client
 const mediaQuery = values => new URLSearchParams({client_id: mediaClient(), ...values}).toString();
 const mediaURL = (id, suffix = "stream") => `api/media/items/${encodeURIComponent(id)}/${suffix}?${new URLSearchParams({client_id: media.playerClient || mediaClient()})}`;
 const mediaPlayer = () => $("media-audio").hidden ? $("media-video") : $("media-audio");
-const mediaTime = n => { const seconds = Math.max(0, Math.floor(Number(n) || 0)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`; };
+const mediaTime = n => {
+  const seconds = Math.max(0, Math.floor(Number(n) || 0)), clock = `${String(seconds % 60).padStart(2, "0")}`;
+  return seconds >= 3600 ? `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${clock}` : `${Math.floor(seconds / 60)}:${clock}`;
+};
 function mediaStatus(text) { $("media-status").textContent = text; }
 function mediaOption(select, value, label) { const option = element("option", label); option.value = value; select.append(option); }
 function mediaViews() {
@@ -45,7 +48,7 @@ function mediaViews() {
   $("media-search").placeholder = say("Search your media", "Rechercher dans vos médias");
   $("media-playlist-name").placeholder = say("Playlist name", "Nom de la playlist");
   const select = $("media-view"); select.replaceChildren();
-  const choices = media.kind === "video" ? [["recent", say("Recent", "Récents")], ["continue", say("Continue watching", "Reprendre")], ["films", say("Films", "Films")], ["series", say("Series", "Séries")], ["all", say("All videos", "Toutes les vidéos")]] : [["albums", say("Albums", "Albums")], ["artists", say("Artists", "Artistes")], ["tracks", say("Tracks", "Pistes")]];
+  const choices = media.kind === "video" ? [["recent", say("Recent", "Récents")], ["continue", say("Continue watching", "Reprendre")], ["films", say("Films", "Films")], ["series", say("Series", "Séries")], ["rated", say("Highly rated", "Les mieux notés")], ["unwatched", say("Not watched yet", "Pas encore vus")], ["all", say("All videos", "Toutes les vidéos")]] : [["albums", say("Albums", "Albums")], ["artists", say("Artists", "Artistes")], ["tracks", say("Tracks", "Pistes")]];
   for (const [value, label] of choices) mediaOption(select, value, label);
   select.value = media.view;
   $("media-video-tab").setAttribute("aria-selected", String(media.kind === "video"));
@@ -60,13 +63,16 @@ async function loadMedia(append = false) {
   const version = ++media.request;
   const query = {kind: media.kind, view: media.view, q: $("media-search").value, offset: append ? media.next || 0 : 0, limit: 100};
   for (const key of ["genre", "year", "language", "availability"]) if ($(`media-${key}`).value) query[key] = $(`media-${key}`).value;
-  const [result, continuing] = await Promise.all([
+  const home = !append && mediaHomeActive();
+  const [result, continuing, rows] = await Promise.all([
     api(`media?${mediaQuery(query)}`),
     media.kind === "video" ? api(`media?${mediaQuery({...query, view: "continue", offset: 0, limit: 8})}`) : Promise.resolve({rows: []}),
+    home ? api(`media/home?${mediaQuery({})}`) : Promise.resolve({rows: []}),
   ]);
   if (version !== media.request) return;
   media.continueRows = continuing.rows;
-  for (const row of [...result.rows, ...continuing.rows]) mediaItems.set(row.id, row);
+  if (!append) media.homeRows = rows.rows.filter(row => row.key !== "continue");
+  for (const row of [...result.rows, ...continuing.rows, ...media.homeRows.flatMap(r => r.rows)]) mediaItems.set(row.id, row);
   media.rows = append ? [...media.rows, ...result.rows] : result.rows;
   media.next = result.has_more ? result.next_offset : null;
   $("media-more").hidden = !result.has_more;
@@ -95,7 +101,7 @@ function mediaArt(row, className = "") {
 function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); }
 function mediaRenderFeature() {
   const root = $("media-feature");
-  const candidates = [...media.rows, ...media.continueRows];
+  const candidates = [...media.rows, ...media.continueRows, ...media.homeRows.flatMap(r => r.rows)];
   const row = candidates.find(item => item.id === media.featureId) || candidates.find(item => item.available !== false && item.artwork_url) || candidates.find(item => item.available !== false) || candidates[0];
   root.hidden = media.kind !== "video" || !row;
   if (root.hidden) { media.selected = null; return; }
@@ -104,8 +110,10 @@ function mediaRenderFeature() {
   root.replaceChildren();
   const art = mediaArt(row, "media-feature-art"); root.append(art);
   const copy = element("div", undefined, "media-feature-copy");
+  // The poster sits left of the title and description, over the same artwork backdrop.
+  if (row.artwork_url) { copy.classList.add("has-poster"); copy.append(mediaArt(row, "media-feature-poster")); }
   copy.append(element("p", say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
-  const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language].filter(Boolean);
+  const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language, row.rating ? `★ ${row.rating}` : ""].filter(Boolean);
   copy.append(element("p", facts.join(" · "), "media-feature-meta"));
   if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
@@ -132,13 +140,72 @@ function mediaRenderContinue() {
     choice.append(art, progress, element("strong", row.title), element("span", mediaTime(row.position), "media-resume-position")); root.append(choice);
   }
 }
+// The video home shows rows (genres, series…); each row's "See all" opens the grid with its filters.
+function mediaHomeActive() {
+  return media.kind === "video" && media.view === "recent" && media.layout === "cinematic" && !$("media-search").value.trim()
+    && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);
+}
+function mediaRenderHome() {
+  const root = $("media-home-rows"), active = mediaHomeActive() && media.homeRows.length > 0;
+  root.hidden = !active; document.querySelector(".media-library-layout").hidden = active;
+  root.replaceChildren();
+  if (!active) return;
+  const titles = {recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")};
+  for (const row of media.homeRows) {
+    const section = element("section", undefined, "media-home-row"), header = element("div", undefined, "media-home-row-header");
+    const title = row.key === "genre" ? row.title : titles[row.key] || row.title;
+    section.setAttribute("aria-label", title);
+    const track = element("div", undefined, "media-row-track");
+    const step = direction => track.scrollBy({left: direction * Math.max(180, track.clientWidth - 180), behavior: "smooth"});
+    const back = button("‹", () => step(-1), "icon-button"), forward = button("›", () => step(1), "icon-button");
+    back.setAttribute("aria-label", say("Scroll left", "Défiler à gauche")); forward.setAttribute("aria-label", say("Scroll right", "Défiler à droite"));
+    const all = button(say("See all", "Voir tout"), () => guard(() => mediaSeeAll(row.filters)), "quiet");
+    header.append(element("h2", title), element("span", say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward, all);
+    for (const item of row.rows) {
+      const card = button("", () => {
+        mediaSelectFeature(item);
+        for (const other of root.querySelectorAll(".media-row-card")) other.setAttribute("aria-pressed", String(other.dataset.id === item.id));
+        $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
+      }, "media-row-card");
+      card.dataset.id = item.id;
+      card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
+      card.ondblclick = () => guard(() => mediaStart([item.id]));
+      card.append(mediaArt(item), element("strong", item.title), element("span", [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
+      track.append(card);
+    }
+    section.append(header, track); root.append(section);
+  }
+  // Rows can be drawn while the page is hidden; measure again whenever a row's size changes.
+  mediaRowObserver ||= new ResizeObserver(mediaRowArrows);
+  mediaRowObserver.disconnect();
+  for (const track of root.querySelectorAll(".media-row-track")) mediaRowObserver.observe(track);
+}
+let mediaRowObserver = null;
+function mediaRowArrows() {
+  // The arrows appear only when a row is wider than the page.
+  for (const section of document.querySelectorAll(".media-home-row")) {
+    const track = section.querySelector(".media-row-track"), overflow = track.scrollWidth > track.clientWidth + 2;
+    for (const arrow of section.querySelectorAll(".media-home-row-header .icon-button")) arrow.hidden = !overflow;
+  }
+}
+async function mediaSeeAll(filters) {
+  const genre = $("media-genre");
+  if (filters.genre) {
+    if (![...genre.options].some(option => option.value === filters.genre)) mediaOption(genre, filters.genre, filters.genre);
+    genre.value = filters.genre;
+  }
+  // Home is the recent view here, so "Recently added" opens every video instead.
+  media.view = !filters.view || filters.view === "recent" ? "all" : filters.view; $("media-view").value = media.view;
+  await loadMedia();
+  window.scrollTo({top: 0});
+}
 function mediaRender() {
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout;
   $("view-media").dataset.musicView = media.view;
   $("view-media").dataset.empty = String(media.rows.length === 0);
   for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
   for (const item of document.querySelectorAll("[data-media-music-view]")) { item.classList.toggle("active", item.dataset.mediaMusicView === media.view); item.setAttribute("aria-current", item.dataset.mediaMusicView === media.view ? "page" : "false"); }
-  mediaRenderFeature(); mediaRenderContinue();
+  mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome();
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries")})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
   const root = $("media-results"); root.replaceChildren();
@@ -731,7 +798,11 @@ $("media-center-mode").onclick = () => guard(async () => {
 });
 $("media-layout-switch").onchange = event => mediaSetLayout(event.target.value);
 $("settings-media-layout").onchange = event => mediaSetLayout(event.target.value);
-for (const item of document.querySelectorAll("[data-media-view]")) item.onclick = () => guard(async () => { media.view = item.dataset.mediaView; $("media-view").value = media.view; await loadMedia(); });
+for (const item of document.querySelectorAll("[data-media-view]")) item.onclick = () => guard(async () => {
+  // Home returns to the rows, so it clears the filters a row's "See all" applied.
+  if (item.dataset.mediaView === "recent") for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}`).value = "";
+  media.view = item.dataset.mediaView; $("media-view").value = media.view; await loadMedia();
+});
 $("media-details").addEventListener("click", event => { if (event.target === $("media-details")) { const box = event.target.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) event.target.close(); } });
 $("media-player-expand").onclick = () => { const expanded = $("media-player-shell").classList.toggle("media-player-expanded"); $("media-player-expand").textContent = expanded ? say("Compact player", "Réduire le lecteur") : say("Expand player", "Agrandir le lecteur"); };
 $("media-fullscreen").hidden = !document.fullscreenEnabled;

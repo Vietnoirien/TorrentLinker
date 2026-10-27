@@ -148,3 +148,50 @@ def test_downloaded_release_is_described_by_its_own_hash(tmp_path):
     media.enrich("default", setup(indexer), threading.Event(), print, [downloaded])
     assert indexer.calls == [exact]
     assert body(media, "0")["release_details"] == exact
+
+
+def test_home_rows_group_films_by_genre_rating_and_watch_state(tmp_path):
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "films"
+    root.mkdir()
+    facts = [
+        ("Horreur, Mystère", "7.4"),
+        ("Horreur", "5.1"),
+        ("Horreur, Drame", "8.0"),
+        ("Drame", "6.0"),
+        ("Comédie", ""),
+    ]
+    for number in range(len(facts)):
+        (root / f"Film {number} (2020).mkv").write_bytes(b"\0" * 64)
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings()
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    media = app.state.assistant.agent.media
+    media.scan("default", threading.Event(), lambda _p: None)
+    ids = {}
+    with media.db:
+        for row in media.db.execute("SELECT id, body FROM media_items").fetchall():
+            film = json.loads(row["body"])
+            number = int(film["title"].split()[-1])
+            ids[number] = row["id"]
+            film.update(genre=facts[number][0], rating=facts[number][1])
+            media.db.execute(
+                "UPDATE media_items SET body=? WHERE id=?", (json.dumps(film), row["id"])
+            )
+        media.db.execute("INSERT INTO media_progress VALUES ('default',?,30,100,0)", (ids[4],))
+    rows = {(r["key"], r["title"]): r for r in media.home_rows("default", limit=10)["rows"]}
+    horror = rows[("genre", "Horreur")]
+    assert horror["total"] == 3 and horror["filters"] == {"view": "films", "genre": "Horreur"}
+    assert ("genre", "Drame") not in rows  # fewer than three films
+    assert [r["id"] for r in rows[("rated", "")]["rows"]] == [ids[2], ids[0]]
+    assert ids[4] not in {r["id"] for r in rows[("unwatched", "")]["rows"]}
+    assert [r["id"] for r in rows[("continue", "")]["rows"]] == [ids[4]]
+    assert "Horreur" in media.listing("default", kind="video")["filters"]["genre"]

@@ -79,6 +79,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from torrentlinker.gui.controls import icon_button, set_role
+from torrentlinker.gui.media_rows import MediaRow
 from torrentlinker.gui.tasks import run_in_background
 
 # The Media Center chat panel and the media beside it never shrink below these.
@@ -150,6 +151,12 @@ class MediaHero(QWidget):
         self.box = QHBoxLayout(self)
         self.box.setContentsMargins(34, 34, 34, 34)
         self.box.setSpacing(28)
+        # The poster sits left of the title and description, over the same artwork backdrop.
+        self.poster = QLabel()
+        self.poster.setObjectName("mediaHeroPoster")
+        self.poster.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.poster.hide()
+        self.box.addWidget(self.poster, 0, Qt.AlignmentFlag.AlignVCenter)
         self.copy = QWidget()
         self.copy.setMaximumWidth(620)
         text = QVBoxLayout(self.copy)
@@ -198,7 +205,31 @@ class MediaHero(QWidget):
 
     def set_picture(self, picture):
         self.picture = picture
+        self._show_poster()
         self.update()
+
+    def _show_poster(self):
+        narrow_focus = self.mode == "focus" and self.width() < 900
+        visible = not self.picture.isNull() and self.width() >= 700 and not narrow_focus
+        self.poster.setVisible(visible)
+        if not visible:
+            return
+        height = max(150, min(300, self.height() - 68))
+        size = QSize(height * 2 // 3, height)
+        scaled = self.picture.scaled(
+            size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+        )
+        rounded = QPixmap(scaled.size())
+        rounded.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(rounded.rect()), 8, 8)
+        painter.setClipPath(path)
+        painter.drawImage(0, 0, scaled)
+        painter.end()
+        self.poster.setFixedSize(scaled.size())
+        self.poster.setPixmap(rounded)
 
     def set_mode(self, mode):
         self.mode = mode
@@ -218,6 +249,7 @@ class MediaHero(QWidget):
             + ("36" if self.width() < 700 else "48")
             + "px; font-weight: 750; color: #f3f4ef;"
         )
+        self._show_poster()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -357,6 +389,10 @@ class MediaTab(QWidget):
         self.picture_cache: OrderedDict[str, QImage] = OrderedDict()
         self._picture_cache_bytes = 0
         self.continue_rows: list[dict[str, Any]] = []
+        # The video home shows rows (genres, series…); a card chosen in a row is the selection.
+        self.home_data: dict[str, Any] | None = None
+        self.home_row_widgets: list[MediaRow] = []
+        self.row_choice = ""
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         self.setObjectName("mediaWorkspace")
@@ -473,11 +509,7 @@ class MediaTab(QWidget):
             button.setCheckable(True)
             button.setFixedWidth(button.fontMetrics().horizontalAdvance(label) + 20)
             button.setFixedHeight(32)
-            button.clicked.connect(
-                lambda _checked=False, name=value: self.view.setCurrentIndex(
-                    self.view.findData(name)
-                )
-            )
+            button.clicked.connect(lambda _checked=False, name=value: self._browse(name))
             self.video_tab_group.addButton(button)
             self.video_tabs[value] = button
             video_navigation_box.addWidget(button)
@@ -738,6 +770,12 @@ class MediaTab(QWidget):
         self.continue_box.setContentsMargins(24, 0, 24, 0)
         self.continue_box.setSpacing(16)
         self.body.addWidget(self.continue_panel)
+        self.home_rows_panel = QWidget()
+        self.home_rows_box = QVBoxLayout(self.home_rows_panel)
+        self.home_rows_box.setContentsMargins(0, 0, 0, 0)
+        self.home_rows_box.setSpacing(22)
+        self.home_rows_panel.hide()
+        self.body.addWidget(self.home_rows_panel)
         shelf_header = QHBoxLayout()
         shelf_header.setContentsMargins(24, 0, 24, 0)
         self.shelf_heading = QLabel(self.tr("Recently added"))
@@ -1744,6 +1782,8 @@ class MediaTab(QWidget):
                 (self.tr("Continue watching"), "continue"),
                 (self.tr("Films"), "films"),
                 (self.tr("Series"), "series"),
+                (self.tr("Highly rated"), "rated"),
+                (self.tr("Not watched yet"), "unwatched"),
             )
             if self.kind.currentData() == "video"
             else (
@@ -1991,6 +2031,7 @@ class MediaTab(QWidget):
         self.browse_generation += 1
         generation = self.browse_generation
         library, client, offset = self.library, self.session_client, self.offset
+        home = self._home_active() and not keep_page
         self.results.setEnabled(False)
         self._set_notice(self.tr("Loading saved media…"))
 
@@ -2000,12 +2041,16 @@ class MediaTab(QWidget):
                 library.listing(client, offset=offset, **context),
                 library.playlists(client),
                 library.listing(client, limit=4, **continuation)["rows"],
+                library.home_rows(client, kind="video") if home else None,
             )
 
         def done(payload):
             if not isValid(self) or generation != self.browse_generation:
                 return
-            self._show_listing(*payload, append=keep_page)
+            if not keep_page:
+                self.home_data = payload[3]
+                self._render_home_rows()
+            self._show_listing(*payload[:3], append=keep_page)
             self.results.setEnabled(True)
 
         def failed(error):
@@ -2086,7 +2131,7 @@ class MediaTab(QWidget):
                 self.hero.metadata.clear()
                 self.hero.set_picture(QImage())
             self._render_continue()
-            self._load_artwork([*self.rows, *continuation])
+            self._load_artwork([*self.rows, *continuation, *self._home_row_items()])
             for name, combo in self.filters.items():
                 current = combo.currentData()
                 values = result.get("filters", {}).get(name, [])
@@ -2160,14 +2205,16 @@ class MediaTab(QWidget):
         self.collection_heading.setVisible(collection)
         self.collection_heading.setText(self.tr("Your collection") if video else self.tr("Music"))
         self.collection_selection.setVisible(collection and chosen)
-        self.results.setVisible(not focus and bool(self.rows))
-        self.shelf_heading.setVisible(not focus and bool(self.rows))
+        rows_home = bool(self.home_row_widgets) and self._home_active() and not active_video
+        self.home_rows_panel.setVisible(rows_home)
+        self.results.setVisible(not focus and bool(self.rows) and not rows_home)
+        self.shelf_heading.setVisible(not focus and bool(self.rows) and not rows_home)
         self.shelf_heading.setText(
             self.tr("Recently added")
             if self.view.currentData() == "all"
             else self.view.currentText()
         )
-        self.page_count.setVisible(bool(self.rows))
+        self.page_count.setVisible(bool(self.rows) and not rows_home)
         continuation = bool(self.continue_rows) and not collection
         self.continue_heading.setVisible(continuation)
         self.continue_panel.setVisible(continuation)
@@ -2204,7 +2251,91 @@ class MediaTab(QWidget):
             widget.setVisible(bool(self.state["queue"]) or self.kind.currentData() == "music")
 
     def selected_ids(self) -> list[str]:
+        if self.row_choice and self.home_rows_panel.isVisibleTo(self):
+            return [self.row_choice]
         return [item.data(Qt.ItemDataRole.UserRole) for item in self.results.selectedItems()]
+
+    def _home_active(self) -> bool:
+        return (
+            self.kind.currentData() == "video"
+            and self.view.currentData() == "all"
+            and self.media_layout == "cinematic"
+            and not self.search.text().strip()
+            and not any(combo.currentData() for combo in self.filters.values())
+        )
+
+    def _home_row_items(self) -> list[dict[str, Any]]:
+        if not self.home_data:
+            return []
+        return [item for row in self.home_data["rows"] for item in row["rows"]]
+
+    def _render_home_rows(self) -> None:
+        for row_widget in self.home_row_widgets:
+            row_widget.deleteLater()
+        self.home_row_widgets = []
+        titles = {
+            "recent": self.tr("Recently added"),
+            "series": self.tr("Series"),
+            "rated": self.tr("Highly rated"),
+            "unwatched": self.tr("Not watched yet"),
+        }
+        placeholder = self._placeholder_icon("video")
+        known = {item["id"] for item in self._home_row_items()}
+        if self.row_choice not in known:
+            self.row_choice = ""
+        for row in (self.home_data or {}).get("rows", []):
+            if row["key"] == "continue":
+                continue  # Continue watching already has its own band
+            title = row["title"] if row["key"] == "genre" else titles.get(row["key"], "")
+            row_widget = MediaRow(title, row["total"])
+            row_widget.set_rows(
+                row["rows"],
+                self._card_title,
+                lambda item: (
+                    self._cover_icon(self.picture_cache[item["id"]])
+                    if item["id"] in self.picture_cache
+                    else placeholder
+                ),
+            )
+            row_widget.chosen.connect(self._choose_row_card)
+            row_widget.activated.connect(self._play_row_card)
+            row_widget.seeAll.connect(lambda filters=row["filters"]: self._see_all(filters))
+            self.home_rows_box.addWidget(row_widget)
+            self.home_row_widgets.append(row_widget)
+        self._update_panes()
+
+    def _choose_row_card(self, identifier: str) -> None:
+        self.row_choice = identifier
+        chooser = self.sender()
+        for row_widget in self.home_row_widgets:
+            if row_widget is not chooser:
+                row_widget.clear_choice()
+        self.show_detail()
+
+    def _play_row_card(self, identifier: str) -> None:
+        self._choose_row_card(identifier)
+        self.play_selected()
+
+    def _see_all(self, filters: dict[str, str]) -> None:
+        """Open the full grid for a row, with that row's filters."""
+        self.row_choice = ""
+        genre = self.filters.get("genre")
+        if genre is not None and filters.get("genre"):
+            with QSignalBlocker(genre):
+                if genre.findData(filters["genre"]) < 0:
+                    genre.addItem(filters["genre"], filters["genre"])
+                genre.setCurrentIndex(genre.findData(filters["genre"]))
+        self.view.setCurrentIndex(max(0, self.view.findData(filters.get("view", "all"))))
+
+    def _browse(self, view: str) -> None:
+        """The Home tab returns to the rows, so it clears the filters a row applied."""
+        if view == "all":
+            for combo in self.filters.values():
+                with QSignalBlocker(combo):
+                    combo.setCurrentIndex(0)
+            if self.view.currentData() == "all":
+                self.refresh()
+        self.view.setCurrentIndex(self.view.findData(view))
 
     def show_detail(self) -> None:
         ids = self.selected_ids()
@@ -2379,6 +2510,8 @@ class MediaTab(QWidget):
                         if item.data(Qt.ItemDataRole.UserRole) == identifier:
                             item.setIcon(self._cover_icon(picture))
                             break
+                    for row_widget in self.home_row_widgets:
+                        row_widget.set_icon(identifier, self._cover_icon(picture))
             self._refresh_focus_strip()
             self._render_continue()
 

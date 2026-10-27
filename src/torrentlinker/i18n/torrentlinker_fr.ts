@@ -7236,6 +7236,14 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
 <context>
     <name>MediaTab</name>
     <message>
+        <source>Highly rated</source>
+        <translation>Les mieux notés</translation>
+    </message>
+    <message>
+        <source>Not watched yet</source>
+        <translation>Pas encore vus</translation>
+    </message>
+    <message>
         <source>Fetching film details from c411… {0} / {1}</source>
         <translation>Récupération des fiches de films depuis c411… {0} / {1}</translation>
     </message>
@@ -7819,6 +7827,25 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <location filename="../gui/media.py" line="135" />
         <source>FROM YOUR LIBRARY FOLDERS</source>
         <translation>DANS VOTRE MÉDIATHÈQUE</translation>
+    </message>
+</context>
+<context>
+    <name>MediaRow</name>
+    <message>
+        <source>Scroll left</source>
+        <translation>Défiler à gauche</translation>
+    </message>
+    <message>
+        <source>Scroll right</source>
+        <translation>Défiler à droite</translation>
+    </message>
+    <message>
+        <source>See all</source>
+        <translation>Voir tout</translation>
+    </message>
+    <message>
+        <source>{0} titles</source>
+        <translation>{0} titres</translation>
     </message>
 </context>
 </TS>

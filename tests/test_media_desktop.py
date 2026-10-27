@@ -964,6 +964,8 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
 
 
 def test_media_grid_scroll_appends_and_filter_resets(qtbot):
+    from PySide6.QtCore import QSignalBlocker
+
     from torrentlinker.gui.media import MediaTab
 
     rows = [
@@ -991,6 +993,9 @@ def test_media_grid_scroll_appends_and_filter_resets(qtbot):
     tab.library = Library()
     tab.resize(1100, 850)
     tab.show()
+    # The continuous grid is the Films view (and each home row's See all).
+    with QSignalBlocker(tab.view):
+        tab.view.setCurrentIndex(tab.view.findData("films"))
     tab.refresh()
     qtbot.waitUntil(lambda: tab.results.isEnabled() and tab.results.count() == 100)
     qtbot.waitUntil(lambda: tab.results.height() > 850)
@@ -1021,3 +1026,86 @@ def test_player_time_shows_hours_for_long_films():
 
     assert MediaTab._time_label(56) == "0:56"
     assert MediaTab._time_label(8034) == "2:13:54"
+
+
+def test_video_home_shows_rows_and_see_all_opens_the_filtered_grid(qtbot, tmp_path):
+    import json
+    import threading
+
+    from PySide6.QtCore import Qt
+
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.gui.media import MediaTab
+    from torrentlinker.gui.media_rows import MediaRow
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "films"
+    root.mkdir()
+    genres = ["Horreur", "Horreur, Drame", "Horreur", "Comédie"]
+    for number in range(len(genres)):
+        (root / f"Film {number} (2020).mkv").write_bytes(b"\0" * 64)
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings()
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    service = app.state.assistant
+    media = service.agent.media
+    media.scan("default", threading.Event(), lambda _p: None)
+    with media.db:
+        for row in media.db.execute("SELECT id, body FROM media_items").fetchall():
+            body = json.loads(row["body"])
+            body["genre"] = genres[int(body["title"].split()[-1])]
+            media.db.execute(
+                "UPDATE media_items SET body=? WHERE id=?", (json.dumps(body), row["id"])
+            )
+    tab = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    tab.resize(1280, 800)
+    tab.show()
+    tab.activate()
+    qtbot.waitUntil(
+        lambda: len(tab.findChildren(MediaRow)) >= 2 and tab.home_rows_panel.isVisible()
+    )
+    rows = {row.title.text(): row for row in tab.home_row_widgets}
+    assert {"Recently added", "Horreur"} <= set(rows)
+    assert not tab.results.isVisible()
+    # Choosing a card in a row makes it the selection the description and Play act on.
+    horror = rows["Horreur"]
+    card = horror.cards.item(1)
+    horror.cards.itemClicked.emit(card)
+    chosen = card.data(Qt.ItemDataRole.UserRole)
+    assert tab.selected_ids() == [chosen]
+    qtbot.waitUntil(lambda: tab.featured_id == chosen)
+    # See all opens the continuous grid with the row's filter; Home brings the rows back.
+    horror.seeAll.emit()
+    qtbot.waitUntil(lambda: tab.results.isVisible() and tab.results.count() == 3)
+    assert tab.filters["genre"].currentData() == "Horreur"
+    tab.video_tabs["all"].click()
+    qtbot.waitUntil(lambda: tab.home_rows_panel.isVisible())
+    assert not tab.filters["genre"].currentData()
+    tab.stop()
+
+
+def test_hero_shows_the_poster_beside_the_description(qtbot):
+    from PySide6.QtGui import QImage
+
+    from torrentlinker.gui.media import MediaHero
+
+    hero = MediaHero()
+    qtbot.addWidget(hero)
+    hero.resize(1200, 440)
+    hero.show()
+    assert hero.poster.isHidden()  # no artwork yet
+    picture = QImage(400, 600, QImage.Format.Format_RGB32)
+    picture.fill(0x336699)
+    hero.set_picture(picture)
+    assert hero.poster.isVisible()
+    assert hero.poster.width() * 3 == hero.poster.height() * 2
+    qtbot.waitUntil(lambda: hero.poster.geometry().right() < hero.copy.geometry().left())
+    hero.resize(640, 440)  # a narrow window keeps the room for the text
+    qtbot.waitUntil(lambda: hero.poster.isHidden())

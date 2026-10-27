@@ -88,6 +88,10 @@ def media_routes(app, agent, assistant):
             artist=artist,
         )
 
+    @app.get("/api/media/home")
+    def home(client_id: str = "", limit: int = Query(20, ge=1, le=50)):
+        return media.home_rows(client(client_id), kind="video", limit=limit)
+
     @app.post("/api/media/scan", status_code=202)
     def scan(body: MediaClient):
         target = client(body.client_id)
