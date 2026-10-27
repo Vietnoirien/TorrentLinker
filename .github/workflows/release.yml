@@ -97,6 +97,7 @@ jobs:
       packages: write
     env:
       IMAGE: ghcr.io/vietnoirien/torrentlinker
+      DOCKER_BUILD_RECORD_UPLOAD: false
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -152,6 +153,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: "{linux,windows,macos}"
       - uses: softprops/action-gh-release@v2
         with:
           files: |
