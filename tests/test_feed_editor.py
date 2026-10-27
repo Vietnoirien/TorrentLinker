@@ -39,7 +39,7 @@ def editor(app, qtbot, feed=RICH):
         2030: IndexerCategory("Movies HD", 2000),
         5000: IndexerCategory("TV"),
     }
-    dialog = FeedEditor(control, feed, "id", lambda: None)
+    dialog = FeedEditor(control, feed, "id", lambda: None, live=False)
     qtbot.addWidget(dialog)
     return dialog
 
@@ -101,3 +101,64 @@ def test_automatic_needs_an_hour(catalogue_app, qtbot):
         cell.setChecked(False)
     with pytest.raises(ValueError, match="at least one hour"):
         dialog.definition()
+
+
+def test_chips_cycle_and_keep_ranking_valid(catalogue_app, qtbot):
+    app, _, _ = catalogue_app
+    dialog = editor(app, qtbot, Subscription(name="x"))
+    row = dialog.criteria.rows["quality"]
+    row.chips["1080p"].click()
+    assert dialog.definition().preferences.preferred == {"quality": ["1080p"]}
+    row.chips["1080p"].click()
+    prefs = dialog.definition().preferences
+    assert prefs.required == {"quality": ["1080p"]}
+    row.chips["1080p"].click()
+    assert dialog.definition().preferences.excluded == {"quality": ["1080p"]}
+    assert dialog.definition().preferences.required == {}
+    assert row.chips["1080p"].property("chip") == "avoid"
+    row.chips["1080p"].click()
+    assert dialog.definition().preferences.excluded == {}
+
+
+def test_typed_chip_and_ranking_move(catalogue_app, qtbot):
+    app, _, _ = catalogue_app
+    dialog = editor(app, qtbot, Subscription(name="x"))
+    row = dialog.criteria.rows["format"]
+    row.add.setText("EPUB")
+    row.add.returnPressed.emit()
+    assert "EPUB" in row.chips
+    row.chips["EPUB"].click()
+    prefs = dialog.definition().preferences
+    assert prefs.preferred == {"format": ["EPUB"]}
+    assert "format" in prefs.priorities  # the validator ranks every preferred field
+    first = prefs.priorities[0]
+    dialog.priorities.shift("format", -10)
+    assert dialog.definition().preferences.priorities[0] == "format"
+    assert dialog.definition().preferences.priorities[1] == first
+
+
+def test_strip_judges_fetched_rows_without_the_network(catalogue_app, qtbot):
+    app, _, _ = catalogue_app
+    dialog = editor(app, qtbot, Subscription(name="x"))
+    dialog.preview_rows = [
+        {"title": "Good.1080p", "size": 10**9, "seeders": 5, "infohash": "a" * 40,
+         "download_url": "u", "metadata": {"quality": "1080p", "source": "WEB"}},
+        {"title": "Bad.CAM", "size": 10**9, "seeders": 5, "infohash": "b" * 40,
+         "download_url": "u", "metadata": {"quality": "CAM"}},
+    ]  # fmt: skip
+    dialog.criteria.suggest(dialog.preview_rows)
+    dialog.criteria.rows["quality"].chips["CAM"].click()  # prefer
+    dialog.criteria.rows["quality"].chips["CAM"].click()  # require
+    assert dialog.strip.text() == "Would match now: 1 of 2 releases"
+    assert dialog.strip_titles.text() == "Bad.CAM"
+    dialog.criteria.rows["quality"].chips["CAM"].click()  # avoid
+    assert dialog.strip.text() == "Would match now: 1 of 2 releases"
+    assert dialog.strip_titles.text() == "Good.1080p"
+
+
+def test_advanced_shows_the_full_definition(catalogue_app, qtbot):
+    app, _, _ = catalogue_app
+    dialog = editor(app, qtbot)
+    dialog.advanced.toggle.setChecked(True)
+    assert '"interval_minutes": 45' in dialog.advanced_text.toPlainText()
+    assert "9999" in dialog.advanced_text.toPlainText()

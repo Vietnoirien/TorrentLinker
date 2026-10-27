@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
+import time
 from collections.abc import Callable, Mapping
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -43,20 +43,10 @@ from torrentlinker.feed_units import (
     size_to_bytes,
     utc_to_local_hours,
 )
-from torrentlinker.feeds import Preferences, Subscription
+from torrentlinker.feeds import Preferences, Subscription, candidate, evaluate
 from torrentlinker.gui.controls import set_role
+from torrentlinker.gui.feed_criteria import CriteriaEditor, PriorityList, retheme
 from torrentlinker.gui.tasks import run_in_background
-
-METADATA_FIELDS = (
-    "quality",
-    "codec",
-    "audio",
-    "subtitles",
-    "format",
-    "bitrate",
-    "platform",
-    "license",
-)
 
 
 def heading(text: str) -> QLabel:
@@ -365,6 +355,8 @@ class FeedEditor(QDialog):
         identifier: str,
         on_saved: Callable[[], None],
         parent=None,
+        *,
+        live: bool = True,
     ):
         super().__init__(parent)
         self.control = control
@@ -372,6 +364,10 @@ class FeedEditor(QDialog):
         self.identifier = identifier
         self.on_saved = on_saved
         self.previewed = ""
+        self.previewed_at = 0.0
+        self.preview_rows: list[dict] = []
+        self.preview_token = 0
+        self.live = live
         self.setWindowTitle(self.tr("RSS subscription"))
         outer = QVBoxLayout(self)
         scroll = QScrollArea()
@@ -386,19 +382,31 @@ class FeedEditor(QDialog):
         self.build_accept()
         self.build_action()
         self.build_schedule()
+        self.build_advanced()
         self.body.addStretch(1)
         scroll.setWidget(pane)
         outer.addWidget(scroll, 1)
-        self.preview = QTextEdit()
-        self.preview.setReadOnly(True)
-        self.preview.setMaximumHeight(110)
-        self.preview.hide()
-        outer.addWidget(self.preview)
+        strip = QHBoxLayout()
+        texts = QVBoxLayout()
+        texts.setSpacing(2)
+        self.strip = QLabel()
+        self.strip.setWordWrap(True)
+        self.strip.setTextFormat(Qt.TextFormat.PlainText)
+        texts.addWidget(self.strip)
+        self.strip_titles = QLabel()
+        self.strip_titles.setProperty("role", "muted")
+        self.strip_titles.setTextFormat(Qt.TextFormat.PlainText)
+        self.strip_titles.hide()
+        texts.addWidget(self.strip_titles)
+        strip.addLayout(texts, 1)
+        self.recheck = set_role(QPushButton(self.tr("Check again")), "quiet")
+        self.recheck.clicked.connect(lambda: self.run_preview())
+        strip.addWidget(self.recheck, 0, Qt.AlignmentFlag.AlignTop)
+        outer.addLayout(strip)
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         for label, role, action in [
             (self.tr("Cancel"), "quiet", self.reject),
-            (self.tr("Preview"), "secondary", self.preview_feed),
             (self.tr("Save"), "primary", self.save),
         ]:
             button = set_role(QPushButton(label), role)
@@ -407,6 +415,8 @@ class FeedEditor(QDialog):
         outer.addLayout(buttons)
         self.resize(780, 780)
         self.mode_changed(self.modes.value())
+        if live:
+            QTimer.singleShot(200, self.run_preview)
 
     def section(self, title: str) -> QFormLayout:
         self.body.addWidget(heading(title))
@@ -441,34 +451,16 @@ class FeedEditor(QDialog):
         self.min_seeders.setRange(0, 1_000_000)
         self.min_seeders.setValue(prefs.min_seeders)
         form.addRow(self.tr("Minimum seeders"), self.min_seeders)
-        self.raw: dict[str, QLineEdit] = {}
-        content = QWidget()
-        raw = QFormLayout(content)
-        raw.addRow(
-            muted(
-                self.tr(
-                    "required/excluded are hard constraints; preferred lists rank "
-                    "acceptable releases. Fields: quality, codec, audio, subtitles, "
-                    "format, bitrate, platform, license. priorities sets ranking order; "
-                    "prefer_small ranks size. Unknown required metadata blocks rules."
-                )
-            )
-        )
-        self.raw["priorities"] = QLineEdit(",".join(prefs.priorities))
-        raw.addRow(self.tr("Ranking priorities, comma separated"), self.raw["priorities"])
-        self.prefer_small = QCheckBox(self.tr("Prefer smaller releases"))
-        self.prefer_small.setChecked(prefs.prefer_small)
-        raw.addRow(self.prefer_small)
-        for key in METADATA_FIELDS:
-            for group, label in [
-                ("required", self.tr("Required / accepted")),
-                ("preferred", self.tr("Preferred in order")),
-                ("excluded", self.tr("Excluded")),
-            ]:
-                field = QLineEdit(",".join(getattr(prefs, group).get(key, [])))
-                self.raw[f"{group}-{key}"] = field
-                raw.addRow(f"{key} · {label}", field)
-        self.body.addWidget(Disclosure(self.tr("Release criteria"), content))
+        self.criteria = CriteriaEditor(prefs)
+        self.criteria.changed.connect(self.criteria_changed)
+        self.body.addWidget(self.criteria)
+        self.body.addWidget(Disclosure(self.tr("More criteria"), self.criteria.more))
+        self.priorities = PriorityList(self.criteria)
+        self.priorities.changed.connect(self.criteria_changed)
+        self.body.addWidget(Disclosure(self.tr("What matters most"), self.priorities))
+        self.min_size.changed.connect(self.criteria_changed)
+        self.max_size.changed.connect(self.criteria_changed)
+        self.min_seeders.valueChanged.connect(self.criteria_changed)
 
     def build_action(self) -> None:
         self.body.addWidget(heading(self.tr("What happens")))
@@ -507,6 +499,20 @@ class FeedEditor(QDialog):
         )
         limits.addRow(self.approval)
         self.body.addWidget(self.limits)
+
+    def build_advanced(self) -> None:
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.setInterval(1200)
+        self.timer.timeout.connect(lambda: self.run_preview())
+        self.query.textChanged.connect(self.source_changed)
+        self.categories.changed.connect(self.source_changed)
+        self.advanced_text = QTextEdit()
+        self.advanced_text.setReadOnly(True)
+        self.advanced_text.setMinimumHeight(220)
+        self.advanced = Disclosure(self.tr("Advanced: full definition"), self.advanced_text)
+        self.advanced.toggle.toggled.connect(lambda _on: self.update_advanced())
+        self.body.addWidget(self.advanced)
 
     def build_schedule(self) -> None:
         content = QWidget()
@@ -552,24 +558,14 @@ class FeedEditor(QDialog):
         self.limits.setVisible(mode == "automatic_download")
 
     def preferences(self) -> Preferences:
-        values: dict = {
-            "min_size": self.min_size.value() or 0,
-            "max_size": self.max_size.value(),
-            "min_seeders": self.min_seeders.value(),
-            "priorities": [
-                v.strip() for v in self.raw["priorities"].text().split(",") if v.strip()
-            ],
-            "prefer_small": self.prefer_small.isChecked(),
-        }
-        for group in ("required", "preferred", "excluded"):
-            values[group] = {}
-            for key in METADATA_FIELDS:
-                selected = [
-                    v.strip() for v in self.raw[f"{group}-{key}"].text().split(",") if v.strip()
-                ]
-                if selected:
-                    values[group][key] = selected
-        return Preferences.model_validate(values)
+        return Preferences.model_validate(
+            {
+                **self.criteria.prefs.model_dump(),
+                "min_size": self.min_size.value() or 0,
+                "max_size": self.max_size.value(),
+                "min_seeders": self.min_seeders.value(),
+            }
+        )
 
     def definition(self) -> Subscription:
         mode = self.modes.value()
@@ -597,33 +593,104 @@ class FeedEditor(QDialog):
             }
         )
 
-    def show_preview(self, text: str) -> None:
-        self.preview.setPlainText(text)
-        self.preview.setVisible(bool(text))
+    def source_changed(self) -> None:
+        """The query or categories changed: ask the source again, once typing pauses."""
+        if self.live:
+            self.timer.start()
 
-    def preview_feed(self) -> None:
+    def criteria_changed(self) -> None:
+        self.priorities.refresh()
+        self.update_strip()
+        self.update_advanced()
+
+    def run_preview(self, then=None) -> None:
         try:
             value = self.definition()
-
-            def done(result):
-                self.previewed = value.model_dump_json()
-                self.show_preview(json.dumps(result, indent=2))
-
-            run_in_background(
-                lambda: self.control.feeds.preview(value),
-                done,
-                lambda e: self.show_preview(str(e)),
-            )
         except Exception as error:
-            self.show_preview(str(error))
+            self.show_strip(str(error), warning=True)
+            return
+        self.preview_token += 1
+        token = self.preview_token
+        self.show_strip(self.tr("Checking the source…"))
+
+        def done(result):
+            if token != self.preview_token:
+                return
+            self.previewed = value.model_dump_json()
+            self.previewed_at = time.time()
+            self.preview_rows = result["rows"]
+            self.criteria.suggest(self.preview_rows)
+            self.update_strip()
+            if then:
+                then(value)
+
+        def failed(error):
+            if token == self.preview_token:
+                self.show_strip(str(error), warning=True)
+
+        run_in_background(lambda: self.control.feeds.preview(value), done, failed)
+
+    def show_strip(self, text: str, titles: str = "", *, warning: bool = False) -> None:
+        self.strip.setText(text)
+        self.strip.setProperty("role", "warning" if warning else "")
+        retheme(self.strip)
+        self.strip_titles.setText(titles)
+        self.strip_titles.setVisible(bool(titles))
+
+    def update_strip(self) -> None:
+        """Re-judge the rows already fetched against the current criteria; no network call."""
+        if not self.preview_rows:
+            return
+        try:
+            prefs = self.preferences()
+        except Exception as error:
+            self.show_strip(str(error), warning=True)
+            return
+        rows = [candidate(raw) for raw in self.preview_rows]
+        judged = [(row, evaluate(row, prefs)) for row in rows]
+        matching = sorted((j for j in judged if j[1]["eligible"]), key=lambda j: j[1]["rank"])
+        unknown = sum(1 for _, e in judged if e["unknown"] and not e["excluded"])
+        text = (
+            self.tr("Would match now: %1 of %2 releases")
+            .replace("%1", str(len(matching)))
+            .replace("%2", str(len(rows)))
+        )
+        if unknown:
+            text += " · " + self.tr("%1 can't be checked (missing details)").replace(
+                "%1", str(unknown)
+            )
+        self.show_strip(text, "\n".join(row.title for row, _ in matching[:3]))
+
+    def update_advanced(self) -> None:
+        if not self.advanced.toggle.isChecked():
+            return
+        try:
+            self.advanced_text.setPlainText(self.definition().model_dump_json(indent=2))
+        except Exception as error:
+            self.advanced_text.setPlainText(str(error))
+
+    def needs_preview(self, value: Subscription) -> bool:
+        """Mirrors FeedControl.save: a new feed or a changed source needs a fresh preview."""
+        changed = value.query != self.feed.query or value.categories != self.feed.categories
+        return not self.identifier or changed
 
     def save(self) -> None:
         try:
             value = self.definition()
-            if not self.identifier and self.previewed != value.model_dump_json():
-                raise ValueError(self.tr("Preview this definition before saving."))
+            current = (
+                self.previewed == value.model_dump_json() and time.time() - self.previewed_at < 840
+            )
+            if self.needs_preview(value) and not current:
+                self.run_preview(then=self.finish_save)
+                return
+            self.finish_save(value)
+        except Exception as error:
+            self.show_strip(str(error), warning=True)
+
+    def finish_save(self, value: Subscription) -> None:
+        try:
             self.control.save(value, approved=self.approval.isChecked())
             self.accept()
             self.on_saved()
         except Exception as error:
-            self.show_preview(str(error))
+            self.show_strip(str(error), warning=True)

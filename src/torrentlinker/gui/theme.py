@@ -200,6 +200,9 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
             border-radius: 10px; }}
         QFrame#chatExample:hover, QFrame#chatExample:focus {{ border-color: {accent}; }}
         QFrame#chatExample QLabel {{ background: transparent; }}
+        QPushButton[chip="prefer"] {{ border-color: {accent}; color: {accent}; }}
+        QPushButton[chip="must"] {{ background: {accent}; border-color: {accent}; color: white; }}
+        QPushButton[chip="avoid"] {{ border-color: {error}; color: {error}; }}
         QFrame#choiceCard {{ background: {panel}; border: 1px solid {border};
             border-radius: 10px; }}
         QFrame#choiceCard:hover {{ border-color: {accent}; }}

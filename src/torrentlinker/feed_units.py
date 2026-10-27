@@ -18,6 +18,17 @@ ChipState = Literal["none", "prefer", "must", "avoid"]
 
 # Fields the editor shows as chips; the others stay under "More criteria".
 COMMON_FIELDS: tuple[MetadataField, ...] = ("quality", "codec", "audio", "subtitles")
+# Values offered as chips before any release has shown what the source really uses.
+STARTER_VALUES: dict[MetadataField, tuple[str, ...]] = {
+    "quality": ("2160p", "1080p", "720p", "480p"),
+    "codec": ("HEVC", "H264", "AV1"),
+    "audio": ("fr", "en", "multi"),
+    "subtitles": ("fr", "en"),
+    "format": (),
+    "bitrate": (),
+    "platform": (),
+    "license": (),
+}
 INTERVALS = (15, 30, 60, 120, 360, 720, 1440)
 NIGHT_HOURS = (1, 2, 3, 4, 5, 6)
 
@@ -169,3 +180,38 @@ def age(seconds: float) -> tuple[int, Literal["minute", "hour", "day"]]:
     if seconds < 86400:
         return round(seconds / 3600), "hour"
     return round(seconds / 86400), "day"
+
+
+def move_preferred(prefs: Preferences, field: MetadataField, value: str, step: int) -> Preferences:
+    """A new Preferences with a preferred value ranked earlier (step < 0) or later (step > 0)."""
+    order = list(prefs.preferred.get(field, []))
+    if value not in order:
+        return prefs
+    index = order.index(value)
+    target = max(0, min(len(order) - 1, index + step))
+    order.insert(target, order.pop(index))
+    return Preferences.model_validate(
+        {**prefs.model_dump(), "preferred": {**prefs.preferred, field: order}}
+    )
+
+
+def move_priority(prefs: Preferences, key: str, step: int) -> Preferences:
+    """A new Preferences with a ranking priority moved earlier or later."""
+    order = list(prefs.priorities)
+    if key not in order:
+        return prefs
+    index = order.index(key)
+    target = max(0, min(len(order) - 1, index + step))
+    order.insert(target, order.pop(index))
+    return Preferences.model_validate({**prefs.model_dump(), "priorities": order})
+
+
+def seen_values(rows: list[dict], field: MetadataField, *, limit: int = 8) -> list[str]:
+    """The most common values releases carry for a field, most frequent first."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = (row.get("metadata") or {}).get(field)
+        for item in value if isinstance(value, list) else [value]:
+            if item not in (None, ""):
+                counts[str(item)] = counts.get(str(item), 0) + 1
+    return sorted(counts, key=lambda v: (-counts[v], v))[:limit]

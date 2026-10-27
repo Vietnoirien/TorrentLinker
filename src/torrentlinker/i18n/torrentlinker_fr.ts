@@ -8465,6 +8465,34 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>Choose at least one hour for automatic downloads.</source>
         <translation>Choisissez au moins une heure pour les téléchargements automatiques.</translation>
     </message>
+    <message>
+        <source>Check again</source>
+        <translation>Vérifier à nouveau</translation>
+    </message>
+    <message>
+        <source>More criteria</source>
+        <translation>Autres critères</translation>
+    </message>
+    <message>
+        <source>What matters most</source>
+        <translation>Ce qui compte le plus</translation>
+    </message>
+    <message>
+        <source>Advanced: full definition</source>
+        <translation>Avancé : définition complète</translation>
+    </message>
+    <message>
+        <source>Checking the source…</source>
+        <translation>Vérification de la source…</translation>
+    </message>
+    <message>
+        <source>Would match now: %1 of %2 releases</source>
+        <translation>Correspondrait maintenant : %1 publications sur %2</translation>
+    </message>
+    <message>
+        <source>%1 can't be checked (missing details)</source>
+        <translation>%1 non vérifiables (informations manquantes)</translation>
+    </message>
 </context>
 <context>
     <name>ModeCards</name>
@@ -8521,6 +8549,143 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Local time. Downloads start only in the hours you tick.</source>
         <translation>Heure locale. Les téléchargements ne démarrent que pendant les heures cochées.</translation>
+    </message>
+</context>
+<context>
+    <name>CriteriaEditor</name>
+    <message>
+        <source>Codec</source>
+        <translation>Codec</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>Qualité</translation>
+    </message>
+    <message>
+        <source>Subtitles</source>
+        <translation>Sous-titres</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>Format</translation>
+    </message>
+    <message>
+        <source>Bitrate</source>
+        <translation>Débit</translation>
+    </message>
+    <message>
+        <source>Platform</source>
+        <translation>Plateforme</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Click a value to prefer it, again to require it, again to avoid it. Right-click a preferred value to rank it.</source>
+        <translation>Cliquez sur une valeur pour la préférer, encore pour l’exiger, encore pour l’éviter. Clic droit sur une valeur préférée pour la classer.</translation>
+    </message>
+    <message>
+        <source>Not set</source>
+        <translation>Non défini</translation>
+    </message>
+    <message>
+        <source>Preferred</source>
+        <translation>Préféré</translation>
+    </message>
+    <message>
+        <source>Required</source>
+        <translation>Exigé</translation>
+    </message>
+    <message>
+        <source>Avoided</source>
+        <translation>Évité</translation>
+    </message>
+    <message>
+        <source>Rank higher</source>
+        <translation>Classer plus haut</translation>
+    </message>
+    <message>
+        <source>Rank lower</source>
+        <translation>Classer plus bas</translation>
+    </message>
+</context>
+<context>
+    <name>PriorityList</name>
+    <message>
+        <source>Codec</source>
+        <translation>Codec</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Prefer smaller releases</source>
+        <translation>Préférer les petits torrents</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>Qualité</translation>
+    </message>
+    <message>
+        <source>Subtitles</source>
+        <translation>Sous-titres</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>Format</translation>
+    </message>
+    <message>
+        <source>Bitrate</source>
+        <translation>Débit</translation>
+    </message>
+    <message>
+        <source>Platform</source>
+        <translation>Plateforme</translation>
+    </message>
+    <message>
+        <source>License</source>
+        <translation>Licence</translation>
+    </message>
+    <message>
+        <source>Smaller size</source>
+        <translation>Taille plus petite</translation>
+    </message>
+    <message>
+        <source>More seeders</source>
+        <translation>Plus de seeders</translation>
+    </message>
+    <message>
+        <source>Add to ranking</source>
+        <translation>Ajouter au classement</translation>
+    </message>
+    <message>
+        <source>only when “Prefer smaller releases” is on</source>
+        <translation>seulement si « Préférer les publications plus petites » est coché</translation>
+    </message>
+    <message>
+        <source>Move up</source>
+        <translation>Monter</translation>
+    </message>
+    <message>
+        <source>Move down</source>
+        <translation>Descendre</translation>
+    </message>
+    <message>
+        <source>Remove from ranking</source>
+        <translation>Retirer du classement</translation>
+    </message>
+</context>
+<context>
+    <name>ChipRow</name>
+    <message>
+        <source>Add…</source>
+        <translation>Ajouter…</translation>
     </message>
 </context>
 </TS>
