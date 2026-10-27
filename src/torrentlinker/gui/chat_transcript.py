@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -131,10 +132,45 @@ class MessageText(QTextBrowser):
         self.fit_content()
 
 
+class ExampleCard(QFrame):
+    """A wrapped example prompt: click it, or focus it and press Enter or Space."""
+
+    clicked = Signal()
+
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+        self.setObjectName("chatExample")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(text)
+        self.setMinimumHeight(64)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 10)
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(label)
+
+    def mouseReleaseEvent(self, event):
+        inside = self.rect().contains(event.position().toPoint())
+        if event.button() == Qt.MouseButton.LeftButton and inside:
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.clicked.emit()
+        else:
+            super().keyPressEvent(event)
+
+
 class ChatTranscript(QScrollArea):
     anchorClicked = Signal(QUrl)
     decisionSubmitted = Signal(str, int, bool)
     answerSubmitted = Signal(str, int, str)
+    # An example prompt from the empty state; the host fills its composer with it.
+    promptChosen = Signal(str)
 
     def __init__(self, parent=None, *, presentation_page=None, presentation_item=None):
         super().__init__(parent)
@@ -150,6 +186,8 @@ class ChatTranscript(QScrollArea):
         self.expanded_commands = set()
         self.expanded_events = set()
         self.plain_text = ""
+        self.examples: list[str] = []
+        self.example_columns = 2
         self.images = ChatImages(self)
         self.follow_bottom = True
         self.verticalScrollBar().rangeChanged.connect(self.follow_layout)
@@ -199,6 +237,22 @@ class ChatTranscript(QScrollArea):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
+        if self.examples:
+            grid = QGridLayout()
+            grid.setContentsMargins(0, 18, 0, 0)
+            grid.setSpacing(10)
+            for column in range(self.example_columns):
+                grid.setColumnStretch(column, 1)
+            for index, example in enumerate(self.examples):
+                card = ExampleCard(example)
+                card.clicked.connect(lambda text=example: self.promptChosen.emit(text))
+                columns = self.example_columns
+                grid.addWidget(card, index // columns, index % columns)
+            row = QHBoxLayout()
+            row.addStretch(1)
+            row.addLayout(grid, 6)
+            row.addStretch(1)
+            layout.addLayout(row)
         layout.addStretch()
 
     def add_message(self, layout, message, dark):

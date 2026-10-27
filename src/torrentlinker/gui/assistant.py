@@ -7,7 +7,8 @@ import json
 from datetime import datetime
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -342,13 +344,11 @@ class AssistantTab(QWidget):
         self.drafts = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.notice = QLabel(
-            self.tr(
-                "Connect a model to discuss tasks and create automations. "
-                "Proposals are the default."
-            )
-        )
+        # Errors and progress only; the discussion header carries the title.
+        self.notice = QLabel()
         self.notice.setWordWrap(True)
+        self.notice.setProperty("role", "muted")
+        self.notice.hide()
         layout.addWidget(self.notice)
         self.pages = QTabWidget()
         layout.addWidget(self.pages, 1)
@@ -357,23 +357,53 @@ class AssistantTab(QWidget):
         splitter = QSplitter()
         left = QWidget()
         self.folder_column = left
-        left.setMaximumWidth(280)
+        left.setMinimumWidth(180)
+        left.setMaximumWidth(420)
         ll = QVBoxLayout(left)
-        new = QPushButton(self.tr("New discussion"))
-        new.clicked.connect(self.new_discussion)
-        ll.addWidget(new)
-        delete = QPushButton(self.tr("Delete discussion"))
-        delete.clicked.connect(self.delete_discussion)
-        ll.addWidget(delete)
+        top = QHBoxLayout()
+        top.setSpacing(4)
+        self.search_chats = QLineEdit()
+        self.search_chats.setPlaceholderText(self.tr("Search discussions"))
+        self.search_chats.setAccessibleName(self.tr("Search discussions"))
+        self.search_chats.setClearButtonEnabled(True)
+        top.addWidget(self.search_chats, 1)
+        self.new_chat = icon_button("＋", self.tr("New discussion"))
+        self.new_chat.clicked.connect(self.new_discussion)
+        top.addWidget(self.new_chat)
+        ll.addLayout(top)
         self.conversations = ChatFolders()
         self.conversations.conversationSelected.connect(self.select_conversation)
+        self.conversations.actionRequested.connect(self.conversation_action)
+        self.search_chats.textChanged.connect(self.conversations.set_filter)
         ll.addWidget(self.conversations)
-        self.move_chat = QPushButton(self.tr("Move to folder…"))
-        self.move_chat.clicked.connect(self.move_conversation)
-        ll.addWidget(self.move_chat)
         splitter.addWidget(left)
         right = QWidget()
         rl = QVBoxLayout(right)
+        rl.setContentsMargins(12, 0, 0, 0)
+        header = QHBoxLayout()
+        header.setContentsMargins(4, 6, 0, 2)
+        header.setSpacing(2)
+        self.chat_title = QLabel(self.tr("New discussion"))
+        self.chat_title.setObjectName("chatTitle")
+        self.chat_title.setTextFormat(Qt.TextFormat.PlainText)
+        header.addWidget(self.chat_title, 1)
+        self.more_menu = QMenu(self)
+        self.chat_settings = self.more_menu.addAction(
+            self.tr("Discussion settings"), self.edit_chat_settings
+        )
+        self.rename_chat = self.more_menu.addAction(self.tr("Rename…"), self.rename_conversation)
+        self.move_chat = self.more_menu.addAction(
+            self.tr("Move to folder…"), self.move_conversation
+        )
+        self.delete_chat = self.more_menu.addAction(
+            self.tr("Delete discussion"), self.delete_discussion
+        )
+        self.more_button = icon_button("⋯", self.tr("More"))
+        self.more_button.setMenu(self.more_menu)
+        self.more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        header.addWidget(self.more_button)
+        self.header = header
+        rl.addLayout(header)
         self.transcript = ChatTranscript(
             presentation_page=lambda *a, **kw: self.service.presentation_page(*a, **kw),
             presentation_item=lambda *a, **kw: self.service.presentation_item(*a, **kw),
@@ -381,16 +411,21 @@ class AssistantTab(QWidget):
         self.transcript.decisionSubmitted.connect(self.submit_decision)
         self.transcript.answerSubmitted.connect(self.submit_answer)
         self.transcript.anchorClicked.connect(self.open_receipt)
+        self.transcript.examples = [
+            self.tr("Find ten films I don't seed yet and show them before any action."),
+            self.tr("Prepare a Plan within 200 GB with the best Zen gain."),
+            self.tr("Review my local upload drafts and list what is missing."),
+            self.tr("Play a film with French subtitles."),
+        ]
+        self.transcript.promptChosen.connect(self.use_example)
         rl.addWidget(self.transcript, 1)
         self.composer = ChatComposer()
         self.composer.sendRequested.connect(self.send_message)
         self.composer.stopRequested.connect(self.stop_run)
         self.composer.modeRequested.connect(self.edit_chat_settings)
-        self.composer.settingsRequested.connect(self.edit_chat_settings)
         self.prompt = self.composer.prompt
         self.chat_model = self.composer.model
         self.chat_model.activated.connect(self.change_chat_model)
-        self.chat_settings = self.composer.settings
         self.send = self.composer.send
         rl.addWidget(self.composer)
         # Without a model the composer is useless: one clear way to connect one instead.
@@ -398,7 +433,13 @@ class AssistantTab(QWidget):
         self.connect_model.clicked.connect(lambda: self.pages.setCurrentIndex(3))
         rl.addWidget(self.connect_model, 0, Qt.AlignmentFlag.AlignHCenter)
         splitter.addWidget(right)
-        splitter.setSizes([220, 760])
+        # The sidebar keeps the width you give it (design principle 3).
+        self.splitter = splitter
+        saved = QSettings().value("assistant/sidebar_width")
+        splitter.setSizes([int(saved) if saved else 240, 760])
+        splitter.splitterMoved.connect(
+            lambda *_: QSettings().setValue("assistant/sidebar_width", splitter.sizes()[0])
+        )
         cl.addWidget(splitter)
         self.pages.addTab(chat, self.tr("Discussion"))
         tasks = QWidget()
@@ -472,41 +513,23 @@ class AssistantTab(QWidget):
         Folders, automations, history and connections stay on the Assistant page.
         """
         self.setObjectName("chatPanel")
-        self.setStyleSheet("QLabel#chatPanelTitle { font-size: 14px; font-weight: 600; }")
-        self.notice.hide()
         # Hidden tabs would still widen the panel's minimum; keep only the discussion.
         while self.pages.count() > 1:
             self.pages.removeTab(1)
         self.pages.tabBar().hide()
         self.folder_column.hide()
-        # The panel's ⋯ menu holds the discussion settings.
-        self.chat_settings.hide()
-        header = QHBoxLayout()
-        header.setContentsMargins(10, 6, 6, 2)
-        header.setSpacing(2)
-        self.chat_title = QLabel(self.tr("New discussion"))
-        self.chat_title.setObjectName("chatPanelTitle")
-        self.chat_title.setTextFormat(Qt.TextFormat.PlainText)
-        header.addWidget(self.chat_title, 1)
+        # Media discussions stay in their folder; moving them belongs to the Assistant page.
+        self.move_chat.setVisible(False)
+        self.transcript.example_columns = 1
         self.history_menu = QMenu(self)
         self.history_menu.aboutToShow.connect(self._fill_history_menu)
-        self.more_menu = QMenu(self)
-        self.more_menu.addAction(self.tr("Discussion settings"), self.edit_chat_settings)
-        self.more_menu.addAction(self.tr("Delete discussion"), self.delete_discussion)
-        for glyph, tip, menu, slot in (
-            ("☰", self.tr("Discussions"), self.history_menu, None),
-            ("⋯", self.tr("More"), self.more_menu, None),
-            ("✕", self.tr("Close chat"), None, self.closeRequested.emit),
-        ):
-            button = icon_button(glyph, tip)
-            if menu is not None:
-                button.setMenu(menu)
-                button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            else:
-                button.clicked.connect(slot)
-            header.addWidget(button)
-        self.layout().insertLayout(0, header)
-        self._sync_compact(False)
+        history = icon_button("☰", self.tr("Discussions"))
+        history.setMenu(self.history_menu)
+        history.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.header.insertWidget(1, history)
+        close = icon_button("✕", self.tr("Close chat"))
+        close.clicked.connect(self.closeRequested.emit)
+        self.header.addWidget(close)
 
     def _fill_history_menu(self):
         self.history_menu.clear()
@@ -526,20 +549,56 @@ class AssistantTab(QWidget):
             action.setCheckable(True)
             action.setChecked(row["id"] == self.conversation_id)
 
-    def _sync_compact(self, running):
+    def _sync_header(self):
         current = next(
             (c for c in getattr(self, "conversation_data", []) if c["id"] == self.conversation_id),
             None,
         )
         self.chat_title.setText(current["name"] if current else self.tr("New discussion"))
+        for action in (self.rename_chat, self.move_chat, self.delete_chat):
+            action.setEnabled(current is not None)
+        if current and self.service:
+            profiles = {p.id: p.name for p in self.service.agent.setup.settings.client_profiles}
+            clients = [profiles.get(i, i) for i in current["policy"]["clients"]]
+            self.chat_title.setToolTip(self.tr("Clients: %1").replace("%1", ", ".join(clients)))
+        else:
+            self.chat_title.setToolTip("")
+
+    def _notify(self, text):
+        self.notice.setText(text)
+        self.notice.setVisible(bool(text))
+
+    def use_example(self, text):
+        self.prompt.setPlainText(text)
+        self.prompt.setFocus()
+        self.prompt.moveCursor(QTextCursor.MoveOperation.End)
+
+    def conversation_action(self, action, identifier):
+        self.select_conversation(identifier)
+        {
+            "rename": self.rename_conversation,
+            "move": self.move_conversation,
+            "delete": self.delete_discussion,
+        }[action]()
+
+    def rename_conversation(self):
+        if not self.service or not self.conversation_id:
+            return
+        body = self.service.conversation(self.conversation_id)[0]
+        name, accepted = QInputDialog.getText(
+            self, self.tr("Rename discussion"), self.tr("Name"), text=body.name
+        )
+        if accepted and name.strip():
+            body.name = name.strip()[:120]
+            self.perform(lambda: self.service.update_conversation(self.conversation_id, body))
 
     def activate(self):
         try:
             self.service = self.get_service()
-            self.notice.clear()
+            self._notify("")
             self.refresh()
         except Exception as error:
-            self.notice.setText(str(error))
+            self._notify(str(error))
 
     def perform(self, action):
         try:
@@ -555,7 +614,6 @@ class AssistantTab(QWidget):
             return
         self.conversation_data = self.service.conversations()
         self.conversations.set_rows(self.conversation_data, self.conversation_id)
-        self.move_chat.setEnabled(bool(self.conversation_id))
         self.task_data = self.service.schedules()
         task_row = self.tasks.currentRow()
         self.tasks.clear()
@@ -700,11 +758,9 @@ class AssistantTab(QWidget):
         self.run_id = ""
         self.prompt.clear()
         self.conversations.select_id("")
-        self.move_chat.setEnabled(False)
         self.chat_model.setCurrentIndex(
             self.chat_model.findData(self.service.chat_defaults().provider_id)
         )
-        self.notice.setText(self.tr("New discussion"))
         self.render_key = ""
         self.refresh_run()
         self.prompt.setFocus()
@@ -714,18 +770,9 @@ class AssistantTab(QWidget):
         if conversation:
             self.drafts[self.conversation_id] = self.prompt.toPlainText()
             self.conversation_id = conversation["id"]
-            self.move_chat.setEnabled(True)
             self.chat_model.setCurrentIndex(self.chat_model.findData(conversation["provider_id"]))
             self.prompt.setPlainText(self.drafts.get(self.conversation_id, ""))
             self.run_id = ""
-            policy = (
-                self.tr("Proposals only")
-                if conversation["policy"]["mode"] == "propose"
-                else self.tr("Execute within limits")
-            )
-            profiles = {p.id: p.name for p in self.service.agent.setup.settings.client_profiles}
-            names = [profiles.get(i, i) for i in conversation["policy"]["clients"]]
-            self.notice.setText(conversation["name"] + " · " + policy + " · " + ", ".join(names))
             self.render_key = ""
             self.refresh_run()
 
@@ -862,8 +909,7 @@ class AssistantTab(QWidget):
         )
         self.composer.set_mode(body.policy.mode != "propose")
         self.run_id = active["id"] if active else self.run_id
-        if self.compact:
-            self._sync_compact(bool(active))
+        self._sync_header()
         if all_rows:
             self.history.set_runs(all_rows, self.status_text)
 
@@ -1121,10 +1167,10 @@ class AssistantTab(QWidget):
                 if not existing or any(
                     existing.get(k) != getattr(p, k) for k in ("kind", "url", "model")
                 ):
-                    self.notice.setText(self.tr("Assessing model capabilities…"))
+                    self._notify(self.tr("Assessing model capabilities…"))
                     run_in_background(
                         lambda: self.service.test_provider(saved["id"]),
-                        lambda result: self.notice.setText(
+                        lambda result: self._notify(
                             "\n".join(
                                 f"{name}: {check['status']}. {check['reason']}"
                                 for name, check in result["checks"].items()
@@ -1143,10 +1189,10 @@ class AssistantTab(QWidget):
         row = self.providers.currentRow()
         if 0 <= row < len(self.provider_data):
             identifier = self.provider_data[row]["id"]
-            self.notice.setText(self.tr("Assessing model capabilities…"))
+            self._notify(self.tr("Assessing model capabilities…"))
             run_in_background(
                 lambda: self.service.test_provider(identifier),
-                lambda result: self.notice.setText(
+                lambda result: self._notify(
                     "\n".join(
                         f"{name}: {check['status']}. {check['reason']}"
                         for name, check in result.get("checks", {}).items()

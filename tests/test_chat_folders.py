@@ -74,7 +74,7 @@ def test_native_move_dialog_pins_custom_folder_and_can_enable_automatic_classifi
             dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
 
         QTimer.singleShot(0, choose_custom)
-        tab.move_chat.click()
+        tab.move_chat.trigger()
         stored = browser.get("/api/assistant/conversations").json()[0]
         assert (stored["folder"], stored["folder_source"]) == ("Uploads", "manual")
         assert tab.conversations.currentItem().parent().text(0) == "Uploads"
@@ -85,7 +85,42 @@ def test_native_move_dialog_pins_custom_folder_and_can_enable_automatic_classifi
             dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
 
         QTimer.singleShot(0, enable_auto)
-        tab.move_chat.click()
+        tab.move_chat.trigger()
         stored = browser.get("/api/assistant/conversations").json()[0]
         assert stored["folder"] == "Uploads"
         assert stored["folder_source"] == "auto"
+
+
+def test_search_hides_other_discussions_and_empty_folders(qtbot):
+    from torrentlinker.gui.chat_folders import ChatFolders
+
+    tree = ChatFolders()
+    qtbot.addWidget(tree)
+    tree.set_rows(
+        [
+            {"id": "a", "name": "Films de Noël", "folder": ""},
+            {"id": "b", "name": "Plan ebooks", "folder": "uploads"},
+        ]
+    )
+    tree.set_filter("noël")
+    general, uploads = tree.topLevelItem(0), tree.topLevelItem(1)
+    assert not general.child(0).isHidden() and uploads.isHidden()
+    # A rebuild keeps the search applied.
+    tree.snapshot = None
+    tree.set_rows([{"id": "b", "name": "Plan ebooks", "folder": "uploads"}])
+    assert tree.topLevelItem(0).isHidden()
+    tree.set_filter("")
+    assert not tree.topLevelItem(0).isHidden()
+
+
+def test_example_prompt_fills_the_composer_without_sending(qtbot):
+    from torrentlinker.gui.assistant import AssistantTab
+    from torrentlinker.gui.chat_transcript import ExampleCard
+
+    widget = AssistantTab(lambda: None)
+    qtbot.addWidget(widget)
+    widget.transcript.set_runs([], lambda value: value)
+    card = widget.transcript.findChildren(ExampleCard)[0]
+    qtbot.mouseClick(card, Qt.MouseButton.LeftButton)
+    assert widget.prompt.toPlainText() == widget.transcript.examples[0]
+    assert widget.run_id == ""

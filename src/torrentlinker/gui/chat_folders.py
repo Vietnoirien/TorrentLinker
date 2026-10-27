@@ -1,11 +1,13 @@
 """Conversation folders with stable selection and user-controlled expansion."""
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QStyle, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QMenu, QStyle, QTreeWidget, QTreeWidgetItem
 
 
 class ChatFolders(QTreeWidget):
     conversationSelected = Signal(str)
+    # A context-menu action ("rename", "move" or "delete") on one discussion.
+    actionRequested = Signal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -19,7 +21,10 @@ class ChatFolders(QTreeWidget):
         )
         self.currentItemChanged.connect(self.selected)
         self.snapshot = None
+        self.filter = ""
         self.collapsed = set()
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.context_menu)
         self.itemCollapsed.connect(lambda item: self.collapsed.add(item.data(0, Qt.UserRole + 1)))
         self.itemExpanded.connect(
             lambda item: self.collapsed.discard(item.data(0, Qt.UserRole + 1))
@@ -59,7 +64,41 @@ class ChatFolders(QTreeWidget):
             child.setData(0, Qt.UserRole, identifier)
             child.setToolTip(0, name)
         self.blockSignals(False)
+        self.set_filter(self.filter)
         self.select_id(current)
+
+    def set_filter(self, text):
+        """Show only discussions whose title contains the text; hide emptied folders."""
+        self.filter = text
+        needle = text.strip().casefold()
+        for index in range(self.topLevelItemCount()):
+            group = self.topLevelItem(index)
+            visible = 0
+            for row in range(group.childCount()):
+                child = group.child(row)
+                match = needle in child.text(0).casefold()
+                child.setHidden(not match)
+                visible += match
+            group.setHidden(not visible)
+            if needle and visible:
+                # Searching opens folders without changing the remembered expansion.
+                self.blockSignals(True)
+                group.setExpanded(True)
+                self.blockSignals(False)
+
+    def context_menu(self, position):
+        item = self.itemAt(position)
+        identifier = item.data(0, Qt.UserRole) if item else None
+        if not identifier:
+            return
+        menu = QMenu(self)
+        for action, label in (
+            ("rename", self.tr("Rename…")),
+            ("move", self.tr("Move to folder…")),
+            ("delete", self.tr("Delete discussion")),
+        ):
+            menu.addAction(label, lambda a=action: self.actionRequested.emit(a, identifier))
+        menu.exec(self.viewport().mapToGlobal(position))
 
     def select_id(self, identifier):
         self.blockSignals(True)

@@ -69,9 +69,9 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkey
         assert activity.isChecked()
 
         from PySide6.QtCore import Qt
-        from PySide6.QtWidgets import QApplication, QPushButton
+        from PySide6.QtWidgets import QApplication
 
-        next(b for b in widget.findChildren(QPushButton) if b.text() == "New discussion").click()
+        widget.new_chat.click()
         assert QApplication.activeModalWidget() is None
         assert widget.prompt.hasFocus()
         assert widget.send.isEnabled()
@@ -89,7 +89,7 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkey
         from PySide6.QtWidgets import QMessageBox
 
         monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
-        next(b for b in widget.findChildren(QPushButton) if b.text() == "Delete discussion").click()
+        widget.delete_chat.trigger()
         assert len(browser.get("/api/assistant/conversations").json()) == 1
         assert not widget.conversation_id
         assert "Help me build a Plan." not in widget.transcript.toPlainText()

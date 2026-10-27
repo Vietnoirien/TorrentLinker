@@ -797,6 +797,38 @@
         <source>Capabilities untested</source>
         <translation>Capacités non testées</translation>
     </message>
+    <message>
+        <source>Search discussions</source>
+        <translation>Rechercher une discussion</translation>
+    </message>
+    <message>
+        <source>Rename…</source>
+        <translation>Renommer…</translation>
+    </message>
+    <message>
+        <source>Clients: %1</source>
+        <translation>Clients : %1</translation>
+    </message>
+    <message>
+        <source>Rename discussion</source>
+        <translation>Renommer la discussion</translation>
+    </message>
+    <message>
+        <source>Find ten films I don&apos;t seed yet and show them before any action.</source>
+        <translation>Cherche dix films que je ne partage pas encore et montre-les-moi avant toute action.</translation>
+    </message>
+    <message>
+        <source>Prepare a Plan within 200 GB with the best Zen gain.</source>
+        <translation>Prépare un Plan de 200 Go maximum avec le meilleur gain de Zen.</translation>
+    </message>
+    <message>
+        <source>Review my local upload drafts and list what is missing.</source>
+        <translation>Relis mes brouillons d&apos;upload locaux et liste ce qui manque.</translation>
+    </message>
+    <message>
+        <source>Play a film with French subtitles.</source>
+        <translation>Lance un film avec des sous-titres français.</translation>
+    </message>
 </context>
 <context>
     <name>BookReader</name>
@@ -6778,6 +6810,18 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Troubleshooting</source>
         <translation>Dépannage</translation>
+    </message>
+    <message>
+        <source>Rename…</source>
+        <translation>Renommer…</translation>
+    </message>
+    <message>
+        <source>Move to folder…</source>
+        <translation>Déplacer vers un dossier…</translation>
+    </message>
+    <message>
+        <source>Delete discussion</source>
+        <translation>Supprimer la discussion</translation>
     </message>
 </context>
 <context>

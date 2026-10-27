@@ -1,7 +1,8 @@
 """The message composer shared by the Assistant page and the Media Center chat panel.
 
 One rounded field with a Send/Stop button inside it, and under it the model and mode
-chips. The host owns what sending, stopping and the chips do.
+chips. The discussion header holds the settings. The host owns what sending, stopping
+and the chips do.
 """
 
 from __future__ import annotations
@@ -29,7 +30,6 @@ class ChatComposer(QFrame):
     sendRequested = Signal()
     stopRequested = Signal()
     modeRequested = Signal()
-    settingsRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -67,9 +67,6 @@ class ChatComposer(QFrame):
         self.mode.clicked.connect(self.modeRequested.emit)
         chips.addWidget(self.mode)
         chips.addStretch()
-        self.settings = icon_button("⚙", self.tr("Discussion settings"))
-        self.settings.clicked.connect(self.settingsRequested.emit)
-        chips.addWidget(self.settings)
         layout.addLayout(chips)
         self.running = False
         self.can_send = False

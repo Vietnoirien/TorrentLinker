@@ -196,6 +196,11 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
         QPushButton[role="icon"]:focus, QToolButton[role="icon"]:focus {{
             border: 1px solid {accent}; }}
         QToolButton[role="icon"]::menu-indicator {{ image: none; width: 0; }}
+        QFrame#chatExample {{ background: {panel}; border: 1px solid {border};
+            border-radius: 10px; }}
+        QFrame#chatExample:hover, QFrame#chatExample:focus {{ border-color: {accent}; }}
+        QFrame#chatExample QLabel {{ background: transparent; }}
+        QLabel#chatTitle {{ font-size: 15px; font-weight: 600; }}
         /* Chat composer (gui/chat_composer.py): one rounded field, chips under it. */
         QFrame#chatComposer {{ background: {panel}; border: 1px solid {border};
             border-radius: 14px; }}
