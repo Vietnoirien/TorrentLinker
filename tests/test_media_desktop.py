@@ -323,7 +323,11 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert tab.video.size() == tab.fullscreen_dialog.size()
     assert tab.player.source() == source
     assert tab.player.position() == position
-    assert tab.caption.font().pixelSize() == max(16, min(64, tab.video.overlay.height() // 18))
+    size = max(16, min(64, tab.video.overlay.height() // 18))
+    assert f"font-size: {size}px" in tab.caption.styleSheet()
+    # What the label really draws with, after the page stylesheet is applied.
+    tab.caption.ensurePolished()
+    assert tab.caption.fontInfo().pixelSize() >= size - 1
     # Two, three and wrapped lines all keep their full height inside the picture.
     for text, lines in (
         ("Un ange est descendu\ndes sphères célestes", 2),
@@ -333,7 +337,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
         tab.caption.setText(text)
         tab._fit_caption()
         qtbot.wait(20)
-        assert tab.caption.height() >= lines * tab.caption.fontMetrics().lineSpacing()
+        assert tab.caption.height() >= lines * tab.caption.fontInfo().pixelSize()
         bottom = tab.caption.mapTo(tab.video, tab.caption.rect().bottomLeft())
         assert tab.video.rect().contains(bottom)
     qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)

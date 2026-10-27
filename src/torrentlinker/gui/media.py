@@ -33,6 +33,7 @@ from PySide6.QtGui import (
     QColor,
     QDesktopServices,
     QFont,
+    QFontMetrics,
     QIcon,
     QImage,
     QImageReader,
@@ -1169,11 +1170,13 @@ class MediaTab(QWidget):
     def _scale_caption(self) -> None:
         height = self.video.overlay.height() or 480
         size = max(16, min(64, height // 18))
-        font = QFont(self.caption.font())
-        font.setPixelSize(size)
-        font.setWeight(QFont.Weight.DemiBold)
-        self.caption.setFont(font)
-        self.caption.setStyleSheet("color: white; background: transparent;")
+        # The page stylesheet would override a font set in code, so the size goes here.
+        self.caption.setStyleSheet(
+            f"color: white; background: transparent; font-size: {size}px; font-weight: 600;"
+        )
+        self.caption_font = QFont(self.caption.font())
+        self.caption_font.setPixelSize(size)
+        self.caption_font.setWeight(QFont.Weight.DemiBold)
         self.caption.setContentsMargins(0, 0, 0, size // 2)
         self.caption.setMaximumWidth(max(200, self.video.overlay.width() * 9 // 10))
         self._fit_caption()
@@ -1181,7 +1184,7 @@ class MediaTab(QWidget):
     def _fit_caption(self) -> None:
         """Give every wrapped subtitle line room, so long cues are never cut off."""
         width = self.caption.maximumWidth()
-        lines = self.caption.fontMetrics().boundingRect(
+        lines = QFontMetrics(self.caption_font).boundingRect(
             QRect(0, 0, width, 100000),
             int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
             self.caption.text(),
