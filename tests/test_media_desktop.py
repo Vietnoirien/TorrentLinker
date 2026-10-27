@@ -199,7 +199,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
 
     import pytest
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QListView
+    from PySide6.QtWidgets import QApplication, QListView
 
     from torrentlinker.domain import LibraryFolder
     from torrentlinker.gui.media import MediaTab
@@ -294,8 +294,10 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     tab.controls_timer.setInterval(120)
     qtbot.mouseMove(tab.video.viewport(), QPoint(20, 20))
     qtbot.waitUntil(lambda: tab.video_controls.isHidden(), timeout=2000)
+    assert tab.player_back.isHidden()
     qtbot.mouseMove(tab.video.viewport(), QPoint(35, 20))
     qtbot.waitUntil(lambda: tab.video_controls.isVisible())
+    assert tab.player_back.isVisible()
     qtbot.keyClick(tab.video, Qt.Key_Space)
     assert tab.video_controls.isVisible()
     local = QPoint(60, 60)
@@ -321,9 +323,18 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert tab.video.size() == tab.fullscreen_dialog.size()
     assert tab.player.source() == source
     assert tab.player.position() == position
+    assert tab.caption.font().pixelSize() == max(16, min(64, tab.video.overlay.height() // 18))
     qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)
     qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
     assert tab.player.source() == source
+    # Double-clicking the picture enters and leaves fullscreen without pausing or playing.
+    state = tab.player.playbackState()
+    qtbot.mouseDClick(tab.video.overlay, Qt.LeftButton, pos=QPoint(80, 80))
+    qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
+    qtbot.mouseDClick(tab.video.overlay, Qt.LeftButton, pos=QPoint(80, 80))
+    qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
+    qtbot.wait(QApplication.doubleClickInterval() + 50)
+    assert tab.player.playbackState() == state
     assert tab.player.position() == position
     qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
     qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)

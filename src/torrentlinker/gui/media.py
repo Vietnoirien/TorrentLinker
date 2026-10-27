@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QGraphicsDropShadowEffect,
     QGraphicsScene,
     QGraphicsView,
     QGridLayout,
@@ -810,11 +811,15 @@ class MediaTab(QWidget):
         self.caption.setTextFormat(Qt.TextFormat.PlainText)
         self.caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.caption.setWordWrap(True)
-        self.caption.setStyleSheet(
-            "color: white; background: rgba(0,0,0,180);"
-            "font-size: 20px; padding: 5px 10px; border-radius: 4px;"
-        )
+        # Outlined text instead of a box, sized to the picture in _scale_caption.
+        outline = QGraphicsDropShadowEffect(self.caption)
+        outline.setOffset(0, 0)
+        outline.setBlurRadius(8)
+        outline.setColor(QColor(0, 0, 0, 255))
+        self.caption.setGraphicsEffect(outline)
         self.caption.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.video.overlay.installEventFilter(self)
+        self._scale_caption()
         self.video_overlay_box.addWidget(self.caption, 0, Qt.AlignmentFlag.AlignHCenter)
         self.video_controls = QWidget()
         self.video_controls.setObjectName("mediaVideoControls")
@@ -946,6 +951,10 @@ class MediaTab(QWidget):
             self.queue_disclosure,
         ):
             widget.hide()
+        self.click_timer = QTimer(self)
+        self.click_timer.setSingleShot(True)
+        self.click_timer.timeout.connect(self.toggle_pause)
+        self._swallow_release = False
         self.controls_timer = QTimer(self)
         self.controls_timer.setSingleShot(True)
         self.controls_timer.setInterval(2200)
@@ -1156,8 +1165,18 @@ class MediaTab(QWidget):
         self.pause.setToolTip(self.tr("Pause") if playing else self.tr("Play"))
         self._show_video_controls()
 
+    def _scale_caption(self) -> None:
+        height = self.video.overlay.height() or 480
+        size = max(16, min(64, height // 18))
+        self.caption.setStyleSheet(
+            f"color: white; background: transparent; font-size: {size}px; "
+            f"font-weight: 600; padding: 0 0 {size // 2}px 0;"
+        )
+        self.caption.setMaximumWidth(max(200, self.video.overlay.width() * 9 // 10))
+
     def _show_video_controls(self) -> None:
         self.video_controls.show()
+        self.player_back.show()
         if self._player_video_mode:
             self.video.viewport().unsetCursor()
             self.controls_timer.start()
@@ -1176,6 +1195,7 @@ class MediaTab(QWidget):
             self.controls_timer.start()
             return
         self.video_controls.hide()
+        self.player_back.hide()
         self.video.viewport().setCursor(Qt.CursorShape.BlankCursor)
 
     def _choose_menu_track(
@@ -1767,13 +1787,28 @@ class MediaTab(QWidget):
             if surface and event.type() == QEvent.Type.ContextMenu:
                 self.player_menu.popup(event.globalPos())
                 return True
+            if watched is self.video.overlay and event.type() == QEvent.Type.Resize:
+                self._scale_caption()
+            if (
+                surface
+                and event.type() == QEvent.Type.MouseButtonDblClick
+                and event.button() == Qt.MouseButton.LeftButton
+            ):
+                # The click that started this double-click must not pause.
+                self.click_timer.stop()
+                self._swallow_release = True
+                self.toggle_fullscreen()
+                return True
             if (
                 surface
                 and event.type() == QEvent.Type.MouseButtonRelease
                 and event.button() == Qt.MouseButton.LeftButton
             ):
                 self.video.setFocus()
-                self.toggle_pause()
+                if self._swallow_release:
+                    self._swallow_release = False
+                else:
+                    self.click_timer.start(QApplication.doubleClickInterval())
                 return True
             if surface and event.type() == QEvent.Type.KeyPress:
                 if event.key() == Qt.Key.Key_Space:
