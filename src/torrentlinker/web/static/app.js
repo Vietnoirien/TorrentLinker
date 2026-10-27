@@ -39,6 +39,8 @@ const french = {
   mediaChat: 'Discuter de ce média',
   mediaCloseChat: 'Fermer la discussion',
   turnOffPartialNames: 'Le désactiver dans Transmission et réessayer',
+  checkAllCandidates: 'Vérifier tous les Candidats',
+  reseedAllMatches: 'Remettre en seed toutes les correspondances complètes',
   mediaPrevious: 'Précédent',
   mediaNext: 'Suivant',
   mediaShuffle: 'Aléatoire',
@@ -1061,6 +1063,32 @@ async function check(row) {
     ),
   );
 }
+// Library batch actions, as on the desktop: they use the Candidates earlier searches found.
+async function checkAllCandidates() {
+  await job({ kind: "check-all" }, (r) => {
+    toast(say(
+      `Checked ${r.items} Local Items: ${r.full} full, ${r.partial} partial, ${r.none} without a Match, ${r.archive} in archives.`,
+      `${r.items} éléments vérifiés : ${r.full} complètes, ${r.partial} partielles, ${r.none} sans correspondance, ${r.archive} dans des archives.`,
+    ));
+    $("candidates").hidden = false;
+    $("candidate-title").textContent = say("Full Matches found", "Correspondances complètes trouvées");
+    const rows = r.results.flatMap((item) => item.rows.filter((c) => c.match === "full").map((c) => ({ ...c, item: item.name })));
+    table("candidate-table", rows, [
+      { label: say("Local Item", "Élément local"), name: true, render: (c) => c.item },
+      { label: "Torrent", render: (c) => c.title },
+    ], null);
+  });
+}
+async function reseedAllMatches() {
+  if (!confirm(say(
+    "Reseed every confirmed Full Match across the Library? Archives and disk renames are left for each item's own review.",
+    "Remettre en seed toutes les correspondances complètes de la bibliothèque ? Les archives et les renommages sur disque restent à traiter élément par élément.",
+  ))) return;
+  await job({ kind: "reseed-all" }, (r) => toast(say(
+    `${r.started} verifications started, ${r.already_present} already in the client, ${r.skipped} left for review.`,
+    `${r.started} vérifications lancées, ${r.already_present} déjà dans le client, ${r.skipped} à traiter à la main.`,
+  )));
+}
 async function enter() {
   await refreshSetup();
   $("login-screen").hidden = true;
@@ -1069,6 +1097,8 @@ async function enter() {
   if (state.setup.configured) await job({ kind: "refresh" }, loadTorrents);
   await pollJobs();
 }
+$("library-check-all").onclick = () => guard(checkAllCandidates);
+$("library-reseed-all").onclick = () => guard(reseedAllMatches);
 $("login-form").onsubmit = (e) => {
   e.preventDefault();
   guard(async () => {

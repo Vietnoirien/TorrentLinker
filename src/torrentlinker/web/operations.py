@@ -67,6 +67,8 @@ class JobRequest(BaseModel):
         "scan",
         "check",
         "reseed",
+        "check-all",
+        "reseed-all",
         "catalogue",
         "plan",
         "details",
@@ -167,7 +169,10 @@ class Operations:
             record = self.setup.store.local_draft(request.draft_id)
             if record["revision"] != request.revision:
                 raise ValueError("Local Draft changed. Reload and review the current revision.")
-        if request.kind in {"scan", "check", "reseed"} and not self.setup.settings.library_folders:
+        if (
+            request.kind in {"scan", "check", "reseed", "check-all", "reseed-all"}
+            and not self.setup.settings.library_folders
+        ):
             raise ValueError("Add a mounted Library Folder in Settings first.")
         if request.kind == "reseed" and len(request.hashes) != 1:
             raise ValueError("Select one checked Candidate.")
@@ -587,6 +592,10 @@ class Operations:
             return self.library.check(request.path, stop, progress)
         if request.kind == "reseed":
             return self.library.reseed(request.path, request.hashes[0], stop)
+        if request.kind == "check-all":
+            return self.library.check_all(stop, progress)
+        if request.kind == "reseed-all":
+            return self.library.reseed_all(stop, progress)
         if request.kind == "search":
             indexer = self.setup.indexer()
             seeded = set()

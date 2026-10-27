@@ -151,6 +151,107 @@ class Library:
             progress({"done": len(result), "total": len(candidates)})
         return result
 
+    def _remembered(self, stop: threading.Event):
+        """Each not fully seeded Local Item with the Candidates its last search found,
+        without rejected ones, as the desktop's Library batch actions use them."""
+        from torrentlinker.domain import ItemState
+        from torrentlinker.review import candidate_key
+
+        indexer = self.setup.indexer()
+        store = self.setup.store
+        for entry in list(self.entries):
+            if stop.is_set():
+                return
+            if entry.state is ItemState.SEEDED:
+                continue
+            rejected = store.rejections(entry.item.path)
+            candidates = [
+                c
+                for c in remembered_candidates(store, indexer, entry.item.path) or []
+                if candidate_key(c) not in rejected
+            ]
+            if candidates:
+                yield entry, indexer, candidates
+
+    def check_all(self, stop: threading.Event, progress: Callable[[Any], None]) -> dict:
+        """Check every remembered Candidate across the Library, like the desktop's
+        "Check all Candidates"; items never searched are left for "Find candidates"."""
+        rules = self.setup.settings.matching.rules()
+        items, counts, errors = [], {"full": 0, "partial": 0, "none": 0, "archive": 0}, []
+        for entry, indexer, candidates in self._remembered(stop):
+            self.check_tree(entry.item.path, stop)
+            item = scan_item(entry.item.path)
+            rows = []
+            for candidate in candidates:
+                if stop.is_set():
+                    break
+                try:
+                    checked = check_candidate(indexer, item, candidate, rules)
+                except Exception as error:
+                    errors.append(f"{candidate.title}: {type(error).__name__}")
+                    continue
+                match = (
+                    "full"
+                    if checked.match and checked.match.is_full
+                    else "partial"
+                    if checked.match
+                    else "none"
+                )
+                counts["archive" if checked.unpack else match] += 1
+                rows.append({"hash": candidate.infohash, "title": candidate.title, "match": match})
+            items.append({"path": str(entry.item.path), "name": entry.item.path.name, "rows": rows})
+            progress({"done": len(items), "full": counts["full"]})
+        return {"items": len(items), **counts, "errors": errors[:20], "results": items}
+
+    def reseed_all(self, stop: threading.Event, progress: Callable[[Any], None]) -> dict:
+        """Reseed every confirmed Full Match across the Library, like the desktop's
+        "Reseed all Full Matches". Archives and disk renames need the item's own review."""
+        from torrentlinker.qbit import AlreadyInClient as ClientAlreadyInClient
+        from torrentlinker.reseed import AlreadyInClient
+        from torrentlinker.review import candidate_key
+
+        rules = self.setup.settings.matching.rules()
+        client = self.client()
+        started, present, skipped, errors = 0, 0, 0, []
+        seen: set[str] = set()
+        for entry, indexer, candidates in self._remembered(stop):
+            self.check_tree(entry.item.path, stop)
+            item = scan_item(entry.item.path)
+            for candidate in candidates:
+                if stop.is_set():
+                    break
+                try:
+                    checked = check_candidate(indexer, item, candidate, rules)
+                    if not checked.meta or not checked.match or not checked.match.is_full:
+                        continue
+                    if checked.unpack or (client.requires_disk_renames and checked.match.renames):
+                        skipped += 1
+                        continue
+                    infohash = checked.meta.infohash.lower()
+                    if infohash in seen:
+                        continue
+                    start_reseed(
+                        client,
+                        self.setup.store,
+                        item,
+                        checked.meta,
+                        checked.match,
+                        candidate_key(candidate),
+                    )
+                    seen.add(infohash)
+                    started += 1
+                except (AlreadyInClient, ClientAlreadyInClient):
+                    present += 1
+                except Exception as error:
+                    errors.append(f"{candidate.title}: {type(error).__name__}")
+            progress({"reseeding": started})
+        return {
+            "started": started,
+            "already_present": present,
+            "skipped": skipped,
+            "errors": errors[:20],
+        }
+
     def reseed(self, path: str, hash: str, stop: threading.Event) -> dict:
         entry = self.entry(path)
         self.check_tree(entry.item.path, stop)
