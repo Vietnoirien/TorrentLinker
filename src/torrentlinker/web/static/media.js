@@ -649,7 +649,8 @@ function mediaChatButtons() {
     $(id).title = label; $(id).setAttribute("aria-label", label);
   }
   $("media-chat-resize").setAttribute("aria-label", say("Resize chat", "Redimensionner la discussion"));
-  for (const id of ["media-chat", "media-feature-chat"]) $(id)?.setAttribute("aria-pressed", String(media.chat));
+  for (const id of ["media-chat", "media-feature-chat", "media-toolbar-chat"]) $(id)?.setAttribute("aria-pressed", String(media.chat));
+  $("media-toolbar-chat").title = say("Chat", "Discussion"); $("media-toolbar-chat").setAttribute("aria-label", say("Chat", "Discussion"));
 }
 async function mediaOpenChat(conversationId = "", fresh = false) {
   await mediaSession(); await mediaHeartbeat();
@@ -713,8 +714,8 @@ function mediaChatResizeKey(event) {
 }
 function mediaCenterAppearance(enabled) {
   document.body.classList.toggle("media-center-mode", enabled);
-  $("media-center-mode").textContent = enabled ? say("Return to TorrentLinker", "Revenir à TorrentLinker") : say("Media Center mode", "Mode Media Center");
-  $("media-center-mode").dataset.i18n = enabled ? "mediaCenterReturn" : "mediaCenterMode";
+  const label = enabled ? say("Return to TorrentLinker", "Revenir à TorrentLinker") : say("Media Center mode", "Mode Media Center");
+  $("media-center-mode").title = label; $("media-center-mode").setAttribute("aria-label", label);
   $("media-center-mode").setAttribute("aria-pressed", String(enabled));
 }
 async function mediaExitCenter() {
@@ -767,7 +768,8 @@ $("media-search").oninput = () => { clearTimeout(mediaSearchTimer); mediaSearchT
 $("media-refresh").onclick = () => guard(mediaScan);
 $("media-more").onclick = () => guard(() => loadMedia(true));
 $("media-cancel-scan").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); });
-$("media-chat").onclick = () => guard(mediaToggleChat); $("media-chat-close").onclick = mediaCloseChat;
+$("media-chat").onclick = () => guard(mediaToggleChat); $("media-toolbar-chat").onclick = () => guard(mediaToggleChat); $("media-chat-close").onclick = mediaCloseChat;
+mediaCenterAppearance(document.body.classList.contains("media-center-mode")); mediaChatButtons();
 $("media-chat-history").onclick = () => guard(mediaChatHistory); $("media-chat-more").onclick = mediaChatMore;
 $("media-chat-resize").addEventListener("pointerdown", mediaStartChatResize); $("media-chat-resize").addEventListener("keydown", mediaChatResizeKey);
 $("media-chat-panel").addEventListener("keydown", e => { if (e.key === "Escape" && !$("media-chat-menu").hidden) { e.stopPropagation(); mediaCloseChatMenu(); } });

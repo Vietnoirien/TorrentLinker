@@ -63,6 +63,38 @@ select:focus-visible {
   color: white;
   border-color: var(--accent);
 }
+/* Button roles, matching the desktop (gui/controls.py): .primary, the plain
+   secondary button above, .quiet and .icon-button. Pages recolor, never reshape. */
+.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.quiet:hover {
+  background: var(--tint);
+  border-color: transparent;
+  color: var(--ink);
+}
+.icon-button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: transparent;
+  border-color: transparent;
+  font-size: 16px;
+  line-height: 1;
+}
+.icon-button:hover {
+  background: var(--tint);
+  border-color: transparent;
+}
+.icon-button[aria-pressed="true"] {
+  background: var(--tint);
+  border-color: var(--accent);
+}
 .danger {
   color: var(--danger);
 }

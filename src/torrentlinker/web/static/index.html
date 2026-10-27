@@ -96,7 +96,7 @@
             <nav id="media-music-nav" class="media-music-nav" aria-label="Music browsing" hidden><button data-media-music-view="albums">Albums</button><button data-media-music-view="artists">Artists</button><button data-media-music-view="tracks">Tracks</button></nav>
             <input id="media-search" type="search" aria-label="Search media" placeholder="Search your media" />
             <details id="media-library-options" class="media-library-options"><summary data-en="Options" data-fr="Options">Options</summary><div class="media-options-panel"><label class="media-layout-control"><span data-i18n="mediaLayoutShort">Layout</span><select id="media-layout-switch" aria-label="Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><div class="toolbar media-filters"><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup" data-i18n="mediaAddFolder">Add Library Folder</button></div></div></details>
-            <button id="media-center-mode" data-i18n="mediaCenterMode" aria-pressed="false">Media Center mode</button>
+            <button id="media-toolbar-chat" class="icon-button" type="button" aria-pressed="false">✦</button><button id="media-center-mode" class="icon-button" type="button" aria-pressed="false">⤢</button>
           </div>
           <section id="media-feature" class="media-feature" aria-label="Featured title" hidden></section>
           <div class="media-shelves">
@@ -668,7 +668,7 @@
           <div id="job-list"></div>
         </section>
       </main>
-      <aside id="media-chat-panel" aria-label="Media Assistant" hidden><div id="media-chat-resize" role="separator" aria-orientation="vertical" tabindex="0"></div><header class="media-chat-header"><h2 id="media-chat-title">Media discussion</h2><button id="media-chat-history" class="media-chat-icon" type="button" aria-haspopup="menu">☰</button><button id="media-chat-more" class="media-chat-icon" type="button" aria-haspopup="menu">⋯</button><button id="media-chat-close" class="media-chat-icon" type="button">✕</button></header><div id="media-chat-menu" class="media-chat-menu" role="menu" hidden></div><div id="media-chat-content"></div></aside>
+      <aside id="media-chat-panel" aria-label="Media Assistant" hidden><div id="media-chat-resize" role="separator" aria-orientation="vertical" tabindex="0"></div><header class="media-chat-header"><h2 id="media-chat-title">Media discussion</h2><button id="media-chat-history" class="icon-button" type="button" aria-haspopup="menu">☰</button><button id="media-chat-more" class="icon-button" type="button" aria-haspopup="menu">⋯</button><button id="media-chat-close" class="icon-button" type="button">✕</button></header><div id="media-chat-menu" class="media-chat-menu" role="menu" hidden></div><div id="media-chat-content"></div></aside>
     </div>
     <div id="toast" role="alert" hidden></div>
     <dialog id="dialog">

@@ -37,6 +37,7 @@ from torrentlinker.assistant.providers import PRESETS, Provider
 from torrentlinker.assistant.research import SearchSettings
 from torrentlinker.gui.chat_folders import ChatFolders
 from torrentlinker.gui.chat_transcript import ChatTranscript
+from torrentlinker.gui.controls import icon_button
 from torrentlinker.gui.request_details import JsonCode, RequestDetails
 from torrentlinker.gui.tasks import run_in_background
 
@@ -501,15 +502,7 @@ class AssistantTab(QWidget):
         Folders, automations, history and connections stay on the Assistant page.
         """
         self.setObjectName("chatPanel")
-        self.setStyleSheet("""
-            QToolButton#chatPanelIcon { background: transparent; border: 0; border-radius: 6px;
-                min-width: 28px; min-height: 28px; padding: 0; font-size: 15px; }
-            QToolButton#chatPanelIcon:hover { background: rgba(255,255,255,30); }
-            QToolButton#chatPanelIcon::menu-indicator { image: none; width: 0; }
-            QToolButton#chatSend { border-radius: 16px; min-width: 32px; min-height: 32px;
-                padding: 0; font-size: 15px; }
-            QLabel#chatPanelTitle { font-size: 14px; font-weight: 600; }
-        """)
+        self.setStyleSheet("QLabel#chatPanelTitle { font-size: 14px; font-weight: 600; }")
         self.notice.hide()
         # Hidden tabs would still widen the panel's minimum; keep only the discussion.
         while self.pages.count() > 1:
@@ -536,11 +529,7 @@ class AssistantTab(QWidget):
             ("⋯", self.tr("More"), self.more_menu, None),
             ("✕", self.tr("Close chat"), None, self.closeRequested.emit),
         ):
-            button = QToolButton()
-            button.setObjectName("chatPanelIcon")
-            button.setText(glyph)
-            button.setToolTip(tip)
-            button.setAccessibleName(tip)
+            button = icon_button(glyph, tip)
             if menu is not None:
                 button.setMenu(menu)
                 button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -552,9 +541,12 @@ class AssistantTab(QWidget):
         composer.setSpacing(6)
         column.removeWidget(self.prompt)
         composer.addWidget(self.prompt, 1)
-        self.send_toggle = QToolButton()
+        self.send_toggle = icon_button("➤", self.tr("Send"))
         self.send_toggle.setObjectName("chatSend")
-        self.send_toggle.setProperty("primary", True)
+        # The main action of the composer: the icon shape in the primary color.
+        self.send_toggle.setStyleSheet(
+            "QToolButton { background: #087f76; color: white; border-radius: 15px; }"
+        )
         self.send_toggle.clicked.connect(self._send_or_stop)
         composer.addWidget(self.send_toggle, 0, Qt.AlignmentFlag.AlignBottom)
         column.insertLayout(column.indexOf(self.connect_model), composer)

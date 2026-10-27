@@ -78,6 +78,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from torrentlinker.gui.controls import icon_button, set_role
 from torrentlinker.gui.tasks import run_in_background
 
 # The Media Center chat panel and the media beside it never shrink below these.
@@ -370,26 +371,37 @@ class MediaTab(QWidget):
             QListWidget#mediaPosters::item:hover,
             QListWidget#mediaFocusStrip::item:hover {
                 background: rgba(255, 255, 255, 14); border-radius: 7px; }
-            QPushButton#mediaPrimary { background: #eff3ed; color: #13211f;
-                border: 0; border-radius: 6px; padding: 10px 18px; font-weight: 650; }
-            QPushButton#mediaSecondary { background: rgba(255, 255, 255, 29); color: #f3f4ef;
-                border: 0; border-radius: 6px; padding: 10px 16px; }
-            QPushButton#mediaDisclosure { padding: 7px 12px; }
-            QPushButton#mediaKindTab, QPushButton#mediaBrowseTab {
-                background: transparent; color: #b8c2c1; border: 0;
-                border-bottom: 2px solid transparent; border-radius: 0; padding: 4px 0; }
-            QPushButton#mediaKindTab:checked, QPushButton#mediaBrowseTab:checked {
-                color: #f0f5f1; border-bottom: 2px solid #79d3c5; }
-            QPushButton#mediaCompactControl, QToolButton#mediaCompactControl {
-                padding: 0; font-size: 19px; border-radius: 6px; }
-            QToolButton#mediaCompactControl::menu-indicator { image: none; width: 0; }
+            /* The Media Center is always dark: it recolors the shared button roles
+               (gui/controls.py) and keeps their shapes. */
+            QWidget#mediaWorkspace QPushButton, QWidget#mediaWorkspace QToolButton {
+                background: rgba(255, 255, 255, 22); color: #eef2ef;
+                border: 1px solid rgba(255, 255, 255, 34); }
+            QWidget#mediaWorkspace QPushButton:hover, QWidget#mediaWorkspace QToolButton:hover {
+                background: rgba(255, 255, 255, 38); border-color: #79d3c5; }
+            QWidget#mediaWorkspace QPushButton:disabled,
+            QWidget#mediaWorkspace QToolButton:disabled {
+                background: rgba(255, 255, 255, 10); color: #75817f;
+                border-color: rgba(255, 255, 255, 18); }
+            QWidget#mediaWorkspace [role="primary"] { background: #eff3ed; color: #13211f;
+                border-color: #eff3ed; font-weight: 650; }
+            QWidget#mediaWorkspace [role="primary"]:hover { background: #ffffff;
+                border-color: #79d3c5; }
+            QWidget#mediaWorkspace [role="quiet"], QWidget#mediaWorkspace [role="icon"] {
+                background: transparent; border-color: transparent; color: #c9d3d1; }
+            QWidget#mediaWorkspace [role="quiet"]:hover,
+            QWidget#mediaWorkspace [role="icon"]:hover {
+                background: rgba(255, 255, 255, 30); border-color: transparent; color: #f3f6f4; }
+            QWidget#mediaWorkspace [role="icon"]:checked { background: #203d39;
+                border-color: #79d3c5; color: #93dfce; }
+            QWidget#mediaWorkspace [role="tab"] { background: transparent; color: #b8c2c1;
+                border: 0; border-bottom: 2px solid transparent; }
+            QWidget#mediaWorkspace [role="tab"]:hover { color: #f0f5f1; background: transparent; }
+            QWidget#mediaWorkspace [role="tab"]:checked { color: #f0f5f1;
+                border-bottom: 2px solid #79d3c5; }
             QLineEdit#mediaSearch { background: #172024; color: #e6eeeb;
                 border: 1px solid #354644; border-radius: 8px; padding: 6px 10px; }
-            QPushButton#mediaCategoryCard { background: #1b3436; color: #eef5ee;
-                border: 1px solid #304f4e; border-radius: 8px; font-size: 15px; }
-            QPushButton#musicNavigation { border: 0; border-radius: 18px; padding: 9px 18px;
-                color: #adbbbd; background: transparent; font-size: 14px; }
-            QPushButton#musicNavigation:checked { color: #93dfce; background: #203d39; }
+            QWidget#mediaWorkspace QPushButton#mediaCategoryCard { background: #1b3436;
+                color: #eef5ee; border: 1px solid #304f4e; border-radius: 8px; font-size: 15px; }
             QLabel#mediaSection { color: #f1f3ef; font-size: 20px; font-weight: 600; }
         """)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -431,7 +443,7 @@ class MediaTab(QWidget):
         self.kind_tab_group = QButtonGroup(self)
         for value, label in (("video", self.tr("Video")), ("music", self.tr("Music"))):
             button = QPushButton(label)
-            button.setObjectName("mediaKindTab")
+            set_role(button, "tab")
             button.setCheckable(True)
             button.setFixedWidth(button.fontMetrics().horizontalAdvance(label) + 24)
             button.setFixedHeight(32)
@@ -457,7 +469,7 @@ class MediaTab(QWidget):
             ("series", self.tr("Series")),
         ):
             button = QPushButton(label)
-            button.setObjectName("mediaBrowseTab")
+            set_role(button, "tab")
             button.setCheckable(True)
             button.setFixedWidth(button.fontMetrics().horizontalAdvance(label) + 20)
             button.setFixedHeight(32)
@@ -544,8 +556,7 @@ class MediaTab(QWidget):
             self.view_actions.append(action)
         self.options_button.setMenu(self.options_menu)
         for widget in (self.search_toggle, self.chat, self.center_button, self.options_button):
-            widget.setObjectName("mediaCompactControl")
-            widget.setFixedSize(32, 32)
+            set_role(widget, "icon")
             tools_box.addWidget(widget)
         self.header_box.addWidget(tools)
         self.media_toolbar = QWidget()
@@ -581,6 +592,7 @@ class MediaTab(QWidget):
         folder_row = QHBoxLayout()
         self.refresh_button = QPushButton(self.tr("Refresh folders"))
         self.cancel_scan = QPushButton(self.tr("Cancel scan"))
+        set_role(self.cancel_scan, "quiet")
         self.cancel_scan.setEnabled(False)
         self.folder_button = QPushButton(self.tr("Add folder…"))
         self.folder_button.clicked.connect(add_folder)
@@ -630,18 +642,19 @@ class MediaTab(QWidget):
         self.body.addWidget(self.empty)
         self.hero = MediaHero()
         self.play_button = QPushButton(self.tr("Play selected"))
-        self.play_button.setObjectName("mediaPrimary")
+        set_role(self.play_button, "primary")
         self.play_button.clicked.connect(self.play_selected)
         self.info_button = QPushButton(self.tr("More info"))
-        self.info_button.setObjectName("mediaSecondary")
+        set_role(self.info_button, "secondary")
         self.info_button.clicked.connect(self.open_details)
         self.enqueue_button = QPushButton(self.tr("Add to queue"))
-        self.enqueue_button.setObjectName("mediaSecondary")
+        set_role(self.enqueue_button, "secondary")
         self.enqueue_button.clicked.connect(self.enqueue_selected)
         self.preview_button = QPushButton(self.tr("Preview downloaded portion"))
-        self.preview_button.setObjectName("mediaPrimary")
+        set_role(self.preview_button, "primary")
         self.preview_button.clicked.connect(self.start_preview)
         self.refresh_preview = QPushButton(self.tr("Refresh preview"))
+        set_role(self.refresh_preview, "quiet")
         self.refresh_preview.clicked.connect(self.start_preview)
         self.action_bar = QWidget()
         actions_box = QHBoxLayout(self.action_bar)
@@ -673,7 +686,7 @@ class MediaTab(QWidget):
             ("tracks", self.tr("Tracks")),
         ):
             button = QPushButton(label)
-            button.setObjectName("musicNavigation")
+            set_role(button, "tab")
             button.setCheckable(True)
             self.music_tab_group.addButton(button)
             button.clicked.connect(
@@ -686,8 +699,10 @@ class MediaTab(QWidget):
         music_navigation_box.addStretch()
         self.music_queue = QPushButton(self.tr("Queue ({0})").format(0))
         self.music_queue.clicked.connect(self._open_music_queue)
+        set_role(self.music_queue, "quiet")
         self.music_playlists = QPushButton(self.tr("Playlists"))
         self.music_playlists.clicked.connect(self._open_music_playlists)
+        set_role(self.music_playlists, "quiet")
         music_navigation_box.addWidget(self.music_queue)
         music_navigation_box.addWidget(self.music_playlists)
         self.body.addWidget(self.music_navigation)
@@ -773,12 +788,14 @@ class MediaTab(QWidget):
         detail_box.addWidget(self.watched)
         detail_actions = QHBoxLayout()
         detail_play = QPushButton(self.tr("Play selected"))
+        set_role(detail_play, "primary")
         detail_play.clicked.connect(self.play_selected)
         detail_play.clicked.connect(self.details.hide)
         detail_preview = QPushButton(self.tr("Preview downloaded portion"))
         detail_preview.clicked.connect(self.start_preview)
         detail_preview.clicked.connect(self.details.hide)
         close_details = QPushButton(self.tr("Close"))
+        set_role(close_details, "quiet")
         close_details.clicked.connect(self.details.hide)
         for widget in (detail_play, detail_preview, close_details):
             detail_actions.addWidget(widget)
@@ -811,6 +828,7 @@ class MediaTab(QWidget):
         self.player_back.setToolTip(self.tr("Home"))
         self.player_back.setAccessibleName(self.tr("Home"))
         self.player_back.clicked.connect(self.dismiss_video)
+        set_role(self.player_back, "icon")
         self.video_overlay_box.addWidget(self.player_back, 0, Qt.AlignmentFlag.AlignLeft)
         self.video_overlay_box.addStretch()
         self.caption = QLabel()
@@ -832,11 +850,7 @@ class MediaTab(QWidget):
         self.video_controls.setStyleSheet("""
             QWidget#mediaVideoControls { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
                 stop:0 rgba(0,0,0,50),stop:1 rgba(0,0,0,210)); color: white; }
-            QPushButton#mediaPlayerIcon, QToolButton#mediaPlayerIcon {
-                background: transparent; color: white; border: 0; border-radius: 4px; padding: 0; }
-            QPushButton#mediaPlayerIcon:hover, QToolButton#mediaPlayerIcon:hover {
-                background: rgba(255,255,255,35); }
-            QToolButton#mediaPlayerIcon::menu-indicator { image: none; width: 0; }
+            QWidget#mediaVideoControls [role="icon"] { color: white; }
         """)
         controls_box = QVBoxLayout(self.video_controls)
         controls_box.setContentsMargins(14, 10, 14, 8)
@@ -914,8 +928,7 @@ class MediaTab(QWidget):
             self.player_options,
             self.fullscreen_button,
         ):
-            widget.setObjectName("mediaPlayerIcon")
-            widget.setFixedSize(34, 32)
+            set_role(widget, "icon")
             widget.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.fullscreen_button.setObjectName("media-fullscreen")
         self.fullscreen_button.setIcon(
@@ -1558,15 +1571,11 @@ class MediaTab(QWidget):
             tile_box = QGridLayout(tile)
             tile_box.setContentsMargins(0, 0, 0, 0)
             tile_box.addWidget(button, 0, 0)
-            remove = QToolButton()
+            remove = icon_button("✕", self.tr("Remove from Continue watching"))
             remove.setObjectName("continueRemove")
-            remove.setText("✕")
-            label_text = self.tr("Remove from Continue watching")
-            remove.setToolTip(label_text)
-            remove.setAccessibleName(label_text)
+            # An icon over artwork keeps a dark backdrop to stay readable.
             remove.setStyleSheet(
-                "QToolButton { background: rgba(0, 0, 0, 150); color: #f1f3ef; border: 0; "
-                "border-radius: 11px; min-width: 22px; min-height: 22px; } "
+                "QToolButton { background: rgba(0, 0, 0, 150); color: #f1f3ef; } "
                 "QToolButton:hover { background: #b84a4a; }"
             )
             remove.clicked.connect(

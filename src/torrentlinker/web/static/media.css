@@ -13,6 +13,10 @@ body.media-view { --bg: #101416; --panel: #171d20; --ink: #f2f3ef; --muted: #9da
 .media-view .sidebar .brand { color: var(--ink); }
 #view-media { --media-muted: #9da9ad; color: #f2f3ef; background: #101416; min-height: calc(100dvh - 78px); }
 #view-media button, #view-media input, #view-media select, #media-details button { color: inherit; background: #ffffff08; border-color: #ffffff23; }
+/* The media view recolors the shared roles for its dark surface; it keeps their shapes. */
+#view-media .icon-button, #view-media .quiet, #media-chat-panel .icon-button { background: transparent; border-color: transparent; }
+#view-media .icon-button:hover, #view-media .quiet:hover, #media-chat-panel .icon-button:hover { background: #ffffff1a; border-color: transparent; }
+#view-media .icon-button[aria-pressed="true"] { background: #203d39; border-color: #79d3c5; color: #93dfce; }
 #view-media button:hover, #media-details button:hover { color: #80d6c5; background: #80d6c511; border-color: #80d6c570; }
 .media-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 20px 36px 12px; position: relative; z-index: 2; }
 .media-tabs { display: flex; gap: 14px; flex-shrink: 0; }
@@ -207,7 +211,7 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 .media-options-panel .media-layout-control { font-size: 11px; justify-content: space-between; align-items: center; }
 .media-options-panel .media-filters { display: grid; grid-template-columns: 1fr 1fr; margin: 12px 0 0; padding-bottom: 0; }
 .media-options-panel select { width: 100%; max-width: none; }
-#media-center-mode { flex-shrink: 0; font-size: 10px; padding: 7px 9px; width: auto; }
+#media-center-mode { flex-shrink: 0; }
 #view-media[data-kind="music"] .media-layout-control { display: none; }
 #view-media[data-kind="music"] .media-shelves { padding-top: 28px; padding-bottom: 250px; }
 #view-media[data-kind="music"] .media-inventory-status { margin: 0 0 12px; }
@@ -335,8 +339,6 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 /* Media Center chat panel: compact header, menus, resize handle and one send/stop icon. */
 .media-chat-header { display: flex; align-items: center; gap: 2px; padding: 10px 0 6px; }
 .media-chat-header h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.media-chat-icon { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 15px; line-height: 1; }
-.media-chat-icon:hover, .media-chat-icon:focus-visible { background: #ffffff1a; }
 .media-chat-menu { position: absolute; top: 46px; right: 12px; z-index: 2; min-width: 220px; max-width: calc(100% - 24px); max-height: 60vh; overflow: auto; display: flex; flex-direction: column; padding: 6px; background: var(--panel,Canvas); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
 .media-chat-menu[hidden] { display: none; }
 .media-chat-menu button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

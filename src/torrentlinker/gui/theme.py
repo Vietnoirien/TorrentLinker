@@ -179,6 +179,28 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
             border-color: {border}; }}
         QPushButton:focus, QToolButton:focus, QLineEdit:focus, QComboBox:focus,
         QAbstractSpinBox:focus {{ border: 2px solid {accent}; }}
+        /* Button roles (gui/controls.py). Secondary is the plain style above. */
+        QPushButton[role="primary"], QToolButton[role="primary"] {{ background: {accent};
+            color: white; border-color: {accent}; font-weight: 600; }}
+        QPushButton[role="quiet"], QToolButton[role="quiet"] {{ background: transparent;
+            border-color: transparent; color: {muted}; padding: 7px 8px; }}
+        QPushButton[role="quiet"]:hover, QToolButton[role="quiet"]:hover {{
+            background: {hover}; border-color: transparent; color: {text}; }}
+        QPushButton[role="icon"], QToolButton[role="icon"] {{ background: transparent;
+            border: 1px solid transparent; border-radius: 6px; padding: 0; font-size: 16px;
+            min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; }}
+        QPushButton[role="icon"]:hover, QToolButton[role="icon"]:hover {{
+            background: {hover}; border-color: transparent; }}
+        QPushButton[role="icon"]:checked, QToolButton[role="icon"]:checked {{
+            background: {selection}; border-color: {accent}; }}
+        QPushButton[role="icon"]:focus, QToolButton[role="icon"]:focus {{
+            border: 1px solid {accent}; }}
+        QToolButton[role="icon"]::menu-indicator {{ image: none; width: 0; }}
+        QPushButton[role="tab"] {{ background: transparent; border: 0; border-radius: 0;
+            border-bottom: 2px solid transparent; color: {muted}; padding: 6px 2px; }}
+        QPushButton[role="tab"]:hover {{ color: {text}; background: transparent; }}
+        QPushButton[role="tab"]:checked {{ color: {text}; border-bottom: 2px solid {accent};
+            font-weight: 600; }}
         QToolButton#browserTabClose {{ background: transparent; border: 0;
             border-radius: 4px; padding: 0; color: {muted}; font-size: 18px; }}
         QToolButton#browserTabClose:hover {{ background: {bg}; color: {text}; }}

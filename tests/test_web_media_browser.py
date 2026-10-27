@@ -428,7 +428,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("#app-sidebar")).to_be_hidden()
             expect(page.locator("main > header")).to_be_hidden()
             expect(page.locator("#media-search")).to_be_visible()
-            expect(page.locator("#media-center-mode")).to_have_text("Return to TorrentLinker")
+            expect(page.locator("#media-center-mode")).to_have_attribute(
+                "aria-label", "Return to TorrentLinker"
+            )
             page.locator("#media-music-tab").click()
             expect(page.locator("#media-results article")).to_have_count(2)
             page.locator("#media-video-tab").click()
@@ -450,7 +452,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement === document.documentElement")
-            expect(page.locator("#media-center-mode")).to_have_text("Return to TorrentLinker")
+            expect(page.locator("#media-center-mode")).to_have_attribute(
+                "aria-label", "Return to TorrentLinker"
+            )
             expect(page.locator("#app-sidebar")).to_be_hidden()
             assert video.get_attribute("src") == source
             page.locator("#media-center-mode").click()
@@ -556,6 +560,14 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             player_action(page, "#media-chat")
             expect(panel).to_be_visible()
             assert abs(panel.bounding_box()["width"] - widened) <= 1
+            # The toolbar's ✦ icon toggles the same panel and shows its state.
+            toolbar_chat = page.locator("#media-toolbar-chat")
+            expect(toolbar_chat).to_have_attribute("aria-pressed", "true")
+            toolbar_chat.click()
+            expect(panel).to_be_hidden()
+            expect(toolbar_chat).to_have_attribute("aria-pressed", "false")
+            toolbar_chat.click()
+            expect(panel).to_be_visible()
             page.locator("#media-chat-close").click()
             page.locator('[data-view="library"]').click()
             expect(video).to_be_visible()
