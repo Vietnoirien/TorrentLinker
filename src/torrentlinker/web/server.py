@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Mapping
 from pathlib import Path
+
+
+def resolve_password(password_file: Path | None, environ: Mapping[str, str]) -> str | None:
+    """Return the Web UI password, preferring the file over TL_WEB_PASSWORD."""
+    if password_file is not None:
+        return password_file.read_text().strip()
+    value = environ.get("TL_WEB_PASSWORD", "").strip()
+    return value or None
 
 
 def main() -> int:
@@ -21,10 +30,14 @@ def main() -> int:
     )
     parser.add_argument("--root-path", default=os.getenv("TL_ROOT_PATH", ""))
     args = parser.parse_args()
-    if args.password_file is None:
+    try:
+        password = resolve_password(args.password_file, os.environ)
+    except OSError as error:
+        parser.error(f"Cannot read the password file: {error}")
+    if password is None:
         parser.error(
-            "Provide --password-file or TL_WEB_PASSWORD_FILE, containing a "
-            "password of at least 12 characters."
+            "Provide --password-file, TL_WEB_PASSWORD_FILE or TL_WEB_PASSWORD, "
+            "with a password of at least 12 characters."
         )
     roots = tuple(
         args.root or [Path(p) for p in os.getenv("TL_STORAGE_ROOTS", "").split(os.pathsep) if p]
@@ -60,7 +73,7 @@ def main() -> int:
         try:
             app = create_app(
                 directory,
-                password=args.password_file.read_text().strip(),
+                password=password,
                 roots=roots,
                 secret_files=secret_files,
                 secure_cookie=args.secure_cookie,
