@@ -7,12 +7,17 @@ from typing import Literal
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from torrentlinker.feeds import Subscription
+from torrentlinker.feeds import Subscription, candidate, evaluate
 
 
 class SaveFeed(BaseModel):
     subscription: Subscription
     approve_automatic: bool = False
+
+
+class JudgeFeed(BaseModel):
+    subscription: Subscription
+    rows: list[dict] = Field(max_length=1000)
 
 
 class FeedSelection(BaseModel):
@@ -60,6 +65,17 @@ def feed_routes(app: FastAPI, service):
     @app.post("/api/feeds/preview")
     def preview(body: Subscription):
         return feeds.preview(body)
+
+    @app.post("/api/feeds/judge")
+    def judge(body: JudgeFeed):
+        """Judge rows from an earlier preview against edited criteria; no source request."""
+        return {
+            "evaluations": {
+                row["infohash"]: evaluate(candidate(row), body.subscription.preferences)
+                for row in body.rows
+                if row.get("infohash")
+            }
+        }
 
     @app.post("/api/feeds")
     def save(body: SaveFeed):

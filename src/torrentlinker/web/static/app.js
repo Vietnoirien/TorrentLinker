@@ -251,7 +251,7 @@ function age(timestamp) {
         : [Math.floor(seconds / 86400), say("days", "jours")];
   return `${value} ${unit}`;
 }
-function table(target, rows, columns, selection, key = "hash") {
+function table(target, rows, columns, selection, key = "hash", onChange) {
   const host = $(target);
   host.replaceChildren();
   if (!rows.length) {
@@ -279,7 +279,8 @@ function table(target, rows, columns, selection, key = "hash") {
       rows.forEach((r) =>
         input.checked ? selection.add(r[key]) : selection.delete(r[key]),
       );
-      table(target, rows, columns, selection, key);
+      table(target, rows, columns, selection, key, onChange);
+      if (onChange) onChange();
     };
     cell.append(input);
     head.append(cell);
@@ -310,8 +311,10 @@ function table(target, rows, columns, selection, key = "hash") {
       input.type = "checkbox";
       input.checked = selection.has(row[key]);
       input.setAttribute("aria-label", row.name || row.title || row[key]);
-      input.onchange = () =>
+      input.onchange = () => {
         input.checked ? selection.add(row[key]) : selection.delete(row[key]);
+        if (onChange) onChange();
+      };
       cell.append(input);
       tr.append(cell);
     }

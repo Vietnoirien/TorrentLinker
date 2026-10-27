@@ -512,13 +512,21 @@
           </section>
         </section>
         <section id="view-feeds" class="view" hidden>
-          <div id="feeds-toolbar" class="toolbar"></div>
-          <div class="feed-layout"><aside id="feeds-sidebar"></aside><div>
-            <p id="feeds-status" class="muted"></p>
-            <div id="feeds-filters" class="toolbar"></div>
-            <div id="feeds-actions" class="toolbar"></div>
-            <div id="feeds-results" class="table-wrap"></div>
-          </div></div>
+          <div class="feed-layout">
+            <aside>
+              <div id="feeds-side-head" class="feed-side-head"></div>
+              <div id="feeds-sidebar"></div>
+            </aside>
+            <div class="feed-main">
+              <div id="feeds-empty" class="feed-empty" hidden></div>
+              <div id="feeds-body">
+                <div id="feeds-header" class="feed-header"></div>
+                <div id="feeds-filters" class="feed-filters" role="tablist"></div>
+                <div id="feeds-actions" class="feed-selection" hidden></div>
+                <div id="feeds-results" class="table-wrap"></div>
+              </div>
+            </div>
+          </div>
         </section>
         <section id="view-search" class="view" hidden>
           <form id="search-form" class="toolbar">
