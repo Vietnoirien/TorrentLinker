@@ -426,6 +426,125 @@
     </message>
 </context>
 <context>
+    <name>AssistantConnections</name>
+    <message>
+        <source>Hosted providers receive messages and tool results. No automatic fallback to a hosted model. Changes here apply at once.</source>
+        <translation>Les fournisseurs distants reçoivent les messages et les résultats des outils. Aucune bascule automatique vers un modèle distant. Les modifications s’appliquent immédiatement.</translation>
+    </message>
+    <message>
+        <source>Model connections</source>
+        <translation>Connexions aux modèles</translation>
+    </message>
+    <message>
+        <source>Add connection</source>
+        <translation>Ajouter une connexion</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Modifier</translation>
+    </message>
+    <message>
+        <source>Test tools</source>
+        <translation>Tester les outils</translation>
+    </message>
+    <message>
+        <source>Web research</source>
+        <translation>Recherche Web</translation>
+    </message>
+    <message>
+        <source>Chat defaults</source>
+        <translation>Paramètres des nouvelles discussions</translation>
+    </message>
+    <message>
+        <source>Capabilities untested</source>
+        <translation>Capacités non testées</translation>
+    </message>
+    <message>
+        <source>Assistant</source>
+        <translation>Assistant</translation>
+    </message>
+    <message>
+        <source>Model connection</source>
+        <translation>Connexion au modèle</translation>
+    </message>
+    <message>
+        <source>Detect context automatically</source>
+        <translation>Détecter automatiquement le contexte</translation>
+    </message>
+    <message>
+        <source>Leave blank to keep the saved key</source>
+        <translation>Laisser vide pour conserver la clé</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Provider</source>
+        <translation>Fournisseur</translation>
+    </message>
+    <message>
+        <source>Base URL</source>
+        <translation>Adresse de base</translation>
+    </message>
+    <message>
+        <source>Model ID</source>
+        <translation>Identifiant du modèle</translation>
+    </message>
+    <message>
+        <source>Context window (tokens)</source>
+        <translation>Fenêtre de contexte (tokens)</translation>
+    </message>
+    <message>
+        <source>API key</source>
+        <translation>Clé API</translation>
+    </message>
+    <message>
+        <source>Automatic detection runs before each task. The value above is used when the server does not report its limit. Disable detection to use it manually.</source>
+        <translation>La détection automatique a lieu avant chaque tâche. La valeur ci-dessus sert de repli si le serveur ne communique pas sa limite. Désactivez la détection pour utiliser cette valeur manuellement.</translation>
+    </message>
+    <message>
+        <source>Check context</source>
+        <translation>Vérifier le contexte</translation>
+    </message>
+    <message>
+        <source>Checking server context…</source>
+        <translation>Vérification du contexte du serveur…</translation>
+    </message>
+    <message>
+        <source>Server context: %1 tokens</source>
+        <translation>Contexte du serveur : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Provider context: %1 tokens</source>
+        <translation>Contexte du fournisseur : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Not reported. Fallback: %1 tokens</source>
+        <translation>Non communiqué. Valeur de repli : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Manual context: %1 tokens</source>
+        <translation>Contexte manuel : %1 tokens</translation>
+    </message>
+    <message>
+        <source>Use an address reachable by TorrentLinker. In Docker, localhost is the container. Changing the address clears the saved key unless you enter a new one.</source>
+        <translation>Utilisez une adresse accessible depuis TorrentLinker. Dans Docker, localhost désigne le conteneur. Changer l’adresse efface la clé enregistrée, sauf si vous en saisissez une nouvelle.</translation>
+    </message>
+    <message>
+        <source>List models</source>
+        <translation>Lister les modèles</translation>
+    </message>
+    <message>
+        <source>Assessing model capabilities…</source>
+        <translation>Évaluation des capacités du modèle…</translation>
+    </message>
+    <message>
+        <source>Use Brave Search or SearXNG for search. Page reading and book metadata need no search key. Film metadata uses your TMDb key.</source>
+        <translation>Utilisez Brave Search ou SearXNG pour la recherche. La lecture de pages et les métadonnées des livres ne nécessitent pas de clé de recherche. Les films utilisent votre clé TMDb.</translation>
+    </message>
+</context>
+<context>
     <name>AssistantTab</name>
     <message>
         <source>Close chat</source>
@@ -829,6 +948,14 @@
         <source>Play a film with French subtitles.</source>
         <translation>Lance un film avec des sous-titres français.</translation>
     </message>
+    <message>
+        <source>In this mode the assistant runs the actions allowed in this discussion&apos;s settings without asking, within its limits on clients, size and downloads per day. Removing torrents and deleting files still need your approval.
+
+Switch to Execute within limits? You will not be asked again.</source>
+        <translation>Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des torrents ou supprimer des fichiers demande toujours votre accord.
+
+Passer en mode Exécuter dans les limites ? Cette question ne sera plus posée.</translation>
+    </message>
 </context>
 <context>
     <name>BookReader</name>
@@ -1055,6 +1182,10 @@
     <message>
         <source>Proposals only</source>
         <translation>Propositions uniquement</translation>
+    </message>
+    <message>
+        <source>Switch the discussion mode</source>
+        <translation>Changer le mode de la discussion</translation>
     </message>
 </context>
 <context>
@@ -5100,6 +5231,10 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <location filename="../gui/settings_dialog.py" line="252" />
         <source>Media interface</source>
         <translation>Interface des médias</translation>
+    </message>
+    <message>
+        <source>Assistant</source>
+        <translation>Assistant</translation>
     </message>
 </context>
 <context>

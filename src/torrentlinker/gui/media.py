@@ -320,6 +320,7 @@ class MediaTab(QWidget):
     scan_progress = Signal(object)
     layout_changed = Signal(str)
     center_mode_requested = Signal(bool)
+    connections_requested = Signal()
 
     def __init__(
         self,
@@ -3408,6 +3409,7 @@ class MediaTab(QWidget):
                 self.assistant = AssistantTab(self.get_service, compact=True)
                 self.assistant.setMinimumWidth(CHAT_MIN_WIDTH)
                 self.assistant.closeRequested.connect(self.close_chat)
+                self.assistant.connectionsRequested.connect(self.connections_requested.emit)
                 self.assistant.conversationRequested.connect(
                     lambda identifier: self.open_chat(identifier, new=not identifier)
                 )

@@ -62,7 +62,7 @@ class ChatComposer(QFrame):
         self.model.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.model.setMaximumWidth(300)
         chips.addWidget(self.model)
-        self.mode = set_role(icon_button("", self.tr("Discussion mode")), "quiet")
+        self.mode = set_role(icon_button("", self.tr("Switch the discussion mode")), "quiet")
         self.mode.setObjectName("chatModeChip")
         self.mode.clicked.connect(self.modeRequested.emit)
         chips.addWidget(self.mode)

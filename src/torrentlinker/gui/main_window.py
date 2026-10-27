@@ -356,6 +356,7 @@ class MainWindow(QMainWindow):
         from torrentlinker.gui.assistant import AssistantTab
 
         self.assistant_tab = AssistantTab(self.assistant_service)
+        self.assistant_tab.connectionsRequested.connect(self.open_assistant_connections)
         self.tabs.addTab(self.assistant_tab, self.tr("Assistant"))
         from torrentlinker.gui.media import MediaTab
 
@@ -368,6 +369,7 @@ class MainWindow(QMainWindow):
         self.media_tab.refresh_on_first_open = True
         self.media_tab.layout_changed.connect(self._save_media_layout)
         self.media_tab.center_mode_requested.connect(self.set_media_center)
+        self.media_tab.connections_requested.connect(self.open_assistant_connections)
         self.tabs.addTab(self.media_tab, self.tr("Media"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
@@ -2010,13 +2012,23 @@ class MainWindow(QMainWindow):
         if ClientProfilesDialog(self.settings, self.store, self).exec():
             self._replace_workspace(self.settings)
 
+    def open_assistant_connections(self) -> None:
+        self.open_settings(assistant=True)
+
     @agent_settings_change
-    def open_settings(self) -> None:
+    def open_settings(self, *, assistant: bool = False) -> None:
         if self.agent_runtime and self.agent_runtime.busy():
             self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
             return
         folders = list(self.settings.library_folders)
-        accepted = SettingsDialog(self.settings, self).exec()
+        dialog = SettingsDialog(self.settings, self)
+        if assistant:
+            dialog.show_assistant_connections()
+        accepted = dialog.exec()
+        # Model connections apply at once, even when the dialog is cancelled.
+        for chat in (self.assistant_tab, self.media_tab.assistant):
+            if chat is not None and chat.service:
+                chat.refresh()
         if accepted:
             self._lock_reading_room()
             self.torrents_tab.reset_connection()

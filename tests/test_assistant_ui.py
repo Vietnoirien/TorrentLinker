@@ -211,7 +211,7 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
         QSpinBox,
     )
 
-    from torrentlinker.gui.assistant import AssistantTab
+    from torrentlinker.gui.assistant_connections import AssistantConnections
 
     app = create_app(
         tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
@@ -222,10 +222,9 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
             "/api/setup/assistant/providers",
             json={"name": "Local test", "kind": "ollama", "model": "test"},
         ).json()
-        widget = AssistantTab(lambda: app.state.assistant)
+        widget = AssistantConnections(lambda: app.state.assistant)
         qtbot.addWidget(widget)
         widget.show()
-        widget.activate()
 
         def configure():
             dialog = QApplication.activeModalWidget()
@@ -531,3 +530,70 @@ def test_chat_composer_switches_between_send_and_stop(qtbot):
     assert composer.send.accessibleName() == "Stop"
     composer.send.click()
     assert stopped == [1] and sent == [1]
+
+
+def test_mode_chip_switches_and_confirms_only_the_first_time(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QMessageBox
+
+    from torrentlinker.gui import assistant as module
+
+    store = QSettings(str(tmp_path / "chat.ini"), QSettings.Format.IniFormat)
+    monkeypatch.setattr(module, "QSettings", lambda: store)
+    asked = []
+
+    def question(*args):
+        asked.append(args)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        browser.post(
+            "/api/setup/assistant/providers",
+            json={"name": "Local test", "kind": "ollama", "model": "test"},
+        )
+        widget = module.AssistantTab(lambda: app.state.assistant)
+        qtbot.addWidget(widget)
+        widget.show()
+        widget.activate()
+        assert widget.composer.mode.text() == "Proposals only"
+        # A new discussion keeps the choice until its first message creates it.
+        widget.composer.mode.click()
+        assert widget.composer.mode.text() == "Execute within limits" and len(asked) == 1
+        widget.prompt.setPlainText("Help me build a Plan.")
+        widget.send_message()
+        chat = browser.get("/api/assistant/conversations").json()[0]
+        assert chat["policy"]["mode"] == "execute"
+        qtbot.waitUntil(lambda: widget.composer.can_send, timeout=5000)
+        widget.composer.mode.click()
+        assert browser.get("/api/assistant/conversations").json()[0]["policy"]["mode"] == (
+            "propose"
+        )
+        widget.composer.mode.click()
+        assert browser.get("/api/assistant/conversations").json()[0]["policy"]["mode"] == (
+            "execute"
+        )
+        assert len(asked) == 1  # Confirmed once, remembered after.
+        assert store.value("assistant/execute_confirmed", False, bool)
+
+
+def test_model_connections_open_in_settings(qtbot, tmp_path):
+    from PySide6.QtWidgets import QWidget
+
+    from torrentlinker.config import Settings
+    from torrentlinker.gui.assistant_connections import AssistantConnections
+    from torrentlinker.gui.settings_dialog import SettingsDialog
+
+    class Host(QWidget):
+        def assistant_service(self):
+            raise RuntimeError("not needed")
+
+    host = Host()
+    qtbot.addWidget(host)
+    dialog = SettingsDialog(Settings(), host)
+    dialog.show_assistant_connections()
+    assert dialog.tabs.currentWidget().isAncestorOf(dialog.findChild(AssistantConnections))

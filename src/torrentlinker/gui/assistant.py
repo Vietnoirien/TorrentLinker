@@ -35,8 +35,6 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.assistant.models import Conversation, Schedule
-from torrentlinker.assistant.providers import PRESETS, Provider
-from torrentlinker.assistant.research import SearchSettings
 from torrentlinker.gui.chat_composer import ChatComposer
 from torrentlinker.gui.chat_folders import ChatFolders
 from torrentlinker.gui.chat_transcript import ChatTranscript
@@ -330,6 +328,8 @@ class AssistantTab(QWidget):
     # Compact mode: ask the host to open a discussion ("" for a new one), or to close.
     conversationRequested = Signal(str)
     closeRequested = Signal()
+    # Model connections live in Settings → Assistant; the host opens them.
+    connectionsRequested = Signal()
 
     def __init__(self, get_service, parent=None, *, compact=False):
         super().__init__(parent)
@@ -342,6 +342,8 @@ class AssistantTab(QWidget):
         self.task_data = []
         self.provider_data = []
         self.drafts = {}
+        # The mode chosen with the chip before a new discussion exists.
+        self.pending_mode = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         # Errors and progress only; the discussion header carries the title.
@@ -422,7 +424,7 @@ class AssistantTab(QWidget):
         self.composer = ChatComposer()
         self.composer.sendRequested.connect(self.send_message)
         self.composer.stopRequested.connect(self.stop_run)
-        self.composer.modeRequested.connect(self.edit_chat_settings)
+        self.composer.modeRequested.connect(self.toggle_mode)
         self.prompt = self.composer.prompt
         self.chat_model = self.composer.model
         self.chat_model.activated.connect(self.change_chat_model)
@@ -430,7 +432,7 @@ class AssistantTab(QWidget):
         rl.addWidget(self.composer)
         # Without a model the composer is useless: one clear way to connect one instead.
         self.connect_model = set_role(QPushButton(self.tr("Connect a model")), "primary")
-        self.connect_model.clicked.connect(lambda: self.pages.setCurrentIndex(3))
+        self.connect_model.clicked.connect(self.connectionsRequested.emit)
         rl.addWidget(self.connect_model, 0, Qt.AlignmentFlag.AlignHCenter)
         splitter.addWidget(right)
         # The sidebar keeps the width you give it (design principle 3).
@@ -475,31 +477,6 @@ class AssistantTab(QWidget):
         self.history.decisionSubmitted.connect(self.submit_decision)
         self.history.answerSubmitted.connect(self.submit_answer)
         self.pages.addTab(self.history, self.tr("History"))
-        connections = QWidget()
-        pl = QVBoxLayout(connections)
-        info = QLabel(
-            self.tr(
-                "Hosted providers receive messages and tool results. No automatic "
-                "fallback to a hosted model."
-            )
-        )
-        info.setWordWrap(True)
-        pl.addWidget(info)
-        self.providers = QListWidget()
-        pl.addWidget(self.providers)
-        row = QHBoxLayout()
-        for label, action in [
-            (self.tr("Add connection"), lambda: self.provider_editor()),
-            (self.tr("Edit"), self.edit_provider),
-            (self.tr("Test tools"), self.test_provider),
-            (self.tr("Web research"), self.research_editor),
-            (self.tr("Chat defaults"), lambda: self.edit_chat_settings(defaults=True)),
-        ]:
-            b = QPushButton(label)
-            b.clicked.connect(action)
-            row.addWidget(b)
-        pl.addLayout(row)
-        self.pages.addTab(connections, self.tr("Connections"))
         self.timer = QTimer(self)
         self.timer.setInterval(1500)
         self.timer.timeout.connect(self.refresh_run)
@@ -581,6 +558,36 @@ class AssistantTab(QWidget):
             "delete": self.delete_discussion,
         }[action]()
 
+    def toggle_mode(self):
+        if not self.service:
+            return
+        if self.conversation_id:
+            body = self.service.conversation(self.conversation_id)[0]
+            current = body.policy.mode
+        else:
+            current = self.pending_mode or self.service.chat_defaults().policy.mode
+        mode = "propose" if current == "execute" else "execute"
+        if mode == "execute" and not QSettings().value("assistant/execute_confirmed", False, bool):
+            answer = QMessageBox.question(
+                self,
+                self.tr("Execute within limits"),
+                self.tr(
+                    "In this mode the assistant runs the actions allowed in this discussion's "
+                    "settings without asking, within its limits on clients, size and downloads "
+                    "per day. Removing torrents and deleting files still need your approval.\n\n"
+                    "Switch to Execute within limits? You will not be asked again."
+                ),
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            QSettings().setValue("assistant/execute_confirmed", True)
+        if self.conversation_id:
+            body.policy.mode = mode
+            self.perform(lambda: self.service.update_conversation(self.conversation_id, body))
+        else:
+            self.pending_mode = mode
+            self.composer.set_mode(mode == "execute")
+
     def rename_conversation(self):
         if not self.service or not self.conversation_id:
             return
@@ -628,19 +635,6 @@ class AssistantTab(QWidget):
             )
         self.tasks.setCurrentRow(task_row)
         self.provider_data = self.service.setup()["providers"]
-        selected = self.providers.currentRow()
-        self.providers.clear()
-        for p in self.provider_data:
-            self.providers.addItem(p["name"] + " · " + p["model"])
-            assessment = p.get("assessment")
-            self.providers.item(self.providers.count() - 1).setToolTip(
-                "\n".join(
-                    f"{name}: {check['status']}. {check['reason']}"
-                    for name, check in (assessment or {}).get("checks", {}).items()
-                )
-                or self.tr("Capabilities untested")
-            )
-        self.providers.setCurrentRow(selected)
         current = next((c for c in self.conversation_data if c["id"] == self.conversation_id), None)
         chosen = (
             current["provider_id"]
@@ -755,6 +749,7 @@ class AssistantTab(QWidget):
         self.drafts[self.conversation_id] = self.prompt.toPlainText()
         self.drafts.pop("", None)
         self.conversation_id = ""
+        self.pending_mode = ""
         self.run_id = ""
         self.prompt.clear()
         self.conversations.select_id("")
@@ -818,8 +813,11 @@ class AssistantTab(QWidget):
             if not self.conversation_id:
                 body = self.service.chat_defaults()
                 body.provider_id = self.chat_model.currentData() or ""
+                if self.pending_mode:
+                    body.policy.mode = self.pending_mode
                 body.name = "Discussion"
                 self.conversation_id = self.service.create_conversation(body)["id"]
+                self.pending_mode = ""
             return self.service.start(self.conversation_id, message)
 
         result = self.perform(submit)
@@ -907,7 +905,8 @@ class AssistantTab(QWidget):
             if self.conversation_id
             else self.service.chat_defaults()
         )
-        self.composer.set_mode(body.policy.mode != "propose")
+        mode = body.policy.mode if self.conversation_id else self.pending_mode or body.policy.mode
+        self.composer.set_mode(mode == "execute")
         self.run_id = active["id"] if active else self.run_id
         self._sync_header()
         if all_rows:
@@ -992,250 +991,3 @@ class AssistantTab(QWidget):
     def error(self, error):
         detail = self.service.secrets.redact(str(error)) if self.service else str(error)
         QMessageBox.warning(self, self.tr("Assistant"), detail)
-
-    def edit_provider(self):
-        row = self.providers.currentRow()
-        if 0 <= row < len(self.provider_data):
-            self.provider_editor(self.provider_data[row])
-
-    def provider_editor(self, existing=None):
-        if not self.service:
-            return
-        existing = existing or {}
-        dialog = QDialog(self)
-        dialog.setWindowTitle(self.tr("Model connection"))
-        dialog.resize(600, 360)
-        form = QFormLayout(dialog)
-        name = QLineEdit(existing.get("name", ""))
-        kind = QComboBox()
-        kind.addItems(list(PRESETS))
-        kind.setCurrentText(existing.get("kind", "ollama"))
-        address = QLineEdit(existing.get("url", PRESETS["ollama"]))
-        model = QComboBox()
-        model.setEditable(True)
-        model.setEditText(existing.get("model", ""))
-        context_window = QSpinBox()
-        context_window.setRange(512, 2000000)
-        context_window.setValue(existing.get("context_window", 32768))
-        context_auto = QCheckBox(self.tr("Detect context automatically"))
-        context_auto.setChecked(existing.get("context_auto", True))
-        key = QLineEdit()
-        key.setEchoMode(QLineEdit.EchoMode.Password)
-        key.setPlaceholderText(self.tr("Leave blank to keep the saved key"))
-        for label, widget in [
-            (self.tr("Name"), name),
-            (self.tr("Provider"), kind),
-            (self.tr("Base URL"), address),
-            (self.tr("Model ID"), model),
-            ("", context_auto),
-            (self.tr("Context window (tokens)"), context_window),
-            (self.tr("API key"), key),
-        ]:
-            form.addRow(label, widget)
-        context_hint = QLabel(
-            self.tr(
-                "Automatic detection runs before each task. The value above is used "
-                "when the server does not report its limit. Disable detection to use it manually."
-            )
-        )
-        context_hint.setWordWrap(True)
-        form.addRow(context_hint)
-        context_status = QLabel()
-        context_status.setWordWrap(True)
-        form.addRow(context_status)
-        check_context = QPushButton(self.tr("Check context"))
-        form.addRow(check_context)
-
-        def context_selection():
-            return (
-                kind.currentText(),
-                address.text(),
-                model.currentText(),
-                context_auto.isChecked(),
-                context_window.value(),
-                key.text(),
-            )
-
-        def check():
-            try:
-                selection = context_selection()
-                connection = Provider(
-                    name=name.text() or "Discovery",
-                    kind=selection[0],
-                    url=selection[1],
-                    model=selection[2],
-                    context_auto=selection[3],
-                    context_window=selection[4],
-                    api_key=selection[5] or None,
-                )
-                check_context.setEnabled(False)
-                context_status.setText(self.tr("Checking server context…"))
-
-                def done(result):
-                    from shiboken6 import isValid
-
-                    if not isValid(dialog) or not dialog.isVisible():
-                        return
-                    check_context.setEnabled(True)
-                    if context_selection() != selection:
-                        return
-                    label = {
-                        "server": self.tr("Server context: %1 tokens"),
-                        "provider": self.tr("Provider context: %1 tokens"),
-                        "fallback": self.tr("Not reported. Fallback: %1 tokens"),
-                        "manual": self.tr("Manual context: %1 tokens"),
-                    }[result["source"]]
-                    context_status.setText(label.replace("%1", str(result["context_window"])))
-
-                def failed(error):
-                    from shiboken6 import isValid
-
-                    if isValid(dialog) and dialog.isVisible():
-                        check_context.setEnabled(True)
-                        self.error(error)
-
-                run_in_background(
-                    lambda: self.service.context_preview(connection, existing.get("id", "")),
-                    done,
-                    failed,
-                )
-            except Exception as error:
-                self.error(error)
-
-        check_context.clicked.connect(check)
-        for field in (address, key):
-            field.textChanged.connect(context_status.clear)
-        model.currentTextChanged.connect(context_status.clear)
-        context_auto.toggled.connect(context_status.clear)
-        context_window.valueChanged.connect(context_status.clear)
-        kind.currentTextChanged.connect(lambda value: address.setText(PRESETS[value]))
-        hint = QLabel(
-            self.tr(
-                "Use an address reachable by TorrentLinker. In Docker, localhost "
-                "is the container. Changing the address clears the saved key "
-                "unless you enter a new one."
-            )
-        )
-        hint.setWordWrap(True)
-        form.addRow(hint)
-        fetch = QPushButton(self.tr("List models"))
-
-        def discover():
-            try:
-                connection = Provider.model_validate(
-                    dict(
-                        name=name.text() or "Discovery",
-                        kind=kind.currentText(),
-                        url=address.text(),
-                        model=model.currentText() or "discovery",
-                    )
-                )
-                credential = key.text()
-                if not credential and existing and connection.url == existing.get("url"):
-                    credential = self.service.secrets.get("assistant:" + existing["id"])
-                run_in_background(
-                    lambda: self.service.models.models(connection, credential),
-                    lambda values: model.addItems(values),
-                    self.error,
-                )
-            except Exception as error:
-                self.error(error)
-
-        fetch.clicked.connect(discover)
-        form.addRow(fetch)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        form.addRow(buttons)
-
-        def save():
-            try:
-                p = Provider.model_validate(
-                    dict(
-                        name=name.text(),
-                        kind=kind.currentText(),
-                        url=address.text(),
-                        model=model.currentText(),
-                        api_key=key.text() or None,
-                        context_window=context_window.value(),
-                        context_auto=context_auto.isChecked(),
-                    )
-                )
-                saved = self.service.save_provider(p, existing.get("id", ""))
-                dialog.accept()
-                self.refresh()
-                if not existing or any(
-                    existing.get(k) != getattr(p, k) for k in ("kind", "url", "model")
-                ):
-                    self._notify(self.tr("Assessing model capabilities…"))
-                    run_in_background(
-                        lambda: self.service.test_provider(saved["id"]),
-                        lambda result: self._notify(
-                            "\n".join(
-                                f"{name}: {check['status']}. {check['reason']}"
-                                for name, check in result["checks"].items()
-                            )
-                        ),
-                        self.error,
-                    )
-            except Exception as error:
-                self.error(error)
-
-        buttons.accepted.connect(save)
-        buttons.rejected.connect(dialog.reject)
-        dialog.exec()
-
-    def test_provider(self):
-        row = self.providers.currentRow()
-        if 0 <= row < len(self.provider_data):
-            identifier = self.provider_data[row]["id"]
-            self._notify(self.tr("Assessing model capabilities…"))
-            run_in_background(
-                lambda: self.service.test_provider(identifier),
-                lambda result: self._notify(
-                    "\n".join(
-                        f"{name}: {check['status']}. {check['reason']}"
-                        for name, check in result.get("checks", {}).items()
-                    )
-                ),
-                self.error,
-            )
-
-    def research_editor(self):
-        if not self.service:
-            return
-        current = self.service.research_settings()
-        dialog = QDialog(self)
-        dialog.setWindowTitle(self.tr("Web research"))
-        form = QFormLayout(dialog)
-        hint = QLabel(
-            self.tr(
-                "Use Brave Search or SearXNG for search. Page reading and book "
-                "metadata need no search key. Film metadata uses your TMDb key."
-            )
-        )
-        hint.setWordWrap(True)
-        form.addRow(hint)
-        url = QLineEdit(current.get("searxng_url", ""))
-        key = QLineEdit()
-        key.setEchoMode(QLineEdit.EchoMode.Password)
-        key.setPlaceholderText(self.tr("Leave blank to keep the saved key"))
-        form.addRow("SearXNG URL", url)
-        form.addRow("Brave Search API key", key)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        form.addRow(buttons)
-        buttons.rejected.connect(dialog.reject)
-
-        def save():
-            try:
-                self.service.save_research(
-                    SearchSettings(searxng_url=url.text(), brave_key=key.text() or None)
-                )
-                dialog.accept()
-            except Exception as error:
-                self.error(error)
-
-        buttons.accepted.connect(save)
-        dialog.exec()

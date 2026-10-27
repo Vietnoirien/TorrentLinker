@@ -133,6 +133,13 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._page(self._paths_box(), fill=True), self.tr("Client Paths"))
         self.tabs.addTab(self._page(self._zen_box()), self.tr("Zen"))
         self.tabs.addTab(self._page(self._general_box()), self.tr("General"))
+        if parent is not None and hasattr(parent, "assistant_service"):
+            from torrentlinker.gui.assistant_connections import AssistantConnections
+
+            self.assistant_connections = AssistantConnections(parent.assistant_service)
+            self.tabs.addTab(
+                self._page(self.assistant_connections, fill=True), self.tr("Assistant")
+            )
         if parent is not None and hasattr(parent, "open_agent_access"):
             agent_page = QWidget()
             agent_layout = QVBoxLayout(agent_page)
@@ -178,6 +185,13 @@ class SettingsDialog(QDialog):
         outer.addWidget(buttons)
         for table in self.findChildren(QTableWidget):
             style_table(table)
+
+    def show_assistant_connections(self) -> None:
+        connections = getattr(self, "assistant_connections", None)
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if connections is not None and page is not None and page.isAncestorOf(connections):
+                self.tabs.setCurrentIndex(index)
 
     @staticmethod
     def _page(*boxes: QWidget, fill: bool = False) -> QScrollArea:
