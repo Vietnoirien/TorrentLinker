@@ -203,6 +203,29 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
         QPushButton[chip="prefer"] {{ border-color: {accent}; color: {accent}; }}
         QPushButton[chip="must"] {{ background: {accent}; border-color: {accent}; color: white; }}
         QPushButton[chip="avoid"] {{ border-color: {error}; color: {error}; }}
+        /* Search page (gui/search_widgets.py, gui/search_filters.py, gui/pagination.py) */
+        QFrame#searchBar {{ background: {panel}; border: 1px solid {border};
+            border-radius: 12px; }}
+        QFrame#searchBar:focus-within {{ border-color: {accent}; }}
+        QFrame#searchBar QLineEdit {{ background: transparent; border: 0; font-size: 15px;
+            padding: 8px 0; }}
+        QFrame#searchBar QLineEdit:focus {{ border: 0; }}
+        QPushButton[chip="pill"] {{ border-radius: 15px; padding: 6px 14px; }}
+        QPushButton[chip="pill"]:checked {{ background: {selection}; border-color: {accent};
+            color: {text}; font-weight: 600; }}
+        QToolButton[chip="filter"], QPushButton[chip="filter"], QComboBox[chip="filter"],
+        QLineEdit[chip="filter"] {{ border-radius: 15px; padding: 5px 12px; min-height: 18px; }}
+        QPushButton[chip="filter"]:checked, QToolButton[chip="filter"][active="true"] {{
+            background: {selection}; border-color: {accent}; color: {text}; }}
+        QComboBox[chip="filter"]::drop-down {{ border: 0; width: 22px; }}
+        QPushButton[chip="sort"] {{ background: transparent; border: 1px solid transparent;
+            border-radius: 6px; color: {muted}; padding: 4px 9px; }}
+        QPushButton[chip="sort"]:hover {{ background: {hover}; color: {text}; }}
+        QPushButton[chip="sort"]:checked {{ background: {selection}; border-color: {accent};
+            color: {text}; }}
+        QPushButton[chip="page"] {{ min-width: 18px; padding: 6px 10px; }}
+        QPushButton[chip="page"]:checked {{ background: {accent}; border-color: {accent};
+            color: white; font-weight: 600; }}
         QFrame#choiceCard {{ background: {panel}; border: 1px solid {border};
             border-radius: 10px; }}
         QFrame#choiceCard:hover {{ border-color: {accent}; }}

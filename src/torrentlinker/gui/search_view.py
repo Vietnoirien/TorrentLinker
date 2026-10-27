@@ -7,14 +7,16 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QDateTime, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QDateTime, QLocale, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -30,7 +32,9 @@ from torrentlinker.gui.category_picker import CategoryPicker
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.pagination import PageBar
 from torrentlinker.gui.search_filters import SearchFilters
+from torrentlinker.gui.search_widgets import CategoryPills
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import choose_directory
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
@@ -73,16 +77,19 @@ class SearchTab(QWidget):
         self._result_indexer: Indexer | None = None
         workspace = QVBoxLayout(self)
         workspace.setContentsMargins(0, 0, 0, 0)
-        queue_access = QHBoxLayout()
+        header = QHBoxLayout()
+        title = QLabel(self.tr("Torrents"))
+        title.setProperty("role", "heading")
+        header.addWidget(title)
         self.queue_notice = QLabel()
         self.queue_notice.setWordWrap(True)
         self.queue_notice.setTextFormat(Qt.TextFormat.PlainText)
-        queue_access.addWidget(self.queue_notice, 1)
+        header.addWidget(self.queue_notice, 1)
         self.view_queue = QPushButton()
         set_role(self.view_queue, "quiet")
         self.view_queue.clicked.connect(self.show_queue)
-        queue_access.addWidget(self.view_queue)
-        workspace.addLayout(queue_access)
+        header.addWidget(self.view_queue)
+        workspace.addLayout(header)
         self.home = QWidget()
         self.browser = BrowserTabs(self.home)
         self.browser.close_requested.connect(self.close_detail)
@@ -90,34 +97,73 @@ class SearchTab(QWidget):
         self._detail_tabs: dict[str, TorrentDetailsDialog] = {}
         layout = QVBoxLayout(self.home)
         layout.setContentsMargins(0, 8, 0, 0)
-        search = QHBoxLayout()
+        self.category = CategoryPicker()
+        self.category.setAccessibleName(self.tr("Category"))
+        self.filters = SearchFilters(self.category)
         self.query = QLineEdit()
-        self.query.setPlaceholderText(self.tr("Search torrents by title…"))
+        self.query.setPlaceholderText(self.tr("Title, original title, release name…"))
         self.query.setAccessibleName(self.tr("Search torrents"))
         self.query.setClearButtonEnabled(True)
         self.query.setMaxLength(200)
         self.query.returnPressed.connect(lambda: self.search())
-        self.category = CategoryPicker()
-        self.category.setAccessibleName(self.tr("Category"))
+        self.query.textChanged.connect(
+            lambda text: self.filters.sort.set_relevance_available(bool(text.strip()))
+        )
         self.search_button = QPushButton(self.tr("Search"))
         set_role(self.search_button, "primary")
         self.search_button.clicked.connect(lambda: self.search())
-        search.addWidget(self.query, 2)
-        search.addWidget(self.category, 1)
+        self.search_bar = QFrame()
+        self.search_bar.setObjectName("searchBar")
+        search = QHBoxLayout(self.search_bar)
+        search.setContentsMargins(14, 6, 6, 6)
+        search.addWidget(self.query, 1)
+        search.addWidget(self.filters.crew)
         search.addWidget(self.search_button)
         self.subscribe = QPushButton(self.tr("Subscribe to RSS"))
+        set_role(self.subscribe, "quiet")
         self.subscribe.clicked.connect(
             lambda: self.subscribe_requested.emit(self.query.text().strip())
         )
-        search.addWidget(self.subscribe)
-        layout.addLayout(search)
-        self.filters = SearchFilters(self.category)
-        layout.addWidget(self.filters)
+        self.filters.action_row.insertWidget(self.filters.action_row.count() - 1, self.subscribe)
+        self.pills = CategoryPills()
+        self.pills.category_chosen.connect(self._pill_chosen)
+        self.category.category_changed.connect(self.pills.select)
+        self.category.categories_changed.connect(self.pills.set_categories)
+        self.pills.set_categories(self.category.categories, self.category.colors)
+        self.page_bar = PageBar()
+        self.page_bar.page_requested.connect(lambda n: self.search((n - 1) * PAGE_SIZE))
+        self.previous, self.next = self.page_bar.previous, self.page_bar.next
+        self.filters.sort_changed.connect(self._sort_changed)
+        self._search_pending = False
         self.pages = QTabWidget()
         layout.addWidget(self.pages, 1)
         results_page = QWidget()
         results_layout = QVBoxLayout(results_page)
         results_layout.setContentsMargins(0, 0, 0, 0)
+        # The search controls and the results scroll together; the actions below stay in reach.
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 8, 0)
+        body_layout.setSpacing(12)
+        body_layout.addWidget(self.search_bar)
+        body_layout.addWidget(self.pills)
+        body_layout.addWidget(self.filters)
+        body_layout.addWidget(self.page_bar)
+        sort_row = QHBoxLayout()
+        sort_label = QLabel(self.tr("SORT"))
+        sort_label.setProperty("role", "muted")
+        sort_row.addWidget(sort_label)
+        sort_row.addWidget(self.filters.sort, 1)
+        self.results_summary = QLabel()
+        self.results_summary.setProperty("role", "muted")
+        self.results_summary.setTextFormat(Qt.TextFormat.PlainText)
+        sort_row.addWidget(self.results_summary)
+        body_layout.addLayout(sort_row)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(body)
+        results_layout.addWidget(scroll, 1)
         self.results = self._table(
             [
                 self.tr("Torrent"),
@@ -143,18 +189,13 @@ class SearchTab(QWidget):
         self.results_empty = EmptyState(
             self.results, self.tr("Search for torrents, then select the ones to download.")
         )
-        results_layout.addWidget(self.results, 1)
+        self.results.setMinimumHeight(420)
+        body_layout.addWidget(self.results, 1)
         self.result_status = QLabel()
         self.result_status.setWordWrap(True)
         self.result_status.setTextFormat(Qt.TextFormat.PlainText)
-        results_layout.addWidget(self.result_status)
+        body_layout.addWidget(self.result_status)
         paging = QHBoxLayout()
-        self.previous = QPushButton(self.tr("Previous page"))
-        self.next = QPushButton(self.tr("Next page"))
-        self.previous.clicked.connect(lambda: self.search(max(0, self._offset - PAGE_SIZE)))
-        self.next.clicked.connect(lambda: self.search(self._offset + PAGE_SIZE))
-        paging.addWidget(self.previous)
-        paging.addWidget(self.next)
         paging.addStretch()
         self.details_button = QPushButton(self.tr("Open in tabs"))
         self.details_button.clicked.connect(self.show_details)
@@ -255,6 +296,7 @@ class SearchTab(QWidget):
         self.results.itemSelectionChanged.connect(self._buttons)
         self.queue.itemSelectionChanged.connect(self._buttons)
         self.filters.ready_changed.connect(self._buttons)
+        self.filters.ready_changed.connect(self._run_pending_search)
         self.refresh_categories()
         self.refresh_queue()
         self.queue_timer = QTimer(self)
@@ -287,12 +329,32 @@ class SearchTab(QWidget):
             if not indexer.api_key:
                 raise ValueError(self.tr("Set your Indexer API key in Settings first."))
             self.filters.configure(indexer)
+            self.filters.sort.setVisible(indexer.is_c411)
             if not indexer.is_c411:
                 self.category.set_categories(self.settings.indexer_categories)
             return indexer
         except Exception as error:
             self.result_status.setText(error_text(error))
             return None
+
+    def _pill_chosen(self, category: int | None) -> None:
+        """A category pill filters at once, as c411's does."""
+        self.category.select_category(category)
+        self._search_pending = True
+        self._run_pending_search()
+
+    def _sort_changed(self) -> None:
+        if self._native_page is not None:
+            self.search()
+
+    def _run_pending_search(self) -> None:
+        if not self._search_pending:
+            return
+        if self.filters.ready:
+            self._search_pending = False
+            self.search()
+        elif not self.filters.retry.isHidden():
+            self._search_pending = False  # the filters failed to load; do not search later
 
     def refresh_categories(self) -> None:
         if self.filters.tree is None:
@@ -350,6 +412,11 @@ class SearchTab(QWidget):
         self._native_page = page
         self._offset = (page.page - 1) * PAGE_SIZE
         self._show_results(page.rows, indexer)
+        self.pills.set_counts(page.root_counts)
+        summary = self.tr("{0} torrents").format(QLocale().toString(page.total))
+        if page.total_size is not None:
+            summary += " · " + human_size(page.total_size)
+        self.results_summary.setText(summary)
         message = self.tr("{0} results · {1} matches · page {2} of {3}").format(
             len(page.rows), page.total, page.page, max(1, page.total_pages)
         )
@@ -366,12 +433,15 @@ class SearchTab(QWidget):
         self._native_page = None
         self._offset = 0
         self.results.setRowCount(0)
+        self.results_summary.clear()
         self.result_status.setText(error_text(error))
         self._buttons()
 
     def _show_results(self, rows: list[Candidate], indexer: Indexer) -> None:
         self._searching = False
         self._results, self._result_indexer = rows, indexer
+        if self._native_page is None:
+            self.results_summary.clear()
         self.results.setSortingEnabled(False)
         self.results.setRowCount(len(rows))
         cats = self.settings.indexer_categories
@@ -950,9 +1020,14 @@ class SearchTab(QWidget):
         busy = self.runner is not None
         can_search = not self._searching and self.filters.ready
         self.search_button.setEnabled(can_search)
-        self.previous.setEnabled(can_search and self._offset > 0)
         more = self._native_page.has_more if self._native_page else len(self._results) == PAGE_SIZE
-        self.next.setEnabled(can_search and more)
+        self.page_bar.set_state(
+            self._offset // PAGE_SIZE + 1,
+            self._native_page.total_pages if self._native_page else None,
+            more,
+            can_search,
+        )
+        self.page_bar.setVisible(bool(self._results) or self._offset > 0)
         selected_results = self.selected_results()
         one = len(selected_results) == 1 and not self._searching
         self.details_button.setEnabled(bool(selected_results) and not self._searching)

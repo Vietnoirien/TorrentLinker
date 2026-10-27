@@ -3905,6 +3905,18 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Enter a year between 1900 and 2100.</source>
         <translation>Saisissez une année entre 1900 et 2100.</translation>
     </message>
+    <message>
+        <source>Cast &amp;&amp; crew</source>
+        <translation>Casting &amp;&amp; équipe</translation>
+    </message>
+    <message>
+        <source>Also search actors, directors and screenwriters.</source>
+        <translation>Cherche aussi parmi les acteurs, réalisateurs et scénaristes.</translation>
+    </message>
+    <message>
+        <source>Clear all</source>
+        <translation>Tout effacer</translation>
+    </message>
 </context>
 <context>
     <name>SearchTab</name>
@@ -4376,6 +4388,22 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
     <message>
         <source>Check the Torrent Client before removing and queueing this entry again.</source>
         <translation>Vérifier le client torrent avant de retirer et remettre cette entrée en file.</translation>
+    </message>
+    <message>
+        <source>Torrents</source>
+        <translation>Torrents</translation>
+    </message>
+    <message>
+        <source>Title, original title, release name…</source>
+        <translation>Titre, titre original, nom de release…</translation>
+    </message>
+    <message>
+        <source>SORT</source>
+        <translation>TRIER</translation>
+    </message>
+    <message>
+        <source>{0} torrents</source>
+        <translation>{0} torrents</translation>
     </message>
 </context>
 <context>
@@ -8686,6 +8714,71 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Add…</source>
         <translation>Ajouter…</translation>
+    </message>
+</context>
+<context>
+    <name>CategoryPills</name>
+    <message>
+        <source>All</source>
+        <translation>Tout</translation>
+    </message>
+</context>
+<context>
+    <name>PageBar</name>
+    <message>
+        <source>← Previous</source>
+        <translation>← Précédent</translation>
+    </message>
+    <message>
+        <source>Next →</source>
+        <translation>Suivant →</translation>
+    </message>
+    <message>
+        <source>Last »</source>
+        <translation>Dernière »</translation>
+    </message>
+    <message>
+        <source>Page {0}</source>
+        <translation>Page {0}</translation>
+    </message>
+</context>
+<context>
+    <name>SortChips</name>
+    <message>
+        <source>Age</source>
+        <translation>Âge</translation>
+    </message>
+    <message>
+        <source>Seeders</source>
+        <translation>Seeders</translation>
+    </message>
+    <message>
+        <source>Leechers</source>
+        <translation>Leechers</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Completed</source>
+        <translation>Complétés</translation>
+    </message>
+    <message>
+        <source>Comments</source>
+        <translation>Commentaires</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Relevance</source>
+        <translation>Pertinence</translation>
     </message>
 </context>
 </TS>

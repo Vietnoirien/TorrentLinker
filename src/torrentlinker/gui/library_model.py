@@ -30,11 +30,11 @@ def state_label(state: ItemState) -> str:
 
 
 def human_size(n: float) -> str:
-    for unit in ("B", "KiB", "MiB", "GiB"):
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
         if n < 1024:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024
-    return f"{n:.1f} TiB"
+    return f"{n:.1f} PiB"
 
 
 STATE_COLORS = {

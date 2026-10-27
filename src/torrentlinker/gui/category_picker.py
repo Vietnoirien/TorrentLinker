@@ -20,10 +20,13 @@ from torrentlinker.downloads import IndexerCategory
 
 class CategoryPicker(QToolButton):
     category_changed = Signal(object)
+    categories_changed = Signal(object, object)  # the mapping and the root colors
 
     def __init__(self) -> None:
         super().__init__()
         self.current_category: int | None = None
+        self.colors: dict[int, str] = {}
+        self.categories: dict[int, IndexerCategory] = {}
         self.items: dict[int, QTreeWidgetItem] = {}
         self._label = self.tr("All categories")
         self.setAccessibleName(self.tr("Category"))
@@ -53,6 +56,7 @@ class CategoryPicker(QToolButton):
 
     def set_categories(self, categories: Mapping[int, IndexerCategory]) -> None:
         expanded = {cid for cid, item in self.items.items() if item.isExpanded()}
+        self.categories = dict(categories)
         self.tree.clear()
         self.items = {cid: QTreeWidgetItem([info.name]) for cid, info in categories.items()}
         self.all_item = QTreeWidgetItem([self.tr("All categories")])
@@ -75,6 +79,7 @@ class CategoryPicker(QToolButton):
             item.setExpanded(cid in expanded)
             item.setToolTip(0, self._path(item))
         self.select_category(self.current_category)
+        self.categories_changed.emit(self.categories, self.colors)
 
     def select_category(self, category: int | None) -> None:
         previous = self.current_category
@@ -98,11 +103,10 @@ class CategoryPicker(QToolButton):
         return " / ".join(reversed(names))
 
     def _fit_label(self) -> None:
-        self.setText(
-            self.fontMetrics().elidedText(
-                self._label, Qt.TextElideMode.ElideRight, max(40, self.width() - 40)
-            )
+        elided = self.fontMetrics().elidedText(
+            self._label, Qt.TextElideMode.ElideRight, max(40, self.width() - 40)
         )
+        self.setText(elided.replace("&", "&&"))  # a lone & would become a mnemonic
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)

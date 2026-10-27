@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +18,7 @@ class SearchTree:
     # Roots use positive native IDs; children negative IDs to avoid ID collisions.
     categories: dict[int, IndexerCategory]
     slugs: dict[int, str]
+    colors: dict[int, str] = field(default_factory=dict)  # root ID -> "#rrggbb"
 
     def root(self, selected: int | None) -> int | None:
         if selected is None or selected not in self.categories:
@@ -28,16 +30,18 @@ class SearchTree:
 
 
 def parse_tree(payload: dict[str, Any]) -> SearchTree:
-    categories, slugs = {}, {}
+    categories, slugs, colors = {}, {}, {}
     for root in payload["data"]:
         rid = int(root["id"])
         categories[rid] = IndexerCategory(str(root["name"]))
         slugs[rid] = str(root.get("slug", ""))
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", str(root.get("color", ""))):
+            colors[rid] = str(root["color"])
         for child in root.get("subcategories", []):
             cid = -int(child["id"])
             categories[cid] = IndexerCategory(str(child["name"]), rid)
             slugs[cid] = str(child.get("slug", ""))
-    return SearchTree(categories, slugs)
+    return SearchTree(categories, slugs, colors)
 
 
 @dataclass(frozen=True)

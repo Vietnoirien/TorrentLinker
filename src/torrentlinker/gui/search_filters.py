@@ -5,10 +5,8 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -23,6 +21,8 @@ from PySide6.QtWidgets import (
 from torrentlinker.gui.category_picker import CategoryPicker
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
+from torrentlinker.gui.flow_layout import FlowLayout
+from torrentlinker.gui.search_widgets import SortChips
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
 from torrentlinker.indexer_search import VIDEO_FILTERS, visible_facets
@@ -38,6 +38,7 @@ class MultiFilter(QToolButton):
         self.setAccessibleName(label)
         self.setArrowType(Qt.ArrowType.DownArrow)
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setProperty("chip", "filter")
         self.popup = QFrame(self, Qt.WindowType.Popup)
         layout = QVBoxLayout(self.popup)
         find = QLineEdit()
@@ -96,11 +97,15 @@ class MultiFilter(QToolButton):
             if self.items.item(i).checkState() == Qt.CheckState.Checked
         ]
         self.setText(self.label + (f" · {len(selected)}" if selected else ""))
+        self.setProperty("active", bool(selected))
+        self.style().unpolish(self)
+        self.style().polish(self)
         self.setToolTip(", ".join(selected) if selected else self.label)
 
 
 class SearchFilters(QWidget):
     ready_changed = Signal()
+    sort_changed = Signal()
 
     def __init__(self, category: CategoryPicker) -> None:
         super().__init__()
@@ -115,20 +120,26 @@ class SearchFilters(QWidget):
         self.video: dict[str, MultiFilter] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.grid = QGridLayout()
-        layout.addLayout(self.grid)
+        layout.setSpacing(8)
         global_filters = QHBoxLayout()
+        global_filters.setSpacing(8)
         self.year = QLineEdit()
         self.year.setPlaceholderText(self.tr("Year"))
         self.year.setAccessibleName(self.tr("Year"))
         self.year.setValidator(QIntValidator(1900, 2100, self))
-        self.year.setMaximumWidth(85)
+        self.year.setMaximumWidth(90)
         self.uploader = QLineEdit()
         self.uploader.setPlaceholderText(self.tr("Uploader"))
         self.uploader.setAccessibleName(self.tr("Uploader"))
         self.uploader.setMaxLength(100)
-        self.exclusive = QCheckBox(self.tr("Exclusive"))
+        self.uploader.setMaximumWidth(150)
+        for field in (self.year, self.uploader):
+            field.setProperty("chip", "filter")
+        self.exclusive = QPushButton(self.tr("Exclusive"))
+        self.exclusive.setCheckable(True)
+        self.exclusive.setProperty("chip", "filter")
         self.palliative = QComboBox()
+        self.palliative.setProperty("chip", "filter")
         self.palliative.setAccessibleName(self.tr("Revival torrents"))
         for label, value in [
             (self.tr("Available torrents"), ""),
@@ -136,46 +147,40 @@ class SearchFilters(QWidget):
             (self.tr("Soins palliatifs only"), "only"),
         ]:
             self.palliative.addItem(label, value)
-        self.sort = QComboBox()
-        self.sort.setAccessibleName(self.tr("Sort results by"))
-        for label, key in [
-            (self.tr("Newest"), "createdAt"),
-            (self.tr("Seeders"), "seeders"),
-            (self.tr("Leechers"), "leechers"),
-            (self.tr("Size"), "size"),
-            (self.tr("Completed downloads"), "completions"),
-            (self.tr("Comments"), "comments"),
-            (self.tr("Name"), "name"),
-            (self.tr("Category"), "category"),
-            (self.tr("Relevance"), "relevance"),
-        ]:
-            self.sort.addItem(label, key)
-        self.order = QComboBox()
-        self.order.setAccessibleName(self.tr("Sort direction"))
-        self.order.addItem(self.tr("Descending"), "desc")
-        self.order.addItem(self.tr("Ascending"), "asc")
-        self.clear_button = QPushButton(self.tr("Clear filters"))
+        self.crew = QPushButton(self.tr("Cast && crew"))
+        self.crew.setCheckable(True)
+        self.crew.setProperty("chip", "filter")
+        self.crew.setToolTip(self.tr("Also search actors, directors and screenwriters."))
+        self.crew.hide()
+        self.sort = SortChips()
+        self.sort.changed.connect(self.sort_changed)
+        self.clear_button = QPushButton(self.tr("Clear all"))
         set_role(self.clear_button, "quiet")
         self.clear_button.clicked.connect(self.clear)
-        # Two rows keep filters usable at the minimum window width.
-        for widget in (self.year, self.uploader, self.exclusive, self.palliative):
+        category.setMaximumWidth(260)
+        category.setProperty("chip", "filter")
+        global_filters.addWidget(category)
+        # Everything but the category menu needs c411's native search.
+        self.native_controls = (self.year, self.uploader, self.exclusive, self.palliative)
+        for widget in self.native_controls:
             global_filters.addWidget(widget)
-        layout.addLayout(global_filters)
-        footer = QHBoxLayout()
-        footer.addWidget(self.sort)
-        footer.addWidget(self.order)
+            widget.hide()
+        global_filters.addStretch()
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
-        footer.addWidget(self.status, 1)
+        global_filters.addWidget(self.status)
         self.retry = QPushButton(self.tr("Retry filters"))
         self.retry.clicked.connect(self._retry)
         self.retry.hide()
-        footer.addWidget(self.retry)
-        footer.addWidget(self.clear_button)
-        layout.addLayout(footer)
+        global_filters.addWidget(self.retry)
+        # The page puts its own actions (Follow in RSS) between the filters and Clear all.
+        self.action_row = global_filters
+        global_filters.addWidget(self.clear_button)
+        layout.addLayout(global_filters)
+        self.flow = FlowLayout(spacing=8)
+        layout.addLayout(self.flow)
         category.category_changed.connect(self._category_changed)
-        self.hide()
 
     def configure(self, indexer: Indexer) -> None:
         if self.indexer is indexer:
@@ -186,7 +191,9 @@ class SearchFilters(QWidget):
         self._cache.clear()
         self._root = None
         self._remove_controls()
-        self.setVisible(indexer.is_c411)
+        self.category.colors = {}
+        for widget in self.native_controls:
+            widget.setVisible(indexer.is_c411)
         if not indexer.is_c411:
             self.category.setEnabled(True)
             self._set_ready(True)
@@ -215,6 +222,7 @@ class SearchFilters(QWidget):
             if generation != self._generation:
                 return
             self.tree = tree
+            self.category.colors = tree.colors
             self.category.set_categories(tree.categories)
             self.category.setEnabled(True)
             self._set_ready(True)
@@ -238,8 +246,8 @@ class SearchFilters(QWidget):
             self._category_changed(self.category.current_category)
 
     def _remove_controls(self) -> None:
-        while self.grid.count():
-            item = self.grid.takeAt(0)
+        while self.flow.count():
+            item = self.flow.takeAt(0)
             widget = item.widget() if item else None
             if widget:
                 widget.hide()
@@ -258,6 +266,9 @@ class SearchFilters(QWidget):
             else {}
         )
         self._root = root
+        self.crew.setVisible(root == 1)
+        if root != 1:
+            self.crew.setChecked(False)
         self._generation += 1
         generation = self._generation
         self._remove_controls()
@@ -278,8 +289,9 @@ class SearchFilters(QWidget):
                             item.setCheckState(Qt.CheckState.Checked)
             for facet in visible_facets(tree, selected, facets):
                 self.options[facet.slug] = MultiFilter(facet.label, facet.choices)
-            for i, control in enumerate([*self.video.values(), *self.options.values()]):
-                self.grid.addWidget(control, i // 6, i % 6)
+            for control in [*self.video.values(), *self.options.values()]:
+                self.flow.addWidget(control)
+            self.flow.invalidate()
             self._set_ready(True)
 
         if root is None:
@@ -322,8 +334,8 @@ class SearchFilters(QWidget):
         self.uploader.clear()
         self.exclusive.setChecked(False)
         self.palliative.setCurrentIndex(0)
-        self.sort.setCurrentIndex(0)
-        self.order.setCurrentIndex(0)
+        self.crew.setChecked(False)
+        self.sort.reset()
         for control in [*self.video.values(), *self.options.values()]:
             control.clear()
         self.category.select_category(None)
@@ -333,7 +345,7 @@ class SearchFilters(QWidget):
             raise ValueError(self.tr("Wait for the search filters to load."))
         if self.year.text() and not self.year.hasAcceptableInput():
             raise ValueError(self.tr("Enter a year between 1900 and 2100."))
-        params = {"sortBy": self.sort.currentData(), "sortOrder": self.order.currentData()}
+        params = {"sortBy": self.sort.key, "sortOrder": self.sort.order}
         if text:
             params["name"] = text[:200]
         elif params["sortBy"] == "relevance":
@@ -353,6 +365,8 @@ class SearchFilters(QWidget):
                 params[key] = value
         if self.exclusive.isChecked():
             params["exclusive"] = "true"
+        if root == 1 and self.crew.isChecked() and text:
+            params["crew"] = "true"
         for key, control in self.video.items():
             if control.selected():
                 params[key] = ",".join(control.selected())
