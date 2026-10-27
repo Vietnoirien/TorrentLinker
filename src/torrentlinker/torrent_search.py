@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from torrentlinker.catalogue_sync import ROOTS, SUBCATS, download_url
@@ -60,6 +60,72 @@ def parse_facets(payload: dict[str, Any]) -> list[SearchFacet]:
 
 
 @dataclass(frozen=True)
+class ListingRow:
+    """What the listing shows beyond a Candidate; display only, never ranked on."""
+
+    leechers: int = 0
+    completions: int = 0
+    comments: int = 0
+    uploader: str = ""
+    exclusive: bool = False
+    freeleech: bool = False
+    title: str = ""  # the film, series or album, not the release name
+    year: int | None = None
+    rating: float | None = None
+    kind: str = ""  # movie, tv, game, music, book ...
+    poster_url: str = ""  # a TMDB https URL; never fetched by the listing itself
+    tags: tuple[tuple[str, str], ...] = ()  # (kind, text): lang, resolution, source, audio, ...
+
+
+def _count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def listing_tags(tech: Any) -> tuple[tuple[str, str], ...]:
+    """Badges for a row, from c411's parsed `tech` block, in reading order."""
+    if not isinstance(tech, dict):
+        return ()
+    languages = [s for v in tech.get("languages") or [] if (s := _text(v))]
+    audio = " ".join(
+        s for s in (_text(tech.get("audioCodec")), _text(tech.get("audioChannels"))) if s
+    )
+    hdr = _text(tech.get("hdrFormat"))
+    tags = (
+        ("lang", ".".join(languages)),
+        ("resolution", _text(tech.get("resolution"))),
+        ("source", _text(tech.get("source"))),
+        ("audio", audio),
+        ("codec", _text(tech.get("videoCodec"))),
+        ("hdr", "" if hdr.upper() == "SDR" else hdr),
+    )
+    return tuple((kind, text) for kind, text in tags if text)
+
+
+def parse_listing_row(item: dict[str, Any]) -> ListingRow:
+    media: dict[str, Any] = item["media"] if isinstance(item.get("media"), dict) else {}
+    year, rating = media.get("year"), media.get("rating")
+    poster = _text(item.get("posterUrl"))
+    return ListingRow(
+        _count(item.get("leechers")),
+        _count(item.get("completions")),
+        _count(item.get("comments")),
+        _text(item.get("uploader")),
+        item.get("isExclusive") is True,
+        item.get("isFreeleech") is True,
+        _text(media.get("title")),
+        year if isinstance(year, int) and 1800 <= year <= 2200 else None,
+        float(rating) if isinstance(rating, int | float) and 0 < rating <= 10 else None,
+        _text(media.get("kind")),
+        poster if poster.startswith("https://") else "",
+        listing_tags(item.get("tech")),
+    )
+
+
+@dataclass(frozen=True)
 class SearchPage:
     rows: list[Candidate]
     page: int
@@ -71,6 +137,10 @@ class SearchPage:
     palliative_matches: int | None = None
     palliative_fallback: bool | None = None
     palliative_count: int | None = None
+    details: dict[str, ListingRow] = field(default_factory=dict)  # by infohash
+    root_counts: dict[int, int] = field(default_factory=dict)  # native root ID -> matches
+    subcategory_counts: dict[int, int] = field(default_factory=dict)  # native child ID -> matches
+    total_size: int | None = None  # bytes over all matches, when the listing says so
 
     @property
     def has_more(self) -> bool:
@@ -85,7 +155,7 @@ def native_search(indexer: Indexer, params: dict[str, str], page: int = 1) -> Se
     payload = indexer.catalogue_json(
         {**params, "page": str(page), "perPage": "100", "viewMode": "flat"}
     )
-    rows, labels, palliative = [], {}, set()
+    rows, labels, palliative, details = [], {}, set(), {}
     for item in payload["data"]:
         h = str(item["infoHash"]).lower()
         if len(h) != 40 or any(ch not in "0123456789abcdef" for ch in h):
@@ -108,6 +178,7 @@ def native_search(indexer: Indexer, params: dict[str, str], page: int = 1) -> Se
         labels[h] = " / ".join(str(obj["name"]) for obj in (root, child) if obj.get("name"))
         if item.get("palliativeSince"):
             palliative.add(h)
+        details[h] = parse_listing_row(item)
     meta = payload["meta"]
     return SearchPage(
         rows,
@@ -120,4 +191,19 @@ def native_search(indexer: Indexer, params: dict[str, str], page: int = 1) -> Se
         meta.get("palliativeMatches"),
         meta.get("palliativeFallback"),
         meta.get("palliativeCount"),
+        details,
+        _counts(meta.get("categories")),
+        _counts(meta.get("subcategories")),
+        total_size if isinstance(total_size := meta.get("totalSize"), int) else None,
     )
+
+
+def _counts(value: Any) -> dict[int, int]:
+    """`[{"id": 1, "count": 12}, ...]` from the listing's meta, ignoring malformed entries."""
+    if not isinstance(value, list):
+        return {}
+    return {
+        entry["id"]: _count(entry.get("count"))
+        for entry in value
+        if isinstance(entry, dict) and isinstance(entry.get("id"), int)
+    }

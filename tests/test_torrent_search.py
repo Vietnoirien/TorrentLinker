@@ -3,7 +3,7 @@ import pytest
 
 from tests.test_indexer import FakeClock
 from torrentlinker.indexer import Indexer
-from torrentlinker.torrent_search import native_search, parse_tree
+from torrentlinker.torrent_search import listing_tags, native_search, parse_listing_row, parse_tree
 
 TREE = {
     "data": [
@@ -134,3 +134,77 @@ def test_search_metadata_uses_root_filter_options_not_upload_options():
     assert indexer.search_filter_options(1) == FACETS
     assert [r.url.path for r in requests] == ["/api/categories", "/api/categories/1/filter-options"]
     assert all(r.headers["Authorization"] == "Bearer test-key" for r in requests)
+
+
+RICH_ROW = {
+    "leechers": 5,
+    "completions": 12,
+    "comments": 2,
+    "uploader": " Biloute ",
+    "isExclusive": True,
+    "isFreeleech": False,
+    "posterUrl": "https://image.tmdb.org/t/p/w500/x.jpg",
+    "media": {"kind": "movie", "title": "Ajami", "year": 2009, "rating": 7.1},
+    "tech": {
+        "resolution": "1080p",
+        "source": "BluRay",
+        "videoCodec": "H.264",
+        "hdrFormat": "SDR",
+        "audioCodec": "AC3",
+        "audioChannels": "5.1",
+        "languages": ["MULTI", "VFF"],
+    },
+}
+
+
+def test_listing_row_reads_the_display_fields():
+    row = parse_listing_row(RICH_ROW)
+    assert (row.leechers, row.completions, row.comments) == (5, 12, 2)
+    assert row.uploader == "Biloute" and row.exclusive and not row.freeleech
+    assert (row.title, row.year, row.rating, row.kind) == ("Ajami", 2009, 7.1, "movie")
+    assert row.poster_url.startswith("https://image.tmdb.org/")
+    assert row.tags == (
+        ("lang", "MULTI.VFF"),
+        ("resolution", "1080p"),
+        ("source", "BluRay"),
+        ("audio", "AC3 5.1"),
+        ("codec", "H.264"),
+    )
+
+
+def test_listing_row_survives_missing_and_malformed_fields():
+    row = parse_listing_row(
+        {
+            "leechers": "many",
+            "completions": -3,
+            "posterUrl": "http://insecure.example/p.jpg",
+            "media": {"year": 99999, "rating": 0},
+            "tech": ["not", "a", "dict"],
+        }
+    )
+    assert row == parse_listing_row({})
+    assert row.poster_url == "" and row.tags == () and row.year is None and row.rating is None
+    assert listing_tags({"hdrFormat": "HDR10", "resolution": "2160p"}) == (
+        ("resolution", "2160p"),
+        ("hdr", "HDR10"),
+    )
+
+
+def test_native_search_keeps_details_and_counts_from_the_listing_meta():
+    payload = listing()
+    payload["data"][0].update(RICH_ROW)
+    payload["meta"].update(
+        {
+            "totalSize": 1757108743727203,
+            "categories": [{"id": 1, "count": 138019}, {"id": 2, "count": 39241}, {"id": "x"}],
+            "subcategories": [{"id": 6, "name": "Film", "count": 61157}],
+        }
+    )
+    page = native_search(fake_indexer(lambda r: httpx.Response(200, json=payload)), {})
+    assert page.details["a" * 40].uploader == "Biloute"
+    assert page.root_counts == {1: 138019, 2: 39241}
+    assert page.subcategory_counts == {6: 61157}
+    assert page.total_size == 1757108743727203
+    bare = native_search(fake_indexer(lambda r: httpx.Response(200, json=listing())), {})
+    assert bare.root_counts == {} and bare.total_size is None
+    assert bare.details["a" * 40].tags == ()

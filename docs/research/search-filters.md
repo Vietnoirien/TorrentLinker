@@ -118,6 +118,14 @@ Response shape, with invented identifying fields and representative actual types
 
 Rows can also include `description`, `language`, `quality`, `seasonEpisode`, `comments`, `uploader`, `hasNfo`, `contentStatus`, `isOwner`, `posterUrl`, `music`, and `media`. `tech` can be null, as observed for Ebook results. Metadata also includes global category and subcategory counts and total size. These category counts need not equal the filtered total. No download URL appeared in these rows; reuse TorrentLinker's existing validated hash-based c411 download URL builder.
 
+## Listing fields for the Search page (verified 2026-10-27)
+
+One read-only `GET /api/torrents?category=1&perPage=3&viewMode=flat` with the configured key. Values below are shapes, not data.
+
+- **Row**: `leechers`, `completions`, `comments` (ints), `uploader` (string), `isExclusive`, `isFreeleech` (bools), `posterUrl` (a `https://image.tmdb.org/t/p/w500/…` URL, null when unknown), `language` (display string such as `Français (VFF/TrueFrench)`), and a `media` block for video: `kind` (`movie`), `title`, `originalTitle`, `year`, `runtime`, `genres`, `rating` (0 to 10), `directors`, `cast`, `overview`, `backdropUrl`. `tech` carries the parsed release facts: `resolution`, `source`, `videoCodec`, `hdrFormat`, `audioCodec`, `audioChannels`, `languages` (list), `season`, `episode`.
+- **Meta**: `total`, `totalTorrents`, `totalSize` (bytes, over every torrent), `categories` (`[{id, count}]` for every native root), `subcategories` (`[{id, name, slug, count}]` for the selected root), `palliativeCount`. Counts and size come in the same response as the rows, so category pills with counts cost no extra request. Whether the counts follow the text query and filters was not tested: compare one filtered request before showing counts next to a search.
+- The Search page reads these through `ListingRow` and `SearchPage.details`, `root_counts`, `subcategory_counts` and `total_size` in `torrent_search.py`. Badges come from `tech`, not from parsing the release name. Posters are TMDB URLs: do not fetch one per row without a cache and a bound.
+
 ## Palliative search
 
 The website URL `palliative=true` becomes API `palliative=include`. The dedicated revival page uses `palliative=only`; see [palliative research](palliative.md). Normal text searches send `palliativeTail=true` when the toggle is off, so the website may append fallback revival matches. A desktop UI should label explicit modes such as Available, Include revival, and Revival only rather than assuming a Boolean means “only”. A row's `palliativeSince`, `bountyZen`, and `palliativeCountdown` describe this status. Do not infer it solely from zero seeders.
