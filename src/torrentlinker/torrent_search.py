@@ -94,6 +94,8 @@ def listing_tags(tech: Any) -> tuple[tuple[str, str], ...]:
     if not isinstance(tech, dict):
         return ()
     languages = [s for v in tech.get("languages") or [] if (s := _text(v))]
+    if len(languages) > 3:  # a release with many dubs would fill the row; the rest are implied
+        languages = [*languages[:3], f"+{len(languages) - 3}"]
     audio = " ".join(
         s for s in (_text(tech.get("audioCodec")), _text(tech.get("audioChannels"))) if s
     )

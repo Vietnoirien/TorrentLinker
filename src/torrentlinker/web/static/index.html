@@ -9,6 +9,7 @@
     <script src="static/app.js" defer></script>
     <script src="static/zen.js" defer></script>
     <script src="static/feeds.js" defer></script>
+    <script src="static/search.js" defer></script>
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
     <script src="static/media.js" defer></script>
@@ -529,45 +530,56 @@
           </div>
         </section>
         <section id="view-search" class="view" hidden>
-          <form id="search-form" class="toolbar">
+          <div class="search-head">
+            <span class="search-tools">
+              <button type="button" id="search-density-compact" class="chip" aria-pressed="false" data-en="Compact" data-fr="Compact">Compact</button>
+              <button type="button" id="search-density-comfortable" class="chip" aria-pressed="true" data-en="Comfortable" data-fr="Confortable">Comfortable</button>
+              <button type="button" id="search-posters" class="chip" aria-pressed="true" data-en="Posters" data-fr="Affiches" title="">Posters</button>
+              <button type="button" id="search-queue-link" class="quiet">Download queue</button>
+            </span>
+          </div>
+          <form id="search-form" class="search-bar">
             <input
               id="search-query"
-              placeholder="Search c411…"
+              placeholder="Title, original title, release name…"
               aria-label="Search c411"
-            /><select id="search-category" aria-label="Search category">
-              <option value="">All categories</option></select
-            ><button class="primary" data-i18n="search">Search</button>
+              maxlength="200"
+            />
+            <button type="button" id="search-crew" class="chip" aria-pressed="false" hidden data-en="Cast &amp; crew" data-fr="Casting &amp; équipe">Cast &amp; crew</button>
+            <button class="primary" data-i18n="search">Search</button>
           </form>
-          <button id="subscribe-search">RSS</button>
-          <div id="search-facets" class="toolbar"></div>
-          <details>
-            <summary data-i18n="moreFilters">More filters</summary>
-            <div class="toolbar">
-              <label
-                >Year<input
-                  id="search-year"
-                  type="number"
-                  min="1900"
-                  max="2100" /></label
-              ><label>Uploader<input id="search-uploader" /></label
-              ><label
-                ><input id="search-palliative" type="checkbox" /> Soins
-                palliatifs</label
-              ><label
-                ><input id="search-exclusive" type="checkbox" />
-                Exclusivités</label
-              >
+          <div id="search-pills" class="search-pills" role="group" aria-label="Categories"></div>
+          <div class="search-row">
+            <select id="search-category" class="chip" aria-label="Search category">
+              <option value="">All categories</option>
+            </select>
+            <button type="button" id="search-exclusive" class="chip" aria-pressed="false" hidden>☆ Exclusive</button>
+            <button type="button" id="search-palliative" class="chip" aria-pressed="false" hidden>♡ Soins palliatifs</button>
+            <span class="spacer"></span>
+            <button type="button" id="subscribe-search" class="quiet" data-en="Subscribe to RSS" data-fr="S’abonner au RSS">Subscribe to RSS</button>
+            <button type="button" id="search-clear" class="quiet" data-en="Clear all" data-fr="Tout effacer">Clear all</button>
+          </div>
+          <div id="search-facets" class="search-facets"></div>
+          <div id="search-chosen" class="search-facets" hidden></div>
+          <div id="search-pages-top" class="search-pages" aria-label="Pages"></div>
+          <div class="results-card">
+            <div class="results-head">
+              <h2 data-en="Search results" data-fr="Résultats de recherche">Search results</h2>
+              <span id="search-summary" class="muted"></span>
             </div>
-          </details>
-          <div id="search-table" class="table-wrap"></div>
-          <div class="pager">
-            <button id="search-prev">←</button><span id="search-count"></span
-            ><button id="search-next">→</button
-            ><button
-              id="queue-search"
-              class="primary"
-              data-i18n="queueSelected"
-            >
+            <div class="results-sort">
+              <span class="muted" data-en="SORT" data-fr="TRIER">SORT</span>
+              <span id="search-sort" class="search-sort" role="group" aria-label="Sort"></span>
+            </div>
+            <div id="search-table" class="search-results"></div>
+          </div>
+          <div id="search-pages-bottom" class="search-pages" aria-label="Pages"></div>
+          <p id="search-status" class="muted" role="status"></p>
+          <div id="search-selection" class="selection-bar" hidden>
+            <span id="search-selected-count"></span>
+            <span class="spacer"></span>
+            <button type="button" id="search-details" class="quiet" data-en="Details" data-fr="Détails">Details</button>
+            <button type="button" id="queue-search" class="primary" data-i18n="queueSelected">
               Queue selected
             </button>
           </div>

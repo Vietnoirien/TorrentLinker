@@ -80,14 +80,18 @@ def test_tab_close_reorder_and_list_preserve_home_and_queue_only_open_torrents(q
     view.browser.request_close(view.browser.indexOf(view.home))
     assert view.browser.count() == 3
     view.browser._fill_tab_menu()
-    assert [a.text() for a in view.browser.tab_menu.actions()] == ["C", "Search", "A"]
+    assert [a.text() for a in view.browser.tab_menu.actions() if not a.isSeparator()][:3] == [
+        "C",
+        "Search",
+        "A",
+    ]
     view.browser.tab_menu.actions()[1].trigger()
     assert view.browser.currentWidget() is view.home
     view._show_results([Candidate("Another search", 1, "url", infohash="f" * 40)], indexer)
-    view.queue_tabs.click()
+    view.queue_tabs.trigger()
     assert [entry.candidate for entry in entries(view.store)] == [rows[2], rows[0]]
     assert view.runner is None
-    view.queue_tabs.click()
+    view.queue_tabs.trigger()
     assert len(entries(view.store)) == 2
     view.browser.close_others(view.home)
     assert view.browser.count() == 1 and not view._detail_tabs
@@ -116,7 +120,7 @@ def test_queue_all_opens_visible_queue_without_starting_downloads(qtbot, tmp_pat
     for candidate in rows:
         view.open_details(candidate)
     view.focus_search()
-    view.queue_tabs.click()
+    view.queue_tabs.trigger()
     assert len(entries(view.store)) == 3
     assert view.queue.isVisible()
     assert view.queue.rowCount() == 3 and view.start.isVisible()
@@ -167,7 +171,7 @@ def test_download_all_tabs_leaves_unrelated_queue_entries_waiting(qtbot, tmp_pat
     view.open_details(c)
     view.open_details(second)
     view.focus_search()
-    view.download_tabs.click()
+    view.download_tabs.trigger()
     qtbot.waitUntil(lambda: view.runner is None)
     assert client.downloads == [c.infohash, second.infohash]
     states = {entry.candidate.infohash: entry.status for entry in entries(store)}

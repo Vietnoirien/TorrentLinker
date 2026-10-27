@@ -208,3 +208,8 @@ def test_native_search_keeps_details_and_counts_from_the_listing_meta():
     bare = native_search(fake_indexer(lambda r: httpx.Response(200, json=listing())), {})
     assert bare.root_counts == {} and bare.total_size is None
     assert bare.details["a" * 40].tags == ()
+
+
+def test_a_release_with_many_languages_shows_the_first_three():
+    tags = listing_tags({"languages": ["MULTI", "VFF", "VF", "ANGLAIS", "ESPAGNOL"]})
+    assert tags == (("lang", "MULTI.VFF.VF.+2"),)

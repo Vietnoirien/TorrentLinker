@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -31,6 +30,8 @@ from torrentlinker.torrent_search import SearchFacet, SearchTree, parse_facets, 
 
 class MultiFilter(QToolButton):
     """A searchable checklist that stays open while choosing several values."""
+
+    changed = Signal()
 
     def __init__(self, label: str, choices: tuple[tuple[str, str], ...]) -> None:
         super().__init__()
@@ -86,6 +87,20 @@ class MultiFilter(QToolButton):
             if self.items.item(i).checkState() == Qt.CheckState.Checked
         ]
 
+    def chosen(self) -> list[tuple[str, str]]:
+        """(label, value) of every checked choice."""
+        return [
+            (item.text(), item.data(Qt.ItemDataRole.UserRole))
+            for i in range(self.items.count())
+            if (item := self.items.item(i)).checkState() == Qt.CheckState.Checked
+        ]
+
+    def uncheck(self, value: str) -> None:
+        for row in range(self.items.count()):
+            item = self.items.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) == value:
+                item.setCheckState(Qt.CheckState.Unchecked)
+
     def clear(self) -> None:
         for row in range(self.items.count()):
             self.items.item(row).setCheckState(Qt.CheckState.Unchecked)
@@ -101,11 +116,155 @@ class MultiFilter(QToolButton):
         self.style().unpolish(self)
         self.style().polish(self)
         self.setToolTip(", ".join(selected) if selected else self.label)
+        self.changed.emit()
+
+
+class InputFilter(QToolButton):
+    """A filter button that opens a small text field (Year, Team, Uploader), shaped like the
+    checklist filters. It keeps the QLineEdit calls the rest of the page uses."""
+
+    changed = Signal()
+
+    def __init__(
+        self, label: str, placeholder: str, *, max_length: int = 100, validator=None
+    ) -> None:
+        super().__init__()
+        self.label = label
+        self.setAccessibleName(label)
+        self.setArrowType(Qt.ArrowType.DownArrow)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setProperty("chip", "filter")
+        self.popup = QFrame(self, Qt.WindowType.Popup)
+        layout = QVBoxLayout(self.popup)
+        self.edit = QLineEdit()
+        self.edit.setPlaceholderText(placeholder)
+        self.edit.setAccessibleName(label)
+        self.edit.setMaxLength(max_length)
+        self.edit.setMinimumWidth(220)
+        if validator is not None:
+            self.edit.setValidator(validator)
+        layout.addWidget(self.edit)
+        clear = QPushButton(self.tr("Clear"))
+        set_role(clear, "quiet")
+        clear.clicked.connect(self.clear)
+        layout.addWidget(clear)
+        self.edit.textChanged.connect(self._label)
+        self.edit.returnPressed.connect(self.popup.hide)
+        self.clicked.connect(self._open)
+        self._label()
+
+    def _open(self) -> None:
+        self.popup.adjustSize()
+        self.popup.move(self.mapToGlobal(self.rect().bottomLeft()))
+        self.popup.show()
+        self.edit.setFocus()
+
+    def text(self) -> str:
+        return self.edit.text()
+
+    def setText(self, text: str) -> None:
+        self.edit.setText(text)
+
+    def clear(self) -> None:
+        self.edit.clear()
+
+    def hasAcceptableInput(self) -> bool:
+        return self.edit.hasAcceptableInput()
+
+    def _label(self) -> None:
+        value = self.edit.text().strip()
+        shown = self.fontMetrics().elidedText(value, Qt.TextElideMode.ElideRight, 120)
+        QToolButton.setText(self, self.label + (f" · {shown}" if value else ""))
+        self.setProperty("active", bool(value))
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.setToolTip(value or self.label)
+        self.changed.emit()
+
+
+class PalliativeToggle(QPushButton):
+    """c411's heart toggle. A click goes Available -> Include -> Only -> Available; the
+    combo box it replaces had the same three values."""
+
+    changed = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setCheckable(True)
+        self.setProperty("chip", "filter")
+        self.setAccessibleName(self.tr("Revival torrents"))
+        self.values = ("", "include", "only")
+        self.index = 0
+        self.count: int | None = None
+        self.clicked.connect(lambda: self.setCurrentIndex((self.index + 1) % 3))
+        self._paint()
+
+    def currentIndex(self) -> int:
+        return self.index
+
+    def currentData(self) -> str:
+        return self.values[self.index]
+
+    def setCurrentIndex(self, index: int) -> None:
+        changed = index != self.index
+        self.index = index
+        self._paint()
+        if changed:
+            self.changed.emit()
+
+    def set_count(self, count: int | None) -> None:
+        self.count = count
+        self._paint()
+
+    def _paint(self) -> None:
+        self.setChecked(self.index != 0)
+        shown = f" · {self.count}" if self.count is not None else ""
+        self.setText(
+            (
+                self.tr("♡ Soins palliatifs") + shown,
+                self.tr("♥ With soins palliatifs"),
+                self.tr("♥ Soins palliatifs only"),
+            )[self.index]
+        )
+        self.setToolTip(
+            (
+                self.tr("Click to include soins palliatifs torrents in the results."),
+                self.tr("Soins palliatifs are included. Click to show only those."),
+                self.tr("Only soins palliatifs. Click to hide them again."),
+            )[self.index]
+        )
+
+
+class ActiveFilters(QWidget):
+    """The chosen filter values as removable chips, for when the buttons cannot show them all."""
+
+    SHOW_FROM = 4
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.flow = FlowLayout(self, 6)
+        self.hide()
+
+    def show_choices(self, controls: list[MultiFilter]) -> None:
+        while item := self.flow.takeAt(0):
+            if widget := item.widget():
+                widget.hide()
+                widget.deleteLater()
+        chosen = [(c, label, value) for c in controls for label, value in c.chosen()]
+        for control, label, value in chosen:
+            chip = QPushButton(f"{control.label}: {label}  ✕")
+            chip.setProperty("chip", "pill")
+            chip.setToolTip(self.tr("Remove this filter"))
+            chip.clicked.connect(lambda _=False, c=control, v=value: c.uncheck(v))
+            self.flow.addWidget(chip)
+        self.setVisible(len(chosen) >= self.SHOW_FROM)
+        self.flow.invalidate()
 
 
 class SearchFilters(QWidget):
     ready_changed = Signal()
     sort_changed = Signal()
+    criteria_changed = Signal()  # any filter changed; the page may search again
 
     def __init__(self, category: CategoryPicker) -> None:
         super().__init__()
@@ -123,30 +282,18 @@ class SearchFilters(QWidget):
         layout.setSpacing(8)
         global_filters = QHBoxLayout()
         global_filters.setSpacing(8)
-        self.year = QLineEdit()
-        self.year.setPlaceholderText(self.tr("Year"))
-        self.year.setAccessibleName(self.tr("Year"))
-        self.year.setValidator(QIntValidator(1900, 2100, self))
-        self.year.setMaximumWidth(90)
-        self.uploader = QLineEdit()
-        self.uploader.setPlaceholderText(self.tr("Uploader"))
-        self.uploader.setAccessibleName(self.tr("Uploader"))
-        self.uploader.setMaxLength(100)
-        self.uploader.setMaximumWidth(150)
-        for field in (self.year, self.uploader):
-            field.setProperty("chip", "filter")
-        self.exclusive = QPushButton(self.tr("Exclusive"))
+        self.year = InputFilter(
+            self.tr("Year"),
+            self.tr("Year"),
+            max_length=4,
+            validator=QIntValidator(1900, 2100, self),
+        )
+        self.team = InputFilter(self.tr("Team"), self.tr("Team name or slug"))
+        self.uploader = InputFilter(self.tr("Uploader"), self.tr("Uploader"))
+        self.exclusive = QPushButton("☆ " + self.tr("Exclusive"))
         self.exclusive.setCheckable(True)
         self.exclusive.setProperty("chip", "filter")
-        self.palliative = QComboBox()
-        self.palliative.setProperty("chip", "filter")
-        self.palliative.setAccessibleName(self.tr("Revival torrents"))
-        for label, value in [
-            (self.tr("Available torrents"), ""),
-            (self.tr("Include soins palliatifs"), "include"),
-            (self.tr("Soins palliatifs only"), "only"),
-        ]:
-            self.palliative.addItem(label, value)
+        self.palliative = PalliativeToggle()
         self.crew = QPushButton(self.tr("Cast && crew"))
         self.crew.setCheckable(True)
         self.crew.setProperty("chip", "filter")
@@ -161,10 +308,12 @@ class SearchFilters(QWidget):
         category.setProperty("chip", "filter")
         global_filters.addWidget(category)
         # Everything but the category menu needs c411's native search.
-        self.native_controls = (self.year, self.uploader, self.exclusive, self.palliative)
-        for widget in self.native_controls:
-            global_filters.addWidget(widget)
-            widget.hide()
+        self.inputs = (self.year, self.team, self.uploader)
+        self.native_controls = (*self.inputs, self.exclusive, self.palliative)
+        global_filters.addWidget(self.exclusive)
+        global_filters.addWidget(self.palliative)
+        for control in self.native_controls:
+            control.hide()
         global_filters.addStretch()
         self.status = QLabel()
         self.status.setWordWrap(True)
@@ -180,6 +329,16 @@ class SearchFilters(QWidget):
         layout.addLayout(global_filters)
         self.flow = FlowLayout(spacing=8)
         layout.addLayout(self.flow)
+        for field in self.inputs:
+            self.flow.addWidget(field)
+        for signal in (
+            *(widget.changed for widget in (*self.inputs, self.palliative)),
+            self.exclusive.toggled,
+            self.crew.toggled,
+        ):
+            signal.connect(self.criteria_changed)
+        self.chosen = ActiveFilters()
+        layout.addWidget(self.chosen)
         category.category_changed.connect(self._category_changed)
 
     def configure(self, indexer: Indexer) -> None:
@@ -245,15 +404,26 @@ class SearchFilters(QWidget):
         else:
             self._category_changed(self.category.current_category)
 
+    def _show_chosen(self) -> None:
+        self.chosen.show_choices([*self.video.values(), *self.options.values()])
+
+    def _place(self, facets: list[MultiFilter]) -> None:
+        """The facets first, then Year, Team and Uploader, as c411 orders them."""
+        for widget in self.inputs:
+            self.flow.removeWidget(widget)
+        for control in facets:
+            self.flow.addWidget(control)
+        for widget in self.inputs:
+            self.flow.addWidget(widget)
+
     def _remove_controls(self) -> None:
-        while self.flow.count():
-            item = self.flow.takeAt(0)
-            widget = item.widget() if item else None
-            if widget:
-                widget.hide()
-                widget.deleteLater()
+        for control in [*self.video.values(), *self.options.values()]:
+            self.flow.removeWidget(control)
+            control.hide()
+            control.deleteLater()
         self.options.clear()
         self.video.clear()
+        self._show_chosen()
 
     def _category_changed(self, selected: int | None) -> None:
         tree, indexer = self.tree, self.indexer
@@ -289,9 +459,13 @@ class SearchFilters(QWidget):
                             item.setCheckState(Qt.CheckState.Checked)
             for facet in visible_facets(tree, selected, facets):
                 self.options[facet.slug] = MultiFilter(facet.label, facet.choices)
-            for control in [*self.video.values(), *self.options.values()]:
-                self.flow.addWidget(control)
+            controls = [*self.video.values(), *self.options.values()]
+            self._place(controls)
+            for control in controls:
+                control.changed.connect(self._show_chosen)
+                control.changed.connect(self.criteria_changed)
             self.flow.invalidate()
+            self._show_chosen()
             self._set_ready(True)
 
         if root is None:
@@ -332,6 +506,7 @@ class SearchFilters(QWidget):
     def clear(self) -> None:
         self.year.clear()
         self.uploader.clear()
+        self.team.clear()
         self.exclusive.setChecked(False)
         self.palliative.setCurrentIndex(0)
         self.crew.setChecked(False)
@@ -359,6 +534,7 @@ class SearchFilters(QWidget):
         for key, value in (
             ("year", self.year.text()),
             ("uploader", self.uploader.text().strip()),
+            ("team", self.team.text().strip()),
             ("palliative", self.palliative.currentData()),
         ):
             if value:

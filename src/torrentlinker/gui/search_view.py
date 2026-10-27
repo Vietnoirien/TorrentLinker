@@ -13,12 +13,13 @@ from PySide6.QtCore import (
     QModelIndex,
     QPersistentModelIndex,
     QSettings,
+    QStandardPaths,
     Qt,
     QTimer,
     QUrl,
     Signal,
 )
-from PySide6.QtGui import QDesktopServices, QShowEvent
+from PySide6.QtGui import QAction, QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -45,10 +46,12 @@ from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.pagination import PageBar
+from torrentlinker.gui.poster_loader import PosterLoader
 from torrentlinker.gui.search_filters import SearchFilters
 from torrentlinker.gui.search_rows import (
     ROW_HEIGHT,
     AgeDelegate,
+    CompactMarkDelegate,
     DownloadDelegate,
     RowView,
     StatsDelegate,
@@ -62,6 +65,7 @@ from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.torrent_details import TorrentDetailsDialog
 from torrentlinker.indexer import Candidate, Indexer, SearchQuery
+from torrentlinker.poster_cache import PosterCache
 from torrentlinker.qbit import Qbit
 from torrentlinker.seeding import Seeding
 from torrentlinker.send import SendProgress, SendReport
@@ -95,6 +99,8 @@ class SearchTab(QWidget):
         self.runner: SendRunner | None = None
         self._searching = False
         self._seeding: Seeding | None = None
+        self._client_hashes: set[str] = set()
+        self._queued_hashes: set[str] = set()
         self._results: list[Candidate] = []
         self._offset = 0
         self._query = SearchQuery()
@@ -124,6 +130,14 @@ class SearchTab(QWidget):
             self.density_group.addButton(button)
             self.density_buttons[key] = button
             header.addWidget(button)
+        self.posters_button = QPushButton(self.tr("Posters"))
+        self.posters_button.setCheckable(True)
+        self.posters_button.setProperty("chip", "filter")
+        self.posters_button.setToolTip(
+            self.tr("Show posters. They are fetched from TMDB, a few at a time, and kept on disk.")
+        )
+        self.posters_button.clicked.connect(self._posters_toggled)
+        header.addWidget(self.posters_button)
         self.view_queue = QPushButton()
         set_role(self.view_queue, "quiet")
         self.view_queue.clicked.connect(self.show_queue)
@@ -170,10 +184,18 @@ class SearchTab(QWidget):
         self.category.categories_changed.connect(self.pills.set_categories)
         self.pills.set_categories(self.category.categories, self.category.colors)
         self.page_bar = PageBar()
-        self.page_bar.page_requested.connect(lambda n: self.search((n - 1) * PAGE_SIZE))
+        self.page_bar_bottom = PageBar()
+        for bar in (self.page_bar, self.page_bar_bottom):
+            bar.page_requested.connect(lambda n: self.search((n - 1) * PAGE_SIZE))
         self.previous, self.next = self.page_bar.previous, self.page_bar.next
         self.filters.sort_changed.connect(self._sort_changed)
         self._search_pending = False
+        # Filters search by themselves a moment after the last change, as c411's do.
+        self._auto_search = QTimer(self)
+        self._auto_search.setSingleShot(True)
+        self._auto_search.setInterval(700)
+        self._auto_search.timeout.connect(self._filters_settled)
+        self.filters.criteria_changed.connect(self._auto_search.start)
         self.pages = QTabWidget()
         layout.addWidget(self.pages, 1)
         results_page = QWidget()
@@ -188,16 +210,6 @@ class SearchTab(QWidget):
         body_layout.addWidget(self.pills)
         body_layout.addWidget(self.filters)
         body_layout.addWidget(self.page_bar)
-        sort_row = QHBoxLayout()
-        sort_label = QLabel(self.tr("SORT"))
-        sort_label.setProperty("role", "muted")
-        sort_row.addWidget(sort_label)
-        sort_row.addWidget(self.filters.sort, 1)
-        self.results_summary = QLabel()
-        self.results_summary.setProperty("role", "muted")
-        self.results_summary.setTextFormat(Qt.TextFormat.PlainText)
-        sort_row.addWidget(self.results_summary)
-        body_layout.addLayout(sort_row)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -238,7 +250,34 @@ class SearchTab(QWidget):
         self.results.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.results.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.results.cellClicked.connect(self._cell_clicked)
-        body_layout.addWidget(self.results)
+        self.results_card = QFrame()
+        self.results_card.setObjectName("resultsCard")
+        card = QVBoxLayout(self.results_card)
+        card.setContentsMargins(0, 0, 0, 0)
+        card.setSpacing(0)
+        card_head = QWidget()
+        head = QHBoxLayout(card_head)
+        head.setContentsMargins(16, 12, 16, 4)
+        title = QLabel(self.tr("Search results"))
+        title.setObjectName("resultsTitle")
+        head.addWidget(title)
+        head.addStretch()
+        self.results_summary = QLabel()
+        self.results_summary.setProperty("role", "muted")
+        self.results_summary.setTextFormat(Qt.TextFormat.PlainText)
+        head.addWidget(self.results_summary)
+        sort_bar = QWidget()
+        sort_row = QHBoxLayout(sort_bar)
+        sort_row.setContentsMargins(12, 0, 12, 8)
+        sort_label = QLabel(self.tr("SORT"))
+        sort_label.setProperty("role", "muted")
+        sort_row.addWidget(sort_label)
+        sort_row.addWidget(self.filters.sort, 1)
+        card.addWidget(card_head)
+        card.addWidget(sort_bar)
+        card.addWidget(self.results)
+        body_layout.addWidget(self.results_card)
+        body_layout.addWidget(self.page_bar_bottom)
         body_layout.addStretch(1)
         self.result_status = QLabel()
         self.result_status.setWordWrap(True)
@@ -271,30 +310,25 @@ class SearchTab(QWidget):
         selection.addWidget(self.add_button)
         results_layout.addWidget(self.selection_bar)
         self.selection_bar.hide()
-        self.tab_row = QWidget()
-        tab_actions = QHBoxLayout(self.tab_row)
-        tab_actions.setContentsMargins(0, 0, 0, 0)
-        self.tab_count = QLabel()
-        tab_actions.addWidget(self.tab_count, 1)
-        self.queue_tabs = QPushButton(self.tr("Queue all tabs"))
+        self.queue_tabs = QAction(self.tr("Queue all tabs"), self)
         self.queue_tabs.setToolTip(
             self.tr("Queue the torrents in open tabs without starting downloads.")
         )
-        self.queue_tabs.clicked.connect(lambda: self.queue_open_tabs(False))
-        self.download_tabs = QPushButton(self.tr("Download all tabs"))
-        set_role(self.download_tabs, "primary")
+        self.queue_tabs.triggered.connect(lambda: self.queue_open_tabs(False))
+        self.download_tabs = QAction(self.tr("Download all tabs"), self)
         self.download_tabs.setToolTip(
             self.tr("Download only the torrents in open tabs. Other queued torrents stay waiting.")
         )
-        self.download_tabs.clicked.connect(lambda: self.queue_open_tabs(True))
-        tab_actions.addWidget(self.queue_tabs)
-        tab_actions.addWidget(self.download_tabs)
-        results_layout.addWidget(self.tab_row)
-        self.tab_row.hide()
+        self.download_tabs.triggered.connect(lambda: self.queue_open_tabs(True))
+        self.browser.extra_actions = [self.queue_tabs, self.download_tabs]
         self.pages.addTab(results_page, self.tr("Results"))
         queue_page = QWidget()
         queue_layout = QVBoxLayout(queue_page)
         queue_layout.setContentsMargins(0, 0, 0, 0)
+        self.back_button = QPushButton(self.tr("← Back to results"))
+        set_role(self.back_button, "quiet")
+        self.back_button.clicked.connect(self.show_results)
+        queue_layout.addWidget(self.back_button, 0, Qt.AlignmentFlag.AlignLeft)
         hint = QLabel(
             self.tr(
                 "Start sends queued torrents to your torrent client. "
@@ -348,6 +382,8 @@ class SearchTab(QWidget):
         self.queue_status.setWordWrap(True)
         queue_layout.addWidget(self.queue_status)
         self.pages.addTab(queue_page, self.tr("Download queue"))
+        # The header's queue button and the back button replace the page tabs.
+        self.pages.tabBar().hide()
         self.results.itemSelectionChanged.connect(self._buttons)
         self.queue.itemSelectionChanged.connect(self._buttons)
         self.filters.ready_changed.connect(self._buttons)
@@ -362,6 +398,12 @@ class SearchTab(QWidget):
             7: AgeDelegate(self._row_view, self.results),
             DOWNLOAD_COLUMN: DownloadDelegate(self._row_view, self.results),
         }
+        self.posters = PosterLoader(self._poster_cache(), self)
+        self.posters.loaded.connect(lambda _url: self.results.viewport().update())
+        shown = bool(self._ui_settings().value("search/posters", True, bool))
+        self.posters.enabled = shown
+        self.posters_button.setChecked(shown)
+        self._compact_title = CompactMarkDelegate(self._row_view, self.results)
         saved = self._ui_settings().value("search/density", "comfortable")
         self.set_density(saved if saved in self.density_buttons else "comfortable")
         self.queue_timer = QTimer(self)
@@ -400,11 +442,19 @@ class SearchTab(QWidget):
             return indexer
         except Exception as error:
             self.result_status.setText(error_text(error))
+            if not self._results:
+                self._empty_message(error_text(error), error=True)
             return None
 
     def _pill_chosen(self, category: int | None) -> None:
         """A category pill filters at once, as c411's does."""
         self.category.select_category(category)
+        self._search_pending = True
+        self._run_pending_search()
+
+    def _filters_settled(self) -> None:
+        if self.filters.year.text() and not self.filters.year.hasAcceptableInput():
+            return  # a half-typed year is not a search yet
         self._search_pending = True
         self._run_pending_search()
 
@@ -478,6 +528,7 @@ class SearchTab(QWidget):
         self._offset = (page.page - 1) * PAGE_SIZE
         self._show_results(page.rows, indexer)
         self.pills.set_counts(page.root_counts)
+        self.filters.palliative.set_count(page.palliative_count)
         summary = self.tr("{0} torrents").format(QLocale().toString(page.total))
         if page.total_size is not None:
             summary += " · " + human_size(page.total_size)
@@ -491,6 +542,14 @@ class SearchTab(QWidget):
             ).format(page.per_page * page.total_pages)
         self.result_status.setText(message)
 
+    def _empty_message(self, text: str, *, error: bool = False) -> None:
+        """What the empty results area says, and whether the status line looks like an error."""
+        self.results_empty.label.setText(text)
+        for label in (self.results_empty.label, self.result_status):
+            label.setProperty("role", "error" if error else "muted")
+            label.style().unpolish(label)
+            label.style().polish(label)
+
     def _search_failed(self, error: Exception) -> None:
         self._searching = False
         # Avoid offering paging against a new query whose request failed.
@@ -500,6 +559,7 @@ class SearchTab(QWidget):
         self.results.setRowCount(0)
         self.results_summary.clear()
         self.result_status.setText(error_text(error))
+        self._empty_message(error_text(error), error=True)
         self._buttons()
 
     def _show_results(self, rows: list[Candidate], indexer: Indexer) -> None:
@@ -546,6 +606,9 @@ class SearchTab(QWidget):
                 row, 4, QTableWidgetItem(self.tr("Soins palliatifs") if revival else "")
             )
         self.results.setSortingEnabled(True)
+        self._empty_message(
+            self.tr("No torrent matches. Try fewer filters, or another spelling of the title.")
+        )
         self._fit_table()
         self.result_status.setText(
             self.tr("{0} results · page {1}").format(len(rows), self._offset // PAGE_SIZE + 1)
@@ -565,6 +628,17 @@ class SearchTab(QWidget):
     def _ui_settings(self) -> QSettings:
         return QSettings()
 
+    def _poster_cache(self) -> PosterCache:
+        folder = Path(
+            QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+        )
+        return PosterCache(folder / "posters")
+
+    def _posters_toggled(self, shown: bool) -> None:
+        self.posters.enabled = shown
+        self._ui_settings().setValue("search/posters", shown)
+        self.results.viewport().update()
+
     def set_density(self, density: str, *, remember: bool = False) -> None:
         self.density = density
         self.density_buttons[density].setChecked(True)
@@ -576,6 +650,8 @@ class SearchTab(QWidget):
             table.setItemDelegateForColumn(
                 column, delegate if comfortable else self._default_delegate
             )
+        if not comfortable:
+            table.setItemDelegateForColumn(0, self._compact_title)
         for column in range(table.columnCount()):
             table.setColumnHidden(
                 column, column in (COMFORTABLE_HIDDEN if comfortable else COMPACT_HIDDEN)
@@ -620,16 +696,26 @@ class SearchTab(QWidget):
         page = self._native_page
         label = self._category_label(candidate)
         age = self.results.item(index.row(), 7)
+        details = page.details.get(candidate.infohash or "") if page else None
         return RowView(
             candidate.title,
             label,
             human_size(candidate.size),
             candidate.seeders,
             age.text() if age else "",
-            page.details.get(candidate.infohash or "") if page else None,
+            details,
             bool(page and candidate.infohash in page.palliative),
             self.pills.color_for(label.split(" / ")[0]) or "#64748b",
+            state=self._known_state(candidate.infohash),
+            poster=self.posters.pixmap(details.poster_url) if details else None,
         )
+
+    def _known_state(self, infohash: str | None) -> str:
+        """Local knowledge only: the last seeding view and our queue, no client request."""
+        key = (infohash or "").lower()
+        if key in self._client_hashes:
+            return "client"
+        return "queued" if key in self._queued_hashes else ""
 
     def _cell_clicked(self, row: int, column: int) -> None:
         item = self.results.item(row, 0)
@@ -670,6 +756,8 @@ class SearchTab(QWidget):
 
     def set_seeding(self, view: Seeding) -> None:
         self._seeding = view
+        self._client_hashes = {row.torrent.hash.lower() for row in view.rows}
+        self.results.viewport().update()
         self.refresh_estimates()
 
     def refresh_estimates(self) -> None:
@@ -795,6 +883,10 @@ class SearchTab(QWidget):
         self.pages.setCurrentIndex(0)
         self.query.setFocus()
         self.query.selectAll()
+
+    def show_results(self) -> None:
+        self.browser.setCurrentWidget(self.home)
+        self.pages.setCurrentIndex(0)
 
     def show_queue(self) -> None:
         self.browser.setCurrentWidget(self.home)
@@ -1040,6 +1132,10 @@ class SearchTab(QWidget):
         selected = set(self.selected_keys())
         rows = entries(self.store)
         self._queue_snapshot = rows
+        self._queued_hashes = {
+            (e.candidate.infohash or "").lower() for e in rows if e.status in {"queued", "sending"}
+        }
+        self.results.viewport().update()
         labels = {
             "queued": self.tr("Queued"),
             "sending": self.tr("Sending…"),
@@ -1176,21 +1272,23 @@ class SearchTab(QWidget):
         can_search = not self._searching and self.filters.ready
         self.search_button.setEnabled(can_search)
         more = self._native_page.has_more if self._native_page else len(self._results) == PAGE_SIZE
-        self.page_bar.set_state(
-            self._offset // PAGE_SIZE + 1,
-            self._native_page.total_pages if self._native_page else None,
-            more,
-            can_search,
-        )
-        self.page_bar.setVisible(bool(self._results) or self._offset > 0)
+        for bar in (self.page_bar, self.page_bar_bottom):
+            bar.set_state(
+                self._offset // PAGE_SIZE + 1,
+                self._native_page.total_pages if self._native_page else None,
+                more,
+                can_search,
+            )
+            bar.setVisible(bool(self._results) or self._offset > 0)
         selected_results = self.selected_results()
         one = len(selected_results) == 1 and not self._searching
         self.details_button.setEnabled(bool(selected_results) and not self._searching)
         self.selection_bar.setVisible(bool(selected_results))
         self.selection_label.setText(self.tr("{0} selected").format(len(selected_results)))
         count = len(self._detail_tabs)
-        self.tab_row.setVisible(count > 0)
-        self.tab_count.setText(self.tr("{0} torrent tabs open").format(count))
+        self.browser.tab_list.setText(
+            self.tr("Open tabs ({0})").format(count) if count else self.tr("Open tabs")
+        )
         self.queue_tabs.setEnabled(count > 0 and not busy)
         self.download_tabs.setEnabled(count > 0 and not busy)
         self.website_button.setEnabled(

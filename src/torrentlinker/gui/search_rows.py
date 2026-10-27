@@ -5,8 +5,27 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QPointF, QRect, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPalette, QPen
+from PySide6.QtCore import (
+    QCoreApplication,
+    QModelIndex,
+    QPersistentModelIndex,
+    QPointF,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+)
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontDatabase,
+    QFontMetrics,
+    QPainter,
+    QPainterPath,
+    QPalette,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
 from torrentlinker.torrent_search import ListingRow
@@ -36,9 +55,16 @@ class RowView:
     revival: bool = False
     color: str = "#64748b"
     zen: str = ""
+    state: str = ""  # "client" when the torrent client has it, "queued" when our queue does
+    poster: QPixmap | None = None
 
 
 Lookup = Callable[[QModelIndex | QPersistentModelIndex], RowView | None]
+
+
+def _points(font: QFont) -> float:
+    """The font's size in points; a style sheet that sets pixels leaves it at -1."""
+    return font.pointSizeF() if font.pointSizeF() > 0 else 10.0
 
 
 def _dark(option: QStyleOptionViewItem) -> bool:
@@ -81,6 +107,46 @@ class _Delegate(QStyledItemDelegate):
         )
 
 
+def state_chip(
+    painter: QPainter, option: QStyleOptionViewItem, right: int, y: int, state: str, small: QFont
+) -> None:
+    """The In client / Queued mark, right-aligned at `right`."""
+    label, shade = (
+        (QCoreApplication.translate("TitleDelegate", "In client"), GREEN)
+        if state == "client"
+        else (QCoreApplication.translate("TitleDelegate", "Queued"), GOLD)
+    )
+    width = QFontMetrics(small).horizontalAdvance("● " + label) + 14
+    _chip(painter, right - width, y, "● " + label, _readable(shade, option), small)
+
+
+class CompactMarkDelegate(QStyledItemDelegate):
+    """The plain compact title cell, plus the In client / Queued mark at its right edge."""
+
+    def __init__(self, lookup: Lookup, parent=None) -> None:
+        super().__init__(parent)
+        self.lookup = lookup
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:  # noqa: ANN001
+        super().paint(painter, option, index)
+        view = self.lookup(index)
+        if view is None or not view.state:
+            return
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        small = QFont(option.font)
+        small.setPointSizeF(max(8.0, _points(option.font) - 2))
+        state_chip(
+            painter,
+            option,
+            option.rect.right() - 6,
+            option.rect.top() + (option.rect.height() - 18) // 2,
+            view.state,
+            small,
+        )
+        painter.restore()
+
+
 class TitleDelegate(_Delegate):
     """Cover placeholder, type badge, title, year, rating, release name and tags."""
 
@@ -95,20 +161,39 @@ class TitleDelegate(_Delegate):
         text = option.palette.color(QPalette.ColorRole.Text)
         muted = option.palette.color(QPalette.ColorRole.PlaceholderText)
         details = view.details
-        # Cover placeholder: the category color with the first letters of the type.
         cover = QRectF(rect.left() + 10, rect.top() + 12, 52, 64)
-        fill = QColor(view.color)
-        fill.setAlpha(46)
-        painter.setPen(QColor(view.color))
-        painter.setBrush(fill)
-        painter.drawRoundedRect(cover, 6, 6)
         small = QFont(option.font)
-        small.setPointSizeF(max(8.0, option.font.pointSizeF() - 2))
-        painter.setFont(option.font)
-        painter.setPen(_readable(view.color, option))
-        painter.drawText(
-            cover, Qt.AlignmentFlag.AlignCenter, (view.label.split(" / ")[-1] or "?")[:2].upper()
-        )
+        small.setPointSizeF(max(8.0, _points(option.font) - 2))
+        if view.poster is not None and not view.poster.isNull():
+            # The poster fills the cover frame, cropped to its shape.
+            clip = QPainterPath()
+            clip.addRoundedRect(cover, 6, 6)
+            painter.save()
+            painter.setClipPath(clip)
+            scale = max(cover.width() / view.poster.width(), cover.height() / view.poster.height())
+            width, height = view.poster.width() * scale, view.poster.height() * scale
+            painter.drawPixmap(
+                QRectF(
+                    cover.center().x() - width / 2, cover.center().y() - height / 2, width, height
+                ),
+                view.poster,
+                QRectF(view.poster.rect()),
+            )
+            painter.restore()
+        else:
+            # No poster: the category color with the first letters of the type.
+            fill = QColor(view.color)
+            fill.setAlpha(46)
+            painter.setPen(QColor(view.color))
+            painter.setBrush(fill)
+            painter.drawRoundedRect(cover, 6, 6)
+            painter.setFont(option.font)
+            painter.setPen(_readable(view.color, option))
+            painter.drawText(
+                cover,
+                Qt.AlignmentFlag.AlignCenter,
+                (view.label.split(" / ")[-1] or "?")[:2].upper(),
+            )
         left = rect.left() + 74
         right = rect.right() - 10
         # Line 1: type badge, title, year, rating, marks.
@@ -118,7 +203,7 @@ class TitleDelegate(_Delegate):
             x = _chip(painter, x, y, badge, _readable(view.color, option), small)
         bold = QFont(option.font)
         bold.setBold(True)
-        bold.setPointSizeF(option.font.pointSizeF() + 1)
+        bold.setPointSizeF(_points(option.font) + 1)
         name = (details.title if details and details.title else view.title) or view.title
         extras = 0
         year = f"{details.year}" if details and details.year else ""
@@ -147,9 +232,11 @@ class TitleDelegate(_Delegate):
             painter.setFont(small)
             painter.setPen(QColor(RED) if view.revival else QColor(GOLD))
             painter.drawText(QRect(x, y - 2, 40, 22), Qt.AlignmentFlag.AlignVCenter, marks.strip())
+        if view.state:
+            state_chip(painter, option, right, y, view.state, small)
         # Line 2: the release name in monospace.
         mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
-        mono.setPointSizeF(max(8.0, option.font.pointSizeF() - 1))
+        mono.setPointSizeF(max(8.0, _points(option.font) - 1))
         painter.setFont(mono)
         painter.setPen(option.palette.color(QPalette.ColorRole.Link))
         release = QFontMetrics(mono).elidedText(
@@ -263,7 +350,7 @@ class ZenDelegate(_Delegate):
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         small = QFont(option.font)
-        small.setPointSizeF(max(8.0, option.font.pointSizeF() - 1))
+        small.setPointSizeF(max(8.0, _points(option.font) - 1))
         label = f"{text} {self.tr('Zen/day')}"
         width = QFontMetrics(small).horizontalAdvance(label) + 14
         x = option.rect.left() + max(6, (option.rect.width() - width) // 2)

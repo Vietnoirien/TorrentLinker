@@ -210,6 +210,14 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
         QFrame#searchBar QLineEdit {{ background: transparent; border: 0; font-size: 15px;
             padding: 8px 0; }}
         QFrame#searchBar QLineEdit:focus {{ border: 0; }}
+        QFrame#resultsCard {{ background: {panel}; border: 1px solid {border};
+            border-radius: 10px; }}
+        QFrame#resultsCard QWidget {{ background: transparent; }}
+        QFrame#resultsCard QTableWidget {{ background: transparent; border: 0;
+            border-top: 1px solid {border}; border-radius: 0; }}
+        QLabel#resultsTitle {{ font-size: 16px; font-weight: 600; }}
+        QFrame#selectionBar {{ background: {panel}; border: 1px solid {border};
+            border-radius: 10px; }}
         QPushButton[chip="pill"] {{ border-radius: 15px; padding: 6px 14px; }}
         QPushButton[chip="pill"]:checked {{ background: {selection}; border-color: {accent};
             color: {text}; font-weight: 600; }}

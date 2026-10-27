@@ -1,6 +1,6 @@
 # Search redesign: c411's layout, our exclusives
 
-Status: decisions 1 to 4 settled 2026-10-27 (all recommendations: c411 structure in our own palette; Simple view with a Compact / Comfortable switch and no Groupé; desktop first). Decisions 5 to 7 (counts, covers, detail page) follow the recommendation unless the step 1 spike says otherwise. Step 1 spike done (see below); step 1 code in `torrent_search.py` is not committed yet.
+Status: built 2026-10-27, desktop and web (everything in this plan, nothing deferred). Decisions: c411 structure in our own palette; Simple view with a Compact / Comfortable switch and no Groupé; desktop first. Counts come from the listing's `meta` (global per root, not filtered); posters are TMDB thumbnails fetched by a bounded, cached loader (the web page proxies them through `/api/poster`); Team is a free-text filter (`team=<name or slug>`, verified live); the detail page stays a separate follow-up.
 
 The Search tab keeps working but looks like a raw query form: a text field, a category tree popup, a grid of checklist buttons and a plain table. c411's own torrents page (screenshot supplied by the user) is faster to scan: category pills with counts, one filter row, rich result rows. This plan brings Search closer to it, on the same basis as the RSS and Assistant redesigns ([rss-redesign](rss-redesign.md), [assistant-chat-redesign](assistant-chat-redesign.md)), without losing what only TorrentLinker does.
 
@@ -101,8 +101,8 @@ Same structure on both. Desktop: a `ResultRow` delegate or row widgets in a `QLi
 ## Order
 
 1. Done: spike, `ListingRow` and counts on `SearchPage`, tests, shape recorded in `docs/research/search-filters.md`.
-2. Desktop page skeleton: header, search bar, pills, filter row restyled, numbered pagination, sort chips. Old table kept for now.
-3. Desktop results: comfortable and compact rows, Zen pill, selection bar, queue badge and queue page.
-4. Desktop polish: filter chips summary, "Follow in RSS", palliative / exclusive toggles, empty and error states, "In client" mark.
-5. Web parity (`index.html`, `app.js`, `app.css`), screenshots both languages and themes.
-6. Docs (`docs/guide/en/search.md`, `fr/search.md`), release note line. Detail page spec as a separate follow-up.
+2. Done: desktop page skeleton (header, search bar, pills, filter row, numbered pages, sort chips).
+3. Done: desktop rows (Comfortable and Compact), Zen pill, selection bar, queue badge.
+4. Done: filter chips, palliative and exclusive toggles, empty and error states, In client / Queued marks (both densities).
+5. Done: Year / Team / Uploader dropdowns, automatic search after a pause, one results card, page links above and below, the queue page reached from the header, tab actions in the Open tabs menu, `poster_cache.py` and the poster loader with a Posters switch.
+6. Done: web parity (`index.html`, `search.js`, `app.css`, `/api/poster`, `search_listing` in the search job), real-data check, Torznab test, guides (EN and FR).

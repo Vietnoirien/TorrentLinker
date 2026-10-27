@@ -45,6 +45,11 @@ class IndexerFilters(BaseModel):
         description="Exact release year; year ranges are not supported.",
     )
     uploader: str = Field(default="", max_length=100)
+    team: str = Field(
+        default="",
+        max_length=100,
+        description="Release team name or slug, as on c411's team pages (case-insensitive).",
+    )
     options: str = Field(
         default="",
         max_length=500,
@@ -164,6 +169,7 @@ def search_options(indexer, category=None, fallback_categories=None):
         "backend": "c411-native",
         "categories": {str(key): asdict(value) for key, value in tree.categories.items()},
         "category_namespace": "Native roots positive; children negative; NOT Torznab IDs.",
+        "root_colors": {str(key): value for key, value in tree.colors.items()},
         "root_category": root,
         "facets": [asdict(facet) for facet in visible_facets(tree, category, facets)],
         "global_filters": {
@@ -174,6 +180,7 @@ def search_options(indexer, category=None, fallback_categories=None):
                 "meaning": "exact release year; no range API",
             },
             "uploader": {"type": "string", "max_length": 100},
+            "team": {"type": "string", "max_length": 100, "meaning": "team name or slug"},
             "exclusive": {"type": "boolean"},
             "crew": {"type": "boolean", "root": 1},
             "palliative": {"choices": ["", "include", "only"]},

@@ -57,6 +57,7 @@ class PageBar(QWidget):
         while item := self.layout_.takeAt(0):
             widget = item.widget()
             if widget is not None and widget not in keep:
+                widget.hide()  # a deleted-later widget must not paint at a stale place
                 widget.deleteLater()
             elif widget is not None:
                 widget.hide()

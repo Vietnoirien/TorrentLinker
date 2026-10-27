@@ -2,42 +2,61 @@
 
 [Documentation](../../README.md) · [Français](../fr/recherche.md)
 
-1. Enter a title, choose a category and adjust its filters.
-2. Double-click a result to open its details in a tab.
-3. Choose a download folder and add the torrent to the queue.
+1. Enter a title, pick a category pill and adjust the filters. The page searches by itself a moment after each change.
+2. Click a result's title to open its details in a tab.
+3. Select results and add them to the queue, or use a row's download button.
 4. ### Start and manage the queue
 
 ![Download queue](../images/en/file.png)
 
 The queue also shows **≈ Zen/day** and **≈ Note** for each torrent. Click their headers to sort numerically. Estimates use the same calculation as search results and refresh when the Zen Profile or seeding torrents change. They remain available after restarting the app.
 
-Open **Download queue** and start it. **Download now** sends only the selected torrent immediately.
+Open **Download queue** from the button at the top right of Search, then start it. **Download now** sends only the selected torrent immediately. **← Back to results** returns to the search.
 
 Screenshots use the English interface, dark theme and example data.
 
-![Search and category filters](../images/en/recherche.png)
+![Search page](../images/en/recherche.png)
 
-## Search and download queue
+## The Search page
 
-In **Search**, enter a title and optionally choose a category from the expandable tree. Click an arrow to show subcategories, select a parent or child to filter, or choose **All categories** to clear the filter. Results come directly from your Indexer, with previous/next paging. Select one or more torrents, choose a Download Folder or leave it blank to use the category folders from Settings, then click **Add selected to queue**.
+The page follows c411's torrents page, with TorrentLinker's own colors and extras.
+
+- **Header.** The **Compact / Comfortable** switch, **Posters**, and the **Download queue (N)** button. Your choices are remembered.
+- **Search bar.** A large field for the title, original title or release name. On Films & Vidéos, **Cast & crew** also searches actors, directors and screenwriters.
+- **Category pills.** *All* and one pill per category, with c411's own totals. A pill filters at once. The **Category** menu below picks a subcategory.
+- **Filters.** Rounded buttons that open a searchable checklist (resolution, source, codec, HDR, audio, channels, language, profile, genre, season and so on), then **Year**, **Team** and **Uploader**. Team takes a team name or slug, as on c411. When four or more values are chosen they also show as chips you can remove one by one. **Exclusive** and the heart button for **soins palliatifs** sit next to the Category menu. **Subscribe to RSS** carries the query into a new subscription, and **Clear all** resets everything.
+- **Automatic search.** Filters, toggles, pills, sort chips and page links search by themselves. Filter changes wait about a second so several clicks make one request. A half-typed year does not search. The Search button and Enter still work.
+- **Results card.** The total number of matches and their size, a row of **sort chips** (Age, Seeders, Leechers, Size, Completed, Comments, Name, Type, and Relevance while a query is typed; click the active chip to flip the direction), and numbered page links above and below.
+
+### Comfortable and Compact
+
+**Comfortable** rows show the poster, the type, the title with year and rating, the release name, colored tags (language, resolution, source, audio, video codec, HDR), size, seeders and leechers with a balance bar, age, completed downloads, the uploader, the **≈ Zen/day** estimate and a download button. A ★ marks exclusives and a ♥ marks soins palliatifs. **In client** appears on torrents your torrent client already has, and **Queued** on those in the download queue; both come from what the app already knows and ask nothing of the client.
+
+**Compact** is a sortable table with seeders, leechers, category, revival, ≈ Zen/day, ≈ Note and age, and shows the same marks.
+
+**Posters** come from TMDB. The app fetches them a few at a time for the rows you see, keeps them on disk and sends no key or cookie with the request. Turn **Posters** off to stop all of it. In the web page the server fetches them, so your browser never contacts TMDB.
+
+### Adding to the queue
+
+Select rows (the selection bar appears at the bottom) and click **Add selected to queue**. Choose a Download Folder in the bar or leave it blank to use the category folders from Settings. **Open in tabs** and **Open on website** work on the selection. A row's own download button queues just that torrent. In the web page, queueing keeps you on Search and the row shows **Queued**.
 
 ### Category filters
 
-For c411, the category tree and available search options come from its native API. Select a category to see its multi-select filters. Films & Vidéos adds resolution, source, HDR, codec, audio, channels, language and profile; series also offer season and episode choices. Year, uploader, exclusivity and sorting apply across categories. **Clear filters** resets the selection. Changing categories clears incompatible filters. Other Indexers keep their Torznab search.
+For c411, the category tree and available search options come from its native API. Select a category to see its filters. Films & Vidéos adds resolution, source, HDR, codec, audio, channels, language and profile; series also offer season and episode choices. Year, team, uploader, exclusivity and sorting apply across categories. Changing categories clears incompatible filters. Other Indexers keep their Torznab search: a category menu and pills, no native filters.
 
 ### Soins palliatifs
 
-The revival selector offers available torrents, inclusion of **soins palliatifs**, or revival torrents only. Results identified by c411 as soins palliatifs carry a label; zero seeders alone does not establish that status. This is discovery support, not personal reward tracking. Previous/next paging keeps the submitted search criteria. If c411 exposes only part of a large result set, the app shows its accessible limit and asks you to narrow the filters.
+The heart button cycles through available torrents, inclusion of **soins palliatifs**, and soins palliatifs only. It shows c411's current count. Results identified by c411 as soins palliatifs carry a label; zero seeders alone does not establish that status. This is discovery support, not personal reward tracking. Page links keep the submitted search criteria. If c411 exposes only part of a large result set, the app shows its accessible limit and asks you to narrow the filters.
 
 ### Estimates and publication age
 
 Search results include sortable **≈ Zen/day** and **≈ Note** previews for c411, also shown in torrent details. Note is the estimated contribution score for your Class, category, swarm and seed age. New torrents use your Zen Profile, planned seed hours and current seeding count, starting at zero seed age and including you in the swarm. Already seeded torrents keep their current estimate and seed age. Hover over the estimate to see its assumptions. Revival payouts remain separate.
 
-The **Age** column shows time since publication, such as **2 hours** or **3 days**, and refreshes every minute while Search is visible. Hover to see the exact local date and time, using c411's creation date or Torznab's publication date. Missing dates display as **–**. The header sorts the current page by the underlying timestamp; use **Newest** with ascending or descending order to sort the search across pages.
+The **Age** column shows time since publication, such as **2 hours** or **3 days**, and refreshes every minute while Search is visible. Hover to see the exact local date and time, using c411's creation date or Torznab's publication date. Missing dates display as **–**. The header sorts the current page by the underlying timestamp; use the **Age** sort chip to sort the search across pages.
 
 ### Torrent details
 
-Select a result and click **Open on website**, or double-click it to open its description, images, NFO and file list in a torrent tab. **Open in tabs** opens all selected results. Details load only when opened; no `.torrent` is downloaded. The NFO is plain text, and images load through the configured proxy without Indexer credentials. Descriptions are centered, with explicit text alignment preserved. Images up to 32 MiB are decoded within a pixel limit and scaled for display. Failed images show compact links; **Retry images** retries them without reloading the torrent metadata and respects a host's rate-limit cooldown. Unsupported details and unavailable images can still be viewed on the website.
+Click a result's title (or double-click a compact row) to open its description, images, NFO and file list in a torrent tab. **Open on website** and **Open in tabs** act on the selected rows. Details load only when opened; no `.torrent` is downloaded. The NFO is plain text, and images load through the configured proxy without Indexer credentials. Descriptions are centered, with explicit text alignment preserved. Images up to 32 MiB are decoded within a pixel limit and scaled for display. Failed images show compact links; **Retry images** retries them without reloading the torrent metadata and respects a host's rate-limit cooldown. Unsupported details and unavailable images can still be viewed on the website.
 
 Each torrent tab also offers **Add to queue** and **Download now**, with an editable Download Folder. Download now sends only that torrent, leaving other queued items waiting. Both actions use the queue's duplicate and overwrite protections; a torrent already queued to a different folder must be removed before changing its destination.
 
@@ -45,7 +64,7 @@ Each torrent tab also offers **Add to queue** and **Download now**, with an edit
 
 Torrent tabs stay open while you run other searches. Opening the same torrent switches to its existing tab. Drag tabs to reorder them, use **Open tabs** to jump to one, or close them with the × button, middle-click, **Ctrl+W**, or the tab's right-click menu. **Ctrl+Tab** and **Ctrl+Shift+Tab** switch tabs; **Ctrl+F** returns to the search field. Closing a tab does not remove or stop a queued download.
 
-On the main Search page, **Queue all tabs** adds the open torrent tabs and opens the queue without starting downloads. The **Download queue** button above the tabs stays accessible while browsing torrent details. **Download all tabs** queues and starts that set in one click, leaving unrelated queued torrents waiting. Each tab keeps its own Download Folder. All destinations are checked before queuing the batch; if one needs attention, that tab opens and an error appears above the tabs. Torrent tabs last for the current app session; the download queue persists across restarts.
+Open the **Open tabs** menu at the right of the tab bar for **Queue all tabs**, which adds the open torrent tabs and opens the queue without starting downloads, and **Download all tabs**, which queues and starts that set in one click, leaving unrelated queued torrents waiting. The **Download queue** button above the tabs stays accessible while browsing torrent details. Each tab keeps its own Download Folder. All destinations are checked before queuing the batch; if one needs attention, that tab opens and an error appears above the tabs. Torrent tabs last for the current app session; the download queue persists across restarts.
 
 Open **Download queue** and click **Start queue** to send the selected torrents to your torrent client in order. The queue respects the Indexer's download limits and waits when asked. **Pause** stops further sends after the current request; downloads already started continue in the torrent client. Queue entries and outcomes survive restarts, and the queue waits for Start after reopening. Failed entries can be retried; sent entries can be cleared without removing torrents from the client. Existing client torrents and files at the destination are protected against duplicate downloads or overwrites.
 

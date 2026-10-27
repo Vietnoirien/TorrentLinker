@@ -125,6 +125,7 @@ class JobRequest(BaseModel):
     filters: dict[str, str] = Field(default_factory=dict, max_length=30)
     indexer_search: bool = False
     search_exclude_seeded: bool = False
+    search_listing: bool = False  # also return the listing's display fields, for the Search page
 
     @field_validator("hashes")
     @classmethod
@@ -384,6 +385,29 @@ class Operations:
             }
             for e in entries(self.setup.store)
         ]
+
+    def search_listing(self, indexer, page, rows) -> dict[str, Any]:
+        """What the Search page paints beyond a result row: poster, rating, tags, counts, and
+        which results the client or the queue already has. Kept out of the rows themselves,
+        which agents and saved selections fingerprint."""
+        from dataclasses import asdict
+
+        from torrentlinker.download_queue import entries
+
+        shown = {r["hash"] for r in rows}
+        known = {t.hash.lower(): "client" for t in self.observed if t.hash.lower() in shown}
+        for entry in entries(self.setup.store):
+            key = (entry.candidate.infohash or "").lower()
+            if key in shown and entry.status in {"queued", "sending"}:
+                known.setdefault(key, "queued")
+        if page is None:
+            return {"listing": {}, "known": known, "root_counts": {}, "total_size": None}
+        return {
+            "listing": {h: asdict(d) for h, d in page.details.items() if h in shown},
+            "known": known,
+            "root_counts": {str(k): v for k, v in page.root_counts.items()},
+            "total_size": page.total_size,
+        }
 
     def search_options(self, category=None):
         from torrentlinker.indexer_search import search_options
@@ -723,9 +747,15 @@ class Operations:
             self.setup.store.save_catalogue(catalogue)
             from torrentlinker.queue_selection import snapshot
 
+            extras = (
+                self.search_listing(indexer, page if indexer.is_c411 else None, result)
+                if request.search_listing
+                else {}
+            )
             return {
                 **snapshot(result, "catalogue", metadata["search"]),
                 **metadata,
+                **extras,
                 "selection_kind": "live-search",
                 "indexer_url": indexer.url,
                 "coverage": "Exact returned page after exclusions; "

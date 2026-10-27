@@ -3917,6 +3917,14 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Clear all</source>
         <translation>Tout effacer</translation>
     </message>
+    <message>
+        <source>Team</source>
+        <translation>Team</translation>
+    </message>
+    <message>
+        <source>Team name or slug</source>
+        <translation>Nom ou slug de la team</translation>
+    </message>
 </context>
 <context>
     <name>SearchTab</name>
@@ -4432,6 +4440,34 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
     <message>
         <source>{0} selected</source>
         <translation>{0} sélectionné(s)</translation>
+    </message>
+    <message>
+        <source>No torrent matches. Try fewer filters, or another spelling of the title.</source>
+        <translation>Aucun torrent ne correspond. Essayez moins de filtres, ou une autre orthographe du titre.</translation>
+    </message>
+    <message>
+        <source>Open tabs</source>
+        <translation>Onglets ouverts</translation>
+    </message>
+    <message>
+        <source>Open tabs ({0})</source>
+        <translation>Onglets ouverts ({0})</translation>
+    </message>
+    <message>
+        <source>Posters</source>
+        <translation>Affiches</translation>
+    </message>
+    <message>
+        <source>Search results</source>
+        <translation>Résultats de recherche</translation>
+    </message>
+    <message>
+        <source>Show posters. They are fetched from TMDB, a few at a time, and kept on disk.</source>
+        <translation>Affiche les affiches. Elles sont récupérées sur TMDB, quelques-unes à la fois, et gardées sur le disque.</translation>
+    </message>
+    <message>
+        <source>← Back to results</source>
+        <translation>← Retour aux résultats</translation>
     </message>
 </context>
 <context>
@@ -8821,6 +8857,62 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Zen/day</source>
         <translation>Zen/j</translation>
+    </message>
+</context>
+<context>
+    <name>PalliativeToggle</name>
+    <message>
+        <source>Revival torrents</source>
+        <translation>Torrents en soins palliatifs</translation>
+    </message>
+    <message>
+        <source>♡ Soins palliatifs</source>
+        <translation>♡ Soins palliatifs</translation>
+    </message>
+    <message>
+        <source>♥ With soins palliatifs</source>
+        <translation>♥ Avec soins palliatifs</translation>
+    </message>
+    <message>
+        <source>♥ Soins palliatifs only</source>
+        <translation>♥ Soins palliatifs seuls</translation>
+    </message>
+    <message>
+        <source>Click to include soins palliatifs torrents in the results.</source>
+        <translation>Cliquez pour inclure les torrents en soins palliatifs dans les résultats.</translation>
+    </message>
+    <message>
+        <source>Soins palliatifs are included. Click to show only those.</source>
+        <translation>Les soins palliatifs sont inclus. Cliquez pour ne voir qu'eux.</translation>
+    </message>
+    <message>
+        <source>Only soins palliatifs. Click to hide them again.</source>
+        <translation>Soins palliatifs seulement. Cliquez pour les masquer à nouveau.</translation>
+    </message>
+</context>
+<context>
+    <name>ActiveFilters</name>
+    <message>
+        <source>Remove this filter</source>
+        <translation>Retirer ce filtre</translation>
+    </message>
+</context>
+<context>
+    <name>TitleDelegate</name>
+    <message>
+        <source>In client</source>
+        <translation>Dans le client</translation>
+    </message>
+    <message>
+        <source>Queued</source>
+        <translation>En file</translation>
+    </message>
+</context>
+<context>
+    <name>InputFilter</name>
+    <message>
+        <source>Clear</source>
+        <translation>Effacer</translation>
     </message>
 </context>
 </TS>

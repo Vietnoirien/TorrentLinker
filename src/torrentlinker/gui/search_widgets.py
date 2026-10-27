@@ -52,6 +52,7 @@ class CategoryPills(QWidget):
         for button in self.buttons.values():
             self.group.removeButton(button)
             self.flow.removeWidget(button)
+            button.hide()  # until the deferred delete runs, it must not paint at a stale place
             button.deleteLater()
         self.buttons.clear()
         self._parents = {cid: info.parent for cid, info in categories.items()}

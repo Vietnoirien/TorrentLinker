@@ -231,9 +231,9 @@ async function api(path, body, method) {
 }
 const bytes = (n) => {
   if (n === null || n === undefined) return "—";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
   let i = 0;
-  while (n >= 1024 && i < 4) {
+  while (n >= 1024 && i < 5) {
     n /= 1024;
     i++;
   }
@@ -611,12 +611,7 @@ async function navigate(view) {
     await refreshSetup();
     await Promise.all([loadZenSeeding(), api("zen/catalogue").then(showCatalogue)]);
   }
-  if (
-    view === "search" &&
-    state.setup.indexer_configured &&
-    !$("search-category").dataset.loaded
-  )
-    await searchOptions();
+  if (view === "search" && state.setup.indexer_configured) await loadSearchPage();
 }
 async function job(body, done) {
   body = {client_id: state.clientId, ...body};
@@ -812,75 +807,6 @@ function searchColumns() {
     { label: "≈ Note", render: (r) => num(r.note) },
     { label: say("Age", "Âge"), render: (r) => age(r.published_at) },
   ];
-}
-async function searchOptions() {
-  await job(
-    {
-      kind: "search-options",
-      category: Number($("search-category").value) || null,
-    },
-    (r) => {
-      const old = $("search-category").value;
-      const categories = r.categories;
-      $("search-category").replaceChildren(
-        new Option(say("All categories", "Toutes les catégories"), ""),
-      );
-      for (const [id, c] of Object.entries(categories).filter(
-        ([, v]) => !v.parent,
-      )) {
-        $("search-category").append(new Option(c.name, id));
-        for (const [child, v] of Object.entries(categories).filter(
-          ([, v]) => String(v.parent) === id,
-        ))
-          $("search-category").append(new Option(`　↳ ${v.name}`, child));
-      }
-      $("search-category").value = old;
-      $("search-category").dataset.loaded = "1";
-      $("search-facets").replaceChildren(
-        ...r.facets.map((f) => {
-          const label = element("label", f.label),
-            select = element("select");
-          select.dataset.facet = f.slug;
-          select.append(
-            new Option("—", ""),
-            ...f.choices.map(([name, id]) => new Option(name, id)),
-          );
-          label.append(select);
-          return label;
-        }),
-      );
-    },
-  );
-}
-async function search(page = 1) {
-  const filters = {};
-  const choices = [...$("search-facets").querySelectorAll("select")]
-    .map((s) => s.value)
-    .filter(Boolean);
-  if (choices.length) filters.options = choices.join(",");
-  if ($("search-year").value) filters.year = $("search-year").value;
-  if ($("search-uploader").value) filters.uploader = $("search-uploader").value;
-  if ($("search-palliative").checked) filters.palliative = "true";
-  if ($("search-exclusive").checked) filters.exclusive = "true";
-  await job(
-    {
-      kind: "search",
-      query: $("search-query").value,
-      page,
-      category: Number($("search-category").value) || null,
-      filters,
-    },
-    (r) => {
-      state.searchPage = r.page;
-      state.searchPages = r.pages;
-      state.searchRows = r.rows;
-      state.searchSelected.clear();
-      table("search-table", r.rows, searchColumns(), state.searchSelected);
-      $("search-count").textContent = `${r.page} / ${Math.max(1, r.pages)}`;
-      $("search-prev").disabled = r.page <= 1;
-      $("search-next").disabled = r.page >= r.pages;
-    },
-  );
 }
 async function enqueue(hashes) {
   if (!hashes.length)
@@ -1163,6 +1089,7 @@ $("language").onchange = () => {
   localStorage.setItem("tl-language", language);
   translate();
   if (state.view === "zen") guard(loadZenSeeding);
+  if (state.view === "search") searchRetranslate();
   if (state.view === "media") { mediaViews(); guard(loadMedia); mediaQueueRender(); }
   $("page-title").textContent =
     document.querySelector(`[data-view="${state.view}"]`)?.textContent ||
@@ -1191,16 +1118,6 @@ $("torrent-next").onclick = () => {
   state.offset += 100;
   guard(loadTorrents);
 };
-$("search-form").onsubmit = (e) => {
-  e.preventDefault();
-  guard(() => search());
-};
-$("search-category").onchange = () => guard(searchOptions);
-$("search-prev").onclick = () =>
-  guard(() => search(Math.max(1, state.searchPage - 1)));
-$("search-next").onclick = () => guard(() => search(state.searchPage + 1));
-$("queue-search").onclick = () =>
-  guard(() => enqueue([...state.searchSelected]));
 $("queue-plan").onclick = () => guard(async () => {
   const grouped = new Map();
   for (const row of state.planRows.filter(r => state.planSelected.has(r.hash))) {

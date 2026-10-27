@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt, Signal
-from PySide6.QtGui import QKeySequence, QMouseEvent, QShortcut
+from PySide6.QtGui import QAction, QKeySequence, QMouseEvent, QShortcut
 from PySide6.QtWidgets import QMenu, QTabBar, QTabWidget, QToolButton, QWidget
 
 
@@ -47,6 +47,7 @@ class BrowserTabs(QTabWidget):
         self.tab_list.setObjectName("browserTabList")
         self.tab_list.setText(self.tr("Open tabs"))
         self.tab_list.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.extra_actions: list[QAction] = []  # shown under the tab list, for whole-set actions
         self.tab_menu = QMenu(self.tab_list)
         self.tab_menu.aboutToShow.connect(self._fill_tab_menu)
         self.tab_list.setMenu(self.tab_menu)
@@ -101,6 +102,10 @@ class BrowserTabs(QTabWidget):
             action.triggered.connect(
                 lambda checked=False, target=page: self.setCurrentWidget(target)
             )
+        if self.extra_actions:
+            self.tab_menu.addSeparator()
+            for action in self.extra_actions:
+                self.tab_menu.addAction(action)
 
     def _menu(self, position: QPoint) -> None:
         index = self.tabBar().tabAt(position)

@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -500,6 +500,28 @@ def create_app(
             r for r in for_client(client_id).library.rows() if q.casefold() in r["name"].casefold()
         ]
         return {"rows": rows[offset : offset + limit], "total": len(rows)}
+
+    from torrentlinker.poster_cache import PosterCache, valid_poster_url
+
+    posters = PosterCache(directory / "posters")
+
+    @app.get("/api/poster")
+    def poster(url: str = Query("", max_length=300)) -> Response:
+        # The browser may not load TMDB images itself (the page's CSP, and TMDB would see the
+        # visitor's address). The server fetches only TMDB poster URLs, bounded and cached.
+        if not valid_poster_url(url):
+            raise HTTPException(404, "No poster.")
+        data = posters.fetch(url)
+        if data is None:
+            raise HTTPException(404, "No poster.")
+        kind = (
+            "image/png"
+            if data[:4] == b"\x89PNG"
+            else "image/webp"
+            if data[8:12] == b"WEBP"
+            else "image/jpeg"
+        )
+        return Response(data, media_type=kind)
 
     @app.get("/api/queue")
     def queue(client_id: str = "") -> list:
