@@ -210,7 +210,8 @@ class ChatTranscript(QScrollArea):
         card.setObjectName("chatMessage")
         card.setProperty("role", message["role"])
         card.setMaximumWidth(700 if user else 860)
-        background = ("#263f65" if dark else "#e8eef8") if user else "transparent"
+        # Your messages use the accent family, like the composer's Send button.
+        background = ("#254c53" if dark else "#d8eeeb") if user else "transparent"
         card.setStyleSheet(
             f"QFrame#chatMessage {{ background: {background}; border: none; border-radius: 18px; }}"
         )

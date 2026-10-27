@@ -369,7 +369,8 @@ def test_desktop_question_approval_and_markdown_table(qtbot, tmp_path):
             timeout=5000,
         )
         assert client.paused == []  # The answer did not authorize the action.
-        assert not widget.send.isEnabled()
+        # While a run waits on approval, the button stops it instead of sending.
+        assert widget.composer.running and not widget.composer.can_send
         next(
             b for b in widget.transcript.findChildren(QPushButton) if b.text() == "Approve once"
         ).click()
@@ -511,3 +512,22 @@ def test_browser_inline_question_approval_and_safe_table(tmp_path):
         server.should_exit = True
         thread.join(5)
         listener.close()
+
+
+def test_chat_composer_switches_between_send_and_stop(qtbot):
+    from torrentlinker.gui.chat_composer import ChatComposer
+
+    composer = ChatComposer()
+    qtbot.addWidget(composer)
+    sent, stopped = [], []
+    composer.sendRequested.connect(lambda: sent.append(1))
+    composer.stopRequested.connect(lambda: stopped.append(1))
+    assert not composer.send.isEnabled()  # No model yet: nothing to send to.
+    composer.set_state(running=False, can_send=True)
+    composer.send.click()
+    assert sent == [1] and composer.send.accessibleName() == "Send"
+    composer.set_state(running=True, can_send=False)
+    assert composer.send.isEnabled() and not composer.model.isEnabled()
+    assert composer.send.accessibleName() == "Stop"
+    composer.send.click()
+    assert stopped == [1] and sent == [1]

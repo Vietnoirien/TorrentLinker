@@ -79,7 +79,7 @@ for language in ("fr", "en"):
             widget.resize(1080, 720)
             widget.show()
             widget.activate()
-            widget.conversations.setCurrentRow(0)
+            widget.select_conversation(c["id"])
             widget.refresh_run()
             QTest.qWait(100)
             assert widget.grab().save(str(output / "assistant.png"))

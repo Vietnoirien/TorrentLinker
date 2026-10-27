@@ -987,6 +987,45 @@
     </message>
 </context>
 <context>
+    <name>ChatComposer</name>
+    <message>
+        <source>Give a task or ask a question…</source>
+        <translation>Donnez une tâche ou posez une question…</translation>
+    </message>
+    <message>
+        <source>Message</source>
+        <translation>Message</translation>
+    </message>
+    <message>
+        <source>Model connection</source>
+        <translation>Connexion au modèle</translation>
+    </message>
+    <message>
+        <source>Discussion mode</source>
+        <translation>Mode de la discussion</translation>
+    </message>
+    <message>
+        <source>Discussion settings</source>
+        <translation>Paramètres de la discussion</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+    <message>
+        <source>Send</source>
+        <translation>Envoyer</translation>
+    </message>
+    <message>
+        <source>Execute within limits</source>
+        <translation>Exécuter dans les limites</translation>
+    </message>
+    <message>
+        <source>Proposals only</source>
+        <translation>Propositions uniquement</translation>
+    </message>
+</context>
+<context>
     <name>ChatTranscript</name>
     <message>
         <location filename="../gui/chat_transcript.py" line="116"/>

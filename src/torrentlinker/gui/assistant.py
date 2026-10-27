@@ -35,24 +35,12 @@ from PySide6.QtWidgets import (
 from torrentlinker.assistant.models import Conversation, Schedule
 from torrentlinker.assistant.providers import PRESETS, Provider
 from torrentlinker.assistant.research import SearchSettings
+from torrentlinker.gui.chat_composer import ChatComposer
 from torrentlinker.gui.chat_folders import ChatFolders
 from torrentlinker.gui.chat_transcript import ChatTranscript
-from torrentlinker.gui.controls import icon_button
+from torrentlinker.gui.controls import icon_button, set_role
 from torrentlinker.gui.request_details import JsonCode, RequestDetails
 from torrentlinker.gui.tasks import run_in_background
-
-
-class ChatPrompt(QPlainTextEdit):
-    submitted = Signal()
-
-    def keyPressEvent(self, event):
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not (
-            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
-        ):
-            self.submitted.emit()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
 
 
 class AssistantEditor(QDialog):
@@ -394,39 +382,21 @@ class AssistantTab(QWidget):
         self.transcript.answerSubmitted.connect(self.submit_answer)
         self.transcript.anchorClicked.connect(self.open_receipt)
         rl.addWidget(self.transcript, 1)
-        self.prompt = ChatPrompt()
-        self.prompt.submitted.connect(self.send_message)
-        self.prompt.setPlaceholderText(self.tr("Give a task or ask a question…"))
-        self.prompt.setMaximumHeight(96)
-        self.prompt.setMinimumHeight(72)
-        self.prompt.setStyleSheet("QPlainTextEdit { border-radius: 12px; padding: 12px; }")
-        self.prompt.setAccessibleName(self.tr("Message"))
-        rl.addWidget(self.prompt)
-        self.connect_model = QPushButton(self.tr("Connect a model"))
-        self.connect_model.clicked.connect(lambda: self.pages.setCurrentIndex(3))
-        rl.addWidget(self.connect_model)
-        controls = QHBoxLayout()
-        self.chat_model = QComboBox()
-        self.chat_model.setAccessibleName(self.tr("Model connection"))
-        self.chat_model.setMinimumWidth(120)
-        self.chat_model.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
+        self.composer = ChatComposer()
+        self.composer.sendRequested.connect(self.send_message)
+        self.composer.stopRequested.connect(self.stop_run)
+        self.composer.modeRequested.connect(self.edit_chat_settings)
+        self.composer.settingsRequested.connect(self.edit_chat_settings)
+        self.prompt = self.composer.prompt
+        self.chat_model = self.composer.model
         self.chat_model.activated.connect(self.change_chat_model)
-        self.chat_model.setMaximumWidth(380)
-        controls.addWidget(self.chat_model, 1)
-        self.chat_settings = QPushButton(self.tr("Discussion settings"))
-        self.chat_settings.clicked.connect(self.edit_chat_settings)
-        controls.addWidget(self.chat_settings)
-        self.send = QPushButton(self.tr("Send"))
-        self.send.clicked.connect(self.send_message)
-        controls.addWidget(self.send)
-        stop = QPushButton(self.tr("Stop"))
-        stop.clicked.connect(self.stop_run)
-        self.stop_button = stop
-        controls.addWidget(stop)
-        controls.addStretch()
-        rl.addLayout(controls)
+        self.chat_settings = self.composer.settings
+        self.send = self.composer.send
+        rl.addWidget(self.composer)
+        # Without a model the composer is useless: one clear way to connect one instead.
+        self.connect_model = set_role(QPushButton(self.tr("Connect a model")), "primary")
+        self.connect_model.clicked.connect(lambda: self.pages.setCurrentIndex(3))
+        rl.addWidget(self.connect_model, 0, Qt.AlignmentFlag.AlignHCenter)
         splitter.addWidget(right)
         splitter.setSizes([220, 760])
         cl.addWidget(splitter)
@@ -494,9 +464,9 @@ class AssistantTab(QWidget):
         self.timer.timeout.connect(self.refresh_run)
         self.timer.start()
         if compact:
-            self._make_compact(rl, controls)
+            self._make_compact()
 
-    def _make_compact(self, column, controls):
+    def _make_compact(self):
         """One discussion in a side panel: small header menus and one send/stop button.
 
         Folders, automations, history and connections stay on the Assistant page.
@@ -509,9 +479,8 @@ class AssistantTab(QWidget):
             self.pages.removeTab(1)
         self.pages.tabBar().hide()
         self.folder_column.hide()
-        for button in (self.send, self.stop_button, self.chat_settings):
-            button.hide()
-        self.chat_model.setMaximumWidth(260)
+        # The panel's ⋯ menu holds the discussion settings.
+        self.chat_settings.hide()
         header = QHBoxLayout()
         header.setContentsMargins(10, 6, 6, 2)
         header.setSpacing(2)
@@ -537,19 +506,6 @@ class AssistantTab(QWidget):
                 button.clicked.connect(slot)
             header.addWidget(button)
         self.layout().insertLayout(0, header)
-        composer = QHBoxLayout()
-        composer.setSpacing(6)
-        column.removeWidget(self.prompt)
-        composer.addWidget(self.prompt, 1)
-        self.send_toggle = icon_button("➤", self.tr("Send"))
-        self.send_toggle.setObjectName("chatSend")
-        # The main action of the composer: the icon shape in the primary color.
-        self.send_toggle.setStyleSheet(
-            "QToolButton { background: #087f76; color: white; border-radius: 15px; }"
-        )
-        self.send_toggle.clicked.connect(self._send_or_stop)
-        composer.addWidget(self.send_toggle, 0, Qt.AlignmentFlag.AlignBottom)
-        column.insertLayout(column.indexOf(self.connect_model), composer)
         self._sync_compact(False)
 
     def _fill_history_menu(self):
@@ -570,19 +526,7 @@ class AssistantTab(QWidget):
             action.setCheckable(True)
             action.setChecked(row["id"] == self.conversation_id)
 
-    def _send_or_stop(self):
-        if self.send_toggle.property("running"):
-            self.stop_run()
-        else:
-            self.send_message()
-
     def _sync_compact(self, running):
-        self.send_toggle.setProperty("running", running)
-        self.send_toggle.setText("■" if running else "➤")
-        label = self.tr("Stop") if running else self.tr("Send")
-        self.send_toggle.setToolTip(label)
-        self.send_toggle.setAccessibleName(label)
-        self.send_toggle.setEnabled(running or self.send.isEnabled())
         current = next(
             (c for c in getattr(self, "conversation_data", []) if c["id"] == self.conversation_id),
             None,
@@ -654,6 +598,7 @@ class AssistantTab(QWidget):
             self.chat_model.setCurrentIndex(index)
         self.chat_model.blockSignals(False)
         self.connect_model.setVisible(not self.provider_data)
+        self.composer.setVisible(bool(self.provider_data))
         self.render_key = ""
         self.refresh_run()
 
@@ -819,7 +764,7 @@ class AssistantTab(QWidget):
 
     def send_message(self):
         message = self.prompt.toPlainText().strip()
-        if not self.service or not self.send.isEnabled() or not message:
+        if not self.service or not self.composer.can_send or not message:
             return
 
         def submit():
@@ -906,19 +851,16 @@ class AssistantTab(QWidget):
             ),
             None,
         )
-        self.send.setEnabled(not active and bool(self.chat_model.currentData()))
-        self.chat_model.setEnabled(not active)
+        self.composer.set_state(
+            running=bool(active), can_send=not active and bool(self.chat_model.currentData())
+        )
         self.chat_settings.setEnabled(not active and bool(self.provider_data))
         body = (
             self.service.conversation(self.conversation_id)[0]
             if self.conversation_id
             else self.service.chat_defaults()
         )
-        self.notice.setText(
-            self.tr("Proposals only")
-            if body.policy.mode == "propose"
-            else self.tr("Execute within limits")
-        )
+        self.composer.set_mode(body.policy.mode != "propose")
         self.run_id = active["id"] if active else self.run_id
         if self.compact:
             self._sync_compact(bool(active))

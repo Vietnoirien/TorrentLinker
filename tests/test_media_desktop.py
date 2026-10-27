@@ -163,7 +163,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     assert tab.chat.isChecked() and tab.assistant.isVisible()
     assert tab.assistant.folder_column.isHidden()
     assert tab.assistant.pages.tabBar().isHidden()
-    assert tab.assistant.send.isHidden() and tab.assistant.send_toggle.isVisible()
+    assert tab.assistant.chat_settings.isHidden() and not tab.assistant.send.isHidden()
     # Both sides fit a 1280-wide window with room to drag the divider.
     media_side = tab.splitter.widget(0).minimumSizeHint().width()
     chat_side = tab.assistant.minimumSizeHint().width()
