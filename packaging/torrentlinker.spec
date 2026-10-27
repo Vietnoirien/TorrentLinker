@@ -1,5 +1,7 @@
-# PyInstaller spec: one-file .exe on Windows, one-dir build on Linux (wrapped into an AppImage).
+# PyInstaller spec: one-file .exe on Windows, one-dir build on Linux (wrapped into an AppImage),
+# .app bundle on macOS (wrapped into a .dmg).
 import sys
+from importlib import metadata
 from pathlib import Path
 
 from PyInstaller.utils.hooks import (
@@ -10,6 +12,7 @@ from PyInstaller.utils.hooks import (
 )
 
 windows = sys.platform == "win32"
+macos = sys.platform == "darwin"
 
 datas = (
     collect_data_files("torrentlinker")
@@ -68,3 +71,13 @@ if windows:
 else:
     exe = EXE(pyz, a.scripts, exclude_binaries=True, name="torrentlinker", console=False)
     coll = COLLECT(exe, a.binaries, a.datas, name="torrentlinker")
+
+if macos:
+    app = BUNDLE(
+        coll,
+        name="TorrentLinker.app",
+        icon="../src/torrentlinker/assets/icon.png",
+        bundle_identifier="io.github.vietnoirien.torrentlinker",
+        version=metadata.version("torrentlinker"),
+        info_plist={"NSHighResolutionCapable": True, "LSApplicationCategoryType": "public.app-category.utilities"},
+    )
