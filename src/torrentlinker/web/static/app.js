@@ -38,6 +38,7 @@ const french = {
   mediaMore: 'Afficher la suite',
   mediaChat: 'Discuter de ce média',
   mediaCloseChat: 'Fermer la discussion',
+  turnOffPartialNames: 'Le désactiver dans Transmission et réessayer',
   mediaPrevious: 'Précédent',
   mediaNext: 'Suivant',
   mediaShuffle: 'Aléatoire',
@@ -221,7 +222,8 @@ async function api(path, body, method) {
       $("workspace").hidden = true;
       $("login-screen").hidden = false;
     }
-    throw Error(result.detail || "Request failed");
+    // An `action` tells the page what it may offer, such as fixing a client option.
+    throw Object.assign(Error(result.detail || "Request failed"), {action: result.action});
   }
   return result;
 }
@@ -483,12 +485,13 @@ function showFolders(rows) {
       ),
   );
 }
-async function testClient(save = false) {
+async function testClient(save = false, turnOffPartialNames = false) {
   $("client-result").textContent = say("Connecting…", "Connexion…");
+  $("client-partial-names").hidden = true;
   try {
     const result = await api(
       save && state.addingClient ? "clients" : `setup/${save ? "client" : "test-client"}`,
-      connection(),
+      {...connection(), turn_off_partial_names: turnOffPartialNames},
     );
     $("client-result").textContent = `✓ ${result.version}\n${result.warning}`;
     showFolders(result.folders);
@@ -502,6 +505,13 @@ async function testClient(save = false) {
     }
   } catch (e) {
     $("client-result").textContent = e.message;
+    if (e.action === "turn_off_partial_names") {
+      // Transmission is reachable; it would rename files to .part. Offer the desktop's fix.
+      const fix = $("client-partial-names");
+      fix.hidden = false;
+      fix.onclick = () => guard(() => testClient(save, true));
+      return;
+    }
     throw e;
   }
 }

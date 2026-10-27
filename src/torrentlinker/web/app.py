@@ -28,6 +28,7 @@ from torrentlinker.web.setup import (
     FolderRemoval,
     FolderSetup,
     IndexerConnection,
+    PartialNamesRefused,
     ProxySetup,
     Setup,
 )
@@ -306,6 +307,11 @@ def create_app(
     @app.get("/api/setup")
     def setup(client_id: str = "") -> dict:
         return for_client(client_id).setup.snapshot()
+
+    @app.exception_handler(PartialNamesRefused)
+    async def partial_names(request: Request, error: PartialNamesRefused) -> JSONResponse:
+        # The form offers to turn the option off and try again.
+        return JSONResponse({"detail": str(error), "action": error.action}, status_code=409)
 
     @app.exception_handler(ValueError)
     async def bad_input(request: Request, error: ValueError) -> JSONResponse:

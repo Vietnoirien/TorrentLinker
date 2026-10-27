@@ -63,8 +63,16 @@ class Connection(BaseModel):
     username: str = Field(default="", max_length=256)
     password: str | None = Field(default=None, max_length=4096)
     api_key: str | None = Field(default=None, max_length=4096)
+    # The user agreed to untick Transmission's "Append .part to incomplete files' names".
+    turn_off_partial_names: bool = False
 
     _host = field_validator("host")(http_url)
+
+
+class PartialNamesRefused(ValueError):
+    """Transmission is reachable but would rename files to .part; the user can let us fix it."""
+
+    action = "turn_off_partial_names"
 
 
 class IndexerConnection(BaseModel):
@@ -234,9 +242,20 @@ class Setup:
                 if name == "qbit"
                 else ""
             )
+            from torrentlinker.transmission import PartialNamesOn
+
             try:
                 client = self.connector(body.client, body.host, body.username, password, key)
-                version = client.check()
+                try:
+                    version = client.check()
+                except PartialNamesOn as refused:
+                    # Connected: say why it is refused rather than "cannot connect".
+                    if not body.turn_off_partial_names:
+                        raise PartialNamesRefused(str(refused)) from None
+                    refused.turn_off()
+                    version = client.check()
+            except PartialNamesRefused:
+                raise
             except Exception as error:
                 if any(
                     word in str(error).lower()
