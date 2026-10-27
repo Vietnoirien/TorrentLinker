@@ -14,6 +14,18 @@ import pytest
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
+def open_films_grid(page):
+    """Films shows rows; a row's See all opens the card grid these steps use."""
+    from playwright.sync_api import expect
+
+    page.locator('[data-media-view="films"]').click()
+    expect(page.locator("#media-home-rows")).to_be_visible(timeout=15000)
+    page.locator("#media-home-rows .media-home-row").first.get_by_role(
+        "button", name="See all", exact=True
+    ).click()
+    expect(page.locator("#media-results")).to_be_visible()
+
+
 def player_action(page, identifier):
     control = page.locator(identifier)
     if not control.is_visible():
@@ -144,8 +156,12 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.locator("#login-form button").click()
             page.locator('[data-view="media"]').click()
             expect(page.locator("#view-media")).to_have_attribute("data-layout", "cinematic")
-            page.locator("#media-library-options summary").click()
-            page.locator("#media-refresh").click()
+            # The toolbar ⟳ refreshes the library and shows that a refresh is running.
+            page.locator("#media-toolbar-refresh").click()
+            expect(page.locator("#media-toolbar-refresh")).to_have_attribute("aria-pressed", "true")
+            expect(page.locator("#media-toolbar-refresh")).to_have_attribute(
+                "aria-pressed", "false", timeout=15000
+            )
             # The video home shows rows; the card grid is under Films.
             expect(page.locator("#media-home-rows")).to_contain_text("Validation", timeout=15000)
             page.locator("#media-home-rows .media-home-row").first.get_by_role(
@@ -153,7 +169,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             ).click()
             expect(page.locator("#media-home-rows")).to_be_hidden()
             expect(page.locator("#media-results")).to_contain_text("Validation")
-            page.locator('[data-media-view="films"]').click()
+            open_films_grid(page)
             expect(page.locator("#media-results")).to_contain_text("Validation", timeout=15000)
             page.locator(".media-card").filter(has_text="Validation Film").get_by_role(
                 "button", name="Details", exact=True
@@ -427,7 +443,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 tracks["preparation"]["error"]
             )
             assert video.evaluate("node => node.paused")
-            page.locator('[data-media-view="films"]').click()
+            open_films_grid(page)
             page.locator(".media-card").filter(has_text="Validation Film").get_by_role(
                 "button", name="Play", exact=True
             ).click()
@@ -608,7 +624,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             other = opening.value
             other.locator('[data-view="media"]').click()
             expect(other.locator("#media-player-shell")).to_be_hidden()
-            other.locator('[data-media-view="films"]').click()
+            open_films_grid(other)
             other.locator(".media-card").filter(has_text="Validation Film").get_by_role(
                 "button", name="Play", exact=True
             ).click()
@@ -710,7 +726,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.locator("#media-video-tab").click()
-            page.locator('[data-media-view="films"]').click()
+            open_films_grid(page)
             page.locator(".media-card").filter(has_text="Unsupported Video").get_by_role(
                 "button", name="Play", exact=True
             ).click()
@@ -839,7 +855,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             expect(page.locator("#view-media")).to_have_attribute("data-layout", "cinematic")
             page.locator("#media-library-options summary").click()
             page.locator("#media-refresh").click()
-            page.locator('[data-media-view="films"]').click()
+            open_films_grid(page)
             card = page.locator(".media-card").filter(has_text="Preview Film")
             expect(card).to_be_visible(timeout=15000)
             expect(card.get_by_role("button", name="Play", exact=True)).to_be_disabled()

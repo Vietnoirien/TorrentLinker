@@ -79,7 +79,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from torrentlinker.gui.controls import icon_button, set_role
-from torrentlinker.gui.media_rows import MediaRow
+from torrentlinker.gui.media_rows import MediaRow, SeriesEpisodes
 from torrentlinker.gui.tasks import run_in_background
 
 # The Media Center chat panel and the media beside it never shrink below these.
@@ -393,6 +393,9 @@ class MediaTab(QWidget):
         self.home_data: dict[str, Any] | None = None
         self.home_row_widgets: list[MediaRow] = []
         self.row_choice = ""
+        self.grid_mode = False  # a row's See all shows the grid until a browse tab is chosen
+        # The app refreshes the library the first time Media opens after it starts.
+        self.refresh_on_first_open = False
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         self.setObjectName("mediaWorkspace")
@@ -587,7 +590,16 @@ class MediaTab(QWidget):
             )
             self.view_actions.append(action)
         self.options_button.setMenu(self.options_menu)
-        for widget in (self.search_toggle, self.chat, self.center_button, self.options_button):
+        self.refresh_icon = icon_button("⟳", self.tr("Refresh library"))
+        self.refresh_icon.setCheckable(True)
+        self.refresh_icon.clicked.connect(self._toggle_scan)
+        for widget in (
+            self.search_toggle,
+            self.refresh_icon,
+            self.chat,
+            self.center_button,
+            self.options_button,
+        ):
             set_role(widget, "icon")
             tools_box.addWidget(widget)
         self.header_box.addWidget(tools)
@@ -761,6 +773,10 @@ class MediaTab(QWidget):
         self.collection_actions = QHBoxLayout()
         selection_copy.addLayout(self.collection_actions)
         self.body.addWidget(self.collection_selection)
+        self.series_panel = SeriesEpisodes()
+        self.series_panel.play.connect(self._play_episode)
+        self.series_panel.hide()
+        self.body.addWidget(self.series_panel)
         self.continue_heading = QLabel(self.tr("Continue watching"))
         self.continue_heading.setObjectName("mediaSection")
         self.continue_heading.setContentsMargins(24, 12, 24, 0)
@@ -1743,6 +1759,11 @@ class MediaTab(QWidget):
                     self._set_notice(str(error))
                     self._render_queue()
                 self.apply_player_commands(session.get("commands", []))
+                if self.refresh_on_first_open:
+                    self.refresh_on_first_open = False
+                    folders = self.library.setup(self.session_client).settings.library_folders
+                    if folders:
+                        QTimer.singleShot(0, self.start_scan)
             self.refresh()
         except Exception as error:
             self._set_notice(str(error))
@@ -1979,6 +2000,8 @@ class MediaTab(QWidget):
         if len(title) > 52:
             title = title[:49] + "…"
         subtitle = str(row.get("artist") or "") if view == "albums" else str(row.get("year") or "")
+        if row.get("series_card"):
+            subtitle = self.tr("{0} episodes").format(row["episode_count"])
         if row.get("track_count"):
             count = self.tr(" · {0} tracks").format(row["track_count"]).lstrip(" ·")
             subtitle = subtitle + "\n" + count if view == "albums" and subtitle else count
@@ -2032,6 +2055,7 @@ class MediaTab(QWidget):
         generation = self.browse_generation
         library, client, offset = self.library, self.session_client, self.offset
         home = self._home_active() and not keep_page
+        scope = {"films": "films", "series": "series"}.get(self.view.currentData(), "home")
         self.results.setEnabled(False)
         self._set_notice(self.tr("Loading saved media…"))
 
@@ -2041,7 +2065,7 @@ class MediaTab(QWidget):
                 library.listing(client, offset=offset, **context),
                 library.playlists(client),
                 library.listing(client, limit=4, **continuation)["rows"],
-                library.home_rows(client, kind="video") if home else None,
+                library.home_rows(client, kind="video", scope=scope) if home else None,
             )
 
         def done(payload):
@@ -2206,6 +2230,13 @@ class MediaTab(QWidget):
         self.collection_heading.setText(self.tr("Your collection") if video else self.tr("Music"))
         self.collection_selection.setVisible(collection and chosen)
         rows_home = bool(self.home_row_widgets) and self._home_active() and not active_video
+        self.series_panel.setVisible(
+            video
+            and not active_video
+            and bool(self.detail_row.get("series"))
+            and bool(self.detail_row.get("episodes"))
+            and bool(self.rows)
+        )
         self.home_rows_panel.setVisible(rows_home)
         self.results.setVisible(not focus and bool(self.rows) and not rows_home)
         self.shelf_heading.setVisible(not focus and bool(self.rows) and not rows_home)
@@ -2258,7 +2289,8 @@ class MediaTab(QWidget):
     def _home_active(self) -> bool:
         return (
             self.kind.currentData() == "video"
-            and self.view.currentData() == "all"
+            and self.view.currentData() in {"all", "films", "series"}
+            and not self.grid_mode
             and self.media_layout == "cinematic"
             and not self.search.text().strip()
             and not any(combo.currentData() for combo in self.filters.values())
@@ -2319,23 +2351,32 @@ class MediaTab(QWidget):
     def _see_all(self, filters: dict[str, str]) -> None:
         """Open the full grid for a row, with that row's filters."""
         self.row_choice = ""
+        self.grid_mode = True
         genre = self.filters.get("genre")
         if genre is not None and filters.get("genre"):
             with QSignalBlocker(genre):
                 if genre.findData(filters["genre"]) < 0:
                     genre.addItem(filters["genre"], filters["genre"])
                 genre.setCurrentIndex(genre.findData(filters["genre"]))
-        self.view.setCurrentIndex(max(0, self.view.findData(filters.get("view", "all"))))
+        index = max(0, self.view.findData(filters.get("view", "all")))
+        if index == self.view.currentIndex():
+            self.refresh()
+        self.view.setCurrentIndex(index)
 
     def _browse(self, view: str) -> None:
-        """The Home tab returns to the rows, so it clears the filters a row applied."""
-        if view == "all":
-            for combo in self.filters.values():
-                with QSignalBlocker(combo):
-                    combo.setCurrentIndex(0)
-            if self.view.currentData() == "all":
-                self.refresh()
+        """A browse tab returns to its rows, so it clears the filters a row's See all set."""
+        self.grid_mode = False
+        for combo in self.filters.values():
+            with QSignalBlocker(combo):
+                combo.setCurrentIndex(0)
+        if self.view.currentData() == view:
+            self.refresh()
         self.view.setCurrentIndex(self.view.findData(view))
+
+    def _play_episode(self, identifier: str) -> None:
+        """Play from this episode on, in series order."""
+        ids = [episode["id"] for episode in self.series_panel.episodes]
+        self.command("play", media_ids=ids, index=ids.index(identifier) if identifier in ids else 0)
 
     def show_detail(self) -> None:
         ids = self.selected_ids()
@@ -2376,6 +2417,17 @@ class MediaTab(QWidget):
                 info.append(self.tr("Embedded subtitle tracks are discovered during playback."))
             self.description.setText("\n".join(info))
             self.watched.setChecked(bool(row.get("watched")))
+            if row["kind"] == "video" and row.get("series") and row.get("episodes"):
+                self.series_panel.title.setText(row["series"])
+                picture = self.picture_cache.get(row["id"])
+                still = (
+                    self._cover_icon(picture, QSize(216, 122))
+                    if picture is not None
+                    else self._placeholder_icon("video")
+                )
+                self.series_panel.set_episodes(
+                    row["episodes"], self._time_label, row.get("season"), lambda _episode: still
+                )
             for combo, name in ((self.releases, "releases"), (self.episodes, "episodes")):
                 combo.clear()
                 combo.addItem(
@@ -3271,6 +3323,7 @@ class MediaTab(QWidget):
         stop = self.scan_stop
         self.refresh_button.setEnabled(False)
         self.cancel_scan.setEnabled(True)
+        self._scan_icon(True)
         self._set_notice(self.tr("Scanning Library Folders…"))
         run_in_background(
             lambda: self.library.scan(self.session_client, stop, self.scan_progress.emit),
@@ -3294,7 +3347,23 @@ class MediaTab(QWidget):
         self.scan_stop = None
         self.refresh_button.setEnabled(True)
         self.cancel_scan.setEnabled(False)
+        self._scan_icon(False)
         self.refresh()
+
+    def _toggle_scan(self) -> None:
+        """The toolbar ⟳ refreshes the library; while it runs, the same button cancels."""
+        if self.scan_stop is not None:
+            self._cancel_media_scan()
+        else:
+            self.start_scan()
+        self._scan_icon(self.scan_stop is not None)
+
+    def _scan_icon(self, running: bool) -> None:
+        with QSignalBlocker(self.refresh_icon):
+            self.refresh_icon.setChecked(running)
+        label = self.tr("Cancel library refresh") if running else self.tr("Refresh library")
+        self.refresh_icon.setToolTip(label)
+        self.refresh_icon.setAccessibleName(label)
 
     def _scan_failed(self, error: Exception) -> None:
         if not isValid(self):

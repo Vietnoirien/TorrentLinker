@@ -7236,6 +7236,18 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
 <context>
     <name>MediaTab</name>
     <message>
+        <source>Cancel library refresh</source>
+        <translation>Annuler l’actualisation</translation>
+    </message>
+    <message>
+        <source>Refresh library</source>
+        <translation>Actualiser la médiathèque</translation>
+    </message>
+    <message>
+        <source>{0} episodes</source>
+        <translation>{0} épisodes</translation>
+    </message>
+    <message>
         <source>Highly rated</source>
         <translation>Les mieux notés</translation>
     </message>
@@ -7846,6 +7858,41 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>{0} titles</source>
         <translation>{0} titres</translation>
+    </message>
+</context>
+<context>
+    <name>SeriesEpisodes</name>
+    <message>
+        <source>Scroll left</source>
+        <translation>Défiler à gauche</translation>
+    </message>
+    <message>
+        <source>Scroll right</source>
+        <translation>Défiler à droite</translation>
+    </message>
+    <message>
+        <source>Episode {0}</source>
+        <translation>Épisode {0}</translation>
+    </message>
+    <message>
+        <source>Episodes</source>
+        <translation>Épisodes</translation>
+    </message>
+    <message>
+        <source>Season {0}</source>
+        <translation>Saison {0}</translation>
+    </message>
+    <message>
+        <source>resume at {0}</source>
+        <translation>reprendre à {0}</translation>
+    </message>
+    <message>
+        <source>unavailable</source>
+        <translation>indisponible</translation>
+    </message>
+    <message>
+        <source>watched</source>
+        <translation>vu</translation>
     </message>
 </context>
 </TS>

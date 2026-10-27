@@ -993,7 +993,8 @@ def test_media_grid_scroll_appends_and_filter_resets(qtbot):
     tab.library = Library()
     tab.resize(1100, 850)
     tab.show()
-    # The continuous grid is the Films view (and each home row's See all).
+    # The continuous grid is what a row's See all opens.
+    tab.grid_mode = True
     with QSignalBlocker(tab.view):
         tab.view.setCurrentIndex(tab.view.findData("films"))
     tab.refresh()
@@ -1109,3 +1110,116 @@ def test_hero_shows_the_poster_beside_the_description(qtbot):
     qtbot.waitUntil(lambda: hero.poster.geometry().right() < hero.copy.geometry().left())
     hero.resize(640, 440)  # a narrow window keeps the room for the text
     qtbot.waitUntil(lambda: hero.poster.isHidden())
+
+
+def test_series_card_unfolds_its_seasons_and_episodes(qtbot, tmp_path):
+    import threading
+
+    from PySide6.QtCore import Qt
+
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.gui.media import MediaTab
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "videos"
+    root.mkdir()
+    for name in ["Show.S01E01.mkv", "Show.S01E02.mkv", "Show.S02E01.mkv", "Film.2020.mkv"]:
+        (root / name).write_bytes(b"\0" * 64)
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings()
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    service = app.state.assistant
+    service.agent.media.scan("default", threading.Event(), lambda _p: None)
+    tab = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    tab.resize(1280, 900)
+    tab.show()
+    tab.activate()
+    tab.video_tabs["series"].click()
+    qtbot.waitUntil(lambda: tab.home_rows_panel.isVisible() and bool(tab.home_row_widgets))
+    cards = tab.home_row_widgets[0].cards
+    assert cards.count() == 1 and cards.item(0).text().startswith("Show\n3 episodes")
+    tab.home_row_widgets[0].cards.itemClicked.emit(cards.item(0))
+    qtbot.waitUntil(lambda: tab.series_panel.isVisible())
+    panel = tab.series_panel
+    assert sorted(panel.season_buttons) == [1, 2]
+    assert panel.cards.count() == 2  # a row of episode cards, not a long list
+    assert panel.cards.height() < 220
+    assert panel.cards.item(0).text().startswith("Episode 1")
+    panel.season_buttons[2].click()
+    assert panel.cards.count() == 1
+    played = []
+    tab.command = lambda action, **values: played.append((action, values))
+    panel.cards.itemActivated.emit(panel.cards.item(0))
+    ids = [episode["id"] for episode in panel.episodes]
+    assert played == [("play", {"media_ids": ids, "index": 2})]
+    # Films keep their own rows and never list the series.
+    tab.video_tabs["films"].click()
+    qtbot.waitUntil(
+        lambda: (
+            bool(tab.home_row_widgets)
+            and tab.home_row_widgets[0].cards.item(0).text().startswith("Film")
+        )
+    )
+    shown = tab.home_row_widgets[0].cards
+    assert not {shown.item(i).data(Qt.ItemDataRole.UserRole) for i in range(shown.count())} & set(
+        ids
+    )
+    tab.stop()
+
+
+def test_toolbar_refreshes_the_library_and_first_open_refreshes_once(qtbot, tmp_path):
+    import threading
+
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.gui.media import MediaTab
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "videos"
+    root.mkdir()
+    (root / "Film.2020.mkv").write_bytes(b"\0" * 64)
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings()
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    service = app.state.assistant
+    media = service.agent.media
+    scans = []
+    real_scan = media.scan
+    release = threading.Event()
+
+    def scan(client, stop, progress):
+        scans.append(client)
+        release.wait(5)
+        return real_scan(client, stop, progress)
+
+    media.scan = scan
+    tab = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    tab.refresh_on_first_open = True
+    tab.show()
+    tab.activate()
+    qtbot.waitUntil(lambda: len(scans) == 1)
+    assert tab.refresh_icon.isChecked()  # a refresh is running
+    assert tab.refresh_icon.toolTip() == "Cancel library refresh"
+    release.set()
+    qtbot.waitUntil(lambda: not tab.refresh_icon.isChecked())
+    qtbot.waitUntil(lambda: tab.results.count() == 1 or bool(tab.home_row_widgets))
+    tab.activate()  # opening Media again does not refresh again
+    assert len(scans) == 1
+    tab.refresh_icon.click()
+    qtbot.waitUntil(lambda: len(scans) == 2)
+    qtbot.waitUntil(lambda: not tab.refresh_icon.isChecked())
+    assert tab.refresh_icon.toolTip() == "Refresh library"
+    tab.stop()

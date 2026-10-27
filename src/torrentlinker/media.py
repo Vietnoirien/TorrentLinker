@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -22,6 +23,33 @@ from torrentlinker import media_tracks
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
 AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wma", ".wv"}
 PARTIAL = (".part", ".partial", ".!qb", ".!ut", ".crdownload", ".tmp")
+
+
+# A file is an episode only when its name says so (S01E02, S3.EP 27, 1x02, Saison 2) or its
+# folder is a season. "Episode 4", "1080" or a year alone made films look like series.
+EPISODE_MARK = re.compile(
+    r"(?i)(?<![a-z0-9])"
+    r"(?:S\d{1,2}[ ._-]?EP?[ ._-]?\d{1,3}|\d{1,2}x\d{2}|(?:season|saison)[ ._-]?\d{1,2})"
+    r"(?![a-z0-9])"
+)
+SEASON_FOLDER = re.compile(
+    r"(?i)(?<![a-z0-9])(?:S\d{1,2}|(?:season|saison)[ ._-]?\d{1,2})(?![a-z0-9])"
+)
+
+
+def is_episode(path: Path) -> bool:
+    return bool(EPISODE_MARK.search(path.name) or SEASON_FOLDER.search(path.parent.name))
+
+
+def film_title(guessed, path: Path) -> str:
+    """`Star Wars Episode 4 – A New Hope` for a film the guesser split into parts."""
+    title = str(guessed.get("title") or "")
+    number, subtitle = guessed.get("episode"), guessed.get("alternative_title")
+    if title and isinstance(number, int):
+        title += f" Episode {number}"
+    if title and subtitle:
+        title += f" – {subtitle}"
+    return title or (f"Episode {number}" if isinstance(number, int) else path.stem)
 
 
 def genres_of(value) -> list[str]:
@@ -278,6 +306,13 @@ class MediaLibrary:
                             == sidecar_signature
                         ):
                             body = json.loads(previous["body"])
+                            if (
+                                body.get("kind") == "video"
+                                and bool(body.get("series")) != is_episode(path)
+                                and body.get("series_source") != "tags"
+                            ):
+                                # Classified as a series by the older filename rule: read again.
+                                body = self.inspect(path, extension, client_id, base)
                         else:
                             body = self.inspect(path, extension, client_id, base)
                         known = enrichment.get(str(path))
@@ -406,7 +441,9 @@ class MediaLibrary:
             guessed = guessit(row.title)
             if self._plain(guessed.get("title") or "") != wanted:
                 continue
-            if series != (guessed.get("type") == "episode"):
+            # A complete-series pack ("…INTEGRALE…") has no episode marker, so series accept
+            # any release of that title; films still refuse episodes.
+            if not series and guessed.get("type") == "episode":
                 continue
             if year and str(guessed.get("year") or "") not in {"", year}:
                 continue
@@ -620,19 +657,37 @@ class MediaLibrary:
             except Exception:
                 pass
         else:
-            guessed = guessit(path.name)
-            season, episode = guessed.get("season"), guessed.get("episode")
-            body.update(
-                title=str(guessed.get("title") or path.stem),
-                year=str(guessed.get("year") or ""),
-                season=season if isinstance(season, int) else None,
-                episode=episode if isinstance(episode, int) else None,
-            )
-            if season is not None or episode is not None:
+            if is_episode(path):
+                guessed = guessit(path.name, {"type": "episode"})
+                season, episode = guessed.get("season"), guessed.get("episode")
+                body.update(
+                    title=str(guessed.get("title") or path.stem),
+                    year=str(guessed.get("year") or ""),
+                    season=season if isinstance(season, int) and season < 100 else None,
+                    episode=episode if isinstance(episode, int) else None,
+                )
                 body["series"] = body["title"]
+                body["episode_title"] = str(guessed.get("episode_title") or "")
+            else:
+                guessed = guessit(path.name, {"type": "movie"})
+                body.update(title=film_title(guessed, path), year=str(guessed.get("year") or ""))
             from torrentlinker.media_info import read_media
 
             facts = read_media(path)
+            tags = dict(facts.tags) if facts else {}
+            if not body["series"] and tags.get("show") and tags.get("episode", "").isdigit():
+                # Proper TV tags make an episode even when the file name does not say so.
+                season = tags.get("season", "")
+                body.update(
+                    series=tags["show"][:500],
+                    title=tags["show"][:500],
+                    season=int(season) if season.isdigit() and int(season) < 100 else None,
+                    episode=int(tags["episode"]),
+                )
+            if body["series"] and tags.get("episode_title") and not body.get("episode_title"):
+                body["episode_title"] = tags["episode_title"][:500]
+            if tags.get("synopsis") and not body["description"]:
+                body["description"] = tags["synopsis"]  # c411 details may still replace it
             if facts:
                 body.update(
                     duration=facts.duration,
@@ -663,7 +718,11 @@ class MediaLibrary:
                     for unique in metadata.findall("uniqueid"):
                         provider = unique.get("type", "")
                         if provider in {"tmdb", "imdb"} and unique.text:
-                            episode_key = f":{season}:{episode}" if season is not None else ""
+                            episode_key = (
+                                f":{body['season']}:{body['episode']}"
+                                if body["season"] is not None
+                                else ""
+                            )
                             body["content_id"] = identity(
                                 provider + ":" + unique.text + episode_key
                             )
@@ -822,6 +881,8 @@ class MediaLibrary:
         ]
         if view == "rated":
             rows.sort(key=rating_of, reverse=True)
+        if view == "series":
+            rows = self._series_cards(rows)
         releases_by_content = {}
         for row in rows:
             releases_by_content.setdefault(row["content_id"], []).append(row["id"])
@@ -864,7 +925,14 @@ class MediaLibrary:
                     if candidate["available"]:
                         checked = candidate
                         break
-            page.append({**row, **checked})
+            entry = {**row, **checked}
+            if row.get("series_card"):
+                # A series card keeps its series name, counts and artwork over the episode's.
+                for key in ("title", "series_card", "episode_count", "seasons", "content_id"):
+                    entry[key] = row[key]
+                for key in ("description", "artwork_url"):
+                    entry[key] = row.get(key) or checked.get(key) or ""
+            page.append(entry)
         return {
             "rows": page,
             "total": total,
@@ -875,9 +943,36 @@ class MediaLibrary:
             "next_offset": offset + limit if offset + limit < total else None,
         }
 
-    def home_rows(self, client_id, *, kind="video", limit=20, genres=8):
-        """The video home as rows: what to continue, what is new, the main genres, series,
-        the best rated and what is not watched yet. Each row says how to see all of it."""
+    @staticmethod
+    def _series_cards(rows):
+        """One card per series instead of every episode: the first episode stands for the
+        series, with how many episodes and seasons it has."""
+        cards: dict[str, dict] = {}
+        for row in sorted(rows, key=lambda r: (r["season"] or 0, r["episode"] or 0)):
+            card = cards.get(row["series"])
+            if card is None:
+                card = cards[row["series"]] = {
+                    **row,
+                    "title": row["series"],
+                    "series_card": True,
+                    "episode_count": 0,
+                    "seasons": [],
+                    "content_id": "series:" + identity(row["series"].casefold()),
+                }
+            card["episode_count"] += 1
+            if row["season"] is not None and row["season"] not in card["seasons"]:
+                card["seasons"].append(row["season"])
+            if not card.get("artwork_url") and row.get("artwork_url"):
+                card["artwork_url"] = row["artwork_url"]
+            if not card.get("description") and row.get("description"):
+                card["description"] = row["description"]
+        order = {row["series"]: index for index, row in enumerate(rows)}
+        return sorted(cards.values(), key=lambda card: order[card["series"]])
+
+    def home_rows(self, client_id, *, kind="video", limit=20, genres=8, scope="home"):
+        """Video browsing as rows. The home: what to continue, what is new, the main genres,
+        series, the best rated and what is not watched yet. The Films and Series views: what
+        is new and the main genres of that kind. Each row says how to see all of it."""
         rows = []
 
         def add(key, title, **filters):
@@ -893,9 +988,13 @@ class MediaLibrary:
                     }
                 )
 
-        add("continue", "", view="continue")
-        add("recent", "", view="recent")
-        films = self.listing(client_id, kind=kind, view="films", limit=200)
+        base = scope if scope in {"films", "series"} else "films"
+        if scope == "home":
+            add("continue", "", view="continue")
+            add("recent", "", view="recent")
+        else:
+            add("recent", "", view=base)
+        films = self.listing(client_id, kind=kind, view=base, limit=200)
         counts: dict[str, int] = {}
         while True:
             for row in films["rows"]:
@@ -904,15 +1003,17 @@ class MediaLibrary:
             if films["next_offset"] is None:
                 break
             films = self.listing(
-                client_id, kind=kind, view="films", limit=200, offset=films["next_offset"]
+                client_id, kind=kind, view=base, limit=200, offset=films["next_offset"]
             )
         top = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        least = 2 if base == "series" else 3  # libraries hold far fewer series than films
         for genre, count in top[:genres]:
-            if count >= 3:
-                add("genre", genre, view="films", genre=genre)
-        add("series", "", view="series")
-        add("rated", "", view="rated")
-        add("unwatched", "", view="unwatched")
+            if count >= least:
+                add("genre", genre, view=base, genre=genre)
+        if scope == "home":
+            add("series", "", view="series")
+            add("rated", "", view="rated")
+            add("unwatched", "", view="unwatched")
         return {"rows": rows}
 
     def detail(self, client_id, identifier, *, episodes_offset=0, releases_offset=0, limit=200):

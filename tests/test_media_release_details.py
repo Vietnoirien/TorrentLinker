@@ -195,3 +195,39 @@ def test_home_rows_group_films_by_genre_rating_and_watch_state(tmp_path):
     assert ids[4] not in {r["id"] for r in rows[("unwatched", "")]["rows"]}
     assert [r["id"] for r in rows[("continue", "")]["rows"]] == [ids[4]]
     assert "Horreur" in media.listing("default", kind="video")["filters"]["genre"]
+
+
+def test_series_view_shows_one_card_per_series_and_films_stay_films(tmp_path):
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "videos"
+    (root / "Show Saison 2").mkdir(parents=True)
+    names = [
+        "Show.S01E01.mkv",
+        "Show.S01E02.mkv",
+        "Show Saison 2/Show.201.mkv",
+        "Star.Wars.Episode.4.A.New.Hope.1080p.mkv",
+        "The Revenant 2015 VOSTFR 1080 Bluray.mkv",
+    ]
+    for name in names:
+        (root / name).write_bytes(b"\0" * 64)
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings()
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    media = app.state.assistant.agent.media
+    media.scan("default", threading.Event(), lambda _p: None)
+    series = media.listing("default", kind="video", view="series")["rows"]
+    assert [(s["title"], s["episode_count"], s["seasons"]) for s in series] == [("Show", 3, [1, 2])]
+    films = {f["title"] for f in media.listing("default", kind="video", view="films")["rows"]}
+    assert films == {"Star Wars Episode 4 – A New Hope", "The Revenant"}
+    episodes = media.detail("default", series[0]["id"])["episodes"]
+    assert [(e["season"], e["episode"]) for e in episodes] == [(1, 1), (1, 2), (2, 1)]
+    rows = media.home_rows("default", scope="series")["rows"]
+    assert [r["key"] for r in rows] == ["recent"] and rows[0]["filters"] == {"view": "series"}

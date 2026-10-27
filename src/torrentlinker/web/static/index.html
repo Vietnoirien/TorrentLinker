@@ -34,7 +34,7 @@
     </section>
     <div id="workspace" hidden>
       <aside class="sidebar" id="app-sidebar">
-        <button id="navigation-close" type="button" data-i18n="closeNavigation">Close navigation</button>
+        <button id="navigation-close" class="quiet" type="button" data-i18n="closeNavigation">Close navigation</button>
         <a class="brand" href="#torrents"
           ><span class="brandmark small">TL</span> TorrentLinker</a
         >
@@ -81,8 +81,8 @@
         <section id="media-player-shell" aria-label="Media player" hidden>
           <div class="toolbar media-player-heading"><h2 id="media-now-playing">Now playing</h2><button id="media-chat" data-i18n="mediaChat">Chat about this</button></div>
           <p id="media-preview-state" class="media-preview-state" role="status" hidden></p>
-          <div class="toolbar media-player-actions"><button id="media-refresh-preview" data-i18n="mediaRefreshPreview" hidden>Refresh preview</button><button id="media-stop" data-i18n="mediaStop">Stop</button><button id="media-player-expand" data-i18n="mediaExpandPlayer">Expand player</button><button id="media-fullscreen" data-i18n="mediaFullscreen" aria-pressed="false">Fullscreen</button></div>
-          <div id="media-video-stage" class="media-video-stage" tabindex="0" aria-label="Video playback"><video id="media-video" controls controlslist="nofullscreen" playsinline preload="metadata" hidden></video><div class="media-video-overlay"><button id="media-player-menu-toggle" aria-label="Player options" aria-controls="media-player-menu" aria-expanded="false" title="Player options">⋮</button></div><div id="media-player-menu" class="media-player-menu" role="dialog" aria-label="Player options" hidden><div class="media-player-menu-heading"><strong data-en="Playback options" data-fr="Options de lecture">Playback options</strong><button id="media-player-menu-close" data-en="Close" data-fr="Fermer">Close</button></div><div id="media-player-tracks"><label id="media-player-audio-control" hidden><span data-en="Audio track" data-fr="Piste audio">Audio track</span><select id="media-player-audio-track" aria-label="Audio track"></select></label><label id="media-player-subtitle-control" hidden><span data-en="Subtitle track" data-fr="Piste de sous-titres">Subtitle track</span><select id="media-player-subtitle-track" aria-label="Subtitle track"></select></label></div></div></div><audio id="media-audio" controls preload="metadata" hidden></audio>
+          <div class="toolbar media-player-actions"><button id="media-refresh-preview" class="quiet" data-i18n="mediaRefreshPreview" hidden>Refresh preview</button><button id="media-stop" data-i18n="mediaStop">Stop</button><button id="media-player-expand" data-i18n="mediaExpandPlayer">Expand player</button><button id="media-fullscreen" data-i18n="mediaFullscreen" aria-pressed="false">Fullscreen</button></div>
+          <div id="media-video-stage" class="media-video-stage" tabindex="0" aria-label="Video playback"><video id="media-video" controls controlslist="nofullscreen" playsinline preload="metadata" hidden></video><div class="media-video-overlay"><button id="media-player-menu-toggle" aria-label="Player options" aria-controls="media-player-menu" aria-expanded="false" title="Player options">⋮</button></div><div id="media-player-menu" class="media-player-menu" role="dialog" aria-label="Player options" hidden><div class="media-player-menu-heading"><strong data-en="Playback options" data-fr="Options de lecture">Playback options</strong><button id="media-player-menu-close" class="quiet" data-en="Close" data-fr="Fermer">Close</button></div><div id="media-player-tracks"><label id="media-player-audio-control" hidden><span data-en="Audio track" data-fr="Piste audio">Audio track</span><select id="media-player-audio-track" aria-label="Audio track"></select></label><label id="media-player-subtitle-control" hidden><span data-en="Subtitle track" data-fr="Piste de sous-titres">Subtitle track</span><select id="media-player-subtitle-track" aria-label="Subtitle track"></select></label></div></div></div><audio id="media-audio" controls preload="metadata" hidden></audio>
           <p id="media-playing-description" class="media-playing-description" hidden></p>
           <p id="media-codec-error" role="alert" hidden><span id="media-codec-message"></span> <a id="media-external" data-i18n="mediaExternal" target="_blank" rel="noopener" download>Open / download for an external player</a></p>
           <p id="media-track-support" class="media-track-support" hidden><span data-en="Embedded audio and subtitle selection depends on the browser's built-in player. If sound or a track is missing, use an external player." data-fr="La sélection des pistes audio et des sous-titres intégrés dépend du lecteur du navigateur. Si le son ou une piste manque, utilisez un lecteur externe.">Embedded audio and subtitle selection depends on the browser's built-in player. If sound or a track is missing, use an external player.</span> <a id="media-track-external" data-en="Open / download the original" data-fr="Ouvrir / télécharger l’original" target="_blank" rel="noopener" download>Open / download the original</a></p>
@@ -95,14 +95,15 @@
             <nav class="media-browse-nav" aria-label="Video browsing"><button data-media-view="recent" data-i18n="mediaHome">Home</button><button data-media-view="films" data-i18n="mediaFilms">Films</button><button data-media-view="series" data-i18n="mediaSeries">Series</button><button data-media-view="continue" data-i18n="mediaContinue">Continue watching</button></nav>
             <nav id="media-music-nav" class="media-music-nav" aria-label="Music browsing" hidden><button data-media-music-view="albums">Albums</button><button data-media-music-view="artists">Artists</button><button data-media-music-view="tracks">Tracks</button></nav>
             <input id="media-search" type="search" aria-label="Search media" placeholder="Search your media" />
-            <details id="media-library-options" class="media-library-options"><summary data-en="Options" data-fr="Options">Options</summary><div class="media-options-panel"><label class="media-layout-control"><span data-i18n="mediaLayoutShort">Layout</span><select id="media-layout-switch" aria-label="Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><div class="toolbar media-filters"><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup" data-i18n="mediaAddFolder">Add Library Folder</button></div></div></details>
-            <button id="media-toolbar-chat" class="icon-button" type="button" aria-pressed="false">✦</button><button id="media-center-mode" class="icon-button" type="button" aria-pressed="false">⤢</button>
+            <details id="media-library-options" class="media-library-options"><summary data-en="Options" data-fr="Options">Options</summary><div class="media-options-panel"><label class="media-layout-control"><span data-i18n="mediaLayoutShort">Layout</span><select id="media-layout-switch" aria-label="Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><div class="toolbar media-filters"><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" class="quiet" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup" data-i18n="mediaAddFolder">Add Library Folder</button></div></div></details>
+            <button id="media-toolbar-refresh" class="icon-button" type="button" aria-pressed="false">⟳</button><button id="media-toolbar-chat" class="icon-button" type="button" aria-pressed="false">✦</button><button id="media-center-mode" class="icon-button" type="button" aria-pressed="false">⤢</button>
           </div>
           <section id="media-feature" class="media-feature" aria-label="Featured title" hidden></section>
           <div class="media-shelves">
             <div class="media-collection-heading"><p class="media-eyebrow" data-i18n="mediaYourLibrary">Your library</p><h2 data-i18n="mediaYourCollection">Your collection</h2></div>
             <p id="media-status" role="status" class="media-inventory-status"></p>
             <section id="media-continue" class="media-continue" aria-label="Continue watching" hidden><h2 data-i18n="mediaContinue">Continue watching</h2><div id="media-continue-items" class="media-continue-row"></div></section>
+            <section id="media-episodes" class="media-episodes" aria-label="Episodes" hidden></section>
             <div id="media-home-rows" class="media-home-rows" hidden></div>
             <div class="media-library-layout"><div class="media-library-content"><div class="media-section-heading"><h2 id="media-shelf-title">Recently added</h2><span id="media-shelf-count"></span></div>
             <div id="media-results" class="media-grid"></div><button id="media-more" data-i18n="mediaMore" hidden>Load more</button>
@@ -352,7 +353,7 @@
         <section id="view-agents" class="view" hidden>
           <div class="toolbar"><label><input type="checkbox" id="agents-enabled" />
             <span data-i18n="enableAgents">Enable agent access</span></label>
-            <button id="agents-refresh" data-i18n="refresh">Refresh</button></div>
+            <button id="agents-refresh" class="quiet" data-i18n="refresh">Refresh</button></div>
           <p data-i18n="agentHelp">New connections only propose changes. Approve them below or explicitly allow selected actions within daily limits. Removal and file deletion always need approval.</p>
           <p><span data-i18n="agentEndpoint">MCP endpoint</span>: <code id="agents-endpoint"></code></p>
           <form id="agent-form" class="card">
@@ -403,7 +404,7 @@
               <option value="">All trackers</option></select
             ><select id="torrent-category" aria-label="Category">
               <option value="">All categories</option></select
-            ><button id="refresh" data-i18n="refresh">Refresh</button>
+            ><button id="refresh" class="quiet" data-i18n="refresh">Refresh</button>
           </div>
           <div class="toolbar">
             <button data-action="resume" data-i18n="start">Start</button
@@ -451,7 +452,7 @@
               <input id="seeding-query" aria-label="Filter torrents or categories" placeholder="Filter torrents or categories…" />
               <button id="seeding-expand" data-i18n="expandAll">Expand all</button>
               <button id="seeding-collapse" data-i18n="collapseAll">Collapse all</button>
-              <button id="seeding-refresh" data-i18n="refresh">Refresh</button>
+              <button id="seeding-refresh" class="quiet" data-i18n="refresh">Refresh</button>
             </div>
             <div class="toolbar">
               <label><span data-i18n="seedingSort">Sort torrents by</span><select id="seeding-sort">
@@ -490,7 +491,7 @@
               <label><span data-i18n="maxTorrentGiB">Maximum torrent size, GiB</span><input id="plan-max-size" type="number" value="0" min="0" step="any" required /></label>
             </div>
             <p class="muted" data-i18n="planZeroHelp">A budget or maximum size of 0 means no additional limit. Available disk space still applies to the plan.</p>
-            <div class="toolbar"><button id="refresh-profile" type="button" data-i18n="refreshProfile">Refresh profile</button><button id="plan" type="submit" class="primary" data-i18n="buildPlan">Build plan</button></div>
+            <div class="toolbar"><button id="refresh-profile" class="quiet" type="button" data-i18n="refreshProfile">Refresh profile</button><button id="plan" type="submit" class="primary" data-i18n="buildPlan">Build plan</button></div>
             <label
               ><input id="plan-cached" type="checkbox" /><span
                 data-i18n="cachedPlan"
@@ -600,7 +601,7 @@
             <h2 data-en="Local draft queue" data-fr="File des brouillons locaux">Local draft queue</h2>
             <p data-en="Review locally before sending to c411. Automated tasks save here."
                data-fr="Relisez ici avant l’envoi à c411. Les tâches automatiques enregistrent leurs brouillons dans cette file.">Review locally before sending to c411. Automated tasks save here.</p>
-            <button id="upload-queue-refresh" data-en="Refresh" data-fr="Actualiser">Refresh</button>
+            <button id="upload-queue-refresh" class="quiet" data-en="Refresh" data-fr="Actualiser">Refresh</button>
             <div id="upload-local-queue" class="table-wrap"></div>
           </div>
           <p id="upload-help" data-i18n="uploadHelp">

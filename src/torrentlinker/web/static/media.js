@@ -1,5 +1,5 @@
 /* The player lives outside navigation views, so browsing never replaces its DOM. */
-const media = {kind: "video", view: "recent", rows: [], homeRows: [], selected: null, session: null,
+const media = {kind: "video", view: "recent", rows: [], homeRows: [], gridMode: false, selected: null, session: null,
   playerClient: "", queue: [], index: 0, shuffle: false, repeat: "off", ack: 0,
   busy: false, preview: null, playbackGeneration: 0, featureId: null, continueRows: [], next: null, chat: false, scan: "", request: 0};
 const mediaTab = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
@@ -67,7 +67,7 @@ async function loadMedia(append = false) {
   const [result, continuing, rows] = await Promise.all([
     api(`media?${mediaQuery(query)}`),
     media.kind === "video" ? api(`media?${mediaQuery({...query, view: "continue", offset: 0, limit: 8})}`) : Promise.resolve({rows: []}),
-    home ? api(`media/home?${mediaQuery({})}`) : Promise.resolve({rows: []}),
+    home ? api(`media/home?${mediaQuery({scope: {films: "films", series: "series"}[media.view] || "home"})}`) : Promise.resolve({rows: []}),
   ]);
   if (version !== media.request) return;
   media.continueRows = continuing.rows;
@@ -98,7 +98,44 @@ function mediaArt(row, className = "") {
   const fallback = element("span", row.title || row.album || say("Artwork unavailable", "Illustration indisponible"), "media-art-title");
   art.append(fallback); return art;
 }
-function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); }
+function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); mediaRenderEpisodes(row).catch(() => {}); }
+// A chosen series unfolds under its description: one tab per season, then its episodes.
+async function mediaRenderEpisodes(row) {
+  const root = $("media-episodes");
+  if (!row || media.kind !== "video" || !row.series) { root.hidden = true; root.replaceChildren(); return; }
+  const detail = await api(`media/items/${encodeURIComponent(row.id)}?${mediaQuery({})}`);
+  if (media.featureId !== row.id) return;
+  const episodes = detail.episodes || [];
+  root.hidden = !episodes.length; root.replaceChildren();
+  if (!episodes.length) return;
+  const header = element("div", undefined, "media-episodes-header"), list = element("div", undefined, "media-row-track media-episode-track");
+  header.append(element("h2", detail.series));
+  const seasons = [...new Set(episodes.map(e => e.season).filter(s => s !== null && s !== undefined))].sort((a, b) => a - b);
+  const show = season => {
+    for (const tab of header.querySelectorAll("button[data-season]")) tab.setAttribute("aria-pressed", String(Number(tab.dataset.season) === season));
+    list.replaceChildren();
+    episodes.forEach((episode, index) => {
+      if (season !== undefined && episode.season !== season) return;
+      const card = button("", () => mediaStart(episodes.map(e => e.id), index), "media-episode-card");
+      const number = episode.episode ?? null;
+      const name = episode.episode_title ? `${number !== null ? `${number}. ` : ""}${episode.episode_title}` : number !== null ? say(`Episode ${number}`, `Épisode ${number}`) : episode.release || episode.title;
+      const facts = [episode.duration ? mediaTime(episode.duration) : "", episode.watched ? say("watched", "vu") : episode.position ? say(`resume at ${mediaTime(episode.position)}`, `reprendre à ${mediaTime(episode.position)}`) : "", episode.available === false ? say("unavailable", "indisponible") : ""].filter(Boolean).join(" · ");
+      const still = mediaArt({...row, title: name}, "media-episode-still");
+      if (episode.duration && episode.position && !episode.watched) {
+        const progress = element("progress"); progress.max = episode.duration; progress.value = episode.position; still.append(progress);
+      }
+      card.append(still, element("strong", name), element("span", facts));
+      card.setAttribute("aria-label", name); card.disabled = episode.available === false;
+      list.append(card);
+    });
+  };
+  for (const season of seasons) {
+    const tab = button(say(`Season ${season}`, `Saison ${season}`), () => show(season), "quiet");
+    tab.dataset.season = season; header.append(tab);
+  }
+  root.append(header, list);
+  show(seasons.includes(detail.season) ? detail.season : seasons[0]);
+}
 function mediaRenderFeature() {
   const root = $("media-feature");
   const candidates = [...media.rows, ...media.continueRows, ...media.homeRows.flatMap(r => r.rows)];
@@ -142,7 +179,7 @@ function mediaRenderContinue() {
 }
 // The video home shows rows (genres, series…); each row's "See all" opens the grid with its filters.
 function mediaHomeActive() {
-  return media.kind === "video" && media.view === "recent" && media.layout === "cinematic" && !$("media-search").value.trim()
+  return media.kind === "video" && ["recent", "films", "series"].includes(media.view) && !media.gridMode && media.layout === "cinematic" && !$("media-search").value.trim()
     && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);
 }
 function mediaRenderHome() {
@@ -170,7 +207,7 @@ function mediaRenderHome() {
       card.dataset.id = item.id;
       card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
       card.ondblclick = () => guard(() => mediaStart([item.id]));
-      card.append(mediaArt(item), element("strong", item.title), element("span", [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
+      card.append(mediaArt(item), element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
       track.append(card);
     }
     section.append(header, track); root.append(section);
@@ -194,8 +231,9 @@ async function mediaSeeAll(filters) {
     if (![...genre.options].some(option => option.value === filters.genre)) mediaOption(genre, filters.genre, filters.genre);
     genre.value = filters.genre;
   }
-  // Home is the recent view here, so "Recently added" opens every video instead.
-  media.view = !filters.view || filters.view === "recent" ? "all" : filters.view; $("media-view").value = media.view;
+  // The grid stays until a browse tab is chosen again.
+  media.gridMode = true;
+  media.view = filters.view || "all"; $("media-view").value = media.view;
   await loadMedia();
   window.scrollTo({top: 0});
 }
@@ -205,7 +243,7 @@ function mediaRender() {
   $("view-media").dataset.empty = String(media.rows.length === 0);
   for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
   for (const item of document.querySelectorAll("[data-media-music-view]")) { item.classList.toggle("active", item.dataset.mediaMusicView === media.view); item.setAttribute("aria-current", item.dataset.mediaMusicView === media.view ? "page" : "false"); }
-  mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome();
+  mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome(); mediaRenderEpisodes(media.selected).catch(() => {});
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries")})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
   const root = $("media-results"); root.replaceChildren();
@@ -219,7 +257,8 @@ function mediaRender() {
   for (const rows of groups.values()) {
     const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
     const title = media.kind === "music" && media.view === "albums" ? row.album || "Unknown album" : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : row.title;
-    const artwork = button("", () => mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`);
+    // A series card unfolds its episodes; any other card opens its details.
+    const artwork = button("", () => row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`);
     if (media.kind === "music" && media.view === "artists") {
       const initials = title.split(/\s+/).slice(0, 2).map(part => [...part][0]).join("");
       const portrait = element("div", undefined, "media-artist-art"); portrait.append(element("span", initials)); artwork.append(portrait); card.classList.add("media-artist-card");
@@ -227,7 +266,7 @@ function mediaRender() {
     const badge = element("span", row.available === false ? row.availability === "unfinished" ? say("Downloading", "Téléchargement") : say("Unavailable", "Indisponible") : say("Available", "Disponible"), "media-poster-badge");
     if (media.kind === "video" || row.available === false) artwork.append(badge);
     card.append(artwork, element("h3", title));
-    card.append(element("p", media.kind === "music" && media.view === "artists" ? say("Artist", "Artiste") : [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
+    card.append(element("p", media.kind === "music" && media.view === "artists" ? say("Artist", "Artiste") : row.series_card ? say(`${row.episode_count} episodes`, `${row.episode_count} épisodes`) : [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
     if (media.kind === "music" && row.track_count) card.append(element("p", say(`${row.track_count} track${row.track_count === 1 ? "" : "s"}`, `${row.track_count} piste${row.track_count === 1 ? "" : "s"}`), "media-card-meta"));
     if (row.identity_source === "filename") card.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-card-source"));
     if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""}`, "media-card-meta"));
@@ -618,7 +657,7 @@ function mediaQueueRender() {
     const row = mediaItems.get(id), item = element("li");
     const select = button(`${index + 1}. ${row?.title || "Unavailable item"}`, async () => { media.index = index; await mediaLoad(id, 0); });
     if (index === media.index) select.setAttribute("aria-current", "true");
-    item.append(select, button(say("Remove", "Retirer"), () => mediaRemoveAt(index))); list.append(item);
+    item.append(select, button(say("Remove", "Retirer"), () => mediaRemoveAt(index), "quiet")); list.append(item);
   });
 }
 async function mediaCommands(commands) {
@@ -689,13 +728,20 @@ async function mediaScan() {
   $("media-library-options").open = false;
   const job = await api("media/scan", {client_id: mediaClient()}); media.scan = job.id;
   $("media-cancel-scan").hidden = false; $("media-refresh").disabled = true;
+  mediaScanIcon();
   mediaStatus("Scanning Library Folders...");
+}
+// The toolbar ⟳ refreshes the library; while a refresh runs, the same button cancels it.
+function mediaScanIcon() {
+  const running = !!media.scan, icon = $("media-toolbar-refresh");
+  const label = running ? say("Cancel library refresh", "Annuler l’actualisation") : say("Refresh library", "Actualiser la médiathèque");
+  icon.setAttribute("aria-pressed", String(running)); icon.title = label; icon.setAttribute("aria-label", label);
 }
 async function mediaPollScan() {
   if (!media.scan) return;
   const job = await api(`jobs/${encodeURIComponent(media.scan)}`);
   mediaStatus(job.progress?.message || (job.progress?.items !== undefined ? `Scanning Library Folders... ${job.progress.items} items found` : job.message || `Scan ${job.status}`));
-  if (!["queued", "running"].includes(job.status)) { media.scan = ""; $("media-cancel-scan").hidden = true; $("media-refresh").disabled = false; await loadMedia(); if (job.error) mediaStatus(job.error); }
+  if (!["queued", "running"].includes(job.status)) { media.scan = ""; mediaScanIcon(); $("media-cancel-scan").hidden = true; $("media-refresh").disabled = false; await loadMedia(); if (job.error) mediaStatus(job.error); }
 }
 const MEDIA_CHAT_MIN = 320, MEDIA_SIDE_MIN = 480;
 function mediaChatWidth(width) {
@@ -799,8 +845,9 @@ $("media-center-mode").onclick = () => guard(async () => {
 $("media-layout-switch").onchange = event => mediaSetLayout(event.target.value);
 $("settings-media-layout").onchange = event => mediaSetLayout(event.target.value);
 for (const item of document.querySelectorAll("[data-media-view]")) item.onclick = () => guard(async () => {
-  // Home returns to the rows, so it clears the filters a row's "See all" applied.
-  if (item.dataset.mediaView === "recent") for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}`).value = "";
+  // A browse tab returns to its rows, so it clears the filters a row's "See all" applied.
+  media.gridMode = false;
+  for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}`).value = "";
   media.view = item.dataset.mediaView; $("media-view").value = media.view; await loadMedia();
 });
 $("media-details").addEventListener("click", event => { if (event.target === $("media-details")) { const box = event.target.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) event.target.close(); } });
@@ -837,6 +884,8 @@ for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}
 let mediaSearchTimer;
 $("media-search").oninput = () => { clearTimeout(mediaSearchTimer); mediaSearchTimer = setTimeout(() => guard(loadMedia), 250); };
 $("media-refresh").onclick = () => guard(mediaScan);
+$("media-toolbar-refresh").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); else await mediaScan(); });
+mediaScanIcon();
 $("media-more").onclick = () => guard(() => loadMedia(true));
 $("media-cancel-scan").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); });
 $("media-chat").onclick = () => guard(mediaToggleChat); $("media-toolbar-chat").onclick = () => guard(mediaToggleChat); $("media-chat-close").onclick = mediaCloseChat;

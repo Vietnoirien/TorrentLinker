@@ -62,6 +62,7 @@ from torrentlinker.downloads import IndexerCategory
 from torrentlinker.ebooks import UNLOCK_COUNT, book_categories, book_roots, seeded_ebooks
 from torrentlinker.gui.batch_runner import BatchRunner
 from torrentlinker.gui.catalogue_runner import CatalogueRunner
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.documentation import DocumentationTab
 from torrentlinker.gui.ebook_reader import ReadingRoom
 from torrentlinker.gui.errors import error_text
@@ -364,6 +365,7 @@ class MainWindow(QMainWindow):
             self.add_library_folder,
         )
         self.media_tab.set_media_layout(settings.media_layout)
+        self.media_tab.refresh_on_first_open = True
         self.media_tab.layout_changed.connect(self._save_media_layout)
         self.media_tab.center_mode_requested.connect(self.set_media_center)
         self.tabs.addTab(self.media_tab, self.tr("Media"))
@@ -414,6 +416,7 @@ class MainWindow(QMainWindow):
         side.addSpacing(24)
         side.addWidget(self.navigation, 1)
         self.reader_button = QPushButton(self.tr("Reading room"))
+        set_role(self.reader_button, "quiet")
         self.reader_button.setCheckable(True)
         self.reader_button.setObjectName("readingRoomButton")
         self.reader_button.hide()
@@ -421,10 +424,12 @@ class MainWindow(QMainWindow):
         side.addWidget(self.reader_button)
         self.documentation_tab: DocumentationTab | None = None
         self.documentation_button = QPushButton(self.tr("Documentation"))
+        set_role(self.documentation_button, "quiet")
         self.documentation_button.setCheckable(True)
         self.documentation_button.clicked.connect(self._open_documentation)
         side.addWidget(self.documentation_button)
         settings_button = QPushButton(self.tr("Settings"))
+        set_role(settings_button, "quiet")
         settings_button.clicked.connect(self.open_settings)
         side.addWidget(settings_button)
         central = QWidget()

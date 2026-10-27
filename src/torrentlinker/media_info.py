@@ -74,6 +74,8 @@ class MediaFacts:
     audio: tuple[AudioTrack, ...]
     subtitles: tuple[SubtitleTrack, ...]
     text: str  # MediaInfo's own text output, as c411's NFO wants it
+    # Embedded tags a tagger or ripper wrote: show, season, episode, episode_title, synopsis.
+    tags: tuple[tuple[str, str], ...] = ()
 
     @property
     def resolution(self) -> str:
@@ -135,7 +137,26 @@ def facts_from(info: MediaInfo, text: str, name: str = "") -> MediaFacts | None:
         audio=tuple(_audio(t) for t in info.audio_tracks),
         subtitles=tuple(_subtitle(t) for t in info.text_tracks),
         text=with_file_name(text, name),
+        tags=_tags(general.to_data() if general else {}),
     )
+
+
+TAG_KEYS = {
+    "show": ("tvshow", "tv_show", "show", "collection", "grouping"),
+    "season": ("season_number", "tvseason", "season"),
+    "episode": ("episode_number", "tvepisode", "track_name_position", "part_position"),
+    "episode_title": ("track_name", "episode_title"),
+    "synopsis": ("synopsis", "longdescription", "description", "summary"),
+}
+
+
+def _tags(general: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    found = []
+    for name, keys in TAG_KEYS.items():
+        value = next((str(general[k]).strip() for k in keys if general.get(k)), "")
+        if value:
+            found.append((name, value[:4000]))
+    return tuple(found)
 
 
 def _kbps(value: Any) -> int:
