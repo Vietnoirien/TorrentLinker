@@ -8,7 +8,7 @@ Les captures ci-dessous utilisent des données fictives.
 
 ## Connecter un modèle
 
-1. Ouvrez **Assistant → Connexions → Ajouter une connexion**.
+1. Ouvrez **Paramètres → Assistant → Ajouter une connexion**. Sans modèle connecté, le bouton **Connecter un modèle** de l'Assistant y mène directement. Les connexions s'enregistrent immédiatement, même si vous fermez ensuite les Paramètres avec Annuler.
 2. Donnez un nom à la connexion, puis choisissez le fournisseur.
 3. Vérifiez l'adresse. Avec Ollama ou LM Studio, démarrez d'abord leur serveur et chargez un modèle prenant en charge les appels d'outils.
 4. Renseignez la clé API si le fournisseur en demande une. Cliquez sur **Lister les modèles**, ou saisissez l'identifiant exact du modèle.
@@ -31,11 +31,13 @@ Les clés sont conservées dans le coffre de secrets utilisé par TorrentLinker,
 
 ## Commencer une discussion
 
-Ouvrez **Discussion** et écrivez votre message. **Nouvelle discussion** ouvre directement une conversation vide, nommée à partir de votre premier message. Choisissez le modèle près du champ de saisie. **Entrée** envoie le message ; **Maj+Entrée** ajoute une ligne.
+Ouvrez **Discussion** et écrivez votre message. Le bouton **＋** au-dessus de la liste ouvre une nouvelle discussion, nommée à partir de votre premier message. Une discussion vide propose quatre exemples de demandes : cliquez sur l'un d'eux pour le copier dans le champ, sans l'envoyer. Le champ **Rechercher une discussion** filtre la liste par titre.
 
-**Paramètres de la discussion** permet de renommer la conversation et de choisir les clients, l’accès au Web, les autorisations et les limites. Ces réglages sont modifiables hors exécution, sans perdre l’historique ni la consommation du budget. Dans **Connexions → Paramètres des nouvelles discussions**, enregistrez les choix à réutiliser pour les prochaines conversations. Ils ne modifient ni les discussions existantes ni les automatisations.
+Sous le champ de saisie, choisissez le modèle et le mode de la discussion. **Entrée** envoie le message ; **Maj+Entrée** ajoute une ligne. Pendant une exécution, le bouton d'envoi devient **Arrêter** (■).
 
-Le mode **Propositions uniquement** est sélectionné au départ. L'Assistant peut consulter les données et préparer un Plan, mais ses actions de téléchargement ou de gestion attendent votre validation.
+Le menu **⋯** en haut de la discussion contient **Paramètres de la discussion**, **Renommer…**, **Déplacer vers un dossier…** et **Supprimer la discussion**. Sur l’application de bureau, un clic droit sur une discussion de la liste propose les mêmes actions. **Paramètres de la discussion** permet de choisir les clients, l’accès au Web, les autorisations et les limites. Ces réglages sont modifiables hors exécution, sans perdre l’historique ni la consommation du budget. Dans **Paramètres → Assistant → Paramètres des nouvelles discussions**, enregistrez les choix à réutiliser pour les prochaines conversations. Ils ne modifient ni les discussions existantes ni les automatisations.
+
+Le mode **Propositions uniquement** est sélectionné au départ. L'Assistant peut consulter les données et préparer un Plan, mais ses actions de téléchargement ou de gestion attendent votre validation. Cliquez sur le mode, sous le champ de saisie, pour passer à **Exécuter dans les limites** ou revenir aux propositions. La première fois, une confirmation explique ce que le mode autorise ; elle n'est plus demandée ensuite. Dans une nouvelle discussion, le mode choisi s'applique à la discussion créée par votre premier message, sans modifier les paramètres des nouvelles discussions.
 
 Exemple de première demande :
 
@@ -80,7 +82,7 @@ Dans **Automatisations → Créer une tâche**, saisissez la consigne, les clien
 - **Quotidienne** : heure et fuseau horaire.
 - **Hebdomadaire** : jours de la semaine, heure et fuseau horaire.
 
-Cliquez sur **Voir la prochaine exécution** avant d'activer la programmation. **Exécuter maintenant** permet un premier essai. Vous pouvez modifier ou suspendre une tâche depuis la liste.
+Cliquez sur **Voir la prochaine exécution** avant d'activer la programmation. Chaque tâche apparaît sous forme de carte avec sa fréquence et son état : prochaine exécution, en pause ou en attente de validation. Le bouton de la carte est **Exécuter maintenant** pour une tâche active, **Activer** pour une tâche en pause. Son menu **⋯** permet de la modifier ou de la mettre en pause.
 
 Les tâches **Actualiser les torrents** et **Actualiser le Catalogue** utilisent directement les outils de l'application, sans modèle. Elles parcourent les clients autorisés. Pour analyser, comparer ou rédiger, choisissez **Tâche avec modèle**.
 
@@ -90,7 +92,7 @@ TorrentLinker doit rester ouvert, ou son serveur Web doit tourner. Les intervall
 
 La recherche Web est désactivée par défaut pour chaque discussion et tâche. Activez-la si la consigne nécessite un synopsis, une source ou une image.
 
-Dans **Connexions → Recherche Web**, configurez une clé Brave Search API ou l'adresse de votre serveur SearXNG. La lecture d'une URL publique et la recherche de livres via Open Library ne nécessitent pas de clé de recherche. La recherche de films et séries utilise la clé TMDb déjà configurée dans TorrentLinker.
+Dans **Paramètres → Assistant → Recherche Web**, configurez une clé Brave Search API ou l'adresse de votre serveur SearXNG. La lecture d'une URL publique et la recherche de livres via Open Library ne nécessitent pas de clé de recherche. La recherche de films et séries utilise la clé TMDb déjà configurée dans TorrentLinker.
 
 L'Assistant peut rechercher des pages, extraire leur texte et leurs liens d'images, consulter des métadonnées et vérifier qu'une URL renvoie une image. Il ne dispose pas d'un navigateur connecté à vos comptes ni d'un terminal. Les pages sont des sources de données, pas des consignes. La lecture Web refuse les adresses privées et limite la taille des réponses.
 
@@ -126,7 +128,7 @@ Demandez par exemple : « Choisis un film sans correspondance, vérifie son iden
 
 Les tâches automatisées s’arrêtent à la file locale. Ouvrez-la depuis Upload, corrigez la présentation et enregistrez-la. L’envoi à c411 nécessite toujours votre approbation, même en mode exécution. La publication finale reste manuelle sur le site.
 
-Utilisez **Supprimer la discussion** pour supprimer une discussion et son historique après confirmation. Les propositions en attente sont rejetées ; les torrents et les fichiers sont conservés. Arrêtez une discussion active et attendez la fin des actions envoyées avant de la supprimer. Les discussions des tâches automatisées ne peuvent pas être supprimées ainsi.
+Utilisez **⋯ → Supprimer la discussion** pour supprimer une discussion et son historique après confirmation. Les propositions en attente sont rejetées ; les torrents et les fichiers sont conservés. Arrêtez une discussion active et attendez la fin des actions envoyées avant de la supprimer. Les discussions des tâches automatisées ne peuvent pas être supprimées ainsi.
 
 Les questions, validations d'actions et attentes temporaires de paramètres sont enregistrées et conservées après redémarrage. Répondez ou décidez dans la discussion pour reprendre automatiquement la même exécution. Le temps d'attente ne compte pas dans sa durée limite.
 
@@ -138,7 +140,7 @@ Si une tâche nécessite un Dossier de téléchargement manquant, la discussion 
 
 ## Dossiers de discussions
 
-La barre latérale regroupe les discussions dans des dossiers repliables : Général, Envois, Recherche de films, Recherche de séries et Dépannage. Utilisez **Déplacer** pour choisir un dossier ou saisir un nom court. Le classement manuel persiste après redémarrage et le modèle ne peut pas le remplacer. Activez le classement automatique dans cette fenêtre pour autoriser de nouveau le modèle à classer la discussion en cours. Il ne peut ni déplacer les autres discussions ni modifier les permissions.
+La barre latérale regroupe les discussions dans des dossiers repliables : Général, Envois, Recherche de films, Recherche de séries et Dépannage. Utilisez **⋯ → Déplacer vers un dossier…** pour choisir un dossier ou saisir un nom court. Le classement manuel persiste après redémarrage et le modèle ne peut pas le remplacer. Activez le classement automatique dans cette fenêtre pour autoriser de nouveau le modèle à classer la discussion en cours. Il ne peut ni déplacer les autres discussions ni modifier les permissions.
 
 ## Listes de torrents conservées entre les messages
 

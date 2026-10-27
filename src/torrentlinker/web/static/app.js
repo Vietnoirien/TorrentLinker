@@ -591,6 +591,7 @@ async function navigate(view) {
   if (view === "setup") {
     await refreshSetup();
     step("client");
+    await loadAssistantConnections();
   }
   if (view === "agents") await loadAgents();
   if (view === "assistant") await loadAssistant();

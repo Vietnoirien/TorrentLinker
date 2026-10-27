@@ -579,7 +579,7 @@ dialog .description img {
 .guide-content h1, .guide-content h2, .guide-content h3 { line-height: 1.35; margin-bottom: 1.2rem; }
 
 /* Assistant: conversation space stays primary, advanced controls stay folded. */
-.assistant-layout { display: grid; grid-template-columns: minmax(150px, 230px) minmax(0, 1fr); gap: 1.2rem; }
+.assistant-layout { display: grid; grid-template-columns: minmax(170px, 270px) minmax(0, 1fr); gap: 1.2rem; }
 .assistant-conversations { display: flex; flex-direction: column; gap: .5rem; max-height: 65vh; overflow: auto; }
 .assistant-conversations button { text-align: left; overflow-wrap: anywhere; }
 .assistant-folder { margin: .8rem 0; }
@@ -591,7 +591,8 @@ dialog .description img {
 .assistant-transcript { flex: 1; min-height: 180px; max-height: 60vh; overflow: auto; padding-right: .5rem; }
 .assistant-run { max-width: 900px; margin: 0 auto 1.8rem; }
 .assistant-message { padding: .25rem 0; margin: 1.25rem 0 .75rem; max-width: 96%; }
-.assistant-message.user { padding: .8rem 1.15rem; max-width: 82%; margin: 1.5rem 0 1.5rem auto; border-radius: 18px; background: color-mix(in srgb, #4686d5 18%, var(--panel)); }
+/* Your messages use the accent family, like the composer's Send button. */
+.assistant-message.user { padding: .8rem 1.15rem; max-width: 82%; margin: 1.5rem 0 1.5rem auto; border-radius: 18px; background: color-mix(in srgb, var(--accent) 22%, var(--panel)); }
 .assistant-activity { margin: .4rem 0 1.2rem; color: color-mix(in srgb, var(--ink) 78%, var(--bg)); font-size: .86rem; }
 .assistant-activity summary { cursor: pointer; padding: .3rem 0; overflow-wrap: anywhere; }
 .assistant-tool-list { max-height: 280px; overflow: auto; padding: .25rem .4rem .25rem 1rem; }
@@ -604,11 +605,11 @@ dialog .description img {
 .assistant-run > .error { padding: 1rem; border: 1px solid currentColor; border-radius: 12px; }
 .assistant-message p { white-space: pre-wrap; line-height: 1.65; overflow-wrap: anywhere; margin-bottom: 0; }
 .assistant-run pre, .assistant-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
-.assistant-composer { display: flex; flex-direction: column; gap: .6rem; margin-top: 1rem; padding: .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
+.assistant-composer { display: flex; flex-direction: column; gap: .35rem; margin-top: 1rem; }
 .assistant-welcome { text-align: center; padding: 4rem 1rem; }
 .assistant-chat-controls { flex-wrap: wrap; width: 100%; }
 .assistant-chat-controls select { max-width: 340px; min-width: 120px; flex: 1; }
-.assistant-composer textarea { width: 100%; min-width: 0; resize: vertical; border: none; border-radius: 12px; padding: .6rem; min-height: 80px; background: transparent; }
+.assistant-composer textarea { flex: 1; width: 100%; min-width: 0; resize: none; border: none; border-radius: 8px; padding: .4rem; min-height: 52px; background: transparent; }
 .assistant-dialog { width: min(720px, 92vw); max-height: 88vh; overflow: auto; }
 .assistant-dialog label { margin: .7rem 0; }
 .assistant-dialog fieldset { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -703,7 +704,8 @@ dialog .description img {
   .chat-view header h1 { font-size: 22px; margin-bottom: 0; }
   .chat-view .eyebrow { display: none; }
   .assistant-layout { grid-template-columns: minmax(0, 1fr); }
-  .assistant-conversations { position: absolute; inset: 0 auto 0 0; width: min(260px, 90%); z-index: 3; padding: 12px; background: var(--panel); border: 1px solid var(--line); }
+  /* The overlay starts under the discussion header, so its ☰ toggle stays reachable. */
+  .assistant-conversations { position: absolute; inset: 48px auto 0 0; width: min(260px, 90%); z-index: 3; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
   .assistant-chat-controls { gap: 6px; }
   .assistant-composer { padding: 8px; }
 }
@@ -741,3 +743,38 @@ dialog .description img {
 .feed-form label {display:flex;flex-direction:column;gap:.25rem}
 .feed-form p {grid-column:1 / -1}
 @media(max-width:700px){.feed-layout{grid-template-columns:1fr}#feeds-sidebar{flex-direction:row;flex-wrap:wrap}}
+
+/* Assistant page, matching the desktop (gui/chat_composer.py, assistant.py). */
+.assistant-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.assistant-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); padding: 8px 14px; }
+.assistant-tabs button.active { color: var(--ink); background: transparent; border-bottom-color: var(--accent); font-weight: 650; }
+.assistant-message.user .assistant-markdown > :first-child { margin-top: 0; }
+.assistant-tabs button:hover { background: var(--tint); }
+.assistant-side-top { display: flex; gap: 4px; align-items: center; }
+.assistant-header { display: flex; align-items: center; gap: 6px; padding-bottom: 6px; }
+.assistant-title { flex: 1; margin: 0; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-menu-wrap { position: relative; }
+.assistant-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 220px; display: flex; flex-direction: column; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.assistant-menu button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; }
+.assistant-menu button:hover, .assistant-menu button:focus-visible { background: var(--tint); }
+.assistant-field { display: flex; align-items: flex-end; gap: 6px; padding: 8px 8px 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.assistant-field:focus-within { border-color: var(--accent); }
+/* The field's border shows focus; the textarea inside needs no second outline. */
+.assistant-field textarea:focus-visible { outline: none; }
+.assistant-send { width: 34px; height: 34px; padding: 0; border-radius: 50%; background: var(--accent); border-color: var(--accent); color: white; flex-shrink: 0; }
+.assistant-send:hover { background: var(--accent); filter: brightness(1.12); }
+.assistant-chips { display: flex; gap: 4px; align-items: center; padding: 0 4px; }
+.assistant-chip { width: auto; max-width: 300px; padding: 4px 8px; font-size: .86rem; color: var(--muted); background: transparent; border-color: transparent; }
+select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
+.assistant-examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 640px; margin: 1.5rem auto 0; }
+.assistant-example { text-align: left; white-space: normal; font-weight: 450; min-height: 64px; border-radius: 10px; }
+.assistant-compact .assistant-examples { grid-template-columns: minmax(0, 1fr); }
+.assistant-connect { align-self: center; margin-top: 1rem; }
+.assistant-tasks-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.assistant-tasks-top p { flex: 1; margin: 0; }
+.assistant-task { display: flex; align-items: center; gap: 8px; padding: 12px 10px 12px 16px; margin-bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.assistant-task-text { flex: 1; min-width: 0; }
+.assistant-task-text h3 { margin: 0 0 3px; font-size: 1rem; }
+.assistant-task-text p { margin: 0; }
+.assistant-run-heading { color: var(--muted); font-size: .8rem; font-weight: 650; padding-top: 14px; border-top: 1px solid var(--line); max-width: 900px; margin: 0 auto; }
+@media (max-width: 700px) { .assistant-examples { grid-template-columns: minmax(0, 1fr); } .assistant-tasks-top { flex-direction: column; } }

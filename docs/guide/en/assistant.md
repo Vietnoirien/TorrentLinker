@@ -8,7 +8,7 @@ The screenshots below use fictional data.
 
 ## Connect a model
 
-1. Open **Assistant → Connections → Add connection**.
+1. Open **Settings → Assistant → Add connection**. With no model connected, the Assistant's **Connect a model** button goes straight there. Connections are saved at once, even if you then close Settings with Cancel.
 2. Name the connection and choose a provider.
 3. Check the address. For Ollama or LM Studio, first start its server and load a model that supports tool calls.
 4. Enter the API key if required. Use **List models**, or type the exact model ID.
@@ -31,11 +31,13 @@ Keys stay in TorrentLinker's secret store, using the system keyring on desktop. 
 
 ## Start a discussion
 
-Open **Discussion** and type your message. **New discussion** opens an empty chat immediately; its title comes from your first message. Choose the model beside the message box. Press **Enter** to send, or **Shift+Enter** for a new line.
+Open **Discussion** and type your message. The **＋** button above the list opens a new discussion; its title comes from your first message. An empty discussion shows four example requests: click one to copy it into the message box without sending it. **Search discussions** filters the list by title.
 
-**Discussion settings** lets you rename the chat and choose its clients, Web access, permissions and limits. Settings can change while the chat is idle, keeping its history and budget usage. Under **Connections → Chat defaults**, save the choices for future chats. These defaults do not change existing discussions or automations.
+Under the message box, choose the model and the discussion mode. Press **Enter** to send, or **Shift+Enter** for a new line. While a run is active, the send button becomes **Stop** (■).
 
-**Proposals only** is the initial default. The Assistant can read data and prepare a Plan, while download and management actions wait for your approval.
+The **⋯** menu at the top of the discussion holds **Discussion settings**, **Rename…**, **Move to folder…** and **Delete discussion**. In the desktop app, right-clicking a discussion in the list offers the same actions. **Discussion settings** lets you choose its clients, Web access, permissions and limits. Settings can change while the chat is idle, keeping its history and budget usage. Under **Settings → Assistant → Chat defaults**, save the choices for future chats. These defaults do not change existing discussions or automations.
+
+**Proposals only** is the initial default. The Assistant can read data and prepare a Plan, while download and management actions wait for your approval. Click the mode under the message box to switch to **Execute within limits** and back. The first time, a confirmation explains what the mode allows; it is not asked again. In a new discussion, the mode you pick applies to the discussion your first message creates, without changing the chat defaults.
 
 Try:
 
@@ -77,7 +79,7 @@ Open **Automations → Create task** and enter the instruction, allowed clients 
 - **Daily**: time and timezone.
 - **Weekly**: weekdays, time and timezone.
 
-Use **Preview next run** before enabling the schedule. **Run now** provides a first trial. You can edit or pause the task from the list.
+Use **Preview next run** before enabling the schedule. Each task shows as a card with its frequency and state: next run, paused, or waiting for review. The card's button is **Run now** for an active task and **Enable** for a paused one. Its **⋯** menu edits or pauses it.
 
 **Refresh torrents** and **Refresh Catalogue** call application tools directly without a model. They process the allowed clients. Choose **Model task** for analysis, comparisons or writing.
 
@@ -87,7 +89,7 @@ Keep the desktop app open or the Web server running. Missed intervals are combin
 
 Public Web research is off by default for every discussion and task. Enable it when instructions need a synopsis, source or image.
 
-Under **Connections → Web research**, configure a Brave Search API key or your SearXNG server URL. Reading a public URL and looking up books through Open Library need no search key. Movie and TV lookups use the TMDb key already configured in TorrentLinker.
+Under **Settings → Assistant → Web research**, configure a Brave Search API key or your SearXNG server URL. Reading a public URL and looking up books through Open Library need no search key. Movie and TV lookups use the TMDb key already configured in TorrentLinker.
 
 The Assistant can search pages, extract text and image URLs, look up metadata and check that a URL returns an image. It has no signed-in browser or terminal. Pages are source material, never instructions. Web reading rejects private addresses and limits response sizes.
 
@@ -119,13 +121,13 @@ TorrentLinker imposes no daily model-call limit. Usage across discussions and ta
 
 External assistants can still use [MCP access](agents.md). The built-in Assistant needs neither external MCP access enabled nor a copied token.
 
-Use **Delete discussion** to remove a chat and its history after confirmation. Pending proposals are rejected; torrents and files are kept. Stop an active discussion and wait for submitted actions to finish before deleting it. Automated-task discussions cannot be deleted this way.
+Use **⋯ → Delete discussion** to remove a chat and its history after confirmation. Pending proposals are rejected; torrents and files are kept. Stop an active discussion and wait for submitted actions to finish before deleting it. Automated-task discussions cannot be deleted this way.
 
 If a task needs a missing Download Folder, the discussion asks where the selected client and category should download. Choose a suggested folder or enter your own absolute path. Review and approve the exact client, category and path before Settings change. The original task then continues under its existing permissions. A rejected change leaves Settings intact. An unavailable folder or unverified remote Path Mapping opens a correction question. On desktop, a local Torrent Client can use an existing empty folder; a remote client needs a matching seeded sample.
 
 ## Conversation folders
 
-The sidebar groups discussions in collapsible folders: General, Uploads, Film research, Series research and Troubleshooting. Use **Move** to choose a folder or enter a short custom name. Manual placement persists across restarts and the model cannot override it. Enable automatic classification in the move dialog to let the model organize the current conversation again. It cannot move other conversations or change permissions.
+The sidebar groups discussions in collapsible folders: General, Uploads, Film research, Series research and Troubleshooting. Use **⋯ → Move to folder…** to choose a folder or enter a short custom name. Manual placement persists across restarts and the model cannot override it. Enable automatic classification in the move dialog to let the model organize the current conversation again. It cannot move other conversations or change permissions.
 
 ## Saved torrent lists across turns
 

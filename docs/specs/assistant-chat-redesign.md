@@ -1,6 +1,6 @@
 # Assistant chat redesign: one chat look on the page and in the panel
 
-Status: proposal, 2026-10-27. Planning only; nothing below is implemented.
+Status: implemented in 1.0.0-beta.17 (desktop and web), 2026-10-27. Not done: deleting an automation, which the service does not support yet.
 
 The Media Center side chat (`AssistantTab(compact=True)`) already has a header with ☰ / ⋯ / ✕, one composer whose button is Send while idle and Stop while running, and the button roles from `gui/controls.py`. The full Assistant page, on desktop and web, still has the old layout. This plan brings the page onto the same basis. It is workstream D of the [Media Center redesign](media-center-redesign.md) for the Assistant.
 

@@ -555,7 +555,8 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
 
             player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
-            expect(page.locator("#assistant-prompt")).to_be_visible()
+            # No model is connected here: the panel offers to connect one instead of a composer.
+            expect(page.locator("#media-chat-content .assistant-connect")).to_be_visible()
             assert video.get_attribute("src") == source
             screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv("TL_WEB_SCREENSHOTS")
             if screenshots:

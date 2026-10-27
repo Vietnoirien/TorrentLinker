@@ -87,9 +87,62 @@ function aDialog(title) {
 }
 function aActions(dialog, form, save) {
   const footer = element("div", undefined, "toolbar");
-  footer.append(button(at("Save", "Enregistrer"), async () => { if (await save() === false) return; dialog.close(); await loadAssistant(); }, "primary"), button(at("Cancel", "Annuler"), () => dialog.close(), "quiet"));
+  footer.append(button(at("Save", "Enregistrer"), async () => { if (await save() === false) return; dialog.close(); await loadAssistant(); if (state.view === "setup") await loadAssistantConnections(); }, "primary"), button(at("Cancel", "Annuler"), () => dialog.close(), "quiet"));
   form.onsubmit = e => e.preventDefault(); form.append(footer);
 }
+// A small popup menu under an icon button: [[label, action], …]. Clicking elsewhere closes it.
+function aMenu(anchor, items) {
+  const open = anchor.parentElement.querySelector(".assistant-menu");
+  document.querySelectorAll(".assistant-menu").forEach(m => m.remove());
+  if (open) return;
+  const menu = element("div", undefined, "assistant-menu"); menu.setAttribute("role", "menu");
+  for (const [label, action, disabled] of items) {
+    const item = button(label, async () => { menu.remove(); await action(); });
+    item.setAttribute("role", "menuitem"); item.disabled = !!disabled; menu.append(item);
+  }
+  anchor.after(menu); menu.querySelector("button:not(:disabled)")?.focus();
+  setTimeout(() => document.addEventListener("click", function close(e) {
+    if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener("click", close); }
+  }), 0);
+}
+function aIconButton(glyph, label, callback, cls = "") {
+  const b = button(glyph, callback, `icon-button ${cls}`.trim());
+  b.title = label; b.setAttribute("aria-label", label); return b;
+}
+const aExamples = () => [
+  at("Find ten films I don't seed yet and show them before any action.", "Cherche dix films que je ne partage pas encore et montre-les-moi avant toute action."),
+  at("Prepare a Plan within 200 GB with the best Zen gain.", "Prépare un Plan de 200 Go maximum avec le meilleur gain de Zen."),
+  at("Review my local upload drafts and list what is missing.", "Relis mes brouillons d'upload locaux et liste ce qui manque."),
+  at("Play a film with French subtitles.", "Lance un film avec des sous-titres français."),
+];
+let assistantPendingMode = "";
+async function aOpenConnections() {
+  await navigate("setup");
+  $("assistant-connections")?.scrollIntoView({block: "start"});
+}
+async function aRename(current) {
+  const name = prompt(at("Rename discussion", "Renommer la discussion"), current.name)?.trim();
+  if (!name) return;
+  const {id, ...body} = current;
+  await api(`assistant/conversations/${id}`, {...body, name: name.slice(0, 120)}, "PUT");
+  await loadAssistant();
+}
+async function aDelete(current) {
+  if (!confirm(at("Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.", "Supprimer cette discussion et son historique ? Les propositions en attente seront refusées. Les torrents et fichiers ne seront pas supprimés."))) return;
+  await api(`assistant/conversations/${current.id}`, undefined, "DELETE");
+  assistantDrafts.delete(current.id); assistantConversation = ""; assistantRun = "";
+  await loadAssistant();
+}
+// The first switch to Execute within limits asks for confirmation; this browser remembers it.
+function aConfirmExecute() {
+  let confirmed = false;
+  try { confirmed = localStorage.getItem("tl-execute-confirmed") === "1"; } catch { /* storage unavailable */ }
+  if (confirmed) return true;
+  if (!confirm(at("In this mode the assistant runs the actions allowed in this discussion's settings without asking, within its limits on clients, size and downloads per day. Removing torrents and deleting files still need your approval.\n\nSwitch to Execute within limits? You will not be asked again.", "Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des torrents ou supprimer des fichiers demande toujours votre accord.\n\nPasser en mode Exécuter dans les limites ? Cette question ne sera plus posée."))) return false;
+  try { localStorage.setItem("tl-execute-confirmed", "1"); } catch { /* storage unavailable */ }
+  return true;
+}
+const aModeLabel = mode => mode === "execute" ? at("Execute within limits", "Exécuter dans les limites") : at("Proposals only", "Propositions uniquement");
 async function loadAssistant() {
   const version = ++assistantLoadVersion;
   const setup = await api("setup/assistant");
@@ -100,108 +153,137 @@ async function loadAssistant() {
   const compact = !!root.closest("#media-chat-content");
   if (compact) assistantView = "chat";
   root.classList.toggle("assistant-compact", compact);
-  const nav = element("div", undefined, "toolbar");
-  for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["tasks", at("Automations", "Automatisations")], ["history", at("History", "Historique")], ["connections", at("Connections", "Connexions")]]) {
-    nav.append(button(label, async () => { assistantView = id; await loadAssistant(); }, assistantView === id ? "primary" : ""));
+  const nav = element("div", undefined, "assistant-tabs"); nav.setAttribute("role", "tablist");
+  for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["tasks", at("Automations", "Automatisations")], ["history", at("History", "Historique")]]) {
+    const tab = button(label, async () => { assistantView = id; await loadAssistant(); }, assistantView === id ? "active" : "");
+    tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", String(assistantView === id));
+    nav.append(tab);
   }
   if (!compact) root.append(nav);
-  if (assistantView === "connections") return aConnections(root);
   if (assistantView === "tasks") return aTasks(root);
   if (assistantView === "history") {
-    const history = await api("assistant/jobs");
+    const [history, conversations] = await Promise.all([api("assistant/jobs"), api("assistant/conversations")]);
+    const names = new Map(conversations.map(c => [c.id, c.name]));
     root.append(element("p", at("Runs and tool receipts are stored here. Interrupted actions are never replayed automatically.", "Les exécutions et leurs actions sont conservées ici. Une action interrompue n’est jamais rejouée automatiquement."), "muted"));
-    for (const run of history) root.append(aRunCard(run));
+    const list = element("div", undefined, "assistant-history");
+    for (const run of history) {
+      const when = new Date((run.created || 0) * 1000).toLocaleString(state.language === "fr" ? "fr-FR" : undefined, {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"});
+      list.append(element("p", [names.get(run.conversation_id) || at("Automation", "Automatisation"), when, aStatus(run.status)].join(" · "), "assistant-run-heading"), aRunCard(run));
+    }
+    root.append(list);
     return;
   }
   const layout = element("div", undefined, "assistant-layout"), side = element("aside", undefined, "assistant-conversations"), main = element("div", undefined, "assistant-main");
   side.id = "assistant-conversations";
   layout.classList.toggle("conversations-collapsed", !assistantSidebarOpen);
-  const toggle = button(at("Discussions", "Discussions"), () => {
+  const sideTop = element("div", undefined, "assistant-side-top");
+  const search = element("input"); search.type = "search"; search.id = "assistant-search";
+  search.placeholder = at("Search discussions", "Rechercher une discussion"); search.setAttribute("aria-label", search.placeholder);
+  search.value = assistantSearch;
+  search.oninput = () => { assistantSearch = search.value; aFilterConversations(); };
+  sideTop.append(search, aIconButton("＋", at("New discussion", "Nouvelle discussion"), async () => {
+    assistantConversation = ""; assistantRun = ""; assistantPendingMode = ""; assistantDrafts.delete("");
+    await loadAssistant(); $("assistant-prompt")?.focus();
+  }));
+  side.append(sideTop);
+  const conversations = await api("assistant/conversations");
+  if (version !== assistantLoadVersion) return;
+  const folders = element("div"); folders.id = "assistant-folders";
+  aConversationFolders(folders, conversations); side.append(folders); aFilterConversations();
+  layout.append(side, main); root.append(layout);
+  const current = conversations.find(c => c.id === assistantConversation);
+  if (assistantConversation && !current) { assistantConversation = ""; return loadAssistant(); }
+  const defaults = await api("setup/assistant/chat"), config = current || defaults;
+  if (version !== assistantLoadVersion) return;
+  const mode = current ? current.policy.mode : assistantPendingMode || defaults.policy.mode;
+  // Discussion header: the sidebar toggle, the title and the ⋯ menu (the panel has its own).
+  const header = element("div", undefined, "assistant-header");
+  const toggle = aIconButton("☰", at("Discussions", "Discussions"), () => {
     assistantSidebarOpen = !assistantSidebarOpen;
     layout.classList.toggle("conversations-collapsed", !assistantSidebarOpen);
     toggle.setAttribute("aria-expanded", String(assistantSidebarOpen));
   });
-  toggle.setAttribute("aria-controls", side.id);
-  toggle.setAttribute("aria-expanded", String(assistantSidebarOpen));
-  nav.append(toggle);
-  side.append(button(at("New discussion", "Nouvelle discussion"), async () => {
-    assistantConversation = ""; assistantRun = ""; assistantDrafts.delete("");
-    await loadAssistant(); $("assistant-prompt")?.focus();
-  }, "primary"));
-  const conversations = await api("assistant/conversations");
-  if (version !== assistantLoadVersion) return;
-  const folders = element("div"); folders.id = "assistant-folders";
-  aConversationFolders(folders, conversations); side.append(folders);
-  layout.append(side, main); root.append(layout);
-  const current = conversations.find(c => c.id === assistantConversation);
-  if (current) side.append(button(at("Move to folder…", "Déplacer vers un dossier…"), async () => {
-    const latest = await api("assistant/conversations");
-    const selected = latest.find(c => c.id === assistantConversation);
-    if (selected) aMoveConversation(selected, latest);
-  }));
-  if (current) side.append(button(at("Delete discussion", "Supprimer la discussion"), async () => {
-    if (!confirm(at("Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.", "Supprimer cette discussion et son historique ? Les propositions en attente seront refusées. Les torrents et fichiers ne seront pas supprimés."))) return;
-    await api(`assistant/conversations/${current.id}`, undefined, "DELETE");
-    assistantDrafts.delete(current.id); assistantConversation = ""; assistantRun = "";
-    await loadAssistant();
-  }));
-  if (assistantConversation && !current) { assistantConversation = ""; return loadAssistant(); }
-  const defaults = await api("setup/assistant/chat"), config = current || defaults;
-  if (version !== assistantLoadVersion) return;
-  if (compact) $("media-chat-title").textContent = current ? current.name : at("New discussion", "Nouvelle discussion");
-  else main.append(element("p", `${current ? current.name + " · " : ""}${config.policy.mode === "propose" ? at("Proposals only", "Propositions uniquement") : at("Execute within limits", "Exécution dans les limites")}`, "muted"));
+  toggle.setAttribute("aria-controls", side.id); toggle.setAttribute("aria-expanded", String(assistantSidebarOpen));
+  const title = element("h2", current ? current.name : at("New discussion", "Nouvelle discussion"), "assistant-title");
+  const settings = button(at("Discussion settings", "Paramètres de la discussion"), () => aTaskEditor(false, {...config, provider_id: model.value}, !current), "assistant-hidden-action");
+  settings.id = "assistant-chat-settings"; settings.hidden = true;
+  const more = aIconButton("⋯", at("More", "Plus"), () => aMenu(more, [
+    [at("Discussion settings", "Paramètres de la discussion"), () => settings.click(), settings.disabled],
+    [at("Rename…", "Renommer…"), () => aRename(current), !current],
+    [at("Move to folder…", "Déplacer vers un dossier…"), async () => {
+      const latest = await api("assistant/conversations");
+      const selected = latest.find(c => c.id === assistantConversation);
+      if (selected) aMoveConversation(selected, latest);
+    }, !current],
+    [at("Delete discussion", "Supprimer la discussion"), () => aDelete(current), !current],
+  ]));
+  more.id = "assistant-more"; more.setAttribute("aria-haspopup", "menu");
+  const menuWrap = element("div", undefined, "assistant-menu-wrap"); menuWrap.append(more);
+  header.append(toggle, title, settings, menuWrap);
+  if (compact) { $("media-chat-title").textContent = title.textContent; main.append(settings); }
+  else main.append(header);
   const transcript = element("div", undefined, "assistant-transcript"); transcript.id = "assistant-transcript";
-  if (!current) {
-    const welcome = element("div", undefined, "assistant-welcome");
-    welcome.append(element("h2", at("What would you like to do?", "Que souhaitez-vous faire ?")), element("p", at("Prepare an Upload, build a Zen Plan or review your torrents.", "Préparez un Upload, créez un Plan Zen ou examinez vos torrents.")));
-    transcript.append(welcome);
-  }
   main.append(transcript);
-  const form = element("form", undefined, "assistant-composer"), prompt = element("textarea");
-  prompt.id = "assistant-prompt"; prompt.maxLength = 16000; prompt.rows = 3;
+  // The composer: one rounded field with Send/Stop inside, the model and mode chips under it.
+  const form = element("form", undefined, "assistant-composer"), field = element("div", undefined, "assistant-field"), prompt = element("textarea");
+  prompt.id = "assistant-prompt"; prompt.maxLength = 16000; prompt.rows = 2;
   prompt.value = assistantDrafts.get(assistantConversation) || "";
   prompt.oninput = () => assistantDrafts.set(assistantConversation, prompt.value);
   prompt.placeholder = at("Give a task or ask a question…", "Donnez une tâche ou posez une question…"); prompt.setAttribute("aria-label", at("Message", "Message"));
-  const controls = element("div", undefined, "toolbar assistant-chat-controls");
-  const model = element("select"); model.id = "assistant-model";
+  const send = element("button", "➤", "assistant-send"); send.type = "submit"; send.id = "assistant-send";
+  field.append(prompt, send);
+  const chips = element("div", undefined, "assistant-chips");
+  const model = element("select", undefined, "assistant-chip"); model.id = "assistant-model";
   model.setAttribute("aria-label", at("Model connection", "Connexion au modèle"));
   for (const p of assistantSnapshot.providers) { const o = element("option", `${p.name} · ${p.model}`); o.value = p.id; model.append(o); }
   if ([...model.options].some(o => o.value === config.provider_id)) model.value = config.provider_id;
   model.onchange = () => guard(async () => {
     if (current) {
       const {id, ...body} = current;
-      send.disabled = true; model.disabled = true; settings.disabled = true;
+      model.disabled = true; settings.disabled = true;
       try { await api(`assistant/conversations/${id}`, {...body, provider_id: model.value}, "PUT"); current.provider_id = model.value; }
       catch (e) { model.value = current.provider_id; throw e; }
-      finally { send.disabled = !model.value; model.disabled = false; settings.disabled = false; }
+      finally { model.disabled = false; settings.disabled = false; aSetSend(false); }
     }
   });
-  const settings = button(at("Discussion settings", "Paramètres de la discussion"), () => aTaskEditor(false, {...config, provider_id: model.value}, !current));
-  settings.id = "assistant-chat-settings";
-  const send = element("button", at("Send", "Envoyer"), "primary"); send.type = "submit"; send.id = "assistant-send";
-  send.disabled = !model.value; settings.disabled = !model.value;
-  const stop = button(at("Stop", "Arrêter"), async () => { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); });
-  stop.id = "assistant-stop";
-  if (compact) {
-    // One round icon beside the message: Send while idle, Stop while the assistant works.
-    for (const [control, glyph, label] of [[send, "➤", at("Send", "Envoyer")], [stop, "■", at("Stop", "Arrêter")]]) {
-      control.textContent = glyph; control.title = label; control.setAttribute("aria-label", label); control.classList.add("assistant-icon-action");
-    }
-    settings.hidden = true; stop.hidden = true;
+  const modeChip = button(aModeLabel(mode), async () => {
+    const next = (current ? current.policy.mode : assistantPendingMode || defaults.policy.mode) === "execute" ? "propose" : "execute";
+    if (next === "execute" && !aConfirmExecute()) return;
+    if (current) {
+      const {id, ...body} = current;
+      await api(`assistant/conversations/${id}`, {...body, policy: {...body.policy, mode: next}}, "PUT");
+      current.policy.mode = next;
+    } else assistantPendingMode = next;
+    modeChip.textContent = aModeLabel(next);
+  }, "quiet assistant-chip");
+  modeChip.id = "assistant-mode"; modeChip.title = at("Switch the discussion mode", "Changer le mode de la discussion");
+  chips.append(model, modeChip);
+  form.append(field, chips);
+  if (!current) {
+    const welcome = element("div", undefined, "assistant-welcome");
+    welcome.append(element("h2", at("What would you like to do?", "Que souhaitez-vous faire ?")), element("p", at("Find films, prepare an Upload or build your next Zen Plan.", "Trouvez des films, préparez un Upload ou votre prochain Plan Zen.")));
+    const examples = element("div", undefined, "assistant-examples");
+    for (const example of aExamples()) examples.append(button(example, () => { prompt.value = example; assistantDrafts.set(assistantConversation, example); prompt.focus(); }, "assistant-example"));
+    welcome.append(examples); transcript.append(welcome);
   }
-  controls.append(model, settings, send, stop);
-  form.append(prompt, controls);
-  if (!assistantSnapshot.providers.length) main.append(button(at("Connect a model", "Connecter un modèle"), async () => { assistantView = "connections"; await loadAssistant(); }));
+  if (!assistantSnapshot.providers.length) {
+    form.hidden = true;
+    main.append(button(at("Connect a model", "Connecter un modèle"), aOpenConnections, "primary assistant-connect"));
+  }
+  aSetSend(false);
   prompt.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!send.disabled) form.requestSubmit(); } };
   form.onsubmit = e => { e.preventDefault(); guard(async () => {
+    if (send.dataset.running === "true") { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); return; }
     if (!prompt.value.trim() || send.disabled) return;
     send.disabled = true;
     const origin = assistantConversation, message = prompt.value;
     let identifier = origin;
     try {
       if (!identifier) {
-        const chat = await api("assistant/conversations", {...defaults, provider_id: model.value, name: "Discussion"});
-        identifier = chat.id;
+        const body = {...defaults, provider_id: model.value, name: "Discussion"};
+        if (assistantPendingMode) body.policy = {...body.policy, mode: assistantPendingMode};
+        const chat = await api("assistant/conversations", body);
+        identifier = chat.id; assistantPendingMode = "";
         assistantDrafts.set(identifier, message); assistantDrafts.delete("");
       }
       if (typeof media !== "undefined" && media.chat) await mediaHeartbeat();
@@ -216,9 +298,33 @@ async function loadAssistant() {
         assistantConversation = identifier; await loadAssistant();
       }
       throw e;
-    } finally { send.disabled = !model.value; }
+    } finally { if (send.isConnected) aSetSend(false); }
   }); };
   main.append(form); await aRefreshChat();
+}
+let assistantSearch = "";
+function aFilterConversations() {
+  const needle = assistantSearch.trim().toLocaleLowerCase();
+  for (const group of document.querySelectorAll("#assistant-folders > .assistant-folder")) {
+    let visible = 0;
+    for (const item of group.querySelectorAll(":scope > button")) {
+      const match = item.textContent.toLocaleLowerCase().includes(needle);
+      item.hidden = !match; visible += match;
+    }
+    group.hidden = !visible;
+    if (needle && visible) group.open = true;
+  }
+}
+// One button sends while idle and stops the assistant while it works.
+function aSetSend(running) {
+  const send = $("assistant-send"), model = $("assistant-model");
+  if (!send) return;
+  const label = running ? at("Stop", "Arrêter") : at("Send", "Envoyer");
+  send.textContent = running ? "■" : "➤"; send.title = label; send.setAttribute("aria-label", label);
+  send.dataset.running = String(running);
+  send.disabled = !running && !model?.value;
+  if (model) model.disabled = running;
+  if ($("assistant-chat-settings")) $("assistant-chat-settings").disabled = running;
 }
 async function aRefreshChat() {
   if (!assistantVisible() || assistantView !== "chat" || !assistantConversation || !$("assistant-transcript") || assistantRefreshBusy) return;
@@ -227,7 +333,7 @@ async function aRefreshChat() {
   try {
     const [rows, conversations] = await Promise.all([api(`assistant/jobs?conversation_id=${encodeURIComponent(identifier)}`), api("assistant/conversations")]);
     if (assistantConversation !== identifier || $("assistant-transcript") !== transcript) return;
-    if ($("assistant-folders")) aConversationFolders($("assistant-folders"), conversations);
+    if ($("assistant-folders")) { aConversationFolders($("assistant-folders"), conversations); aFilterConversations(); }
     const key = JSON.stringify(rows); if (key === assistantRenderKey) return;
     assistantRenderKey = key;
     const position = transcript.scrollTop, bottom = position >= transcript.scrollHeight - transcript.clientHeight - 20;
@@ -235,10 +341,7 @@ async function aRefreshChat() {
     transcript.scrollTop = bottom ? transcript.scrollHeight : position;
     const active = rows.find(r => ["queued", "running", "awaiting_approval", "awaiting_user", "waiting_settings"].includes(r.status));
     assistantRun = active?.id || rows[0]?.id || "";
-    $("assistant-send").disabled = !!active || !$("assistant-model").value;
-    $("assistant-model").disabled = !!active;
-    $("assistant-chat-settings").disabled = !!active;
-    if (assistantRoot().classList.contains("assistant-compact")) { $("assistant-send").hidden = !!active; $("assistant-stop").hidden = !active; }
+    aSetSend(!!active);
   } finally { assistantRefreshBusy = false; }
 }
 function aMarkdown(message) {
@@ -409,10 +512,19 @@ async function aReview(id, completed = aRefreshChat) {
   } else form.append(element("pre", JSON.stringify(review, null, 2)));
   form.append(button(at("Approve this action", "Approuver cette action"), async () => { await api(`agents/proposals/${id}/approve`, {}); dialog.close(); await completed(); }, "primary"), button(at("Reject", "Refuser"), async () => { await api(`agents/proposals/${id}/reject`, {}); dialog.close(); await completed(); }), button(at("Close", "Fermer"), () => dialog.close(), "quiet"));
 }
+// Model connections live in Settings → Assistant; they are saved as soon as each dialog is.
+async function loadAssistantConnections() {
+  const root = $("assistant-connections-body");
+  if (!root) return;
+  assistantSnapshot = await api("setup/assistant");
+  root.replaceChildren();
+  await aConnections(root);
+}
 async function aConnections(root) {
   root.append(element("p", at("Credentials stay in TorrentLinker. Hosted providers receive your messages and tool results. Local connections never fall back to a hosted provider.", "Les clés restent dans TorrentLinker. Les fournisseurs distants reçoivent vos messages et les résultats des outils. Aucune bascule automatique du local vers une API distante."), "muted"));
-  root.append(button(at("Add connection", "Ajouter une connexion"), () => aProvider(), "primary"));
-  root.append(button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aTaskEditor(false, await api("setup/assistant/chat"), true)));
+  const actions = element("div", undefined, "toolbar");
+  actions.append(button(at("Add connection", "Ajouter une connexion"), () => aProvider(), "primary"), button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aTaskEditor(false, await api("setup/assistant/chat"), true), "quiet"));
+  root.append(actions);
   for (const p of assistantSnapshot.providers) {
     const card = element("div", undefined, "card"); card.append(element("h3", p.name), element("p", `${p.kind} · ${p.model} · ${p.url}`));
     const assessment = element("div");
@@ -480,15 +592,45 @@ function aProvider(existing = null) {
     }
   });
 }
+function aScheduleText(t) {
+  if (t.frequency === "interval") return at(`Every ${t.interval_minutes} min`, `Toutes les ${t.interval_minutes} min`);
+  if (t.frequency === "weekly") {
+    const names = [at("Mon", "lun."), at("Tue", "mar."), at("Wed", "mer."), at("Thu", "jeu."), at("Fri", "ven."), at("Sat", "sam."), at("Sun", "dim.")];
+    const days = [...(t.weekdays || [])].sort().map(d => names[d]).join(", ");
+    return at(`Weekly, ${days} at ${t.at}`, `Chaque semaine, ${days} à ${t.at}`);
+  }
+  return at(`Daily at ${t.at}`, `Chaque jour à ${t.at}`);
+}
+function aTaskState(t) {
+  if (!t.enabled) return at("Paused", "En pause");
+  if (t.blocked) return at("Waiting for its actions or your review", "En attente de ses actions ou de votre validation");
+  const when = new Date(t.next_at * 1000).toLocaleString(state.language === "fr" ? "fr-FR" : undefined, {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"});
+  return at(`Next run ${when}`, `Prochaine exécution ${when}`);
+}
 async function aTasks(root) {
-  root.append(element("p", at("Tasks run while TorrentLinker is running. On desktop, keep the app open; on Docker, closing this browser is fine. Missed intervals are combined into one run. Failed/interrupted runs wait for review and Run now.", "Les tâches s’exécutent lorsque TorrentLinker fonctionne. Sur PC, gardez l’application ouverte ; sur Docker, vous pouvez fermer le navigateur. Les échéances manquées sont regroupées en une seule exécution. Après un échec ou une interruption, vérifiez l’historique puis cliquez sur Exécuter."), "muted"));
-  root.append(button(at("Create task", "Créer une tâche"), () => aTaskEditor(true), "primary"));
-  for (const t of await api("assistant/schedules")) {
-    const card = element("div", undefined, "card"); card.append(element("h3", t.name), element("p", t.instruction), element("p", `${t.enabled ? new Date(t.next_at * 1000).toLocaleString() : at("Paused", "En pause")} · ${t.timezone} · ${t.blocked ? at("Awaiting completion/review", "En attente de fin ou de validation") : t.policy.mode}`));
-    if (t.last_error) card.append(element("p", t.last_error, "error"));
-    card.append(button(at("Edit", "Modifier"), () => aTaskEditor(true, t)), button(t.enabled ? at("Pause", "Suspendre") : at("Enable", "Activer"), async () => {
-      const {id, next_at, last_error, blocked, ...body} = t; await api(`assistant/schedules/${id}`, {...body, enabled: !t.enabled}, "PUT"); await loadAssistant();
-    }), button(at("Run now", "Exécuter maintenant"), async () => { await api(`assistant/schedules/${t.id}/run`, {}); assistantView = "history"; await loadAssistant(); })); root.append(card);
+  const top = element("div", undefined, "assistant-tasks-top");
+  top.append(element("p", at("Tasks run while TorrentLinker is running. On desktop, keep the app open; on Docker, closing this browser is fine. Missed intervals are combined into one run. Failed/interrupted runs wait for review and Run now.", "Les tâches s’exécutent lorsque TorrentLinker fonctionne. Sur PC, gardez l’application ouverte ; sur Docker, vous pouvez fermer le navigateur. Les échéances manquées sont regroupées en une exécution. Les exécutions échouées ou interrompues attendent votre vérification et Exécuter maintenant."), "muted"), button(at("Create task", "Créer une tâche"), () => aTaskEditor(true), "primary"));
+  root.append(top);
+  const tasks = await api("assistant/schedules");
+  if (!tasks.length) root.append(element("p", at("No automations yet. Create one to run a task on a schedule.", "Aucune automatisation. Créez-en une pour exécuter une tâche à heure fixe."), "muted"));
+  const toggle = async t => {
+    const {id, next_at, last_error, blocked, ...body} = t; await api(`assistant/schedules/${id}`, {...body, enabled: !t.enabled}, "PUT"); await loadAssistant();
+  };
+  for (const t of tasks) {
+    const card = element("article", undefined, "assistant-task"), text = element("div", undefined, "assistant-task-text");
+    text.append(element("h3", t.name), element("p", `${aScheduleText(t)} · ${aTaskState(t)}`, "muted"));
+    if (t.last_error) text.append(element("p", t.last_error, "error"));
+    const main = t.enabled
+      ? button(at("Run now", "Exécuter maintenant"), async () => { await api(`assistant/schedules/${t.id}/run`, {}); assistantView = "history"; await loadAssistant(); })
+      : button(at("Enable", "Activer"), () => toggle(t));
+    main.disabled = t.enabled && t.blocked;
+    const more = aIconButton("⋯", at("More", "Plus"), () => aMenu(more, [
+      [at("Edit", "Modifier"), () => aTaskEditor(true, t)],
+      [t.enabled ? at("Pause", "Mettre en pause") : at("Enable", "Activer"), () => toggle(t)],
+    ]));
+    more.setAttribute("aria-haspopup", "menu");
+    const wrap = element("div", undefined, "assistant-menu-wrap"); wrap.append(more);
+    card.append(text, main, wrap); root.append(card);
   }
 }
 function aTaskEditor(scheduled, existing = null, defaults = false) {
