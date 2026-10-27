@@ -1,12 +1,13 @@
 """Compact, readable tool activity with opt-in command and result details."""
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -15,6 +16,42 @@ from shiboken6 import isValid
 
 from torrentlinker.agent.presentation import tool_description, tool_error
 from torrentlinker.gui.request_details import JsonCode
+
+
+class ElidedToolButton(QToolButton):
+    """A one-line summary that shortens with "…" instead of widening the transcript."""
+
+    def __init__(self):
+        super().__init__()
+        self.full_text = ""
+        # Tool buttons are fixed-width by default, which makes layouts use the full text width.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+    def setText(self, text):
+        self.full_text = text
+        self._elide()
+
+    def text(self):
+        return self.full_text
+
+    def _elide(self):
+        width = max(0, self.width() - 8)
+        metrics = self.fontMetrics()
+        shown = metrics.elidedText(self.full_text, Qt.TextElideMode.ElideRight, width)
+        super().setText(shown if self.width() > 40 else self.full_text)
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        hint.setWidth(self.fontMetrics().horizontalAdvance(self.full_text) + 12)
+        return hint
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        return QSize(60, hint.height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
 
 
 class ToolActivity(QWidget):
@@ -47,7 +84,7 @@ class ToolActivity(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
-        self.toggle = QToolButton()
+        self.toggle = ElidedToolButton()
         self.toggle.setObjectName("toolActivitySummary")
         self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle.setCheckable(True)
@@ -102,7 +139,7 @@ class ToolActivity(QWidget):
             content = QVBoxLayout(entry)
             content.setContentsMargins(0, 0, 0, 0)
             content.setSpacing(4)
-            toggle = QToolButton()
+            toggle = ElidedToolButton()
             toggle.setObjectName("toolEventSummary")
             toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             toggle.setCheckable(True)

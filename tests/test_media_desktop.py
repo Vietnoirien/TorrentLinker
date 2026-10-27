@@ -16,6 +16,7 @@ def test_media_workspace_opens_without_starting_connected_services(qtbot, tmp_pa
 
 
 def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp_path, monkeypatch):
+
     import math
     import struct
     import threading
@@ -145,12 +146,53 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     qtbot.waitUntil(lambda: tab.results.count() == 0)
     assert tab.player.source() == source
     assert tab.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+    from torrentlinker.gui.media import CHAT_MIN_WIDTH, MEDIA_MIN_WIDTH
+
+    tab.resize(1280, 720)
     qtbot.mouseClick(tab.chat, Qt.LeftButton)
     assert tab.assistant.conversation_id == tab.conversation_id
     assert isinstance(tab.conversation_id, str)
     first_conversation = tab.conversation_id
+    # The side panel is one discussion: no folders, tabs or full-width buttons.
+    assert tab.chat.isChecked() and tab.assistant.isVisible()
+    assert tab.assistant.folder_column.isHidden()
+    assert tab.assistant.pages.tabBar().isHidden()
+    assert tab.assistant.send.isHidden() and tab.assistant.send_toggle.isVisible()
+    # Both sides fit a 1280-wide window with room to drag the divider.
+    media_side = tab.splitter.widget(0).minimumSizeHint().width()
+    chat_side = tab.assistant.minimumSizeHint().width()
+    assert media_side <= MEDIA_MIN_WIDTH and chat_side <= CHAT_MIN_WIDTH, (media_side, chat_side)
+    total = sum(tab.splitter.sizes())
+    tab.splitter.moveSplitter(total - 450, 1)
+    qtbot.waitUntil(lambda: abs(tab.splitter.sizes()[1] - 450) <= 8)
+    width = tab.splitter.sizes()[1]
+    # ✦ closes what it opened; the width is remembered for the next opening.
     qtbot.mouseClick(tab.chat, Qt.LeftButton)
+    assert tab.assistant.isHidden() and not tab.chat.isChecked()
+    qtbot.mouseClick(tab.chat, Qt.LeftButton)
+    assert tab.assistant.isVisible()
+    assert tab.splitter.sizes()[1] == width
     assert tab.conversation_id == first_conversation
+    # The ☰ menu starts a new media discussion and switches back, both bound to this player.
+    tab.assistant.conversationRequested.emit("")
+    assert tab.conversation_id != first_conversation
+    assert tab.assistant.conversation_id == tab.conversation_id
+    tab.assistant.conversationRequested.emit(first_conversation)
+    assert tab.conversation_id == first_conversation
+    assert tab.assistant.isVisible()
+    tab.assistant.closeRequested.emit()
+    assert tab.assistant.isHidden() and not tab.chat.isChecked()
+    assert int(tab.credentials.value("chat_width")) == width
+    # A restarted app opens the chat at the remembered width.
+    restarted = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(restarted)
+    restarted.resize(1280, 720)
+    restarted.show()
+    restarted.activate()
+    qtbot.mouseClick(restarted.chat, Qt.LeftButton)
+    assert restarted.splitter.sizes()[1] == width
+    restarted.close_chat()
+    restarted.stop()
     assert tab.player.source() == source
     assert tab.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
     tab.command("pause")

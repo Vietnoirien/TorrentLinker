@@ -111,7 +111,7 @@ function mediaRenderFeature() {
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
   const actions = element("div", undefined, "media-feature-actions");
   const play = button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false;
-  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"), button(say("Assistant", "Assistant"), async () => { media.selected = row; await mediaOpenChat(); }, "media-secondary"));
+  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"), Object.assign(button(say("Assistant", "Assistant"), async () => { media.selected = row; await mediaToggleChat(); }, "media-secondary"), {id: "media-feature-chat"}));
   copy.append(actions);
   if (row.available === false) copy.append(element("p", row.reason || say("Unavailable", "Indisponible"), "media-availability-note"));
   root.append(copy);
@@ -630,14 +630,87 @@ async function mediaPollScan() {
   mediaStatus(job.progress?.message || (job.progress?.items !== undefined ? `Scanning Library Folders... ${job.progress.items} items found` : job.message || `Scan ${job.status}`));
   if (!["queued", "running"].includes(job.status)) { media.scan = ""; $("media-cancel-scan").hidden = true; $("media-refresh").disabled = false; await loadMedia(); if (job.error) mediaStatus(job.error); }
 }
-async function mediaOpenChat() {
+const MEDIA_CHAT_MIN = 320, MEDIA_SIDE_MIN = 480;
+function mediaChatWidth(width) {
+  // The chat keeps its remembered width, leaving the media side its minimum.
+  const navigation = document.querySelector("main")?.getBoundingClientRect().left || 0;
+  const clamped = Math.round(Math.max(MEDIA_CHAT_MIN, Math.min(width, window.innerWidth - navigation - MEDIA_SIDE_MIN)));
+  document.body.style.setProperty("--media-chat-width", `${clamped}px`);
+  return clamped;
+}
+function mediaRestoreChatWidth() {
+  let saved = 0;
+  try { saved = Number(localStorage.getItem("tl-media-chat-width")) || 0; } catch {}
+  mediaChatWidth(saved || window.innerWidth * 0.38);
+}
+function mediaRememberChatWidth(width) { try { localStorage.setItem("tl-media-chat-width", String(width)); } catch {} }
+function mediaChatButtons() {
+  for (const [id, label] of [["media-chat-history", say("Discussions", "Discussions")], ["media-chat-more", say("More", "Plus")], ["media-chat-close", say("Close chat", "Fermer la discussion")]]) {
+    $(id).title = label; $(id).setAttribute("aria-label", label);
+  }
+  $("media-chat-resize").setAttribute("aria-label", say("Resize chat", "Redimensionner la discussion"));
+  for (const id of ["media-chat", "media-feature-chat"]) $(id)?.setAttribute("aria-pressed", String(media.chat));
+}
+async function mediaOpenChat(conversationId = "", fresh = false) {
   await mediaSession(); await mediaHeartbeat();
-  const result = await api(`media/sessions/${encodeURIComponent(media.session.id)}/chat`, {token: media.session.token});
+  const result = await api(`media/sessions/${encodeURIComponent(media.session.id)}/chat`, {token: media.session.token, conversation_id: conversationId, new: fresh});
+  if (!media.chat) mediaRestoreChatWidth();
   media.chat = true; $("media-chat-panel").hidden = false; document.body.classList.add("media-chat-open");
+  mediaChatButtons(); mediaCloseChatMenu();
   await mountMediaAssistant($("media-chat-content"), result.conversation_id);
   $("assistant-prompt")?.focus();
 }
-function mediaCloseChat() { media.chat = false; $("media-chat-panel").hidden = true; document.body.classList.remove("media-chat-open"); restoreMediaAssistant(); }
+async function mediaToggleChat() { if (media.chat) mediaCloseChat(); else await mediaOpenChat(); }
+function mediaCloseChat() { media.chat = false; mediaCloseChatMenu(); $("media-chat-panel").hidden = true; document.body.classList.remove("media-chat-open"); mediaChatButtons(); restoreMediaAssistant(); }
+function mediaCloseChatMenu() { $("media-chat-menu").hidden = true; $("media-chat-menu").replaceChildren(); }
+function mediaChatMenu(anchor, items) {
+  const menu = $("media-chat-menu");
+  if (!menu.hidden && menu.dataset.anchor === anchor.id) return mediaCloseChatMenu();
+  menu.replaceChildren(...items.map(([label, action, checked]) => {
+    const item = button(label, () => { mediaCloseChatMenu(); guard(action); });
+    item.setAttribute("role", checked === undefined ? "menuitem" : "menuitemradio");
+    if (checked !== undefined) item.setAttribute("aria-checked", String(checked));
+    return item;
+  }));
+  menu.dataset.anchor = anchor.id; menu.hidden = false;
+  menu.querySelector("button")?.focus();
+}
+async function mediaChatHistory() {
+  const conversations = (await api("assistant/conversations")).filter(c => c.folder === "Media").slice(0, 20);
+  mediaChatMenu($("media-chat-history"), [
+    [say("New discussion", "Nouvelle discussion"), () => mediaOpenChat("", true)],
+    ...conversations.map(c => [c.name, () => mediaOpenChat(c.id), c.id === assistantConversation]),
+  ]);
+}
+function mediaChatMore() {
+  mediaChatMenu($("media-chat-more"), [
+    [say("Discussion settings", "Paramètres de la discussion"), () => $("assistant-chat-settings")?.click()],
+    [say("Delete discussion", "Supprimer la discussion"), async () => {
+      if (!assistantConversation || !confirm(say("Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.", "Supprimer cette discussion et son historique ? Les propositions en attente seront refusées. Les torrents et fichiers ne seront pas supprimés."))) return;
+      await api(`assistant/conversations/${assistantConversation}`, undefined, "DELETE");
+      await mediaOpenChat("", true);
+    }],
+  ]);
+}
+function mediaStartChatResize(event) {
+  event.preventDefault();
+  // Listen on the window: pointer capture is not available for every input device.
+  document.body.classList.add("media-chat-resizing");
+  let width = 0;
+  const move = e => { width = mediaChatWidth(window.innerWidth - e.clientX); };
+  const done = () => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", done); window.removeEventListener("pointercancel", done);
+    document.body.classList.remove("media-chat-resizing");
+    if (width) mediaRememberChatWidth(width);
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", done); window.addEventListener("pointercancel", done);
+}
+function mediaChatResizeKey(event) {
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+  event.preventDefault();
+  const current = $("media-chat-panel").getBoundingClientRect().width;
+  mediaRememberChatWidth(mediaChatWidth(current + (event.key === "ArrowLeft" ? 24 : -24)));
+}
 function mediaCenterAppearance(enabled) {
   document.body.classList.toggle("media-center-mode", enabled);
   $("media-center-mode").textContent = enabled ? say("Return to TorrentLinker", "Revenir à TorrentLinker") : say("Media Center mode", "Mode Media Center");
@@ -694,7 +767,11 @@ $("media-search").oninput = () => { clearTimeout(mediaSearchTimer); mediaSearchT
 $("media-refresh").onclick = () => guard(mediaScan);
 $("media-more").onclick = () => guard(() => loadMedia(true));
 $("media-cancel-scan").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); });
-$("media-chat").onclick = () => guard(mediaOpenChat); $("media-chat-close").onclick = mediaCloseChat;
+$("media-chat").onclick = () => guard(mediaToggleChat); $("media-chat-close").onclick = mediaCloseChat;
+$("media-chat-history").onclick = () => guard(mediaChatHistory); $("media-chat-more").onclick = mediaChatMore;
+$("media-chat-resize").addEventListener("pointerdown", mediaStartChatResize); $("media-chat-resize").addEventListener("keydown", mediaChatResizeKey);
+$("media-chat-panel").addEventListener("keydown", e => { if (e.key === "Escape" && !$("media-chat-menu").hidden) { e.stopPropagation(); mediaCloseChatMenu(); } });
+window.addEventListener("resize", () => { if (media.chat) mediaChatWidth($("media-chat-panel").getBoundingClientRect().width); });
 $("media-previous").onclick = () => guard(() => mediaAdvance(-1)); $("media-next").onclick = () => guard(() => mediaAdvance(1));
 $("media-shuffle").onclick = () => { media.shuffle = !media.shuffle; mediaQueueRender(); guard(mediaHeartbeat); };
 $("media-repeat").onchange = () => { media.repeat = $("media-repeat").value; guard(mediaHeartbeat); };

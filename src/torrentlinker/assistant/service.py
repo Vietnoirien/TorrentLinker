@@ -381,13 +381,16 @@ class Assistant:
             )
         return {"id": identifier, **body.model_dump()}
 
-    def media_chat(self, session_id, token, conversation_id=""):
-        """Owner gesture authorizes this discussion to control only its attached player."""
+    def media_chat(self, session_id, token, conversation_id="", *, new=False):
+        """Owner gesture authorizes this discussion to control only its attached player.
+
+        `new` starts a fresh media discussion instead of reopening the attached one.
+        """
         from torrentlinker.agent.access import Grant
 
         media = self.agent.media
         session = media.session_record(session_id, token)
-        conversation_id = conversation_id or session["conversation"]
+        conversation_id = conversation_id or ("" if new else session["conversation"])
         if conversation_id:
             body, actor = self.conversation(conversation_id)
             if session["client"] not in self.agent.access.grant(actor).clients:

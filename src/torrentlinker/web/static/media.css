@@ -130,16 +130,19 @@ body.media-view { --bg: #101416; --panel: #171d20; --ink: #f2f3ef; --muted: #9da
 .media-view #media-player-shell summary { font-size: 10px; }
 .media-view #media-player-shell.media-player-expanded { width: min(900px,calc(100vw - 260px)); max-height: 88dvh; }
 .media-view #media-player-shell.media-player-expanded #media-video { max-height: 58dvh; }
-#media-chat-panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(540px,45vw); z-index: 8; background: var(--panel,Canvas); border-left: 1px solid var(--line); box-shadow: var(--shadow); padding: 1rem; overflow: auto; }
+#media-chat-panel { position: fixed; right: 0; top: 0; bottom: 0; width: var(--media-chat-width,min(540px,45vw)); z-index: 8; background: var(--panel,Canvas); border-left: 1px solid var(--line); box-shadow: var(--shadow); padding: 0 1rem 1rem; overflow: hidden; display: flex; flex-direction: column; }
 #media-chat-panel[hidden] { display: none; }
-#media-chat-content #view-assistant { height: calc(100dvh - 90px); display: flex; flex-direction: column; }
+#media-chat-content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#media-chat-content #view-assistant { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#media-chat-content .assistant-layout { flex: 1; min-height: 0; display: flex; }
+#media-chat-content .assistant-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 #media-chat-content .assistant-layout { grid-template-columns: minmax(0,1fr); }
 #media-chat-content .assistant-conversations { display: none; }
 #media-chat-content .assistant-transcript { flex: 1; min-height: 150px; }
 #media-chat-content .assistant-main { min-height: 0; }
 #media-chat-content [aria-controls="assistant-conversations"] { display: none; }
-.media-chat-open main { margin-right: min(540px,45vw); }
-.media-view.media-chat-open #media-player-shell { right: calc(min(540px,45vw) + 18px); width: 310px; }
+.media-chat-open main { margin-right: var(--media-chat-width,min(540px,45vw)); }
+.media-view.media-chat-open #media-player-shell { right: calc(var(--media-chat-width,min(540px,45vw)) + 18px); width: 310px; }
 @media (min-width: 1550px) { .media-grid { grid-template-columns: repeat(6,minmax(0,1fr)); } .media-feature { min-height: 560px; } .media-feature-copy { padding-top: 105px; } }
 @media (max-width: 1200px) { .media-topbar { flex-wrap: wrap; gap: 15px; } #media-search { max-width: 32%; } .media-grid { grid-template-columns: repeat(4,minmax(0,1fr)); } #view-media[data-layout="collection"][data-kind="video"] .media-grid { grid-template-columns: repeat(5,minmax(0,1fr)); } .media-feature-copy { padding-top: 45px; } .media-browse-nav { order: 4; width: 100%; } }
 @media (max-width: 850px) { .media-view main > header { padding: 12px 20px; gap: 10px; } .media-topbar { padding: 16px 20px 10px; } .media-feature-copy { padding: 40px 20px 65px; } .media-shelves { padding: 0 20px 90px; } .media-feature { min-height: 420px; } .media-feature h2 { font-size: 52px; } .media-grid, #view-media[data-layout="collection"][data-kind="video"] .media-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; } .media-continue-row { grid-template-columns: repeat(2,minmax(0,1fr)); } #media-chat-panel { width: min(100vw,540px); } .media-chat-open main { margin-right: 0; } .media-view.media-chat-open #media-player-shell { right: 16px; } #view-media[data-layout="focus"][data-kind="video"] .media-feature-copy { max-width: 100%; padding-bottom: 235px; } #view-media[data-layout="focus"][data-kind="video"] .media-focus-strip { bottom: 25px; left: 20px; right: 20px; max-width: none; } .media-focus-choice { flex-basis: 94px !important; width: 94px !important; } .media-focus-choice .media-art { height: 140px; } .media-view #media-player-shell.media-player-expanded { width: calc(100vw - 32px); } }
@@ -265,7 +268,7 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 .media-view #media-player-shell[data-kind="music"]:not(:fullscreen) #media-codec-error { grid-column: 2/4; }
 .media-view #media-player-shell[data-kind="music"]:not(:fullscreen) #media-player-expand { display: none; }
 .media-view.navigation-collapsed #media-player-shell[data-kind="music"]:not(:fullscreen), .media-center-mode #media-player-shell[data-kind="music"]:not(:fullscreen) { left: 18px; }
-.media-chat-open #media-player-shell[data-kind="music"]:not(:fullscreen) { right: calc(min(540px,45vw) + 18px); grid-template-columns: 40px minmax(0,1fr); }
+.media-chat-open #media-player-shell[data-kind="music"]:not(:fullscreen) { right: calc(var(--media-chat-width,min(540px,45vw)) + 18px); grid-template-columns: 40px minmax(0,1fr); }
 .media-chat-open #media-player-shell[data-kind="music"]:not(:fullscreen) #media-audio, .media-chat-open #media-player-shell[data-kind="music"]:not(:fullscreen) > .media-player-transport, .media-chat-open #media-player-shell[data-kind="music"]:not(:fullscreen) > details { grid-column: 2; grid-row: auto; }
 html[data-theme="light"] .media-music-card { background: #ffffff70; }
 html[data-theme="light"] .media-artist-art { background: radial-gradient(circle at 35% 25%,#d0e2d6,#a4c4bb); color: #28564f; }
@@ -328,3 +331,23 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 :root #media-player-shell[data-kind="video"]:fullscreen > .media-player-heading, :root #media-player-shell[data-kind="video"]:fullscreen #media-playing-description { display: none; }
 :root #media-player-shell:fullscreen #media-video-stage { flex: 1 1 0; min-height: 0; display: block; border-radius: 0; }
 :root #media-player-shell[data-kind="video"]:fullscreen #media-video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; }
+
+/* Media Center chat panel: compact header, menus, resize handle and one send/stop icon. */
+.media-chat-header { display: flex; align-items: center; gap: 2px; padding: 10px 0 6px; }
+.media-chat-header h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-chat-icon { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 15px; line-height: 1; }
+.media-chat-icon:hover, .media-chat-icon:focus-visible { background: #ffffff1a; }
+.media-chat-menu { position: absolute; top: 46px; right: 12px; z-index: 2; min-width: 220px; max-width: calc(100% - 24px); max-height: 60vh; overflow: auto; display: flex; flex-direction: column; padding: 6px; background: var(--panel,Canvas); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.media-chat-menu[hidden] { display: none; }
+.media-chat-menu button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-chat-menu button:hover, .media-chat-menu button:focus-visible { background: #ffffff14; }
+.media-chat-menu button[aria-checked="true"]::before { content: "✓ "; }
+#media-chat-resize { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 3; }
+#media-chat-resize:hover, #media-chat-resize:focus-visible, .media-chat-resizing #media-chat-resize { background: var(--accent,#5ec7b6); opacity: .5; }
+.media-chat-resizing, .media-chat-resizing * { user-select: none; cursor: col-resize; }
+#media-chat-content .assistant-compact .assistant-transcript { overflow-wrap: anywhere; }
+#media-chat-content .assistant-compact .assistant-composer { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 8px; align-items: end; }
+#media-chat-content .assistant-compact .assistant-composer textarea { grid-column: 1; grid-row: 1; width: 100%; box-sizing: border-box; }
+#media-chat-content .assistant-compact .assistant-chat-controls { display: contents; }
+#media-chat-content .assistant-compact #assistant-model { grid-column: 1; grid-row: 2; justify-self: start; max-width: 100%; font-size: 12px; padding: 4px 8px; }
+#media-chat-content .assistant-compact .assistant-icon-action { grid-column: 2; grid-row: 1; width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: 15px; }

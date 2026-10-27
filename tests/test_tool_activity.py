@@ -155,3 +155,33 @@ def test_tool_activity_is_readable_inline_expandable_and_preserves_its_place(qtb
     assert transcript.findChild(QToolButton, "toolEventSummary").isChecked()
     qtbot.waitUntil(lambda: transcript.findChild(JsonCode).isVisible())
     transcript.grab().save(str(tmp_path / "chat-tool-activity.png"))
+
+
+def test_long_tool_summaries_shorten_instead_of_widening_a_narrow_chat(qtbot):
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from torrentlinker.gui.tool_activity import ElidedToolButton
+
+    long = "Select Catalogue torrents and calculate exact totals for every chosen category"
+    holder = QWidget()
+    qtbot.addWidget(holder)
+    button = ElidedToolButton()
+    QVBoxLayout(holder).addWidget(button)
+    button.setText(long)
+    holder.resize(220, 60)
+    holder.show()
+    qtbot.waitUntil(lambda: button.width() <= 220)
+    assert holder.minimumSizeHint().width() < 120
+    assert button.text() == long  # the full label stays available
+    shown = QToolButton.text(button)
+    assert shown.endswith("…") and len(shown) < len(long)
+    # A transcript holding such summaries fits a narrow chat panel.
+    run = narrative_run()
+    for event in run["events"]:
+        event["description"] = {"en": long, "fr": long}
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    transcript.resize(320, 600)
+    transcript.show()
+    transcript.set_runs([run], str)
+    qtbot.waitUntil(lambda: transcript.widget().width() <= transcript.viewport().width())

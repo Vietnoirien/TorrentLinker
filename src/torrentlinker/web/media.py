@@ -49,6 +49,7 @@ class Watched(MediaClient):
 class MediaChat(BaseModel):
     token: str = Field(max_length=100)
     conversation_id: str = Field(default="", max_length=64)
+    new: bool = False
 
 
 def media_routes(app, agent, assistant):
@@ -247,4 +248,4 @@ def media_routes(app, agent, assistant):
 
     @app.post("/api/media/sessions/{identifier}/chat")
     def chat(identifier: str, body: MediaChat):
-        return assistant.media_chat(identifier, body.token, body.conversation_id)
+        return assistant.media_chat(identifier, body.token, body.conversation_id, new=body.new)

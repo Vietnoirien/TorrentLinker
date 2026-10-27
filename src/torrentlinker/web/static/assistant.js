@@ -96,11 +96,15 @@ async function loadAssistant() {
   if (version !== assistantLoadVersion) return;
   assistantSnapshot = setup;
   const root = assistantRoot(); root.replaceChildren(); assistantRenderKey = "";
+  // In the Media Center side panel: one discussion, no tabs; folders and automations stay on the Assistant page.
+  const compact = !!root.closest("#media-chat-content");
+  if (compact) assistantView = "chat";
+  root.classList.toggle("assistant-compact", compact);
   const nav = element("div", undefined, "toolbar");
   for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["tasks", at("Automations", "Automatisations")], ["history", at("History", "Historique")], ["connections", at("Connections", "Connexions")]]) {
     nav.append(button(label, async () => { assistantView = id; await loadAssistant(); }, assistantView === id ? "primary" : ""));
   }
-  root.append(nav);
+  if (!compact) root.append(nav);
   if (assistantView === "connections") return aConnections(root);
   if (assistantView === "tasks") return aTasks(root);
   if (assistantView === "history") {
@@ -144,7 +148,8 @@ async function loadAssistant() {
   if (assistantConversation && !current) { assistantConversation = ""; return loadAssistant(); }
   const defaults = await api("setup/assistant/chat"), config = current || defaults;
   if (version !== assistantLoadVersion) return;
-  main.append(element("p", `${current ? current.name + " · " : ""}${config.policy.mode === "propose" ? at("Proposals only", "Propositions uniquement") : at("Execute within limits", "Exécution dans les limites")}`, "muted"));
+  if (compact) $("media-chat-title").textContent = current ? current.name : at("New discussion", "Nouvelle discussion");
+  else main.append(element("p", `${current ? current.name + " · " : ""}${config.policy.mode === "propose" ? at("Proposals only", "Propositions uniquement") : at("Execute within limits", "Exécution dans les limites")}`, "muted"));
   const transcript = element("div", undefined, "assistant-transcript"); transcript.id = "assistant-transcript";
   if (!current) {
     const welcome = element("div", undefined, "assistant-welcome");
@@ -175,7 +180,16 @@ async function loadAssistant() {
   settings.id = "assistant-chat-settings";
   const send = element("button", at("Send", "Envoyer"), "primary"); send.type = "submit"; send.id = "assistant-send";
   send.disabled = !model.value; settings.disabled = !model.value;
-  controls.append(model, settings, send, button(at("Stop", "Arrêter"), async () => { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); }));
+  const stop = button(at("Stop", "Arrêter"), async () => { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); });
+  stop.id = "assistant-stop";
+  if (compact) {
+    // One round icon beside the message: Send while idle, Stop while the assistant works.
+    for (const [control, glyph, label] of [[send, "➤", at("Send", "Envoyer")], [stop, "■", at("Stop", "Arrêter")]]) {
+      control.textContent = glyph; control.title = label; control.setAttribute("aria-label", label); control.classList.add("assistant-icon-action");
+    }
+    settings.hidden = true; stop.hidden = true;
+  }
+  controls.append(model, settings, send, stop);
   form.append(prompt, controls);
   if (!assistantSnapshot.providers.length) main.append(button(at("Connect a model", "Connecter un modèle"), async () => { assistantView = "connections"; await loadAssistant(); }));
   prompt.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!send.disabled) form.requestSubmit(); } };
@@ -224,6 +238,7 @@ async function aRefreshChat() {
     $("assistant-send").disabled = !!active || !$("assistant-model").value;
     $("assistant-model").disabled = !!active;
     $("assistant-chat-settings").disabled = !!active;
+    if (assistantRoot().classList.contains("assistant-compact")) { $("assistant-send").hidden = !!active; $("assistant-stop").hidden = !active; }
   } finally { assistantRefreshBusy = false; }
 }
 function aMarkdown(message) {

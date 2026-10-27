@@ -532,6 +532,30 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             if screenshots:
                 Path(screenshots).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(screenshots) / "media-contextual-chat.png"))
+            # The side panel is one discussion: header icons, no Assistant tabs or folders.
+            expect(page.locator("#media-chat-history")).to_be_visible()
+            expect(page.locator("#media-chat-content .assistant-conversations")).to_be_hidden()
+            assert page.locator("#media-chat-content #view-assistant > .toolbar").count() == 0
+            expect(page.locator("#assistant-chat-settings")).to_be_hidden()
+            # Dragging the edge resizes the chat; the width is remembered for the next opening.
+            panel = page.locator("#media-chat-panel")
+            before = panel.bounding_box()["width"]
+            edge = page.locator("#media-chat-resize").bounding_box()
+            page.mouse.move(edge["x"] + 4, edge["y"] + 200)
+            page.mouse.down()
+            page.mouse.move(edge["x"] - 80, edge["y"] + 200, steps=4)
+            page.mouse.up()
+            widened = panel.bounding_box()["width"]
+            assert abs(widened - (before + 84)) <= 6, (before, widened)
+            assert int(page.evaluate("localStorage.getItem('tl-media-chat-width')")) == round(
+                widened
+            )
+            # The button that opened the chat closes it, and reopening keeps the width.
+            player_action(page, "#media-chat")
+            expect(panel).to_be_hidden()
+            player_action(page, "#media-chat")
+            expect(panel).to_be_visible()
+            assert abs(panel.bounding_box()["width"] - widened) <= 1
             page.locator("#media-chat-close").click()
             page.locator('[data-view="library"]').click()
             expect(video).to_be_visible()

@@ -80,6 +80,10 @@ from shiboken6 import isValid
 
 from torrentlinker.gui.tasks import run_in_background
 
+# The Media Center chat panel and the media beside it never shrink below these.
+CHAT_MIN_WIDTH = 320
+MEDIA_MIN_WIDTH = 520
+
 
 class VerifiedPrefixDevice(QIODevice):
     """A read-only, seekable view of a fixed verified prefix, never of missing pieces."""
@@ -1034,7 +1038,8 @@ class MediaTab(QWidget):
         self.view.currentIndexChanged.connect(self.refresh)
         self.view.currentIndexChanged.connect(self._sync_music_tabs)
         self.search.textChanged.connect(self.refresh)
-        self.chat.clicked.connect(self.open_chat)
+        self.chat.setCheckable(True)
+        self.chat.clicked.connect(self.toggle_chat)
         self.layout_combo.currentIndexChanged.connect(self._layout_selected)
         self._kind_changed()
         self.heartbeat = QTimer(self)
@@ -3155,34 +3160,75 @@ class MediaTab(QWidget):
         self._scan_done(None)
         self._set_notice(str(error))
 
-    def open_chat(self) -> None:
+    def toggle_chat(self, checked: bool = True) -> None:
+        if checked:
+            self.open_chat()
+        else:
+            self.close_chat()
+
+    def open_chat(self, conversation_id: str = "", *, new: bool = False) -> None:
         if self.library is None:
+            self.chat.setChecked(False)
             return
         try:
             self.report()
             self.conversation_id = self.service.media_chat(
                 self.session_id,
                 self.token,
-                self.conversation_id,
+                conversation_id or ("" if new else self.conversation_id),
+                new=new,
             )["conversation_id"]
             if self.credentials:
                 self.credentials.setValue("conversation", self.conversation_id)
                 self.credentials.sync()
+            opening = self.assistant is None or self.assistant.isHidden()
             if self.assistant is None:
                 from torrentlinker.gui.assistant import AssistantTab
 
-                self.assistant = AssistantTab(self.get_service)
-                close_chat = QPushButton(self.tr("Close chat"))
-                close_chat.clicked.connect(self.assistant.hide)
-                self.assistant.layout().insertWidget(0, close_chat)
+                self.assistant = AssistantTab(self.get_service, compact=True)
+                self.assistant.setMinimumWidth(CHAT_MIN_WIDTH)
+                self.assistant.closeRequested.connect(self.close_chat)
+                self.assistant.conversationRequested.connect(
+                    lambda identifier: self.open_chat(identifier, new=not identifier)
+                )
                 self.splitter.addWidget(self.assistant)
-                self.splitter.setSizes([700, 500])
-            self.assistant.show()
+                self.splitter.setChildrenCollapsible(False)
+                self.splitter.splitterMoved.connect(self._remember_chat_width)
+            if opening:
+                # Also on the first opening after a restart, when the panel is new.
+                self.assistant.show()
+                self._restore_chat_width()
+            self.chat.setChecked(True)
             self.assistant.activate()
             self.assistant.select_conversation(self.conversation_id)
             self.assistant.prompt.setFocus()
         except Exception as error:
+            self.chat.setChecked(False)
             self._set_notice(str(error))
+
+    def close_chat(self) -> None:
+        if self.assistant is not None and self.assistant.isVisible():
+            self._remember_chat_width()
+            self.assistant.hide()
+        self.chat.setChecked(False)
+
+    def _restore_chat_width(self) -> None:
+        total = sum(self.splitter.sizes()) or self.splitter.width()
+        saved = self.credentials.value("chat_width", 0) if self.credentials else 0
+        try:
+            width = int(str(saved or 0))
+        except (TypeError, ValueError):
+            width = 0
+        width = width or total * 38 // 100
+        # Keep the remembered width, but always leave the media side its minimum.
+        width = max(CHAT_MIN_WIDTH, min(width, total - MEDIA_MIN_WIDTH))
+        self.splitter.setSizes([max(0, total - width), width])
+
+    def _remember_chat_width(self, *_args: Any) -> None:
+        if self.assistant is None or not self.assistant.isVisible() or not self.credentials:
+            return
+        self.credentials.setValue("chat_width", self.splitter.sizes()[-1])
+        self.credentials.sync()
 
     def stop(self) -> None:
         if self.fullscreen_dialog.isVisible():

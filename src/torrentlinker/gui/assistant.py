@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -334,8 +336,13 @@ class AssistantTab(QWidget):
             "finished": self.tr("Finished"),
         }.get(value, value)
 
-    def __init__(self, get_service, parent=None):
+    # Compact mode: ask the host to open a discussion ("" for a new one), or to close.
+    conversationRequested = Signal(str)
+    closeRequested = Signal()
+
+    def __init__(self, get_service, parent=None, *, compact=False):
         super().__init__(parent)
+        self.compact = compact
         self.get_service = get_service
         self.service: Any = None
         self.conversation_id = ""
@@ -360,6 +367,7 @@ class AssistantTab(QWidget):
         cl = QVBoxLayout(chat)
         splitter = QSplitter()
         left = QWidget()
+        self.folder_column = left
         left.setMaximumWidth(280)
         ll = QVBoxLayout(left)
         new = QPushButton(self.tr("New discussion"))
@@ -414,6 +422,7 @@ class AssistantTab(QWidget):
         controls.addWidget(self.send)
         stop = QPushButton(self.tr("Stop"))
         stop.clicked.connect(self.stop_run)
+        self.stop_button = stop
         controls.addWidget(stop)
         controls.addStretch()
         rl.addLayout(controls)
@@ -483,6 +492,110 @@ class AssistantTab(QWidget):
         self.timer.setInterval(1500)
         self.timer.timeout.connect(self.refresh_run)
         self.timer.start()
+        if compact:
+            self._make_compact(rl, controls)
+
+    def _make_compact(self, column, controls):
+        """One discussion in a side panel: small header menus and one send/stop button.
+
+        Folders, automations, history and connections stay on the Assistant page.
+        """
+        self.setObjectName("chatPanel")
+        self.setStyleSheet("""
+            QToolButton#chatPanelIcon { background: transparent; border: 0; border-radius: 6px;
+                min-width: 28px; min-height: 28px; padding: 0; font-size: 15px; }
+            QToolButton#chatPanelIcon:hover { background: rgba(255,255,255,30); }
+            QToolButton#chatPanelIcon::menu-indicator { image: none; width: 0; }
+            QToolButton#chatSend { border-radius: 16px; min-width: 32px; min-height: 32px;
+                padding: 0; font-size: 15px; }
+            QLabel#chatPanelTitle { font-size: 14px; font-weight: 600; }
+        """)
+        self.notice.hide()
+        # Hidden tabs would still widen the panel's minimum; keep only the discussion.
+        while self.pages.count() > 1:
+            self.pages.removeTab(1)
+        self.pages.tabBar().hide()
+        self.folder_column.hide()
+        for button in (self.send, self.stop_button, self.chat_settings):
+            button.hide()
+        self.chat_model.setMaximumWidth(260)
+        header = QHBoxLayout()
+        header.setContentsMargins(10, 6, 6, 2)
+        header.setSpacing(2)
+        self.chat_title = QLabel(self.tr("New discussion"))
+        self.chat_title.setObjectName("chatPanelTitle")
+        self.chat_title.setTextFormat(Qt.TextFormat.PlainText)
+        header.addWidget(self.chat_title, 1)
+        self.history_menu = QMenu(self)
+        self.history_menu.aboutToShow.connect(self._fill_history_menu)
+        self.more_menu = QMenu(self)
+        self.more_menu.addAction(self.tr("Discussion settings"), self.edit_chat_settings)
+        self.more_menu.addAction(self.tr("Delete discussion"), self.delete_discussion)
+        for glyph, tip, menu, slot in (
+            ("☰", self.tr("Discussions"), self.history_menu, None),
+            ("⋯", self.tr("More"), self.more_menu, None),
+            ("✕", self.tr("Close chat"), None, self.closeRequested.emit),
+        ):
+            button = QToolButton()
+            button.setObjectName("chatPanelIcon")
+            button.setText(glyph)
+            button.setToolTip(tip)
+            button.setAccessibleName(tip)
+            if menu is not None:
+                button.setMenu(menu)
+                button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            else:
+                button.clicked.connect(slot)
+            header.addWidget(button)
+        self.layout().insertLayout(0, header)
+        composer = QHBoxLayout()
+        composer.setSpacing(6)
+        column.removeWidget(self.prompt)
+        composer.addWidget(self.prompt, 1)
+        self.send_toggle = QToolButton()
+        self.send_toggle.setObjectName("chatSend")
+        self.send_toggle.setProperty("primary", True)
+        self.send_toggle.clicked.connect(self._send_or_stop)
+        composer.addWidget(self.send_toggle, 0, Qt.AlignmentFlag.AlignBottom)
+        column.insertLayout(column.indexOf(self.connect_model), composer)
+        self._sync_compact(False)
+
+    def _fill_history_menu(self):
+        self.history_menu.clear()
+        self.history_menu.addAction(
+            self.tr("New discussion"), lambda: self.conversationRequested.emit("")
+        )
+        self.history_menu.addSeparator()
+        rows = [c for c in getattr(self, "conversation_data", []) if c.get("folder") == "Media"]
+        rows = rows[:20]
+        for row in rows:
+            action = self.history_menu.addAction(
+                row["name"],
+                lambda _checked=False, identifier=row["id"]: self.conversationRequested.emit(
+                    identifier
+                ),
+            )
+            action.setCheckable(True)
+            action.setChecked(row["id"] == self.conversation_id)
+
+    def _send_or_stop(self):
+        if self.send_toggle.property("running"):
+            self.stop_run()
+        else:
+            self.send_message()
+
+    def _sync_compact(self, running):
+        self.send_toggle.setProperty("running", running)
+        self.send_toggle.setText("■" if running else "➤")
+        label = self.tr("Stop") if running else self.tr("Send")
+        self.send_toggle.setToolTip(label)
+        self.send_toggle.setAccessibleName(label)
+        self.send_toggle.setEnabled(running or self.send.isEnabled())
+        current = next(
+            (c for c in getattr(self, "conversation_data", []) if c["id"] == self.conversation_id),
+            None,
+        )
+        self.chat_title.setText(current["name"] if current else self.tr("New discussion"))
 
     def activate(self):
         try:
@@ -815,6 +928,8 @@ class AssistantTab(QWidget):
             else self.tr("Execute within limits")
         )
         self.run_id = active["id"] if active else self.run_id
+        if self.compact:
+            self._sync_compact(bool(active))
         if all_rows:
             self.history.set_runs(all_rows, self.status_text)
 

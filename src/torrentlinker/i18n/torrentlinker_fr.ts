@@ -428,6 +428,18 @@
 <context>
     <name>AssistantTab</name>
     <message>
+        <source>Close chat</source>
+        <translation>Fermer la discussion</translation>
+    </message>
+    <message>
+        <source>Discussions</source>
+        <translation>Discussions</translation>
+    </message>
+    <message>
+        <source>More</source>
+        <translation>Plus</translation>
+    </message>
+    <message>
         <location filename="../gui/assistant.py" line="871"/>
         <source>Detect context automatically</source>
         <translation>Détecter automatiquement le contexte</translation>
