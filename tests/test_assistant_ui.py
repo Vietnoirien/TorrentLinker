@@ -597,3 +597,35 @@ def test_model_connections_open_in_settings(qtbot, tmp_path):
     dialog = SettingsDialog(Settings(), host)
     dialog.show_assistant_connections()
     assert dialog.tabs.currentWidget().isAncestorOf(dialog.findChild(AssistantConnections))
+
+
+def test_automation_cards_show_the_schedule_and_one_main_action(qtbot):
+    from PySide6.QtWidgets import QLabel, QPushButton
+
+    from torrentlinker.gui.automation_cards import AutomationCards
+
+    cards = AutomationCards()
+    qtbot.addWidget(cards)
+    active = {
+        "id": "a",
+        "name": "Daily review",
+        "enabled": True,
+        "frequency": "daily",
+        "at": "08:30",
+        "next_at": 0,
+        "last_error": "",
+        "blocked": False,
+    }
+    paused = {**active, "id": "b", "name": "Weekend Plan", "enabled": False}
+    paused.update(frequency="weekly", weekdays=[5], at="10:00")
+    ran, toggled = [], []
+    cards.runRequested.connect(ran.append)
+    cards.toggleRequested.connect(toggled.append)
+    cards.set_rows([active, paused])
+    texts = [label.text() for label in cards.findChildren(QLabel)]
+    assert any(text.startswith("Daily at 08:30 · Next run") for text in texts)
+    assert "Weekly, Sat at 10:00 · Paused" in texts
+    buttons = {b.text(): b for b in cards.findChildren(QPushButton)}
+    buttons["Run now"].click()
+    buttons["Enable"].click()
+    assert [t["id"] for t in ran] == ["a"] and [t["id"] for t in toggled] == ["b"]

@@ -545,6 +545,85 @@
     </message>
 </context>
 <context>
+    <name>AutomationCards</name>
+    <message>
+        <source>Every %1 min</source>
+        <translation>Toutes les %1 min</translation>
+    </message>
+    <message>
+        <source>Weekly, %1 at %2</source>
+        <translation>Chaque semaine, %1 à %2</translation>
+    </message>
+    <message>
+        <source>Daily at %1</source>
+        <translation>Chaque jour à %1</translation>
+    </message>
+    <message>
+        <source>Paused</source>
+        <translation>En pause</translation>
+    </message>
+    <message>
+        <source>Waiting for its actions or your review</source>
+        <translation>En attente de ses actions ou de votre validation</translation>
+    </message>
+    <message>
+        <source>Next run %1</source>
+        <translation>Prochaine exécution %1</translation>
+    </message>
+    <message>
+        <source>No automations yet. Create one to run a task on a schedule.</source>
+        <translation>Aucune automatisation. Créez-en une pour exécuter une tâche à heure fixe.</translation>
+    </message>
+    <message>
+        <source>Run now</source>
+        <translation>Exécuter maintenant</translation>
+    </message>
+    <message>
+        <source>Enable</source>
+        <translation>Activer</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Modifier</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Mettre en pause</translation>
+    </message>
+    <message>
+        <source>More</source>
+        <translation>Plus</translation>
+    </message>
+    <message>
+        <source>Mon</source>
+        <translation>lun.</translation>
+    </message>
+    <message>
+        <source>Tue</source>
+        <translation>mar.</translation>
+    </message>
+    <message>
+        <source>Wed</source>
+        <translation>mer.</translation>
+    </message>
+    <message>
+        <source>Thu</source>
+        <translation>jeu.</translation>
+    </message>
+    <message>
+        <source>Fri</source>
+        <translation>ven.</translation>
+    </message>
+    <message>
+        <source>Sat</source>
+        <translation>sam.</translation>
+    </message>
+    <message>
+        <source>Sun</source>
+        <translation>dim.</translation>
+    </message>
+</context>
+<context>
     <name>AssistantTab</name>
     <message>
         <source>Close chat</source>
@@ -955,6 +1034,10 @@ Switch to Execute within limits? You will not be asked again.</source>
         <translation>Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des torrents ou supprimer des fichiers demande toujours votre accord.
 
 Passer en mode Exécuter dans les limites ? Cette question ne sera plus posée.</translation>
+    </message>
+    <message>
+        <source>Automation</source>
+        <translation>Automatisation</translation>
     </message>
 </context>
 <context>

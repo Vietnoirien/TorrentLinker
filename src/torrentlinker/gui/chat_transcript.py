@@ -188,6 +188,8 @@ class ChatTranscript(QScrollArea):
         self.plain_text = ""
         self.examples: list[str] = []
         self.example_columns = 2
+        # History mixes discussions: a callable that names each run's discussion and time.
+        self.run_heading = None
         self.images = ChatImages(self)
         self.follow_bottom = True
         self.verticalScrollBar().rangeChanged.connect(self.follow_layout)
@@ -412,6 +414,11 @@ class ChatTranscript(QScrollArea):
         layout = self.content()
         dark = QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
         for run in reversed(rows):
+            if self.run_heading:
+                heading = QLabel(self.run_heading(run))
+                heading.setObjectName("runHeading")
+                heading.setTextFormat(Qt.TextFormat.PlainText)
+                layout.addWidget(heading)
             messages = run["messages"]
             fallback = len(messages) - 1
             if messages and messages[-1]["role"] == "assistant":

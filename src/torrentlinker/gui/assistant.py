@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
     QMenu,
     QMessageBox,
     QPlainTextEdit,
@@ -35,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.assistant.models import Conversation, Schedule
+from torrentlinker.gui.automation_cards import AutomationCards
 from torrentlinker.gui.chat_composer import ChatComposer
 from torrentlinker.gui.chat_folders import ChatFolders
 from torrentlinker.gui.chat_transcript import ChatTranscript
@@ -454,26 +454,25 @@ class AssistantTab(QWidget):
             )
         )
         help_text.setWordWrap(True)
-        tl.addWidget(help_text)
-        self.tasks = QListWidget()
-        tl.addWidget(self.tasks)
-        task_buttons = QHBoxLayout()
-        for label, action in [
-            (self.tr("Create task"), lambda: self.edit(True)),
-            (self.tr("Edit"), self.edit_task),
-            (self.tr("Pause / Enable"), self.toggle_task),
-            (self.tr("Run now"), self.run_task),
-        ]:
-            b = QPushButton(label)
-            b.clicked.connect(action)
-            task_buttons.addWidget(b)
-        tl.addLayout(task_buttons)
+        help_text.setProperty("role", "muted")
+        top = QHBoxLayout()
+        top.addWidget(help_text, 1)
+        create = set_role(QPushButton(self.tr("Create task")), "primary")
+        create.clicked.connect(lambda: self.edit(True))
+        top.addWidget(create, 0, Qt.AlignmentFlag.AlignTop)
+        tl.addLayout(top)
+        self.tasks = AutomationCards()
+        self.tasks.editRequested.connect(lambda task: self.edit(True, task))
+        self.tasks.toggleRequested.connect(self.toggle_task)
+        self.tasks.runRequested.connect(self.run_task)
+        tl.addWidget(self.tasks, 1)
         self.pages.addTab(tasks, self.tr("Automations"))
         self.history = ChatTranscript(
             presentation_page=lambda *a, **kw: self.service.presentation_page(*a, **kw),
             presentation_item=lambda *a, **kw: self.service.presentation_item(*a, **kw),
         )
         self.history.anchorClicked.connect(self.open_receipt)
+        self.history.run_heading = self.run_heading
         self.history.decisionSubmitted.connect(self.submit_decision)
         self.history.answerSubmitted.connect(self.submit_answer)
         self.pages.addTab(self.history, self.tr("History"))
@@ -622,18 +621,7 @@ class AssistantTab(QWidget):
         self.conversation_data = self.service.conversations()
         self.conversations.set_rows(self.conversation_data, self.conversation_id)
         self.task_data = self.service.schedules()
-        task_row = self.tasks.currentRow()
-        self.tasks.clear()
-        for t in self.task_data:
-            date = (
-                datetime.fromtimestamp(t["next_at"]).astimezone().strftime("%d/%m %H:%M")
-                if t["enabled"]
-                else self.tr("Paused")
-            )
-            self.tasks.addItem(
-                f"{t['name']} · {date}" + (f"\n{t['last_error']}" if t["last_error"] else "")
-            )
-        self.tasks.setCurrentRow(task_row)
+        self.tasks.set_rows(self.task_data)
         self.provider_data = self.service.setup()["providers"]
         current = next((c for c in self.conversation_data if c["id"] == self.conversation_id), None)
         chosen = (
@@ -781,24 +769,20 @@ class AssistantTab(QWidget):
                     self.conversation_id = editor.saved
                 self.refresh()
 
-    def edit_task(self):
-        row = self.tasks.currentRow()
-        if 0 <= row < len(self.task_data):
-            self.edit(True, self.task_data[row])
+    def run_heading(self, run):
+        names = {c["id"]: c["name"] for c in getattr(self, "conversation_data", [])}
+        name = names.get(run.get("conversation_id"), self.tr("Automation"))
+        when = datetime.fromtimestamp(run.get("created") or 0).astimezone()
+        return " · ".join((name, when.strftime("%d/%m %H:%M"), self.status_text(run["status"])))
 
-    def toggle_task(self):
-        row = self.tasks.currentRow()
-        if 0 <= row < len(self.task_data):
-            task = self.task_data[row]
-            body = {k: v for k, v in task.items() if k in Schedule.model_fields}
-            body["enabled"] = not task["enabled"]
-            self.perform(lambda: self.service.save_schedule(Schedule(**body), task["id"]))
+    def toggle_task(self, task):
+        body = {k: v for k, v in task.items() if k in Schedule.model_fields}
+        body["enabled"] = not task["enabled"]
+        self.perform(lambda: self.service.save_schedule(Schedule(**body), task["id"]))
 
-    def run_task(self):
-        row = self.tasks.currentRow()
-        if 0 <= row < len(self.task_data):
-            self.perform(lambda: self.service.run_schedule(self.task_data[row]["id"]))
-            self.pages.setCurrentIndex(2)
+    def run_task(self, task):
+        self.perform(lambda: self.service.run_schedule(task["id"]))
+        self.pages.setCurrentIndex(2)
 
     def stop_run(self):
         if self.service and self.run_id:

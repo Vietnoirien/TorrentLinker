@@ -200,6 +200,12 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
             border-radius: 10px; }}
         QFrame#chatExample:hover, QFrame#chatExample:focus {{ border-color: {accent}; }}
         QFrame#chatExample QLabel {{ background: transparent; }}
+        QFrame#automationCard {{ background: {panel}; border: 1px solid {border};
+            border-radius: 10px; }}
+        QFrame#automationCard QLabel {{ background: transparent; }}
+        QLabel#automationName {{ font-size: 14px; font-weight: 600; }}
+        QLabel#runHeading {{ color: {muted}; font-size: 12px; font-weight: 600;
+            padding: 14px 0 2px; border-top: 1px solid {border}; }}
         QLabel#chatTitle {{ font-size: 15px; font-weight: 600; }}
         /* Chat composer (gui/chat_composer.py): one rounded field, chips under it. */
         QFrame#chatComposer {{ background: {panel}; border: 1px solid {border};
