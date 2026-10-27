@@ -26,12 +26,16 @@ With qBittorrent, Deluge and Transmission, reseeding does not rename existing fi
 
 ## Download
 
-| Platform | Download |
-| --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases) |
+We recommend the latest 1.0 preview (beta): it has every new feature. Open the [tag list](https://github.com/Vietnoirien/TorrentLinker/tags), where the newest is at the top, and download your platform's file from its release page. The stable 0.12.2 release is still available under [releases](https://github.com/Vietnoirien/TorrentLinker/releases).
 
-On Linux, make the AppImage executable before opening it. See the [release notes](https://github.com/Vietnoirien/TorrentLinker/releases) for changes.
+| Platform | File |
+| --- | --- |
+| Windows x64 | `TorrentLinker.exe` |
+| Linux x86_64 | `TorrentLinker-x86_64.AppImage` |
+| macOS (Apple Silicon) | `TorrentLinker-macOS-arm64.dmg` |
+| Docker (amd64, arm64) | `ghcr.io/vietnoirien/torrentlinker:beta` |
+
+On Linux, make the AppImage executable before opening it. On macOS the app is not notarized: the first time, right-click it and choose **Open**.
 
 ## Get started
 
@@ -51,4 +55,4 @@ Open **Documentation**, above Settings, to read the illustrated guides inside th
 
 ## Web UI and Docker
 
-A browser interface with guided setup is available from source for NAS and seedbox deployments. See the [Docker guide](docs/guide/en/web-docker.md) to build the image and configure storage access.
+A browser interface with guided setup is published as a Docker image for NAS and seedbox deployments: `ghcr.io/vietnoirien/torrentlinker`. Start from the [Compose example](deploy/compose.example.yaml) and see the [Docker guide](docs/guide/en/web-docker.md) for storage access.

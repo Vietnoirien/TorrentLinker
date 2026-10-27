@@ -1,8 +1,25 @@
 # Web UI and Docker
 
-The Web UI is available from source. The README links to the latest published desktop release. Build the Docker image from source; no published image is required.
+The image is published at `ghcr.io/vietnoirien/torrentlinker` for amd64 and arm64. Pick a tag:
 
-## Start the server
+| Tag | Contents |
+| --- | --- |
+| `beta` | newest preview (recommended) |
+| `latest` | newest stable release |
+| `1.0.0-beta.16` | one fixed version, so upgrades happen only when you choose |
+
+## Start without the source
+
+Copy [deploy/compose.example.yaml](../../../deploy/compose.example.yaml) into an empty folder as `compose.yaml`. Put a `web-password.txt` next to it (12 characters or more, `chmod 600`), replace `/srv/media` with your downloads folder, then run:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+To upgrade, run both commands again. The `config` volume keeps your settings.
+
+## Start from the source
 
 From the repository root, create a private password file. Use at least 12 characters:
 
@@ -18,6 +35,8 @@ with os.fdopen(fd, 'w') as output:
 PY
 docker compose up -d --build
 ```
+
+Without `--build`, Compose uses the published image named by `TL_IMAGE_TAG` (`latest` by default; `TL_IMAGE_TAG=beta` for the preview).
 
 Open `http://localhost:8787` and sign in. The default port binding is host-only. Set `TL_BIND_ADDRESS` to your host's LAN address for LAN access. For remote access, use an HTTPS reverse proxy and `TL_SECURE_COOKIE=1`. Do not expose the plain HTTP port directly to the Internet.
 

@@ -28,10 +28,16 @@ Avec qBittorrent, Deluge et Transmission, les fichiers existants ne sont pas ren
 
 | Plateforme | Téléchargement |
 | --- | --- |
-| Windows x64 | [TorrentLinker.exe](https://github.com/Vietnoirien/TorrentLinker/releases) |
-| Linux x86_64 | [TorrentLinker-x86_64.AppImage](https://github.com/Vietnoirien/TorrentLinker/releases) |
+Nous recommandons la dernière préversion 1.0 (bêta) : elle contient toutes les nouveautés. Ouvrez la [liste des tags](https://github.com/Vietnoirien/TorrentLinker/tags), où la plus récente est en haut, puis téléchargez le fichier de votre plateforme dans sa page de version. La version stable 0.12.2 reste disponible dans les [versions](https://github.com/Vietnoirien/TorrentLinker/releases).
 
-Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Consultez les [notes de version](https://github.com/Vietnoirien/TorrentLinker/releases) pour les changements.
+| Plateforme | Fichier |
+| --- | --- |
+| Windows x64 | `TorrentLinker.exe` |
+| Linux x86_64 | `TorrentLinker-x86_64.AppImage` |
+| macOS (Apple Silicon) | `TorrentLinker-macOS-arm64.dmg` |
+| Docker (amd64, arm64) | `ghcr.io/vietnoirien/torrentlinker:beta` |
+
+Sous Linux, rendez l’AppImage exécutable avant de l’ouvrir. Sous macOS, l’application n’est pas notariée : au premier lancement, faites un clic droit sur l’application puis **Ouvrir**.
 
 ## Premiers pas
 
@@ -51,4 +57,4 @@ Le bouton **Documentation**, au-dessus des Paramètres, ouvre les guides illustr
 
 ## Interface web et Docker
 
-Une interface web avec assistant de configuration est disponible depuis les sources pour les NAS et seedboxes. Consultez le [guide Docker](docs/guide/fr/web-docker.md) pour construire l’image et vérifier l’accès aux dossiers.
+Une interface web avec assistant de configuration est publiée en image Docker pour les NAS et seedboxes : `ghcr.io/vietnoirien/torrentlinker`. Partez de l’[exemple Compose](deploy/compose.example.yaml) et consultez le [guide Docker](docs/guide/fr/web-docker.md) pour l’accès aux dossiers.

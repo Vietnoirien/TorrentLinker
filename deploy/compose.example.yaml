@@ -1,0 +1,41 @@
+# Standalone example: copy this file into an empty folder as compose.yaml, no checkout needed.
+#   1. Put the web password (12 characters or more) in web-password.txt next to it, mode 600.
+#   2. Set the media path and the image tag below, then run: docker compose up -d
+#   3. Open http://localhost:8787 and follow the setup assistant.
+# Tags: beta (latest preview, recommended), latest (stable), or a fixed version such as 1.0.0-beta.16.
+services:
+  torrentlinker:
+    image: ghcr.io/vietnoirien/torrentlinker:beta
+    # The image runs as UID/GID 1000; to read media owned by another account, set user: "UID:GID"
+    # and make the config volume writable by it.
+    ports:
+      - "127.0.0.1:8787:8787"  # host only; use the host's LAN address for LAN access
+    environment:
+      TL_WEB_PASSWORD_FILE: /run/secrets/web_password
+      TL_STORAGE_ROOTS: /data
+      # Behind an HTTPS reverse proxy:
+      # TL_SECURE_COOKIE: "1"
+      # TL_ROOT_PATH: /torrentlinker
+      # Optional secret files instead of typing keys in the web UI:
+      # TL_INDEXER_API_KEY_FILE: /run/secrets/indexer_api_key
+    secrets:
+      - web_password
+    volumes:
+      - config:/config
+      - /srv/media:/data:ro  # the folder your torrent client downloads into
+    # Reach a client running on the Docker host as http://host.docker.internal:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+secrets:
+  web_password:
+    file: ./web-password.txt
+  # indexer_api_key:
+  #   file: ./indexer-api-key.txt
+
+volumes:
+  config:

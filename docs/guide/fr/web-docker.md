@@ -1,8 +1,25 @@
 # Interface web et Docker
 
-Cette interface est disponible depuis les sources. Les exécutables de la dernière version publiée restent disponibles dans le README. L'image se construit depuis les sources ; aucune image officielle publiée n'est nécessaire.
+L'image est publiée sur `ghcr.io/vietnoirien/torrentlinker` pour amd64 et arm64. Choisissez son tag :
 
-## Démarrage
+| Tag | Contenu |
+| --- | --- |
+| `beta` | dernière préversion (recommandé) |
+| `latest` | dernière version stable |
+| `1.0.0-beta.16` | une version précise, pour ne pas changer de version sans le décider |
+
+## Démarrage sans les sources
+
+Copiez [deploy/compose.example.yaml](../../../deploy/compose.example.yaml) dans un dossier vide sous le nom `compose.yaml`. Placez à côté un fichier `web-password.txt` (12 caractères au moins, `chmod 600`), remplacez `/srv/media` par le dossier de vos téléchargements, puis lancez :
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Pour mettre à jour, relancez ces deux commandes. Le volume `config` conserve vos paramètres.
+
+## Démarrage depuis les sources
 
 Depuis la racine du dépôt, créez le fichier de mot de passe. Choisissez au moins 12 caractères. La commande suivante masque la saisie et crée un fichier privé :
 
@@ -18,6 +35,8 @@ with os.fdopen(fd, 'w') as output:
 PY
 docker compose up -d --build
 ```
+
+Sans `--build`, Compose utilise l'image publiée indiquée par `TL_IMAGE_TAG` (`latest` par défaut ; `TL_IMAGE_TAG=beta` pour la préversion).
 
 Ouvrez `http://localhost:8787` et saisissez ce mot de passe. Le serveur est accessible uniquement depuis la machine hôte par défaut. Pour un accès sur le réseau local, définissez `TL_BIND_ADDRESS` avec l'adresse LAN de l'hôte. Pour l'accès distant, utilisez un reverse proxy HTTPS et `TL_SECURE_COOKIE=1` ; n'exposez pas directement un port HTTP sur Internet.
 

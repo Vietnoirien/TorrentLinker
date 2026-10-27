@@ -1,7 +1,9 @@
-# Start with: docker compose up -d --build
+# Start with: docker compose up -d   (pulls the published image; add --build to build from this checkout)
+# TL_IMAGE_TAG picks the release: latest (stable), beta, or a version such as 1.0.0-beta.16.
 # Create deploy/web-password.txt first; never commit it.
 services:
   torrentlinker:
+    image: ghcr.io/vietnoirien/torrentlinker:${TL_IMAGE_TAG:-latest}
     build:
       context: .
       args:

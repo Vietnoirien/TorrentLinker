@@ -88,9 +88,62 @@ jobs:
           name: macos
           path: dist/TorrentLinker-macOS-arm64.dmg
 
+  container:
+    # Built and tested on every run; pushed to GHCR only for a tag, once every desktop build passed
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/vietnoirien/torrentlinker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build for the smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: torrentlinker:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: |
+          echo smoke-password > "$RUNNER_TEMP/pw"
+          chmod 644 "$RUNNER_TEMP/pw"
+          docker run -d --name tl -p 8787:8787 -e TL_WEB_PASSWORD_FILE=/run/pw -v "$RUNNER_TEMP/pw:/run/pw:ro" torrentlinker:smoke
+          for i in $(seq 30); do curl -fsS http://127.0.0.1:8787/healthz && exit 0; sleep 2; done
+          docker logs tl
+          exit 1
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+            type=raw,value=beta,enable=${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-') }}
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, windows, macos]
+    needs: [linux, windows, macos, container]
     runs-on: ubuntu-latest
     permissions:
       contents: write
