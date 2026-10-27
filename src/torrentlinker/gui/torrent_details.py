@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.settings_dialog import choose_directory
@@ -179,7 +180,7 @@ class TorrentDetailsDialog(QDialog):
         self.folder.setPlaceholderText(self.tr("Choose a Download Folder"))
         self.add_queue = QPushButton(self.tr("Add to queue"))
         self.download_now = QPushButton(self.tr("Download now"))
-        self.download_now.setProperty("primary", True)
+        set_role(self.download_now, "primary")
         self.add_queue.clicked.connect(lambda: self._download(False))
         self.download_now.clicked.connect(lambda: self._download(True))
         download_controls = QWidget()
@@ -196,18 +197,22 @@ class TorrentDetailsDialog(QDialog):
         layout.addWidget(download_controls)
         controls = QHBoxLayout()
         self.reload = QPushButton(self.tr("Reload details"))
+        set_role(self.reload, "quiet")
         self.reload.clicked.connect(self.load)
         controls.addWidget(self.reload)
         self.retry_images = QPushButton(self.tr("Retry images"))
+        set_role(self.retry_images, "quiet")
         self.retry_images.clicked.connect(self._retry_images)
         self.retry_images.hide()
         controls.addWidget(self.retry_images)
         self.website = QPushButton(self.tr("Open on website"))
+        set_role(self.website, "quiet")
         self.website.setEnabled(bool(website_url(candidate, indexer)))
         self.website.clicked.connect(lambda: self._open_link(QUrl(website_url(candidate, indexer))))
         controls.addWidget(self.website)
         controls.addStretch()
         close = QPushButton(self.tr("Close"))
+        set_role(close, "quiet")
         close.clicked.connect(self.reject)
         controls.addWidget(close)
         layout.addLayout(controls)

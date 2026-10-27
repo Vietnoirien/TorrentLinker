@@ -27,6 +27,7 @@ from torrentlinker.config import Settings
 from torrentlinker.download_queue import QueueEntry, enqueue, entries, queue_key, run_queue
 from torrentlinker.gui.browser_tabs import BrowserTabs
 from torrentlinker.gui.category_picker import CategoryPicker
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.search_filters import SearchFilters
@@ -78,6 +79,7 @@ class SearchTab(QWidget):
         self.queue_notice.setTextFormat(Qt.TextFormat.PlainText)
         queue_access.addWidget(self.queue_notice, 1)
         self.view_queue = QPushButton()
+        set_role(self.view_queue, "quiet")
         self.view_queue.clicked.connect(self.show_queue)
         queue_access.addWidget(self.view_queue)
         workspace.addLayout(queue_access)
@@ -98,7 +100,7 @@ class SearchTab(QWidget):
         self.category = CategoryPicker()
         self.category.setAccessibleName(self.tr("Category"))
         self.search_button = QPushButton(self.tr("Search"))
-        self.search_button.setProperty("primary", True)
+        set_role(self.search_button, "primary")
         self.search_button.clicked.connect(lambda: self.search())
         search.addWidget(self.query, 2)
         search.addWidget(self.category, 1)
@@ -157,6 +159,7 @@ class SearchTab(QWidget):
         self.details_button = QPushButton(self.tr("Open in tabs"))
         self.details_button.clicked.connect(self.show_details)
         self.website_button = QPushButton(self.tr("Open on website"))
+        set_role(self.website_button, "quiet")
         self.website_button.clicked.connect(self.open_website)
         paging.addWidget(self.details_button)
         paging.addWidget(self.website_button)
@@ -184,7 +187,7 @@ class SearchTab(QWidget):
         )
         self.queue_tabs.clicked.connect(lambda: self.queue_open_tabs(False))
         self.download_tabs = QPushButton(self.tr("Download all tabs"))
-        self.download_tabs.setProperty("primary", True)
+        set_role(self.download_tabs, "primary")
         self.download_tabs.setToolTip(
             self.tr("Download only the torrents in open tabs. Other queued torrents stay waiting.")
         )
@@ -205,6 +208,7 @@ class SearchTab(QWidget):
         hint.setWordWrap(True)
         queue_layout.addWidget(hint)
         self.manage_button = QPushButton(self.tr("Open in Torrents"))
+        set_role(self.manage_button, "quiet")
         self.manage_button.clicked.connect(self._open_in_torrents)
         queue_layout.addWidget(self.manage_button)
         self.queue = self._table(
@@ -227,15 +231,17 @@ class SearchTab(QWidget):
         queue_layout.addWidget(self.queue, 1)
         controls = QHBoxLayout()
         self.start = QPushButton(self.tr("Start queue"))
-        self.start.setProperty("primary", True)
+        set_role(self.start, "primary")
         self.start.clicked.connect(lambda: self.start_queue())
         self.pause = QPushButton(self.tr("Pause"))
         self.pause.clicked.connect(self.stop)
         self.retry = QPushButton(self.tr("Retry selected"))
         self.retry.clicked.connect(self.retry_selected)
         self.remove = QPushButton(self.tr("Remove selected"))
+        set_role(self.remove, "quiet")
         self.remove.clicked.connect(self.remove_selected)
         self.clear_done = QPushButton(self.tr("Clear sent"))
+        set_role(self.clear_done, "quiet")
         self.clear_done.clicked.connect(self.clear_sent)
         for button in (self.start, self.pause, self.retry, self.remove, self.clear_done):
             controls.addWidget(button)

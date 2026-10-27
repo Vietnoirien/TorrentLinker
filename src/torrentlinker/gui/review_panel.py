@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
@@ -133,6 +134,7 @@ class ReviewPanel(QWidget):
         self.check_button.clicked.connect(self._check_selected)
         actions.addWidget(self.check_button)
         self.reject_button = QPushButton(self.tr("Reject"))
+        set_role(self.reject_button, "quiet")
         self.reject_button.setToolTip(self.tr("Not this Local Item: never propose it again"))
         self.reject_button.clicked.connect(self._reject_selected)
         actions.addWidget(self.reject_button)
@@ -146,7 +148,7 @@ class ReviewPanel(QWidget):
         self.reseed_button.setToolTip(
             self.tr("Add to your torrent client against your files, verify, then seed")
         )
-        self.reseed_button.setProperty("primary", True)
+        set_role(self.reseed_button, "primary")
         self.reseed_button.clicked.connect(self._reseed_selected)
         actions.addWidget(self.reseed_button)
         self.action_row = actions

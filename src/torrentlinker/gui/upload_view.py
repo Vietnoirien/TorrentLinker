@@ -48,6 +48,7 @@ from torrentlinker.archives import Unpacked, is_archive, unpack, unpacked
 from torrentlinker.bbcode import bbcode_to_html
 from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.domain import ContentKind, ItemState, LocalItem
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.local_drafts import LocalDrafts
@@ -510,6 +511,7 @@ class UploadTab(QWidget):
         self.options_box = QGroupBox()
         options_layout = QVBoxLayout(self.options_box)
         self.options_toggle = QToolButton()
+        set_role(self.options_toggle, "quiet")
         self.options_toggle.setText(self.tr("Options"))
         self.options_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.options_toggle.setArrowType(Qt.ArrowType.RightArrow)
@@ -531,6 +533,7 @@ class UploadTab(QWidget):
         self.options_status.setWordWrap(True)
         status_row.addWidget(self.options_status, 1)
         self.options_refresh = QPushButton(self.tr("Refresh options"))
+        set_role(self.options_refresh, "quiet")
         self.options_refresh.setToolTip(self.tr("Read this subcategory's options from c411 again"))
         self.options_refresh.clicked.connect(lambda: self._show_options(refresh=True))
         status_row.addWidget(self.options_refresh)
@@ -592,6 +595,7 @@ class UploadTab(QWidget):
         self.presentation_status.setTextFormat(Qt.TextFormat.PlainText)
         dl.addWidget(self.presentation_status)
         reset_description = QPushButton(self.tr("Reset from the template"))
+        set_role(reset_description, "quiet")
         reset_description.clicked.connect(lambda: self._reset("description"))
         dl.addWidget(reset_description, 0, Qt.AlignmentFlag.AlignRight)
         self.pages.addTab(description_page, self.tr("Description"))
@@ -606,6 +610,7 @@ class UploadTab(QWidget):
         self.nfo.textChanged.connect(self._render_description)
         nl.addWidget(self.nfo)
         reset_nfo = QPushButton(self.tr("Reset from the files"))
+        set_role(reset_nfo, "quiet")
         reset_nfo.clicked.connect(lambda: self._reset("nfo"))
         nl.addWidget(reset_nfo, 0, Qt.AlignmentFlag.AlignRight)
         self.pages.addTab(nfo_page, self.tr("NFO"))
@@ -636,7 +641,7 @@ class UploadTab(QWidget):
         self.queue_button.clicked.connect(self.queue_draft)
         actions.addWidget(self.queue_button)
         self.create_button = QPushButton()
-        self.create_button.setProperty("primary", True)
+        set_role(self.create_button, "primary")
         self.create_button.clicked.connect(self.create_draft)
         actions.addWidget(self.create_button)
 
@@ -678,9 +683,11 @@ class UploadTab(QWidget):
         self.drafts_status = QLabel()
         row.addWidget(self.drafts_status, 1)
         refresh = QPushButton(self.tr("Refresh"))
+        set_role(refresh, "quiet")
         refresh.clicked.connect(self.refresh_drafts)
         row.addWidget(refresh)
         open_page = QPushButton(self.tr("Open c411's upload page"))
+        set_role(open_page, "quiet")
         open_page.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(C411_UPLOAD_PAGE)))
         row.addWidget(open_page)
         drafts_layout.addLayout(row)

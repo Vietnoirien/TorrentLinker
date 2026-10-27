@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from torrentlinker.agent.upload_presentations import draft_item
 from torrentlinker.bbcode import bbcode_to_html
 from torrentlinker.gui.chat_images import ChatImages
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.selection_cards import SelectionDetail
@@ -90,16 +91,20 @@ class LocalDrafts(QWidget):
         layout.addWidget(self.status)
         actions = QGridLayout()
         self.refresh_button = QPushButton(self.tr("Refresh"))
+        set_role(self.refresh_button, "quiet")
         self.refresh_button.clicked.connect(self.refresh)
         self.preview_button = QPushButton(self.tr("Preview saved draft"))
         self.preview_button.clicked.connect(self.open_preview)
         self.save_button = QPushButton(self.tr("Save changes locally"))
         self.save_button.clicked.connect(self.save)
         self.send_button = QPushButton(self.tr("Send to c411…"))
+        set_role(self.send_button, "primary")
         self.send_button.clicked.connect(self.send)
         self.remove_button = QPushButton(self.tr("Remove from local queue"))
+        set_role(self.remove_button, "quiet")
         self.remove_button.clicked.connect(self.remove)
         self.reset_button = QPushButton(self.tr("Allow retry after checking c411…"))
+        set_role(self.reset_button, "quiet")
         self.reset_button.clicked.connect(self.reset)
         for index, button in enumerate(
             (

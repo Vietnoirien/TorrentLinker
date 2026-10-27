@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from torrentlinker.client_profiles import Connections
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tables import NumberItem, style_table
 from torrentlinker.gui.tasks import run_in_background
@@ -53,6 +54,7 @@ class ClientOverview(QWidget):
         self.filter.textChanged.connect(self.render)
         toolbar.addWidget(self.filter)
         self.refresh_button = QPushButton(self.tr("Refresh all clients"))
+        set_role(self.refresh_button, "quiet")
         self.refresh_button.clicked.connect(self.refresh)
         toolbar.addWidget(self.refresh_button)
         layout.addLayout(toolbar)

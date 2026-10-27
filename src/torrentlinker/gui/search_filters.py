@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.gui.category_picker import CategoryPicker
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import Indexer
@@ -51,6 +52,7 @@ class MultiFilter(QToolButton):
             item.setCheckState(Qt.CheckState.Unchecked)
         layout.addWidget(self.items)
         clear = QPushButton(self.tr("Clear"))
+        set_role(clear, "quiet")
         clear.clicked.connect(self.clear)
         layout.addWidget(clear)
         find.textChanged.connect(self._filter)
@@ -153,6 +155,7 @@ class SearchFilters(QWidget):
         self.order.addItem(self.tr("Descending"), "desc")
         self.order.addItem(self.tr("Ascending"), "asc")
         self.clear_button = QPushButton(self.tr("Clear filters"))
+        set_role(self.clear_button, "quiet")
         self.clear_button.clicked.connect(self.clear)
         # Two rows keep filters usable at the minimum window width.
         for widget in (self.year, self.uploader, self.exclusive, self.palliative):

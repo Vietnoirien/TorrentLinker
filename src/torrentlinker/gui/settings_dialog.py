@@ -44,6 +44,7 @@ from torrentlinker.config import Settings
 from torrentlinker.credentials import TMDB_API_KEY, get_secret, set_secret
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, Torrent, TorrentClient
 from torrentlinker.downloads import DownloadFolders, IndexerCategory
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import offer_whole_names
 from torrentlinker.gui.folder_import import FolderImportDialog
 from torrentlinker.gui.tables import style_table
@@ -141,6 +142,7 @@ class SettingsDialog(QDialog):
             info.setWordWrap(True)
             agent_layout.addWidget(info)
             open_agents = QPushButton(self.tr("Open agent access (MCP)"))
+            set_role(open_agents, "quiet")
 
             def agent_access():
                 self.reject()
@@ -676,6 +678,7 @@ class SettingsDialog(QDialog):
         add = QPushButton(self.tr("Add folder…"))
         add.clicked.connect(self._pick_folder)
         remove = QPushButton(self.tr("Remove"))
+        set_role(remove, "quiet")
         remove.clicked.connect(lambda: self.folders.removeRow(self.folders.currentRow()))
         row.addWidget(add)
         row.addWidget(self.typed_folder, 1)
@@ -956,6 +959,7 @@ class SettingsDialog(QDialog):
         )
         add.clicked.connect(self._pick_mapping)
         remove = QPushButton(self.tr("Remove"))
+        set_role(remove, "quiet")
         remove.clicked.connect(lambda: self.mappings.removeRow(self.mappings.currentRow()))
         self.detect_button = QPushButton(self.tr("Detect"))
         self.detect_button.setToolTip(

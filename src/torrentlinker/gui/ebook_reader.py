@@ -39,6 +39,7 @@ from torrentlinker.ebooks import (
     member_path,
 )
 from torrentlinker.gui.book_pages import BookPages
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.tasks import run_in_background
 
 
@@ -204,7 +205,9 @@ class BookReader(QWidget):
         self.notice.setWordWrap(True)
         self.notice.setProperty("role", "muted")
         self.previous = QPushButton("‹")
+        set_role(self.previous, "icon")
         self.next = QPushButton("›")
+        set_role(self.next, "icon")
         self.previous.setAccessibleName(self.tr("Previous"))
         self.previous.setToolTip(self.tr("Previous"))
         self.next.setAccessibleName(self.tr("Next"))
@@ -224,8 +227,10 @@ class BookReader(QWidget):
         self.chapters.setAccessibleName(self.tr("Chapters"))
         self.chapters.activated.connect(self.go)
         self.smaller = QPushButton("−")
+        set_role(self.smaller, "icon")
         self.smaller.setAccessibleName(self.tr("Zoom out"))
         self.larger = QPushButton("+")
+        set_role(self.larger, "icon")
         self.larger.setAccessibleName(self.tr("Zoom in"))
         self.smaller.clicked.connect(lambda: self.zoom(-1))
         self.larger.clicked.connect(lambda: self.zoom(1))
@@ -605,6 +610,7 @@ class ReadingRoom(QWidget):
         self.filter.setAccessibleName(self.tr("Find a book"))
         self.filter.textChanged.connect(self._filter)
         self.refresh = QPushButton(self.tr("Refresh library"))
+        set_role(self.refresh, "quiet")
         self.refresh.clicked.connect(self.scan)
         self.library = QTreeWidget()
         self.library.setHeaderHidden(True)

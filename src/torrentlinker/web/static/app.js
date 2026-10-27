@@ -765,7 +765,7 @@ async function manage(action) {
     );
     content.append(
       list,
-      button(say("Cancel", "Annuler"), () => $("dialog").close()),
+      button(say("Cancel", "Annuler"), () => $("dialog").close(), "quiet"),
       button(
         say("Confirm", "Confirmer"),
         async () => {

@@ -58,7 +58,7 @@ async function aCardDetail(load) {
   const {dialog, form} = aDialog(at("Selection details", "Détails de la sélection"));
   dialog.classList.add("selection-detail");
   const body = element("div", at("Loading details…", "Chargement des détails…"));
-  form.append(body, button(at("Close", "Fermer"), () => dialog.close()));
+  form.append(body, button(at("Close", "Fermer"), () => dialog.close(), "quiet"));
   try {
     const item = await load();
     if (!dialog.isConnected) return;

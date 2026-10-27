@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.torrent_details import DescriptionBrowser
@@ -147,6 +148,7 @@ class SelectionDetail(QDialog):
         self.status = plain_label(self.tr("Loading details…"))
         self.layout_box.addWidget(self.status)
         close = QPushButton(self.tr("Close"))
+        set_role(close, "quiet")
         close.clicked.connect(self.close)
         self.layout_box.addWidget(close)
         self.images = images
@@ -256,6 +258,7 @@ class SelectionDetail(QDialog):
         source = item.get("source_url") or ""
         if urlsplit(source).scheme in {"https", "http"}:
             link = QPushButton(self.tr("Open source"))
+            set_role(link, "quiet")
             link.clicked.connect(lambda: self.open_source(QUrl(source)))
             box.addWidget(link)
         self.layout_box.insertWidget(0, body, 1)

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.seeding_tree import SeedingTree
@@ -100,6 +101,7 @@ class SeedingView(QWidget):
         top.addWidget(self.title)
         top.addStretch()
         self.refresh_button = QPushButton(self.tr("Refresh"))
+        set_role(self.refresh_button, "quiet")
         self.refresh_button.setToolTip(self.tr("Read your torrents from your torrent client again"))
         self.refresh_button.clicked.connect(self.refresh)
         top.addWidget(self.refresh_button)
@@ -112,8 +114,10 @@ class SeedingView(QWidget):
         self.search.textChanged.connect(self.table.filter)
         self.search.setPlaceholderText(self.tr("Filter torrents or categories…"))
         self.expand_button = QPushButton(self.tr("Expand all"))
+        set_role(self.expand_button, "quiet")
         self.expand_button.clicked.connect(self.table.expandAll)
         self.collapse_button = QPushButton(self.tr("Collapse all"))
+        set_role(self.collapse_button, "quiet")
         self.collapse_button.clicked.connect(self.table.collapseAll)
         top.insertWidget(1, self.expand_button)
         top.insertWidget(2, self.collapse_button)
@@ -423,7 +427,7 @@ class PlanView(QGroupBox):
         top.addWidget(self.categories_button)
         self._refresh_categories_label()
         self.make_button = QPushButton(self.tr("Make a Plan"))
-        self.make_button.setProperty("primary", True)
+        set_role(self.make_button, "primary")
         self.make_button.clicked.connect(self.make_requested)
         top.addWidget(self.make_button)
         self.stop_fetch_button = QPushButton(self.tr("Stop fetching and plan now"))
@@ -927,6 +931,7 @@ class ZenBand(QFrame):
             row.addSpacing(16)
         row.addStretch()
         self.refresh_button = QPushButton(self.tr("Refresh profile"))
+        set_role(self.refresh_button, "quiet")
         self.refresh_button.setToolTip(self.tr("Read your Zen Balance and Class from c411"))
         self.refresh_button.clicked.connect(self.refresh_requested)
         row.addWidget(self.refresh_button)

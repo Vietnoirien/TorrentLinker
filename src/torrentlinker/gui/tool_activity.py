@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from torrentlinker.agent.presentation import tool_description, tool_error
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.request_details import JsonCode
 
 
@@ -187,6 +188,7 @@ class ToolActivity(QWidget):
                     )
                     panel.setProperty("loaded", True)
                     open_receipt = QPushButton(self.tr("Open receipt"))
+                    set_role(open_receipt, "quiet")
                     open_receipt.setFlat(True)
                     open_receipt.clicked.connect(lambda checked=False, i=position: receipt(i))
                     box.addWidget(open_receipt)

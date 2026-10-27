@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.domain import Torrent, TorrentFile
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table, style_table
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
@@ -298,6 +299,7 @@ class TorrentsTab(QWidget):
         filters.addWidget(self.tags)
         filters.addStretch()
         self.refresh_button = QPushButton(self.tr("Refresh"))
+        set_role(self.refresh_button, "quiet")
         self.refresh_button.clicked.connect(self.refresh)
         filters.addWidget(self.refresh_button)
         layout.addLayout(filters)

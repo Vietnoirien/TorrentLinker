@@ -31,6 +31,7 @@ from shiboken6 import isValid
 
 from torrentlinker.assistant.markdown import documentation_link, render
 from torrentlinker.gui.chat_images import ChatImages
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.request_details import RequestDetails
 
 
@@ -279,6 +280,7 @@ class ChatTranscript(QScrollArea):
                     (self.tr("Reject"), False),
                 ):
                     button = QPushButton(title)
+                    set_role(button, "primary" if approve else "secondary")
                     button.clicked.connect(
                         lambda checked=False, r=run["id"], n=i, yes=approve: (
                             self.decisionSubmitted.emit(r, n, yes)

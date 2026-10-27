@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
 
+from torrentlinker.gui.controls import set_role
 from torrentlinker.updates import Release
 
 
@@ -23,6 +24,7 @@ class UpdateNotice(QFrame):
         self.open_button.clicked.connect(self._open_release)
         layout.addWidget(self.open_button)
         self.dismiss_button = QPushButton(self.tr("Dismiss"))
+        set_role(self.dismiss_button, "quiet")
         self.dismiss_button.clicked.connect(self._dismiss)
         layout.addWidget(self.dismiss_button)
         self.hide()

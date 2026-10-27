@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.library import LibraryEntry
 from torrentlinker.review import CheckedCandidate
@@ -63,9 +64,11 @@ class ReseedDialog(QDialog):
         layout.addWidget(self.items)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         self.unpack_button = QPushButton(self.tr("Unpack and reseed selected…"))
+        set_role(self.unpack_button, "secondary")
         self.unpack_button.clicked.connect(self._choose_archive)
         buttons.addButton(self.unpack_button, QDialogButtonBox.ButtonRole.ActionRole)
         self.ready_button = QPushButton(self.tr("Reseed ready Matches ({0})").format(ready))
+        set_role(self.ready_button, "primary")
         self.ready_button.setEnabled(ready > 0)
         self.ready_button.clicked.connect(self.accept)
         buttons.addButton(self.ready_button, QDialogButtonBox.ButtonRole.AcceptRole)

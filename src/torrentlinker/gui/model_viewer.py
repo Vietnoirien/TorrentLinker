@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import delete
 
 from torrentlinker.domain import LocalItem
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.matching import IgnoreList
@@ -359,6 +360,7 @@ class ModelPanel(QWidget):
         layout.addWidget(self.viewer, 1)
         row = QHBoxLayout()
         self.capture_button = QPushButton(self.tr("Capture"))
+        set_role(self.capture_button, "primary")
         self.capture_button.setToolTip(
             self.tr("Save the view as a PNG of at least 1000 px to add on c411")
         )
@@ -369,8 +371,10 @@ class ModelPanel(QWidget):
         )
         self.sheet_button.clicked.connect(self.capture_sheet)
         self.reset_button = QPushButton(self.tr("Reset the view"))
+        set_role(self.reset_button, "quiet")
         self.reset_button.clicked.connect(self.viewer.reset_view)
         self.open_button = QPushButton(self.tr("Open the folder"))
+        set_role(self.open_button, "quiet")
         self.open_button.clicked.connect(self.open_folder)
         for button in (self.capture_button, self.sheet_button, self.reset_button):
             row.addWidget(button)

@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.agent.access import Grant
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.tasks import run_in_background
 
 
@@ -103,6 +104,7 @@ class AgentDialog(QDialog):
         form.addRow(self.tr("Torrents per day"), self.count)
         form.addRow(self.tr("Keep free (GiB)"), self.reserve)
         button = QPushButton(self.tr("Create connection"))
+        set_role(button, "primary")
         button.clicked.connect(self.create)
         form.addRow(button)
         scroll = QScrollArea()
@@ -121,10 +123,12 @@ class AgentDialog(QDialog):
         review.addWidget(split)
         actions = QHBoxLayout()
         self.approve = QPushButton(self.tr("Approve proposal"))
+        set_role(self.approve, "primary")
         self.reject_button = QPushButton(self.tr("Reject proposal"))
         self.revoke = QPushButton(self.tr("Revoke connection"))
         self.cancel_job = QPushButton(self.tr("Cancel job"))
         refresh = QPushButton(self.tr("Refresh"))
+        set_role(refresh, "quiet")
         for b in (self.approve, self.reject_button, self.revoke, self.cancel_job, refresh):
             actions.addWidget(b)
         review.addLayout(actions)
@@ -189,6 +193,7 @@ class AgentDialog(QDialog):
         token.setReadOnly(True)
         box.addWidget(token)
         copy = QPushButton(self.tr("Copy token"))
+        set_role(copy, "quiet")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(token.text()))
         box.addWidget(copy)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)

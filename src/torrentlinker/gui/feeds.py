@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.feeds import Preferences, Subscription, candidate
+from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.torrent_details import TorrentDetailsDialog
 
@@ -266,6 +267,7 @@ class FeedsTab(QWidget):
         layout.addWidget(text)
         if isinstance(value, dict) and value.get("id") and "hashes" in value:
             queue = QPushButton(self.tr("Queue selected"))
+            set_role(queue, "primary")
             queue.clicked.connect(lambda: self.enqueue(value["id"]))
             layout.addWidget(queue)
         dialog.resize(800, 600)

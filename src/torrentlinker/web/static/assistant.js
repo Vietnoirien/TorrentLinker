@@ -87,7 +87,7 @@ function aDialog(title) {
 }
 function aActions(dialog, form, save) {
   const footer = element("div", undefined, "toolbar");
-  footer.append(button(at("Save", "Enregistrer"), async () => { if (await save() === false) return; dialog.close(); await loadAssistant(); }, "primary"), button(at("Cancel", "Annuler"), () => dialog.close()));
+  footer.append(button(at("Save", "Enregistrer"), async () => { if (await save() === false) return; dialog.close(); await loadAssistant(); }, "primary"), button(at("Cancel", "Annuler"), () => dialog.close(), "quiet"));
   form.onsubmit = e => e.preventDefault(); form.append(footer);
 }
 async function loadAssistant() {
@@ -407,7 +407,7 @@ async function aReview(id, completed = aRefreshChat) {
     form.append(element("p", at("Metadata sizes are not reclaimable disk space.", "Les tailles des métadonnées ne sont pas de l’espace récupérable."), "muted"));
     const details = element("details"); details.append(element("summary", at("Full review", "Revue complète")), element("pre", JSON.stringify(review, null, 2))); form.append(details);
   } else form.append(element("pre", JSON.stringify(review, null, 2)));
-  form.append(button(at("Approve this action", "Approuver cette action"), async () => { await api(`agents/proposals/${id}/approve`, {}); dialog.close(); await completed(); }, "primary"), button(at("Reject", "Refuser"), async () => { await api(`agents/proposals/${id}/reject`, {}); dialog.close(); await completed(); }), button(at("Close", "Fermer"), () => dialog.close()));
+  form.append(button(at("Approve this action", "Approuver cette action"), async () => { await api(`agents/proposals/${id}/approve`, {}); dialog.close(); await completed(); }, "primary"), button(at("Reject", "Refuser"), async () => { await api(`agents/proposals/${id}/reject`, {}); dialog.close(); await completed(); }), button(at("Close", "Fermer"), () => dialog.close(), "quiet"));
 }
 async function aConnections(root) {
   root.append(element("p", at("Credentials stay in TorrentLinker. Hosted providers receive your messages and tool results. Local connections never fall back to a hosted provider.", "Les clés restent dans TorrentLinker. Les fournisseurs distants reçoivent vos messages et les résultats des outils. Aucune bascule automatique du local vers une API distante."), "muted"));

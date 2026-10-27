@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker import documentation as docs
+from torrentlinker.gui.controls import icon_button, set_role
 
 
 class GuideBrowser(QTextBrowser):
@@ -129,9 +130,10 @@ class DocumentationTab(QWidget):
         right = QVBoxLayout(content)
         right.setContentsMargins(0, 0, 0, 0)
         navigation = QHBoxLayout()
-        back = QPushButton(self.tr("Back"))
-        forward = QPushButton(self.tr("Forward"))
+        back = icon_button("←", self.tr("Back"))
+        forward = icon_button("→", self.tr("Forward"))
         online = QPushButton(self.tr("Open online"))
+        set_role(online, "quiet")
         navigation.addWidget(back)
         navigation.addWidget(forward)
         navigation.addStretch()
