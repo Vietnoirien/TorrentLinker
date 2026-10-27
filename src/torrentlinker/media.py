@@ -326,7 +326,212 @@ class MediaLibrary:
                 "INSERT OR REPLACE INTO media_options VALUES (?,?)",
                 ("errors:" + client_id, json.dumps(errors)),
             )
-        return {"count": len(found), "errors": errors, "partial": bool(errors)}
+        details = self.enrich(client_id, setup, stop, progress, target.observed)
+        if stop.is_set():
+            return {"cancelled": True}
+        if details in {"limit", "unavailable", "rejected"}:
+            # The library is complete; the remaining descriptions come with a later refresh.
+            note = {
+                "message": "c411 is not answering for now; the remaining film details "
+                "will be fetched on the next refresh."
+            }
+            with self.lock, self.db:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                    ("errors:" + client_id, json.dumps([*errors, note])),
+                )
+        return {
+            "count": len(found),
+            "errors": errors,
+            "partial": bool(errors),
+            "film_details": details,
+        }
+
+    def _release_hashes(self, setup, observed):
+        """Local path of each video in the client's torrents, with the torrent's hash.
+
+        A torrent holding several videos is kept only for series episodes, since a film
+        collection's release description fits none of its films alone.
+        """
+        from torrentlinker.paths import PathMapper
+        from torrentlinker.torrent_meta import read_torrent
+
+        mapper = PathMapper(setup.settings.path_mappings)
+        result = {}
+        for torrent in observed:
+            files = torrent.files
+            if not files:
+                try:
+                    data = setup.store.cached_torrent(torrent.hash)
+                    files = read_torrent(data).files if data else {}
+                except Exception:
+                    continue
+            videos = [name for name in files if Path(name).suffix.lower() in VIDEO]
+            for name in videos:
+                path = Path(mapper.to_local(str(torrent.save_path))) / name
+                result[str(path.absolute())] = (torrent.hash.lower(), len(videos) == 1)
+        return result
+
+    @staticmethod
+    def _plain(value):
+        """A title compared without case, accents or punctuation."""
+        import re
+        import unicodedata
+
+        value = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+    def _catalogue_release(self, setup, title, year, series):
+        """The best seeded Catalogue release whose name guesses to the same title and year."""
+        import re
+
+        wanted = self._plain(title)
+        words = [w for w in re.findall(r"[A-Za-z0-9]+", wanted) if len(w) > 1][:6]
+        for row in setup.store.catalogue_titled(words):
+            guessed = guessit(row.title)
+            if self._plain(guessed.get("title") or "") != wanted:
+                continue
+            if series != (guessed.get("type") == "episode"):
+                continue
+            if year and str(guessed.get("year") or "") not in {"", year}:
+                continue
+            return row.infohash.lower()
+        return ""
+
+    def enrich(self, client_id, setup, stop, progress, observed=()):
+        """Fill film and series facts from c411 release descriptions, in French.
+
+        Never fails the scan: answers are cached per release, so titles left over when
+        c411 asks to wait or is unreachable are described by a later refresh.
+        """
+        from torrentlinker.indexer import KeyRefused, RateLimited
+
+        try:
+            indexer = setup.indexer()
+        except Exception:
+            return "off"
+        if not indexer.is_c411:
+            return "off"
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT id, path, body FROM media_items WHERE client=?", (client_id,)
+            ).fetchall()
+        downloads = self._release_hashes(setup, observed)
+        wanted: dict[tuple[str, str, bool], list[tuple[str, dict, str]]] = {}
+        for row in rows:
+            body = json.loads(row["body"])
+            if body.get("kind") != "video" or body.get("release_details"):
+                continue
+            if body.get("description") and body.get("identity_source") != "filename":
+                continue  # local or verified metadata already describes it
+            series = bool(body.get("series"))
+            title = (body["series"] if series else body["title"]).strip()
+            known = downloads.get(str(Path(row["path"]).absolute()))
+            exact = known[0] if known and (known[1] or series) else ""
+            if title or exact:
+                query = (title, "" if series else str(body.get("year") or ""), series)
+                wanted.setdefault(query, []).append((row["id"], body, exact))
+        status, failures, done = "complete", 0, 0
+        for (title, year, series), items in wanted.items():
+            if stop.is_set():
+                break
+            match_key = "c411-match:" + identity(json.dumps([title.lower(), year, series]))
+            with self.lock:
+                saved = self.db.execute(
+                    "SELECT body FROM media_options WHERE key=?", (match_key,)
+                ).fetchone()
+            match = json.loads(saved[0]) if saved else None
+            if match is None or (
+                not match.get("hash") and time.time() - match.get("at", 0) > 7 * 86400
+            ):
+                match = {"hash": self._catalogue_release(setup, title, year, series)}
+                match["at"] = time.time()
+                with self.lock, self.db:
+                    self.db.execute(
+                        "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                        (match_key, json.dumps(match)),
+                    )
+            for identifier, body, exact in items:
+                release = exact or match["hash"]
+                if not release:
+                    continue
+                details_key = "c411-details:" + release
+                with self.lock:
+                    saved = self.db.execute(
+                        "SELECT body FROM media_options WHERE key=?", (details_key,)
+                    ).fetchone()
+                if saved:
+                    details = json.loads(saved[0])
+                else:
+                    try:
+                        payload = indexer.torrent_json(release)
+                    except (RateLimited, KeyRefused) as error:
+                        status = "limit" if isinstance(error, RateLimited) else "rejected"
+                        break
+                    except Exception:
+                        failures += 1
+                        if failures >= 3:
+                            status = "unavailable"
+                            break
+                        continue
+                    metadata = payload.get("metadata") if isinstance(payload, dict) else None
+                    details = (metadata or {}).get("tmdbData") or {}
+                    if not isinstance(details, dict):
+                        details = {}
+                    with self.lock, self.db:
+                        self.db.execute(
+                            "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                            (details_key, json.dumps(details)),
+                        )
+                if not details.get("title"):
+                    continue
+                self._apply_release_details(body, details, release)
+                with self.lock, self.db:
+                    self.db.execute(
+                        "UPDATE media_items SET body=? WHERE client=? AND id=?",
+                        (json.dumps(body), client_id, identifier),
+                    )
+            if status != "complete":
+                break
+            done += 1
+            if done % 10 == 0:
+                progress({"film_details": done, "of": len(wanted)})
+        return status
+
+    @staticmethod
+    def _apply_release_details(body, details, release):
+        def text(name, limit=16000):
+            value = details.get(name)
+            if isinstance(value, list):
+                value = ", ".join(
+                    str(v.get("name") if isinstance(v, dict) else v) for v in value[:8]
+                )
+            return str(value or "").strip()[:limit]
+
+        body["release_details"] = release
+        if body.get("series"):
+            body["series"] = text("title", 500) or body["series"]
+        else:
+            body["title"] = text("title", 500) or body["title"]
+            body["year"] = (text("year") or text("releaseDate"))[:4] or body["year"]
+        body["original_title"] = text("originalTitle", 500)
+        if not body.get("description") or body.get("identity_source") == "filename":
+            body["description"] = text("overview") or body.get("description", "")
+        body["genre"] = body.get("genre") or text("genres", 500)
+        for field, name in (
+            ("director", "directors"),
+            ("actors", "cast"),
+            ("rating", "rating"),
+            ("tagline", "tagline"),
+        ):
+            if text(name, 1000):
+                body[field] = text(name, 1000)
+        if not body.get("artwork") and not body.get("remote_artwork"):
+            body["remote_artwork"] = text("posterUrl", 2000)
+        content = text("id", 40)
+        if content and body.get("identity_source") == "filename" and not body.get("series"):
+            body["content_id"] = identity("tmdb:movie:" + content)
+            body["identity_source"] = "c411 release description"
 
     def sidecar(self, client_id, path, folder, maximum=262144):
         checked = self.checked_path(client_id, str(path), folder)
@@ -712,6 +917,13 @@ class MediaLibrary:
 
             data, _ = fetch_image(remote)
             image = self.cache_artwork(data)
+            body = json.loads(row["body"])
+            body["artwork"] = image  # download each poster once
+            with self.lock, self.db:
+                self.db.execute(
+                    "UPDATE media_items SET body=? WHERE client=? AND id=?",
+                    (json.dumps(body), client_id, identifier),
+                )
         self.checked_path(client_id, row["path"], row["folder"])
         if image.startswith("asset:"):
             key = image[6:]

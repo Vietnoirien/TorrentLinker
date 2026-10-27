@@ -742,6 +742,18 @@ class Store:
                     )
         return [CatalogueRow(*r) for r in rows]
 
+    def catalogue_titled(self, words: list[str], limit: int = 200) -> list[CatalogueRow]:
+        """Catalogue torrents whose name holds every word, best seeded first."""
+        if not words:
+            return []
+        where = " AND ".join("title LIKE ?" for _ in words)
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT * FROM catalogue WHERE {where} ORDER BY seeders DESC LIMIT ?",
+                [f"%{w}%" for w in words] + [limit],
+            ).fetchall()
+        return [CatalogueRow(*r) for r in rows]
+
     def update_catalogue_seeders(self, counts: dict[str, int]) -> None:
         """Apply swarm observations without claiming size/category metadata was refreshed."""
         with self._lock, self._db:

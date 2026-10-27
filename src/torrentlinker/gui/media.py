@@ -1017,7 +1017,7 @@ class MediaTab(QWidget):
         left_box.addWidget(self.player_panel)
         self.refresh_button.clicked.connect(self.start_scan)
         self.cancel_scan.clicked.connect(self._cancel_media_scan)
-        self.scan_progress.connect(lambda value: self._set_notice(str(value)))
+        self.scan_progress.connect(self._scan_progress)
         self.kind.currentIndexChanged.connect(self._kind_changed)
         self.view.currentIndexChanged.connect(self._leave_video_for_navigation)
         self.view.currentIndexChanged.connect(self.refresh)
@@ -1419,6 +1419,8 @@ class MediaTab(QWidget):
         ]
         if row.get("identity_source") == "filename":
             facts.insert(0, self.tr("Filename metadata"))
+        if row.get("rating"):
+            facts.append("★ " + str(row["rating"]))
         if row.get("duration"):
             facts.append(self._time_label(float(row["duration"])))
         if row.get("position"):
@@ -2140,9 +2142,17 @@ class MediaTab(QWidget):
             info = [row["title"]]
             if row.get("identity_source") == "filename":
                 info.append(self.tr("Title and release details guessed from filename"))
+            if row.get("original_title") and row["original_title"] != row["title"]:
+                info.append(self.tr("Original title: {0}").format(row["original_title"]))
             for name in ("year", "genre", "language", "description", "reason"):
                 if row.get(name):
                     info.append(str(row[name]))
+            for name, label in (
+                ("director", self.tr("Directed by {0}")),
+                ("actors", self.tr("With {0}")),
+            ):
+                if row.get(name):
+                    info.append(label.format(row[name]))
             if row.get("season") is not None or row.get("episode") is not None:
                 info.append(
                     self.tr("Filename metadata: season {0}, episode {1}").format(
@@ -3058,6 +3068,16 @@ class MediaTab(QWidget):
             self._scan_done,
             self._scan_failed,
         )
+
+    def _scan_progress(self, value: Any) -> None:
+        if isinstance(value, dict) and "film_details" in value:
+            self._set_notice(
+                self.tr("Fetching film details from c411… {0} / {1}").format(
+                    value["film_details"], value.get("of", "?")
+                )
+            )
+        elif isinstance(value, dict) and "items" in value:
+            self._set_notice(self.tr("Scanning Library Folders… {0} files").format(value["items"]))
 
     def _scan_done(self, _result: Any) -> None:
         if not isValid(self):

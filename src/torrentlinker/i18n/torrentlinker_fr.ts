@@ -7224,6 +7224,30 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
 <context>
     <name>MediaTab</name>
     <message>
+        <source>Fetching film details from c411… {0} / {1}</source>
+        <translation>Récupération des fiches de films depuis c411… {0} / {1}</translation>
+    </message>
+    <message>
+        <source>Scanning Library Folders… {0} files</source>
+        <translation>Analyse des Dossiers de bibliothèque… {0} fichiers</translation>
+    </message>
+    <message>
+        <source>Remove from Continue watching</source>
+        <translation>Retirer de Reprendre la lecture</translation>
+    </message>
+    <message>
+        <source>Original title: {0}</source>
+        <translation>Titre original : {0}</translation>
+    </message>
+    <message>
+        <source>Directed by {0}</source>
+        <translation>Réalisé par {0}</translation>
+    </message>
+    <message>
+        <source>With {0}</source>
+        <translation>Avec {0}</translation>
+    </message>
+    <message>
         <location filename="../gui/media.py" line="155" />
         <source>Video</source>
         <translation>Vidéo</translation>
