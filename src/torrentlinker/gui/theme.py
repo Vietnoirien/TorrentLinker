@@ -200,6 +200,11 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
             border-radius: 10px; }}
         QFrame#chatExample:hover, QFrame#chatExample:focus {{ border-color: {accent}; }}
         QFrame#chatExample QLabel {{ background: transparent; }}
+        QFrame#choiceCard {{ background: {panel}; border: 1px solid {border};
+            border-radius: 10px; }}
+        QFrame#choiceCard:hover {{ border-color: {accent}; }}
+        QFrame#choiceCard[selected="true"] {{ border: 2px solid {accent}; }}
+        QFrame#choiceCard QLabel, QFrame#choiceCard QRadioButton {{ background: transparent; }}
         QFrame#automationCard {{ background: {panel}; border: 1px solid {border};
             border-radius: 10px; }}
         QFrame#automationCard QLabel {{ background: transparent; }}

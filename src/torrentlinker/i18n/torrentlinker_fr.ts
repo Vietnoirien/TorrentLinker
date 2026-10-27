@@ -8296,4 +8296,231 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <translation>vu</translation>
     </message>
 </context>
+<context>
+    <name>CategoryChecklist</name>
+    <message>
+        <source>All categories</source>
+        <translation>Toutes les catégories</translation>
+    </message>
+    <message>
+        <source>Categories</source>
+        <translation>Catégories</translation>
+    </message>
+</context>
+<context>
+    <name>FeedEditor</name>
+    <message>
+        <source>RSS subscription</source>
+        <translation>Abonnement RSS</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Preview</source>
+        <translation>Aperçu</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Minimum seeders</source>
+        <translation>Seeders minimum</translation>
+    </message>
+    <message>
+        <source>Ranking priorities, comma separated</source>
+        <translation>Priorités de classement, séparées par des virgules</translation>
+    </message>
+    <message>
+        <source>Prefer smaller releases</source>
+        <translation>Préférer les petits torrents</translation>
+    </message>
+    <message>
+        <source>Required / accepted</source>
+        <translation>Requis / acceptés</translation>
+    </message>
+    <message>
+        <source>Preferred in order</source>
+        <translation>Préférés par ordre</translation>
+    </message>
+    <message>
+        <source>Excluded</source>
+        <translation>Exclus</translation>
+    </message>
+    <message>
+        <source>Torrent Client</source>
+        <translation>Client torrent</translation>
+    </message>
+    <message>
+        <source>Download Folder</source>
+        <translation>Dossier de téléchargement</translation>
+    </message>
+    <message>
+        <source>Torrents per day</source>
+        <translation>Torrents par jour</translation>
+    </message>
+    <message>
+        <source>I explicitly authorize automatic downloads under these limits</source>
+        <translation>J'autorise explicitement les téléchargements automatiques selon ces limites</translation>
+    </message>
+    <message>
+        <source>Include currently available releases</source>
+        <translation>Inclure les torrents actuels</translation>
+    </message>
+    <message>
+        <source>Replace better matches while still pending</source>
+        <translation>Remplacer par un meilleur choix uniquement en attente</translation>
+    </message>
+    <message>
+        <source>Preview this definition before saving.</source>
+        <translation>Prévisualisez cette définition avant de l'enregistrer.</translation>
+    </message>
+    <message>
+        <source>What to follow</source>
+        <translation>Ce qu’il faut suivre</translation>
+    </message>
+    <message>
+        <source>Words the title must contain</source>
+        <translation>Mots que le titre doit contenir</translation>
+    </message>
+    <message>
+        <source>Title contains</source>
+        <translation>Le titre contient</translation>
+    </message>
+    <message>
+        <source>Categories</source>
+        <translation>Catégories</translation>
+    </message>
+    <message>
+        <source>Category names appear once the indexer has been connected.</source>
+        <translation>Les noms de catégories apparaissent une fois l’indexeur connecté.</translation>
+    </message>
+    <message>
+        <source>What you accept</source>
+        <translation>Ce que vous acceptez</translation>
+    </message>
+    <message>
+        <source>At least</source>
+        <translation>Au moins</translation>
+    </message>
+    <message>
+        <source>At most</source>
+        <translation>Au plus</translation>
+    </message>
+    <message>
+        <source>required/excluded are hard constraints; preferred lists rank acceptable releases. Fields: quality, codec, audio, subtitles, format, bitrate, platform, license. priorities sets ranking order; prefer_small ranks size. Unknown required metadata blocks rules.</source>
+        <translation>required/excluded sont des contraintes strictes ; les listes preferred classent les publications acceptables. Champs : quality, codec, audio, subtitles, format, bitrate, platform, license. priorities fixe l’ordre de classement ; prefer_small classe la taille. Une métadonnée requise inconnue bloque les règles.</translation>
+    </message>
+    <message>
+        <source>Release criteria</source>
+        <translation>Critères des publications</translation>
+    </message>
+    <message>
+        <source>What happens</source>
+        <translation>Ce qui se passe</translation>
+    </message>
+    <message>
+        <source>Per day, at most</source>
+        <translation>Par jour, au plus</translation>
+    </message>
+    <message>
+        <source>Keep free on disk</source>
+        <translation>Garder libre sur le disque</translation>
+    </message>
+    <message>
+        <source>Allowed hours</source>
+        <translation>Heures autorisées</translation>
+    </message>
+    <message>
+        <source>Check every</source>
+        <translation>Vérifier toutes les</translation>
+    </message>
+    <message>
+        <source> min</source>
+        <translation> min</translation>
+    </message>
+    <message>
+        <source>Wait for better releases</source>
+        <translation>Attendre de meilleures publications</translation>
+    </message>
+    <message>
+        <source>How often</source>
+        <translation>Fréquence</translation>
+    </message>
+    <message>
+        <source>%1 h</source>
+        <translation>%1 h</translation>
+    </message>
+    <message>
+        <source>%1 min</source>
+        <translation>%1 min</translation>
+    </message>
+    <message>
+        <source>Choose at least one hour for automatic downloads.</source>
+        <translation>Choisissez au moins une heure pour les téléchargements automatiques.</translation>
+    </message>
+</context>
+<context>
+    <name>ModeCards</name>
+    <message>
+        <source>Notify me</source>
+        <translation>Me prévenir</translation>
+    </message>
+    <message>
+        <source>Add to queue</source>
+        <translation>Ajouter à la file</translation>
+    </message>
+    <message>
+        <source>Download automatically</source>
+        <translation>Télécharger automatiquement</translation>
+    </message>
+    <message>
+        <source>New releases appear in the RSS inbox. Nothing is queued.</source>
+        <translation>Les nouvelles publications arrivent dans la boîte RSS. Rien n’est mis en file.</translation>
+    </message>
+    <message>
+        <source>Matching releases join TorrentLinker's queue. Nothing reaches your client until you start it.</source>
+        <translation>Les publications correspondantes rejoignent la file de TorrentLinker. Rien n’atteint votre client avant que vous la démarriez.</translation>
+    </message>
+    <message>
+        <source>Matching releases are sent to your client on their own, within your limits.</source>
+        <translation>Les publications correspondantes sont envoyées seules à votre client, dans vos limites.</translation>
+    </message>
+</context>
+<context>
+    <name>SizeField</name>
+    <message>
+        <source>No limit</source>
+        <translation>Sans limite</translation>
+    </message>
+</context>
+<context>
+    <name>HoursField</name>
+    <message>
+        <source>Any time</source>
+        <translation>À tout moment</translation>
+    </message>
+    <message>
+        <source>Night only (1:00–7:00)</source>
+        <translation>La nuit seulement (1 h–7 h)</translation>
+    </message>
+    <message>
+        <source>Custom hours</source>
+        <translation>Heures personnalisées</translation>
+    </message>
+    <message>
+        <source>Hour %1</source>
+        <translation>Heure %1</translation>
+    </message>
+    <message>
+        <source>Local time. Downloads start only in the hours you tick.</source>
+        <translation>Heure locale. Les téléchargements ne démarrent que pendant les heures cochées.</translation>
+    </message>
+</context>
 </TS>

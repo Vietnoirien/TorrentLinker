@@ -11,7 +11,6 @@ from PySide6.QtCore import QLocale, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -19,13 +18,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSplitter,
     QStackedWidget,
     QTableWidget,
@@ -37,8 +34,9 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.feed_units import age, format_size, when
-from torrentlinker.feeds import Preferences, Subscription, candidate
+from torrentlinker.feeds import Subscription, candidate
 from torrentlinker.gui.controls import icon_button, set_role
+from torrentlinker.gui.feed_editor import FeedEditor
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.gui.torrent_details import TorrentDetailsDialog
 
@@ -548,250 +546,4 @@ class FeedsTab(QWidget):
                 name="RSS", query=query, client_id=control.service.setup.settings.active_client_id
             )
         )
-        dialog = QDialog(self)
-        dialog.setWindowTitle(self.tr("RSS subscription"))
-        outer = QVBoxLayout(dialog)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        pane = QWidget()
-        form = QFormLayout(pane)
-        fields = {}
-
-        def line(key, label, value):
-            fields[key] = QLineEdit(str(value))
-            form.addRow(label, fields[key])
-
-        line("name", self.tr("Name"), feed.name)
-        line("query", self.tr("Title query"), feed.query)
-        line("categories", self.tr("Torznab category IDs"), ",".join(map(str, feed.categories)))
-        note = QLabel(
-            self.tr(
-                "Film 2030, TV 5000, Music 3010, Books 7020, all 3D 8010. Native "
-                "Search filters are not copied. Advanced criteria use verified "
-                "metadata only."
-            )
-        )
-        note.setWordWrap(True)
-        form.addRow(note)
-        client = QComboBox()
-        folder = QComboBox()
-        for profile in control.service.setup.settings.client_profiles:
-            if profile.enabled:
-                client.addItem(profile.name, profile.id)
-        client.setCurrentIndex(max(0, client.findData(feed.client_id)))
-
-        def folders():
-            folder.clear()
-            folder.addItem("")
-            folder.addItems(
-                sorted(control.service.for_client(client.currentData()).download_destinations())
-            )
-            folder.setCurrentText(feed.folder)
-
-        client.currentIndexChanged.connect(folders)
-        folders()
-        form.addRow(self.tr("Torrent Client"), client)
-        form.addRow(self.tr("Download Folder"), folder)
-        mode = QComboBox()
-        for label, value in [
-            (self.tr("Review only"), "review_only"),
-            (self.tr("App queue only"), "app_queue"),
-            (self.tr("Automatic downloads"), "automatic_download"),
-        ]:
-            mode.addItem(label, value)
-        mode.setCurrentIndex(mode.findData(feed.mode))
-        form.addRow(self.tr("Mode"), mode)
-        for key, label in [
-            ("interval_minutes", self.tr("Poll interval, minutes")),
-            ("wait_minutes", self.tr("Wait for alternatives, minutes")),
-            ("daily_bytes", self.tr("Daily download bytes")),
-            ("daily_torrents", self.tr("Daily download count")),
-            ("reserve_bytes", self.tr("Disk reserve bytes")),
-        ]:
-            line(key, label, getattr(feed, key))
-        line(
-            "download_hours", self.tr("Allowed UTC hours"), ",".join(map(str, feed.download_hours))
-        )
-        include = QCheckBox(self.tr("Include currently available releases"))
-        include.setChecked(feed.include_current)
-        replace = QCheckBox(self.tr("Replace better matches while still pending"))
-        replace.setChecked(feed.replace_pending)
-        form.addRow(include)
-        form.addRow(replace)
-        preference_fields = {}
-        for key, label, value in [
-            ("min_size", self.tr("Minimum bytes"), feed.preferences.min_size),
-            (
-                "max_size",
-                self.tr("Maximum bytes, blank for unlimited"),
-                feed.preferences.max_size if feed.preferences.max_size is not None else "",
-            ),
-            ("min_seeders", self.tr("Minimum seeders"), feed.preferences.min_seeders),
-            (
-                "priorities",
-                self.tr("Ranking priorities, comma separated"),
-                ",".join(feed.preferences.priorities),
-            ),
-        ]:
-            field = QLineEdit(str(value))
-            preference_fields[key] = field
-            form.addRow(label, field)
-        prefer_small = QCheckBox(self.tr("Prefer smaller releases"))
-        prefer_small.setChecked(feed.preferences.prefer_small)
-        form.addRow(prefer_small)
-        seeders_help = QLabel(
-            self.tr(
-                "Add seeders to the ranking priorities to prefer more seeders; move it "
-                "before quality or codec to give availability priority."
-            )
-        )
-        seeders_help.setWordWrap(True)
-        form.addRow(seeders_help)
-        for key in (
-            "quality",
-            "codec",
-            "audio",
-            "subtitles",
-            "format",
-            "bitrate",
-            "platform",
-            "license",
-        ):
-            for group, label in [
-                ("required", self.tr("Required / accepted")),
-                ("preferred", self.tr("Preferred in order")),
-                ("excluded", self.tr("Excluded")),
-            ]:
-                field = QLineEdit(",".join(getattr(feed.preferences, group).get(key, [])))
-                preference_fields[group + "-" + key] = field
-                form.addRow(f"{key} · {label}", field)
-        help_text = QLabel(
-            self.tr(
-                "required/excluded are hard constraints; preferred lists rank "
-                "acceptable releases. Fields: quality, codec, audio, subtitles, "
-                "format, bitrate, platform, license. priorities sets ranking order; "
-                "prefer_small ranks size. Unknown required metadata blocks rules. Work "
-                "identity must be verified."
-            )
-        )
-        help_text.setWordWrap(True)
-        form.addRow(help_text)
-        approval = QCheckBox(
-            self.tr("I explicitly authorize automatic downloads under these limits")
-        )
-        form.addRow(approval)
-        preview = QTextEdit()
-        preview.setReadOnly(True)
-        form.addRow(preview)
-        scroll.setWidget(pane)
-        outer.addWidget(scroll)
-        previewed = [""]
-
-        def preference_definition():
-            values = {
-                "min_size": int(preference_fields["min_size"].text()),
-                "max_size": int(preference_fields["max_size"].text())
-                if preference_fields["max_size"].text().strip()
-                else None,
-                "min_seeders": int(preference_fields["min_seeders"].text()),
-                "priorities": [
-                    v.strip()
-                    for v in preference_fields["priorities"].text().split(",")
-                    if v.strip()
-                ],
-                "prefer_small": prefer_small.isChecked(),
-            }
-            for group in ("required", "preferred", "excluded"):
-                values[group] = {}
-                for key in (
-                    "quality",
-                    "codec",
-                    "audio",
-                    "subtitles",
-                    "format",
-                    "bitrate",
-                    "platform",
-                    "license",
-                ):
-                    selected = [
-                        v.strip()
-                        for v in preference_fields[group + "-" + key].text().split(",")
-                        if v.strip()
-                    ]
-                    if selected:
-                        values[group][key] = selected
-            return Preferences.model_validate(values)
-
-        def definition():
-            values = {
-                key: int(fields[key].text())
-                for key in (
-                    "interval_minutes",
-                    "wait_minutes",
-                    "daily_bytes",
-                    "daily_torrents",
-                    "reserve_bytes",
-                )
-            }
-            return Subscription(
-                **{
-                    **feed.model_dump(),
-                    **values,
-                    "name": fields["name"].text(),
-                    "query": fields["query"].text(),
-                    "categories": [
-                        int(v.strip()) for v in fields["categories"].text().split(",") if v.strip()
-                    ],
-                    "client_id": client.currentData(),
-                    "folder": folder.currentText(),
-                    "mode": mode.currentData(),
-                    "include_current": include.isChecked(),
-                    "replace_pending": replace.isChecked(),
-                    "download_hours": [
-                        int(v.strip())
-                        for v in fields["download_hours"].text().split(",")
-                        if v.strip()
-                    ],
-                    "preferences": preference_definition(),
-                }
-            )
-
-        def preview_feed():
-            try:
-                value = definition()
-
-                def done(result):
-                    previewed[0] = value.model_dump_json()
-                    preview.setPlainText(json.dumps(result, indent=2))
-
-                run_in_background(
-                    lambda: control.feeds.preview(value),
-                    done,
-                    lambda e: preview.setPlainText(str(e)),
-                )
-            except Exception as error:
-                preview.setPlainText(str(error))
-
-        def save():
-            try:
-                value = definition()
-                if not identifier and previewed[0] != value.model_dump_json():
-                    raise ValueError(self.tr("Preview this definition before saving."))
-                control.save(value, approved=approval.isChecked())
-                dialog.accept()
-                self.reload()
-            except Exception as error:
-                preview.setPlainText(str(error))
-
-        buttons = QHBoxLayout()
-        for label, action in [
-            (self.tr("Preview"), preview_feed),
-            (self.tr("Save subscription"), save),
-            (self.tr("Cancel"), dialog.reject),
-        ]:
-            button = QPushButton(label)
-            button.clicked.connect(action)
-            buttons.addWidget(button)
-        outer.addLayout(buttons)
-        dialog.resize(850, 750)
-        dialog.exec()
+        FeedEditor(control, feed, identifier, self.reload, self).exec()
