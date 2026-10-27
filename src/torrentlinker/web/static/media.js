@@ -237,12 +237,18 @@ async function mediaSeeAll(filters) {
   await loadMedia();
   window.scrollTo({top: 0});
 }
+// In Video, a music track keeps its bar only while it plays, so it can still be paused.
+function mediaMusicBar() {
+  const shell = $("media-player-shell");
+  shell.classList.toggle("media-shell-parked", shell.dataset.kind === "music" && media.kind === "video" && $("media-audio").paused);
+}
 function mediaRender() {
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout;
   $("view-media").dataset.musicView = media.view;
   $("view-media").dataset.empty = String(media.rows.length === 0);
   for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
   for (const item of document.querySelectorAll("[data-media-music-view]")) { item.classList.toggle("active", item.dataset.mediaMusicView === media.view); item.setAttribute("aria-current", item.dataset.mediaMusicView === media.view ? "page" : "false"); }
+  mediaMusicBar();
   mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome(); mediaRenderEpisodes(media.selected).catch(() => {});
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries")})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
@@ -569,7 +575,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   media.preview = preview;
   if (preview) { media.queue = [id]; media.index = 0; }
   else if (request.queue) { media.queue = request.queue; media.index = request.index; }
-  $("media-player-shell").dataset.kind = row.kind;
+  $("media-player-shell").dataset.kind = row.kind; mediaMusicBar();
   mediaPlayerComposition(row.kind);
   const player = $(row.kind === "music" ? "media-audio" : "media-video");
   $("media-audio").hidden = row.kind !== "music"; $("media-video").hidden = row.kind === "music";
@@ -884,6 +890,7 @@ for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}
 let mediaSearchTimer;
 $("media-search").oninput = () => { clearTimeout(mediaSearchTimer); mediaSearchTimer = setTimeout(() => guard(loadMedia), 250); };
 $("media-refresh").onclick = () => guard(mediaScan);
+for (const event of ["play", "pause", "ended", "emptied"]) $("media-audio").addEventListener(event, mediaMusicBar);
 $("media-toolbar-refresh").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); else await mediaScan(); });
 mediaScanIcon();
 $("media-more").onclick = () => guard(() => loadMedia(true));

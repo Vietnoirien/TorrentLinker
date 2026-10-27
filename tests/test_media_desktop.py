@@ -146,6 +146,12 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     qtbot.waitUntil(lambda: tab.results.count() == 0)
     assert tab.player.source() == source
     assert tab.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+    # In Video, playing music keeps its bar so it can be paused; paused, the bar leaves.
+    assert tab.player_panel.isVisible()
+    tab.player.pause()
+    qtbot.waitUntil(lambda: not tab.player_panel.isVisible())
+    tab.player.play()
+    qtbot.waitUntil(lambda: tab.player_panel.isVisible())
     from torrentlinker.gui.media import CHAT_MIN_WIDTH, MEDIA_MIN_WIDTH
 
     tab.resize(1280, 720)

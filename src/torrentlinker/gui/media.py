@@ -1238,6 +1238,8 @@ class MediaTab(QWidget):
         )
         self.pause.setToolTip(self.tr("Pause") if playing else self.tr("Play"))
         self._show_video_controls()
+        if self.kind.currentData() == "video" and self.current_row.get("kind") == "music":
+            self._update_panes()  # the music bar follows play and pause while in Video
 
     def _scale_caption(self) -> None:
         self._fit_caption()
@@ -2265,8 +2267,15 @@ class MediaTab(QWidget):
         self.refresh_preview.setVisible(
             chosen and self.preview_item == self.detail_row.get("id") and bool(self.preview_id)
         )
+        playing = (
+            self.player is not None
+            and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        )
+        # In Video, a music track keeps its bar only while it plays, so it can be paused.
+        background_music = active and not active_video and video
         self.player_panel.setVisible(
-            active
+            (active and not background_music)
+            or (background_music and playing)
             or (not video and (bool(self.state["queue"]) or self.queue_disclosure.isChecked()))
         )
         self.video.setVisible(active_video)

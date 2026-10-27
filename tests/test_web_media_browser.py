@@ -688,6 +688,13 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             ).click()
             expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 2")
             assert page.locator("#media-audio").evaluate("node => node.paused") is True
+            # Paused music leaves its bar behind when switching to Video, and finds it again.
+            expect(page.locator("#media-player-shell")).to_be_visible()
+            page.locator("#media-video-tab").click()
+            expect(page.locator("#media-player-shell")).to_be_hidden()
+            page.locator("#media-music-tab").click()
+            expect(page.locator("#media-player-shell")).to_be_visible()
+            music_nav.get_by_role("button", name="Tracks", exact=True).click()
             if screenshots:
                 page.screenshot(path=str(Path(screenshots) / "media-music-tracks.png"))
                 page.locator("#theme").select_option("light")

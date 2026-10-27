@@ -390,3 +390,4 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 .media-episode-still progress { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 4px; }
 .media-episode-card strong { font-size: 13px; }
 .media-episode-card span { color: var(--muted); font-size: 11px; }
+#media-player-shell.media-shell-parked { display: none !important; }
