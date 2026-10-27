@@ -4405,6 +4405,34 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>{0} torrents</source>
         <translation>{0} torrents</translation>
     </message>
+    <message>
+        <source>Compact</source>
+        <translation>Compact</translation>
+    </message>
+    <message>
+        <source>Comfortable</source>
+        <translation>Confortable</translation>
+    </message>
+    <message>
+        <source>Leechers</source>
+        <translation>Leechers</translation>
+    </message>
+    <message>
+        <source>Completed</source>
+        <translation>Complétés</translation>
+    </message>
+    <message>
+        <source>Uploader</source>
+        <translation>Uploader</translation>
+    </message>
+    <message>
+        <source>Add to the download queue</source>
+        <translation>Ajouter à la file de téléchargement</translation>
+    </message>
+    <message>
+        <source>{0} selected</source>
+        <translation>{0} sélectionné(s)</translation>
+    </message>
 </context>
 <context>
     <name>SeedingTree</name>
@@ -8779,6 +8807,20 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Relevance</source>
         <translation>Pertinence</translation>
+    </message>
+</context>
+<context>
+    <name>AgeDelegate</name>
+    <message>
+        <source>{0} compl.</source>
+        <translation>{0} compl.</translation>
+    </message>
+</context>
+<context>
+    <name>ZenDelegate</name>
+    <message>
+        <source>Zen/day</source>
+        <translation>Zen/j</translation>
     </message>
 </context>
 </TS>

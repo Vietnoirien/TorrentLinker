@@ -43,6 +43,7 @@ class CategoryPills(QWidget):
         self._parents: dict[int, int | None] = {}
         self._counts: dict[int, int] = {}
         self._current: int | None = None
+        self._colors: dict[str, str] = {}
         self.set_categories({})
 
     def set_categories(
@@ -56,12 +57,15 @@ class CategoryPills(QWidget):
         self._parents = {cid: info.parent for cid, info in categories.items()}
         roots = [cid for cid, info in categories.items() if info.parent not in categories]
         self._names = {None: self.tr("All"), **{cid: categories[cid].name for cid in roots}}
+        self._colors = {}
         for index, key in enumerate(self._names):
             button = QPushButton()
             button.setProperty("chip", "pill")
             button.setCheckable(True)
             color = (colors or {}).get(key or 0) or FALLBACK_COLORS[index % len(FALLBACK_COLORS)]
             button.setIcon(dot(color))
+            if key is not None:
+                self._colors[self._names[key]] = color
             button.setIconSize(QSize(10, 10))
             button.clicked.connect(lambda _=False, k=key: self.category_chosen.emit(k))
             self.group.addButton(button)
@@ -70,6 +74,10 @@ class CategoryPills(QWidget):
         self.set_counts(self._counts)
         self.select(self._current)
         self.setVisible(len(roots) > 0)
+
+    def color_for(self, root_name: str) -> str | None:
+        """The pill color of a root category, by name; the result rows reuse it."""
+        return self._colors.get(root_name)
 
     def set_counts(self, counts: Mapping[int, int]) -> None:
         self._counts = dict(counts)

@@ -7,12 +7,24 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QDateTime, QLocale, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import (
+    QDateTime,
+    QLocale,
+    QModelIndex,
+    QPersistentModelIndex,
+    QSettings,
+    Qt,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QDesktopServices, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -34,6 +46,15 @@ from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.pagination import PageBar
 from torrentlinker.gui.search_filters import SearchFilters
+from torrentlinker.gui.search_rows import (
+    ROW_HEIGHT,
+    AgeDelegate,
+    DownloadDelegate,
+    RowView,
+    StatsDelegate,
+    TitleDelegate,
+    ZenDelegate,
+)
 from torrentlinker.gui.search_widgets import CategoryPills
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import choose_directory
@@ -50,6 +71,11 @@ from torrentlinker.torrent_search import SearchPage, native_search
 from torrentlinker.zen import ZenTorrent, added_values, note
 
 PAGE_SIZE = 100
+RESULT_WIDTHS = (420, 100, 80, 240, 150, 110, 90, 160, 80, 90, 120, 60)
+DOWNLOAD_COLUMN = 11
+# Comfortable rows fold seeders, leechers, completed and uploader into painted cells.
+COMFORTABLE_HIDDEN = (2, 3, 4, 6, 8, 9, 10)
+COMPACT_HIDDEN = (9, 10, 11)
 
 
 class SearchTab(QWidget):
@@ -85,6 +111,19 @@ class SearchTab(QWidget):
         self.queue_notice.setWordWrap(True)
         self.queue_notice.setTextFormat(Qt.TextFormat.PlainText)
         header.addWidget(self.queue_notice, 1)
+        self.density_group = QButtonGroup(self)
+        self.density_buttons: dict[str, QPushButton] = {}
+        for key, label in (
+            ("compact", self.tr("Compact")),
+            ("comfortable", self.tr("Comfortable")),
+        ):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setProperty("chip", "filter")
+            button.clicked.connect(lambda _=False, k=key: self.set_density(k, remember=True))
+            self.density_group.addButton(button)
+            self.density_buttons[key] = button
+            header.addWidget(button)
         self.view_queue = QPushButton()
         set_role(self.view_queue, "quiet")
         self.view_queue.clicked.connect(self.show_queue)
@@ -174,13 +213,20 @@ class SearchTab(QWidget):
                 self.tr("≈ Zen/day"),
                 self.tr("≈ Note"),
                 self.tr("Age"),
+                self.tr("Leechers"),
+                self.tr("Completed"),
+                self.tr("Uploader"),
+                "",
             ]
         )
-        for column, width in enumerate((420, 100, 80, 240, 150, 110, 90, 160)):
+        for column, width in enumerate(RESULT_WIDTHS):
             self.results.setColumnWidth(column, width)
         self.results.horizontalHeader().moveSection(5, 3)
         self.results.horizontalHeader().moveSection(6, 4)
         self.results.horizontalHeader().moveSection(7, 3)
+        # Leechers sit next to Seeders in the compact view.
+        columns = self.results.horizontalHeader()
+        columns.moveSection(columns.visualIndex(8), columns.visualIndex(2) + 1)
         published_header = self.results.horizontalHeaderItem(7)
         assert published_header is not None
         published_header.setToolTip(
@@ -189,37 +235,45 @@ class SearchTab(QWidget):
         self.results_empty = EmptyState(
             self.results, self.tr("Search for torrents, then select the ones to download.")
         )
-        self.results.setMinimumHeight(420)
-        body_layout.addWidget(self.results, 1)
+        self.results.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.results.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.results.cellClicked.connect(self._cell_clicked)
+        body_layout.addWidget(self.results)
+        body_layout.addStretch(1)
         self.result_status = QLabel()
         self.result_status.setWordWrap(True)
         self.result_status.setTextFormat(Qt.TextFormat.PlainText)
         body_layout.addWidget(self.result_status)
-        paging = QHBoxLayout()
-        paging.addStretch()
+        self.selection_bar = QFrame()
+        self.selection_bar.setObjectName("selectionBar")
+        selection = QHBoxLayout(self.selection_bar)
+        selection.setContentsMargins(12, 8, 8, 8)
+        self.selection_label = QLabel()
+        selection.addWidget(self.selection_label)
+        selection.addStretch()
         self.details_button = QPushButton(self.tr("Open in tabs"))
         self.details_button.clicked.connect(self.show_details)
         self.website_button = QPushButton(self.tr("Open on website"))
         set_role(self.website_button, "quiet")
         self.website_button.clicked.connect(self.open_website)
-        paging.addWidget(self.details_button)
-        paging.addWidget(self.website_button)
         self.results.itemDoubleClicked.connect(self._open_result_item)
-        results_layout.addLayout(paging)
-        destination = QHBoxLayout()
-        destination.addWidget(QLabel(self.tr("Download Folder")))
         self.folder = QLineEdit()
         self.folder.setPlaceholderText(self.tr("Use category folders from Settings"))
         self.folder.setAccessibleName(self.tr("Download Folder"))
+        self.folder.setMaximumWidth(280)
         browse = QPushButton(self.tr("Browse…"))
         browse.clicked.connect(self._browse)
         self.add_button = QPushButton(self.tr("Add selected to queue"))
+        set_role(self.add_button, "primary")
         self.add_button.clicked.connect(self.add_selected)
-        destination.addWidget(self.folder, 1)
-        destination.addWidget(browse)
-        destination.addWidget(self.add_button)
-        results_layout.addLayout(destination)
-        tab_actions = QHBoxLayout()
+        for widget in (self.details_button, self.website_button, self.folder, browse):
+            selection.addWidget(widget)
+        selection.addWidget(self.add_button)
+        results_layout.addWidget(self.selection_bar)
+        self.selection_bar.hide()
+        self.tab_row = QWidget()
+        tab_actions = QHBoxLayout(self.tab_row)
+        tab_actions.setContentsMargins(0, 0, 0, 0)
         self.tab_count = QLabel()
         tab_actions.addWidget(self.tab_count, 1)
         self.queue_tabs = QPushButton(self.tr("Queue all tabs"))
@@ -235,7 +289,8 @@ class SearchTab(QWidget):
         self.download_tabs.clicked.connect(lambda: self.queue_open_tabs(True))
         tab_actions.addWidget(self.queue_tabs)
         tab_actions.addWidget(self.download_tabs)
-        results_layout.addLayout(tab_actions)
+        results_layout.addWidget(self.tab_row)
+        self.tab_row.hide()
         self.pages.addTab(results_page, self.tr("Results"))
         queue_page = QWidget()
         queue_layout = QVBoxLayout(queue_page)
@@ -299,6 +354,16 @@ class SearchTab(QWidget):
         self.filters.ready_changed.connect(self._run_pending_search)
         self.refresh_categories()
         self.refresh_queue()
+        self._default_delegate = self.results.itemDelegate()
+        self._delegates = {
+            0: TitleDelegate(self._row_view, self.results),
+            1: StatsDelegate(self._row_view, self.results),
+            5: ZenDelegate(self._row_view, self.results),
+            7: AgeDelegate(self._row_view, self.results),
+            DOWNLOAD_COLUMN: DownloadDelegate(self._row_view, self.results),
+        }
+        saved = self._ui_settings().value("search/density", "comfortable")
+        self.set_density(saved if saved in self.density_buttons else "comfortable")
         self.queue_timer = QTimer(self)
         self.queue_timer.setInterval(1000)
         self.queue_timer.timeout.connect(self._poll_queue)
@@ -444,7 +509,6 @@ class SearchTab(QWidget):
             self.results_summary.clear()
         self.results.setSortingEnabled(False)
         self.results.setRowCount(len(rows))
-        cats = self.settings.indexer_categories
         for row, c in enumerate(rows):
             item = QTableWidgetItem(c.title)
             item.setData(Qt.ItemDataRole.UserRole, row)
@@ -460,28 +524,117 @@ class SearchTab(QWidget):
                 published = NumberItem("–", float("-inf"))
                 published.setToolTip(self.tr("Publication date unavailable."))
             self.results.setItem(row, 7, published)
-            self.results.setItem(
-                row,
-                3,
-                QTableWidgetItem(
-                    self._native_page.labels.get(c.infohash or "", "")
-                    if self._native_page
-                    else " / ".join(
-                        cats[cid].name if cid in cats else str(cid) for cid in c.categories
-                    )
-                ),
-            )
+            self.results.setItem(row, 3, QTableWidgetItem(self._category_label(c)))
+            listing = self._native_page.details.get(c.infohash or "") if self._native_page else None
+            for column, value in (
+                (8, listing and listing.leechers),
+                (9, listing and listing.completions),
+            ):
+                self.results.setItem(
+                    row,
+                    column,
+                    NumberItem("–", float("-inf"))
+                    if listing is None
+                    else NumberItem(str(value), value or 0),
+                )
+            self.results.setItem(row, 10, QTableWidgetItem(listing.uploader if listing else ""))
+            action = QTableWidgetItem()
+            action.setToolTip(self.tr("Add to the download queue"))
+            self.results.setItem(row, 11, action)
             revival = bool(self._native_page and c.infohash in self._native_page.palliative)
             self.results.setItem(
                 row, 4, QTableWidgetItem(self.tr("Soins palliatifs") if revival else "")
             )
         self.results.setSortingEnabled(True)
+        self._fit_table()
         self.result_status.setText(
             self.tr("{0} results · page {1}").format(len(rows), self._offset // PAGE_SIZE + 1)
         )
         self.pages.setCurrentIndex(0)
         self.refresh_estimates()
         self._buttons()
+
+    def _category_label(self, candidate: Candidate) -> str:
+        if self._native_page:
+            return self._native_page.labels.get(candidate.infohash or "", "")
+        cats = self.settings.indexer_categories
+        return " / ".join(
+            cats[cid].name if cid in cats else str(cid) for cid in candidate.categories
+        )
+
+    def _ui_settings(self) -> QSettings:
+        return QSettings()
+
+    def set_density(self, density: str, *, remember: bool = False) -> None:
+        self.density = density
+        self.density_buttons[density].setChecked(True)
+        if remember:
+            self._ui_settings().setValue("search/density", density)
+        comfortable = density == "comfortable"
+        table, header = self.results, self.results.horizontalHeader()
+        for column, delegate in self._delegates.items():
+            table.setItemDelegateForColumn(
+                column, delegate if comfortable else self._default_delegate
+            )
+        for column in range(table.columnCount()):
+            table.setColumnHidden(
+                column, column in (COMFORTABLE_HIDDEN if comfortable else COMPACT_HIDDEN)
+            )
+        header.setVisible(not comfortable)
+        table.setAlternatingRowColors(not comfortable)
+        table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            if comfortable
+            else Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        mode = QHeaderView.ResizeMode
+        for column in range(table.columnCount()):
+            header.setSectionResizeMode(column, mode.Interactive)
+            table.setColumnWidth(column, RESULT_WIDTHS[column])
+        if comfortable:
+            header.setSectionResizeMode(0, mode.Stretch)
+            for column, width in {1: 130, 5: 150, 7: 130, 11: 64}.items():
+                header.setSectionResizeMode(column, mode.Fixed)
+                table.setColumnWidth(column, width)
+        size = ROW_HEIGHT if comfortable else 34
+        table.verticalHeader().setDefaultSectionSize(size)
+        for row in range(table.rowCount()):
+            table.setRowHeight(row, size)
+        self._fit_table()
+
+    def _fit_table(self) -> None:
+        """The table is as tall as its rows, so the page scrolls instead of the table."""
+        table = self.results
+        comfortable = self.density == "comfortable"
+        head = 0 if comfortable else table.horizontalHeader().sizeHint().height()
+        bar = 0 if comfortable else 18
+        rows = table.rowCount() * table.verticalHeader().defaultSectionSize()
+        table.setFixedHeight(max(300, rows + head + bar + 4))
+
+    def _row_view(self, index: QModelIndex | QPersistentModelIndex) -> RowView | None:
+        item = self.results.item(index.row(), 0)
+        number = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not isinstance(number, int) or not 0 <= number < len(self._results):
+            return None
+        candidate = self._results[number]
+        page = self._native_page
+        label = self._category_label(candidate)
+        age = self.results.item(index.row(), 7)
+        return RowView(
+            candidate.title,
+            label,
+            human_size(candidate.size),
+            candidate.seeders,
+            age.text() if age else "",
+            page.details.get(candidate.infohash or "") if page else None,
+            bool(page and candidate.infohash in page.palliative),
+            self.pills.color_for(label.split(" / ")[0]) or "#64748b",
+        )
+
+    def _cell_clicked(self, row: int, column: int) -> None:
+        item = self.results.item(row, 0)
+        if column == DOWNLOAD_COLUMN and item is not None:
+            self._add_candidates([self._results[item.data(Qt.ItemDataRole.UserRole)]])
 
     def _age(self, published_at: float, now: float) -> str:
         seconds = now - published_at
@@ -843,10 +996,12 @@ class SearchTab(QWidget):
         return self.tr("Added to queue.") if added else self.tr("Already in the queue.")
 
     def add_selected(self) -> None:
+        self._add_candidates(self.selected_results())
+
+    def _add_candidates(self, chosen: list[Candidate]) -> None:
         indexer = self._result_indexer
         if indexer is None or self.runner:
             return
-        chosen = self.selected_results()
         destinations = []
         for c in chosen:
             folder = self._download_folder(c)
@@ -1031,7 +1186,10 @@ class SearchTab(QWidget):
         selected_results = self.selected_results()
         one = len(selected_results) == 1 and not self._searching
         self.details_button.setEnabled(bool(selected_results) and not self._searching)
+        self.selection_bar.setVisible(bool(selected_results))
+        self.selection_label.setText(self.tr("{0} selected").format(len(selected_results)))
         count = len(self._detail_tabs)
+        self.tab_row.setVisible(count > 0)
         self.tab_count.setText(self.tr("{0} torrent tabs open").format(count))
         self.queue_tabs.setEnabled(count > 0 and not busy)
         self.download_tabs.setEnabled(count > 0 and not busy)
