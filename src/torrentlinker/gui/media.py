@@ -1168,29 +1168,36 @@ class MediaTab(QWidget):
         self._show_video_controls()
 
     def _scale_caption(self) -> None:
-        height = self.video.overlay.height() or 480
-        size = max(16, min(64, height // 18))
-        # The page stylesheet would override a font set in code, so the size goes here.
-        self.caption.setStyleSheet(
-            f"color: white; background: transparent; font-size: {size}px; font-weight: 600;"
-        )
-        self.caption_font = QFont(self.caption.font())
-        self.caption_font.setPixelSize(size)
-        self.caption_font.setWeight(QFont.Weight.DemiBold)
-        self.caption.setContentsMargins(0, 0, 0, size // 2)
-        self.caption.setMaximumWidth(max(200, self.video.overlay.width() * 9 // 10))
         self._fit_caption()
 
     def _fit_caption(self) -> None:
-        """Give every wrapped subtitle line room, so long cues are never cut off."""
-        width = self.caption.maximumWidth()
-        lines = QFontMetrics(self.caption_font).boundingRect(
-            QRect(0, 0, width, 100000),
-            int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
-            self.caption.text(),
-        )
-        margins = self.caption.contentsMargins()
-        self.caption.setFixedHeight(lines.height() + margins.top() + margins.bottom() + 4)
+        """Size subtitles to the picture as it is now, and give every wrapped line room.
+
+        The label gets the exact width it is measured at, so it never wraps onto more
+        lines than its height allows; a long cue shrinks rather than leave the picture.
+        """
+        height = self.video.overlay.height() or 480
+        width = max(200, self.video.overlay.width() * 9 // 10)
+        text = self.caption.text()
+        flags = int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap)
+        size = max(16, min(56, height // 20))
+        while True:
+            font = QFont(self.caption.font())
+            font.setPixelSize(size)
+            font.setWeight(QFont.Weight.DemiBold)
+            lines = QFontMetrics(font).boundingRect(QRect(0, 0, width, 100000), flags, text)
+            if size <= 12 or lines.height() <= height * 2 // 5:
+                break
+            size -= 2
+        if getattr(self, "caption_size", None) != size:
+            self.caption_size = size
+            # The page stylesheet would override a font set in code, so the size goes here.
+            self.caption.setStyleSheet(
+                f"color: white; background: transparent; font-size: {size}px; font-weight: 600;"
+            )
+        self.caption.setContentsMargins(0, 0, 0, size // 2)
+        self.caption.setFixedWidth(width)
+        self.caption.setFixedHeight(lines.height() + size // 2 + 4)
 
     def _show_video_controls(self) -> None:
         self.video_controls.show()

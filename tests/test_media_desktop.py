@@ -323,7 +323,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert tab.video.size() == tab.fullscreen_dialog.size()
     assert tab.player.source() == source
     assert tab.player.position() == position
-    size = max(16, min(64, tab.video.overlay.height() // 18))
+    size = max(16, min(56, tab.video.overlay.height() // 20))
     assert f"font-size: {size}px" in tab.caption.styleSheet()
     # What the label really draws with, after the page stylesheet is applied.
     tab.caption.ensurePolished()
@@ -338,10 +338,17 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
         tab._fit_caption()
         qtbot.wait(20)
         assert tab.caption.height() >= lines * tab.caption.fontInfo().pixelSize()
+        # Qt's own wrapping at the label's real width fits the height it was given.
+        assert tab.caption.heightForWidth(tab.caption.width()) <= tab.caption.height()
         bottom = tab.caption.mapTo(tab.video, tab.caption.rect().bottomLeft())
         assert tab.video.rect().contains(bottom)
+    fullscreen_size = tab.caption_size
     qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)
     qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
+    tab.caption.setText("Viens à moi.")
+    tab._fit_caption()
+    assert tab.caption_size == max(16, min(56, tab.video.overlay.height() // 20))
+    assert tab.caption_size <= fullscreen_size
     assert tab.player.source() == source
     # Double-clicking the picture enters and leaves fullscreen without pausing or playing.
     state = tab.player.playbackState()
