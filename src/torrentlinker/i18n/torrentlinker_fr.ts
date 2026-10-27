@@ -7533,6 +7533,106 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>Last success</source>
         <translation>Dernier succès</translation>
     </message>
+    <message>
+        <source>%1 selected</source>
+        <translation>%1 sélectionné(s)</translation>
+    </message>
+    <message>
+        <source>Add to queue</source>
+        <translation>Ajouter à la file</translation>
+    </message>
+    <message>
+        <source>Compare clients…</source>
+        <translation>Comparer les clients…</translation>
+    </message>
+    <message>
+        <source>Delete subscription</source>
+        <translation>Supprimer l’abonnement</translation>
+    </message>
+    <message>
+        <source>Delete “%1”? Its releases leave the inbox.</source>
+        <translation>Supprimer « %1 » ? Ses publications quittent la boîte de réception.</translation>
+    </message>
+    <message>
+        <source>Delete…</source>
+        <translation>Supprimer…</translation>
+    </message>
+    <message>
+        <source>Download automatically</source>
+        <translation>Télécharger automatiquement</translation>
+    </message>
+    <message>
+        <source>Edit…</source>
+        <translation>Modifier…</translation>
+    </message>
+    <message>
+        <source>Follow a search to see new releases here, or let rules queue them for you.</source>
+        <translation>Suivez une recherche pour voir ici les nouvelles publications, ou laissez des règles les mettre en file.</translation>
+    </message>
+    <message>
+        <source>Limited discovery</source>
+        <translation>Découverte limitée</translation>
+    </message>
+    <message>
+        <source>More</source>
+        <translation>Plus</translation>
+    </message>
+    <message>
+        <source>Notify me</source>
+        <translation>Me prévenir</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Suspendre</translation>
+    </message>
+    <message>
+        <source>Refresh all</source>
+        <translation>Tout actualiser</translation>
+    </message>
+    <message>
+        <source>Refresh now</source>
+        <translation>Actualiser maintenant</translation>
+    </message>
+    <message>
+        <source>Resume</source>
+        <translation>Reprendre</translation>
+    </message>
+    <message>
+        <source>Subscriptions</source>
+        <translation>Abonnements</translation>
+    </message>
+    <message>
+        <source>Subscriptions: %1</source>
+        <translation>Abonnements : %1</translation>
+    </message>
+    <message>
+        <source>Today %1</source>
+        <translation>Aujourd’hui %1</translation>
+    </message>
+    <message>
+        <source>Updated %1 d ago</source>
+        <translation>Mis à jour il y a %1 j</translation>
+    </message>
+    <message>
+        <source>Updated %1 h ago</source>
+        <translation>Mis à jour il y a %1 h</translation>
+    </message>
+    <message>
+        <source>Updated %1 min ago</source>
+        <translation>Mis à jour il y a %1 min</translation>
+    </message>
+    <message>
+        <source>Waiting for the first update</source>
+        <translation>En attente de la première mise à jour</translation>
+    </message>
+    <message>
+        <source>Yesterday %1</source>
+        <translation>Hier %1</translation>
+    </message>
+    <message>
+        <source>Paused</source>
+        <translation>En pause</translation>
+    </message>
 </context>
 <context>
     <name>MediaTab</name>
