@@ -503,3 +503,21 @@ def test_all_client_adapters_send_explicit_data_deletion_flag(delete_files):
     client = FakeQbit(by_hash={"a": torrent()})
     MappedQbit(client, PathMapper([])).remove("a", delete_files=delete_files)
     assert client.removed == [("a", delete_files)]
+
+
+def test_progress_bar_fills_from_left_to_right(qtbot):
+    tab = TorrentsTab(lambda: FakeQbit())
+    qtbot.addWidget(tab)
+    tab.resize(1000, 400)
+    tab.show()
+    tab.model.update([torrent("a", progress=0.5), torrent("b", progress=1.0)])
+    tab.table.setColumnWidth(2, 200)
+    tab.table.setRowHeight(0, 40)
+    image = tab.table.viewport().grab().toImage()
+    rect = tab.table.visualRect(tab.proxy.index(0, 2))
+    y = rect.center().y() + 12  # below the label, where only the bar's fill shows
+    left = image.pixelColor(rect.left() + 12, y)
+    right = image.pixelColor(rect.right() - 12, y)
+    top_left = image.pixelColor(rect.left() + 12, rect.top() + 6)
+    assert left != right  # filled on the left, empty on the right, whatever the row height
+    assert top_left == left or top_left != right

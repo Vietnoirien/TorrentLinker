@@ -587,3 +587,25 @@ def test_prepared_upload_survives_unrelated_folder_changes(tmp_path, monkeypatch
         assert seeded["status"] == "completed", seeded
         assert seeded["result"]["status"] == "verifying"
         assert item.read_text() == "solid model\nendsolid model\n"
+
+
+def test_files_endpoint_lists_one_torrents_files_for_the_files_tab(tmp_path: Path):
+    from torrentlinker.domain import TorrentFile
+
+    class Files(Client):
+        def file_listing(self, hash):
+            return [TorrentFile(0, "a.mkv", 2048, True), TorrentFile(1, "b.nfo", 10, False)]
+
+    client = Files()
+    app = create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+    with TestClient(app) as browser:
+        assert browser.get("/api/torrents/" + "a" * 40 + "/files").status_code == 401
+        login(browser)
+        browser.post("/api/setup/client", json={"client": "deluge", "host": "https://box.example"})
+        found = browser.get("/api/torrents/" + "a" * 40 + "/files")
+        assert found.status_code == 200
+        assert found.json() == [
+            {"index": 0, "name": "a.mkv", "size": 2048, "wanted": True},
+            {"index": 1, "name": "b.nfo", "size": 10, "wanted": False},
+        ]
+        assert browser.get("/api/torrents/not-a-hash/files").status_code == 400

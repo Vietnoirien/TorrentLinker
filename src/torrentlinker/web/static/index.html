@@ -391,7 +391,16 @@
           <h2 data-i18n="activity">Activity</h2><div id="agent-activity"></div>
         </section>
         <section id="view-torrents" class="view">
-          <div class="toolbar">
+          <div class="torrent-bar">
+            <span class="torrent-actions" role="toolbar" aria-label="Actions">
+              <button class="icon-button" data-action="resume" data-title="start" type="button">▶</button
+              ><button class="icon-button" data-action="pause" data-title="pause" type="button">⏸</button
+              ><button class="icon-button" data-action="recheck" data-title="recheck" type="button">⟳</button
+              ><button class="icon-button" data-action="remove" data-title="remove" type="button">✕</button
+              ><button class="icon-button danger" data-action="delete" data-title="deleteFiles" type="button">🗑</button
+              ><button id="refresh" class="icon-button" data-title="refresh" type="button">↻</button>
+            </span>
+            <span class="spacer"></span>
             <input
               id="torrent-query"
               placeholder="Find a torrent…"
@@ -407,22 +416,7 @@
               <option value="">All trackers</option></select
             ><select id="torrent-category" hidden aria-label="Category">
               <option value="">All categories</option></select
-            ><select id="torrent-tag" hidden aria-label="Tag"><option value="">All tags</option></select
-            ><button id="refresh" class="quiet" data-i18n="refresh">Refresh</button>
-          </div>
-          <div class="toolbar">
-            <button data-action="resume" data-i18n="start">Start</button
-            ><button data-action="pause" data-i18n="pause">Pause</button
-            ><button data-action="recheck" data-i18n="recheck">Recheck</button
-            ><button data-action="remove" data-i18n="remove">
-              Remove torrent</button
-            ><button
-              data-action="delete"
-              class="danger"
-              data-i18n="deleteFiles"
-            >
-              Delete torrent and files
-            </button>
+            ><select id="torrent-tag" hidden aria-label="Tag"><option value="">All tags</option></select>
           </div>
           <div class="torrent-layout">
             <aside id="torrent-side" aria-label="Filters"></aside>

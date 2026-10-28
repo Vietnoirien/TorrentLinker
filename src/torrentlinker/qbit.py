@@ -228,7 +228,17 @@ class QbitApi:
 
     def torrent(self, hash: str, with_files: bool = True) -> Torrent | None:
         found = self._client.torrents_info(torrent_hashes=hash)
-        return self._torrent(found[0], with_files) if found else None
+        if not found:
+            return None
+        info = dict(found[0])
+        if "tracker_urls" not in info:
+            # The plain info call names only the current tracker; one torrent can afford the list.
+            info["tracker_urls"] = [
+                str(x["url"])
+                for x in self._client.torrents_trackers(hash)
+                if str(x.get("url", "")).startswith(("http", "udp"))
+            ]
+        return self._torrent(info, with_files)
 
     def files(self, hash: str) -> dict[str, int]:
         return {f.name: int(f.size) for f in self._client.torrents_files(hash)}

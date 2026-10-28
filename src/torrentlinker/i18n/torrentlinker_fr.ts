@@ -6295,6 +6295,18 @@ Seeders annoncés par le tracker : {1}</translation>
         <source>Failed</source>
         <translation>Échec</translation>
     </message>
+    <message>
+        <source>STATUS</source>
+        <translation>STATUT</translation>
+    </message>
+    <message>
+        <source>TAGS</source>
+        <translation>TAGS</translation>
+    </message>
+    <message>
+        <source>TRACKERS</source>
+        <translation>TRACKERS</translation>
+    </message>
 </context>
 <context>
     <name>UpdateNotice</name>

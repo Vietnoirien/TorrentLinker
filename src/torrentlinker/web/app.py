@@ -695,6 +695,16 @@ def create_app(
             },
         }
 
+    @app.get("/api/torrents/{infohash}/files")
+    def torrent_files(infohash: str, client_id: str = "") -> list:
+        """The file list of one torrent, for the Files tab under the Torrents table."""
+        if len(infohash) != 40 or any(c not in "0123456789abcdefABCDEF" for c in infohash):
+            raise HTTPException(400, "Invalid torrent hash.")
+        found = for_client(client_id).setup.client().file_listing(infohash.lower())
+        return [
+            {"index": f.index, "name": f.name, "size": f.size, "wanted": f.wanted} for f in found
+        ]
+
     @app.post("/api/jobs", status_code=202)
     def start_job(body: JobRequest) -> dict:
         with jobs.lock:

@@ -19,12 +19,14 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QHideEvent, QShowEvent
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
     QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMenu,
     QMessageBox,
     QPlainTextEdit,
@@ -37,6 +39,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -44,7 +47,7 @@ from PySide6.QtWidgets import (
 )
 
 from torrentlinker.domain import Torrent, TorrentFile
-from torrentlinker.gui.controls import set_role
+from torrentlinker.gui.controls import icon_button
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table, style_table
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
@@ -80,7 +83,8 @@ class ProgressBarDelegate(QStyledItemDelegate):
         bar.progress = int(max(0.0, min(1.0, value)) * 1000)
         bar.text = f"{value * 100:.1f} %"
         bar.textVisible = True
-        bar.state = option.state
+        # Without the horizontal flag Fusion fills the bar from the bottom up.
+        bar.state = option.state | QStyle.StateFlag.State_Horizontal
         QApplication.style().drawControl(QStyle.ControlElement.CE_ProgressBar, bar, painter)
 
 
@@ -298,59 +302,64 @@ class TorrentsTab(QWidget):
         self.proxy = TorrentFilter(self.model)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        filters = QHBoxLayout()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(self.tr("Find a torrent…"))
-        self.search.setClearButtonEnabled(True)
-        self.search.setMaximumWidth(420)
-        self.search.textChanged.connect(self._filter)
-        filters.addWidget(self.search, 1)
-        self.states = QComboBox()
-        self.states.addItem(self.tr("All states"), "")
-        for key, label in self.model.states.items():
-            self.states.addItem(label, key)
-        self.states.currentIndexChanged.connect(self._filter)
-        filters.addWidget(self.states)
-        self.tags = QComboBox()
-        self.tags.setMinimumContentsLength(10)
-        self.tags.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        self.tags.addItem(self.tr("All tags"), "")
-        self.tags.currentIndexChanged.connect(self._filter)
-        filters.addWidget(self.tags)
-        filters.addStretch()
-        self.refresh_button = QPushButton(self.tr("Refresh"))
-        set_role(self.refresh_button, "quiet")
-        self.refresh_button.clicked.connect(self.refresh)
-        filters.addWidget(self.refresh_button)
-        layout.addLayout(filters)
-        actions = QHBoxLayout()
-        self.buttons: list[QPushButton] = []
+        bar = QHBoxLayout()
+        bar.setSpacing(2)
+        self.buttons: list[QAbstractButton] = []
         self.context_menu = QMenu(self)
-        for text, action in [
-            (self.tr("Start"), "resume"),
-            (self.tr("Pause"), "pause"),
-            (self.tr("Recheck"), "recheck"),
-            (self.tr("Remove…"), "remove"),
+        for glyph, text, action in [
+            ("▶", self.tr("Start"), "resume"),
+            ("⏸", self.tr("Pause"), "pause"),
+            ("⟳", self.tr("Recheck"), "recheck"),
+            ("✕", self.tr("Remove…"), "remove"),
         ]:
-            button = QPushButton(text)
+            button = icon_button(glyph, text)
             button.clicked.connect(lambda _=False, a=action: self.perform(a))
             self.buttons.append(button)
-            actions.addWidget(button)
+            bar.addWidget(button)
             if action == "remove":
                 self.context_menu.addSeparator()
             menu_action = self.context_menu.addAction(text)
             menu_action.triggered.connect(lambda _=False, a=action: self.perform(a))
         delete_action = self.context_menu.addAction(self.tr("Delete torrent and files…"))
         delete_action.triggered.connect(lambda: self.perform("delete"))
-        actions.addStretch()
-        self.columns = QPushButton(self.tr("Columns"))
+        self.refresh_button = icon_button("↻", self.tr("Refresh"))
+        self.refresh_button.clicked.connect(self.refresh)
+        bar.addWidget(self.refresh_button)
+        bar.addStretch()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(self.tr("Find a torrent…"))
+        self.search.setClearButtonEnabled(True)
+        self.search.setMaximumWidth(300)
+        self.search.textChanged.connect(self._filter)
+        bar.addWidget(self.search)
+        self.columns = icon_button("⚙", self.tr("Columns"))
         columns = QMenu(self.columns)
         self.columns.setMenu(columns)
-        actions.addWidget(self.columns)
-        layout.addLayout(actions)
+        self.columns.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        bar.addWidget(self.columns)
+        layout.addLayout(bar)
+        # The state and tag filters live in the sidebar, as in qBittorrent; the combo boxes
+        # keep the choice and stay out of sight.
+        self.states = QComboBox(self)
+        self.states.addItem(self.tr("All states"), "")
+        for key, label in self.model.states.items():
+            self.states.addItem(label, key)
+        self.states.currentIndexChanged.connect(self._filter)
+        self.tags = QComboBox(self)
+        self.tags.addItem(self.tr("All tags"), "")
+        self.tags.currentIndexChanged.connect(self._filter)
+        self.states.hide()
+        self.tags.hide()
         split = QSplitter()
+        side = QWidget()
+        side_layout = QVBoxLayout(side)
+        side_layout.setContentsMargins(0, 0, 0, 0)
+        side_layout.setSpacing(4)
+        self.status_list = self._side_list(side_layout, self.tr("STATUS"), self.states)
+        self.tag_list = self._side_list(side_layout, self.tr("TAGS"), self.tags)
+        heading = QLabel(self.tr("TRACKERS"))
+        heading.setProperty("role", "muted")
+        side_layout.addWidget(heading)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setMinimumWidth(140)
@@ -361,7 +370,8 @@ class TorrentsTab(QWidget):
         tree_action.setCheckable(True)
         tree_action.setChecked(True)
         tree_action.toggled.connect(self.tree.setVisible)
-        split.addWidget(self.tree)
+        side_layout.addWidget(self.tree, 1)
+        split.addWidget(side)
         right = QSplitter(Qt.Orientation.Vertical)
         self.table = QTableView()
         self.table.setModel(self.proxy)
@@ -369,6 +379,7 @@ class TorrentsTab(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setItemDelegateForColumn(2, ProgressBarDelegate(self.table))
+        self.table.verticalHeader().setDefaultSectionSize(26)  # dense, like qBittorrent's list
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.table.selectionModel().selectionChanged.connect(self._selection)
@@ -422,10 +433,10 @@ class TorrentsTab(QWidget):
             (self.tr("Download"), "want_files"),
             (self.tr("Skip"), "skip_files"),
         ]:
-            button = QPushButton(text)
-            button.clicked.connect(lambda _=False, a=action: self.perform(a))
-            self.buttons.append(button)
-            file_buttons.addWidget(button)
+            file_button = QPushButton(text)
+            file_button.clicked.connect(lambda _=False, a=action: self.perform(a))
+            self.buttons.append(file_button)
+            file_buttons.addWidget(file_button)
         file_buttons.addStretch()
         file_layout.addLayout(file_buttons)
         self.details.addTab(file_page, self.tr("Files"))
@@ -448,6 +459,32 @@ class TorrentsTab(QWidget):
         self.timer.setInterval(5000)
         self.timer.timeout.connect(self.refresh)
         self._selection()
+
+    def _side_list(self, layout: QVBoxLayout, title: str, combo: QComboBox) -> QListWidget:
+        """A sidebar section whose rows mirror a (hidden) combo box and set its choice."""
+        heading = QLabel(title)
+        heading.setProperty("role", "muted")
+        layout.addWidget(heading)
+        listing = QListWidget()
+        listing.setFrameShape(QListWidget.Shape.NoFrame)
+        listing.setUniformItemSizes(True)
+        listing.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        listing.setAccessibleName(title)
+        listing.currentRowChanged.connect(lambda row, c=combo: row >= 0 and c.setCurrentIndex(row))
+        combo.currentIndexChanged.connect(lambda _i, c=combo, w=listing: self._mirror(c, w))
+        layout.addWidget(listing)
+        return listing
+
+    def _mirror(self, combo: QComboBox, listing: QListWidget) -> None:
+        """Show the combo's rows, with their counts, in the sidebar list."""
+        with QSignalBlocker(listing):
+            listing.clear()
+            for i in range(combo.count()):
+                listing.addItem(combo.itemText(i))
+            listing.setCurrentRow(combo.currentIndex())
+        listing.setFixedHeight(
+            max(1, listing.count()) * listing.sizeHintForRow(0) + 6 if listing.count() else 0
+        )
 
     def _column(self, column: int, visible: bool) -> None:
         self.table.setColumnHidden(column, not visible)
@@ -530,6 +567,8 @@ class TorrentsTab(QWidget):
             for i in range(1, self.tags.count()):
                 tag = self.tags.itemData(i)
                 self.tags.setItemText(i, f"{tag} ({tag_counts[tag]})")
+            self._mirror(self.states, self.status_list)
+            self._mirror(self.tags, self.tag_list)
             self._restore_selection(selected)
             self.table.verticalScrollBar().setValue(scroll)
             self.connection.setText(

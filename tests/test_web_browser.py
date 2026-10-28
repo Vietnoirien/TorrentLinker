@@ -48,6 +48,11 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
         def torrent(self, hash, **kwargs):
             return self.torrents()[0]
 
+        def file_listing(self, hash):
+            from torrentlinker.domain import TorrentFile
+
+            return [TorrentFile(0, "Example book.epub", 1048576, True)]
+
         def pause(self, hash):
             self.paused = True
 
@@ -101,9 +106,18 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#torrent-table")).to_contain_text("Example book.epub")
             expect(page.locator("#torrent-table")).to_contain_text("3 (42)")
             expect(page.locator("#torrent-table")).to_contain_text("2 (13)")
-            page.locator("#torrent-table tbody input[type=checkbox]").check()
+            # Actions wait for a selection, as on the desktop; a row is selected by clicking it.
+            expect(page.locator("[data-action=pause]")).to_be_disabled()
+            page.locator("#torrent-table tbody tr").click()
+            expect(page.locator("#torrent-table tbody tr.selected")).to_have_count(1)
+            expect(page.locator("#torrent-details")).to_contain_text("Example book.epub")
+            page.locator("#torrent-details").get_by_role("button", name="Files").click()
+            expect(page.locator("#torrent-details tbody")).to_contain_text("Example book.epub")
+            page.locator("#torrent-details").get_by_role("button", name="Information").click()
             page.locator("[data-action=pause]").click()
-            expect(page.locator("#torrent-table")).to_contain_text("paused", timeout=10000)
+            expect(page.locator("#torrent-table")).to_contain_text("Paused", timeout=10000)
+            page.locator("#torrent-details").get_by_role("button", name="Activity").click()
+            expect(page.locator("#torrent-details")).to_contain_text("pause: 1")
             # Assistant writes use a separate connection while this view stays open.
             from torrentlinker.download_queue import enqueue, entries
             from torrentlinker.indexer import Candidate, Indexer

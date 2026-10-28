@@ -968,4 +968,25 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 #torrent-details dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; margin: 8px 0 0; }
 #torrent-details dt { color: var(--muted); font-size: 12px; }
 #torrent-details dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 800px) { .torrent-layout { grid-template-columns: 1fr; } }
+@media (max-width: 800px) { .torrent-layout { grid-template-columns: minmax(0, 1fr); } #torrent-side { max-height: 40vh; } }
+
+.torrent-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.torrent-actions { display: inline-flex; gap: 2px; }
+.torrent-bar .icon-button { font-size: 16px; }
+.torrent-bar input { width: min(300px, 100%); }
+
+/* Torrents: rows select by click, the pane below has the desktop's three tabs */
+#torrent-table tbody tr { cursor: default; }
+#torrent-table tbody tr.selected td { background: var(--tint); }
+#torrent-table tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#torrent-table td { padding-top: 5px; padding-bottom: 5px; }
+#torrent-table th .header-sort { font-weight: 650; padding: 0; }
+.torrent-actions button:disabled { opacity: .35; }
+#torrent-details { margin-top: 12px; padding: 0; overflow: hidden; }
+.detail-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 0 8px; }
+.detail-tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 10px 12px; }
+.detail-tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 650; }
+.detail-body { padding: 12px 16px; max-height: 260px; overflow: auto; }
+.detail-body dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+.detail-body dt { color: var(--muted); } .detail-body dd { margin: 0; overflow-wrap: anywhere; }
+.detail-body pre { margin: 0; white-space: pre-wrap; }

@@ -705,6 +705,29 @@ function duration(seconds) {
   const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600), m = Math.floor((seconds % 3600) / 60);
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 }
+const statusLabel = (s) =>
+  ({
+    downloading: say("Downloading", "Téléchargement"),
+    seeding: say("Seeding", "En partage"),
+    paused: say("Paused", "En pause"),
+    checking: say("Checking", "Vérification"),
+    error: say("Error", "Erreur"),
+    other: say("Other", "Autre"),
+  })[s] || s;
+function labelTorrentBar() {
+  const titles = {
+    start: say("Start", "Démarrer"),
+    pause: say("Pause", "Mettre en pause"),
+    recheck: say("Recheck", "Revérifier"),
+    remove: say("Remove torrent", "Retirer le torrent"),
+    deleteFiles: say("Delete torrent and files", "Supprimer le torrent et les fichiers"),
+    refresh: say("Refresh", "Actualiser"),
+  };
+  document.querySelectorAll(".torrent-bar [data-title]").forEach((b) => {
+    b.title = titles[b.dataset.title];
+    b.setAttribute("aria-label", titles[b.dataset.title]);
+  });
+}
 const STATUSES = ["downloading", "seeding", "paused", "checking", "error", "other"];
 function sidebar(counts) {
   const side = $("torrent-side");
@@ -723,34 +746,139 @@ function sidebar(counts) {
       side.append(b);
     };
     pick("", say("All", "Tous"), total);
-    for (const [value, n] of entries) pick(value, value, n);
+    for (const [value, n] of entries) pick(value, select === "torrent-state" ? statusLabel(value) : value, n);
   };
   section(say("Status", "Statut"), "torrent-state", STATUSES.filter((s) => counts.status[s]).map((s) => [s, counts.status[s]]), counts.all);
   section(say("Categories", "Catégories"), "torrent-category", Object.entries(counts.categories), counts.all);
   section("Tags", "torrent-tag", Object.entries(counts.tags), counts.all);
   section("Trackers", "torrent-tracker", Object.entries(counts.trackers), counts.all);
 }
-function details_pane(row) {
+/* The pane under the table has the same three tabs as the desktop: Information, Files, Activity. */
+function selectedTorrents() {
+  return (state.torrentRows || []).filter((r) => state.selected.has(r.hash));
+}
+function syncTorrentSelection() {
+  document.querySelectorAll("#torrent-table tbody tr").forEach((tr) => tr.classList.toggle("selected", state.selected.has(tr.dataset.hash)));
+  const none = !state.selected.size;
+  document.querySelectorAll(".torrent-actions [data-action]").forEach((b) => (b.disabled = none));
+  renderTorrentDetails();
+}
+function selectTorrentRow(event, row, rows) {
+  const index = rows.findIndex((r) => r.hash === row.hash);
+  if (event.shiftKey && state.anchor !== undefined) {
+    const [from, to] = [state.anchor, index].sort((x, y) => x - y);
+    if (!(event.ctrlKey || event.metaKey)) state.selected.clear();
+    rows.slice(from, to + 1).forEach((r) => state.selected.add(r.hash));
+  } else if (event.ctrlKey || event.metaKey) {
+    state.selected.has(row.hash) ? state.selected.delete(row.hash) : state.selected.add(row.hash);
+    state.anchor = index;
+  } else {
+    state.selected.clear();
+    state.selected.add(row.hash);
+    state.anchor = index;
+  }
+  syncTorrentSelection();
+}
+function renderTorrentTable(rows, columns) {
+  const host = $("torrent-table");
+  host.replaceChildren();
+  if (!rows.length) {
+    host.append(element("p", say("No torrents match these filters.", "Aucun torrent ne correspond à ces filtres."), "empty"));
+    return;
+  }
+  const head = element("tr");
+  for (const c of columns) {
+    const th = element("th");
+    if (c.title) th.title = c.title;
+    const b = button(c.label + (state.sort === c.key ? (state.descending ? " ↓" : " ↑") : ""), () => {
+      state.descending = state.sort === c.key ? !state.descending : false;
+      state.sort = c.key;
+      return loadTorrents();
+    }, "quiet header-sort");
+    th.append(b);
+    head.append(th);
+  }
+  const thead = element("thead");
+  thead.append(head);
+  const body = element("tbody");
+  for (const row of rows) {
+    const tr = element("tr");
+    tr.dataset.hash = row.hash;
+    tr.tabIndex = 0;
+    tr.onclick = (event) => selectTorrentRow(event, row, rows);
+    for (const c of columns) {
+      const cell = element("td", undefined, c.key === "name" ? "name" : "");
+      const value = c.render(row);
+      if (value instanceof Node) cell.append(value);
+      else cell.textContent = value ?? "—";
+      if (c.key === "name") cell.title = row.name;
+      tr.append(cell);
+    }
+    body.append(tr);
+  }
+  const table = element("table");
+  table.append(thead, body);
+  host.append(table);
+}
+state.detailTab = "info";
+state.activity = [];
+function renderTorrentDetails() {
   const pane = $("torrent-details");
-  pane.hidden = !row;
-  if (!row) return;
-  pane.replaceChildren(element("strong", row.name));
-  const dl = element("dl");
-  const add = (k, v) => dl.append(element("dt", k), element("dd", v));
-  add(say("Progress", "Progression"), `${(row.progress * 100).toFixed(1)} %`);
-  add(say("Size", "Taille"), bytes(row.size));
-  add(say("Status", "État"), row.status);
-  add("↓ / ↑", `${bytes(row.download)}/s · ${bytes(row.upload)}/s`);
-  add("Ratio", num(row.ratio));
-  add("ETA", row.eta >= 0 && row.eta < 8640000 ? duration(row.eta) : "∞");
-  add(say("Seeds", "Seeders"), `${row.seeds} (${row.total_seeds >= 0 ? row.total_seeds : "?"})`);
-  add(say("Peers", "Pairs"), `${row.peers} (${row.total_peers >= 0 ? row.total_peers : "?"})`);
-  add(say("Folder", "Dossier"), row.folder);
-  add("Trackers", row.trackers.join(", ") || "—");
-  add(say("Categories", "Catégories"), row.categories.map((c) => c.join(" / ")).filter(Boolean).join(", ") || "—");
-  add("Tags", row.tags.join(", ") || "—");
-  add("Hash", row.hash);
-  pane.append(dl);
+  pane.hidden = false;
+  const tabs = element("div", undefined, "detail-tabs");
+  for (const [key, label] of [["info", say("Information", "Informations")], ["files", say("Files", "Fichiers")], ["activity", say("Activity", "Activité")]]) {
+    const b = button(label, () => {
+      state.detailTab = key;
+      renderTorrentDetails();
+    }, "detail-tab");
+    b.setAttribute("aria-pressed", String(state.detailTab === key));
+    tabs.append(b);
+  }
+  const body = element("div", undefined, "detail-body");
+  const chosen = selectedTorrents();
+  const row = chosen.length === 1 ? chosen[0] : null;
+  if (state.detailTab === "activity") {
+    body.append(element("pre", state.activity.join("\n") || "—"));
+  } else if (!row) {
+    body.append(element("p", say(`${state.selected.size} torrents selected.`, `${state.selected.size} torrents sélectionnés.`), "muted"));
+  } else if (state.detailTab === "files") {
+    body.append(element("p", say("Loading…", "Chargement…"), "muted"));
+    const hash = row.hash;
+    api(`torrents/${hash}/files?client_id=${encodeURIComponent(row.client_id || state.clientId)}`)
+      .then((files) => {
+        if (state.detailTab !== "files" || !state.selected.has(hash)) return;
+        const list = element("table", undefined, "dense");
+        const head = element("tr");
+        [say("File", "Fichier"), say("Size", "Taille"), say("Download", "Télécharger")].forEach((h) => head.append(element("th", h)));
+        const thead = element("thead");
+        thead.append(head);
+        const tbody = element("tbody");
+        files.forEach((f) => {
+          const tr = element("tr");
+          tr.append(element("td", f.name, "name"), element("td", bytes(f.size)), element("td", f.wanted ? "✓" : "—"));
+          tbody.append(tr);
+        });
+        list.append(thead, tbody);
+        body.replaceChildren(list);
+      })
+      .catch((error) => body.replaceChildren(element("p", error.message, "muted")));
+  } else {
+    // The same lines as the desktop's Information tab.
+    body.append(
+      element(
+        "pre",
+        [
+          row.name,
+          `${say("Status", "État")} : ${statusLabel(row.status)}`,
+          `${say("Download Folder", "Dossier de téléchargement")} : ${row.folder}`,
+          `Trackers : ${row.trackers.join(", ") || say("No tracker", "Aucun tracker")}`,
+          `Tags : ${row.tags.join(", ")}`,
+          `Hash : ${row.hash}`,
+        ].join("\n"),
+      ),
+    );
+  }
+  pane.replaceChildren(tabs, body);
 }
 async function loadTorrents() {
   const params = new URLSearchParams({
@@ -778,9 +906,9 @@ async function loadTorrents() {
     say("All categories", "Toutes les catégories"),
   );
   const labels = [
-    ["client_name", say("Client", "Client"), (v) => v.client_name],
+    ...(state.clientId === "all" ? [["client_name", say("Client", "Client"), (v) => v.client_name]] : []),
     ["name", say("Torrent", "Torrent"), (v) => v.name],
-    ["status", say("Status", "État"), (v) => v.status],
+    ["status", say("Status", "État"), (v) => statusLabel(v.status)],
     ["progress", say("Progress", "Progression"), (v) => {
       const bar = element("div", undefined, "bar"), fill = element("i");
       fill.style.width = `${v.progress * 100}%`;
@@ -788,37 +916,31 @@ async function loadTorrents() {
       return bar;
     }],
     ["size", say("Size", "Taille"), (v) => bytes(v.size)],
-    ["seeds", say("Seeds", "Seeders"), (v) => `${v.seeds >= 0 ? v.seeds : "?"} (${v.total_seeds >= 0 ? v.total_seeds : "?"})`],
+    ["download", say("Download/s", "Réception/s"), (v) => bytes(v.download)],
+    ["upload", say("Upload/s", "Envoi/s"), (v) => bytes(v.upload)],
+    ["seeds", say("Seeders", "Seeders"), (v) => `${v.seeds >= 0 ? v.seeds : "?"} (${v.total_seeds >= 0 ? v.total_seeds : "?"})`],
     ["peers", say("Peers", "Pairs"), (v) => `${v.peers >= 0 ? v.peers : "?"} (${v.total_peers >= 0 ? v.total_peers : "?"})`],
-    ["download", "↓ / s", (v) => bytes(v.download)],
-    ["upload", "↑ / s", (v) => bytes(v.upload)],
     ["ratio", "Ratio", (v) => num(v.ratio)],
     ["eta", "ETA", (v) => (v.eta >= 0 && v.eta < 8640000 ? duration(v.eta) : "∞")],
     ["zen", "≈ Zen / j", (v) => num(v.zen) + (v.provisional ? " *" : "")],
     ["note", "≈ Note", (v) => num(v.note) + (v.provisional ? " *" : "")],
   ];
-  table(
-    "torrent-table",
+  const sortable = new Set(["name", "client_name", "status", "size", "progress", "download", "upload", "ratio", "seeds", "peers", "zen", "note"]);
+  renderTorrentTable(
     r.rows,
-    labels.map(([key, label, render]) => ({
-      label,
-      render,
-      title: ["seeds", "peers"].includes(key) ? say(
-        "Connected (swarm total). ? = unknown. Sorted by total when known.",
-        "Connectés (total de l'essaim). ? = inconnu. Tri par total lorsqu'il est connu.",
-      ) : "",
-      sort: key,
-      name: key === "name",
-    })),
-    state.selected,
-    "hash",
-    undefined,
-    (row) => {
-      state.current = row.hash;
-      loadTorrents();
-    },
+    labels
+      .filter(([key]) => sortable.has(key) || key === "eta")
+      .map(([key, label, render]) => ({
+        key,
+        label,
+        render,
+        title: ["seeds", "peers"].includes(key) ? say(
+          "Connected (swarm total). ? = unknown. Sorted by total when known.",
+          "Connectés (total de l'essaim). ? = inconnu. Tri par total lorsqu'il est connu.",
+        ) : "",
+      })),
   );
-  details_pane(r.rows.find((v) => v.hash === state.current));
+  syncTorrentSelection();
   $("torrent-count").textContent =
     `${r.total} torrents · ${Math.floor(state.offset / 100) + 1}` + (r.client_errors?.length ? " · " + r.client_errors.map(e => `${e.name}: ${e.message}`).join(" · ") : "");
   $("torrent-prev").disabled = !state.offset;
@@ -854,6 +976,7 @@ async function manage(action) {
       button(
         say("Confirm", "Confirmer"),
         async () => {
+          state.activity.push(`${new Date().toLocaleTimeString()}  ${action}: ${hashes.length}`);
           await job({ ...body, confirmation: preview.token }, () =>
             job({ kind: "refresh" }, loadTorrents),
           );
@@ -866,6 +989,7 @@ async function manage(action) {
     content.querySelector("button").focus();
     return;
   }
+  state.activity.push(`${new Date().toLocaleTimeString()}  ${action}: ${hashes.length}`);
   await job(body, () => job({ kind: "refresh" }, loadTorrents));
 }
 function searchColumns() {
@@ -1252,12 +1376,15 @@ $("language").onchange = () => {
   translate();
   if (state.view === "zen") guard(loadZenSeeding);
   if (state.view === "search") searchRetranslate();
+  labelTorrentBar();
+  if (state.view === "torrents") guard(loadTorrents);
   if (state.view === "media") { mediaViews(); guard(loadMedia); mediaQueueRender(); }
   $("page-title").textContent =
     document.querySelector(`[data-view="${state.view}"]`)?.textContent ||
     state.view;
 };
 translate();
+labelTorrentBar();
 $("refresh").onclick = () =>
   guard(() => job({ kind: "refresh" }, loadTorrents));
 let filterTimer;
