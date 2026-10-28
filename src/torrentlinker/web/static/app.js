@@ -251,7 +251,7 @@ function age(timestamp) {
         : [Math.floor(seconds / 86400), say("days", "jours")];
   return `${value} ${unit}`;
 }
-function table(target, rows, columns, selection, key = "hash", onChange) {
+function table(target, rows, columns, selection, key = "hash", onChange, onRow) {
   const host = $(target);
   host.replaceChildren();
   if (!rows.length) {
@@ -305,6 +305,12 @@ function table(target, rows, columns, selection, key = "hash", onChange) {
   const body = element("tbody");
   for (const row of rows) {
     const tr = element("tr");
+    if (onRow) {
+      tr.onclick = (e) => {
+        if (!e.target.closest("button, input, a")) onRow(row);
+      };
+      if (row[key] === state.current) tr.className = "current";
+    }
     if (selection) {
       const cell = element("td"),
         input = document.createElement("input");
@@ -695,6 +701,57 @@ function options(select, values, label) {
   );
   select.value = old;
 }
+function duration(seconds) {
+  const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600), m = Math.floor((seconds % 3600) / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+const STATUSES = ["downloading", "seeding", "paused", "checking", "error", "other"];
+function sidebar(counts) {
+  const side = $("torrent-side");
+  side.replaceChildren();
+  const section = (title, select, entries, total) => {
+    side.append(element("h3", title));
+    const pick = (value, label, n) => {
+      const b = element("button");
+      b.append(element("span", label), element("span", String(n)));
+      b.setAttribute("aria-pressed", String($(select).value === value));
+      b.onclick = () => {
+        $(select).value = value;
+        state.offset = 0;
+        guard(loadTorrents);
+      };
+      side.append(b);
+    };
+    pick("", say("All", "Tous"), total);
+    for (const [value, n] of entries) pick(value, value, n);
+  };
+  section(say("Status", "Statut"), "torrent-state", STATUSES.filter((s) => counts.status[s]).map((s) => [s, counts.status[s]]), counts.all);
+  section(say("Categories", "Catégories"), "torrent-category", Object.entries(counts.categories), counts.all);
+  section("Tags", "torrent-tag", Object.entries(counts.tags), counts.all);
+  section("Trackers", "torrent-tracker", Object.entries(counts.trackers), counts.all);
+}
+function details_pane(row) {
+  const pane = $("torrent-details");
+  pane.hidden = !row;
+  if (!row) return;
+  pane.replaceChildren(element("strong", row.name));
+  const dl = element("dl");
+  const add = (k, v) => dl.append(element("dt", k), element("dd", v));
+  add(say("Progress", "Progression"), `${(row.progress * 100).toFixed(1)} %`);
+  add(say("Size", "Taille"), bytes(row.size));
+  add(say("Status", "État"), row.status);
+  add("↓ / ↑", `${bytes(row.download)}/s · ${bytes(row.upload)}/s`);
+  add("Ratio", num(row.ratio));
+  add("ETA", row.eta >= 0 && row.eta < 8640000 ? duration(row.eta) : "∞");
+  add(say("Seeds", "Seeders"), `${row.seeds} (${row.total_seeds >= 0 ? row.total_seeds : "?"})`);
+  add(say("Peers", "Pairs"), `${row.peers} (${row.total_peers >= 0 ? row.total_peers : "?"})`);
+  add(say("Folder", "Dossier"), row.folder);
+  add("Trackers", row.trackers.join(", ") || "—");
+  add(say("Categories", "Catégories"), row.categories.map((c) => c.join(" / ")).filter(Boolean).join(", ") || "—");
+  add("Tags", row.tags.join(", ") || "—");
+  add("Hash", row.hash);
+  pane.append(dl);
+}
 async function loadTorrents() {
   const params = new URLSearchParams({
     q: $("torrent-query").value,
@@ -704,8 +761,12 @@ async function loadTorrents() {
     tracker: $("torrent-tracker").value,
     state: $("torrent-state").value,
     category: $("torrent-category").value,
+    tag: $("torrent-tag").value,
   });
   const r = await api(`torrents?${params}`);
+  state.torrentRows = r.rows;
+  options($("torrent-tag"), r.tags, say("All tags", "Tous les tags"));
+  sidebar(r.counts);
   options(
     $("torrent-tracker"),
     r.trackers,
@@ -720,13 +781,19 @@ async function loadTorrents() {
     ["client_name", say("Client", "Client"), (v) => v.client_name],
     ["name", say("Torrent", "Torrent"), (v) => v.name],
     ["status", say("Status", "État"), (v) => v.status],
-    ["progress", "%", (v) => (v.progress * 100).toFixed(1)],
+    ["progress", say("Progress", "Progression"), (v) => {
+      const bar = element("div", undefined, "bar"), fill = element("i");
+      fill.style.width = `${v.progress * 100}%`;
+      bar.append(fill, element("span", `${(v.progress * 100).toFixed(1)} %`));
+      return bar;
+    }],
     ["size", say("Size", "Taille"), (v) => bytes(v.size)],
     ["seeds", say("Seeds", "Seeders"), (v) => `${v.seeds >= 0 ? v.seeds : "?"} (${v.total_seeds >= 0 ? v.total_seeds : "?"})`],
     ["peers", say("Peers", "Pairs"), (v) => `${v.peers >= 0 ? v.peers : "?"} (${v.total_peers >= 0 ? v.total_peers : "?"})`],
     ["download", "↓ / s", (v) => bytes(v.download)],
     ["upload", "↑ / s", (v) => bytes(v.upload)],
     ["ratio", "Ratio", (v) => num(v.ratio)],
+    ["eta", "ETA", (v) => (v.eta >= 0 && v.eta < 8640000 ? duration(v.eta) : "∞")],
     ["zen", "≈ Zen / j", (v) => num(v.zen) + (v.provisional ? " *" : "")],
     ["note", "≈ Note", (v) => num(v.note) + (v.provisional ? " *" : "")],
   ];
@@ -744,7 +811,14 @@ async function loadTorrents() {
       name: key === "name",
     })),
     state.selected,
+    "hash",
+    undefined,
+    (row) => {
+      state.current = row.hash;
+      loadTorrents();
+    },
   );
+  details_pane(r.rows.find((v) => v.hash === state.current));
   $("torrent-count").textContent =
     `${r.total} torrents · ${Math.floor(state.offset / 100) + 1}` + (r.client_errors?.length ? " · " + r.client_errors.map(e => `${e.name}: ${e.message}`).join(" · ") : "");
   $("torrent-prev").disabled = !state.offset;
@@ -1195,7 +1269,7 @@ function filter() {
   }, 250);
 }
 $("torrent-query").oninput = filter;
-["torrent-state", "torrent-tracker", "torrent-category"].forEach(
+["torrent-state", "torrent-tracker", "torrent-category", "torrent-tag"].forEach(
   (id) => ($(id).onchange = filter),
 );
 $("torrent-prev").onclick = () => {

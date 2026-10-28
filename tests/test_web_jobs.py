@@ -205,6 +205,11 @@ def test_torrents_are_paged_sorted_and_never_expose_announce_keys(tmp_path: Path
         assert result.json()["rows"][0]["peers"] == 2
         assert result.json()["rows"][0]["zen"] is not None
         assert "private-passkey" not in result.text
+        counts = result.json()["counts"]
+        assert counts["all"] == 2
+        assert sum(counts["status"].values()) == 2
+        assert result.json()["rows"][0]["eta"] == -1
+        assert browser.get("/api/torrents", params={"tag": "absent"}).json()["total"] == 0
 
 
 def test_search_can_queue_a_selected_result_but_remote_unmounted_sends_are_refused(

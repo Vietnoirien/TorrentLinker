@@ -952,3 +952,20 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 .hc-genre { background: #12343a; border: 1px solid #1f6a64; border-radius: 9px; padding: 1px 9px; color: #7fe3d3; font-size: .85em; }
 .hc-cast { font-size: .9em; }
 @media (hover: none) { .hover-card { display: none; } }
+
+.torrent-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+#torrent-side { font-size: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 8px; max-height: 70vh; overflow: auto; }
+#torrent-side h3 { margin: 10px 6px 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+#torrent-side button { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; background: none; padding: 4px 6px; border-radius: 6px; font-size: 13px; }
+#torrent-side button[aria-pressed="true"] { background: var(--accent, #2563eb); color: #fff; }
+.dense td, .dense th { padding: 4px 8px; }
+.dense tr.current td { background: color-mix(in srgb, var(--accent, #2563eb) 15%, transparent); }
+.dense tbody tr { cursor: pointer; }
+.bar { position: relative; min-width: 90px; height: 16px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent, #2563eb); opacity: .75; }
+.bar > span { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; }
+#torrent-details { margin-top: 0; }
+#torrent-details dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; margin: 8px 0 0; }
+#torrent-details dt { color: var(--muted); font-size: 12px; }
+#torrent-details dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 800px) { .torrent-layout { grid-template-columns: 1fr; } }

@@ -909,6 +909,7 @@ class Operations:
                         "download": t.download_rate,
                         "upload": t.upload_rate,
                         "ratio": t.ratio,
+                        "eta": t.eta,
                         "seeds": t.connected_seeds,
                         "peers": t.connected_peers,
                         "total_seeds": t.swarm_seeders,

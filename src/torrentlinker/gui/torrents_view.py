@@ -20,6 +20,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QHideEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -29,6 +30,9 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionProgressBar,
     QTableView,
     QTableWidget,
     QTableWidgetItem,
@@ -60,6 +64,24 @@ from torrentlinker.torrent_management import (
 )
 
 SORT = Qt.ItemDataRole.UserRole + 1
+
+
+class ProgressBarDelegate(QStyledItemDelegate):
+    """Draws the Progress column as a bar, as qBittorrent does."""
+
+    def paint(self, painter: Any, option: Any, index: QModelIndex | QPersistentModelIndex) -> None:
+        value = index.data(SORT)
+        if not isinstance(value, (int, float)):
+            super().paint(painter, option, index)
+            return
+        bar = QStyleOptionProgressBar()
+        bar.rect = option.rect.adjusted(2, 2, -2, -2)
+        bar.minimum, bar.maximum = 0, 1000
+        bar.progress = int(max(0.0, min(1.0, value)) * 1000)
+        bar.text = f"{value * 100:.1f} %"
+        bar.textVisible = True
+        bar.state = option.state
+        QApplication.style().drawControl(QStyle.ControlElement.CE_ProgressBar, bar, painter)
 
 
 class TorrentModel(QAbstractTableModel):
@@ -346,6 +368,7 @@ class TorrentsTab(QWidget):
         style_table(self.table)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setItemDelegateForColumn(2, ProgressBarDelegate(self.table))
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.table.selectionModel().selectionChanged.connect(self._selection)
@@ -489,8 +512,13 @@ class TorrentsTab(QWidget):
             scroll = self.table.verticalScrollBar().value()
             self.model.update(rows)
             self._group()
+            for i in range(1, self.states.count()):
+                key = self.states.itemData(i)
+                n = sum(1 for t in rows if status(t) == key)
+                self.states.setItemText(i, f"{self.model.states[key]} ({n})")
             current_tag = self.tags.currentData()
             available = sorted({tag for t in rows for tag in t.tags})
+            tag_counts = {tag: sum(1 for t in rows if tag in t.tags) for tag in available}
             if available != [self.tags.itemData(i) for i in range(1, self.tags.count())]:
                 with QSignalBlocker(self.tags):
                     self.tags.clear()
@@ -499,6 +527,9 @@ class TorrentsTab(QWidget):
                         self.tags.addItem(tag, tag)
                     self.tags.setCurrentIndex(max(0, self.tags.findData(current_tag)))
                 self._filter()
+            for i in range(1, self.tags.count()):
+                tag = self.tags.itemData(i)
+                self.tags.setItemText(i, f"{tag} ({tag_counts[tag]})")
             self._restore_selection(selected)
             self.table.verticalScrollBar().setValue(scroll)
             self.connection.setText(

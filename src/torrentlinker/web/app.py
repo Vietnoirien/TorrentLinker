@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -603,6 +604,7 @@ def create_app(
         tracker: str = "",
         state: str = "",
         category: str = "",
+        tag: str = "",
     ) -> dict:
         targets = (
             [for_client(p.id) for p in service.settings.client_profiles if p.enabled]
@@ -636,6 +638,7 @@ def create_app(
             )
             and (not state or r["status"] == state)
             and (not category or any(category == " / ".join(c) for c in r["categories"]))
+            and (not tag or tag in r["tags"])
         ]
         if sort not in {
             "name",
@@ -676,6 +679,20 @@ def create_app(
             ],
             "trackers": sorted({tracker_group(h) for r in all_rows for h in r["trackers"] if h}),
             "categories": sorted({" / ".join(c) for r in all_rows for c in r["categories"] if c}),
+            "tags": sorted({t for r in all_rows for t in r["tags"]}),
+            "counts": {
+                "status": dict(Counter(r["status"] for r in all_rows)),
+                "tags": dict(Counter(t for r in all_rows for t in r["tags"])),
+                "trackers": dict(
+                    Counter(
+                        g for r in all_rows for g in {tracker_group(h) for h in r["trackers"] if h}
+                    )
+                ),
+                "categories": dict(
+                    Counter(" / ".join(c) for r in all_rows for c in r["categories"] if c)
+                ),
+                "all": len(all_rows),
+            },
         }
 
     @app.post("/api/jobs", status_code=202)

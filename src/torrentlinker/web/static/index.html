@@ -396,17 +396,18 @@
               id="torrent-query"
               placeholder="Find a torrent…"
               aria-label="Find a torrent"
-            /><select id="torrent-state" aria-label="State">
+            /><select id="torrent-state" hidden aria-label="State">
               <option value="" data-i18n="allStates">All states</option>
               <option value="seeding" data-i18n="seedingState">seeding</option>
               <option value="downloading" data-i18n="downloadingState">downloading</option>
               <option value="paused" data-i18n="pausedState">paused</option>
               <option value="checking" data-i18n="checkingState">checking</option>
               <option value="error" data-i18n="errorState">error</option></select
-            ><select id="torrent-tracker" aria-label="Tracker">
+            ><select id="torrent-tracker" hidden aria-label="Tracker">
               <option value="">All trackers</option></select
-            ><select id="torrent-category" aria-label="Category">
+            ><select id="torrent-category" hidden aria-label="Category">
               <option value="">All categories</option></select
+            ><select id="torrent-tag" hidden aria-label="Tag"><option value="">All tags</option></select
             ><button id="refresh" class="quiet" data-i18n="refresh">Refresh</button>
           </div>
           <div class="toolbar">
@@ -423,10 +424,16 @@
               Delete torrent and files
             </button>
           </div>
-          <div id="torrent-table" class="table-wrap"></div>
-          <div class="pager">
-            <button id="torrent-prev">←</button><span id="torrent-count"></span
-            ><button id="torrent-next">→</button>
+          <div class="torrent-layout">
+            <aside id="torrent-side" aria-label="Filters"></aside>
+            <div class="torrent-main">
+              <div id="torrent-table" class="table-wrap dense"></div>
+              <div class="pager">
+                <button id="torrent-prev">←</button><span id="torrent-count"></span
+                ><button id="torrent-next">→</button>
+              </div>
+              <div id="torrent-details" class="card" hidden></div>
+            </div>
           </div>
         </section>
         <section id="view-zen" class="view" hidden>
