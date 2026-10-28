@@ -232,3 +232,40 @@ def test_desktop_evidence_inspects_claims_and_keeps_the_original(
     if destination := os.getenv("TL_UI_SCREENSHOTS"):
         Path(destination).mkdir(parents=True, exist_ok=True)
         window.grab().save(str(Path(destination) / "library-features-desktop.png"))
+        qtbot.mouseClick(window.review.expand_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: not window.library_view.isVisible())
+        window.grab().save(str(Path(destination) / "library-evidence-desktop-expanded.png"))
+
+
+def test_desktop_repair_requires_experimental_opt_in(qtbot, tmp_path, library_theme):
+    import os
+    import threading
+    from pathlib import Path
+
+    from tests.fake_qbit import FakeQbit
+    from tests.torrents import make_torrent
+    from torrentlinker.gui.repair_dialog import RepairDialog
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.repair import Repairs
+    from torrentlinker.scan import scan_item
+
+    video = tmp_path / "Example.mkv"
+    video.write_bytes(b"A" * 1024 * 1024)
+    data = make_torrent(video)
+    video.write_bytes(b"B" * 128 + b"A" * (1024 * 1024 - 128))
+    repository = Repairs(tmp_path, "test")
+    repository.diagnose(
+        scan_item(video),
+        Candidate("Example", video.stat().st_size, "https://example.invalid", seeders=2),
+        data,
+        threading.Event(),
+    )
+    dialog = RepairDialog(None, repository, FakeQbit())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert not dialog.prepare_button.isEnabled()
+    qtbot.mouseClick(dialog.experimental, Qt.MouseButton.LeftButton)
+    assert dialog.prepare_button.isEnabled()
+    assert not dialog.start_button.isEnabled()
+    if destination := os.getenv("TL_UI_SCREENSHOTS"):
+        dialog.grab().save(str(Path(destination) / "library-repair-desktop.png"))
