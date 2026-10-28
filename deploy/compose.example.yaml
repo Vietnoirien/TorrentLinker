@@ -12,6 +12,7 @@ services:
       - "127.0.0.1:8787:8787"  # host only; use the host's LAN address for LAN access
     environment:
       TL_WEB_PASSWORD_FILE: /run/secrets/web_password
+      # Portainer or no file? Replace the line above with: TL_WEB_PASSWORD: ${WEB_PASSWORD}
       TL_STORAGE_ROOTS: /data
       # Behind an HTTPS reverse proxy:
       # TL_SECURE_COOKIE: "1"

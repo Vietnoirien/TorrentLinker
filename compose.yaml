@@ -13,6 +13,7 @@ services:
       - "${TL_BIND_ADDRESS:-127.0.0.1}:8787:8787"
     environment:
       TL_WEB_PASSWORD_FILE: /run/secrets/web_password
+      # Portainer or no file? Replace the line above with: TL_WEB_PASSWORD: ${WEB_PASSWORD}
       TL_SECURE_COOKIE: ${TL_SECURE_COOKIE:-0}
       TL_ROOT_PATH: ${TL_ROOT_PATH:-}
     secrets:

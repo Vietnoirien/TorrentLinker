@@ -90,6 +90,8 @@ Les identifiants saisis dans l'interface sont chiffrés dans `credentials.enc`. 
 
 Le mot de passe de l’interface web provient de `TL_WEB_PASSWORD_FILE` (recommandé). Si les fichiers sont peu pratiques, par exemple avec une pile Portainer, définissez `TL_WEB_PASSWORD`. Le fichier l’emporte si les deux sont définis. Les variables d’environnement sont visibles via `docker inspect` : préférez le fichier quand c’est possible.
 
+Dans une pile Portainer, ou si vous préférez éviter un fichier, remplacez la ligne `TL_WEB_PASSWORD_FILE` et le secret `web_password` par `TL_WEB_PASSWORD: ${WEB_PASSWORD}`, puis définissez `WEB_PASSWORD` dans les variables d’environnement de la pile.
+
 Les fichiers secrets Docker sont pris en charge avec `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE` , `TL_ANNOUNCE_URL_FILE` et `TL_PROXY_PASSWORD_FILE`. Leur contenu n'est pas renvoyé au navigateur.
 
 ## Sans Docker

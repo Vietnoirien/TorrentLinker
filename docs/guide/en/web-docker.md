@@ -90,6 +90,8 @@ UI-entered credentials are encrypted in `credentials.enc`. Back up it and `crede
 
 The Web UI password comes from `TL_WEB_PASSWORD_FILE` (recommended). Where files are impractical, such as a Portainer stack, set `TL_WEB_PASSWORD` instead. The file wins if both are set. Environment variables are visible through `docker inspect`, so prefer the file when you can.
 
+In a Portainer stack, or anywhere you would rather not manage a file, replace the `TL_WEB_PASSWORD_FILE` line and the `web_password` secret with `TL_WEB_PASSWORD: ${WEB_PASSWORD}` and define `WEB_PASSWORD` in the stack's environment variables.
+
 Secret-file overrides: `TL_INDEXER_API_KEY_FILE`, `TL_QBIT_PASSWORD_FILE`, `TL_QBIT_API_KEY_FILE`, `TL_DELUGE_PASSWORD_FILE`, `TL_TRANSMISSION_PASSWORD_FILE`, `TL_UTORRENT_PASSWORD_FILE`, `TL_ANNOUNCE_URL_FILE`, `TL_PROXY_PASSWORD_FILE`. Credentials never appear in setup API responses.
 
 ## Run without Docker
