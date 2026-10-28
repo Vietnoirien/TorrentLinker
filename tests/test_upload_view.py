@@ -265,10 +265,15 @@ def test_creating_a_draft_saves_it_and_seeds_from_the_local_file(  # type: ignor
     view.description.setPlainText(complete_description())
 
     qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
-    view.create_button.click()
+    view.queue_button.click()
+    qtbot.waitUntil(lambda: view.local_drafts.record is not None, timeout=5000)
+    assert not indexer.saved
+    view.local_drafts.pages.setCurrentIndex(4)
+    view.local_drafts.reviewed.setChecked(True)
+    view.local_drafts.send_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
-    assert not asked
+    assert len(asked) == 1
     assert "saved as a Draft" in shown[0], shown
     assert indexer.saved[0]["title"] == "Petit.Etau.De.Bureau.NOTAG.3MF"
     [t] = qbit.torrents()
@@ -285,6 +290,7 @@ def test_draft_keeps_the_image_with_a_custom_description(  # type: ignore[no-unt
 
     monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
     view, indexer, _ = tab(qtbot, tmp_path)
     vise = model(tmp_path)
     view.set_entries([vise])
@@ -298,7 +304,12 @@ def test_draft_keeps_the_image_with_a_custom_description(  # type: ignore[no-unt
         view.image_url.setText(url)
     view._image_timer.stop()
     qtbot.waitUntil(view.create_button.isEnabled, timeout=5000)
-    view.create_button.click()
+    view.queue_button.click()
+    qtbot.waitUntil(lambda: view.local_drafts.record is not None, timeout=5000)
+    assert not indexer.saved
+    view.local_drafts.pages.setCurrentIndex(4)
+    view.local_drafts.reviewed.setChecked(True)
+    view.local_drafts.send_button.click()
     qtbot.waitUntil(lambda: bool(indexer.saved), timeout=5000)
     description = indexer.saved[0]["description"]
     assert f"[img]{url}[/img]" in description
@@ -442,7 +453,8 @@ def test_an_archive_is_unpacked_next_to_it_then_its_folder_is_offered(  # type: 
     view.set_entries([entry, folder_entry])
     assert view.entry == folder_entry
     assert view.why_not(folder_entry) is None
-    assert view.create_button.text() == "Create Draft"
+    assert view.create_button.isHidden()
+    assert view.queue_button.isEnabled()
 
 
 def test_bbcode_renders_as_html_without_running_markup() -> None:
@@ -534,6 +546,7 @@ def test_the_list_of_existing_releases_collapses(qtbot, tmp_path: Path) -> None:
     entry = model(tmp_path)
     view.set_entries([entry])
     view.remember(entry, [])
+    view.new_draft()
     view.show()
     view.items.selectRow(0)
     qtbot.waitUntil(lambda: view.existing_view.isVisible(), timeout=5000)
@@ -676,6 +689,7 @@ def test_options_collapse_keeps_choices_and_editor_space(  # type: ignore[no-unt
 ) -> None:
     view, _, _ = film_tab(qtbot, tmp_path, monkeypatch)
     view.resize(1200, 900)
+    view.new_draft()
     view.show()
     qtbot.waitUntil(lambda: bool(view.option_types), timeout=5000)
     assert view.options_body.isHidden()
@@ -722,7 +736,12 @@ def test_the_users_choice_wins_over_the_profile_and_is_sent_in_the_draft(  # typ
     view._image_timer.stop()
     view.description.setPlainText(complete_description(1, 6))
     view.nfo.setPlainText(complete_form(1, 6)["nfo"])
-    view.create_button.click()
+    view.queue_button.click()
+    qtbot.waitUntil(lambda: view.local_drafts.record is not None, timeout=5000)
+    assert not indexer.saved
+    view.local_drafts.pages.setCurrentIndex(4)
+    view.local_drafts.reviewed.setChecked(True)
+    view.local_drafts.send_button.click()
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
     assert indexer.saved[0]["options"] == {"1": [2], "5": [39], "4": 38}
     assert indexer.saved[0]["subcategoryId"] == 6
@@ -783,6 +802,7 @@ def test_the_3d_page_follows_the_selected_orphan_and_the_subcategory(qtbot, tmp_
     box = LibraryEntry(box.folder, scan_item(box.item.path), ItemState.ORPHAN)
     view.set_entries([box])
     view.remember(box, [])
+    view.new_draft()
     view.show()
     assert view.pages.isTabVisible(view.model_tab) is False  # nothing picked
 

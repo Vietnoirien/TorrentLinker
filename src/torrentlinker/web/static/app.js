@@ -203,7 +203,7 @@ async function guard(fn) {
   }
 }
 async function api(path, body, method) {
-  const scoped = ["setup", "torrents", "library", "queue", "upload/queue"];
+  const scoped = ["setup", "torrents", "library", "queue", "upload/queue", "upload/drafts"];
   if (body === undefined && scoped.includes(path.split("?")[0]) && state.clientId) {
     const id = state.clientId === "all" && path === "setup" ? state.setup?.default_client_id || "" : state.clientId;
     path += (path.includes("?") ? "&" : "?") + "client_id=" + encodeURIComponent(id);
@@ -619,12 +619,12 @@ async function navigate(view) {
   }
   if (view === "search" && state.setup.indexer_configured) await loadSearchPage();
 }
-async function job(body, done) {
+async function job(body, done, failed) {
   body = {client_id: state.clientId, ...body};
   if (body.client_id === "all" && body.kind !== "refresh")
     throw Error(say("Choose a target client first.", "Choisissez un client cible."));
   const r = await api("jobs", body);
-  state.jobs.set(r.id, { body, done });
+  state.jobs.set(r.id, { body, done, failed });
   $("work-status").textContent = say("Working…", "En cours…");
   await pollJobs();
   return r.id;
@@ -644,6 +644,7 @@ async function pollJobs() {
         if (full.status === "partial") toast(say("Scan incomplete. Some paths could not be read; previous items were kept. See job details.", "Analyse incomplète. Certains chemins sont inaccessibles ; les éléments précédents ont été conservés. Consultez les détails de la tâche."));
       } else {
         if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
+        if (pending.failed && pending.body.client_id === state.clientId) await pending.failed(full.error);
         toast(full.error || say("Job cancelled", "Tâche annulée"));
       }
     }
@@ -1376,6 +1377,7 @@ $("language").onchange = () => {
   translate();
   if (state.view === "zen") guard(loadZenSeeding);
   if (state.view === "search") searchRetranslate();
+  if (state.view === "upload") { renderUploadQueue(); uploadEditorState(); }
   labelTorrentBar();
   if (state.view === "torrents") guard(loadTorrents);
   if (state.view === "media") { mediaViews(); guard(loadMedia); mediaQueueRender(); }
@@ -1509,299 +1511,6 @@ guard(async () => {
   }
 });
 
-$("upload-nfo").addEventListener("input", () => { state.uploadNfoOrigin = "original"; });
-
-function uploadForm() {
-  const options = {};
-  $("upload-options")
-    .querySelectorAll("select")
-    .forEach((s) => {
-      options[s.dataset.type] = [...s.selectedOptions]
-        .map((o) => Number(o.value))
-        .filter(Boolean);
-    });
-  return {
-    category: Number($("upload-category").value) || null,
-    subcategory: Number($("upload-subcategory").value) || null,
-    source: $("upload-source").value,
-    image: $("upload-image").value,
-    title: $("upload-title").value,
-    description: $("upload-description").value,
-    nfo: $("upload-nfo").value,
-    options,
-    assets: state.uploadAssets || [],
-    nfo_origin: state.uploadNfoOrigin || "",
-    reviewed: $("upload-reviewed").checked,
-  };
-}
-async function prepareUpload(row, saved = null) {
-  state.uploadDraft = saved;
-  state.uploadAssets = saved?.form.assets || [];
-  state.uploadNfoOrigin = saved?.form.nfo_origin || "";
-  state.uploadPath = row.path;
-  $("upload-model-tools")?.remove();
-  $("upload-save-local").disabled = false;
-  await navigate("upload");
-  $("upload-editor").hidden = false;
-  $("upload-help").textContent = row.name;
-  const categories = await api("upload/categories");
-  $("upload-category").replaceChildren(
-    new Option("Auto", ""),
-    ...categories.map((c) => new Option(c.name, c.id)),
-  );
-  [
-    "upload-title",
-    "upload-description",
-    "upload-nfo",
-    "upload-source",
-    "upload-image",
-  ].forEach((id) => ($(id).value = ""));
-  $("upload-subcategory").replaceChildren();
-  $("upload-options").replaceChildren();
-  $("upload-reviewed").checked = false;
-  $("upload-result").replaceChildren();
-  $("upload-send-direct").hidden = Boolean(saved);
-  $("upload-send-local").hidden = !saved;
-  if (saved) {
-    for (const [field, id] of Object.entries({title: "upload-title", description: "upload-description",
-      nfo: "upload-nfo", source: "upload-source", image: "upload-image", category: "upload-category"})) {
-      $(id).value = saved.form[field] ?? "";
-    }
-    $("upload-subcategory").append(new Option(String(saved.form.subcategory), saved.form.subcategory));
-    state.uploadSavedOptions = saved.form.options;
-  }
-  await previewUpload();
-}
-async function previewUpload() {
-  const form = uploadForm();
-  if (state.uploadSavedOptions) { form.options = state.uploadSavedOptions; state.uploadSavedOptions = null; }
-  await job(
-    { kind: "upload-preview", path: state.uploadPath, upload: form,
-      draft_id: state.uploadDraft?.id || "", revision: state.uploadDraft?.revision || 0 },
-    (r) => {
-      state.uploadAssets = r.assets || [];
-      state.uploadNfoOrigin = r.nfo_origin || "";
-      $("upload-category").value = r.category;
-      if (r.category === 10 && !$("upload-model-tools")) uploadModelTools();
-      $("upload-title").value = r.title;
-      $("upload-description").value = r.description;
-      $("upload-nfo").value = r.nfo;
-      $("upload-subcategory").replaceChildren(
-        ...r.subcategories.map((s) => new Option(s.label || s.name, s.id)),
-      );
-      $("upload-subcategory").value = r.subcategory;
-      $("upload-options").replaceChildren(
-        ...r.options.map((o) => {
-          const label = element("label", o.name + (o.required ? " *" : "")),
-            select = element("select");
-          select.dataset.type = o.id;
-          select.multiple = o.multiple;
-          select.append(
-            new Option("—", ""),
-            ...o.values.map(
-              (v) =>
-                new Option(
-                  v.label,
-                  v.id,
-                  false,
-                  (r.chosen[o.id] || []).includes(v.id),
-                ),
-            ),
-          );
-          label.append(select);
-          return label;
-        }),
-      );
-      $("upload-rules").replaceChildren(
-        ...r.refusals.map((v) => element("p", v, "danger")),
-        ...r.warnings.map((v) => element("p", v)),
-      );
-      table(
-        "upload-files",
-        r.files,
-        [
-          { label: "Torrent file", render: (f) => f.torrent_path },
-          { label: "Local file", render: (f) => f.local_path },
-          { label: "Size", render: (f) => bytes(f.size) },
-        ],
-        null,
-      );
-    },
-  );
-}
-function uploadCameraControls(preset) {
-  const details = element("details"), fields = new Map();
-  details.append(element("summary", say("Advanced camera", "Caméra avancée")));
-  const initial = {yaw: 45, pitch: 55, roll: 0, zoom: 1, center_x: 0, center_y: 0};
-  const specs = [
-    ["yaw", say("Yaw (degrees)", "Azimut (degrés)"), null, null, 1],
-    ["pitch", say("Polar pitch (degrees)", "Angle polaire (degrés)"), null, null, 1],
-    ["roll", say("Roll (degrees)", "Roulis (degrés)"), null, null, 1],
-    ["zoom", say("Zoom (larger means closer)", "Zoom (plus grand signifie plus près)"), 0.1, 10, 0.1],
-    ["center_x", say("Horizontal framing", "Cadrage horizontal"), -0.8, 0.8, 0.05],
-    ["center_y", say("Vertical framing", "Cadrage vertical"), -0.8, 0.8, 0.05],
-  ];
-  for (const [field, text, min, max, step] of specs) {
-    const label = element("label"), input = element("input");
-    input.type = "number"; input.value = initial[field]; input.step = step;
-    input.required = true; input.dataset.cameraField = field;
-    if (min !== null) input.min = min;
-    if (max !== null) input.max = max;
-    if (["yaw", "pitch", "roll"].includes(field)) input.addEventListener("input", () => { preset.value = "custom"; });
-    label.append(element("span", text), input); details.append(label); fields.set(field, input);
-  }
-  const presets = {isometric: [45, 55, 0], front: [0, 90, 0], back: [180, 90, 0],
-    left: [-90, 90, 0], right: [90, 90, 0], top: [0, 0, 0], bottom: [0, 180, 0]};
-  preset.addEventListener("change", () => {
-    const angles = presets[preset.value];
-    if (angles) ["yaw", "pitch", "roll"].forEach((field, index) => { fields.get(field).value = angles[index]; });
-  });
-  return {element: details, read: () => Object.fromEntries([...fields].map(([field, input]) => {
-    if (!input.checkValidity() || input.value === "" || !Number.isFinite(Number(input.value)))
-      throw Error(say("Invalid camera value: ", "Valeur de caméra incorrecte : ") + field);
-    return [field, Number(input.value)];
-  }))};
-}
-function uploadModelTools() {
-  const box = element("div", undefined, "card"); box.id = "upload-model-tools";
-  const path = state.uploadPath, client = state.clientId;
-  const inventory = element("div"), output = element("div");
-  const choices = [];
-  const current = () => path === state.uploadPath && client === state.clientId;
-  const show = result => {
-    if (!current()) return;
-    output.replaceChildren(element("p", `${result.covered.length}/${result.selected} ${say("pieces rendered", "pièces rendues")}`));
-    for (const problem of result.unsupported) output.append(element("p", `${problem.file}: ${problem.reason}`, "danger"));
-    for (const content of result.content || []) {
-      const img = element("img"); img.src = `data:${content.mimeType};base64,${content.data}`;
-      img.alt = say("Local 3D presentation image", "Image de présentation 3D locale");
-      img.style.maxWidth = "100%"; output.append(img);
-    }
-    output.append(button(say("Use these private images", "Utiliser ces images privées"), () => {
-      if (current()) state.uploadAssets = result.artifacts.map(asset => asset.asset_id);
-      toast(say("Images selected. Save the Local Draft to keep them.", "Images sélectionnées. Enregistrez le brouillon local pour les conserver."));
-    }));
-  };
-  box.append(button(say("Inspect 3D pieces", "Inspecter les pièces 3D"), () => job({kind: "model-inspect", path}, result => {
-    if (!current()) return;
-    inventory.replaceChildren(); choices.length = 0;
-    inventory.append(element("p", say("Folder and assembled names are hints. Keep scale/support variants distinct.", "Les noms de dossiers et d’assemblage sont des indices. Distinguez les échelles et supports.")));
-    for (const model of result.models) {
-      const row = element("div"), check = element("input"); check.type = "checkbox"; check.checked = model.previewable;
-      const preset = element("select");
-      for (const name of ["isometric", "front", "back", "left", "right", "top", "bottom", "custom"]) preset.append(new Option(name, name));
-      const camera = uploadCameraControls(preset);
-      choices.push({file: model.file, check, camera});
-      row.append(check, element("span", model.file), preset, camera.element, button(say("Preview", "Aperçu"), () => job({
-        kind: "model-render", path, model_files: [model.file], model_cameras: {[model.file]: camera.read()}
-      }, show)));
-      inventory.append(row);
-    }
-  })), inventory, button(say("Render all selected pieces", "Rendre toutes les pièces sélectionnées"), () => {
-    const selected = choices.filter(choice => choice.check.checked);
-    if (!selected.length) throw Error(say("Select inspected pieces first.", "Sélectionnez d’abord les pièces inspectées."));
-    return job({kind: "model-render", path, model_files: selected.map(choice => choice.file),
-      model_cameras: Object.fromEntries(selected.map(choice => [choice.file, choice.camera.read()]))}, show);
-  }), output);
-  $("upload-result").before(box);
-}
-async function loadUploadQueue() {
-  const rows = await api("upload/queue");
-  table("upload-local-queue", rows, [
-    {label: say("Title", "Titre"), render: r => r.form.title},
-    {label: say("Status", "État"), render: r => ({queued: say("Awaiting review", "À relire"),
-      sending: say("Sending / check c411", "Envoi / vérifier c411"),
-      uncertain: say("Check c411 before retrying", "Vérifier c411 avant un nouvel essai"),
-      sent: say("Sent to c411", "Envoyé à c411")})[r.status] || r.status},
-    {label: say("Actions", "Actions"), render: r => {
-      const actions = element("div", "", "actions");
-      actions.append(button(say("Preview saved draft", "Aperçu du brouillon enregistré"), () => {
-        const client = state.clientId;
-        return aCardDetail(() => api(`upload/queue/${encodeURIComponent(r.id)}/preview?revision=${r.revision}&client_id=${encodeURIComponent(client || "")}`));
-      }));
-      if (r.status === "queued") actions.append(button(say("Review / edit", "Relire / modifier"),
-        () => prepareUpload({path: r.path, name: r.form.title}, r)));
-      if (r.status !== "sending") actions.append(button(say("Remove locally", "Retirer localement"), async () => {
-        if (confirm(say("Remove only this local record? Files and c411 Drafts will be kept.",
-          "Retirer uniquement ce brouillon local ? Les fichiers et brouillons c411 seront conservés.")))
-          await job({kind: "upload-remove", draft_id: r.id, revision: r.revision}, loadUploadQueue);
-      }));
-      if (["sending", "uncertain"].includes(r.status)) actions.append(button(say("Allow retry…", "Autoriser un nouvel essai…"), async () => {
-        if (confirm(say("Check c411 and wait for any running send. Confirm that no Draft was created before allowing another attempt.",
-          "Vérifiez c411 et attendez la fin de tout envoi. Confirmez qu’aucun brouillon n’a été créé avant un nouvel essai.")))
-          await job({kind: "upload-reset", draft_id: r.id, revision: r.revision}, loadUploadQueue);
-      }));
-      return actions;
-    }},
-  ], null);
-}
-$("upload-queue-refresh").onclick = () => guard(loadUploadQueue);
-$("upload-save-local").onclick = () => guard(async () => {
-  await job({kind: "upload-queue", path: state.uploadPath, upload: uploadForm(),
-    draft_id: state.uploadDraft?.id || "", revision: state.uploadDraft?.revision || 0}, async r => {
-      state.uploadDraft = r;
-      $("upload-send-direct").hidden = true;
-      $("upload-send-local").hidden = false;
-      $("upload-reviewed").checked = false;
-      $("upload-description").value = r.form.description;
-      toast(say("Saved locally. Nothing sent to c411.", "Enregistré localement. Rien n’a été envoyé à c411."));
-      await loadUploadQueue();
-    });
-});
-$("upload-send-local").onclick = () => guard(async () => {
-  const saved = state.uploadDraft;
-  if (!saved || !$("upload-reviewed").checked) throw Error(say("Review the saved draft and check the confirmation box.",
-    "Relisez le brouillon enregistré et cochez la confirmation."));
-  const current = uploadForm();
-  for (const field of ["title", "description", "nfo", "source", "image", "category", "subcategory"])
-    if (current[field] !== saved.form[field]) throw Error(say("Save your changes locally before sending.", "Enregistrez vos modifications avant l’envoi."));
-  const canonicalOptions = values => JSON.stringify(Object.entries(values).filter(([,v]) => v.length)
-    .sort(([a], [b]) => Number(a)-Number(b)).map(([k,v]) => [String(k), [...v].sort((a,b) => a-b)]));
-  if (canonicalOptions(current.options) !== canonicalOptions(saved.form.options))
-    throw Error(say("Save your changes locally before sending.", "Enregistrez vos modifications avant l’envoi."));
-  if (!confirm(say("Send this saved revision to c411 as a Draft? It will not be published.",
-    "Envoyer cette version enregistrée à c411 comme brouillon ? Elle ne sera pas publiée."))) return;
-  await job({kind: "upload-send", draft_id: saved.id, revision: saved.revision}, async r => {
-    $("upload-result").replaceChildren(element("p", r.message), button(say("Seed prepared Upload", "Seeder l’upload préparé"),
-      () => job({kind: "upload-seed", hashes: [r.hash]}, () => toast(say("Verification started.", "Vérification lancée.")))));
-    $("upload-send-local").hidden = true;
-    $("upload-save-local").disabled = true;
-    await loadUploadQueue();
-  });
-});
-$("upload-preview").onclick = () => guard(previewUpload);
-$("upload-category").onchange = () => {
-  $("upload-subcategory").replaceChildren();
-  $("upload-title").value = "";
-  guard(previewUpload);
-};
-$("upload-subcategory").onchange = () => guard(previewUpload);
-$("upload-form").onsubmit = (e) => {
-  e.preventDefault();
-  if (state.uploadDraft) { $("upload-send-local").click(); return; }
-  guard(async () => {
-    if (!$("upload-reviewed").checked)
-      throw Error(
-        say(
-          "Review the Upload and check the confirmation box.",
-          "Relisez l’upload et cochez la confirmation.",
-        ),
-      );
-    await job(
-      { kind: "upload-draft", path: state.uploadPath, upload: uploadForm() },
-      (r) => {
-        $("upload-result").replaceChildren(
-          element("p", r.message),
-          button(say("Seed prepared Upload", "Seeder l’upload préparé"), () =>
-            job({ kind: "upload-seed", hashes: [r.hash] }, () =>
-              toast(say("Verification started.", "Vérification lancée.")),
-            ),
-          ),
-        );
-      },
-    );
-  });
-};
 $("save-announce").onclick = () =>
   guard(async () => {
     await api("setup/announce", { value: $("announce-url").value });
@@ -1898,6 +1607,7 @@ $("guide-content").onclick = event => {
 
 $("target-client").onchange = () => guard(async () => {
   state.clientId = $("target-client").value;
+  resetUploadWorkspace();
   state.uploadDraft = null;
   state.uploadSavedOptions = null;
   state.addingClient = false;

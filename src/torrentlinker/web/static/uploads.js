@@ -1,0 +1,409 @@
+/* Upload workspace: the same saved-draft flow as the desktop. */
+const uploadUI = {section: "details", view: "local", baseline: null, loading: false, busy: false, stale: false,
+  generation: 0, rows: [], refusals: [], sourceOffset: 0, sourceGeneration: 0};
+$("upload-nfo").addEventListener("input", () => { state.uploadNfoOrigin = "original"; });
+
+function uploadForm() {
+  const options = {};
+  $("upload-options")
+    .querySelectorAll("select")
+    .forEach((s) => {
+      options[s.dataset.type] = [...s.selectedOptions]
+        .map((o) => Number(o.value))
+        .filter(Boolean);
+    });
+  return {
+    category: Number($("upload-category").value) || null,
+    subcategory: Number($("upload-subcategory").value) || null,
+    source: $("upload-source").value,
+    image: $("upload-image").value,
+    title: $("upload-title").value,
+    description: $("upload-description").value,
+    nfo: $("upload-nfo").value,
+    options,
+    assets: state.uploadAssets || [],
+    nfo_origin: state.uploadNfoOrigin || "",
+    field_provenance: state.uploadDraft?.form.field_provenance || {},
+    reviewed: $("upload-reviewed").checked,
+  };
+}
+async function prepareUpload(row, saved = null) {
+  if (uploadUI.busy) return;
+  if (uploadDirty() && !confirm(say("Discard unsaved changes?", "Abandonner les modifications non enregistrées ?"))) return;
+  const generation = ++uploadUI.generation;
+  const client = state.clientId;
+  state.uploadDraft = saved;
+  state.uploadAssets = saved?.form.assets || [];
+  state.uploadNfoOrigin = saved?.form.nfo_origin || "";
+  state.uploadPath = row.path;
+  $("upload-model-tools")?.remove();
+  $("upload-save-local").disabled = false;
+  await navigate("upload");
+  $("upload-editor").hidden = false;
+  showUploadView("local");
+  $("upload-help").hidden = true;
+  $("upload-editor-title").textContent = row.name;
+  uploadUI.loading = true;
+  uploadUI.stale = false;
+  uploadUI.baseline = null;
+  uploadUI.section = "details";
+  const categories = await api("upload/categories");
+  if (generation !== uploadUI.generation || client !== state.clientId) return;
+  $("upload-category").replaceChildren(
+    new Option("Auto", ""),
+    ...categories.map((c) => new Option(c.name, c.id)),
+  );
+  [
+    "upload-title",
+    "upload-description",
+    "upload-nfo",
+    "upload-source",
+    "upload-image",
+  ].forEach((id) => ($(id).value = ""));
+  $("upload-subcategory").replaceChildren();
+  $("upload-options").replaceChildren();
+  $("upload-reviewed").checked = false;
+  $("upload-result").replaceChildren();
+
+  if (saved) {
+    for (const [field, id] of Object.entries({title: "upload-title", description: "upload-description",
+      nfo: "upload-nfo", source: "upload-source", image: "upload-image", category: "upload-category"})) {
+      $(id).value = saved.form[field] ?? "";
+    }
+    $("upload-subcategory").append(new Option(String(saved.form.subcategory), saved.form.subcategory));
+    state.uploadSavedOptions = saved.form.options;
+  }
+  await previewUpload();
+}
+async function previewUpload() {
+  const generation = uploadUI.generation, client = state.clientId;
+  const form = uploadForm();
+  if (state.uploadSavedOptions) { form.options = state.uploadSavedOptions; state.uploadSavedOptions = null; }
+  await uploadOperation(
+    { kind: "upload-preview", path: state.uploadPath, upload: form,
+      draft_id: state.uploadDraft?.id || "", revision: state.uploadDraft?.revision || 0 },
+    (r) => {
+      if (generation !== uploadUI.generation || client !== state.clientId) return;
+      state.uploadAssets = r.assets || [];
+      state.uploadNfoOrigin = r.nfo_origin || "";
+      $("upload-category").value = r.category;
+      if (r.category === 10 && !$("upload-model-tools")) uploadModelTools();
+      $("upload-title").value = r.title;
+      $("upload-description").value = r.description;
+      $("upload-nfo").value = r.nfo;
+      $("upload-subcategory").replaceChildren(
+        ...r.subcategories.map((s) => new Option(s.label || s.name, s.id)),
+      );
+      $("upload-subcategory").value = r.subcategory;
+      $("upload-options").replaceChildren(
+        ...r.options.map((o) => {
+          const label = element("label", o.name + (o.required ? " *" : "")),
+            select = element("select");
+          select.dataset.type = o.id;
+          select.multiple = o.multiple;
+          select.append(
+            new Option("—", ""),
+            ...o.values.map(
+              (v) =>
+                new Option(
+                  v.label,
+                  v.id,
+                  false,
+                  (r.chosen[o.id] || []).includes(v.id),
+                ),
+            ),
+          );
+          label.append(select);
+          return label;
+        }),
+      );
+      uploadUI.refusals = r.refusals;
+      $("upload-rules").replaceChildren(
+        ...r.refusals.map((v) => element("p", v, "danger")),
+        ...r.warnings.map((v) => element("p", v)),
+      );
+      table(
+        "upload-files",
+        r.files,
+        [
+          { label: "Torrent file", render: (f) => f.torrent_path },
+          { label: "Local file", render: (f) => f.local_path },
+          { label: "Size", render: (f) => bytes(f.size) },
+        ],
+        null,
+      );
+      if (uploadUI.loading) {
+        // The baseline describes what was loaded, while the send still checks the saved form.
+        uploadUI.baseline = uploadCanonical(uploadForm());
+        uploadUI.loading = false;
+      }
+      showUploadSection(uploadUI.section);
+    },
+  );
+}
+function uploadCameraControls(preset) {
+  const details = element("details"), fields = new Map();
+  details.append(element("summary", say("Advanced camera", "Caméra avancée")));
+  const initial = {yaw: 45, pitch: 55, roll: 0, zoom: 1, center_x: 0, center_y: 0};
+  const specs = [
+    ["yaw", say("Yaw (degrees)", "Azimut (degrés)"), null, null, 1],
+    ["pitch", say("Polar pitch (degrees)", "Angle polaire (degrés)"), null, null, 1],
+    ["roll", say("Roll (degrees)", "Roulis (degrés)"), null, null, 1],
+    ["zoom", say("Zoom (larger means closer)", "Zoom (plus grand signifie plus près)"), 0.1, 10, 0.1],
+    ["center_x", say("Horizontal framing", "Cadrage horizontal"), -0.8, 0.8, 0.05],
+    ["center_y", say("Vertical framing", "Cadrage vertical"), -0.8, 0.8, 0.05],
+  ];
+  for (const [field, text, min, max, step] of specs) {
+    const label = element("label"), input = element("input");
+    input.type = "number"; input.value = initial[field]; input.step = step;
+    input.required = true; input.dataset.cameraField = field;
+    if (min !== null) input.min = min;
+    if (max !== null) input.max = max;
+    if (["yaw", "pitch", "roll"].includes(field)) input.addEventListener("input", () => { preset.value = "custom"; });
+    label.append(element("span", text), input); details.append(label); fields.set(field, input);
+  }
+  const presets = {isometric: [45, 55, 0], front: [0, 90, 0], back: [180, 90, 0],
+    left: [-90, 90, 0], right: [90, 90, 0], top: [0, 0, 0], bottom: [0, 180, 0]};
+  preset.addEventListener("change", () => {
+    const angles = presets[preset.value];
+    if (angles) ["yaw", "pitch", "roll"].forEach((field, index) => { fields.get(field).value = angles[index]; });
+  });
+  return {element: details, read: () => Object.fromEntries([...fields].map(([field, input]) => {
+    if (!input.checkValidity() || input.value === "" || !Number.isFinite(Number(input.value)))
+      throw Error(say("Invalid camera value: ", "Valeur de caméra incorrecte : ") + field);
+    return [field, Number(input.value)];
+  }))};
+}
+function uploadModelTools() {
+  const box = element("div", undefined, "card"); box.id = "upload-model-tools";
+  const path = state.uploadPath, client = state.clientId;
+  const inventory = element("div"), output = element("div");
+  const choices = [];
+  const current = () => path === state.uploadPath && client === state.clientId;
+  const show = result => {
+    if (!current()) return;
+    output.replaceChildren(element("p", `${result.covered.length}/${result.selected} ${say("pieces rendered", "pièces rendues")}`));
+    for (const problem of result.unsupported) output.append(element("p", `${problem.file}: ${problem.reason}`, "danger"));
+    for (const content of result.content || []) {
+      const img = element("img"); img.src = `data:${content.mimeType};base64,${content.data}`;
+      img.alt = say("Local 3D presentation image", "Image de présentation 3D locale");
+      img.style.maxWidth = "100%"; output.append(img);
+    }
+    output.append(button(say("Use these private images", "Utiliser ces images privées"), () => {
+      if (current()) state.uploadAssets = result.artifacts.map(asset => asset.asset_id);
+      toast(say("Images selected. Save the Local Draft to keep them.", "Images sélectionnées. Enregistrez le brouillon local pour les conserver."));
+    }));
+  };
+  box.append(button(say("Inspect 3D pieces", "Inspecter les pièces 3D"), () => job({kind: "model-inspect", path}, result => {
+    if (!current()) return;
+    inventory.replaceChildren(); choices.length = 0;
+    inventory.append(element("p", say("Folder and assembled names are hints. Keep scale/support variants distinct.", "Les noms de dossiers et d’assemblage sont des indices. Distinguez les échelles et supports.")));
+    for (const model of result.models) {
+      const row = element("div"), check = element("input"); check.type = "checkbox"; check.checked = model.previewable;
+      const preset = element("select");
+      for (const name of ["isometric", "front", "back", "left", "right", "top", "bottom", "custom"]) preset.append(new Option(name, name));
+      const camera = uploadCameraControls(preset);
+      choices.push({file: model.file, check, camera});
+      row.append(check, element("span", model.file), preset, camera.element, button(say("Preview", "Aperçu"), () => job({
+        kind: "model-render", path, model_files: [model.file], model_cameras: {[model.file]: camera.read()}
+      }, show)));
+      inventory.append(row);
+    }
+  })), inventory, button(say("Render all selected pieces", "Rendre toutes les pièces sélectionnées"), () => {
+    const selected = choices.filter(choice => choice.check.checked);
+    if (!selected.length) throw Error(say("Select inspected pieces first.", "Sélectionnez d’abord les pièces inspectées."));
+    return job({kind: "model-render", path, model_files: selected.map(choice => choice.file),
+      model_cameras: Object.fromEntries(selected.map(choice => [choice.file, choice.camera.read()]))}, show);
+  }), output);
+  $("upload-artwork-tools").append(box);
+}
+
+function uploadCanonical(form) {
+  const options = Object.entries(form.options || {}).filter(([,v]) => v.length)
+    .sort(([a],[b]) => Number(a)-Number(b)).map(([k,v]) => [String(k), [...v].sort((a,b)=>a-b)]);
+  return JSON.stringify([form.category || null, form.subcategory || null, form.source || "",
+    form.image || "", form.title || "", form.description || "", form.nfo || "", options,
+    [...(form.assets || [])].sort(), form.nfo_origin || ""]);
+}
+function uploadDirty() {
+  return Boolean(uploadUI.baseline && state.uploadPath && uploadCanonical(uploadForm()) !== uploadUI.baseline);
+}
+function uploadStatus(value) {
+  return {queued: say("Awaiting review", "À relire"), sending: say("Sending to c411", "Envoi à c411"),
+    uncertain: say("Check c411 before retrying", "Vérifier c411 avant un nouvel essai"),
+    sent: say("Sent to c411", "Envoyé à c411")}[value] || value;
+}
+function showUploadSection(section) {
+  uploadUI.section = section;
+  document.querySelectorAll('[data-upload-panel]').forEach(el => el.hidden = el.dataset.uploadPanel !== section);
+  document.querySelectorAll('[data-upload-section]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.uploadSection === section)));
+  uploadEditorState();
+}
+function showUploadView(view) {
+  uploadUI.view = view;
+  $("upload-workspace").hidden = view !== "local";
+  $("upload-remote").hidden = view !== "remote";
+  $("upload-sources").hidden = view !== "sources";
+  document.querySelectorAll('[data-upload-view]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.uploadView === (view === 'sources' ? 'local' : view))));
+}
+function uploadEditorState() {
+  const saved = state.uploadDraft, dirty = uploadDirty();
+  const editable = !uploadUI.loading && !uploadUI.busy && !uploadUI.stale && (!saved || saved.status === 'queued');
+  const currentSaved = saved && uploadCanonical(uploadForm()) === uploadCanonical(saved.form);
+  const review = uploadUI.section === 'review';
+  if (dirty || !currentSaved) $("upload-reviewed").checked = false;
+  $("upload-save-state").textContent = uploadUI.loading ? say("Loading draft…", "Chargement du brouillon…") :
+    dirty || (saved && !currentSaved) ? say("Unsaved changes", "Modifications non enregistrées") :
+    saved ? `${say("Saved locally", "Enregistré localement")} · ${say("Revision", "Version")} ${saved.revision} · ${uploadStatus(saved.status)}` :
+    say("New preparation · Not saved", "Nouvelle préparation · Non enregistrée");
+  $("upload-save-local").disabled = !editable;
+  $("upload-save-local").classList.toggle('primary', !saved);
+  $("upload-review").hidden = !saved || review;
+  $("upload-send-local").hidden = !saved || !review;
+  $("upload-reviewed").disabled = !editable || !currentSaved;
+  const missing = !saved?.form.image || !saved?.form.description?.trim() || !saved?.form.nfo?.trim() || (saved?.review?.refusals || []).length;
+  $("upload-send-local").disabled = !editable || !currentSaved || Boolean(missing) || !$("upload-reviewed").checked;
+  $("upload-presentation-preview").disabled = !saved;
+  $("upload-review-state").textContent = !saved ? say("Save a local draft first.", "Enregistrez d’abord un brouillon local.") :
+    !currentSaved ? say("Save changes before reviewing this revision.", "Enregistrez les modifications avant de relire cette version.") :
+    missing ? say("Resolve the missing fields and refusals before sending.", "Complétez les champs manquants et corrigez les refus avant l’envoi.") :
+    say("Review the saved revision and confirm below.", "Relisez la version enregistrée et confirmez ci-dessous.");
+  $("upload-form").querySelectorAll('input:not(#upload-reviewed),select,textarea').forEach(el => el.disabled = !editable);
+  renderUploadActions();
+}
+function renderUploadQueue() {
+  $("upload-draft-search").placeholder = say("Find a draft…", "Chercher un brouillon…");
+  $("upload-draft-search").setAttribute('aria-label', $("upload-draft-search").placeholder);
+  const host = $("upload-local-queue"), query = $("upload-draft-search").value.toLocaleLowerCase();
+  host.replaceChildren();
+  for (const row of uploadUI.rows.filter(r => r.form.title.toLocaleLowerCase().includes(query))) {
+    const entry = button('', () => prepareUpload({path: row.path, name: row.form.title}, row));
+    entry.className = 'upload-draft-row';
+    entry.setAttribute('aria-pressed', String(row.id === state.uploadDraft?.id));
+    entry.append(element('strong', row.form.title), element('small', `${row.files.length} ${say('files','fichiers')} · ${uploadStatus(row.status)}`));
+    host.append(entry);
+  }
+  if (!host.childElementCount) host.append(element('p', say('No local drafts match. Choose New draft to prepare a Library item.', 'Aucun brouillon correspondant. Choisissez Nouveau brouillon pour préparer un élément de la Bibliothèque.'), 'muted'));
+}
+async function loadUploadQueue() {
+  const client = state.clientId, rows = await api('upload/queue');
+  if (client !== state.clientId) return;
+  uploadUI.rows = rows;
+  renderUploadQueue();
+  const current = rows.find(r => r.id === state.uploadDraft?.id);
+  if (state.uploadDraft && (!current || current.revision !== state.uploadDraft.revision || current.status !== state.uploadDraft.status)) {
+    uploadUI.stale = true;
+    $("upload-reviewed").checked = false;
+  }
+  uploadEditorState();
+  if (uploadUI.stale) {
+    $("upload-review-state").textContent = say('Draft changed elsewhere. Reopen it from the list before sending.', 'Le brouillon a changé ailleurs. Rouvrez-le dans la liste avant l’envoi.');
+  }
+}
+function renderUploadActions() {
+  const host = $("upload-draft-actions"), r = state.uploadDraft;
+  host.replaceChildren();
+  if (!r) return;
+  host.append(button(say('Preview saved draft','Aperçu du brouillon enregistré'), previewSavedUpload));
+  if (r.status !== 'sending') host.append(button(say('Remove locally','Retirer localement'), async () => {
+    if (!confirm(say('Remove only this local record? Files and c411 drafts will be kept.', 'Retirer uniquement ce brouillon local ? Les fichiers et brouillons c411 seront conservés.'))) return;
+    await job({kind:'upload-remove',draft_id:r.id,revision:r.revision}, async () => {
+      if (state.uploadDraft?.id === r.id) { state.uploadDraft = null; uploadUI.baseline = null; $("upload-editor").hidden = true; $("upload-help").hidden = false; }
+      await loadUploadQueue();
+    });
+  }));
+  if (['sending','uncertain'].includes(r.status)) host.append(button(say('Allow retry…','Autoriser un nouvel essai…'), async () => {
+    if (!confirm(say('Check c411 and wait for any running send. Confirm that no draft was created before allowing another attempt.', 'Vérifiez c411 et attendez la fin de tout envoi. Confirmez qu’aucun brouillon n’a été créé avant un nouvel essai.'))) return;
+    await job({kind:'upload-reset',draft_id:r.id,revision:r.revision}, async () => { await loadUploadQueue(); const current=uploadUI.rows.find(x=>x.id===r.id); if(current) await prepareUpload({path:current.path,name:current.form.title},current); });
+  }));
+}
+async function previewSavedUpload() {
+  const r = state.uploadDraft;
+  if (!r) return;
+  return aCardDetail(() => api(`upload/queue/${encodeURIComponent(r.id)}/preview?revision=${r.revision}&client_id=${encodeURIComponent(state.clientId || '')}`));
+}
+async function loadRemoteUploads() {
+  showUploadView('remote');
+  const client=state.clientId;
+  $("upload-remote-list").textContent=say('Loading c411 drafts…','Chargement des brouillons c411…');
+  try {
+    const rows=await api('upload/drafts');
+    if(client!==state.clientId)return;
+    table('upload-remote-list',rows,[{label:say('Draft','Brouillon'),render:r=>r.name||r.title||String(r.id)},
+      {label:say('Category','Catégorie'),render:r=>r.subcategory?.name||r.category?.name||''},
+      {label:say('Modified','Modifié'),render:r=>String(r.updatedAt||'').slice(0,16).replace('T',' ')}]);
+    if(!rows.length)$("upload-remote-list").textContent=say('No drafts on c411.','Aucun brouillon sur c411.');
+  } catch(error) { if(client===state.clientId)$("upload-remote-list").textContent=error.message; }
+}
+async function loadUploadSources(more=false) {
+  if (!more) { uploadUI.sourceOffset=0; $("upload-source-list").replaceChildren(); }
+  const generation=++uploadUI.sourceGeneration, client=state.clientId;
+  const result=await api(`library?${new URLSearchParams({q:$("upload-source-search").value,offset:uploadUI.sourceOffset,limit:100})}`);
+  if(generation!==uploadUI.sourceGeneration||client!==state.clientId)return;
+  for(const r of result.rows.filter(r=>r.state==='orphan')) {
+    const b=button('',()=>prepareUpload(r));b.className='upload-source-row';b.append(element('strong',r.name),element('small',`${r.kind} · ${bytes(r.size)}`));$("upload-source-list").append(b);
+  }
+  uploadUI.sourceOffset+=result.rows.length;
+  $("upload-source-more").hidden=uploadUI.sourceOffset>=result.total;
+  if(!$("upload-source-list").childElementCount)$("upload-source-list").append(element('p',say('No orphan items in this page. Scan your Library or load more items.', 'Aucun orphelin sur cette page. Analysez votre Bibliothèque ou affichez la suite.')));
+}
+$("upload-draft-search").oninput=renderUploadQueue;
+$("upload-queue-refresh").onclick=()=>guard(loadUploadQueue);
+$("upload-remote-refresh").onclick=()=>guard(loadRemoteUploads);
+$("upload-new").onclick=()=>guard(async()=>{showUploadView('sources');await loadUploadSources();});
+$("upload-source-refresh").onclick=()=>guard(()=>loadUploadSources());
+$("upload-source-more").onclick=()=>guard(()=>loadUploadSources(true));
+$("upload-source-search").onkeydown=e=>{if(e.key==='Enter')guard(()=>loadUploadSources());};
+document.querySelectorAll('[data-upload-view]').forEach(b=>b.onclick=()=>guard(async()=>{if(b.dataset.uploadView==='remote')await loadRemoteUploads();else{showUploadView('local');await loadUploadQueue();}}));
+document.querySelectorAll('[data-upload-section]').forEach(b=>b.onclick=()=>showUploadSection(b.dataset.uploadSection));
+$("upload-review").onclick=()=>showUploadSection('review');
+$("upload-reviewed").onchange=uploadEditorState;
+$("upload-presentation-preview").onclick=()=>guard(previewSavedUpload);
+$("upload-form").addEventListener('input',event=>{ if(event.target.id === 'upload-reviewed') return; $("upload-reviewed").checked=false;uploadEditorState(); });
+$("upload-save-local").onclick=()=>guard(async()=>{
+  const generation=uploadUI.generation,client=state.clientId;
+  await uploadOperation({kind:'upload-queue',path:state.uploadPath,upload:uploadForm(),draft_id:state.uploadDraft?.id||'',revision:state.uploadDraft?.revision||0},async r=>{
+    if(generation!==uploadUI.generation||client!==state.clientId)return;
+    state.uploadDraft=r;
+    $("upload-description").value=r.form.description;$("upload-nfo").value=r.form.nfo;
+    state.uploadAssets=r.form.assets||[];state.uploadNfoOrigin=r.form.nfo_origin||'';
+    uploadUI.baseline=uploadCanonical(uploadForm());$("upload-reviewed").checked=false;
+    uploadUI.refusals=r.review?.refusals||[];
+    $("upload-rules").replaceChildren(...uploadUI.refusals.map(x=>element('p',x,'danger')),...(r.review?.warnings||[]).map(x=>element('p',x)));
+    toast(say('Saved locally. Nothing sent to c411.','Enregistré localement. Rien n’a été envoyé à c411.'));
+    uploadEditorState();await loadUploadQueue();
+  });
+});
+$("upload-send-local").onclick=()=>guard(async()=>{
+  const saved=state.uploadDraft,generation=uploadUI.generation,client=state.clientId;
+  if(!saved||!$("upload-reviewed").checked||uploadCanonical(uploadForm())!==uploadCanonical(saved.form))throw Error(say('Save and review this revision before sending.','Enregistrez et relisez cette version avant l’envoi.'));
+  if(!confirm(say('Send this saved revision to c411 as a draft? It will not be published.','Envoyer cette version enregistrée à c411 comme brouillon ? Elle ne sera pas publiée.')))return;
+  $("upload-send-local").disabled=true;
+  await uploadOperation({kind:'upload-send',draft_id:saved.id,revision:saved.revision},async r=>{
+    if(generation!==uploadUI.generation||client!==state.clientId)return;
+    state.uploadDraft={...saved,status:'sent'};
+    $("upload-result").replaceChildren(element('p',r.message),button(say('Start seeding','Démarrer le seed'),()=>job({kind:'upload-seed',hashes:[r.hash]},()=>toast(say('Verification started.','Vérification lancée.')))));
+    uploadEditorState();await loadUploadQueue();
+  });
+});
+$("upload-preview").onclick=()=>guard(previewUpload);
+$("upload-category").onchange=()=>{$("upload-subcategory").replaceChildren();$("upload-title").value='';$("upload-reviewed").checked=false;guard(previewUpload);};
+$("upload-subcategory").onchange=()=>{$("upload-reviewed").checked=false;guard(previewUpload);};
+$("upload-form").onsubmit=e=>{e.preventDefault();$("upload-save-local").click();};
+
+function resetUploadWorkspace() {
+  uploadUI.generation++; uploadUI.sourceGeneration++;
+  uploadUI.baseline=null; uploadUI.loading=false; uploadUI.busy=false; uploadUI.stale=false;
+  state.uploadPath=''; state.uploadDraft=null;
+  $("upload-help").hidden=false; $("upload-editor").hidden=true;
+  $("upload-remote-list").replaceChildren(); $("upload-local-queue").replaceChildren();
+  showUploadView('local');
+}
+async function uploadOperation(body, done) {
+  const generation=uploadUI.generation;
+  uploadUI.busy=true; uploadEditorState();
+  const release=()=>{ if(generation===uploadUI.generation){uploadUI.busy=false;uploadUI.loading=false;uploadEditorState();} };
+  try {
+    return await job(body,async result=>{try{await done(result);}finally{release();}},async()=>{release();await loadUploadQueue();});
+  } catch(error) { release(); throw error; }
+}

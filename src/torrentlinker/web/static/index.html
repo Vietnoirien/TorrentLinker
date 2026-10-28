@@ -13,6 +13,7 @@
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
     <script src="static/media.js" defer></script>
+    <script src="static/uploads.js" defer></script>
   </head>
   <body>
     <section id="login-screen" class="welcome">
@@ -622,61 +623,26 @@
           </div>
         </section>
         <section id="view-upload" class="view" hidden>
-          <div class="card">
-            <h2 data-en="Local draft queue" data-fr="File des brouillons locaux">Local draft queue</h2>
-            <p data-en="Review locally before sending to c411. Automated tasks save here."
-               data-fr="Relisez ici avant l’envoi à c411. Les tâches automatiques enregistrent leurs brouillons dans cette file.">Review locally before sending to c411. Automated tasks save here.</p>
-            <button id="upload-queue-refresh" class="quiet" data-en="Refresh" data-fr="Actualiser">Refresh</button>
-            <div id="upload-local-queue" class="table-wrap"></div>
-          </div>
-          <p id="upload-help" data-i18n="uploadHelp">
-            Choose a Local Item from the Library to prepare an Upload.
-          </p>
-          <div id="upload-editor" class="card" hidden>
-            <form id="upload-form">
-              <div class="form-grid">
-                <label><span data-i18n="categoryLabel">Category</span><select id="upload-category"></select></label
-                ><label
-                  ><span data-i18n="subcategoryLabel">Subcategory</span><select id="upload-subcategory"></select></label
-                ><label>Source<input id="upload-source" /></label
-                ><label
-                  ><span data-i18n="imageUrl">Image URL</span><input
-                    id="upload-image"
-                    type="url"
-                    placeholder="https://…"
-                /></label>
+          <header class="upload-heading"><div><p class="muted" data-en="Prepare locally. Review. Send to c411." data-fr="Préparer localement. Relire. Envoyer à c411.">Prepare locally. Review. Send to c411.</p></div><button id="upload-new" class="primary" data-en="New draft" data-fr="Nouveau brouillon">New draft</button></header>
+          <nav class="upload-nav" aria-label="Upload"><button data-upload-view="local" aria-pressed="true" data-en="Local drafts" data-fr="Brouillons locaux">Local drafts</button><button data-upload-view="remote" aria-pressed="false" data-en="c411 drafts" data-fr="Brouillons c411">c411 drafts</button></nav>
+          <div id="upload-remote" hidden><div class="upload-heading"><p data-en="Final publication happens on c411. Seeding is a separate action." data-fr="La publication finale se fait sur c411. La mise en seed est une action distincte.">Final publication happens on c411. Seeding is a separate action.</p><button id="upload-remote-refresh" class="icon-button" aria-label="Refresh c411 drafts" title="Refresh c411 drafts">↻</button></div><div id="upload-remote-list"></div><a href="https://c411.org/upload" target="_blank" rel="noopener noreferrer" data-en="Open c411’s upload page" data-fr="Ouvrir la page d’upload c411">Open c411’s upload page</a></div>
+          <div id="upload-sources" hidden><h3 data-en="Start from your Library" data-fr="Choisir dans la Bibliothèque">Start from your Library</h3><div class="actions"><input id="upload-source-search" aria-label="Find a Library item" placeholder="Find a Library item…" /><button id="upload-source-refresh" data-en="Search" data-fr="Chercher">Search</button></div><div id="upload-source-list"></div><button id="upload-source-more" class="quiet" data-en="Load more" data-fr="Afficher la suite">Load more</button></div>
+          <div id="upload-workspace" class="upload-workspace">
+            <aside class="upload-sidebar"><div class="actions"><input id="upload-draft-search" aria-label="Find a draft" placeholder="Find a draft…" /><button id="upload-queue-refresh" class="icon-button" aria-label="Refresh local drafts" title="Refresh">↻</button></div><div id="upload-local-queue"></div></aside>
+            <div class="upload-main"><p id="upload-help" data-en="Choose a local draft, or New draft to prepare a Library item." data-fr="Choisissez un brouillon local, ou Nouveau brouillon pour préparer un élément de la Bibliothèque.">Choose a local draft, or New draft to prepare a Library item.</p>
+              <div id="upload-editor" hidden><header class="upload-heading"><div><h3 id="upload-editor-title"></h3><p id="upload-save-state" class="muted" role="status"></p></div><details class="upload-more"><summary aria-label="Draft actions">⋯</summary><div id="upload-draft-actions"></div></details></header>
+                <form id="upload-form"><nav class="upload-sections" aria-label="Draft sections">
+                  <button type="button" data-upload-section="details" aria-pressed="true" data-en="Details" data-fr="Détails">Details</button><button type="button" data-upload-section="files" aria-pressed="false" data-en="Files & NFO" data-fr="Fichiers et NFO">Files & NFO</button><button type="button" data-upload-section="description" aria-pressed="false" data-en="Description" data-fr="Description">Description</button><button type="button" data-upload-section="artwork" aria-pressed="false" data-en="Artwork" data-fr="Illustration">Artwork</button><button type="button" data-upload-section="review" aria-pressed="false" data-en="Review" data-fr="Relecture">Review</button>
+                </nav>
+                <section data-upload-panel="details"><label><span data-en="Upload name" data-fr="Nom de l’upload">Upload name</span><input id="upload-title" maxlength="200" /></label><div class="form-grid"><label><span data-i18n="categoryLabel">Category</span><select id="upload-category"></select></label><label><span data-i18n="subcategoryLabel">Subcategory</span><select id="upload-subcategory"></select></label><label>Source<input id="upload-source" /></label></div><div id="upload-options" class="form-grid"></div><button id="upload-preview" type="button" class="quiet" data-i18n="updatePreview">Update preview</button></section>
+                <section data-upload-panel="files" hidden><div id="upload-files" class="table-wrap"></div><label>NFO<textarea id="upload-nfo" rows="9"></textarea></label></section>
+                <section data-upload-panel="description" hidden><label>Description · BBCode<textarea id="upload-description" rows="12"></textarea></label><button id="upload-presentation-preview" type="button" class="quiet" data-en="Preview saved draft" data-fr="Aperçu du brouillon enregistré">Preview saved draft</button></section>
+                <section data-upload-panel="artwork" hidden><label><span data-en="Hosted image URL" data-fr="URL de l’image hébergée">Hosted image URL</span><input id="upload-image" type="url" placeholder="https://…" /></label><p data-en="Use a direct image URL. Save locally before reviewing." data-fr="Utilisez un lien direct vers une image. Enregistrez localement avant la relecture.">Use a direct image URL. Save locally before reviewing.</p><a href="https://postimages.org/" target="_blank" rel="noopener noreferrer" data-en="Host an image" data-fr="Héberger une image">Host an image</a><div id="upload-artwork-tools"></div></section>
+                <section data-upload-panel="review" hidden><h3 data-en="Review the saved draft" data-fr="Relire le brouillon enregistré">Review the saved draft</h3><div id="upload-rules"></div><p id="upload-review-state" role="status"></p><label class="check"><input id="upload-reviewed" type="checkbox" /><span data-i18n="reviewUpload">I have reviewed the files, description and category warnings.</span></label><p class="muted" data-en="Sending creates a c411 draft. You publish it on c411." data-fr="L’envoi crée un brouillon c411. Vous le publiez sur c411.">Sending creates a c411 draft. You publish it on c411.</p></section>
+                <footer class="upload-footer"><button id="upload-save-local" type="button" data-en="Save locally" data-fr="Enregistrer localement">Save locally</button><button id="upload-review" type="button" class="primary" data-en="Review draft" data-fr="Relire le brouillon">Review draft</button><button id="upload-send-local" type="button" class="primary" hidden data-en="Send to c411…" data-fr="Envoyer à c411…">Send to c411…</button></footer>
+                </form><div id="upload-result"></div>
               </div>
-              <label
-                ><span data-i18n="releaseName">Release name</span><input id="upload-title" maxlength="200"
-              /></label>
-              <div id="upload-options" class="form-grid"></div>
-              <label
-                >Description · BBCode<textarea
-                  id="upload-description"
-                  rows="10"
-                ></textarea></label
-              ><label>NFO<textarea id="upload-nfo" rows="6"></textarea></label>
-              <div id="upload-rules"></div>
-              <label
-                ><input id="upload-reviewed" type="checkbox" /><span data-i18n="reviewUpload">I have reviewed the files, description and category warnings.</span></label
-              >
-              <div class="actions">
-                <button id="upload-preview" type="button" data-i18n="updatePreview">Update preview</button
-                ><button id="upload-save-local" type="button" class="primary"
-                  data-en="Save to local queue" data-fr="Enregistrer dans la file locale">Save to local queue</button
-                ><button id="upload-send-local" type="button" hidden
-                  data-en="Send saved draft to c411…" data-fr="Envoyer le brouillon enregistré à c411…">Send saved draft to c411…</button
-                ><button id="upload-send-direct">Save Draft on c411</button
-                ><a
-                  href="https://postimages.org/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  >Host an image</a
-                >
-              </div>
-            </form>
-            <div id="upload-files" class="table-wrap"></div>
-            <div id="upload-result"></div>
+            </div>
           </div>
         </section>
         <section id="view-documentation" class="view" hidden>

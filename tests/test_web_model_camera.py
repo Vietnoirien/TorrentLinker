@@ -11,7 +11,7 @@ def test_advanced_camera_controls_keep_all_fields_and_apply_presets():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is unavailable")
-    source = Path("src/torrentlinker/web/static/app.js").read_text()
+    source = Path("src/torrentlinker/web/static/uploads.js").read_text()
     helper = source[
         source.index("function uploadCameraControls(") : source.index("function uploadModelTools(")
     ]

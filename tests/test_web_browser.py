@@ -323,7 +323,8 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
             page.locator("#navigation-toggle").click()
             page.locator('[data-view="upload"]').click()
             expect(page.locator("#upload-local-queue")).to_contain_text("Cable.Holder.NOTAG.STL")
-            page.get_by_role("button", name="Review / edit").click()
+            page.locator("#upload-local-queue button").first.click()
+            page.locator("[data-upload-section=description]").click()
             expect(page.locator("#upload-description")).to_have_value(
                 re.compile("A small cable holder")
             )
@@ -342,16 +343,35 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
             if screenshots:
                 target = Path(screenshots)
                 target.mkdir(parents=True, exist_ok=True)
+                page.locator("#toast").evaluate("e => e.hidden = true")
+                page.set_viewport_size({"width": 1280, "height": 900})
                 for lang in ("en", "fr"):
                     page.locator("#language").select_option(lang)
-                    page.screenshot(path=str(target / f"upload-queue-{lang}.png"), full_page=True)
+                    for theme in ("dark", "light"):
+                        page.locator("#theme").select_option(theme)
+                        for section in ("details", "files", "description", "artwork", "review"):
+                            page.locator(f"[data-upload-section={section}]").click()
+                            page.mouse.move(1, 1)
+                            page.wait_for_timeout(160)
+                            page.screenshot(
+                                path=str(target / f"web-upload-{section}-{lang}-{theme}.png")
+                            )
                 page.locator("#language").select_option("en")
+                page.locator("#theme").select_option("dark")
             page.on("dialog", lambda dialog: dialog.accept())
+            page.locator("[data-upload-section=review]").click()
             page.locator("#upload-reviewed").check()
             page.locator("#upload-send-local").click()
             expect(page.locator("#upload-local-queue")).to_contain_text(
                 "Sent to c411", timeout=10000
             )
+            page.locator("[data-upload-view=remote]").click()
+            expect(page.locator("#upload-remote-list")).to_contain_text("No drafts on c411")
+            if screenshots:
+                page.screenshot(path=str(target / "web-upload-c411-en-dark.png"))
+                page.locator("#upload-new").click()
+                expect(page.locator("#upload-sources")).to_be_visible()
+                page.screenshot(path=str(target / "web-upload-new-en-dark.png"))
             assert len(posted) == 1
             assert "Reviewed cable holder description" in posted[0].content.decode()
             assert not errors

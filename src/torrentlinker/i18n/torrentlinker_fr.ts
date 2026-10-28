@@ -2011,6 +2011,114 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
         <source>Draft changed. Refresh the queue and preview it again.</source>
         <translation>Le brouillon a changé. Actualisez la file et ouvrez à nouveau l’aperçu.</translation>
     </message>
+    <message>
+        <source>Find a draft…</source>
+        <translation>Chercher un brouillon…</translation>
+    </message>
+    <message>
+        <source>Local drafts</source>
+        <translation>Brouillons locaux</translation>
+    </message>
+    <message>
+        <source>No local drafts. Choose New draft to prepare a Library item.</source>
+        <translation>Aucun brouillon local. Choisissez Nouveau brouillon pour préparer un élément de la Bibliothèque.</translation>
+    </message>
+    <message>
+        <source>Select a local draft</source>
+        <translation>Choisissez un brouillon local</translation>
+    </message>
+    <message>
+        <source>Draft actions</source>
+        <translation>Actions du brouillon</translation>
+    </message>
+    <message>
+        <source>Upload name</source>
+        <translation>Nom de l’upload</translation>
+    </message>
+    <message>
+        <source>Subcategory</source>
+        <translation>Sous-catégorie</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Open model tools…</source>
+        <translation>Ouvrir les outils 3D…</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>Files &amp;&amp; NFO</source>
+        <translation>Fichiers et NFO</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Modifier</translation>
+    </message>
+    <message>
+        <source>Hosted image URL</source>
+        <translation>URL de l’image hébergée</translation>
+    </message>
+    <message>
+        <source>Host image…</source>
+        <translation>Héberger une image…</translation>
+    </message>
+    <message>
+        <source>Use a direct image URL. Model tools open the preparation editor.</source>
+        <translation>Utilisez un lien direct vers une image. Les outils 3D ouvrent l’éditeur de préparation.</translation>
+    </message>
+    <message>
+        <source>Artwork</source>
+        <translation>Illustration</translation>
+    </message>
+    <message>
+        <source>I reviewed this saved revision, its files and category warnings.</source>
+        <translation>J’ai relu cette version enregistrée, ses fichiers et les avertissements de catégorie.</translation>
+    </message>
+    <message>
+        <source>Sending creates a c411 draft. Final publication happens on c411.</source>
+        <translation>L’envoi crée un brouillon c411. La publication finale se fait sur c411.</translation>
+    </message>
+    <message>
+        <source>Review</source>
+        <translation>Relecture</translation>
+    </message>
+    <message>
+        <source>Save locally</source>
+        <translation>Enregistrer localement</translation>
+    </message>
+    <message>
+        <source>Review draft</source>
+        <translation>Relire le brouillon</translation>
+    </message>
+    <message>
+        <source>Loading category options…</source>
+        <translation>Chargement des options de catégorie…</translation>
+    </message>
+    <message>
+        <source>Save your changes locally before opening model tools.</source>
+        <translation>Enregistrez vos modifications localement avant d’ouvrir les outils 3D.</translation>
+    </message>
+    <message>
+        <source>Draft changed elsewhere. Reopen it from the list before sending.</source>
+        <translation>Le brouillon a changé ailleurs. Rouvrez-le dans la liste avant l’envoi.</translation>
+    </message>
+    <message>
+        <source>Unsaved changes</source>
+        <translation>Modifications non enregistrées</translation>
+    </message>
+    <message>
+        <source>Discard unsaved changes and open another draft?</source>
+        <translation>Abandonner les modifications non enregistrées et ouvrir un autre brouillon ?</translation>
+    </message>
+    <message>
+        <source>Saved locally · Revision {0} · {1}</source>
+        <translation>Enregistré localement · Version {0} · {1}</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
@@ -6710,8 +6818,8 @@ Seeders annoncés par le tracker : {1}</translation>
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="496"/>
-        <source>Release name</source>
-        <translation>Nom de la release</translation>
+        <source>Upload name</source>
+        <translation>Nom de l’upload</translation>
     </message>
     <message>
         <location filename="../gui/upload_view.py" line="499"/>
@@ -7084,6 +7192,54 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <location filename="../gui/upload_view.py" line="1765"/>
         <source>{0}/15 Drafts on c411</source>
         <translation>{0}/15 brouillons sur c411</translation>
+    </message>
+    <message>
+        <source>Upload</source>
+        <translation>Upload</translation>
+    </message>
+    <message>
+        <source>New draft</source>
+        <translation>Nouveau brouillon</translation>
+    </message>
+    <message>
+        <source>Prepare locally. Review. Send to c411.</source>
+        <translation>Préparer localement. Relire. Envoyer à c411.</translation>
+    </message>
+    <message>
+        <source>Local drafts</source>
+        <translation>Brouillons locaux</translation>
+    </message>
+    <message>
+        <source>c411 drafts</source>
+        <translation>Brouillons c411</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>Scan the Library containing this Local Draft first.</source>
+        <translation>Analysez d’abord la Bibliothèque contenant ce brouillon local.</translation>
+    </message>
+    <message>
+        <source>An Announce URL is needed only when sending. Set it in Settings → Connections.</source>
+        <translation>L’URL d’annonce est nécessaire uniquement pour l’envoi. Configurez-la dans Paramètres → Connexions.</translation>
+    </message>
+    <message>
+        <source>Choose an Orphan to prepare a local draft. Review it before sending to c411.</source>
+        <translation>Choisissez un Orphelin pour préparer un brouillon local. Relisez-le avant de l’envoyer à c411.</translation>
+    </message>
+    <message>
+        <source>Files &amp;&amp; NFO</source>
+        <translation>Fichiers et NFO</translation>
+    </message>
+    <message>
+        <source>Artwork</source>
+        <translation>Illustration</translation>
+    </message>
+    <message>
+        <source>Save draft</source>
+        <translation>Enregistrer le brouillon</translation>
     </message>
 </context>
 <context>

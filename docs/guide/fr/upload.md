@@ -1,5 +1,10 @@
 # Préparer un upload c411
 
+L’onglet Upload s’ouvre sur les **Brouillons locaux**, avec une liste filtrable à côté de l’éditeur. Choisissez **Nouveau brouillon** pour préparer un élément de la Bibliothèque. Enregistrez localement, puis complétez les sections **Détails**, **Fichiers et NFO**, **Description**, **Illustration** et **Relecture**. L’envoi est disponible uniquement dans **Relecture**, après enregistrement et confirmation de la version actuelle. Toute modification efface cette confirmation. La vue **Brouillons c411** liste les brouillons distants ; la publication finale reste sur c411.
+
+Sur le bureau, **Ouvrir les outils 3D…** dans Illustration ouvre la préparation du même brouillon. Enregistrez pour le mettre à jour. L’interface web conserve ces outils dans Illustration. Le menu **⋯** regroupe les actions du brouillon.
+
+
 [Documentation](../../README.md) · [English](../en/upload.md)
 
 1. Dans la Bibliothèque, recherchez les correspondances de votre élément. Les Orphelins sans résultat apparaissent dans **Upload**.
@@ -13,7 +18,7 @@ Captures de l’interface française en thème sombre, avec des données d’exe
 
 ## Relire dans la file de brouillons locaux
 
-Cliquez sur **Enregistrer dans la file locale** pour conserver votre travail dans TorrentLinker. Sur ordinateur, ouvrez **File de brouillons locaux**. Sur le web, la file se trouve en haut de la page Upload. Sélectionnez un brouillon pour vérifier ses fichiers, sa description et son NFO, modifier la présentation et enregistrer vos corrections localement.
+Cliquez sur **Enregistrer le brouillon** pendant la préparation, ou sur **Enregistrer localement** dans l’éditeur, pour conserver votre travail dans TorrentLinker. Ouvrez **Brouillons locaux** sur ordinateur ou sur le web. Sélectionnez un brouillon pour vérifier ses fichiers, sa description et son NFO, modifier la présentation et enregistrer vos corrections localement.
 
 **Aperçu du brouillon enregistré** ouvre la même fenêtre de relecture que les fiches de l’Assistant : illustration, description, NFO, fichiers, options de catégorie et résultats de la vérification. L’aperçu montre la révision enregistrée ; enregistrez donc vos modifications dans l’éditeur au préalable. Il ne valide ni n’envoie le brouillon.
 
@@ -30,7 +35,7 @@ Les tâches d’upload automatisées enregistrent leur travail ici pour relectur
 
 ## Préparer des uploads et brouillons c411
 
-L’onglet **Upload** affiche les Orphelins pour lesquels une recherche n’a trouvé aucune correspondance, dans tous vos dossiers de Bibliothèque. Ces contenus peuvent être absents de c411. Chaque upload appartient à une **catégorie** c411 choisie dans le formulaire. Le Type de contenu du dossier propose une catégorie : Modèles 3D → Imprimante 3D, Films et Séries → Films & Vidéos, etc. Pour le type Autre, choisissez-la vous-même. Les catégories **Imprimante 3D**, **Ebook**, **Audio**, **Films & Vidéos**, **GPS**, **Emulation**, **Applications** et **Jeux Vidéo** sont prises en charge. Les autres indiquent qu’elles ne le sont pas encore. Changer de catégorie recalcule les contrôles, la sous-catégorie, le nom, le NFO et la description.
+**Nouveau brouillon** affiche les Orphelins pour lesquels une recherche n’a trouvé aucune correspondance, dans tous vos dossiers de Bibliothèque. Ces contenus peuvent être absents de c411. Chaque upload appartient à une **catégorie** c411 choisie dans le formulaire. Le Type de contenu du dossier propose une catégorie : Modèles 3D → Imprimante 3D, Films et Séries → Films & Vidéos, etc. Pour le type Autre, choisissez-la vous-même. Les catégories **Imprimante 3D**, **Ebook**, **Audio**, **Films & Vidéos**, **GPS**, **Emulation**, **Applications** et **Jeux Vidéo** sont prises en charge. Les autres indiquent qu’elles ne le sont pas encore. Changer de catégorie recalcule les contrôles, la sous-catégorie, le nom, le NFO et la description.
 
 Renseignez votre **URL d’annonce**, issue de votre profil c411, dans **Paramètres → Connexions**, et utilisez une clé API principale autorisée à gérer les **Brouillons d’upload** (`drafts:rw`). La barre de recherche au-dessus de la liste filtre les Éléments locaux par nom de fichier, en complément du Type de contenu et de **Tout afficher**.
 
@@ -52,7 +57,7 @@ L’upload d’image de c411 nécessite une session de navigateur connectée. To
 - Pour un **Pack**, la capture de planche produit une grille d’au plus neuf modèles, chacun en vue isométrique avec son nom de fichier.
 - **Ouvrir le dossier** affiche ces images, rangées dans `uploads/<release name>/`, jamais dans la Bibliothèque. Ajoutez celle de votre choix sur c411 en relisant le brouillon ; la description conserve un emplacement `[img]…[/img]`.
 
-Si vous hébergez l’image ailleurs, collez son lien direct dans **URL de l’image**. Le bouton d’hébergement ouvre Postimages. L’image est incluse dans la description du brouillon même après modification du texte ; changer l’URL remplace l’image sans réinitialiser la présentation.
+Si vous hébergez l’image ailleurs, collez son lien direct dans **URL de l’image hébergée**. Le bouton d’hébergement ouvre Postimages. L’image est incluse dans la description du brouillon même après modification du texte ; changer l’URL remplace l’image sans réinitialiser la présentation.
 
 STEP, GCODE, BLEND, F3D, SLDPRT et FCStd n’ont pas d’aperçu : préparez leur image vous-même. Le rendu nécessite OpenGL ; s’il est indisponible, la vue et les captures affichent la raison de leur indisponibilité.
 
@@ -68,4 +73,4 @@ L’Assistant utilise `preview_upload` pour examiner un élément de la Biblioth
 
 Un brouillon incomplet peut être enregistré localement. La vérification indique précisément chaque champ manquant dans la description ou le NFO. Conservez les libellés techniques du modèle et remplissez la section Présentation/Synopsis. Une valeur inconnue ou un texte à compléter ne compte pas comme un champ rempli. Certaines exigences dépendent du contenu : plateforme WEB, détails d’un livre audio, profondeur du son sans perte, durée de chaque piste. La langue des métadonnées EPUB est contrôlée lorsqu’elle est disponible ; déclarer « Français » ne rend pas admissible un fichier dans une autre langue.
 
-`present_upload_drafts` refuse les fiches incomplètes. L’Assistant doit corriger le formulaire enregistré puis présenter sa nouvelle révision, ou vous demander les informations manquantes. L’aperçu de la file reste accessible pour relire un travail en cours. Chaque envoi revérifie les champs avant de créer le torrent ou de contacter c411, y compris l’envoi direct sur ordinateur. Des champs complets ne garantissent ni leur exactitude ni l’acceptation par le site : les refus de catégorie, les doublons et la relecture restent à traiter. Conservez les NFO originaux ; les rapports vidéo MediaInfo sont reconnus sans réécriture.
+`present_upload_drafts` refuse les fiches incomplètes. L’Assistant doit corriger le formulaire enregistré puis présenter sa nouvelle révision, ou vous demander les informations manquantes. L’aperçu de la file reste accessible pour relire un travail en cours. Chaque envoi revérifie les champs avant de créer le torrent ou de contacter c411, sur ordinateur comme sur le web. Des champs complets ne garantissent ni leur exactitude ni l’acceptation par le site : les refus de catégorie, les doublons et la relecture restent à traiter. Conservez les NFO originaux ; les rapports vidéo MediaInfo sont reconnus sans réécriture.

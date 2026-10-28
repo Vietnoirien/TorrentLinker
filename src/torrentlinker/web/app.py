@@ -471,6 +471,10 @@ def create_app(
 
         return [{"id": cid, "name": category_name(cid)} for cid in PROFILES]
 
+    @app.get("/api/upload/drafts")
+    def upload_drafts(client_id: str = "") -> list:
+        return for_client(client_id).setup.indexer().drafts()
+
     @app.get("/api/upload/queue")
     def upload_queue(client_id: str = "") -> list:
         return for_client(client_id).setup.store.local_drafts()

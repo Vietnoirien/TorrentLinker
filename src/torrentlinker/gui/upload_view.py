@@ -12,7 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import httpx
-from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, QSettings, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QImage, QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -401,6 +402,7 @@ class UploadTab(QWidget):
         self.announce = announce
         self.folder = folder  # where the .torrent and .nfo files are kept
         self._http = http  # tests' own; otherwise one per image, through today's proxy
+        self._editing_record: dict | None = None
         self.entries: list[LibraryEntry] = []
         self.searched: dict[Path, list[CheckedCandidate]] = {}
         self._refresh_depth = 0
@@ -430,6 +432,29 @@ class UploadTab(QWidget):
         self._inspecting: set[tuple[Path, int]] = set()  # ... being read now
 
         layout = QVBoxLayout(self)
+        heading = QHBoxLayout()
+        title = QLabel(self.tr("Upload"))
+        font = title.font()
+        font.setPointSize(font.pointSize() + 5)
+        title.setFont(font)
+        title.setProperty("role", "heading")
+        heading.addWidget(title)
+        heading.addStretch()
+        self.new_button = QPushButton(self.tr("New draft"))
+        set_role(self.new_button, "primary")
+        self.new_button.clicked.connect(self.new_draft)
+        heading.addWidget(self.new_button)
+        layout.addLayout(heading)
+        layout.addWidget(QLabel(self.tr("Prepare locally. Review. Send to c411.")))
+        navigation = QHBoxLayout()
+        self.local_button = QPushButton(self.tr("Local drafts"))
+        self.remote_button = QPushButton(self.tr("c411 drafts"))
+        for button in (self.local_button, self.remote_button):
+            set_role(button, "tab")
+            button.setCheckable(True)
+            navigation.addWidget(button)
+        navigation.addStretch()
+        layout.addLayout(navigation)
         self.notice = QLabel()
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
@@ -495,7 +520,7 @@ class UploadTab(QWidget):
         form.addRow(self.tr("Category"), self.category)
         form.addRow(self.tr("Source"), self.source)
         form.addRow(self.tr("Subcategory"), self.subcategory)
-        form.addRow(self.tr("Release name"), self.name)
+        form.addRow(self.tr("Upload name"), self.name)
         image_row = QHBoxLayout()
         image_row.addWidget(self.image_url, 1)
         self.host_image = QPushButton(self.tr("Host image…"))
@@ -507,7 +532,11 @@ class UploadTab(QWidget):
         )
         image_row.addWidget(self.host_image)
         form.addRow(self.tr("Image URL"), image_row)
-        right_layout.addLayout(form)
+        self.pages = QTabWidget()
+        details_page = QWidget()
+        details_layout = QVBoxLayout(details_page)
+        details_layout.addLayout(form)
+        self.pages.addTab(details_page, self.tr("Details"))
         self.options_box = QGroupBox()
         options_layout = QVBoxLayout(self.options_box)
         self.options_toggle = QToolButton()
@@ -538,7 +567,7 @@ class UploadTab(QWidget):
         self.options_refresh.clicked.connect(lambda: self._show_options(refresh=True))
         status_row.addWidget(self.options_refresh)
         options_layout.addLayout(status_row)
-        right_layout.addWidget(self.options_box)
+        details_layout.addWidget(self.options_box)
         self.problems = QLabel()
         self.problems.setWordWrap(True)
         self.problems.setProperty("role", "error")
@@ -564,9 +593,8 @@ class UploadTab(QWidget):
         body_layout.addWidget(self.existing_status)
         body_layout.addWidget(self.existing_view)
         existing_layout.addWidget(self.existing_body)
-        right_layout.addWidget(self.existing_box)
+        details_layout.addWidget(self.existing_box)
 
-        self.pages = QTabWidget()
         self.file_table = QTableWidget(0, 3)
         self.file_table.setHorizontalHeaderLabels(
             [self.tr("In the torrent"), self.tr("Your file"), self.tr("Size")]
@@ -577,7 +605,10 @@ class UploadTab(QWidget):
         fh.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         fh.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         fh.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        self.pages.addTab(self.file_table, self.tr("Files"))
+        file_page = QWidget()
+        file_layout = QVBoxLayout(file_page)
+        file_layout.addWidget(self.file_table, 1)
+        self.pages.addTab(file_page, self.tr("Files && NFO"))
 
         description_page = QWidget()
         dl = QVBoxLayout(description_page)
@@ -613,7 +644,7 @@ class UploadTab(QWidget):
         set_role(reset_nfo, "quiet")
         reset_nfo.clicked.connect(lambda: self._reset("nfo"))
         nl.addWidget(reset_nfo, 0, Qt.AlignmentFlag.AlignRight)
-        self.pages.addTab(nfo_page, self.tr("NFO"))
+        file_layout.addWidget(nfo_page, 1)
 
         image_page = QWidget()
         il = QVBoxLayout(image_page)
@@ -621,7 +652,7 @@ class UploadTab(QWidget):
         self.image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image.setMinimumHeight(200)
         il.addWidget(self.image, 1)
-        self.pages.addTab(image_page, self.tr("Image"))
+        self.pages.addTab(image_page, self.tr("Artwork"))
         self.model_panel = ModelPanel(
             folder, lambda: self.name.text().strip(), self.ignore, self._image_is_sheet
         )
@@ -637,7 +668,8 @@ class UploadTab(QWidget):
         self.stop_button.hide()
         actions.addWidget(self.stop_button)
         actions.addStretch()
-        self.queue_button = QPushButton(self.tr("Save to local queue"))
+        self.queue_button = QPushButton(self.tr("Save draft"))
+        set_role(self.queue_button, "primary")
         self.queue_button.clicked.connect(self.queue_draft)
         actions.addWidget(self.queue_button)
         self.create_button = QPushButton()
@@ -660,14 +692,23 @@ class UploadTab(QWidget):
         main.addWidget(editor)
         main.setChildrenCollapsible(False)
         main.setHandleWidth(2)
-        main.setSizes([450, 750])
-        self.workspaces = QTabWidget()
-        self.workspaces.addTab(main, self.tr("Prepare Upload"))
+        main.setSizes([int(str(QSettings().value("upload/prepare_width", 300))), 750])
+        main.splitterMoved.connect(
+            lambda *_: QSettings().setValue("upload/prepare_width", main.sizes()[0])
+        )
+        self.workspaces = QStackedWidget()
+        self.workspaces.addWidget(main)
         layout.addWidget(self.workspaces, 1)
 
-        self.local_drafts = LocalDrafts(store, self._edit_local_draft, self._send_local_draft)
+        self.local_drafts = LocalDrafts(
+            store,
+            self._edit_local_draft,
+            self._send_local_draft,
+            self.edit_saved_details,
+            lambda sub: category_options(store, self.indexer().category_options, sub),
+        )
         self.local_drafts.sent.connect(self._local_draft_sent)
-        self.workspaces.addTab(self.local_drafts, self.tr("Local draft queue"))
+        self.workspaces.addWidget(self.local_drafts)
 
         drafts_box = QGroupBox(self.tr("Your c411 Drafts"))
         drafts_layout = QVBoxLayout(drafts_box)
@@ -691,7 +732,13 @@ class UploadTab(QWidget):
         open_page.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(C411_UPLOAD_PAGE)))
         row.addWidget(open_page)
         drafts_layout.addLayout(row)
-        self.workspaces.addTab(drafts_box, self.tr("Drafts"))
+        self.workspaces.addWidget(drafts_box)
+        self.local_button.clicked.connect(
+            lambda: self.workspaces.setCurrentWidget(self.local_drafts)
+        )
+        self.remote_button.clicked.connect(lambda: self.workspaces.setCurrentWidget(drafts_box))
+        self.workspaces.currentChanged.connect(self._workspace_changed)
+        self.workspaces.setCurrentWidget(self.local_drafts)
 
         self._image_timer = QTimer(self)
         self._image_timer.setSingleShot(True)
@@ -699,6 +746,56 @@ class UploadTab(QWidget):
         self._image_timer.timeout.connect(self._load_image)
         self._fill()
         self._show_entry()
+
+    def _workspace_changed(self, index: int) -> None:
+        self.local_button.setChecked(index != 2)
+        self.remote_button.setChecked(index == 2)
+        self.notice.setVisible(index == 0)
+        self.new_button.setVisible(index != 0)
+        if index == 1:
+            self.local_drafts.refresh()
+        elif index == 2:
+            self.refresh_drafts()
+
+    def new_draft(self) -> None:
+        self._editing_record = None
+        self.items.setEnabled(True)
+        self.workspaces.setCurrentIndex(0)
+        self.pages.setCurrentIndex(0)
+
+    def edit_saved_details(self, record: dict) -> None:
+        self.select(Path(record["path"]))
+        if self.entry is None or str(self.entry.item.path) != record["path"]:
+            QMessageBox.warning(
+                self,
+                self.tr("Local drafts"),
+                self.tr("Scan the Library containing this Local Draft first."),
+            )
+            return
+        self._editing_record = record
+        self.items.setEnabled(False)
+        form = record["form"]
+        self._picked[self.entry.item.path] = form["category"]
+        self._show_entry()
+        self._edited.update({"name", "description", "nfo"})
+        self.source.setText(form.get("source", ""))
+        self.subcategory.setCurrentIndex(
+            next(
+                (
+                    i
+                    for i in range(self.subcategory.count())
+                    if int(self.subcategory.itemData(i)) == form["subcategory"]
+                ),
+                -1,
+            )
+        )
+        self._picks = {int(k): v for k, v in form.get("options", {}).items()}
+        self.name.setText(form["title"])
+        self.image_url.setText(form.get("image", ""))
+        self.description.setPlainText(form["description"])
+        self.nfo.setPlainText(form["nfo"])
+        self._show_options()
+        self.pages.setCurrentIndex(0)
 
     # The Library -----------------------------------------------------------
 
@@ -740,7 +837,7 @@ class UploadTab(QWidget):
 
     def select(self, path: Path) -> None:
         """Show the Upload form for this Local Item, even if the filters hid it."""
-        self.workspaces.setCurrentIndex(0)
+        self.new_draft()
         if all(e.item.path != path for e in self.shown):
             self.search.clear()
             self.kind_filter.setCurrentIndex(0)
@@ -844,7 +941,9 @@ class UploadTab(QWidget):
         hidden = len(self.candidates()) - len(self.shown)
         if not self.announce():
             self.notice.setText(
-                self.tr("Enter your Announce URL in Settings → Connections to make Uploads.")
+                self.tr(
+                    "An Announce URL is needed only when sending. Set it in Settings → Connections."
+                )
             )
         elif not self.shown and query:
             self.notice.setText(self.tr("No Local Items match your search and filters."))
@@ -859,8 +958,7 @@ class UploadTab(QWidget):
         else:
             self.notice.setText(
                 self.tr(
-                    "Orphans that a search found no Match for. Each Upload is saved as a "
-                    "Draft on c411, where you publish it."
+                    "Choose an Orphan to prepare a local draft. Review it before sending to c411."
                 )
             )
         self._update_actions()
@@ -1310,7 +1408,6 @@ class UploadTab(QWidget):
                 cell = NumberItem(text, f.size) if c == 2 else QTableWidgetItem(text)
                 self.file_table.setItem(r, c, cell)
         self.file_table.setSortingEnabled(True)
-        self.pages.setTabText(0, self.tr("Files ({0})").format(len(self.files)))
 
     def _set_text(self, editor: QPlainTextEdit, text: str) -> None:
         editor.blockSignals(True)
@@ -1434,7 +1531,8 @@ class UploadTab(QWidget):
     def _update_actions(self) -> None:
         entry, profile = self.entry, self.profile()
         archive = entry is not None and self.needs_unpacking(entry)
-        self.create_button.setText(self.tr("Unpack…") if archive else self.tr("Create Draft"))
+        self.create_button.setVisible(archive)
+        self.create_button.setText(self.tr("Unpack…"))
         self.create_button.setToolTip(
             self.tr("Unpack the archive into a new folder next to it, then prepare its Upload")
             if archive
@@ -1484,10 +1582,24 @@ class UploadTab(QWidget):
             nfo_origin="original" if "nfo" in self._edited else "generated",
             options=self.chosen_options(),
         ).model_dump()
-        record = {"path": str(entry.item.path), "form": form, "id": "", "revision": 0}
+        record = self._editing_record or {
+            "path": str(entry.item.path),
+            "form": form,
+            "id": "",
+            "revision": 0,
+        }
+        if self._editing_record:
+            form = {
+                **record["form"],
+                **form,
+                "assets": self.model_panel.asset_ids or record["form"].get("assets", []),
+                "field_provenance": record["form"].get("field_provenance", {}),
+            }
         self.queue_button.setEnabled(False)
 
         def saved(value):
+            self._editing_record = None
+            self.items.setEnabled(True)
             self.local_drafts.record = value
             self.local_drafts.load()
             self.local_drafts.refresh()
@@ -1607,41 +1719,8 @@ class UploadTab(QWidget):
         if self.needs_unpacking(entry):
             self._unpack(entry)
             return
-        self._sync_description_image()
-        request = UploadRequest(
-            entry.item,
-            self.name.text().strip(),
-            self.files,
-            self.nfo.toPlainText(),
-            self.description.toPlainText(),
-            profile.category,
-            self.subcategory.currentData(),
-            options_body(self.option_types, self.chosen_options()),
-            profile.draft_fields(entry.item, self.ignore(), self.files),
-        )
-        store, announce, indexer, folder, stop = (
-            self.store,
-            self.announce(),
-            self.indexer(),
-            self.folder,
-            self._stop,
-        )
-        self._start_progress()
-
-        def work(report: Callable[[object], None]) -> PreparedUpload:
-            return create_upload(
-                request,
-                announce,
-                folder,
-                indexer.save_draft,
-                store,
-                report=lambda done, total: report((done, total)),
-                stopped=stop.is_set,
-            )
-
-        run_with_progress(
-            work, self._progressed, lambda prepared: self._drafted(entry, prepared), self._failed
-        )
+        # Manual preparation always enters local review; only saved revisions can be sent.
+        self.queue_draft()
 
     def _start_progress(self) -> None:
         self._stop.clear()
@@ -1741,6 +1820,8 @@ class UploadTab(QWidget):
         )
 
     def _seeding(self, entry: LibraryEntry, prepared: PreparedUpload) -> None:
+        if not isValid(self):
+            return
         self._done()
         self.upload_started.emit(entry.item.path)
         QMessageBox.information(
@@ -1774,6 +1855,8 @@ class UploadTab(QWidget):
         QMessageBox.warning(self, self.tr("Upload failed"), error_text(error))
 
     def _done(self) -> None:
+        if not isValid(self):
+            return
         self.progress.hide()
         self.stop_button.hide()
         self._update_actions()
@@ -1781,11 +1864,8 @@ class UploadTab(QWidget):
     # Drafts ----------------------------------------------------------------
 
     def refresh_drafts(self) -> None:
-        if not self.announce():
-            return
-        indexer = self.indexer()
         self.drafts_status.setText(self.tr("Reading your Drafts…"))
-        run_in_background(indexer.drafts, self._show_drafts, self._drafts_failed)
+        run_in_background(lambda: self.indexer().drafts(), self._show_drafts, self._drafts_failed)
 
     def _show_drafts(self, drafts: list[dict[str, object]]) -> None:
         self.drafts.setSortingEnabled(False)

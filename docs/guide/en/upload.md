@@ -1,5 +1,10 @@
 # Prepare a c411 upload
 
+Upload opens on **Local drafts**, with a searchable list beside the editor. Choose **New draft** to prepare a Library item. Save locally, then use **Details**, **Files & NFO**, **Description**, **Artwork** and **Review** to finish it. Sending is available only in **Review** after saving and confirming the current revision. Any edit clears that confirmation. The **c411 drafts** view lists remote drafts; final publication remains on c411.
+
+On desktop, **Open model tools…** in Artwork opens preparation for the same draft. Save to update it. The WebUI keeps model tools inside Artwork. Draft actions are in the **⋯** menu.
+
+
 [Documentation](../../README.md) · [Français](../fr/upload.md)
 
 1. Search the Library item for matches. Orphans with no results appear in **Upload**.
@@ -13,13 +18,13 @@ Screenshots use the English interface, dark theme and example data.
 
 ## Review in the local draft queue
 
-Click **Save to local queue** to keep work in TorrentLinker. Open **Local draft queue** on desktop, or the queue at the top of the web Upload page. Select a draft to inspect its files, description and NFO, edit the presentation, and save your changes locally.
+Click **Save draft** in preparation, or **Save locally** in the saved editor, to keep work in TorrentLinker. Open **Local drafts** on desktop or web. Select a draft to inspect its files, description and NFO, edit the presentation, and save your changes locally.
 
 **Preview saved draft** opens the same review dialog as Assistant cards, with artwork, description, NFO, files, category options and review findings. It shows the saved revision, so save any editor changes first. Previewing does not approve or send the draft.
 
 Local drafts survive restarts and belong to the selected Torrent Client. They stay on the computer or server running TorrentLinker. Saving does not create a `.torrent`, send anything to c411 or start seeding. You can save an incomplete draft without an Announce URL and correct it later.
 
-When ready, save your changes and choose **Send to c411…**. The web form also asks you to check the review box. TorrentLinker checks the saved revision, current files, required category options, hosted image, description and NFO. Sending needs your Announce URL and c411 draft credentials. If files changed since review, save and review again.
+When ready, save your changes and choose **Send to c411…**. Both interfaces ask you to check the review box. TorrentLinker checks the saved revision, current files, required category options, hosted image, description and NFO. Sending needs your Announce URL and c411 draft credentials. If files changed since review, save and review again.
 
 The desktop follows its usual verification and seeding workflow after a successful send. Web and MCP offer seeding as a separate action. Final publication remains manual on c411.
 
@@ -48,7 +53,7 @@ c411's image upload only accepts a logged-in browser, so TorrentLinker renders t
 - For a **Pack**, **Capture the Pack sheet** saves a grid of up to 9 models, each seen from the isometric angle with its file name below.
 - **Open the folder** shows the images, which are in `uploads/<release name>/` (never in your Library). Add the one you choose on c411's upload page while reviewing the Draft; the description keeps an `[img]…[/img]` placeholder for it.
 
-If you host the image elsewhere, paste its direct URL into **Image URL**. **Host image…** opens Postimages. The image is included in the Draft description even after you edit the text; changing the URL updates the image without resetting your presentation.
+If you host the image elsewhere, paste its direct URL into **Hosted image URL**. **Host image…** opens Postimages. The image is included in the Draft description even after you edit the text; changing the URL updates the image without resetting your presentation.
 
 STEP, GCODE, BLEND, F3D, SLDPRT and FCStd items show no preview and say so: make that image yourself. Rendering needs OpenGL; without it the view and captures are unavailable and the message says why.
 
@@ -64,4 +69,4 @@ The Assistant uses `preview_upload` to inspect a Library item, `get_upload_requi
 
 You can save incomplete Local Drafts. Preview and validation identify each missing description or NFO field by name. Keep the template's technical labels and fill the presentation/synopsis section. Unknown values and placeholders do not count as completed fields. Conditional requirements include WEB platform, audiobook details, lossless audio bit depth and individual track durations. EPUB language metadata is checked when available; a foreign-language file cannot be made eligible by labelling it French.
 
-The Assistant cannot display incomplete drafts with `present_upload_drafts`. It must correct the saved form and present the new revision, or ask you for the missing facts. The queue preview remains available so you can inspect unfinished work. All sends recheck completeness before hashing or contacting c411, including the desktop direct-send action. Complete fields do not guarantee factual accuracy or tracker acceptance: category refusals, duplicate checks and human review still matter. Preserve original release NFOs; standard video MediaInfo text is recognized without rewriting it.
+The Assistant cannot display incomplete drafts with `present_upload_drafts`. It must correct the saved form and present the new revision, or ask you for the missing facts. The queue preview remains available so you can inspect unfinished work. All sends recheck completeness before hashing or contacting c411, on both desktop and WebUI. Complete fields do not guarantee factual accuracy or tracker acceptance: category refusals, duplicate checks and human review still matter. Preserve original release NFOs; standard video MediaInfo text is recognized without rewriting it.
