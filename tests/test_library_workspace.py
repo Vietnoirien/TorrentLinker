@@ -234,6 +234,8 @@ def test_desktop_evidence_inspects_claims_and_keeps_the_original(
         window.grab().save(str(Path(destination) / "library-features-desktop.png"))
         qtbot.mouseClick(window.review.expand_button, Qt.MouseButton.LeftButton)
         qtbot.waitUntil(lambda: not window.library_view.isVisible())
+        assert not window.library_workspace.combine.isVisible()
+        qtbot.wait(100)  # allow queued Qt layout requests before grabbing the rendered panel
         window.grab().save(str(Path(destination) / "library-evidence-desktop-expanded.png"))
 
 

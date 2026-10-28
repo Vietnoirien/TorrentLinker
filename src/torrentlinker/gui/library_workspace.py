@@ -201,7 +201,8 @@ class LibraryWorkspace(QWidget):
         combine = QPushButton(self.tr("Combine selected Local Items"))
         combine.setObjectName("combineLibraryItems")
         combine.clicked.connect(self.combine_selected)
-        stack.addWidget(combine)
+        self.combine = combine
+        stack.addWidget(combine, 0, Qt.AlignmentFlag.AlignLeft)
         stack.addWidget(matches)
         self.split = QSplitter(Qt.Orientation.Vertical)
         self.split.setChildrenCollapsible(False)
@@ -240,7 +241,7 @@ class LibraryWorkspace(QWidget):
 
     def expand_review(self) -> None:
         expanded = not self.items.isHidden()
-        for widget in (self.items, self.toolbar, self.matches):
+        for widget in (self.items, self.toolbar, self.matches, self.combine):
             widget.setVisible(not expanded)
         self.owner.review.expand_button.setText(
             self.tr("Back to Local Items") if expanded else self.tr("Expand review")
