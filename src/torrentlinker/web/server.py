@@ -16,7 +16,8 @@ def resolve_password(password_file: Path | None, environ: Mapping[str, str]) -> 
     return value or None
 
 
-def main() -> int:
+def argument_parser() -> argparse.ArgumentParser:
+    """Share configuration parsing with the container bootstrap."""
     parser = argparse.ArgumentParser(description="TorrentLinker Web UI")
     parser.add_argument("--host", default=os.getenv("TL_WEB_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.getenv("TL_WEB_PORT", "8787")))
@@ -29,6 +30,11 @@ def main() -> int:
         "--secure-cookie", action="store_true", default=os.getenv("TL_SECURE_COOKIE", "0") == "1"
     )
     parser.add_argument("--root-path", default=os.getenv("TL_ROOT_PATH", ""))
+    return parser
+
+
+def main() -> int:
+    parser = argument_parser()
     args = parser.parse_args()
     try:
         password = resolve_password(args.password_file, os.environ)

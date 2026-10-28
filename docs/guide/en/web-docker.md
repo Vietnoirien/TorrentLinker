@@ -40,7 +40,28 @@ Without `--build`, Compose uses the published image named by `TL_IMAGE_TAG` (`la
 
 Open `http://localhost:8787` and sign in. The default port binding is host-only. Set `TL_BIND_ADDRESS` to your host's LAN address for LAN access. For remote access, use an HTTPS reverse proxy and `TL_SECURE_COOKIE=1`. Do not expose the plain HTTP port directly to the Internet.
 
-The image runs as UID/GID 1000. Set `TL_UID` and `TL_GID` before building if needed, and adjust ownership of an existing configuration volume accordingly.
+## Container user and permissions
+
+The image still starts as UID/GID 1000 by default. Existing deployments with `cap_drop: [ALL]` need no change. `TL_UID` and `TL_GID` remain build-time options.
+
+To use the published image with a NAS account, enable initialization explicitly:
+
+```bash
+PUID=1001 PGID=100 docker compose \
+  -f compose.yaml -f deploy/compose.identity.yaml up -d
+```
+
+The override starts the entrypoint as root and restores `CHOWN`, `DAC_OVERRIDE`, `SETUID` and `SETGID`, which the base Compose file drops. It repairs ownership only under `/config`, then starts the application as `PUID:PGID`, with no supplementary groups or effective capabilities. Both IDs must be positive integers. Without these variables, root initialization uses the image's build-time account IDs. Setting `PUID`/`PGID` alone does not activate initialization.
+
+For a standalone Compose file, set `user: "0:0"`, add `PUID` and `PGID` to `environment`, and add `cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID]` alongside `cap_drop: [ALL]`. With `docker run`, use `--user 0:0 -e PUID=1001 -e PGID=100`; Docker's default capabilities suffice. Never use `--privileged` for this.
+
+Alternatively, use `user: "1001:100"` with a configuration volume already writable by that account. This skips identity changes and ownership repair, ignores `PUID`/`PGID`, and preserves supplementary groups supplied through `group_add`. Use this mode for root-squashed NFS storage whose ownership must be prepared on the NAS.
+
+Reserve `/config` for application state. Ownership repair never follows symlinks, changes hardlinked files, or touches nested mounts, including same-filesystem bind mounts. It leaves already-correct ownership unchanged and does not run chmod. Linux may clear setuid/setgid bits when ownership changes. Mount media outside `/config`, read-only where possible. Do not modify the configuration tree concurrently with initialization. `TL_CONFIG_DIR` or `--config` pointing elsewhere does not extend the ownership allowlist; prepare that location yourself.
+
+The image uses `/config/home`, `/config/cache` and `/config/tmp` for `HOME`, `XDG_CACHE_HOME` and `TMPDIR`. It creates them as the application user. With a custom `TL_CONFIG_DIR` or `--config`, these directories follow the effective configuration path, without extending root ownership repair beyond `/config`. If an ownership change fails, initialization warns and still drops privileges. Startup can then fail if the configuration or runtime directories are not writable; it never falls back to running the application as root. Missing initialization capabilities or invalid IDs stop startup before repair.
+
+Tini is included in the image to forward shutdown signals and reap orphaned children, including with `docker run` without `--init`. Existing Compose `init: true` remains compatible.
 
 ## Guided setup
 

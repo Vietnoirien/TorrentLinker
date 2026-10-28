@@ -1,0 +1,11 @@
+# Optional runtime identity for the published image. No rebuild needed:
+# PUID=1001 PGID=100 docker compose -f compose.yaml -f deploy/compose.identity.yaml up -d
+# Root only initializes /config, then execs the application as PUID:PGID.
+services:
+  torrentlinker:
+    user: "0:0"
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+    # The base Compose file drops ALL. Restore only initialization capabilities.
+    cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID]

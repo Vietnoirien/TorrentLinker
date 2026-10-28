@@ -40,7 +40,28 @@ Sans `--build`, Compose utilise l'image publiée indiquée par `TL_IMAGE_TAG` (`
 
 Ouvrez `http://localhost:8787` et saisissez ce mot de passe. Le serveur est accessible uniquement depuis la machine hôte par défaut. Pour un accès sur le réseau local, définissez `TL_BIND_ADDRESS` avec l'adresse LAN de l'hôte. Pour l'accès distant, utilisez un reverse proxy HTTPS et `TL_SECURE_COOKIE=1` ; n'exposez pas directement un port HTTP sur Internet.
 
-L'image utilise l'UID/GID 1000 par défaut. Si vos fichiers appartiennent à un autre compte, définissez `TL_UID` et `TL_GID` avant de construire l'image et adaptez les droits du volume de configuration déjà créé. Ne changez pas les droits de tous vos médias pour résoudre un simple problème de montage.
+## Utilisateur du conteneur et permissions
+
+L'image démarre toujours avec l'UID/GID 1000 par défaut. Les déploiements existants avec `cap_drop: [ALL]` ne changent pas. `TL_UID` et `TL_GID` restent disponibles à la construction.
+
+Pour utiliser l'image publiée avec un compte du NAS, activez explicitement l'initialisation :
+
+```bash
+PUID=1001 PGID=100 docker compose \
+  -f compose.yaml -f deploy/compose.identity.yaml up -d
+```
+
+La surcharge démarre le point d'entrée en root et rétablit `CHOWN`, `DAC_OVERRIDE`, `SETUID` et `SETGID`, retirées par le fichier Compose de base. Elle corrige les propriétaires uniquement sous `/config`, puis lance l'application sous `PUID:PGID`, sans groupes supplémentaires ni capacités effectives. Les deux identifiants doivent être des entiers strictement positifs. Sans ces variables, l'initialisation utilise les identifiants du compte défini à la construction. Définir uniquement `PUID`/`PGID` n'active pas l'initialisation.
+
+Dans un fichier Compose autonome, définissez `user: "0:0"`, ajoutez `PUID` et `PGID` dans `environment`, puis `cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID]` en conservant `cap_drop: [ALL]`. Avec `docker run`, utilisez `--user 0:0 -e PUID=1001 -e PGID=100` ; les capacités Docker par défaut suffisent. N'utilisez pas `--privileged` pour cela.
+
+Autre possibilité : `user: "1001:100"` avec un volume de configuration déjà accessible en écriture. Ce mode ne change ni l'identité ni les propriétaires, ignore `PUID`/`PGID` et conserve les groupes supplémentaires fournis par `group_add`. Utilisez-le pour un stockage NFS avec root squash dont les droits doivent être préparés sur le NAS.
+
+Réservez `/config` aux données de l'application. La correction ne suit pas les liens symboliques, ne modifie pas les fichiers avec plusieurs liens physiques et ne touche pas aux montages imbriqués, même sur le même système de fichiers. Elle conserve les propriétaires déjà corrects et ne lance pas chmod. Linux peut retirer les bits setuid/setgid lors d’un changement de propriétaire. Montez les médias hors de `/config`, en lecture seule si possible. Ne modifiez pas l'arborescence de configuration pendant l'initialisation. Un chemin différent fourni par `TL_CONFIG_DIR` ou `--config` n'étend pas la liste autorisée ; préparez ses droits vous-même.
+
+L'image utilise `/config/home`, `/config/cache` et `/config/tmp` pour `HOME`, `XDG_CACHE_HOME` et `TMPDIR`. Elle crée ces dossiers sous l'utilisateur de l'application. Avec `TL_CONFIG_DIR` ou `--config`, ces dossiers suivent le chemin de configuration effectif, sans étendre la correction root au-delà de `/config`. Si une correction échoue, l'initialisation avertit puis abandonne les privilèges. Le démarrage peut ensuite échouer si la configuration ou ces dossiers ne sont pas accessibles en écriture ; l'application ne s'exécute jamais en root comme solution de repli. Des capacités manquantes ou des identifiants invalides arrêtent le démarrage avant toute correction.
+
+Tini est inclus dans l'image pour transmettre les signaux d'arrêt et récupérer les processus orphelins, y compris avec `docker run` sans `--init`. Le réglage Compose existant `init: true` reste compatible.
 
 ## Assistant de configuration
 

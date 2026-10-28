@@ -7,7 +7,9 @@ services:
   torrentlinker:
     image: ghcr.io/vietnoirien/torrentlinker:beta
     # The image runs as UID/GID 1000; to read media owned by another account, set user: "UID:GID"
-    # and make the config volume writable by it.
+    # and make the config volume writable by it. PUID/PGID initialization is opt-in:
+    # set user: "0:0", add PUID and PGID to environment, and add
+    # cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID] alongside cap_drop below.
     ports:
       - "127.0.0.1:8787:8787"  # host only; use the host's LAN address for LAN access
     environment:
