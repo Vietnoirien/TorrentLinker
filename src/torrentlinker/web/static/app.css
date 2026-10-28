@@ -1019,3 +1019,31 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 #upload-review-state { color:var(--muted); }
 #upload-remote-list { margin:16px 0; }
 @media(max-width:850px) { .upload-workspace { grid-template-columns:1fr; } .upload-sidebar { border-right:0; padding-right:0; border-bottom:1px solid var(--line); padding-bottom:16px; } #upload-local-queue { grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); } }
+
+/* Settings keep navigation and agent management in the same page. */
+.settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; }
+.settings-navigation { display: flex; flex-direction: column; gap: 6px; position: sticky; top: 24px; }
+.settings-navigation button { text-align: left; background: transparent; border-color: transparent; }
+.settings-navigation button[aria-current], .agent-tabs button[aria-current] { color: var(--accent); border-color: var(--accent); background: var(--tint); }
+.settings-content { min-width: 0; }
+.agent-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+.agent-connection-details { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr); gap: 8px 20px; }
+.agent-connection-details dt { color: var(--muted); }
+.agent-connection-details dd { margin: 0; overflow-wrap: anywhere; }
+#agents-endpoint { overflow-wrap: anywhere; }
+#agent-token { width: 100%; }
+#view-agents pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .settings-navigation { position: static; flex-direction: row; flex-wrap: wrap; }
+}
+@media (max-width: 520px) {
+  .agent-connection-details { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .agent-connection-details dd { margin-bottom: 10px; }
+}
+#view-agents > .toolbar > label,
+#agent-form fieldset label { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+#agent-form fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 16px 0; padding: 14px; }
+#agent-form fieldset label { margin: 8px 0; }
+#agent-form input[type="checkbox"] { flex: 0 0 auto; }
+#agent-form > .toolbar { gap: 16px; margin-bottom: 20px; }

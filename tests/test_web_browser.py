@@ -205,26 +205,118 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
             page.locator("[data-view=setup][data-i18n=settings]").click()
             page.locator("#language").select_option("en")
-            page.locator("[data-view=agents]").click()
+            page.locator("[data-settings-section=agents]").click()
             expect(page.locator("#view-agents")).to_be_visible()
             expect(page.locator("#agents-enabled")).not_to_be_checked()
             page.locator("#agents-enabled").check()
+            expect(page.locator("#view-setup")).to_be_visible()
+            expect(page.locator("#page-title")).to_have_text("Settings")
+            expect(page.locator("#agent-connections")).to_contain_text("No connections yet")
+            page.locator("[data-agent-tab=new]").click()
             page.locator("#agent-name").fill("My assistant")
             expect(page.locator("#agent-mode")).to_have_value("propose")
             page.locator("#agent-form button.primary").click()
             expect(page.locator("#agent-token-box")).to_be_visible()
-            expect(page.locator("#agent-connections")).to_contain_text("My assistant")
-            page.locator("#agent-token-hide").click()
+            token = page.locator("#agent-token").input_value()
+            with page.expect_download() as download:
+                page.locator("#agent-token-save").click()
+            assert download.value.suggested_filename == "torrentlinker-token.txt"
+            assert Path(download.value.path()).read_text() == token + "\n"
+            page.locator("[data-agent-tab=connections]").click()
             expect(page.locator("#agent-token")).to_have_value("")
-            page.locator("#agent-connections button").click()
+            expect(page.locator("#agent-token-box")).to_be_hidden()
+            expect(page.locator("#agent-connections")).to_contain_text("My assistant")
+            expect(page.locator("#agent-connections")).to_contain_text("Proposals only")
+            expect(page.locator("#agent-connections")).to_contain_text("qBittorrent")
+            expect(page.locator("#agent-connections")).to_contain_text("10.0 GiB")
+            expect(page.locator("#agent-connections")).to_contain_text("None")
+            page.locator("#language").select_option("fr")
+            expect(page.locator("#agent-connections")).to_contain_text("Propositions uniquement")
+            page.locator("#language").select_option("en")
+            page.locator("[data-agent-tab=new]").click()
+            expect(page.locator("#agent-token")).to_have_value("")
+            page.locator("#agent-name").fill("Upload helper")
+            page.locator("#agent-mode").select_option("execute")
+            page.locator("#agent-permissions input[value=uploads]").check()
+            page.locator("#agent-form button.primary").click()
+            expect(page.locator("#agent-token-box")).to_be_visible()
+            page.locator("[data-settings-section=interface]").click()
+            expect(page.locator("#settings-media-layout")).to_be_visible()
+            expect(page.locator("#agent-token")).to_have_value("")
+            page.locator("[data-settings-section=agents]").click()
+            page.locator("[data-agent-tab=connections]").click()
+            expect(page.locator("#agent-connections")).to_contain_text("Upload drafts and seeding")
+            page.locator("#agent-connections .card").filter(has_text="My assistant").get_by_role(
+                "button"
+            ).click()
             expect(page.locator("#agent-connections")).to_contain_text("Revoked")
+            expect(page.locator("#agent-connections").get_by_role("button")).to_have_count(1)
+            for width in (600, 390):
+                page.set_viewport_size({"width": width, "height": 850})
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             if screenshot:
+                page.screenshot(
+                    path=str(Path(screenshot) / "agent-settings-mobile.png"), full_page=True
+                )
+                page.set_viewport_size({"width": 1440, "height": 1000})
                 for language in ("en", "fr"):
                     page.locator("#language").select_option(language)
+                    expect(page.locator("#agent-connections")).to_contain_text(
+                        "Revoked" if language == "en" else "Révoquée"
+                    )
                     page.evaluate("window.scrollTo(0, 0)")
                     page.screenshot(
                         path=str(Path(screenshot) / f"agent-access-{language}.png"), full_page=True
                     )
+                page.locator("#language").select_option("en")
+                page.locator("#theme").select_option("light")
+                page.screenshot(
+                    path=str(Path(screenshot) / "agent-settings-light.png"), full_page=True
+                )
+                page.locator("[data-agent-tab=new]").click()
+                page.screenshot(
+                    path=str(Path(screenshot) / "agent-settings-new.png"), full_page=True
+                )
+                page.locator("[data-agent-tab=activity]").click()
+                page.screenshot(
+                    path=str(Path(screenshot) / "agent-settings-activity.png"), full_page=True
+                )
+            # A late create response must not restore a token after leaving its panel.
+            page.locator("[data-agent-tab=new]").click()
+            page.locator("#agent-name").fill("Delayed connection")
+            pending = []
+
+            def delay_creation(route):
+                if route.request.method == "POST":
+                    pending.append((route, route.fetch()))
+                else:
+                    route.continue_()
+
+            page.route("**/api/agents", delay_creation)
+            page.locator("#agent-form button.primary").click()
+            for _ in range(50):
+                if pending:
+                    break
+                page.wait_for_timeout(20)
+            assert pending
+            page.locator("[data-agent-tab=connections]").click()
+            pending[0][0].fulfill(response=pending[0][1])
+            expect(page.locator("#toast")).to_contain_text("token was dismissed")
+            page.locator("[data-agent-tab=new]").click()
+            expect(page.locator("#agent-token")).to_have_value("")
+            expect(page.locator("#agent-token-box")).to_be_hidden()
+            page.unroute("**/api/agents", delay_creation)
+            # A persistent tab button may keep focus without blocking background refresh.
+            page.locator("[data-agent-tab=connections]").click()
+            created_elsewhere = page.request.post(
+                f"http://127.0.0.1:{port}/api/agents",
+                headers={"X-TorrentLinker": "1"},
+                data={"name": "Another window", "clients": ["default"]},
+            )
+            assert created_elsewhere.ok
+            expect(page.locator("#agent-connections")).to_contain_text(
+                "Another window", timeout=7000
+            )
             assert not errors, errors
             browser.close()
     finally:

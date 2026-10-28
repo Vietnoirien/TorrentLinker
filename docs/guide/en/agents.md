@@ -10,7 +10,9 @@ Connect an MCP-compatible assistant to TorrentLinker to inspect torrents, search
 4. Create the connection and copy its token. It is shown once. Store it in your assistant's secret settings, not a shared chat or repository.
 5. Configure the assistant with the endpoint shown in TorrentLinker and an `Authorization: Bearer YOUR_TOKEN` header. Keep TorrentLinker running.
 
-On desktop, **Connections** lists existing MCP connections with their status, clients, permissions and limits. Select a connection to inspect or revoke it. **New connection** creates a token; **Save token to file…** saves it privately for a local MCP host. Connection changes apply immediately. Proposals approved while Settings is open run after it closes, and changed settings can invalidate a proposal.
+On desktop and WebUI, **Agent access** stays inside Settings. **Connections** lists existing MCP connections with their status, Torrent Clients, permissions and limits. Use **Revoke connection** to invalidate a token. **New connection** creates a token; **Save token to file…** saves it locally on desktop or downloads it in the browser. Tokens appear only once and are cleared when you leave the creation panel. **Proposals and activity** contains approvals, jobs and saved goals. Connection changes apply immediately.
+
+On desktop, proposals approved while Settings is open run after it closes, and changed settings can invalidate a proposal. WebUI approvals run immediately through the shared authorization checks.
 
 The desktop endpoint is `http://127.0.0.1:8790/mcp/`. For the Web UI, use `/mcp/` on its server address. A remote connection needs HTTPS. MCP uses its own token, not the Web UI's login cookie.
 

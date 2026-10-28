@@ -546,6 +546,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                     page.locator("#media-search").fill("")
                     expect(page.locator("#view-media")).to_have_attribute("data-empty", "false")
             page.locator('[data-view="setup"][data-i18n="settings"]').click()
+            page.locator("[data-settings-section=interface]").click()
             page.locator("#settings-media-layout").select_option("collection")
             page.reload()
             page.locator('[data-view="media"]').click()

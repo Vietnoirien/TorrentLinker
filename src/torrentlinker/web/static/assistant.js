@@ -117,7 +117,7 @@ const aExamples = () => [
 ];
 let assistantPendingMode = "";
 async function aOpenConnections() {
-  await navigate("setup");
+  await navigate("setup", "assistant");
   $("assistant-connections")?.scrollIntoView({block: "start"});
 }
 async function aRename(current) {

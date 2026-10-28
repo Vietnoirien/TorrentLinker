@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   view: "torrents",
   setup: null,
+  settingsSection: "connections",
   clientId: "",
   addingClient: false,
   offset: 0,
@@ -221,6 +222,7 @@ async function api(path, body, method) {
   const result = await response.json();
   if (!response.ok) {
     if (response.status === 401) {
+      clearAgentToken();
       $("workspace").hidden = true;
       $("login-screen").hidden = false;
     }
@@ -583,7 +585,42 @@ async function browse(path = "") {
     );
   if (!$("dialog").open) $("dialog").showModal();
 }
-async function navigate(view) {
+let agentTokenGeneration = 0;
+function clearAgentToken() {
+  agentTokenGeneration += 1;
+  $("agent-token").value = "";
+  $("agent-token-box").hidden = true;
+}
+async function settingsSection(section) {
+  state.settingsSection = section;
+  document.querySelectorAll("[data-settings-panel]").forEach(el => {
+    el.hidden = el.dataset.settingsPanel !== section;
+  });
+  document.querySelectorAll("[data-settings-section]").forEach(el => {
+    if (el.dataset.settingsSection === section) el.setAttribute("aria-current", "page");
+    else el.removeAttribute("aria-current");
+  });
+  if (section !== "agents") clearAgentToken();
+  if (section === "agents") await loadAgents();
+  if (section === "assistant") await loadAssistantConnections();
+}
+document.querySelectorAll("[data-settings-section]").forEach(el => {
+  el.onclick = () => guard(() => settingsSection(el.dataset.settingsSection));
+});
+document.querySelectorAll("[data-agent-tab]").forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll("[data-agent-panel]").forEach(panel => {
+      panel.hidden = panel.dataset.agentPanel !== el.dataset.agentTab;
+    });
+    document.querySelectorAll("[data-agent-tab]").forEach(tab => {
+      if (tab === el) tab.setAttribute("aria-current", "page");
+      else tab.removeAttribute("aria-current");
+    });
+    if (el.dataset.agentTab !== "new") clearAgentToken();
+  };
+});
+async function navigate(view, section = "connections") {
+  if (view === "agents") { view = "setup"; section = "agents"; }
   if (view !== "media" && document.body.classList.contains("media-center-mode")) await mediaExitCenter();
   if (typeof mediaCloseChat === "function" && media.chat) mediaCloseChat();
   state.view = view;
@@ -600,12 +637,11 @@ async function navigate(view) {
   if (view === "setup") {
     await refreshSetup();
     step("client");
-    await loadAssistantConnections();
+    await settingsSection(section);
   }
-  if (view === "agents") await loadAgents();
   if (view === "assistant") await loadAssistant();
   if (view === "media") await loadMedia();
-  if (view !== "agents") { $("agent-token").value = ""; $("agent-token-box").hidden = true; }
+  if (view !== "setup") clearAgentToken();
   if (view === "documentation") await loadGuides();
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
@@ -1359,6 +1395,7 @@ $("logout").onclick = () =>
   guard(async () => {
     await api("logout", {});
     state.jobs.clear();
+    clearAgentToken();
     $("workspace").hidden = true;
     $("login-screen").hidden = false;
   });
@@ -1375,6 +1412,7 @@ $("language").onchange = () => {
   language = $("language").value;
   localStorage.setItem("tl-language", language);
   translate();
+  if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
   if (state.view === "zen") guard(loadZenSeeding);
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") { renderUploadQueue(); uploadEditorState(); }
@@ -1634,8 +1672,20 @@ $("remove-client").onclick = () => guard(async () => {
 });
 
 
-async function loadAgents() {
+function agentReviewInUse() {
+  return !document.querySelector('[data-agent-panel="new"]').hidden ||
+    $("view-agents").querySelector("details[open]") ||
+    ["agent-connections", "agent-proposals", "agent-goals", "agent-activity"]
+      .some(id => $(id).contains(document.activeElement));
+}
+let agentRequest = 0;
+async function loadAgents(background = false) {
+  const request = ++agentRequest;
   const data = await api("agents");
+  if (request !== agentRequest || (background && agentReviewInUse())) return;
+  const snapshot = JSON.stringify([data, state.setup.clients, language]);
+  if (state.agentSnapshot === snapshot) return;
+  state.agentSnapshot = snapshot;
   $("agents-enabled").checked = data.enabled;
   $("agents-endpoint").textContent = new URL("mcp/", location.href).href;
   const choices = $("agent-clients");
@@ -1648,15 +1698,34 @@ async function loadAgents() {
     label.append(input, document.createTextNode(p.name)); return label;
   }));
   $("agent-permissions").disabled = $("agent-mode").value === "propose";
-  $("agent-connections").replaceChildren(...data.connections.map(g => {
+  const connections = data.connections.filter(g => !g.id.startsWith("assistant-"));
+  const permissions = Object.fromEntries([...$("agent-permissions").querySelectorAll("label")]
+    .map(label => [label.querySelector("input").value, label.textContent.trim()]));
+  const clientNames = new Map(state.setup.clients.map(p => [p.id, p.name]));
+  $("agent-connections").replaceChildren(...connections.map(g => {
     const row = element("div", undefined, "card");
-    row.append(element("p", `${g.name} · ${g.mode} · ${g.clients.join(", ")}`));
-    if (g.revoked) row.append(element("span", say("Revoked", "Révoqué")));
-    else row.append(button(say("Revoke", "Révoquer"), async () => {
+    const heading = element("div", undefined, "toolbar");
+    heading.append(element("h3", g.name), element("span", g.revoked ? say("Revoked", "Révoquée") : say("Active", "Active"), "badge"));
+    const details = element("dl", undefined, "agent-connection-details");
+    const fields = [
+      [say("Torrent Clients", "Clients torrent"), g.clients.map(id => clientNames.get(id) || id).join(", ")],
+      [say("Mode", "Mode"), g.mode === "execute" ? say("Execute permitted actions", "Exécuter les actions autorisées") : say("Proposals only", "Propositions uniquement")],
+      [say("Automatic actions", "Actions automatiques"), g.mode === "execute" && g.permissions.length ? g.permissions.map(p => permissions[p] || p).join(", ") : say("None", "Aucune")],
+      [say("Daily download budget", "Budget quotidien"), bytes(g.daily_bytes)],
+      [say("Torrents per day", "Torrents par jour"), String(g.daily_torrents)],
+      [say("Keep free", "Espace à conserver"), bytes(g.reserve_bytes)],
+    ];
+    fields.forEach(([label, value]) => details.append(element("dt", label), element("dd", value)));
+    row.append(heading, details);
+    if (!g.revoked) row.append(button(say("Revoke connection", "Révoquer la connexion"), async () => {
       await api(`agents/${g.id}/revoke`, {}); await loadAgents();
     }));
     return row;
   }));
+  if (!connections.length) $("agent-connections").append(element("p", say(
+    "No connections yet. Choose New connection to create one.",
+    "Aucune connexion. Choisissez Nouvelle connexion pour en créer une."
+  ), "empty"));
   $("agent-proposals").replaceChildren(...data.proposals.map(p => {
     const row = element("details", undefined, "card");
     const name = data.connections.find(g => g.id === p.grant_id)?.name || p.grant_id;
@@ -1700,14 +1769,33 @@ async function loadAgents() {
     element("p", `${new Date(e.created * 1000).toLocaleString()} · ${e.action} · ${e.detail}`)));
 }
 $("agents-refresh").onclick = () => guard(loadAgents);
+let agentPolling = false;
+setInterval(() => {
+  if (agentPolling || document.hidden || $("workspace").hidden || state.view !== "setup" || state.settingsSection !== "agents") return;
+  // Do not replace a form or review the owner is currently using. Refresh is always available.
+  if (agentReviewInUse()) return;
+  agentPolling = true;
+  guard(() => loadAgents(true)).finally(() => { agentPolling = false; });
+}, 3000);
 $("agents-enabled").onchange = () => guard(async () => {
   await api("agents", {enabled: $("agents-enabled").checked}, "PUT"); await loadAgents();
 });
 $("agent-mode").onchange = () => { $("agent-permissions").disabled = $("agent-mode").value === "propose"; };
-$("agent-token-hide").onclick = () => { $("agent-token").value = ""; $("agent-token-box").hidden = true; };
+$("agent-token-hide").onclick = clearAgentToken;
+$("agent-token-save").onclick = () => {
+  const token = $("agent-token").value;
+  if (!token) return;
+  const url = URL.createObjectURL(new Blob([token + "\n"], {type: "text/plain;charset=utf-8"}));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "torrentlinker-token.txt";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 $("agent-form").onsubmit = event => {
   event.preventDefault();
   guard(async () => {
+    const generation = agentTokenGeneration;
     const grant = await api("agents", {
       name: $("agent-name").value,
       clients: [...$("agent-clients").querySelectorAll("input:checked")].map(e => e.value),
@@ -1717,7 +1805,12 @@ $("agent-form").onsubmit = event => {
       daily_torrents: Number($("agent-count").value),
       reserve_bytes: Number($("agent-reserve").value) * 1024 ** 3,
     });
-    $("agent-token").value = grant.token; $("agent-token-box").hidden = false;
+    if (generation === agentTokenGeneration) {
+      $("agent-token").value = grant.token; $("agent-token-box").hidden = false;
+    } else {
+      toast(say("Connection created. Its token was dismissed when you left New connection. Revoke it and create another if needed.",
+        "Connexion créée. Son jeton a été masqué lorsque vous avez quitté Nouvelle connexion. Révoquez-la et recréez-en une si nécessaire."));
+    }
     await loadAgents();
   });
 };

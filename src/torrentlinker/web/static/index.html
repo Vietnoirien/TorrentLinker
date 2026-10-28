@@ -114,13 +114,19 @@
           <dialog id="media-details" class="media-detail-dialog" aria-label="Media details"></dialog>
         </section>
         <section id="view-assistant" class="view" hidden></section>
-        <section id="view-setup" class="view" hidden>
+        <section id="view-setup" class="view settings-layout" hidden>
+          <nav class="settings-navigation" aria-label="Settings sections">
+            <button data-settings-section="connections" aria-current="page" data-en="Connections and folders" data-fr="Connexions et dossiers">Connections and folders</button>
+            <button data-settings-section="interface" data-i18n="interfaceSettings">Interface</button>
+            <button data-settings-section="assistant">Assistant</button>
+            <button data-settings-section="agents" data-i18n="agentAccess">Agent access (MCP)</button>
+          </nav>
+          <div class="settings-content">
+          <section data-settings-panel="connections">
           <p class="intro" data-i18n="setupIntro">
             Connect your client, check its folders, then add c411. You can
             change each connection later.
           </p>
-          <section class="card interface-settings" aria-labelledby="interface-settings-title"><h2 id="interface-settings-title" data-i18n="interfaceSettings">Interface</h2><label><span data-i18n="mediaLayout">Media layout</span><select id="settings-media-layout" aria-label="Settings Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><p class="muted" data-i18n="mediaLayoutHelp">Choose how your media library opens in this browser. Playback continues when you change layouts.</p></section>
-          <button data-view="agents" data-i18n="agentAccess">Agent access (MCP)</button>
           <div class="steps" role="group" aria-label="Setup steps">
             <button data-step="client" data-i18n="stepClient">
               1 · Torrent client</button
@@ -352,16 +358,24 @@
               Open Torrents
             </button>
           </section>
-          <section id="assistant-connections" class="card" aria-labelledby="assistant-connections-title"><h2 id="assistant-connections-title" data-en="Assistant: model connections" data-fr="Assistant : connexions aux modèles">Assistant: model connections</h2><div id="assistant-connections-body"></div></section>
         </section>
-        <section id="view-agents" class="view" hidden>
+          <section data-settings-panel="interface" hidden class="card interface-settings" aria-labelledby="interface-settings-title"><h2 id="interface-settings-title" data-i18n="interfaceSettings">Interface</h2><label><span data-i18n="mediaLayout">Media layout</span><select id="settings-media-layout" aria-label="Settings Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><p class="muted" data-i18n="mediaLayoutHelp">Choose how your media library opens in this browser. Playback continues when you change layouts.</p></section>
+          <section data-settings-panel="assistant" hidden id="assistant-connections" class="card" aria-labelledby="assistant-connections-title"><h2 id="assistant-connections-title" data-en="Assistant: model connections" data-fr="Assistant : connexions aux modèles">Assistant: model connections</h2><div id="assistant-connections-body"></div></section>
+        <section id="view-agents" data-settings-panel="agents" hidden>
           <div class="toolbar"><label><input type="checkbox" id="agents-enabled" />
             <span data-i18n="enableAgents">Enable agent access</span></label>
             <button id="agents-refresh" class="quiet" data-i18n="refresh">Refresh</button></div>
           <p data-i18n="agentHelp">New connections only propose changes. Approve them below or explicitly allow selected actions within daily limits. Removal and file deletion always need approval.</p>
           <p><span data-i18n="agentEndpoint">MCP endpoint</span>: <code id="agents-endpoint"></code></p>
+          <nav class="agent-tabs" aria-label="Agent access sections">
+            <button data-agent-tab="connections" aria-current="page" data-i18n="agentConnections">Connections</button>
+            <button data-agent-tab="new" data-en="New connection" data-fr="Nouvelle connexion">New connection</button>
+            <button data-agent-tab="activity" data-en="Proposals and activity" data-fr="Propositions et activité">Proposals and activity</button>
+          </nav>
+          <section data-agent-panel="connections"><div id="agent-connections"></div></section>
+          <section data-agent-panel="new" hidden>
           <form id="agent-form" class="card">
-            <label><span data-i18n="clientName">Name</span><input id="agent-name" required maxlength="100" /></label>
+            <label><span data-en="Connection name" data-fr="Nom de la connexion">Connection name</span><input id="agent-name" required maxlength="100" /></label>
             <fieldset><legend data-i18n="agentClients">Allowed clients</legend><div id="agent-clients"></div></fieldset>
             <label><span data-i18n="agentMode">Mode</span><select id="agent-mode">
               <option value="propose" data-i18n="agentPropose">Proposals only</option>
@@ -384,12 +398,18 @@
           <div id="agent-token-box" class="card" hidden>
             <p data-i18n="agentTokenHelp">Copy this token now. It is shown only once. Use it as the Bearer token or TL_MCP_TOKEN for the stdio bridge. Keep it private.</p>
             <textarea id="agent-token" readonly aria-label="Agent token"></textarea>
+            <button id="agent-token-save" data-en="Save token to file…" data-fr="Enregistrer le jeton dans un fichier…">Save token to file…</button>
             <button id="agent-token-hide" data-i18n="agentHide">Hide token</button>
           </div>
-          <h2 data-i18n="agentConnections">Connections</h2><div id="agent-connections"></div>
+          </section>
+          <section data-agent-panel="activity" hidden>
           <h2 data-i18n="agentProposals">Proposals and jobs</h2><div id="agent-proposals"></div>
           <h2 data-i18n="agentGoals">Saved goals</h2><div id="agent-goals"></div>
           <h2 data-i18n="activity">Activity</h2><div id="agent-activity"></div>
+          </section>
+          <p class="muted" data-en="Connection changes apply immediately." data-fr="Les modifications des connexions s’appliquent immédiatement.">Connection changes apply immediately.</p>
+          </section>
+          </div>
         </section>
         <section id="view-torrents" class="view">
           <div class="torrent-bar">
