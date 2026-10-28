@@ -241,6 +241,8 @@ def refusal_text(r: Refusal) -> str:
 
 
 def warning_text(w: UploadWarning) -> str:
+    if w.judgement is Judgement.METADATA_CONSISTENCY:
+        return QCoreApplication.translate("Upload", "Metadata consistency") + ": " + w.detail
     if w.judgement is Judgement.PACK_THEME:
         return QCoreApplication.translate("Upload", "A pack must have one coherent theme")
     if w.judgement is Judgement.FRENCH_ONLY:
@@ -521,6 +523,9 @@ class UploadTab(QWidget):
         form.addRow(self.tr("Source"), self.source)
         form.addRow(self.tr("Subcategory"), self.subcategory)
         form.addRow(self.tr("Upload name"), self.name)
+        original_name = QPushButton(self.tr("Use a verified original name…"))
+        original_name.clicked.connect(self.use_original_name)
+        form.addRow("", original_name)
         image_row = QHBoxLayout()
         image_row.addWidget(self.image_url, 1)
         self.host_image = QPushButton(self.tr("Host image…"))
@@ -1317,6 +1322,34 @@ class UploadTab(QWidget):
         """The user's choice for this option wins over the profile's suggestion."""
         self._picks[option_id] = self.chosen_options()[option_id]
         self._name_changed()
+
+    def use_original_name(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+
+        from torrentlinker.provenance import Provenance
+
+        item = self.source_item()
+        if item is None:
+            return
+        names = Provenance(self.store.torrent_dir.parent).names(item)
+        if not names:
+            QMessageBox.information(
+                self,
+                self.tr("Original names"),
+                self.tr("Import and verify an old torrent in Library → Evidence first."),
+            )
+            return
+        name, accepted = QInputDialog.getItem(
+            self,
+            self.tr("Original names"),
+            self.tr("Use this verified release name"),
+            names,
+            0,
+            False,
+        )
+        if accepted:
+            self._edited.add("name")
+            self.name.setText(name)
 
     def _regenerate(self) -> None:
         """Fill what the user has not edited from the profile: name, NFO, description."""

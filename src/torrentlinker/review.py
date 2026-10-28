@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from torrentlinker.archives import ArchiveError, Unpacked, unpack, unpacked
@@ -148,6 +148,12 @@ def _compared(
         compare(item, meta.files, rules.ignore),
         match(item, meta.files, rules),
     )
+    if candidate.metadata.get("discovery") == "compatible":
+        return (
+            plain
+            if plain.match is not None and not plain.match.unwanted
+            else replace(plain, match=None)
+        )
     if plain.match is not None and plain.match.is_full:
         return plain
     inside = unpacked(item)

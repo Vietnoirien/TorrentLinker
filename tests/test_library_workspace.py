@@ -187,3 +187,43 @@ def test_disconnected_folder_keeps_items_and_visible_health_warning(qtbot, tmp_p
     assert window.library_model.rowCount() == 1
     assert "Scan incomplete" in window.library_workspace.rail.item(1).text()
     assert "previous items kept" in window.library_workspace.editor.table.item(0, 3).text()
+
+
+def test_desktop_evidence_inspects_claims_and_keeps_the_original(qtbot, tmp_path, monkeypatch):
+    import os
+    from pathlib import Path
+
+    from pymediainfo import MediaInfo
+
+    from tests.test_upload_video import FIXTURES
+    from torrentlinker.domain import ItemState, LibraryFolder
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.scan import scan_item
+
+    window, _ = window_for(qtbot, tmp_path, monkeypatch)
+    video = tmp_path / "Example.1080p.WEB-DL.DDP5.1.H264-TEAM.mkv"
+    video.write_bytes(b"unchanged media")
+    fixture = MediaInfo(
+        (FIXTURES / "film_x264_1080p_fr.xml")
+        .read_text()
+        .replace("1920", "1280")
+        .replace("1080", "720")
+    )
+    monkeypatch.setattr(
+        MediaInfo,
+        "parse",
+        lambda *args, **kwargs: "MediaInfo fixture" if "output" in kwargs else fixture,
+    )
+    entry = LibraryEntry(LibraryFolder(tmp_path), scan_item(video), ItemState.ORPHAN)
+    window.review.set_entry(entry)
+    window.tabs.setCurrentIndex(1)
+    window.review.details_tabs.setCurrentIndex(4)
+    window.resize(1600, 1000)
+    window.show()
+    qtbot.mouseClick(window.review.evidence.inspect_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: "720p" in window.review.evidence.output.toPlainText(), timeout=5000)
+    assert "1080p" in window.review.evidence.output.toPlainText()
+    assert video.read_bytes() == b"unchanged media"
+    if destination := os.getenv("TL_UI_SCREENSHOTS"):
+        Path(destination).mkdir(parents=True, exist_ok=True)
+        window.grab().save(str(Path(destination) / "library-features-desktop.png"))

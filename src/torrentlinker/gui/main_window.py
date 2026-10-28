@@ -297,6 +297,8 @@ class MainWindow(QMainWindow):
             self.default_query,
             approve_disk_renames=self.reseed_consent.approve,
         )
+        self.review.compatible_categories = lambda kind: self.settings.categories(kind)
+        self.review.repair_supported = lambda: self.settings.client is TorrentClient.QBITTORRENT
         self.review.reseed_started.connect(self._reseed_started)
         self.review.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.review.candidates_checked.connect(self._show_match_zen)

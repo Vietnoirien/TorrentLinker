@@ -35,7 +35,7 @@ A Local Item whose files are already content of an Indexer torrent in the Torren
 A Local Item of which some files, but not all, are content of Indexer torrents in the Torrent Client; not searched unless the user forces it.
 
 **Orphan**:
-A Local Item that no Indexer torrent in the Torrent Client covers, even if a torrent of another tracker does; the only kind of Local Item that gets searched.
+A Local Item that no Indexer torrent in the Torrent Client covers, even if a torrent of another tracker does; the kind searched automatically. Explicit compatible discovery also accepts Seeded and Partially Seeded Items.
 _Avoid_: Missing, unseeded
 
 **Indexer**:
@@ -43,7 +43,7 @@ A Torznab endpoint (URL + API key) where Candidates are searched; c411 is the fi
 _Avoid_: Tracker (when meaning the search API), site
 
 **Candidate**:
-A torrent returned by an Indexer search for an Orphan, not yet verified against local data.
+A torrent returned by an Indexer search for a Local Item, not yet verified against local data.
 _Avoid_: Result, hit
 
 **Match**:
@@ -67,6 +67,12 @@ _Avoid_: Inject, cross-seed, relink
 
 **Verification**:
 The Torrent Client's hash check a Reseed must pass at 100% before the torrent is started; a failed Verification removes the torrent (never the data) and becomes a Rejection.
+
+**Provenance Evidence**:
+An original release name and file association recovered from an imported torrent. Size is a suggestion; verified target pieces establish byte correspondence. Evidence becomes stale when a local file changes.
+
+**Repair Copy**:
+An independent copy created for an explicitly confirmed download of missing target pieces. The existing Local Item remains unchanged. A Repair Copy is separate from an ordinary Reseed.
 
 ### Uploading
 

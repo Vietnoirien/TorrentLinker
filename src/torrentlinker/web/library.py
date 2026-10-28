@@ -31,6 +31,7 @@ class Library:
     def __init__(self, setup: Setup):
         self.setup = setup
         self.entries: list[LibraryEntry] = []
+        self.selections: dict[str, list[str]] = {}
         self.folder_errors: list[ScanError] = []
 
     def client(self) -> MappedQbit:
@@ -127,18 +128,129 @@ class Library:
             for e in self.entries
         ]
 
+    def combine(self, paths: list[str], stop: threading.Event) -> dict:
+        from torrentlinker.compatible import combine_items
+        from torrentlinker.domain import TorrentClient
+
+        if self.setup.settings.client != TorrentClient.QBITTORRENT:
+            raise ValueError("Combining folders currently requires qBittorrent.")
+        entries = [self.entry(p) for p in dict.fromkeys(paths)]
+        if any(p in self.selections for p in paths):
+            raise ValueError("Select real Local Items, not another combined selection.")
+        if len({e.folder.kind for e in entries}) != 1:
+            raise ValueError("Select items with the same Content Kind.")
+        items = [self.scan_entry(e, stop) for e in entries]
+        item = combine_items(items, self.setup.settings.path_mappings)
+        self.selections[str(item.path)] = list(dict.fromkeys(paths))
+        return {
+            "path": str(item.path),
+            "name": "Selected Local Items",
+            "size": item.size,
+            "folder": str(item.save_path),
+            "kind": entries[0].folder.kind,
+        }
+
+    def scan_entry(self, entry: LibraryEntry, stop: threading.Event):
+        from torrentlinker.compatible import combine_items
+
+        paths = self.selections.get(str(entry.item.path))
+        if paths:
+            return combine_items(
+                [self.scan_entry(self.entry(p), stop) for p in paths],
+                self.setup.settings.path_mappings,
+            )
+        self.check_tree(entry.item.path, stop)
+        return scan_item(entry.item.path)
+
     def entry(self, path: str) -> LibraryEntry:
+        if path in self.selections:
+            from torrentlinker.compatible import combine_items
+
+            entries = [self.entry(p) for p in self.selections[path]]
+            return LibraryEntry(
+                entries[0].folder,
+                combine_items([e.item for e in entries], self.setup.settings.path_mappings),
+                ItemState.ORPHAN,
+            )
         for entry in self.entries:
             if str(entry.item.path) == path:
                 return entry
         raise ValueError("Scan the Library and select a Local Item first.")
 
+    def repairs(self):
+        from torrentlinker.repair import Repairs
+
+        return Repairs(self.setup.store.torrent_dir.parent, self.setup.settings.active_client_id)
+
+    def diagnose(self, path: str, candidate, data: bytes, stop: threading.Event) -> dict:
+        entry = self.entry(path)
+        self.check_tree(entry.item.path, stop)
+        return self.repairs().diagnose(scan_item(entry.item.path), candidate, data, stop)
+
+    def repair_client(self):
+        from torrentlinker.domain import TorrentClient
+
+        if self.setup.settings.client != TorrentClient.QBITTORRENT:
+            raise ValueError("Experimental repair currently requires qBittorrent.")
+        return self.client()
+
+    def prepare_repair(
+        self, identifier: str, destination: str, stop: threading.Event, *, client=None
+    ) -> dict:
+        root = self.setup.path_under_root(destination)
+        return self.repairs().prepare(identifier, root, client or self.repair_client(), stop)
+
+    def refresh_repair(self, identifier: str, *, client=None) -> dict:
+        return self.repairs().refresh(identifier, client or self.repair_client())
+
+    def start_repair(self, identifier: str, confirmation: str, *, client=None) -> dict:
+        return self.repairs().start(identifier, confirmation, client or self.repair_client())
+
+    def import_provenance(self, path: str, data: bytes, stop: threading.Event) -> dict:
+        from torrentlinker.provenance import Provenance
+
+        entry = self.entry(path)
+        return Provenance(self.setup.store.torrent_dir.parent).inspect(
+            self.scan_entry(entry, stop), data, stop
+        )
+
+    def provenance(self, path: str) -> list[dict]:
+        from torrentlinker.provenance import Provenance
+
+        entry = self.entry(path)
+        return Provenance(self.setup.store.torrent_dir.parent).rows(
+            self.scan_entry(entry, threading.Event())
+        )
+
+    def compatible(self, path: str, stop: threading.Event, progress) -> list[dict]:
+        from torrentlinker.compatible import discover
+
+        entry = self.entry(path)
+        item = self.scan_entry(entry, stop)
+        indexer = self.setup.indexer()
+        checked = discover(
+            indexer,
+            self.setup.store,
+            item,
+            entry.folder.kind,
+            self.setup.settings.categories(entry.folder.kind),
+            self.setup.settings.matching.rules(),
+            stop,
+            progress,
+        )
+        return [self.candidate_row(row, indexer) for row in checked]
+
+    def evidence(self, path: str, stop: threading.Event, **kwargs) -> dict:
+        from torrentlinker.library_evidence import inspect_item
+
+        entry = self.entry(path)
+        return inspect_item(self.scan_entry(entry, stop), stop, **kwargs)
+
     def check(self, path: str, stop: threading.Event, progress: Callable[[Any], None]) -> list:
         from torrentlinker.review import search_candidates
 
         entry = self.entry(path)
-        self.check_tree(entry.item.path, stop)
-        item = scan_item(entry.item.path)
+        item = self.scan_entry(entry, stop)
         indexer = self.setup.indexer()
         candidates = search_candidates(
             indexer,
@@ -195,12 +307,12 @@ class Library:
             "files": files,
             "coverage": comparison.coverage if comparison else None,
             "website": website_url(c, indexer),
+            "evidence": c.metadata,
         }
 
     def review(self, path: str, stop: threading.Event, *, key: str = "", action: str = "") -> list:
         entry = self.entry(path)
-        self.check_tree(entry.item.path, stop)
-        item = scan_item(entry.item.path)
+        item = self.scan_entry(entry, stop)
         indexer, store = self.setup.indexer(), self.setup.store
         found = remembered_candidates(store, indexer, item.path) or []
         rejected = store.rejections(item.path)
@@ -338,8 +450,7 @@ class Library:
 
     def reseed(self, path: str, hash: str, stop: threading.Event) -> dict:
         entry = self.entry(path)
-        self.check_tree(entry.item.path, stop)
-        item = scan_item(entry.item.path)
+        item = self.scan_entry(entry, stop)
         indexer = self.setup.indexer()
         candidates = remembered_candidates(self.setup.store, indexer, item.path) or []
         rejected = self.setup.store.rejections(item.path)

@@ -3992,6 +3992,42 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Verify &amp;&amp; reseed</source>
         <translation>Vérifier et remettre en seed</translation>
     </message>
+    <message>
+        <source>Evidence</source>
+        <translation>Éléments de preuve</translation>
+    </message>
+    <message>
+        <source>Find compatible torrents</source>
+        <translation>Chercher des torrents compatibles</translation>
+    </message>
+    <message>
+        <source>Search up to 30 pages across series, seasons and episodes, including seeded items.</source>
+        <translation>Chercher jusqu’à 30 pages parmi les séries, saisons et épisodes, y compris les éléments déjà en seed.</translation>
+    </message>
+    <message>
+        <source>Diagnose repair…</source>
+        <translation>Diagnostiquer une réparation…</translation>
+    </message>
+    <message>
+        <source>Repair history…</source>
+        <translation>Historique des réparations…</translation>
+    </message>
+    <message>
+        <source>Repair</source>
+        <translation>Réparation</translation>
+    </message>
+    <message>
+        <source>Experimental repair currently requires qBittorrent.</source>
+        <translation>La réparation expérimentale nécessite actuellement qBittorrent.</translation>
+    </message>
+    <message>
+        <source>Discovery scope: </source>
+        <translation>Périmètre de recherche : </translation>
+    </message>
+    <message>
+        <source>Search limit reached; results are incomplete.</source>
+        <translation>Limite de recherche atteinte ; résultats incomplets.</translation>
+    </message>
 </context>
 <context>
     <name>SearchFilters</name>
@@ -6931,6 +6967,10 @@ Seeders annoncés par le tracker : {1}</translation>
         <source>c411 forbids files from independent creators who live off them</source>
         <translation>c411 interdit les fichiers de créateurs indépendants qui en vivent</translation>
     </message>
+    <message>
+        <source>Metadata consistency</source>
+        <translation>Cohérence des métadonnées</translation>
+    </message>
 </context>
 <context>
     <name>UploadTab</name>
@@ -7430,6 +7470,22 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Save draft</source>
         <translation>Enregistrer le brouillon</translation>
+    </message>
+    <message>
+        <source>Use a verified original name…</source>
+        <translation>Utiliser un nom d’origine vérifié…</translation>
+    </message>
+    <message>
+        <source>Original names</source>
+        <translation>Noms d’origine</translation>
+    </message>
+    <message>
+        <source>Import and verify an old torrent in Library → Evidence first.</source>
+        <translation>Importez et vérifiez d’abord un ancien torrent dans Bibliothèque → Éléments de preuve.</translation>
+    </message>
+    <message>
+        <source>Use this verified release name</source>
+        <translation>Utiliser ce nom de release vérifié</translation>
     </message>
 </context>
 <context>
@@ -9564,6 +9620,184 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <location filename="../gui/library_workspace.py" line="268"/>
         <source>Scan incomplete</source>
         <translation>Analyse incomplète</translation>
+    </message>
+    <message>
+        <source>Combine selected Local Items</source>
+        <translation>Combiner les éléments locaux sélectionnés</translation>
+    </message>
+    <message>
+        <source>Combine Local Items</source>
+        <translation>Combiner les éléments locaux</translation>
+    </message>
+</context>
+<context>
+    <name>EvidencePanel</name>
+    <message>
+        <source>Compare claims with MediaInfo. Original names are evidence, not proof of authorship.</source>
+        <translation>Comparez les déclarations avec MediaInfo. Les noms d’origine sont des indices, pas une preuve de paternité.</translation>
+    </message>
+    <message>
+        <source>Inspect metadata</source>
+        <translation>Inspecter les métadonnées</translation>
+    </message>
+    <message>
+        <source>Import old torrents…</source>
+        <translation>Importer d’anciens torrents…</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Reading local evidence…</source>
+        <translation>Lecture des éléments locaux…</translation>
+    </message>
+    <message>
+        <source>Import old torrents</source>
+        <translation>Importer d’anciens torrents</translation>
+    </message>
+    <message>
+        <source>File / source</source>
+        <translation>Fichier / source</translation>
+    </message>
+    <message>
+        <source>Claim</source>
+        <translation>Déclaration</translation>
+    </message>
+    <message>
+        <source>Observed</source>
+        <translation>Observé</translation>
+    </message>
+    <message>
+        <source>Confidence</source>
+        <translation>Confiance</translation>
+    </message>
+    <message>
+        <source>Filename</source>
+        <translation>Nom du fichier</translation>
+    </message>
+    <message>
+        <source>Embedded title</source>
+        <translation>Titre intégré</translation>
+    </message>
+    <message>
+        <source>Writing application</source>
+        <translation>Application d’écriture</translation>
+    </message>
+    <message>
+        <source>Resolution</source>
+        <translation>Résolution</translation>
+    </message>
+    <message>
+        <source>Video codec</source>
+        <translation>Codec vidéo</translation>
+    </message>
+    <message>
+        <source>Audio codec</source>
+        <translation>Codec audio</translation>
+    </message>
+    <message>
+        <source>Audio channels</source>
+        <translation>Canaux audio</translation>
+    </message>
+    <message>
+        <source>Processing clue</source>
+        <translation>Indice de traitement</translation>
+    </message>
+    <message>
+        <source>Measured contradiction</source>
+        <translation>Contradiction mesurée</translation>
+    </message>
+    <message>
+        <source>Clue only</source>
+        <translation>Simple indice</translation>
+    </message>
+    <message>
+        <source>Review needed</source>
+        <translation>À examiner</translation>
+    </message>
+    <message>
+        <source>Hash verified</source>
+        <translation>Hashes vérifiés</translation>
+    </message>
+    <message>
+        <source>Unverified</source>
+        <translation>Non vérifié</translation>
+    </message>
+    <message>
+        <source>Ambiguous</source>
+        <translation>Ambigu</translation>
+    </message>
+    <message>
+        <source>Partially verified</source>
+        <translation>Partiellement vérifié</translation>
+    </message>
+    <message>
+        <source>File changed; verify again</source>
+        <translation>Fichier modifié ; vérifier à nouveau</translation>
+    </message>
+    <message>
+        <source>No inconsistencies reported. This does not certify the release origin.</source>
+        <translation>Aucune incohérence signalée. Cela ne certifie pas l’origine de la release.</translation>
+    </message>
+    <message>
+        <source>MediaInfo unavailable: </source>
+        <translation>MediaInfo indisponible : </translation>
+    </message>
+</context>
+<context>
+    <name>RepairDialog</name>
+    <message>
+        <source>Experimental repair on a copy</source>
+        <translation>Réparation expérimentale sur une copie</translation>
+    </message>
+    <message>
+        <source>The original stays unchanged. Prepare an independent copy, wait for the client check, then confirm downloading. Source/team metadata and seeder counts are not guarantees.</source>
+        <translation>L’original reste inchangé. Préparez une copie indépendante, attendez la vérification du client, puis confirmez le téléchargement. Les métadonnées de source/team et le nombre de seeders ne sont pas des garanties.</translation>
+    </message>
+    <message>
+        <source>Prepare independent copy…</source>
+        <translation>Préparer une copie indépendante…</translation>
+    </message>
+    <message>
+        <source>Refresh verification</source>
+        <translation>Actualiser la vérification</translation>
+    </message>
+    <message>
+        <source>Confirm download into copy…</source>
+        <translation>Confirmer le téléchargement dans la copie…</translation>
+    </message>
+    <message>
+        <source>Destination for independent copy</source>
+        <translation>Destination de la copie indépendante</translation>
+    </message>
+    <message>
+        <source>Download missing content into this copy? The original is retained. Network traffic may exceed the missing payload estimate.</source>
+        <translation>Télécharger le contenu manquant dans cette copie ? L’original est conservé. Le trafic réseau peut dépasser l’estimation du contenu manquant.</translation>
+    </message>
+    <message>
+        <source>Limits: 1% / 50 MiB size difference, 90% verified, 500 MiB missing, 2 seeders.</source>
+        <translation>Limites : écart de 1 % / 50 Mio, 90 % vérifiés, 500 Mio manquants, 2 seeders.</translation>
+    </message>
+    <message>
+        <source>Estimated missing payload: </source>
+        <translation>Contenu manquant estimé : </translation>
+    </message>
+    <message>
+        <source>Verified bytes: </source>
+        <translation>Octets vérifiés : </translation>
+    </message>
+    <message>
+        <source>Copy: </source>
+        <translation>Copie : </translation>
+    </message>
+    <message>
+        <source>Not prepared</source>
+        <translation>Non préparée</translation>
+    </message>
+    <message>
+        <source>Original: </source>
+        <translation>Original : </translation>
     </message>
 </context>
 </TS>

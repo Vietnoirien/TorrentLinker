@@ -123,3 +123,43 @@ def test_clearing_download_destination_keeps_the_scanned_library(tmp_path):
         assert result.status_code == 200
         assert browser.get("/api/library").json()["rows"] == before
         assert browser.get("/api/setup").json()["folders"][0]["local"] == str(root)
+
+
+def test_library_evidence_and_offline_import_are_available_as_authenticated_jobs(tmp_path):
+    import base64
+
+    root, config = tmp_path / "media", tmp_path / "config"
+    root.mkdir()
+    config.mkdir()
+    book = root / "original.epub"
+    book.write_bytes(b"book" * 100)
+    data = make_torrent(book)
+    setup = Setup(config, (root,), ServerSecrets(config), lambda *args: EmptyClient())
+    setup.configured = True
+    with TestClient(
+        create_app(config, password="test-password-long", service_override=setup)
+    ) as browser:
+        login(browser)
+        browser.post("/api/setup/folder", json={"local": str(root)})
+
+        def run(body):
+            job = browser.post("/api/jobs", json=body)
+            assert job.status_code == 202, job.text
+            outcome = finished(browser, job.json()["id"])
+            assert outcome["status"] == "completed", outcome
+            return outcome["result"]
+
+        run({"kind": "scan"})
+        assert run({"kind": "library-evidence", "path": str(book)})["observations"] == []
+        result = run(
+            {
+                "kind": "import-provenance",
+                "path": str(book),
+                "torrent_data": base64.b64encode(data).decode(),
+            }
+        )
+        assert result["status"] == "verified"
+        assert (
+            run({"kind": "library-evidence", "path": str(book)})["provenance"][0]["status"]
+            == "verified"
+        )

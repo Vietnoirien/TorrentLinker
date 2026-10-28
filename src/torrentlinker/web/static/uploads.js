@@ -117,6 +117,13 @@ async function previewUpload() {
           return label;
         }),
       );
+      let originals=$("upload-original-names");
+      if(!originals){originals=element("div");originals.id="upload-original-names";$("upload-title").parentElement.append(originals);}
+      originals.replaceChildren();
+      for(const name of r.original_names || []) originals.append(button(say("Use verified original name: ","Utiliser le nom d’origine vérifié : ")+name,()=>{
+        $("upload-title").value=name;$("upload-title").dispatchEvent(new Event("input",{bubbles:true}));
+        guard(previewUpload);
+      }));
       uploadUI.refusals = r.refusals;
       $("upload-rules").replaceChildren(
         ...r.refusals.map((v) => element("p", v, "danger")),

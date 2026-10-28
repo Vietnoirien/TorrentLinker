@@ -125,6 +125,16 @@ class ReviewPanel(QWidget):
         self.search_button.clicked.connect(self.search)
         row.addWidget(self.query)
         row.addWidget(self.search_button)
+        self.compatible_button = QPushButton(self.tr("Find compatible torrents"))
+        self.compatible_button.setObjectName("findCompatibleTorrents")
+        self.compatible_button.setToolTip(
+            self.tr(
+                "Search up to 30 pages across series, seasons and episodes, including seeded items."
+            )
+        )
+        self.compatible_button.clicked.connect(self.find_compatible)
+        self.compatible_categories: Callable[[ContentKind], tuple[int, ...]] = lambda kind: ()
+        row.addWidget(self.compatible_button)
         layout.addLayout(row)
 
         self.candidates = _readonly_table(
@@ -158,6 +168,13 @@ class ReviewPanel(QWidget):
             lambda: self.entry is not None and self.upload_requested.emit(self.entry)
         )
         actions.addWidget(self.upload_button)
+        self.repair_button = QPushButton(self.tr("Diagnose repair…"))
+        self.repair_button.clicked.connect(self.diagnose_repair)
+        self.repair_supported = lambda: True
+        actions.addWidget(self.repair_button)
+        history = QPushButton(self.tr("Repair history…"))
+        history.clicked.connect(lambda: self.open_repair())
+        actions.addWidget(history)
         actions.addStretch()
         self.reseed_button = QPushButton(self.tr("Reseed"))
         self.reseed_button.setToolTip(
@@ -193,6 +210,10 @@ class ReviewPanel(QWidget):
             (self.nfo, self.tr("NFO")),
         ):
             self.details_tabs.addTab(widget, title)
+        from torrentlinker.gui.library_evidence import EvidencePanel
+
+        self.evidence = EvidencePanel(store.torrent_dir.parent)
+        self.details_tabs.addTab(self.evidence, self.tr("Evidence"))
         self.details_tabs.currentChanged.connect(self._load_details)
         lower_layout.addWidget(self.details_tabs)
         lower_layout.addWidget(self.unpack_progress)
@@ -215,9 +236,11 @@ class ReviewPanel(QWidget):
     def set_entry(self, entry: LibraryEntry | None) -> None:
         self._review_generation += 1
         self.entry = entry
+        self.evidence.set_entry(entry)
         self.checked = []
         self.candidates.setRowCount(0)
         self.files.setRowCount(0)
+        self.compatible_button.setEnabled(entry is not None)
         searchable = entry is not None and entry.state is not ItemState.SEEDED
         self.query.setEnabled(searchable)
         self.search_button.setEnabled(searchable)
@@ -259,6 +282,77 @@ class ReviewPanel(QWidget):
         ]
 
     # Search ----------------------------------------------------------------
+
+    def open_repair(self, diagnose=None) -> None:
+        from torrentlinker.gui.repair_dialog import RepairDialog
+        from torrentlinker.repair import Repairs
+
+        if not self.repair_supported():
+            QMessageBox.information(
+                self,
+                self.tr("Repair"),
+                self.tr("Experimental repair currently requires qBittorrent."),
+            )
+            return
+        dialog = RepairDialog(
+            self,
+            Repairs(self.store.torrent_dir.parent, self.store.client_id),
+            self.qbit(),
+            diagnose=diagnose,
+        )
+        dialog.exec()
+
+    def diagnose_repair(self) -> None:
+        import threading
+
+        from torrentlinker.repair import Repairs
+
+        selected, entry = self.selected(), self.entry
+        if selected is None or entry is None:
+            return
+        indexer = self.indexer()
+        repository = Repairs(self.store.torrent_dir.parent, self.store.client_id)
+        self.open_repair(
+            lambda: repository.diagnose(
+                entry.item,
+                selected.candidate,
+                indexer.fetch_torrent(selected.candidate),
+                threading.Event(),
+            )
+        )
+
+    def find_compatible(self) -> None:
+        import threading
+
+        from torrentlinker.compatible import discover
+
+        if self.entry is None:
+            return
+        entry, indexer, rules = self.entry, self.indexer(), self.rules()
+        self.compatible_button.setEnabled(False)
+        categories = self.compatible_categories(entry.folder.kind)
+
+        def work():
+            return discover(
+                indexer,
+                self.store,
+                entry.item,
+                entry.folder.kind,
+                categories,
+                rules,
+                threading.Event(),
+                lambda value: None,
+            )
+
+        def done(checked):
+            self.compatible_button.setEnabled(self.entry is not None)
+            self._show(entry, checked)
+
+        def failed(error):
+            self.compatible_button.setEnabled(self.entry is not None)
+            self._failed(error)
+
+        run_in_background(work, done, failed)
 
     def search(self) -> None:
         if self.entry is None:
@@ -382,6 +476,19 @@ class ReviewPanel(QWidget):
                     "verify the hashes before seeding."
                 )
             )
+        if v is not None and v.candidate.metadata.get("discovery") == "compatible":
+            self.summary.setText(
+                self.summary.text()
+                + "\n\n"
+                + self.tr("Discovery scope: ")
+                + str(v.candidate.metadata.get("scope", ""))
+            )
+            if v.candidate.metadata.get("limited") == "true":
+                self.summary.setText(
+                    self.summary.text()
+                    + "\n"
+                    + self.tr("Search limit reached; results are incomplete.")
+                )
         self._load_details()
         self._update_actions()
         if v is None or v.comparison is None:
@@ -421,7 +528,7 @@ class ReviewPanel(QWidget):
             self._open_link(QUrl(website_url(selected.candidate, self.indexer())))
 
     def _load_details(self, *_: object) -> None:
-        if self.details_tabs.currentIndex() < 2:
+        if self.details_tabs.currentIndex() not in (2, 3):
             return
         selected = self.selected()
         if selected is None:
@@ -460,6 +567,9 @@ class ReviewPanel(QWidget):
 
     def _update_actions(self) -> None:
         v, chosen = self.selected(), self.selected_all()
+        self.repair_button.setEnabled(
+            v is not None and self.entry is not None and self.entry.item.path.is_file()
+        )
         self.website_button.setEnabled(v is not None)
         self.check_button.setEnabled(v is not None and not v.compared)
         self.reject_button.setEnabled(bool(chosen))

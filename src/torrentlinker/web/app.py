@@ -214,7 +214,8 @@ def create_app(
             return JSONResponse({"detail": "Sign in to TorrentLinker."}, status_code=401)
         if route.startswith("/api/"):
             length = request.headers.get("content-length", "0")
-            if not length.isdigit() or int(length) > 256_000:
+            limit = 12_000_000 if route == "/api/jobs" else 256_000
+            if not length.isdigit() or int(length) > limit:
                 return JSONResponse({"detail": "Request too large."}, status_code=413)
             if request.method != "GET" and request.headers.get("X-TorrentLinker") != "1":
                 return JSONResponse({"detail": "Browser request header required."}, status_code=403)

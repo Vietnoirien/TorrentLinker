@@ -162,6 +162,7 @@ class VideoProfile:
         self.available = available
         self.tmdb = tmdb
         self.facts: dict[tuple[str, int], MediaFacts] = {}
+        self.nfo_claims: dict[str, str] = {}
         self.identified: dict[str, TmdbInfo] = {}  # by the Local Item's name
 
     def image_is_sheet(self, subcategory: int) -> bool:
@@ -175,6 +176,10 @@ class VideoProfile:
             for path, size in _media(_content(item, ignore)).items():
                 if (path, size) not in self.facts and (found := self.reader(item.save_path / path)):
                     self.facts[(path, size)] = found
+        from torrentlinker.library_evidence import sidecar_claim
+
+        for path in _media(_content(item, ignore)):
+            self.nfo_claims[path] = sidecar_claim(item.save_path / path)
         self._identify(item)
 
     def _identify(self, item: LocalItem) -> None:
@@ -255,6 +260,15 @@ class VideoProfile:
             found.append(UploadWarning(Judgement.MICKEY_TAG))
         if subcategory in EPISODE_SUBCATEGORIES and (gaps := _missing_episodes(files)):
             found.append(UploadWarning(Judgement.INCOMPLETE_SEASON, ", ".join(gaps)))
+        from torrentlinker.library_evidence import consistency
+
+        for path, facts in self._facts_of(files):
+            for row in consistency(path, facts, self.nfo_claims.get(path, "")):
+                detail = (
+                    f"{path} · {row['source']} · {row['field']}: "
+                    f"{row['claim']} → {row['observed']} [{row['confidence']}]"
+                )
+                found.append(UploadWarning(Judgement.METADATA_CONSISTENCY, detail))
         found.append(UploadWarning(Judgement.SLOTS))
         return found
 

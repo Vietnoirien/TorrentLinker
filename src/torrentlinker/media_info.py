@@ -77,6 +77,9 @@ class MediaFacts:
     # Embedded tags a tagger or ripper wrote: show, season, episode, episode_title, synopsis.
     tags: tuple[tuple[str, str], ...] = ()
 
+    title: str = ""
+    writing_application: str = ""
+
     @property
     def resolution(self) -> str:
         """The resolution tag by the frame's size: 2160p, 1080p, 720p, or SD."""
@@ -138,6 +141,10 @@ def facts_from(info: MediaInfo, text: str, name: str = "") -> MediaFacts | None:
         subtitles=tuple(_subtitle(t) for t in info.text_tracks),
         text=with_file_name(text, name),
         tags=_tags(general.to_data() if general else {}),
+        title=str(general.title or general.movie or "") if general else "",
+        writing_application=str(general.writing_application or general.encoded_application or "")
+        if general
+        else "",
     )
 
 

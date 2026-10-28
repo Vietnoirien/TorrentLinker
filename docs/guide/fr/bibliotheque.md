@@ -52,3 +52,25 @@ Un Élément local au format `.zip`, `.rar` ou `.7z` est aussi comparé par son 
 Les archives ZIP ne demandent aucun outil supplémentaire. Les archives RAR et 7z nécessitent [7-Zip](https://www.7-zip.org/), ou unrar pour RAR ; sans cet outil, elles sont comparées comme de simples fichiers.
 
 [Documentation](../../README.md) · [English](../en/library.md)
+
+## Éléments de preuve et noms d’origine
+
+Dans l’inspecteur d’un élément local, ouvrez **Éléments de preuve**, puis **Inspecter les métadonnées**. TorrentLinker compare le nom du fichier, son titre intégré et le NFO adjacent de même nom avec MediaInfo. Chaque avertissement indique sa source et son niveau de confiance. Les dimensions recadrées et les pistes audio multiples sont prises en compte. HandBrake est un simple indice de traitement ; ces contrôles ne certifient ni la source ni la team.
+
+**Importer d’anciens torrents…** accepte jusqu’à 100 fichiers `.torrent` par lot, de 8 Mio maximum chacun. L’import est hors ligne : aucune annonce au tracker, aucun ajout au client et aucun renommage des médias. La taille exacte suggère une association ; les hashes du torrent vérifient les octets. Les associations ambiguës restent non résolues. Une modification du fichier invalide sa vérification enregistrée. Les torrents v2 et hybrides ne sont pas encore pris en charge par ce parcours.
+
+La préparation d’upload propose **Utiliser un nom d’origine vérifié…** après vérification d’un ancien torrent. Cette action change uniquement le nom de release proposé. Examinez la liste des fichiers avant d’enregistrer le brouillon ; les noms internes d’un pack ne sont pas restaurés automatiquement. Les règles actuelles du tracker et la revue de l’uploader restent nécessaires.
+
+## Trouver d’autres torrents pour les mêmes fichiers
+
+**Chercher des torrents compatibles** fonctionne aussi pour les éléments déjà en seed. La recherche couvre les séries, saisons et épisodes selon les capacités de l’indexeur. Un épisode peut correspondre à un sous-ensemble d’une intégrale plus volumineuse. La recherche est limitée à 30 requêtes et 100 candidats ; un avertissement indique si cette limite rend les résultats incomplets. Les résultats ne garantissent pas une couverture exhaustive du tracker.
+
+Sélectionnez plusieurs éléments locaux de la même série et du même type de contenu, puis **Combiner les éléments locaux sélectionnés** pour chercher un pack. Cette opération construit une liste virtuelle, sans copier les médias ni créer de liens. Elle nécessite actuellement qBittorrent et une correspondance de chemins cohérente depuis le dossier parent commun. Tous les fichiers du torrent cible doivent être présents, y compris les fichiers annexes. La vérification habituelle du client doit réussir avant le seed. Après un redémarrage, sélectionnez à nouveau les éléments pour recréer la sélection combinée.
+
+## Réparation expérimentale sur une copie indépendante
+
+Sélectionnez un candidat pour un fichier local unique, puis **Diagnostiquer une réparation…**. Le diagnostic lit les hashes sans modifier l’original ni contacter de pairs. Les limites initiales sont un écart de taille inférieur ou égal à 1 % et 50 Mio, au moins 90 % des octets cibles vérifiés, au plus 500 Mio manquants et au moins deux seeders annoncés. Ces valeurs prudentes sont fixes dans cette version. Les seeders annoncés et les déclarations de source/team ne garantissent ni disponibilité ni authenticité.
+
+Pour un résultat admissible, choisissez la destination d’une copie indépendante. Dans le WebUI, ce dossier doit être monté sous une racine de stockage autorisée du serveur. TorrentLinker crée un nouveau dossier et conserve l’original intact. Il ajoute le torrent arrêté dans qBittorrent et demande une vérification. Utilisez **Actualiser la vérification**, puis **Confirmer le téléchargement dans la copie…** uniquement quand le résultat est prêt. Les autres clients et les torrents multifichiers/v2 ne sont pas encore pris en charge par la réparation.
+
+L’estimation concerne le contenu utile manquant, pas le trafic réseau total. L’historique persiste après redémarrage ; aucune réparation en attente ne démarre automatiquement. Les opérations échouées ou incertaines nécessitent une inspection du client torrent. Les copies incomplètes sont conservées ; retirer un torrent seul ne les supprime pas. L’original reste disponible. Les tests utilisent des données synthétiques ; le taux de réussite sur des vidéothèques réelles reste à mesurer.

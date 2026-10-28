@@ -221,6 +221,7 @@ class Refusal:
 class Judgement(StrEnum):
     """A c411 rule only the uploader can judge; the GUI words each one."""
 
+    METADATA_CONSISTENCY = "metadata-consistency"
     PAID_CREATORS = "paid-creators"
     PACK_THEME = "pack-theme"
     FRENCH_ONLY = "french-only"

@@ -50,3 +50,25 @@ A Local Item that is a .zip, .rar or .7z archive is also compared by what it hol
 Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-zip.org/) (or unrar for rar); without it they are compared as plain files. For the WebUI, install the extractor on the TorrentLinker server or in its container.
 
 [Documentation](../../README.md) · [Français](../fr/bibliotheque.md)
+
+## Evidence and original names
+
+Open **Evidence** in the Local Item inspector, then **Inspect metadata**. TorrentLinker compares the filename, embedded title and adjacent same-name NFO with MediaInfo. Each warning identifies its source and confidence. Cropped dimensions and multiple audio tracks are considered. A HandBrake tag is only a processing clue; these checks cannot certify a source or team.
+
+**Import old torrents…** accepts up to 100 `.torrent` files per batch, at most 8 MiB each. Import runs offline: it does not announce, add torrents to a client or rename media. Exact sizes suggest associations; target piece hashes verify bytes. Ambiguous associations remain unresolved. Modified files invalidate saved verification. V2-only and hybrid torrents are not supported by this evidence workflow yet.
+
+Upload preparation offers **Use a verified original name…** after an import verifies the Local Item. This changes the proposed release name only. Check the Files preview before saving a draft; nested filenames are not automatically restored. Current tracker rules and the uploader's review still apply.
+
+## More torrents from existing files
+
+**Find compatible torrents** also works for already seeded items. Series searches include series, season and episode scopes supported by the Indexer. A smaller episode can match files in a larger pack. Searches are bounded to 30 requests and 100 Candidates; a limit notice means the results are incomplete. Search counts and catalogue coverage are not guarantees of exhaustive results.
+
+Select multiple Local Items of the same series and Content Kind, then **Combine selected Local Items** to search for a combined pack. This creates a virtual file list, without copying or linking media. Initial support requires qBittorrent and one consistent Path Mapping from the common parent. Each target file must be present, including sidecars, and the client's ordinary hash verification must succeed before seeding. Select the items again after restarting to restore the combined selection.
+
+## Experimental repair on an independent copy
+
+Select a Candidate for one local file and choose **Diagnose repair…**. Diagnosis reads target piece hashes without writing the original or contacting peers. Initial limits are a size difference of at most 1% and 50 MiB, at least 90% verified target bytes, at most 500 MiB missing and at least two advertised seeders. These are fixed conservative defaults in this version. Seeder counts and source/team claims do not guarantee availability or authenticity.
+
+For an eligible result, choose a destination for an independent copy. WebUI destinations must be mounted under an allowed storage root on the server. TorrentLinker creates a new directory and keeps the original intact. It adds the target stopped in qBittorrent and requests verification. **Refresh verification**, then use **Confirm download into copy…** only after the result is ready. Other clients and multifile/v2 torrents are not supported by repair yet.
+
+The missing-byte estimate describes useful content, not total network traffic. Repair history persists across restarts; restarting never starts a pending repair. Failed or uncertain operations remain for manual inspection in the Torrent Client. Incomplete copies are kept; removal of a torrent alone does not delete them. The original is always retained. Tests use synthetic data; repair success rates on real media collections are not established.

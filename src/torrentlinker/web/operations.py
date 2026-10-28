@@ -68,6 +68,14 @@ class JobRequest(BaseModel):
         "scan",
         "check",
         "library-review",
+        "library-evidence",
+        "find-compatible",
+        "combine-library",
+        "diagnose-repair",
+        "prepare-repair",
+        "refresh-repair",
+        "start-repair",
+        "import-provenance",
         "library-reject",
         "check-candidate",
         "search-library",
@@ -125,6 +133,8 @@ class JobRequest(BaseModel):
     queue_selection: QueueCriteria = Field(default_factory=QueueCriteria)
     selection_fingerprint: str = Field(default="", max_length=64)
     path: str = Field(default="", max_length=4096)
+    repair_id: str = Field(default="", max_length=64)
+    torrent_data: str = Field(default="", max_length=12_000_000)
     candidate_key: str = Field(default="", max_length=4096)
     paths: list[str] = Field(default_factory=list, max_length=1000)
     client_path: str = Field(default="", max_length=4096)
@@ -626,6 +636,41 @@ class Operations:
             return self.search_options(request.category)
         if request.kind == "scan":
             return self.library.scan(stop, progress)
+        if request.kind == "diagnose-repair":
+            from torrentlinker.review import candidate_key, remembered_candidates
+
+            indexer = self.setup.indexer()
+            found = remembered_candidates(self.setup.store, indexer, Path(request.path)) or []
+            candidate = next((c for c in found if candidate_key(c) == request.candidate_key), None)
+            if candidate is None:
+                raise ValueError("Select a current Candidate first.")
+            return self.library.diagnose(
+                request.path, candidate, indexer.fetch_torrent(candidate), stop
+            )
+        if request.kind == "prepare-repair":
+            return self.library.prepare_repair(request.repair_id, request.client_path, stop)
+        if request.kind == "refresh-repair":
+            return self.library.refresh_repair(request.repair_id)
+        if request.kind == "start-repair":
+            return self.library.start_repair(request.repair_id, request.confirmation)
+        if request.kind == "combine-library":
+            return self.library.combine(request.paths, stop)
+        if request.kind == "find-compatible":
+            return self.library.compatible(request.path, stop, progress)
+        if request.kind == "library-evidence":
+            return {
+                **self.library.evidence(request.path, stop),
+                "provenance": self.library.provenance(request.path),
+                "repairs": self.library.repairs().rows(),
+            }
+        if request.kind == "import-provenance":
+            import base64
+
+            try:
+                data = base64.b64decode(request.torrent_data, validate=True)
+            except ValueError as error:
+                raise ValueError("Invalid torrent upload.") from error
+            return self.library.import_provenance(request.path, data, stop)
         if request.kind == "check":
             return self.library.check(request.path, stop, progress)
         if request.kind in {"library-review", "library-reject", "check-candidate"}:

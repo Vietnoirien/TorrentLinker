@@ -30,3 +30,7 @@
 
 .archive-path { overflow-wrap:anywhere; }
 #dialog-content progress { width:100%; margin-top:12px; }
+
+#candidate-evidence { max-height:420px; overflow:auto; overflow-wrap:anywhere; padding:10px; }
+#evidence-report section { border:1px solid var(--border); border-radius:8px; padding:12px; margin:12px 0; }
+.library-nav { flex-wrap:wrap; }

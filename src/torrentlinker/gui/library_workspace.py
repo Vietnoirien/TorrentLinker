@@ -198,6 +198,10 @@ class LibraryWorkspace(QWidget):
         stack = QVBoxLayout(content)
         stack.setContentsMargins(0, 0, 0, 0)
         stack.addWidget(toolbar)
+        combine = QPushButton(self.tr("Combine selected Local Items"))
+        combine.setObjectName("combineLibraryItems")
+        combine.clicked.connect(self.combine_selected)
+        stack.addWidget(combine)
         stack.addWidget(matches)
         self.split = QSplitter(Qt.Orientation.Vertical)
         self.split.setChildrenCollapsible(False)
@@ -241,6 +245,25 @@ class LibraryWorkspace(QWidget):
         self.owner.review.expand_button.setText(
             self.tr("Back to Local Items") if expanded else self.tr("Expand review")
         )
+
+    def combine_selected(self):
+        from torrentlinker.compatible import combine_items
+        from torrentlinker.domain import ItemState, TorrentClient
+        from torrentlinker.library import LibraryEntry
+        from torrentlinker.scan import scan_item
+
+        entries = self.owner.selected_entries()
+        try:
+            if self.owner.settings.client is not TorrentClient.QBITTORRENT:
+                raise ValueError("Combining folders currently requires qBittorrent.")
+            if len({e.folder.kind for e in entries}) != 1:
+                raise ValueError("Select Local Items with the same Content Kind.")
+            item = combine_items(
+                [scan_item(e.item.path) for e in entries], self.owner.settings.path_mappings
+            )
+            self.owner.review.set_entry(LibraryEntry(entries[0].folder, item, ItemState.ORPHAN))
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, self.tr("Combine Local Items"), str(error))
 
     def select_folder(self, row: int) -> None:
         if row >= 0:

@@ -93,6 +93,33 @@ def test_folder_explorer_and_candidate_review(tmp_path):
             if destination:
                 Path(destination).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(destination) / "library-web.png"), full_page=True)
+            page.locator("[data-candidate-tab=evidence]").click()
+            page.locator("#inspect-evidence").click()
+            expect(page.locator("#evidence-report")).to_contain_text(
+                "No inconsistencies", timeout=15000
+            )
+            page.locator("#import-provenance").set_input_files(
+                {
+                    "name": "original.torrent",
+                    "mimeType": "application/x-bittorrent",
+                    "buffer": make_torrent(local),
+                }
+            )
+            expect(page.locator("#evidence-report")).to_contain_text("Hash verified", timeout=15000)
+            if destination:
+                page.screenshot(
+                    path=str(Path(destination) / "library-features-web.png"), full_page=True
+                )
+                page.locator("#language").select_option("fr")
+                page.locator("#inspect-evidence").click()
+                expect(page.locator("#evidence-report")).to_contain_text(
+                    "Hashes vérifiés", timeout=15000
+                )
+                page.screenshot(
+                    path=str(Path(destination) / "library-features-web-fr.png"), full_page=True
+                )
+                page.locator("#language").select_option("en")
+            page.locator("[data-candidate-tab=files]").click()
             page.locator("#candidate-expand").click()
             expect(page.locator("#library-results")).to_be_hidden()
             expect(page.locator("#candidate-files")).to_contain_text("The Time Machine.epub")

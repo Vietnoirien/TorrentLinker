@@ -139,7 +139,10 @@ class Uploads:
             profile.draft_fields(item, ignore, files),
         )
         refusals = profile.refusals(item, ignore, sub) + missing_options(types, chosen)
+        from torrentlinker.provenance import Provenance
+        original_names = Provenance(self.setup.store.torrent_dir.parent).names(item)
         preview: dict[str, Any] = {
+            "original_names": original_names,
             "title": title,
             "category": profile.category,
             "subcategory": sub,
