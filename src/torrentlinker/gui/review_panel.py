@@ -4,8 +4,8 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -13,11 +13,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -29,6 +31,7 @@ from torrentlinker.gui.errors import error_text, offer_whole_names
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
+from torrentlinker.gui.torrent_details import DescriptionBrowser
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import MatchRules
@@ -43,6 +46,7 @@ from torrentlinker.review import (
     unpack_and_reseed,
 )
 from torrentlinker.store import Store
+from torrentlinker.torrent_details import parse_details, preview_html, website_url
 from torrentlinker.transmission import PartialNamesOn
 
 Searcher = Callable[[LibraryEntry, str | None], list[Candidate]]
@@ -98,6 +102,17 @@ class ReviewPanel(QWidget):
         ] = {}  # last Candidates checked per Local Item
 
         layout = QVBoxLayout(self)
+        self._review_generation = 0
+        self._details_loaded = ""
+        self._selected_keys: dict[Path, str] = {}
+        heading = QHBoxLayout()
+        label = QLabel(self.tr("Candidate review"))
+        label.setStyleSheet("font-size: 16px; font-weight: 600")
+        heading.addWidget(label, 1)
+        self.expand_button = QPushButton(self.tr("Expand review"))
+        self.expand_button.setObjectName("expandCandidateReview")
+        heading.addWidget(self.expand_button)
+        layout.addLayout(heading)
         self.title = QLabel()
         self.title.setWordWrap(True)
         layout.addWidget(self.title)
@@ -124,7 +139,7 @@ class ReviewPanel(QWidget):
         self.files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
 
         actions = QHBoxLayout()
-        self.check_button = QPushButton(self.tr("Check files"))
+        self.check_button = QPushButton(self.tr("Check Candidate"))
         self.check_button.setToolTip(
             self.tr(
                 "Download this Candidate's .torrent and compare. Needed for Candidates "
@@ -151,6 +166,9 @@ class ReviewPanel(QWidget):
         set_role(self.reseed_button, "primary")
         self.reseed_button.clicked.connect(self._reseed_selected)
         actions.addWidget(self.reseed_button)
+        self.website_button = QPushButton(self.tr("Open on website"))
+        self.website_button.clicked.connect(self._open_website)
+        actions.addWidget(self.website_button)
         self.action_row = actions
         self.unpack_progress = QProgressBar()
         self.unpack_progress.hide()
@@ -158,19 +176,44 @@ class ReviewPanel(QWidget):
         lower = QWidget()
         lower_layout = QVBoxLayout(lower)
         lower_layout.setContentsMargins(0, 0, 0, 0)
-        lower_layout.addWidget(self.files)
-        lower_layout.addLayout(actions)
+        self.details_tabs = QTabWidget()
+        self.summary = QLabel()
+        self.summary.setTextFormat(Qt.TextFormat.PlainText)
+        self.summary.setWordWrap(True)
+        self.summary.setMargin(12)
+        self.description = DescriptionBrowser()
+        self.description.setOpenLinks(False)
+        self.description.anchorClicked.connect(self._open_link)
+        self.nfo = QPlainTextEdit()
+        self.nfo.setReadOnly(True)
+        for widget, title in (
+            (self.summary, self.tr("Summary")),
+            (self.files, self.tr("Files")),
+            (self.description, self.tr("Description")),
+            (self.nfo, self.tr("NFO")),
+        ):
+            self.details_tabs.addTab(widget, title)
+        self.details_tabs.currentChanged.connect(self._load_details)
+        lower_layout.addWidget(self.details_tabs)
         lower_layout.addWidget(self.unpack_progress)
 
-        split = QSplitter(Qt.Orientation.Vertical)
+        split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(self.candidates)
         split.addWidget(lower)
-        layout.addWidget(split)
+        layout.addWidget(split, 1)
+        layout.addLayout(actions)
+        self.candidates.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column, width in ((1, 85), (2, 65), (3, 150)):
+            self.candidates.setColumnWidth(column, width)
+        self.files.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.files.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.files.setColumnWidth(2, 130)
         self.set_entry(None)
 
     # Selection -------------------------------------------------------------
 
     def set_entry(self, entry: LibraryEntry | None) -> None:
+        self._review_generation += 1
         self.entry = entry
         self.checked = []
         self.candidates.setRowCount(0)
@@ -257,8 +300,14 @@ class ReviewPanel(QWidget):
         self._update_actions()
         if not checked:
             self.title.setText(self.title.text() + "<br>" + self.tr("No Candidates found"))
-        elif self.checked[0].match is not None:
-            self._select_candidate(self.checked[0])
+        else:
+            saved = self._selected_keys.get(entry.item.path)
+            self._select_candidate(
+                next(
+                    (c for c in self.checked if candidate_key(c.candidate) == saved),
+                    self.checked[0],
+                )
+            )
 
     def _select_candidate(self, candidate: CheckedCandidate) -> None:
         for row in range(self.candidates.rowCount()):
@@ -313,6 +362,27 @@ class ReviewPanel(QWidget):
     def _candidate_selected(self) -> None:
         self.files.setRowCount(0)
         v = self.selected()
+        self._review_generation += 1
+        self._details_loaded = ""
+        self.description.setPlainText(
+            self.tr("Select Description to load the torrent presentation.")
+        )
+        self.nfo.setPlainText(self.tr("Select NFO to load its contents."))
+        self.summary.setText(self.tr("Select a Candidate to compare it with your Local Item."))
+        if v is not None and self.entry is not None:
+            self._selected_keys[self.entry.item.path] = candidate_key(v.candidate)
+            self.summary.setText(
+                f"{v.candidate.title}\n\n{self._match_label(v)[0]} · "
+                f"{human_size(v.candidate.size)} · {v.candidate.seeders} seeders\n\n"
+                + self.tr("Local folder: ")
+                + str(self.entry.item.path.parent)
+                + "\n\n"
+                + self.tr(
+                    "A Match compares file names and sizes. Your Torrent Client must "
+                    "verify the hashes before seeding."
+                )
+            )
+        self._load_details()
         self._update_actions()
         if v is None or v.comparison is None:
             return
@@ -339,8 +409,58 @@ class ReviewPanel(QWidget):
             self.files.setItem(r, 2, cell)
         self.files.setSortingEnabled(True)
 
+    @staticmethod
+    def _open_link(url: QUrl) -> None:
+        from torrentlinker.torrent_details import web_url
+
+        if value := web_url(url.toString()):
+            QDesktopServices.openUrl(QUrl(value))
+
+    def _open_website(self) -> None:
+        if selected := self.selected():
+            self._open_link(QUrl(website_url(selected.candidate, self.indexer())))
+
+    def _load_details(self, *_: object) -> None:
+        if self.details_tabs.currentIndex() < 2:
+            return
+        selected = self.selected()
+        if selected is None:
+            return
+        key = candidate_key(selected.candidate)
+        if self._details_loaded == key:
+            return
+        indexer = self.indexer()
+        if not indexer.is_c411 or not selected.candidate.infohash:
+            self.description.setPlainText(self.tr("Open this Candidate on its Indexer website."))
+            self.nfo.setPlainText(self.tr("NFO unavailable for this Indexer."))
+            return
+        self._details_loaded = key
+        generation = self._review_generation
+        self.description.setPlainText(self.tr("Loading…"))
+        self.nfo.setPlainText(self.tr("Loading…"))
+
+        def loaded(details) -> None:
+            if generation != self._review_generation:
+                return
+            markup, _images = preview_html(details.description)
+            self.description.setHtml(markup or self.tr("No description supplied."))
+            self.nfo.setPlainText(details.nfo or self.tr("No NFO supplied."))
+
+        def failed(error: Exception) -> None:
+            if generation == self._review_generation:
+                self._details_loaded = ""
+                self.description.setPlainText(error_text(error))
+                self.nfo.setPlainText(error_text(error))
+
+        run_in_background(
+            lambda: parse_details(indexer.torrent_json(selected.candidate.infohash or "")),
+            loaded,
+            failed,
+        )
+
     def _update_actions(self) -> None:
         v, chosen = self.selected(), self.selected_all()
+        self.website_button.setEnabled(v is not None)
         self.check_button.setEnabled(v is not None and not v.compared)
         self.reject_button.setEnabled(bool(chosen))
         archive = any(c.unpack for c in chosen)
@@ -364,7 +484,7 @@ class ReviewPanel(QWidget):
             self.reseed_button.setText(
                 self.tr("Reseed {0} Matches").format(len(chosen))
                 if len(chosen) > 1
-                else self.tr("Reseed")
+                else self.tr("Verify && reseed")
             )
 
     def _reject_selected(self) -> None:

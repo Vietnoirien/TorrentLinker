@@ -1,0 +1,189 @@
+"""Library navigation and Candidate review through the desktop widgets."""
+
+import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QPushButton, QTabWidget
+
+from tests.test_library_folders import window_for
+
+
+@pytest.fixture
+def library_theme(qapp, monkeypatch):
+    from torrentlinker.gui.theme import ThemeFollower, apply_theme
+
+    palette, stylesheet, style = qapp.palette(), qapp.styleSheet(), qapp.style().objectName()
+    follower = qapp.findChild(ThemeFollower)
+    mode = follower.mode if follower else "auto"
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "")
+    apply_theme(qapp, "dark")
+    try:
+        yield
+    finally:
+        current = qapp.findChild(ThemeFollower)
+        if current and current is not follower:
+            current.stop()
+            current.deleteLater()
+        elif follower:
+            follower.mode = mode
+        qapp.setStyle(style)
+        qapp.setPalette(palette)
+        qapp.setStyleSheet(stylesheet)
+
+
+def test_candidate_review_can_expand_without_losing_the_local_item(qtbot, tmp_path, monkeypatch):
+    window, _ = window_for(qtbot, tmp_path, monkeypatch)
+    window.tabs.setCurrentIndex(1)
+    window.show()
+    tabs = window.findChild(QTabWidget, "librarySections")
+    assert tabs is not None
+    assert [tabs.tabText(i) for i in range(tabs.count())] == ["Local Items", "Folders", "Activity"]
+    expand = window.findChild(QPushButton, "expandCandidateReview")
+    assert expand is not None
+    qtbot.mouseClick(expand, Qt.MouseButton.LeftButton)
+    assert not window.library_view.isVisible()
+    assert window.review.isVisible()
+    qtbot.mouseClick(expand, Qt.MouseButton.LeftButton)
+    assert window.library_view.isVisible()
+    assert [window.review.details_tabs.tabText(i) for i in range(4)] == [
+        "Summary",
+        "Files",
+        "Description",
+        "NFO",
+    ]
+
+
+def test_desktop_review_preserves_candidate_selection_across_local_items(
+    qtbot, tmp_path, monkeypatch, library_theme
+):
+    import os
+    from pathlib import Path
+
+    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.matching import FileComparison, Match
+    from torrentlinker.review import CheckedCandidate
+    from torrentlinker.torrent_meta import TorrentMeta
+
+    window, _ = window_for(qtbot, tmp_path, monkeypatch)
+    folder = LibraryFolder(tmp_path / "Books", 1, ContentKind.EBOOK)
+    entries = [
+        LibraryEntry(folder, LocalItem(folder.path / name, {name: 400}), ItemState.ORPHAN)
+        for name in ("The Time Machine.epub", "The War of the Worlds.epub")
+    ]
+    window.settings.library_folders = [folder]
+    window._fill_folder_filter()
+    window.library_model.set_entries(entries)
+    first = CheckedCandidate(
+        Candidate(
+            "The.Time.Machine.1895.EN.EPUB",
+            400,
+            "https://example.test/1",
+            seeders=12,
+            infohash="a" * 40,
+        ),
+        meta=TorrentMeta("The Time Machine.epub", "a" * 40, {"The Time Machine.epub": 400}, b""),
+        comparison=FileComparison({"The Time Machine.epub": "The Time Machine.epub"}),
+        match=Match({"The Time Machine.epub": "The Time Machine.epub"}),
+    )
+    second = CheckedCandidate(
+        Candidate("The.Time.Machine.Collection", 900, "https://example.test/2", infohash="b" * 40)
+    )
+    window.review.remember(entries[0], [first, second])
+    window.tabs.setCurrentIndex(1)
+    window.resize(1600, 1000)
+    window.show()
+    window.library_view.selectRow(0)
+    window.review.candidates.selectRow(1)
+    window.library_view.selectRow(1)
+    window.library_view.selectRow(0)
+    assert window.review.selected().candidate.infohash == "b" * 40
+    window.review.candidates.selectRow(0)
+    window.review.details_tabs.setCurrentIndex(1)
+    qtbot.wait(50)
+    if destination := os.getenv("TL_WEB_SCREENSHOTS"):
+        Path(destination).mkdir(parents=True, exist_ok=True)
+        window.grab().save(str(Path(destination) / "library-desktop.png"))
+        window.library_workspace.sections.setCurrentIndex(1)
+        qtbot.wait(50)
+        window.grab().save(str(Path(destination) / "library-desktop-folders.png"))
+
+
+def test_desktop_scans_new_folders_while_client_is_offline_and_recovers(
+    qtbot, tmp_path, monkeypatch
+):
+    from PySide6.QtWidgets import QMessageBox
+
+    from torrentlinker.domain import ItemState, LibraryFolder
+
+    window, _ = window_for(qtbot, tmp_path, monkeypatch)
+    # Restore the public scan operation; window_for disables it for editor tests.
+    from torrentlinker.gui.main_window import MainWindow
+
+    monkeypatch.setattr(window, "scan", lambda: MainWindow.scan(window))
+
+    class Client:
+        offline = False
+
+        def torrents(self, **kwargs):
+            if self.offline:
+                raise ConnectionError("offline")
+            return []
+
+    client = Client()
+    monkeypatch.setattr(window, "qbit", lambda: client)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: None)
+    first, second = tmp_path / "Books", tmp_path / "Films"
+    first.mkdir()
+    second.mkdir()
+    (first / "Book.epub").write_bytes(b"book")
+    (second / "Film.mkv").write_bytes(b"film")
+    window.settings.library_folders = [LibraryFolder(first)]
+    window.scan()
+    qtbot.waitUntil(lambda: window.scan_action.isEnabled())
+    client.offline = True
+    window.settings.library_folders.append(LibraryFolder(second))
+    window.scan()
+    qtbot.waitUntil(lambda: window.scan_action.isEnabled())
+    assert {entry.item.path.name for entry in window.library_model.entries} == {
+        "Book.epub",
+        "Film.mkv",
+    }
+    assert all(entry.state is ItemState.UNKNOWN for entry in window.library_model.entries)
+    client.offline = False
+    window.scan()
+    qtbot.waitUntil(lambda: window.scan_action.isEnabled())
+    assert all(entry.state is ItemState.ORPHAN for entry in window.library_model.entries)
+    assert all(
+        window.library_model.data(window.library_model.index(row, 1)) != "Seeding status unknown"
+        for row in range(2)
+    )
+
+
+def test_disconnected_folder_keeps_items_and_visible_health_warning(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.gui.main_window import MainWindow
+
+    window, _ = window_for(qtbot, tmp_path, monkeypatch)
+    folder = tmp_path / "Books"
+    folder.mkdir()
+    (folder / "Book.epub").write_bytes(b"book")
+    window.settings.library_folders = [LibraryFolder(folder)]
+    window._fill_folder_filter()
+
+    class Client:
+        def torrents(self, **kwargs):
+            return []
+
+    monkeypatch.setattr(window, "qbit", lambda: Client())
+    monkeypatch.setattr(QMessageBox, "exec", lambda *args: QMessageBox.StandardButton.Ok)
+    MainWindow.scan(window)
+    qtbot.waitUntil(lambda: window.scan_action.isEnabled())
+    folder.rename(tmp_path / "disconnected")
+    MainWindow.scan(window)
+    qtbot.waitUntil(lambda: window.scan_action.isEnabled())
+    assert window.library_model.rowCount() == 1
+    assert "Scan incomplete" in window.library_workspace.rail.item(1).text()
+    assert "previous items kept" in window.library_workspace.editor.table.item(0, 3).text()

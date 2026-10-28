@@ -5,14 +5,25 @@ from __future__ import annotations
 import os
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from torrentlinker.domain import ItemState
 from torrentlinker.library import LibraryEntry, LibraryResult, build_library, indexer_contents
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.reseed import start_reseed
-from torrentlinker.review import check_candidate, remember_candidates, remembered_candidates
+from torrentlinker.review import (
+    CheckedCandidate,
+    candidate_key,
+    check_candidate,
+    check_candidates,
+    remember_candidates,
+    remembered_candidates,
+    restore_checked,
+)
 from torrentlinker.scan import ScanError, scan_item
+from torrentlinker.torrent_details import website_url
 from torrentlinker.web.setup import Setup, StorageUnavailableError
 
 
@@ -20,6 +31,7 @@ class Library:
     def __init__(self, setup: Setup):
         self.setup = setup
         self.entries: list[LibraryEntry] = []
+        self.folder_errors: list[ScanError] = []
 
     def client(self) -> MappedQbit:
         return MappedQbit(self.setup.client(), PathMapper(self.setup.settings.path_mappings))
@@ -61,9 +73,14 @@ class Library:
                 raise
         if stop.is_set():
             return {"cancelled": True}
-        torrents = indexer_contents(
-            self.client(), self.setup.store, self.setup.settings.indexer.url
-        )
+        client_unavailable = False
+        try:
+            torrents = indexer_contents(
+                self.client(), self.setup.store, self.setup.settings.indexer.url
+            )
+        except Exception:
+            torrents = []
+            client_unavailable = True
         result = LibraryResult()
         for folder in self.setup.settings.library_folders:
             if stop.is_set():
@@ -84,9 +101,13 @@ class Library:
             progress({"items": len(result), "folder": str(folder.path)})
         if stop.is_set():
             return {"cancelled": True}
+        if client_unavailable:
+            result[:] = [replace(entry, state=ItemState.UNKNOWN) for entry in result]
         self.entries = result
+        self.folder_errors = list(result.errors)
         return {
             "count": len(result),
+            "client_unavailable": client_unavailable,
             "partial": bool(result.errors),
             "errors": [
                 {"path": str(error.path), "message": error.message} for error in result.errors
@@ -127,29 +148,92 @@ class Library:
             indexer.supported_modes(),
         )
         remember_candidates(self.setup.store, indexer, item.path, candidates)
-        result = []
+        result: list[dict] = []
+        rejected = self.setup.store.rejections(item.path)
         for candidate in candidates:
             if stop.is_set():
                 break
-            checked = check_candidate(
-                indexer, item, candidate, self.setup.settings.matching.rules()
+            checked = check_candidates(
+                indexer, item, [candidate], self.setup.settings.matching.rules(), rejected
             )
-            result.append(
-                {
-                    "hash": candidate.infohash,
-                    "title": candidate.title,
-                    "size": candidate.size,
-                    "seeders": candidate.seeders,
-                    "match": "full"
-                    if checked.match and checked.match.is_full
-                    else "partial"
-                    if checked.match
-                    else "none",
-                    "archive": checked.unpack is not None,
-                }
-            )
+            result.extend(self.candidate_row(v, indexer) for v in checked)
             progress({"done": len(result), "total": len(candidates)})
         return result
+
+    def candidate_row(self, checked: CheckedCandidate, indexer) -> dict:
+        c, comparison = checked.candidate, checked.comparison
+        files = []
+        if comparison is not None:
+            for torrent, local in comparison.pairs.items():
+                files.append(
+                    {
+                        "torrent": torrent,
+                        "local": local,
+                        "status": "renamed" if torrent != local else "matched",
+                    }
+                )
+            files.extend(
+                {"torrent": path, "local": "", "status": "missing"} for path in comparison.absent
+            )
+            files.extend(
+                {"torrent": path, "local": "", "status": "ignored"} for path in comparison.skipped
+            )
+        return {
+            "key": candidate_key(c),
+            "hash": c.infohash,
+            "title": c.title,
+            "size": c.size,
+            "seeders": c.seeders,
+            "match": "unchecked"
+            if not checked.compared
+            else "full"
+            if checked.match and checked.match.is_full
+            else "partial"
+            if checked.match
+            else "none",
+            "archive": checked.unpack is not None,
+            "files": files,
+            "coverage": comparison.coverage if comparison else None,
+            "website": website_url(c, indexer),
+        }
+
+    def review(self, path: str, stop: threading.Event, *, key: str = "", action: str = "") -> list:
+        entry = self.entry(path)
+        self.check_tree(entry.item.path, stop)
+        item = scan_item(entry.item.path)
+        indexer, store = self.setup.indexer(), self.setup.store
+        found = remembered_candidates(store, indexer, item.path) or []
+        rejected = store.rejections(item.path)
+        found = [c for c in found if candidate_key(c) not in rejected]
+        if action:
+            candidate = next((c for c in found if candidate_key(c) == key), None)
+            if candidate is None:
+                raise ValueError("Select a current Candidate for this Local Item.")
+            if action == "reject":
+                store.reject(item.path, key, "Rejected by user")
+                found.remove(candidate)
+            elif action == "check":
+                check_candidate(indexer, item, candidate, self.setup.settings.matching.rules())
+        checked = restore_checked(indexer, item, found, self.setup.settings.matching.rules())
+        return [self.candidate_row(v, indexer) for v in checked]
+
+    def search_items(self, paths: list[str], stop: threading.Event, progress) -> dict:
+        from torrentlinker.domain import ItemState
+
+        selected = [self.entry(path) for path in paths] if paths else list(self.entries)
+        results, errors = [], []
+        for entry in selected:
+            if stop.is_set():
+                break
+            if entry.state is not ItemState.ORPHAN:
+                continue
+            try:
+                rows = self.check(str(entry.item.path), stop, progress)
+                results.append({"path": str(entry.item.path), "rows": rows})
+            except Exception as error:
+                errors.append({"path": str(entry.item.path), "message": type(error).__name__})
+            progress({"done": len(results), "total": len(selected)})
+        return {"results": results, "errors": errors}
 
     def _remembered(self, stop: threading.Event):
         """Each not fully seeded Local Item with the Candidates its last search found,
@@ -258,7 +342,10 @@ class Library:
         item = scan_item(entry.item.path)
         indexer = self.setup.indexer()
         candidates = remembered_candidates(self.setup.store, indexer, item.path) or []
-        candidate = next((c for c in candidates if c.infohash == hash), None)
+        rejected = self.setup.store.rejections(item.path)
+        candidate = next(
+            (c for c in candidates if c.infohash == hash and candidate_key(c) not in rejected), None
+        )
         if candidate is None:
             raise ValueError("Check this Local Item's Candidates first.")
         checked = check_candidate(indexer, item, candidate, self.setup.settings.matching.rules())

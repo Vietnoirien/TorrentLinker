@@ -1,0 +1,29 @@
+.library-nav { display:flex; gap:8px; border-bottom:1px solid var(--border,#344553); padding:0 0 10px; margin-bottom:14px; }
+.library-nav button { background:transparent; border-color:transparent; }
+.library-nav button[aria-pressed="true"] { color:var(--accent,#5ad4ca); background:#234b52; border-color:#368b8b; }
+.library-explorer { display:grid; grid-template-columns:210px minmax(0,1fr); gap:18px; }
+.library-rail { border-right:1px solid var(--border,#344553); padding-right:14px; }
+.library-rail h3 { text-transform:uppercase; font-size:12px; letter-spacing:.08em; color:#a8bac7; }
+#library-folders { display:grid; gap:6px; margin-bottom:16px; }
+#library-folders button { text-align:left; white-space:normal; overflow-wrap:anywhere; }
+#library-folders button[aria-pressed="true"] { background:#234b52; border-color:#368b8b; }
+.library-main, .library-detail { min-width:0; }
+#library-table { max-height:350px; overflow:auto; }
+.library-folder-path { display:block; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.library-review { padding:16px; margin:12px 0; }
+.library-review-heading { display:flex; align-items:start; justify-content:space-between; gap:14px; }
+.library-review-heading h2 { font-size:17px; margin:0; }
+.library-review-heading p { color:#a8bac7; font-size:13px; overflow-wrap:anywhere; }
+.library-review-body { display:grid; grid-template-columns:minmax(230px, .9fr) minmax(300px,1.1fr); gap:16px; }
+#candidate-table { max-height:380px; overflow:auto; }
+#candidate-table .candidate-choice { display:block; width:100%; text-align:left; white-space:normal; overflow-wrap:anywhere; margin:0 0 8px; padding:12px; }
+#candidate-table .candidate-choice[aria-pressed="true"] { background:#234b52; border-color:#368b8b; }
+.candidate-choice small { display:block; margin-top:8px; color:#a8bac7; }
+#candidate-summary, #candidate-files, #candidate-description, #candidate-nfo { min-height:150px; max-height:320px; overflow:auto; padding:10px; }
+#candidate-summary p { overflow-wrap:anywhere; }
+#candidate-description iframe { width:100%; min-height:290px; border:0; background:white; }
+#candidate-actions { margin-top:12px; }
+.library-folder-row { display:flex; align-items:center; justify-content:space-between; gap:15px; padding:14px; margin-bottom:10px; border:1px solid var(--border,#344553); border-radius:9px; overflow-wrap:anywhere; }
+.library-expanded #candidate-table, .library-expanded #candidate-summary, .library-expanded #candidate-files, .library-expanded #candidate-description, .library-expanded #candidate-nfo { max-height:65vh; }
+@media(max-width:1100px) { .library-explorer {grid-template-columns:170px minmax(0,1fr)} .library-review-body {grid-template-columns:1fr} }
+@media(max-width:700px) { .library-explorer {grid-template-columns:1fr} .library-rail {border-right:0} #library-folders {grid-template-columns:repeat(2,minmax(0,1fr))} .library-review-heading {flex-direction:column} }

@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from tests.fake_qbit import FakeQbit
 from tests.test_upload_completeness import complete_description, complete_form
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
+from torrentlinker.gui.library_workspace import FolderEditor
 from torrentlinker.gui.upload_view import UploadTab
 from torrentlinker.indexer import Candidate, SearchQuery
 from torrentlinker.library import LibraryEntry
@@ -366,6 +367,7 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
 
         def __init__(self, settings: Settings, parent: object) -> None:
             self.settings = settings
+            self.folder_editor = FolderEditor(settings.library_folders, window)
 
         def exec(self) -> bool:
             self.settings.library_folders = [replace(folder, kind=ContentKind.MODEL_3D)]

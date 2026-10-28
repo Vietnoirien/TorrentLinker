@@ -66,6 +66,10 @@ class JobRequest(BaseModel):
         "send-queue",
         "scan",
         "check",
+        "library-review",
+        "library-reject",
+        "check-candidate",
+        "search-library",
         "reseed",
         "check-all",
         "reseed-all",
@@ -118,6 +122,8 @@ class JobRequest(BaseModel):
     queue_selection: QueueCriteria = Field(default_factory=QueueCriteria)
     selection_fingerprint: str = Field(default="", max_length=64)
     path: str = Field(default="", max_length=4096)
+    candidate_key: str = Field(default="", max_length=4096)
+    paths: list[str] = Field(default_factory=list, max_length=1000)
     client_path: str = Field(default="", max_length=4096)
     query: str = Field(default="", max_length=500)
     page: int = Field(default=1, ge=1, le=10000)
@@ -618,6 +624,19 @@ class Operations:
             return self.library.scan(stop, progress)
         if request.kind == "check":
             return self.library.check(request.path, stop, progress)
+        if request.kind in {"library-review", "library-reject", "check-candidate"}:
+            return self.library.review(
+                request.path,
+                stop,
+                key=request.candidate_key,
+                action={
+                    "library-review": "",
+                    "library-reject": "reject",
+                    "check-candidate": "check",
+                }[request.kind],
+            )
+        if request.kind == "search-library":
+            return self.library.search_items(request.paths, stop, progress)
         if request.kind == "reseed":
             return self.library.reseed(request.path, request.hashes[0], stop)
         if request.kind == "check-all":

@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from torrentlinker.config import Settings
 from torrentlinker.gui import main_window
+from torrentlinker.gui.library_workspace import FolderEditor
 from torrentlinker.gui.upload_view import UploadTab
 from torrentlinker.gui.zen_view import SeedingView
 from torrentlinker.store import Store
@@ -136,6 +137,7 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
 
         def __init__(self, settings, parent):
             opened.append(True)
+            self.folder_editor = FolderEditor(settings.library_folders, parent)
 
         def exec(self):
             if save[0]:
@@ -169,7 +171,7 @@ def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, mon
         agent_approvals = ()
 
         def __init__(self, settings, parent):
-            pass
+            self.folder_editor = FolderEditor(settings.library_folders, parent)
 
         def exec(self):
             return True

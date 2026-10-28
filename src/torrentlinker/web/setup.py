@@ -103,10 +103,11 @@ class FolderRemoval(BaseModel):
     client_id: str = ""
     local: str = Field(max_length=4096)
     purpose: Literal["library", "download"] = "library"
+    category: int | None = None
 
 
 class FolderSetup(FolderRemoval):
-    client_path: str = Field(max_length=4096)
+    client_path: str = Field(default="", max_length=4096)
     kind: ContentKind = ContentKind.OTHER
     depth: int = Field(default=1, ge=0, le=10)
 
@@ -217,6 +218,14 @@ class Setup:
                     for f in self.settings.library_folders
                 ],
                 "download_folder": self.settings.download_folders.default,
+                "download_folders": {
+                    "default": self.settings.download_folders.default,
+                    "by_category": self.settings.download_folders.by_category,
+                    "effective": {
+                        str(cid): str(self.download_folder(cid) or "")
+                        for cid in self.settings.indexer_categories
+                    },
+                },
                 "mappings": [asdict(m) for m in self.settings.path_mappings],
                 "capabilities": {
                     "manage": self.configured,
@@ -452,6 +461,22 @@ class Setup:
     def folder(self, body: FolderSetup, *, save: bool = False) -> dict[str, Any]:
         with self.lock:
             local = self.path_under_root(body.local)
+            if body.purpose == "library" and not body.client_path.strip():
+                # Register readable storage independently of a Torrent Client connection.
+                with os.scandir(local) as entries:
+                    next(entries, None)
+                if save:
+                    self.settings.library_folders = [
+                        f for f in self.settings.library_folders if f.path != local
+                    ] + [LibraryFolder(local, body.depth, body.kind)]
+                    self.save()
+                return {
+                    "readable": True,
+                    "sample": None,
+                    "local": str(local),
+                    "client": "",
+                    "warning": "",
+                }
             if not body.client_path.startswith(("/", "\\\\")) and not (
                 len(body.client_path) > 2 and body.client_path[1] == ":"
             ):
@@ -588,6 +613,9 @@ class Setup:
                     for folder in self.settings.library_folders
                     if str(folder.path) != body.local
                 ]
+            elif body.category is not None:
+                if self.settings.download_folders.by_category.get(body.category) == body.local:
+                    self.settings.download_folders.by_category.pop(body.category)
             elif self.settings.download_folders.default == body.local:
                 self.settings.download_folders.default = ""
             self.save()

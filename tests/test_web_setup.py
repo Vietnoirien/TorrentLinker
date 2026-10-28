@@ -314,3 +314,46 @@ def test_bittorrent_classic_connection_uses_webui_and_persists_its_own_profile(
         denied = browser.post("/api/setup/test-client", json=connection)
         assert denied.status_code == 400
         assert "private-classic-password" not in denied.text
+
+
+def test_library_folders_can_be_registered_without_a_client_or_mapping(tmp_path):
+    root = tmp_path / "media"
+    root.mkdir()
+    for name in ("Films", "Books"):
+        (root / name).mkdir()
+    with TestClient(
+        create_app(tmp_path / "config", password="test-password-long", roots=(root,))
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        for name in ("Films", "Books"):
+            result = browser.post("/api/setup/folder", json={"local": str(root / name)})
+            assert result.status_code == 200, result.text
+            assert result.json()["readable"]
+        settings = browser.get("/api/setup").json()
+        assert [f["local"] for f in settings["folders"]] == [
+            str(root / "Films"),
+            str(root / "Books"),
+        ]
+        assert settings["mappings"] == []
+        assert settings["download_folder"] == ""
+        denied = browser.post("/api/setup/folder", json={"local": str(tmp_path)})
+        assert denied.status_code == 400
+
+
+def test_scan_without_a_client_shows_unknown_seeding_status(tmp_path):
+    from tests.test_web_jobs import finished, login
+
+    root = tmp_path / "media"
+    root.mkdir()
+    (root / "book.epub").write_bytes(b"book")
+    with TestClient(
+        create_app(tmp_path / "config", password="test-password-long", roots=(root,))
+    ) as browser:
+        login(browser)
+        assert browser.post("/api/setup/folder", json={"local": str(root)}).status_code == 200
+        created = browser.post("/api/jobs", json={"kind": "scan"})
+        result = finished(browser, created.json()["id"])
+        assert result["status"] in {"completed", "partial"}, result
+        rows = browser.get("/api/library").json()["rows"]
+        assert [(r["name"], r["state"]) for r in rows] == [("book.epub", "unknown")]

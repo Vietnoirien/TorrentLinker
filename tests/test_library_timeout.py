@@ -108,7 +108,7 @@ def test_qbittorrent_wrapped_timeout_is_retried(tmp_path):
     assert len(calls) == 2
 
 
-def test_scan_timeout_dialog_preserves_previous_library(qtbot, tmp_path, monkeypatch):
+def test_scan_timeout_still_scans_files_with_unknown_state(qtbot, tmp_path, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
 
     from torrentlinker.config import Settings
@@ -116,13 +116,16 @@ def test_scan_timeout_dialog_preserves_previous_library(qtbot, tmp_path, monkeyp
     from torrentlinker.gui import main_window
     from torrentlinker.library import LibraryEntry
 
-    folder = LibraryFolder(tmp_path, depth=5)
+    root = tmp_path / "Books"
+    root.mkdir()
+    (root / "old.epub").write_bytes(b"x" * 10)
+    folder = LibraryFolder(root, depth=5)
     window = main_window.MainWindow(
         Settings(library_folders=[folder]), tmp_path / "settings.json", Store(tmp_path / "s.db")
     )
     qtbot.addWidget(window)
     previous = [
-        LibraryEntry(folder, LocalItem(tmp_path / "old.epub", {"old.epub": 10}), ItemState.SEEDED)
+        LibraryEntry(folder, LocalItem(root / "old.epub", {"old.epub": 10}), ItemState.SEEDED)
     ]
     window.library_model.set_entries(previous)
     client = FakeQbit()
@@ -138,7 +141,8 @@ def test_scan_timeout_dialog_preserves_previous_library(qtbot, tmp_path, monkeyp
     qtbot.waitUntil(lambda: bool(messages))
     assert "torrent list" in messages[0]
     assert "Settings" in messages[0]
-    assert window.library_model.entries == previous
+    assert [e.item for e in window.library_model.entries] == [e.item for e in previous]
+    assert window.library_model.entries[0].state is ItemState.UNKNOWN
     assert window.scan_action.isEnabled()
     assert window.rescan_action.isEnabled()
     assert window.add_folder_action.isEnabled()

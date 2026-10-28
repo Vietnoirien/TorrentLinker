@@ -402,6 +402,7 @@ async function refreshSetup() {
   $("proxy-client").checked = state.setup.proxy.torrent_client;
   clientKind();
   renderCapabilities();
+  if (typeof renderLibraryDownloads === "function") renderLibraryDownloads();
 }
 function savedFolder(local, purpose, label) {
   const row = element("div", undefined, "toolbar");
@@ -1335,84 +1336,14 @@ async function details(row, queueAction = null) {
     }
   });
 }
-async function loadLibrary() {
-  const r = await api(
-    `library?${new URLSearchParams({ q: $("library-query").value, offset: state.libraryOffset })}`,
-  );
-  table(
-    "library-table",
-    r.rows,
-    [
-      {
-        label: say("Local Item", "Élément local"),
-        name: true,
-        render: (r) => r.name,
-      },
-      { label: say("State", "État"), render: (r) => r.state },
-      { label: say("Size", "Taille"), render: (r) => bytes(r.size) },
-      { label: say("Folder", "Dossier"), render: (r) => r.folder },
-      {
-        label: "",
-        render: (r) =>
-          button(say("Find candidates", "Chercher des candidats"), () =>
-            check(r),
-          ),
-      },
-      {
-        label: "Upload",
-        render: (r) =>
-          button(say("Prepare", "Préparer"), () => prepareUpload(r)),
-      },
-    ],
-    null,
-  );
-  $("library-count").textContent =
-    `${r.total} · ${Math.floor(state.libraryOffset / 100) + 1}`;
-  $("library-prev").disabled = !state.libraryOffset;
-  $("library-next").disabled = state.libraryOffset + 100 >= r.total;
-}
-async function check(row) {
-  state.localItem = row.path;
-  $("candidates").hidden = false;
-  $("candidate-title").textContent = row.name;
-  await job({ kind: "check", path: row.path }, (r) =>
-    table(
-      "candidate-table",
-      r,
-      [
-        { label: "Torrent", name: true, render: (c) => c.title },
-        { label: say("Match", "Correspondance"), render: (c) => c.match },
-        {
-          label: "",
-          render: (c) => {
-            const b = button("Reseed", () =>
-              job({ kind: "reseed", path: row.path, hashes: [c.hash] }, () =>
-                toast(say("Verification started.", "Vérification lancée.")),
-              ),
-            );
-            b.disabled = c.match === "none" || c.archive;
-            return b;
-          },
-        },
-      ],
-      null,
-    ),
-  );
-}
 // Library batch actions, as on the desktop: they use the Candidates earlier searches found.
 async function checkAllCandidates() {
-  await job({ kind: "check-all" }, (r) => {
+  await job({ kind: "check-all" }, async (r) => {
     toast(say(
       `Checked ${r.items} Local Items: ${r.full} full, ${r.partial} partial, ${r.none} without a Match, ${r.archive} in archives.`,
       `${r.items} éléments vérifiés : ${r.full} complètes, ${r.partial} partielles, ${r.none} sans correspondance, ${r.archive} dans des archives.`,
     ));
-    $("candidates").hidden = false;
-    $("candidate-title").textContent = say("Full Matches found", "Correspondances complètes trouvées");
-    const rows = r.results.flatMap((item) => item.rows.filter((c) => c.match === "full").map((c) => ({ ...c, item: item.name })));
-    table("candidate-table", rows, [
-      { label: say("Local Item", "Élément local"), name: true, render: (c) => c.item },
-      { label: "Torrent", render: (c) => c.title },
-    ], null);
+    if (libraryUI.item) await reviewLibraryItem(libraryUI.item);
   });
 }
 async function reseedAllMatches() {

@@ -1,5 +1,19 @@
 # Bibliothèque et remise en seed
 
+## Explorateur de dossiers et examen des candidats
+
+L’application de bureau et l’interface web partagent trois sections : **Local Items**, **Folders** et **Activity**. Sélectionnez un dossier dans la colonne de gauche, puis un élément local pour examiner ses candidats sous le tableau. **Expand review** agrandit cet espace ; le retour conserve le candidat sélectionné.
+
+Les onglets **Summary**, **Files**, **Description** et **NFO** permettent de consulter les détails. Files montre les fichiers correspondants, renommés ou absents. Une correspondance complète compare les noms et tailles ; le client torrent doit encore vérifier les hashes avant le seed. Le rejet d’un candidat est mémorisé pour cet élément local. Chercher, vérifier les fichiers ou rejeter un candidat ne lance pas de reseed.
+
+**Folders** permet d’ajouter plusieurs dossiers et de modifier leur type de contenu et leur profondeur. La profondeur 1 considère chaque enfant direct comme un élément local. Retirer un dossier de la bibliothèque conserve ses fichiers. Les paramètres donnent accès au même éditeur ; les destinations de téléchargement et les correspondances de chemins restent propres au client torrent.
+
+Dans l’interface web, le navigateur de dossiers montre les fichiers du **serveur TorrentLinker**, dans les racines configurées, et non ceux de l’ordinateur du navigateur. Un dossier lisible peut être enregistré sans correspondance de chemins. Si le client torrent est indisponible, l’analyse indique un état de seed inconnu. Les dossiers inaccessibles conservent les éléments de leur dernière analyse.
+
+L’interface web permet de chercher les éléments sélectionnés, revoir les candidats mémorisés, comparer les fichiers et rejeter un candidat. **Activity** permet d’annuler les tâches en cours. L’extraction d’archives et l’approbation des renommages sur disque pour µTorrent nécessitent encore l’application de bureau.
+
+Les paramètres affichent les destinations de téléchargement par défaut et par catégorie du client sélectionné. La destination effective tient compte de l’héritage. Enregistrer une destination vérifie sa correspondance avec un fichier seedé et conserve les autres règles.
+
 [Documentation](../../README.md) · [English](../en/library.md)
 
 1. Cliquez sur **Ajouter un dossier…** et choisissez son type de contenu et sa profondeur d’analyse.

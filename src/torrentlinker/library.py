@@ -91,18 +91,19 @@ class LibraryResult(list[LibraryEntry]):
     def __init__(self) -> None:
         super().__init__()
         self.errors: list[ScanError] = []
+        self.client_error: Exception | None = None
 
 
 def build_library(
     folders: Iterable[LibraryFolder],
-    torrents: list[Torrent],
+    torrents: list[Torrent] | None,
     ignore: IgnoreList = IgnoreList(),
     cache: Store | None = None,
     refresh: bool = False,
     previous: Iterable[LibraryEntry] = (),
 ) -> LibraryResult:
     file_hashes: dict[Path, set[str]] = {}
-    for torrent in torrents:
+    for torrent in torrents or []:
         for rel in torrent.files:
             file_hashes.setdefault(torrent.save_path / rel, set()).add(torrent.hash.lower())
     entries = LibraryResult()
@@ -121,13 +122,19 @@ def build_library(
                 for error in items.errors
             )
         )
-        states = classify(items, torrents, ignore)
+        states = (
+            classify(items, torrents, ignore)
+            if torrents is not None
+            else {item.path: ItemState.UNKNOWN for item in items}
+        )
         for item in items:
             content = [rel for rel in item.files if not ignore.matches(rel)] or list(item.files)
             hashes = frozenset(
                 hash for rel in content for hash in file_hashes.get(item.save_path / rel, ())
             )
             entries.append(LibraryEntry(folder, item, states[item.path], hashes))
+    if torrents is None:
+        entries[:] = [replace(entry, state=ItemState.UNKNOWN) for entry in entries]
     return entries
 
 

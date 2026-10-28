@@ -420,7 +420,12 @@ def create_app(
             idle()
             target = for_client(body.client_id)
             result = target.setup.folder(body, save=True)
-            target.library.entries.clear()
+            # Adding a folder keeps the successful scans of all other folders.
+            for operation in [operations, *client_operations.values()]:
+                valid = {f.path for f in service.settings.library_folders}
+                operation.library.entries[:] = [
+                    e for e in operation.library.entries if e.folder.path in valid
+                ]
             return result
 
     @app.post("/api/setup/remove-folder")
@@ -433,7 +438,11 @@ def create_app(
                     409, "Finish pending Reseed Verifications before removing folders."
                 )
             target.setup.remove_folder(body)
-            target.library.entries.clear()
+            if body.purpose == "library":
+                for operation in [operations, *client_operations.values()]:
+                    operation.library.entries[:] = [
+                        e for e in operation.library.entries if str(e.folder.path) != body.local
+                    ]
         return {"ok": True}
 
     @app.post("/api/setup/suggest-mappings")
@@ -498,13 +507,28 @@ def create_app(
     def library(
         client_id: str = "",
         q: str = "",
+        folder: str = "",
+        state: str = "",
         offset: int = Query(0, ge=0),
         limit: int = Query(100, ge=1, le=200),
     ) -> dict:
         rows = [
-            r for r in for_client(client_id).library.rows() if q.casefold() in r["name"].casefold()
+            r
+            for r in for_client(client_id).library.rows()
+            if q.casefold() in r["name"].casefold()
+            and (not folder or r["folder"] == folder)
+            and (not state or r["state"] == state)
         ]
-        return {"rows": rows[offset : offset + limit], "total": len(rows)}
+        from collections import Counter
+
+        library = for_client(client_id).library
+        counts = Counter(str(entry.folder.path) for entry in library.entries)
+        return {
+            "rows": rows[offset : offset + limit],
+            "total": len(rows),
+            "folder_counts": counts,
+            "folder_errors": [str(error.path) for error in library.folder_errors],
+        }
 
     from torrentlinker.poster_cache import PosterCache, valid_poster_url
 

@@ -688,32 +688,14 @@ class SettingsDialog(QDialog):
     # Library Folders -------------------------------------------------------
 
     def _folders_box(self) -> QGroupBox:
+        from torrentlinker.gui.library_workspace import FolderEditor
+
         box = QGroupBox(self.tr("Library Folders"))
         layout = QVBoxLayout(box)
-        self.folders = QTableWidget(0, 3)
-        self.folders.setHorizontalHeaderLabels(
-            [self.tr("Folder"), self.tr("Content Kind"), self.tr("Scan depth")]
-        )
-        self.folders.horizontalHeader().setSectionResizeMode(
-            COL_PATH, QHeaderView.ResizeMode.Interactive
-        )
-        for f in self.settings.library_folders:
-            self._add_folder_row(f)
-        layout.addWidget(self.folders)
-
-        row = QHBoxLayout()
-        self.typed_folder = QLineEdit()
-        self.typed_folder.setPlaceholderText(self.tr("…or type a folder path and press Enter"))
-        self.typed_folder.returnPressed.connect(self._add_typed_folder)
-        add = QPushButton(self.tr("Add folder…"))
-        add.clicked.connect(self._pick_folder)
-        remove = QPushButton(self.tr("Remove"))
-        set_role(remove, "quiet")
-        remove.clicked.connect(lambda: self.folders.removeRow(self.folders.currentRow()))
-        row.addWidget(add)
-        row.addWidget(self.typed_folder, 1)
-        row.addWidget(remove)
-        layout.addLayout(row)
+        self.folder_editor = FolderEditor(self.settings.library_folders)
+        self.folders = self.folder_editor.table
+        self.typed_folder = self.folder_editor.path
+        layout.addWidget(self.folder_editor)
         return box
 
     def _add_typed_folder(self) -> None:
@@ -734,34 +716,10 @@ class SettingsDialog(QDialog):
             self._add_folder_row(LibraryFolder(Path(path)))
 
     def _add_folder_row(self, folder: LibraryFolder) -> None:
-        r = self.folders.rowCount()
-        self.folders.insertRow(r)
-        path_cell = QTableWidgetItem(str(folder.path))
-        path_cell.setFlags(path_cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.folders.setItem(r, COL_PATH, path_cell)
-        kind = QComboBox()
-        for k in ContentKind:
-            kind.addItem(kind_label(k), k)
-        kind.setCurrentIndex(list(ContentKind).index(folder.kind))
-        self.folders.setCellWidget(r, COL_KIND, kind)
-        depth = QSpinBox()
-        depth.setRange(1, 5)
-        depth.setValue(folder.depth)
-        self.folders.setCellWidget(r, COL_DEPTH, depth)
+        self.folder_editor.add_folder(folder)
 
     def _read_folders(self) -> list[LibraryFolder]:
-        result = []
-        for r in range(self.folders.rowCount()):
-            cell = self.folders.item(r, COL_PATH)
-            kind, depth = (
-                self.folders.cellWidget(r, COL_KIND),
-                self.folders.cellWidget(r, COL_DEPTH),
-            )
-            assert cell is not None and isinstance(kind, QComboBox) and isinstance(depth, QSpinBox)
-            result.append(
-                LibraryFolder(Path(cell.text()), depth.value(), ContentKind(kind.currentData()))
-            )
-        return result
+        return self.folder_editor.folders()
 
     # Download Folders ------------------------------------------------------
 

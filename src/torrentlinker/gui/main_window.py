@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QSplitter,
     QStackedWidget,
     QTableView,
     QTabWidget,
@@ -69,6 +68,7 @@ from torrentlinker.gui.ebook_reader import ReadingRoom
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_folder_dialog import LibraryFolderDialog
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
+from torrentlinker.gui.library_workspace import LibraryWorkspace
 from torrentlinker.gui.reseed_consent import ReseedConsent
 from torrentlinker.gui.reseed_dialog import ReseedDialog
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
@@ -300,12 +300,6 @@ class MainWindow(QMainWindow):
         self.review.reseed_started.connect(self._reseed_started)
         self.review.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.review.candidates_checked.connect(self._show_match_zen)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(library_pane)
-        splitter.addWidget(self.review)
-        splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(2)
-        splitter.setSizes([660, 520])
         self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
         self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
         self.zen_tab.defer_while_hidden(
@@ -313,13 +307,8 @@ class MainWindow(QMainWindow):
         )
         self.tabs = QTabWidget()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
-        library_page = QWidget()
-        library_page_layout = QVBoxLayout(library_page)
-        library_page_layout.setContentsMargins(0, 0, 0, 0)
-        library_page_layout.addWidget(toolbar)
-        library_page_layout.addWidget(match_toolbar)
-        library_page_layout.addWidget(splitter, 1)
-        self.tabs.addTab(library_page, self.tr("Library"))
+        self.library_workspace = LibraryWorkspace(self, library_pane, toolbar, match_toolbar)
+        self.tabs.addTab(self.library_workspace, self.tr("Library"))
         self.upload_tab = UploadTab(
             store,
             self.indexer,
@@ -1886,6 +1875,28 @@ class MainWindow(QMainWindow):
         else:
             self.scan()
 
+    @agent_settings_change
+    def save_library_folders(self, folders: list[LibraryFolder]) -> bool:
+        if not self.add_folder_action.isEnabled() or self.batch is not None:
+            self.statusBar().showMessage(self.tr("Wait for the Library operation to finish."))
+            return False
+        try:
+            replace(self.settings, library_folders=folders).save(self.settings_path)
+        except OSError as error:
+            QMessageBox.warning(self, self.tr("Library Folders"), error_text(error))
+            return False
+        self.settings.library_folders = folders
+        if self.agent_runtime:
+            self.agent_runtime.reset(self.settings)
+        self._fill_folder_filter()
+        valid = {f.path for f in folders}
+        self.library_model.set_entries(
+            [entry for entry in self.library_model.entries if entry.folder.path in valid]
+        )
+        if folders:
+            self.scan()
+        return True
+
     def set_media_center(self, enabled: bool) -> None:
         if enabled == self.media_center_active:
             return
@@ -2040,6 +2051,9 @@ class MainWindow(QMainWindow):
             return
         folders = list(self.settings.library_folders)
         dialog = SettingsDialog(self.settings, self)
+        dialog.folder_editor.set_scan_errors(
+            self.library_workspace.scan_errors, self.library_workspace.editor.scanned
+        )
         if assistant:
             dialog.show_assistant_connections()
         if agents:
@@ -2108,6 +2122,9 @@ class MainWindow(QMainWindow):
         self.folder_filter.setCurrentIndex(max(index, 0))
         self.folder_filter.blockSignals(False)
         self._apply_filters()
+        if hasattr(self, "library_workspace"):
+            self.library_workspace.refresh()
+            self.library_workspace.editor.set_folders(self.settings.library_folders)
 
     def _apply_filters(self) -> None:
         state = self.state_filter.currentData()  # Qt hands enum data back as plain str
@@ -2399,15 +2416,22 @@ class MainWindow(QMainWindow):
         previous = list(self.library_model.entries)
         qbit, ignore, store = self.qbit(), self.settings.matching.ignore, self.store
         url = self.settings.indexer.url
-        run_in_background(
-            lambda: build_library(
-                folders, indexer_contents(qbit, store, url), ignore, store, refresh, previous
-            ),
-            self._scan_done,
-            self._scan_failed,
-        )
+
+        def work():
+            client_error = None
+            try:
+                torrents = indexer_contents(qbit, store, url)
+            except Exception as error:
+                client_error = error
+                torrents = None
+            result = build_library(folders, torrents, ignore, store, refresh, previous)
+            result.client_error = client_error
+            return result
+
+        run_in_background(work, self._scan_done, self._scan_failed)
 
     def _scan_done(self, entries: list) -> None:  # type: ignore[type-arg]
+        self.library_workspace.set_scan_errors(getattr(entries, "errors", []))
         self.library_model.set_entries(entries)
         self.upload_tab.set_entries(entries)
         self.scan_action.setEnabled(True)
@@ -2415,6 +2439,13 @@ class MainWindow(QMainWindow):
         self.add_folder_action.setEnabled(True)
         self.statusBar().showMessage(self.tr("{0} Local Items").format(len(entries)))
         self.restore_searches(entries)
+        if client_error := getattr(entries, "client_error", None):
+            QMessageBox.warning(
+                self,
+                self.tr("Seeding status unknown"),
+                self.tr("Files were scanned, but the Torrent Client is unavailable. ")
+                + error_text(client_error),
+            )
         errors = getattr(entries, "errors", [])
         if errors:
             self.statusBar().showMessage(self.tr("Scan incomplete: {0} errors").format(len(errors)))
@@ -2465,7 +2496,7 @@ class MainWindow(QMainWindow):
         self.scan_action.setEnabled(True)
         self.rescan_action.setEnabled(True)
         self.add_folder_action.setEnabled(True)
-        self.statusBar().showMessage(self.tr("Scan failed"))
+        self.statusBar().showMessage(self.tr("Scan failed; showing the previous scan"))
         QMessageBox.warning(self, self.tr("Scan failed"), error_text(error))
 
     # Verification ----------------------------------------------------------

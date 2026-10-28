@@ -19,6 +19,7 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.seeding import Seeding
 
 STATE_LABELS = {
+    ItemState.UNKNOWN: QT_TRANSLATE_NOOP("LibraryModel", "Seeding status unknown"),
     ItemState.SEEDED: QT_TRANSLATE_NOOP("LibraryModel", "Seeded"),
     ItemState.PARTIALLY_SEEDED: QT_TRANSLATE_NOOP("LibraryModel", "Partially seeded"),
     ItemState.ORPHAN: QT_TRANSLATE_NOOP("LibraryModel", "Orphan"),
@@ -128,7 +129,9 @@ class LibraryModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return (
                 e.item.path.name,
-                self.status.get(e.item.path) or state_label(e.state),
+                state_label(e.state)
+                if e.state is ItemState.UNKNOWN
+                else self.status.get(e.item.path) or state_label(e.state),
                 human_size(e.item.size),
                 str(e.folder.path),
                 f"≈ {zen:.2f}" if (zen := self.zen_of(e)) is not None else "",

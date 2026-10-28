@@ -83,6 +83,7 @@ class LocalItem:
 
 
 class ItemState(StrEnum):
+    UNKNOWN = "unknown"
     SEEDED = "seeded"
     PARTIALLY_SEEDED = "partially-seeded"
     ORPHAN = "orphan"

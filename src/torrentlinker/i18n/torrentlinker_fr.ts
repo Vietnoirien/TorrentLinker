@@ -1910,6 +1910,11 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
         <source>Current Zen/day estimate for the linked torrents, as shown in Zen. A torrent shared by several Local Items appears on each item. Paused torrents contribute zero; a blank value means unavailable.</source>
         <translation>Estimation actuelle de Zen/jour des torrents associés, identique à celle de Zen. Un torrent partagé par plusieurs éléments locaux apparaît sur chacun. Les torrents en pause comptent pour zéro ; une valeur vide signifie que l’estimation est indisponible.</translation>
     </message>
+    <message>
+        <location filename="../gui/library_model.py" line="22"/>
+        <source>Seeding status unknown</source>
+        <translation>État du seed inconnu</translation>
+    </message>
 </context>
 <context>
     <name>LocalDrafts</name>
@@ -2961,6 +2966,31 @@ La mettre à la corbeille ?</translation>
         <source>Approved proposal started.</source>
         <translation>La proposition approuvée a démarré.</translation>
     </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1881"/>
+        <source>Wait for the Library operation to finish.</source>
+        <translation>Attendez la fin de l’opération de bibliothèque.</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="1886"/>
+        <source>Library Folders</source>
+        <translation>Dossiers de bibliothèque</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="2442"/>
+        <source>Seeding status unknown</source>
+        <translation>État du seed inconnu</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="2443"/>
+        <source>Files were scanned, but the Torrent Client is unavailable. </source>
+        <translation>Les fichiers ont été analysés, mais le client torrent est indisponible. </translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="2496"/>
+        <source>Scan failed; showing the previous scan</source>
+        <translation>Échec de l’analyse ; affichage de l’analyse précédente</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -3865,6 +3895,102 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <location filename="../gui/review_panel.py" line="598"/>
         <source>Reseed failed</source>
         <translation>Échec du repartage</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="109"/>
+        <source>Candidate review</source>
+        <translation>Examen des candidats</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="112"/>
+        <source>Expand review</source>
+        <translation>Agrandir l’examen</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="142"/>
+        <source>Check Candidate</source>
+        <translation>Vérifier le candidat</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="169"/>
+        <source>Open on website</source>
+        <translation>Ouvrir sur le site</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="190"/>
+        <source>Summary</source>
+        <translation>Résumé</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="191"/>
+        <source>Files</source>
+        <translation>Fichiers</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="192"/>
+        <source>Description</source>
+        <translation>Description</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="193"/>
+        <source>NFO</source>
+        <translation>NFO</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="368"/>
+        <source>Select Description to load the torrent presentation.</source>
+        <translation>Sélectionnez Description pour charger la présentation du torrent.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="370"/>
+        <source>Select NFO to load its contents.</source>
+        <translation>Sélectionnez NFO pour charger son contenu.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="371"/>
+        <source>Select a Candidate to compare it with your Local Item.</source>
+        <translation>Sélectionnez un candidat pour le comparer à votre élément local.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="377"/>
+        <source>Local folder: </source>
+        <translation>Dossier local : </translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="381"/>
+        <source>A Match compares file names and sizes. Your Torrent Client must verify the hashes before seeding.</source>
+        <translation>Une correspondance compare les noms et tailles des fichiers. Le client torrent doit vérifier les hashes avant de seeder.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="434"/>
+        <source>Open this Candidate on its Indexer website.</source>
+        <translation>Ouvrez ce candidat sur le site de son indexeur.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="435"/>
+        <source>NFO unavailable for this Indexer.</source>
+        <translation>NFO indisponible pour cet indexeur.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="439"/>
+        <location filename="../gui/review_panel.py" line="440"/>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="446"/>
+        <source>No description supplied.</source>
+        <translation>Aucune description fournie.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="447"/>
+        <source>No NFO supplied.</source>
+        <translation>Aucun NFO fourni.</translation>
+    </message>
+    <message>
+        <location filename="../gui/review_panel.py" line="487"/>
+        <source>Verify &amp;&amp; reseed</source>
+        <translation>Vérifier et remettre en seed</translation>
     </message>
 </context>
 <context>
@@ -8945,6 +9071,11 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <source>%1 can't be checked (missing details)</source>
         <translation>%1 non vérifiables (informations manquantes)</translation>
     </message>
+    <message>
+        <location filename="../gui/feed_editor.py" line="659"/>
+        <source>%1 can&apos;t be checked (missing details)</source>
+        <translation>%1 non vérifiables (informations manquantes)</translation>
+    </message>
 </context>
 <context>
     <name>ModeCards</name>
@@ -8971,6 +9102,11 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Matching releases are sent to your client on their own, within your limits.</source>
         <translation>Les publications correspondantes sont envoyées seules à votre client, dans vos limites.</translation>
+    </message>
+    <message>
+        <location filename="../gui/feed_editor.py" line="314"/>
+        <source>Matching releases join TorrentLinker&apos;s queue. Nothing reaches your client until you start it.</source>
+        <translation>Les publications correspondantes rejoignent la file de TorrentLinker. Rien n’atteint votre client avant que vous la démarriez.</translation>
     </message>
 </context>
 <context>
@@ -9280,6 +9416,154 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>EXCLU</source>
         <translation>EXCLU</translation>
+    </message>
+</context>
+<context>
+    <name>FolderEditor</name>
+    <message>
+        <location filename="../gui/library_workspace.py" line="41"/>
+        <source>Register the folders TorrentLinker can read. Add as many as you need. Download destinations and Torrent Client Path Mappings are configured separately.</source>
+        <translation>Enregistrez les dossiers lisibles par TorrentLinker, autant que nécessaire. Les destinations de téléchargement et les correspondances de chemins du client torrent se règlent séparément.</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="52"/>
+        <location filename="../gui/library_workspace.py" line="147"/>
+        <location filename="../gui/library_workspace.py" line="157"/>
+        <source>Library Folder</source>
+        <translation>Dossier de bibliothèque</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="53"/>
+        <source>Content Kind</source>
+        <translation>Type de contenu</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="54"/>
+        <source>Scan grouping</source>
+        <translation>Regroupement des éléments</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="55"/>
+        <source>File access</source>
+        <translation>Accès aux fichiers</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="64"/>
+        <source>Type a folder path</source>
+        <translation>Saisir un chemin de dossier</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="67"/>
+        <source>Browse…</source>
+        <translation>Parcourir…</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="69"/>
+        <source>Add folder</source>
+        <translation>Ajouter un dossier</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="72"/>
+        <source>Remove selected</source>
+        <translation>Retirer la sélection</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="79"/>
+        <source>Depth 1: each direct child is one Local Item. Depth 2: scan one level further. Removing a folder here keeps all files on disk.</source>
+        <translation>Profondeur 1 : chaque enfant direct est un élément local. Profondeur 2 : un niveau plus bas. Retirer un dossier ici conserve tous ses fichiers.</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="108"/>
+        <source>Depth </source>
+        <translation>Profondeur </translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="126"/>
+        <source>Scan incomplete · previous items kept</source>
+        <translation>Analyse incomplète · éléments précédents conservés</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="128"/>
+        <source>Last scan readable</source>
+        <translation>Lisible lors de la dernière analyse</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="128"/>
+        <source>Not scanned</source>
+        <translation>Non analysé</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="157"/>
+        <source>Folder is unavailable.</source>
+        <translation>Le dossier est inaccessible.</translation>
+    </message>
+</context>
+<context>
+    <name>LibraryWorkspace</name>
+    <message>
+        <location filename="../gui/library_workspace.py" line="170"/>
+        <source>Explore your folders. Review Candidates. Verify before seeding.</source>
+        <translation>Parcourir les dossiers. Examiner les candidats. Vérifier avant de seeder.</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="184"/>
+        <source>LIBRARY FOLDERS</source>
+        <translation>DOSSIERS DE BIBLIOTHÈQUE</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="190"/>
+        <source>Library Folders</source>
+        <translation>Dossiers de bibliothèque</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="193"/>
+        <source>Manage folders</source>
+        <translation>Gérer les dossiers</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="209"/>
+        <source>Local Items</source>
+        <translation>Éléments locaux</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="211"/>
+        <source>Save folders</source>
+        <translation>Enregistrer les dossiers</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="217"/>
+        <source>Folders</source>
+        <translation>Dossiers</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="222"/>
+        <source>Scan, search and Verification progress appears here.</source>
+        <translation>La progression des analyses, recherches et vérifications apparaît ici.</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="224"/>
+        <source>Activity</source>
+        <translation>Activité</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="242"/>
+        <source>Back to Local Items</source>
+        <translation>Retour aux éléments locaux</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="242"/>
+        <source>Expand review</source>
+        <translation>Agrandir l’examen</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="257"/>
+        <source>All folders · {0}</source>
+        <translation>Tous les dossiers · {0}</translation>
+    </message>
+    <message>
+        <location filename="../gui/library_workspace.py" line="268"/>
+        <source>Scan incomplete</source>
+        <translation>Analyse incomplète</translation>
     </message>
 </context>
 </TS>

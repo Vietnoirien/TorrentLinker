@@ -1,5 +1,19 @@
 # Library and reseeding
 
+## Folder explorer and Candidate review
+
+Desktop and WebUI use the same Library layout: **Local Items**, **Folders**, and **Activity**. Choose a Library Folder in the left rail, filter the Local Items, then select an item to open its Candidate review below the table. **Expand review** gives the Candidates more room; **Back to Local Items** restores the table without losing the selected Candidate.
+
+Review **Summary**, **Files**, **Description**, and **NFO** before acting. Files shows local counterparts, renamed paths and absent files. A Full Match compares file names and sizes; **Verify & reseed** still requires the Torrent Client's hash Verification. **Reject Candidate** remembers your decision for this Local Item. Searching, checking and rejecting never start a Reseed.
+
+Use **Folders → Add folder** to register several folders and edit their Content Kind and scan grouping. Depth 1 treats each direct child as one Local Item. Removing a registration leaves files on disk. Settings opens the same folder editor. Download destinations and Path Mappings remain separate, per Torrent Client.
+
+In the WebUI, Browse lists folders on the **TorrentLinker server**, within its configured storage roots. It cannot browse the computer running your browser. Registering a readable Library Folder does not require a Torrent Client mapping. If the client is unavailable, a scan can still list files with **Seeding status unknown**; they are not automatically classified as Orphans. The desktop also scans readable folders while the client is offline and labels their seeding status unknown. Unreadable paths retain their previous scanned items.
+
+The WebUI now supports selected-item searches, remembered Candidate review, file comparison and rejection. **Activity** lists server jobs and allows cancelling active work. Archive extraction and µTorrent disk-rename approval still require the desktop application's individual review.
+
+Settings also lists the selected client's default and category Download Folders. Choose a category to see its effective destination. Saving a destination verifies an existing Path Mapping against a seeded file and preserves the other category rules.
+
 [Documentation](../../README.md) · [Français](../fr/bibliotheque.md)
 
 1. Click **Add folder…** and choose its content kind and scan depth.
