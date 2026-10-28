@@ -13,7 +13,7 @@ from pathlib import Path
 from torrentlinker.domain import LocalItem
 from torrentlinker.media_info import MediaFacts, read_media
 
-VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".m2ts", ".ts", ".mov", ".webm"}
+VIDEO_EXTENSIONS = {".mkv", ".m4v", ".mp4", ".avi", ".m2ts", ".ts", ".mov", ".webm"}
 
 
 def consistency(name: str, facts: MediaFacts, nfo: str = "") -> list[dict[str, str]]:
@@ -50,22 +50,51 @@ def consistency(name: str, facts: MediaFacts, nfo: str = "") -> list[dict[str, s
                     ", ".join(sorted(observed_audio)),
                 )
             )
-        channels = {
-            int(a) + int(b) for a, b in re.findall(r"(?<!\d)([1257])[.]([01])(?!\d)", claim)
-        }
-        observed_channels = {t.channels for t in facts.audio if t.channels}
-        if len(channels) == 1 and observed_channels and channels.isdisjoint(observed_channels):
-            values.append(
-                (
-                    "audio-channels",
-                    str(next(iter(channels))),
-                    ", ".join(map(str, sorted(observed_channels))),
+        # Codec and channels belong to a single track; do not merge unrelated tracks.
+        channel_claims = re.findall(
+            r"(?i)(?<!\w)(E[.-]?AC[.-]?3|AC[.-]?3|DDP|DD|AAC|FLAC|TRUEHD)"
+            r"[ ._-]*([1257])[.]([01])(?!\d)",
+            claim,
+        )
+        for codec, whole, lfe in channel_claims:
+            codec = audio_aliases.get(re.sub(r"[.-]", "", codec.upper()), codec.upper())
+            channels = int(whole) + int(lfe)
+            tracks = [t for t in facts.audio if t.codec == codec and t.channels]
+            if tracks and not any(t.channels == channels for t in tracks):
+                values.append(
+                    (
+                        "audio-channels",
+                        f"{codec} {channels}",
+                        ", ".join(f"{t.codec} {t.channels}" for t in tracks),
+                    )
                 )
+        hdr_claims = [
+            (r"(?i)\b(?:DV|DOLBY[ .]VISION)\b", "Dolby Vision", bool(facts.dv_profile)),
+            (r"(?i)\bHDR10\+", "HDR10+", facts.hdr10plus),
+            (r"(?i)\bHDR10(?!\+|\w)", "HDR10", facts.hdr10 or facts.hdr10plus),
+            (r"(?i)\bHLG\b", "HLG", facts.hlg),
+            (
+                r"(?i)\bHDR\b",
+                "HDR",
+                bool(facts.hdr10 or facts.hdr10plus or facts.hlg or facts.dv_profile),
+            ),
+        ]
+        observed_hdr = (
+            ", ".join(
+                label
+                for label, present in (
+                    ("Dolby Vision", facts.dv_profile),
+                    ("HDR10+", facts.hdr10plus),
+                    ("HDR10", facts.hdr10),
+                    ("HLG", facts.hlg),
+                )
+                if present
             )
-        if re.search(r"(?i)\b(?:HDR10\+?|HDR|DV|DOLBY[ .]VISION)\b", claim) and not (
-            facts.hdr10 or facts.hdr10plus or facts.hlg or facts.dv_profile
-        ):
-            values.append(("hdr", "HDR", "No HDR reported by MediaInfo"))
+            or "No HDR reported by MediaInfo"
+        )
+        for pattern, label, present in hdr_claims:
+            if re.search(pattern, claim) and not present:
+                values.append(("hdr", label, observed_hdr))
         for field, expected, actual in values:
             rows.append(
                 dict(

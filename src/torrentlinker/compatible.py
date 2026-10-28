@@ -36,7 +36,8 @@ def discover(
     progress: Callable[[dict], None],
 ) -> list[CheckedCandidate]:
     caps = indexer.supported_modes()
-    bases = build_queries(item, kind, categories, find_ids(item), caps)
+    query_item = replace(item, path=item.save_path / item.search_name) if item.search_name else item
+    bases = build_queries(query_item, kind, categories, find_ids(query_item), caps)
     queries = list(bases)
     if kind is ContentKind.SERIES:
         scopes: set[tuple[int, int | None]] = set()
@@ -143,4 +144,19 @@ def combine_items(items: list[LocalItem], mappings=()) -> LocalItem:
     identifier = hashlib.sha256("\n".join(sorted(str(i.path) for i in items)).encode()).hexdigest()[
         :16
     ]
-    return LocalItem(root / ("Library selection " + identifier), files)
+    titles = set()
+    for name in files:
+        info = guessit(Path(name).name)
+        if isinstance(info.get("season"), int) and info.get("title"):
+            titles.add(str(info["title"]))
+    if len(titles) > 1:
+        raise ValueError("Select Local Items from the same series.")
+    title = next(iter(titles), str(guessit(items[0].path.name).get("title") or items[0].path.name))
+    ids = [find_ids(item) for item in items]
+    for field in ("imdb", "tmdb"):
+        values = {getattr(value, field) for value in ids if getattr(value, field)}
+        if len(values) > 1:
+            raise ValueError("Selected items have conflicting series identifiers.")
+        if values:
+            title += " {" + field + "-" + next(iter(values)) + "}"
+    return LocalItem(root / ("Library selection " + identifier), files, search_name=title)

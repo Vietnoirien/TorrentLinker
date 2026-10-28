@@ -3,6 +3,8 @@
 import threading
 from dataclasses import replace
 
+import pytest
+
 from tests.test_upload_video import recorded
 from torrentlinker.domain import LibraryFolder
 from torrentlinker.library import build_library
@@ -206,7 +208,10 @@ def test_near_match_diagnostic_counts_valid_bytes_without_modifying_original(tmp
     assert video.read_bytes() == b"X" * 128 + original[128:]
 
 
-def test_repair_requires_completed_client_check_and_confirmation_and_preserves_original(tmp_path):
+@pytest.mark.parametrize("invalidate", [False, True])
+def test_repair_requires_completed_client_check_and_confirmation_and_preserves_original(
+    tmp_path, invalidate
+):
     import pytest
 
     from tests.fake_qbit import FakeQbit
@@ -229,7 +234,12 @@ def test_repair_requires_completed_client_check_and_confirmation_and_preserves_o
     client = FakeQbit()
     copies = root / "copies"
     copies.mkdir()
-    prepared = library.prepare_repair(report["id"], str(copies), threading.Event(), client=client)
+    with pytest.raises(ValueError, match="experimental"):
+        library.prepare_repair(report["id"], str(copies), threading.Event(), client=client)
+    assert list(copies.iterdir()) == []
+    prepared = library.prepare_repair(
+        report["id"], str(copies), threading.Event(), client=client, experimental=True
+    )
     assert prepared["status"] == "checking"
     assert client.started == []
     with pytest.raises(ValueError):
@@ -237,6 +247,13 @@ def test_repair_requires_completed_client_check_and_confirmation_and_preserves_o
     client.by_hash[meta.infohash] = replace(client.by_hash[meta.infohash], state="stoppedDL")
     client.pieces[meta.infohash] = [0] + [2] * (len(original) // meta.piece_length - 1)
     assert library.refresh_repair(report["id"], client=client)["status"] == "ready"
+    if invalidate:
+        client.pieces[meta.infohash] = [0] * (len(original) // meta.piece_length)
+        with pytest.raises(ValueError):
+            library.start_repair(report["id"], report["id"], client=client)
+        assert client.started == []
+        assert library.refresh_repair(report["id"], client=client)["status"] == "needs-review"
+        return
     with pytest.raises(ValueError):
         library.start_repair(report["id"], "", client=client)
     assert (
@@ -302,3 +319,54 @@ def test_combining_inconsistent_nas_mappings_is_refused(tmp_path):
     library.setup.settings.path_mappings = [PathMapping(str(root / "Season1"), "/unrelated")]
     with pytest.raises(ValueError, match="consistent Path Mapping"):
         library.combine([str(root / "Season1"), str(root / "Season2")], threading.Event())
+
+
+def test_audio_claim_must_match_one_track_and_hdr_formats_stay_distinct(tmp_path):
+    library, root = library_at(tmp_path)
+    video = root / "Film.DDP5.1.DV.HDR10+.mkv"
+    video.write_bytes(b"media")
+    scan(library)
+    facts = recorded("film_x264_1080p_fr")
+    facts = replace(
+        facts,
+        hdr10=True,
+        hdr10plus=False,
+        dv_profile=0,
+        audio=(
+            replace(facts.audio[0], codec="EAC3", channels=2),
+            replace(facts.audio[0], codec="AC3", channels=6),
+        ),
+    )
+    rows = library.evidence(str(video), threading.Event(), reader=lambda path: facts)[
+        "observations"
+    ]
+    assert any(r["field"] == "audio-channels" for r in rows)
+    assert {r["claim"] for r in rows if r["field"] == "hdr"} == {"Dolby Vision", "HDR10+"}
+
+
+def test_combined_seasons_discover_by_show_identity(tmp_path, monkeypatch):
+    from torrentlinker.domain import ContentKind
+    from torrentlinker.indexer import SearchMode
+
+    library, root = library_at(tmp_path)
+    library.setup.settings.library_folders = [LibraryFolder(root, kind=ContentKind.SERIES)]
+    for season in ("S01", "S02"):
+        folder = root / season
+        folder.mkdir()
+        (folder / f"Example.Show.{season}E01.mkv").write_bytes(b"data")
+    scan(library)
+    row = library.combine([str(root / "S01"), str(root / "S02")], threading.Event())
+    queries = []
+
+    class Indexer:
+        def supported_modes(self):
+            return {SearchMode.TV: {"q", "season", "ep"}}
+
+        def search(self, query):
+            queries.append(query)
+            return []
+
+    monkeypatch.setattr(library.setup, "indexer", lambda: Indexer())
+    library.compatible(row["path"], threading.Event(), lambda value: None)
+    assert queries and {q.q for q in queries} == {"Example Show"}
+    assert {(q.season, q.ep) for q in queries} >= {(None, None), (1, 1), (2, 1)}

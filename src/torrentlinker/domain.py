@@ -72,6 +72,7 @@ class LocalItem:
 
     path: Path
     files: dict[str, int] = field(default_factory=dict)
+    search_name: str = ""  # identity for a virtual combined manifest; never a disk path
 
     @property
     def size(self) -> int:

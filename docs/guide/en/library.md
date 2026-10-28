@@ -72,3 +72,5 @@ Select a Candidate for one local file and choose **Diagnose repair…**. Diagnos
 For an eligible result, choose a destination for an independent copy. WebUI destinations must be mounted under an allowed storage root on the server. TorrentLinker creates a new directory and keeps the original intact. It adds the target stopped in qBittorrent and requests verification. **Refresh verification**, then use **Confirm download into copy…** only after the result is ready. Other clients and multifile/v2 torrents are not supported by repair yet.
 
 The missing-byte estimate describes useful content, not total network traffic. Repair history persists across restarts; restarting never starts a pending repair. Failed or uncertain operations remain for manual inspection in the Torrent Client. Incomplete copies are kept; removal of a torrent alone does not delete them. The original is always retained. Tests use synthetic data; repair success rates on real media collections are not established.
+
+Before preparing a copy, explicitly enable experimental repair. Representative real-library trials are still pending; diagnosis remains available without enabling downloads.

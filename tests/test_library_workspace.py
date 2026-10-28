@@ -189,7 +189,9 @@ def test_disconnected_folder_keeps_items_and_visible_health_warning(qtbot, tmp_p
     assert "previous items kept" in window.library_workspace.editor.table.item(0, 3).text()
 
 
-def test_desktop_evidence_inspects_claims_and_keeps_the_original(qtbot, tmp_path, monkeypatch):
+def test_desktop_evidence_inspects_claims_and_keeps_the_original(
+    qtbot, tmp_path, monkeypatch, library_theme
+):
     import os
     from pathlib import Path
 
@@ -215,6 +217,9 @@ def test_desktop_evidence_inspects_claims_and_keeps_the_original(qtbot, tmp_path
         lambda *args, **kwargs: "MediaInfo fixture" if "output" in kwargs else fixture,
     )
     entry = LibraryEntry(LibraryFolder(tmp_path), scan_item(video), ItemState.ORPHAN)
+    window.settings.library_folders = [entry.folder]
+    window._fill_folder_filter()
+    window.library_model.set_entries([entry])
     window.review.set_entry(entry)
     window.tabs.setCurrentIndex(1)
     window.review.details_tabs.setCurrentIndex(4)

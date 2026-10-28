@@ -67,7 +67,9 @@ def test_real_client_checks_copy_while_stopped_then_requires_explicit_start(cont
         infohash=meta.infohash,
     )
     preview = library.diagnose(str(video), candidate, data, threading.Event())
-    prepared = library.prepare_repair(preview["id"], str(root), threading.Event())
+    prepared = library.prepare_repair(
+        preview["id"], str(root), threading.Event(), experimental=True
+    )
     assert prepared["status"] == "checking"
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:

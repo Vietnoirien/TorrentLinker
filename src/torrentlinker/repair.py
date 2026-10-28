@@ -11,6 +11,7 @@ import os
 import shutil
 import sqlite3
 import threading
+import time
 import uuid
 from contextlib import closing
 from pathlib import Path
@@ -102,8 +103,16 @@ class Repairs:
         return self._public(row)
 
     def prepare(
-        self, identifier: str, destination: Path, client: Qbit, stop: threading.Event
+        self,
+        identifier: str,
+        destination: Path,
+        client: Qbit,
+        stop: threading.Event,
+        *,
+        experimental: bool = False,
     ) -> dict:
+        if not experimental:
+            raise ValueError("Opt in to experimental repair before preparing a copy.")
         with _LOCK:
             row = self._get(identifier)
             if row["status"] != "awaiting-confirmation" or not row["eligible"]:
@@ -147,6 +156,7 @@ class Repairs:
                     raise ValueError("Copy verification differs from the preview.")
                 row["copy_identity"] = identity(target)
                 # Journal before the external add. An uncertain result is never retried.
+                row["check_requested_at"] = time.time()
                 row["status"] = "adding"
                 self._save(row)
                 client.add(data, str(root), ["torrentlinker-repair"])
@@ -167,13 +177,22 @@ class Repairs:
                 if torrent is None:
                     row["status"] = "needs-review"
                 elif torrent.state in CHECKING:
+                    row["check_seen"] = True
                     row["status"] = "checking"
                 elif torrent.state not in STOPPED:
                     client.pause(row["hash"])
                     row["status"] = "needs-review"
                 elif client.piece_states(row["hash"]) == row["piece_states"]:
                     row["status"] = "ready"
-                # A stopped torrent with no verified pieces may still be queued for recheck.
+                else:
+                    # A newly submitted recheck may not have started yet. Readiness is
+                    # revoked immediately; pending checks get a bounded grace period.
+                    failed = (
+                        row["status"] == "ready"
+                        or row.get("check_seen")
+                        or time.time() - row.get("check_requested_at", 0) >= 60
+                    )
+                    row["status"] = "needs-review" if failed else "checking"
                 self._save(row)
             elif row["status"] == "downloading" and torrent and torrent.progress >= 1:
                 row["status"] = "completed"

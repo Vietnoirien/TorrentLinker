@@ -9748,6 +9748,10 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
 <context>
     <name>RepairDialog</name>
     <message>
+      <source>Enable experimental repair (real-library trials pending)</source>
+      <translation>Activer la réparation expérimentale (essais sur des bibliothèques réelles en attente)</translation>
+    </message>
+    <message>
         <source>Experimental repair on a copy</source>
         <translation>Réparation expérimentale sur une copie</translation>
     </message>

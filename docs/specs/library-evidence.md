@@ -20,3 +20,5 @@ The user approved the seven-step implementation plan on 28 October 2026 and requ
 The current authenticated C411 metadata contract and current member-only reupload rules were not available during the preceding research. Discovery therefore uses the existing Torznab adapter and does not depend on unverified by-tmdb technical attributes. Original names are optional suggestions; publication remains the user's existing draft review workflow.
 
 Synthetic fixtures can validate hash arithmetic, file preservation and state transitions. They cannot establish the success rate of repair on real media libraries. The repair feature remains explicitly experimental. NAS-specific mapping and filesystem combinations require additional environment-specific validation; unsupported layouts must explain why they are refused.
+
+Repair requires a separate experimental opt-in, enforced by the shared service and unchecked in both interfaces. Representative real-media trials remain a release-readiness checkpoint; synthetic validation does not complete that checkpoint.

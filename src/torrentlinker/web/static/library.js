@@ -210,7 +210,7 @@ async function searchLibrary(selected) {
 }
 async function loadLibraryActivity() {
   const rows=await api("jobs"),host=$("library-job-list");host.replaceChildren();
-  for(const row of rows.filter(r=>["scan","check","check-all","reseed","reseed-all","search-library","library-review","library-reject","check-candidate","preview-unpack","unpack-reseed"].includes(r.kind))) {
+  for(const row of rows.filter(r=>["scan","check","check-all","reseed","reseed-all","search-library","library-review","library-reject","check-candidate","preview-unpack","unpack-reseed","library-evidence","import-provenance","find-compatible","combine-library","diagnose-repair","prepare-repair","refresh-repair","start-repair"].includes(r.kind))) {
     const card=element("div",undefined,"card");card.append(element("p",`${row.kind} · ${row.status}`));
     if(row.progress?.total) card.append(element("p",`${bytes(row.progress.done)} / ${bytes(row.progress.total)}`));
     if(row.error) card.append(element("p",row.error));
@@ -377,9 +377,11 @@ function renderRepair(host,row) {
   const update=r=>{card.remove();renderRepair(host,r);};
   if(row.eligible && row.status==="awaiting-confirmation"){
     const label=element("label",say("Server folder for the copy","Dossier du serveur pour la copie")),input=element("input");label.append(input);card.append(label);
-    card.append(button(say("Prepare independent copy","Préparer une copie indépendante"),()=>guard(async()=>{
-      await job({kind:"prepare-repair",repair_id:row.id,client_path:input.value},update);
-    })));
+    const optLabel=element("label"),opt=element("input");opt.type="checkbox";
+    optLabel.append(opt,document.createTextNode(say("Enable experimental repair (real-library trials pending)","Activer la réparation expérimentale (essais sur des bibliothèques réelles en attente)")));card.append(optLabel);
+    const prepare=button(say("Prepare independent copy","Préparer une copie indépendante"),()=>guard(async()=>{
+      await job({kind:"prepare-repair",repair_id:row.id,client_path:input.value,experimental:opt.checked},update);
+    }));prepare.disabled=true;opt.onchange=()=>{prepare.disabled=!opt.checked;};card.append(prepare);
   }
   if(row.copy)card.append(button(say("Refresh verification","Actualiser la vérification"),()=>guard(async()=>{
     await job({kind:"refresh-repair",repair_id:row.id},update);

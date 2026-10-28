@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -48,6 +49,11 @@ class RepairDialog(QDialog):
         self.report = QPlainTextEdit()
         self.report.setReadOnly(True)
         layout.addWidget(self.report)
+        self.experimental = QCheckBox(
+            self.tr("Enable experimental repair (real-library trials pending)")
+        )
+        self.experimental.toggled.connect(lambda _: self.show_row(self.row))
+        layout.addWidget(self.experimental)
         self.prepare_button = QPushButton(self.tr("Prepare independent copy…"))
         self.prepare_button.clicked.connect(self.prepare)
         self.refresh_button = QPushButton(self.tr("Refresh verification"))
@@ -58,7 +64,7 @@ class RepairDialog(QDialog):
             layout.addWidget(button)
         self.show_row(self.history.currentData())
         if diagnose:
-            self.run(diagnose)
+            self.run(lambda: diagnose(self.stop))
 
     def show_row(self, row):
         self.row = row
@@ -81,6 +87,7 @@ class RepairDialog(QDialog):
             )
         self.prepare_button.setEnabled(
             bool(row and row["eligible"] and row["status"] == "awaiting-confirmation")
+            and self.experimental.isChecked()
             and not self.busy
         )
         self.refresh_button.setEnabled(bool(row and row.get("copy")) and not self.busy)
@@ -111,7 +118,11 @@ class RepairDialog(QDialog):
         from pathlib import Path
 
         identifier = self.row["id"]
-        self.run(lambda: self.repository.prepare(identifier, Path(folder), self.client, self.stop))
+        self.run(
+            lambda: self.repository.prepare(
+                identifier, Path(folder), self.client, self.stop, experimental=True
+            )
+        )
 
     def refresh(self):
         if self.row:

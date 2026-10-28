@@ -303,8 +303,6 @@ class ReviewPanel(QWidget):
         dialog.exec()
 
     def diagnose_repair(self) -> None:
-        import threading
-
         from torrentlinker.repair import Repairs
 
         selected, entry = self.selected(), self.entry
@@ -313,11 +311,11 @@ class ReviewPanel(QWidget):
         indexer = self.indexer()
         repository = Repairs(self.store.torrent_dir.parent, self.store.client_id)
         self.open_repair(
-            lambda: repository.diagnose(
+            lambda stop: repository.diagnose(
                 entry.item,
                 selected.candidate,
                 indexer.fetch_torrent(selected.candidate),
-                threading.Event(),
+                stop,
             )
         )
 

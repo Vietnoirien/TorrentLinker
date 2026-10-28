@@ -109,6 +109,7 @@ class JobRequest(BaseModel):
     action: Literal["pause", "resume", "recheck", "remove", "delete"] = "pause"
     hashes: list[str] = Field(default_factory=list, max_length=1000)
     confirmation: str = ""
+    experimental: bool = False
     upload: UploadForm = Field(default_factory=UploadForm)
     model_files: list[str] = Field(default_factory=list, max_length=108)
     model_cameras: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=108)
@@ -648,7 +649,9 @@ class Operations:
                 request.path, candidate, indexer.fetch_torrent(candidate), stop
             )
         if request.kind == "prepare-repair":
-            return self.library.prepare_repair(request.repair_id, request.client_path, stop)
+            return self.library.prepare_repair(
+                request.repair_id, request.client_path, stop, experimental=request.experimental
+            )
         if request.kind == "refresh-repair":
             return self.library.refresh_repair(request.repair_id)
         if request.kind == "start-repair":

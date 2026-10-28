@@ -195,10 +195,18 @@ class Library:
         return self.client()
 
     def prepare_repair(
-        self, identifier: str, destination: str, stop: threading.Event, *, client=None
+        self,
+        identifier: str,
+        destination: str,
+        stop: threading.Event,
+        *,
+        client=None,
+        experimental: bool = False,
     ) -> dict:
         root = self.setup.path_under_root(destination)
-        return self.repairs().prepare(identifier, root, client or self.repair_client(), stop)
+        return self.repairs().prepare(
+            identifier, root, client or self.repair_client(), stop, experimental=experimental
+        )
 
     def refresh_repair(self, identifier: str, *, client=None) -> dict:
         return self.repairs().refresh(identifier, client or self.repair_client())
