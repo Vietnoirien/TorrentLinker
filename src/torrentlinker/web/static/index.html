@@ -617,8 +617,12 @@
             ><button id="remove-queue" data-i18n="removeSelected">
               Remove selected
             </button>
+            <button id="retry-queue" data-en="Retry selected" data-fr="Réessayer la sélection">Retry selected</button>
+            <button id="clear-sent-queue" data-en="Clear sent" data-fr="Retirer les envoyés">Clear sent</button>
           </div>
+          <p id="queue-summary" class="muted" role="status"></p>
           <div id="queue-table" class="table-wrap"></div>
+          <div id="queue-menu" class="queue-context-menu" role="menu" aria-label="Queue actions" hidden></div>
         </section>
         <section id="view-library" class="view" hidden>
           <div class="toolbar">

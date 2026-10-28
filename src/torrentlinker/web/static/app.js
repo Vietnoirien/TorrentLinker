@@ -15,6 +15,7 @@ const state = {
   selected: new Set(),
   searchSelected: new Set(),
   queueSelected: new Set(),
+  queueRows: [],
   planSelected: new Set(),
   jobs: new Map(),
   searchRows: [],
@@ -307,6 +308,7 @@ function table(target, rows, columns, selection, key = "hash", onChange, onRow) 
   const body = element("tbody");
   for (const row of rows) {
     const tr = element("tr");
+    tr.dataset.key = row[key];
     if (onRow) {
       tr.onclick = (e) => {
         if (!e.target.closest("button, input, a")) onRow(row);
@@ -1090,6 +1092,18 @@ async function loadQueue() {
   const snapshot = JSON.stringify([clientId, language, rows]);
   if (state.queueSnapshot === snapshot) return;
   state.queueSnapshot = snapshot;
+  state.queueRows = rows;
+  const keys = new Set(rows.map((r) => r.key));
+  for (const key of state.queueSelected) {
+    if (!keys.has(key)) state.queueSelected.delete(key);
+  }
+  closeQueueMenu();
+  const count = (status) => rows.filter((r) => r.status === status).length;
+  const attention = rows.filter((r) => ["failed", "refused", "uncertain"].includes(r.status)).length;
+  $("queue-summary").textContent = say(
+    `${rows.length} total · ${count("queued")} queued · ${count("sending")} sending · ${count("sent")} sent · ${attention} need attention`,
+    `${rows.length} au total · ${count("queued")} en attente · ${count("sending")} en cours d’envoi · ${count("sent")} envoyés · ${attention} à vérifier`,
+  );
   table(
     "queue-table",
     rows,
@@ -1105,8 +1119,77 @@ async function loadQueue() {
     ],
     state.queueSelected,
     "key",
+    queueControls,
   );
+  queueControls();
 }
+function queueControls() {
+  const rows = state.queueRows;
+  $("start-queue").disabled = !rows.some((r) => r.status === "queued");
+  $("remove-queue").disabled = !state.queueSelected.size;
+  $("retry-queue").disabled = !rows.some((r) => state.queueSelected.has(r.key)
+    && (r.status === "refused" || (r.status === "failed" && r.retry_safe)));
+  $("clear-sent-queue").disabled = !rows.some((r) => r.status === "sent");
+}
+function closeQueueMenu() {
+  $("queue-menu").hidden = true;
+}
+function openQueueMenu(event) {
+  const row = event.target.closest("tbody tr[data-key]");
+  if (!row) return;
+  event.preventDefault();
+  if (!state.queueSelected.has(row.dataset.key)) {
+    state.queueSelected.clear();
+    state.queueSelected.add(row.dataset.key);
+  }
+  $("queue-table").querySelectorAll("tbody tr").forEach((tr) => {
+    tr.querySelector("input").checked = state.queueSelected.has(tr.dataset.key);
+  });
+  const selectAll = $("queue-table").querySelector("thead input");
+  selectAll.checked = state.queueRows.every((r) => state.queueSelected.has(r.key));
+  queueControls();
+  const menu = $("queue-menu");
+  menu.replaceChildren();
+  for (const id of ["start-queue", "retry-queue", "remove-queue", "clear-sent-queue"]) {
+    const source = $(id);
+    const action = element("button", source.textContent.trim());
+    action.type = "button";
+    action.role = "menuitem";
+    action.disabled = source.disabled;
+    action.onclick = () => { closeQueueMenu(); source.click(); };
+    menu.append(action);
+  }
+  menu.hidden = false;
+  const bounds = row.getBoundingClientRect();
+  const x = event.type === "keydown" ? bounds.left : event.clientX;
+  const y = event.type === "keydown" ? bounds.bottom : event.clientY;
+  menu.style.left = `${Math.max(0, Math.min(x, innerWidth - menu.offsetWidth))}px`;
+  menu.style.top = `${Math.max(0, Math.min(y, innerHeight - menu.offsetHeight))}px`;
+  menu.querySelector("button:not(:disabled)")?.focus();
+}
+$("queue-table").addEventListener("contextmenu", openQueueMenu);
+$("queue-table").addEventListener("keydown", (event) => {
+  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) openQueueMenu(event);
+});
+$("queue-menu").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeQueueMenu();
+    $("queue-table").querySelector("tbody input:checked")?.focus();
+  }
+  if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    const buttons = [...$("queue-menu").querySelectorAll("button:not(:disabled)")];
+    const index = buttons.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  }
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!event.target.closest("#queue-menu")) closeQueueMenu();
+});
+window.addEventListener("resize", closeQueueMenu);
+document.addEventListener("scroll", closeQueueMenu, true);
 async function details(row, queueAction = null) {
   const content = $("dialog-content");
   const chip = (text, kind) => element("span", text, "dt-chip" + (kind ? " dt-" + kind : ""));
@@ -1467,12 +1550,19 @@ $("queue-plan").onclick = () => guard(async () => {
 });
 $("start-queue").onclick = () =>
   guard(() => job({ kind: "send-queue" }, loadQueue));
-$("remove-queue").onclick = () =>
-  guard(async () => {
-    await api("queue/remove", [...state.queueSelected]);
-    state.queueSelected.clear();
+async function editQueue(action, keys) {
+  try {
+    for (let offset = 0; offset < keys.length; offset += 1000) {
+      await api(`queue/${action}`, keys.slice(offset, offset + 1000));
+    }
+  } finally {
     await loadQueue();
-  });
+  }
+}
+$("retry-queue").onclick = () => guard(() => editQueue("retry", [...state.queueSelected]));
+$("clear-sent-queue").onclick = () => guard(() => editQueue("remove",
+  state.queueRows.filter((r) => r.status === "sent").map((r) => r.key)));
+$("remove-queue").onclick = () => guard(() => editQueue("remove", [...state.queueSelected]));
 $("scan").onclick = () => guard(() => job({ kind: "scan" }, loadLibrary));
 $("library-query").oninput = () => {
   state.libraryOffset = 0;

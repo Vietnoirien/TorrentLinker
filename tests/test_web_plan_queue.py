@@ -52,3 +52,39 @@ eval(process.argv[2]);
     subprocess.run(
         [node, "-e", script, handler, waiter], check=True, capture_output=True, text=True
     )
+
+
+def test_queue_actions_batch_the_entire_selection_and_refresh_after_failure():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for the web handler test")
+    source = Path("src/torrentlinker/web/static/app.js").read_text()
+    handler = (
+        "async function editQueue"
+        + source.split("async function editQueue", 1)[1].split('\n$("retry-queue")', 1)[0]
+    )
+    script = r"""
+const assert = require('node:assert/strict');
+const keys = Array.from({length: 2001}, (_, i) => String(i));
+const calls = [];
+let refreshed = 0, fail = false;
+const api = async (path, batch) => {
+  assert(batch.length <= 1000);
+  calls.push([path, batch]);
+  if (fail) throw Error('busy');
+};
+const loadQueue = async () => { refreshed++; };
+eval(process.argv[1]);
+(async () => {
+  await editQueue('remove', keys);
+  assert.deepEqual(calls.map(c => c[1].length), [1000, 1000, 1]);
+  assert.deepEqual(calls.flatMap(c => c[1]), keys);
+  assert(calls.every(c => c[0] === 'queue/remove'));
+  assert.equal(refreshed, 1);
+  fail = true;
+  await assert.rejects(editQueue('retry', keys), /busy/);
+  assert.equal(calls.at(-1)[0], 'queue/retry');
+  assert.equal(refreshed, 2);
+})().catch(error => { console.error(error); process.exitCode=1; });
+"""
+    subprocess.run([node, "-e", script, handler], check=True, capture_output=True, text=True)

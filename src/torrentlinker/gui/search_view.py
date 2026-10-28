@@ -14,6 +14,7 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     QPersistentModelIndex,
+    QPoint,
     QRect,
     QSettings,
     QStandardPaths,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QScrollArea,
     QTableWidget,
@@ -307,7 +309,7 @@ class SearchTab(QWidget):
         self.result_status = QLabel()
         self.result_status.setWordWrap(True)
         self.result_status.setTextFormat(Qt.TextFormat.PlainText)
-        body_layout.addWidget(self.result_status)
+        results_layout.addWidget(self.result_status)
         self.selection_bar = QFrame()
         self.selection_bar.setObjectName("selectionBar")
         selection = QHBoxLayout(self.selection_bar)
@@ -378,6 +380,11 @@ class SearchTab(QWidget):
                 self.tr("Client"),
             ]
         )
+        self.queue.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.queue.customContextMenuRequested.connect(self._queue_context_menu)
+        self.queue_summary = QLabel()
+        self.queue_summary.setWordWrap(True)
+        queue_layout.addWidget(self.queue_summary)
         self.queue_empty = EmptyState(
             self.queue, self.tr("Your queue is empty. Add torrents from the search results.")
         )
@@ -1222,12 +1229,21 @@ class SearchTab(QWidget):
 
     def _add_candidates(self, chosen: list[Candidate]) -> None:
         indexer = self._result_indexer
-        if indexer is None or self.runner:
+        if indexer is None or self.runner or not chosen:
             return
         destinations = []
         for c in chosen:
             folder = self._download_folder(c)
-            if folder is None or not folder.is_dir():
+            if folder is None:
+                self.result_status.setText(
+                    self.tr(
+                        "No Download Folder for {0}. Choose a folder below "
+                        "or configure category folders in Settings."
+                    ).format(self._category_label(c) or c.title)
+                )
+                self.folder.setFocus()
+                return
+            if not folder.is_dir():
                 self.result_status.setText(
                     self.tr(
                         "Choose an accessible Download Folder, "
@@ -1240,12 +1256,14 @@ class SearchTab(QWidget):
                 return
             destinations.append((c, folder.resolve()))
         added = sum(enqueue(self.store, indexer, c, folder) for c, folder in destinations)
-        self.result_status.setText(
-            self.tr("{0} added to the queue; {1} already listed.").format(
-                added, len(chosen) - added
-            )
+        message = self.tr("{0} added to the queue; {1} already listed.").format(
+            added, len(chosen) - added
         )
+        self.result_status.setText(message)
+        self.queue_notice.setText(message)
+        self.queue_status.setText(message)
         self.refresh_queue()
+        self.show_queue()
 
     def selected_keys(self) -> list[str]:
         return [
@@ -1299,10 +1317,43 @@ class SearchTab(QWidget):
                 cell.setToolTip(cell.text())
         self._refresh_queue_estimates()
         self.queue.blockSignals(False)
-        count = sum(e.status == "queued" for e in rows)
+        count = len(rows)
+        self.queue_summary.setText(
+            self.tr("{0} queued · {1} sending · {2} sent · {3} need attention").format(
+                sum(e.status == "queued" for e in rows),
+                sum(e.status == "sending" for e in rows),
+                sum(e.status == "sent" for e in rows),
+                sum(e.status in {"failed", "refused", "uncertain"} for e in rows),
+            )
+        )
         self.pages.setTabText(1, self.tr("Download queue ({0})").format(count))
         self.view_queue.setText(self.tr("Download queue ({0})").format(count))
         self._buttons()
+
+    def _queue_context_menu(self, position: QPoint) -> None:
+        item = self.queue.itemAt(position)
+        if item is not None and not item.isSelected():
+            self.queue.selectRow(item.row())
+        elif item is None:
+            self.queue.clearSelection()
+        menu = QMenu(self)
+        start = menu.addAction(self.tr("Start selected"))
+        selected = set(self.selected_keys())
+        start.setEnabled(
+            self.runner is None
+            and any(e.key in selected and e.status == "queued" for e in entries(self.store))
+        )
+        start.triggered.connect(lambda: self.start_queue(only=set(self.selected_keys())))
+        for button in (self.pause, self.retry, self.remove, self.clear_done):
+            action = menu.addAction(button.text())
+            action.setEnabled(button.isEnabled())
+            action.triggered.connect(button.click)
+        menu.addSeparator()
+        manage = menu.addAction(self.manage_button.text())
+        manage.setEnabled(bool(selected))
+        manage.triggered.connect(self._open_in_torrents)
+        menu.exec(self.queue.viewport().mapToGlobal(position))
+        menu.deleteLater()
 
     def _open_in_torrents(self) -> None:
         selected = self.queue.selectionModel().selectedRows()
@@ -1433,7 +1484,15 @@ class SearchTab(QWidget):
         )
         self.start.setEnabled(not busy and any(e.status == "queued" for e in entries(self.store)))
         self.pause.setEnabled(busy)
-        selected = bool(self.queue.selectionModel().selectedRows())
-        self.retry.setEnabled(not busy and selected)
-        self.remove.setEnabled(not busy and selected)
-        self.clear_done.setEnabled(not busy)
+        selected = set(self.selected_keys())
+        rows = entries(self.store)
+        self.retry.setEnabled(
+            not busy
+            and any(
+                e.key in selected
+                and (e.status == "refused" or (e.status == "failed" and e.retry_safe))
+                for e in rows
+            )
+        )
+        self.remove.setEnabled(not busy and bool(selected))
+        self.clear_done.setEnabled(not busy and any(e.status == "sent" for e in rows))

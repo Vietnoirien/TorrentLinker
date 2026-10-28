@@ -38,7 +38,7 @@ The page follows c411's torrents page, with TorrentLinker's own colors and extra
 
 ### Adding to the queue
 
-Select rows (the selection bar appears at the bottom) and click **Add selected to queue**. Choose a Download Folder in the bar or leave it blank to use the category folders from Settings. **Open in tabs** and **Open on website** work on the selection. A row's own download button queues just that torrent. In the web page, queueing keeps you on Search and the row shows **Queued**.
+Select rows (the selection bar appears at the bottom) and click **Add selected to queue**. Choose a Download Folder in the bar or leave it blank to use the category folders from Settings. **Open in tabs** and **Open on website** work on the selection. After adding on desktop, the queue opens with the number added and already listed. Folder errors stay visible beside the selection controls. A row's own download button queues just that torrent. In the web page, queueing keeps you on Search and the row shows **Queued**.
 
 ### Category filters
 
@@ -69,6 +69,8 @@ Torrent tabs stay open while you run other searches. Opening the same torrent sw
 Open the **Open tabs** menu at the right of the tab bar for **Queue all tabs**, which adds the open torrent tabs and opens the queue without starting downloads, and **Download all tabs**, which queues and starts that set in one click, leaving unrelated queued torrents waiting. The **Download queue** button above the tabs stays accessible while browsing torrent details. Each tab keeps its own Download Folder. All destinations are checked before queuing the batch; if one needs attention, that tab opens and an error appears above the tabs. Torrent tabs last for the current app session; the download queue persists across restarts.
 
 Open **Download queue** and click **Start queue** to send the selected torrents to your torrent client in order. The queue respects the Indexer's download limits and waits when asked. **Pause** stops further sends after the current request; downloads already started continue in the torrent client. Queue entries and outcomes survive restarts, and the queue waits for Start after reopening. Failed entries can be retried; sent entries can be cleared without removing torrents from the client. Existing client torrents and files at the destination are protected against duplicate downloads or overwrites.
+
+The **Download queue** count includes every row, including sent entries. The summary separates queued, sending, sent and entries needing attention. Right-click a queue row for actions, or use the buttons below the desktop table and above the WebUI table. **Retry selected** puts safe failures and skipped entries back in the waiting queue; press **Start queue** to send them. Uncertain sends must be checked in the Torrent Client first. **Remove selected** and **Clear sent** only remove queue records, leaving client torrents and files untouched.
 
 ### Unavailable torrents
 

@@ -672,7 +672,7 @@ function pickCategory(id) {
 async function refreshQueueCount() {
   try {
     const rows = await api("queue");
-    const queued = rows.filter((r) => ["queued", "sending"].includes(r.status)).length;
+    const queued = rows.length;
     $("search-queue-link").textContent = say(`Download queue (${queued})`, `File de téléchargement (${queued})`);
   } catch {
     /* The count is a convenience. */

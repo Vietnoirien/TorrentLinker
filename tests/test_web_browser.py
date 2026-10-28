@@ -136,6 +136,26 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             writer.download_outcome(entries(writer)[0].key, "sent")
             expect(page.locator("#queue-table")).to_contain_text("sent", timeout=6000)
             expect(checkbox).to_be_checked()
+            expect(page.locator("#queue-summary")).to_contain_text(
+                "1 total · 0 queued · 0 sending · 1 sent"
+            )
+            expect(page.locator("#start-queue")).to_be_disabled()
+            page.locator("#queue-table tbody tr").click(button="right")
+            expect(page.locator("#queue-menu")).to_be_visible()
+            expect(
+                page.locator("#queue-menu").get_by_role("menuitem", name="Retry selected")
+            ).to_be_disabled()
+            if screenshot:
+                page.screenshot(path=str(Path(screenshot) / "queue-web-context-menu.png"))
+            page.keyboard.press("Escape")
+            expect(page.locator("#queue-menu")).to_be_hidden()
+            checkbox.focus()
+            page.keyboard.press("Shift+F10")
+            expect(page.locator("#queue-menu")).to_be_visible()
+            page.locator("#queue-menu").get_by_role("menuitem", name="Remove selected").click()
+            expect(page.locator("#queue-summary")).to_contain_text("0 total")
+            expect(page.locator("#remove-queue")).to_be_disabled()
+            assert entries(writer) == []
             page.locator("[data-view=torrents]").click()
             if screenshot:
                 for lang in ("fr", "en"):

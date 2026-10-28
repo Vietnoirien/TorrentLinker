@@ -4629,6 +4629,18 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Comm.</source>
         <translation>Comm.</translation>
     </message>
+    <message>
+        <source>Start selected</source>
+        <translation>Démarrer la sélection</translation>
+    </message>
+    <message>
+        <source>{0} queued · {1} sending · {2} sent · {3} need attention</source>
+        <translation>{0} en attente · {1} en cours d’envoi · {2} envoyés · {3} à vérifier</translation>
+    </message>
+    <message>
+        <source>No Download Folder for {0}. Choose a folder below or configure category folders in Settings.</source>
+        <translation>Aucun dossier de téléchargement pour {0}. Choisissez un dossier ci-dessous ou configurez les dossiers par catégorie dans les Paramètres.</translation>
+    </message>
 </context>
 <context>
     <name>SeedingTree</name>

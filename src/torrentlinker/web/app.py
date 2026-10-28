@@ -536,6 +536,20 @@ def create_app(
             ]
         return for_client(client_id).queue()
 
+    @app.post("/api/queue/retry")
+    def retry_queue(keys: list[str]) -> dict:
+        from torrentlinker.download_queue import entries
+
+        with jobs.lock:
+            idle()
+            selected = set(keys[:1000])
+            for entry in entries(service.store, all_clients=True):
+                if entry.key in selected and (
+                    entry.status == "refused" or (entry.status == "failed" and entry.retry_safe)
+                ):
+                    service.store.download_outcome(entry.key, "queued")
+        return {"ok": True}
+
     @app.post("/api/queue/remove")
     def remove_queue(keys: list[str]) -> dict:
         with jobs.lock:
