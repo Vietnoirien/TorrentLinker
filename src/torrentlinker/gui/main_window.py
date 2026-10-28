@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -578,11 +579,14 @@ class MainWindow(QMainWindow):
         return self.agent_runtime.app.state.assistant
 
     def open_agent_access(self) -> None:
+        self.open_settings(agents=True)
+
+    def agent_access_widget(self, parent=None):
         try:
             from PySide6.QtWidgets import QApplication
 
             from torrentlinker.agent.desktop import DesktopServer
-            from torrentlinker.gui.agent_access import AgentDialog
+            from torrentlinker.gui.agent_access import AgentAccess
 
             if self.agent_runtime is None:
                 self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
@@ -590,7 +594,10 @@ class MainWindow(QMainWindow):
                 if app is not None:
                     app.aboutToQuit.connect(self.agent_runtime.close)
             self.agent_runtime.start()
-            AgentDialog(self.agent_runtime.service, self.agent_runtime.url, self).exec()
+            stack = getattr(self, "_settings_stack", None)
+            if stack is not None and not self.agent_runtime.settings_edit_depth:
+                stack.enter_context(self.agent_runtime.editing_settings())
+            return AgentAccess(self.agent_runtime.service, self.agent_runtime.url, parent)
         except Exception as error:
             from torrentlinker.torrent_management import safe_error
 
@@ -2019,7 +2026,15 @@ class MainWindow(QMainWindow):
         self.open_settings(assistant=True)
 
     @agent_settings_change
-    def open_settings(self, *, assistant: bool = False) -> None:
+    def open_settings(self, *, assistant: bool = False, agents: bool = False) -> None:
+        with ExitStack() as stack:
+            self._settings_stack: ExitStack | None = stack
+            try:
+                self._edit_settings(assistant=assistant, agents=agents)
+            finally:
+                self._settings_stack = None
+
+    def _edit_settings(self, *, assistant: bool, agents: bool) -> None:
         if self.agent_runtime and self.agent_runtime.busy():
             self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
             return
@@ -2027,7 +2042,15 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if assistant:
             dialog.show_assistant_connections()
+        if agents:
+            dialog.show_agent_access()
         accepted = dialog.exec()
+        for identifier in dialog.agent_approvals:
+            # Run only after the settings transaction has released its suspension.
+            # execute() still checks the reviewed proposal's settings fingerprint.
+            QTimer.singleShot(
+                0, lambda identifier=identifier: self._execute_agent_approval(identifier)
+            )
         # Model connections apply at once, even when the dialog is cancelled.
         for chat in (self.assistant_tab, self.media_tab.assistant):
             if chat is not None and chat.service:
@@ -2063,6 +2086,16 @@ class MainWindow(QMainWindow):
                     self.scan()  # a new folder, depth or Content Kind changes every entry
         else:
             log.info("settings dialog cancelled")
+
+    def _execute_agent_approval(self, identifier: str) -> None:
+        if self.agent_runtime is None:
+            return
+        service = self.agent_runtime.service
+        run_in_background(
+            lambda: service.execute(identifier, approved=True),
+            lambda _: self.statusBar().showMessage(self.tr("Approved proposal started."), 5000),
+            lambda error: QMessageBox.warning(self, self.tr("Agent access"), str(error)),
+        )
 
     def _fill_folder_filter(self) -> None:
         current = self.folder_filter.currentData()

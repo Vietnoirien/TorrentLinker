@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -33,12 +35,12 @@ from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.tasks import run_in_background
 
 
-class AgentDialog(QDialog):
+class AgentAccess(QWidget):
+    approval_requested = Signal(str)
+
     def __init__(self, service, endpoint: str, parent=None):
         super().__init__(parent)
         self.service = service
-        self.setWindowTitle(self.tr("Agent access (MCP)"))
-        self.resize(920, 680)
         layout = QVBoxLayout(self)
         self.enabled = QCheckBox(self.tr("Enable agent access"))
         self.enabled.setChecked(service.access.enabled)
@@ -55,8 +57,30 @@ class AgentDialog(QDialog):
         )
         help_text.setWordWrap(True)
         layout.addWidget(help_text)
-        tabs = QTabWidget()
+        tabs = self.tabs = QTabWidget()
         layout.addWidget(tabs, 1)
+        connections = QWidget()
+        connection_layout = QVBoxLayout(connections)
+        self.connections = QListWidget()
+        self.connections.setAccessibleName(self.tr("Connections"))
+        self.connection_details = QPlainTextEdit()
+        self.connection_details.setReadOnly(True)
+        self.connection_details.setAccessibleName(self.tr("Connection details"))
+        connection_split = QSplitter()
+        connection_split.addWidget(self.connections)
+        connection_split.addWidget(self.connection_details)
+        connection_split.setStretchFactor(1, 2)
+        connection_layout.addWidget(connection_split, 1)
+        self.connection_empty = QLabel(
+            self.tr("No connections yet. Choose New connection to create one.")
+        )
+        self.connection_empty.setWordWrap(True)
+        connection_layout.addWidget(self.connection_empty)
+        self.revoke = QPushButton(self.tr("Revoke connection"))
+        self.revoke.clicked.connect(self.revoke_selected)
+        connection_layout.addWidget(self.revoke, 0, Qt.AlignmentFlag.AlignRight)
+        tabs.addTab(connections, self.tr("Connections"))
+        self.connections.currentRowChanged.connect(self.connection_selected)
         create = QWidget()
         form = QFormLayout(create)
         self.name = QLineEdit()
@@ -125,11 +149,10 @@ class AgentDialog(QDialog):
         self.approve = QPushButton(self.tr("Approve proposal"))
         set_role(self.approve, "primary")
         self.reject_button = QPushButton(self.tr("Reject proposal"))
-        self.revoke = QPushButton(self.tr("Revoke connection"))
         self.cancel_job = QPushButton(self.tr("Cancel job"))
         refresh = QPushButton(self.tr("Refresh"))
         set_role(refresh, "quiet")
-        for b in (self.approve, self.reject_button, self.revoke, self.cancel_job, refresh):
+        for b in (self.approve, self.reject_button, self.cancel_job, refresh):
             actions.addWidget(b)
         review.addLayout(actions)
         self.release_storage = QPushButton(self.tr("Release uncertain storage reservation"))
@@ -139,18 +162,31 @@ class AgentDialog(QDialog):
         self.items.currentRowChanged.connect(self.selected)
         self.approve.clicked.connect(self.approve_selected)
         self.reject_button.clicked.connect(self.reject_selected)
-        self.revoke.clicked.connect(self.revoke_selected)
         self.cancel_job.clicked.connect(self.cancel_selected)
         refresh.clicked.connect(self.refresh)
+        self.status = QLabel(
+            self.tr(
+                "Connection changes apply immediately. "
+                "Approved proposals run after Settings closes."
+            )
+        )
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+        self.connection_records: list[dict[str, Any]] = []
         self.records: list[tuple[str, dict[str, Any]]] = []
         self.refresh()
         self.timer = QTimer(self)
         self.timer.setInterval(3000)
         self.timer.timeout.connect(self.refresh)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh()
         self.timer.start()
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+
+    def hideEvent(self, event):
+        self.timer.stop()
+        super().hideEvent(event)
 
     def enable(self, enabled):
         self.service.enable(enabled)
@@ -196,12 +232,30 @@ class AgentDialog(QDialog):
         set_role(copy, "quiet")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(token.text()))
         box.addWidget(copy)
+        save_token = QPushButton(self.tr("Save token to file…"))
+        save_token.clicked.connect(lambda: self.save_token(token.text()))
+        box.addWidget(save_token)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         box.addWidget(buttons)
         dialog.exec()
         token.clear()
         self.refresh()
+
+    def save_token(self, token: str) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, self.tr("Save token to file…"), "torrentlinker-token.txt"
+        )
+        if not path:
+            return
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+                if os.name != "nt":
+                    os.fchmod(target.fileno(), 0o600)
+                target.write(token + "\n")
+        except OSError as error:
+            self.error(error)
 
     def refresh(self):
         selection = (
@@ -215,8 +269,28 @@ class AgentDialog(QDialog):
             state = self.service.access.snapshot()
         finally:
             self.service.access.lock.release()
-        self.records = [("connection", r) for r in state["connections"]]
-        self.records += [("proposal", r) for r in state["proposals"]]
+        selected_connection = self.connections.currentItem()
+        identifier = (
+            selected_connection.data(Qt.ItemDataRole.UserRole) if selected_connection else None
+        )
+        self.connection_records = [
+            r for r in state["connections"] if not r["id"].startswith("assistant-")
+        ]
+        self.connections.blockSignals(True)
+        self.connections.clear()
+        for record in self.connection_records:
+            status = self.tr("Revoked") if record["revoked"] else self.tr("Active")
+            self.connections.addItem(f"{record['name']} · {status}")
+            item = self.connections.item(self.connections.count() - 1)
+            item.setData(Qt.ItemDataRole.UserRole, record["id"])
+            if record["id"] == identifier:
+                self.connections.setCurrentItem(item)
+        if self.connections.currentRow() < 0 and self.connection_records:
+            self.connections.setCurrentRow(0)
+        self.connections.blockSignals(False)
+        self.connection_empty.setVisible(not self.connection_records)
+        self.connection_selected()
+        self.records = [("proposal", r) for r in state["proposals"]]
         self.records += [("goal", r) for r in state["goals"]]
         self.records += [("activity", r) for r in state["activity"]]
         self.items.blockSignals(True)
@@ -242,7 +316,6 @@ class AgentDialog(QDialog):
         self.details.setPlainText(json.dumps(record, indent=2, ensure_ascii=False, default=str))
         self.approve.setEnabled(kind == "proposal" and record["status"] == "pending")
         self.reject_button.setEnabled(self.approve.isEnabled())
-        self.revoke.setEnabled(kind == "connection" and not record["revoked"])
         self.cancel_job.setEnabled(kind == "proposal" and bool(record.get("job_id")))
         self.release_storage.setEnabled(
             kind == "proposal" and record["body"]["kind"] == "send-queue"
@@ -340,6 +413,12 @@ class AgentDialog(QDialog):
                     != QMessageBox.StandardButton.Yes
                 ):
                     return
+            if self.service.suspended:
+                self.approval_requested.emit(record["id"])
+                self.status.setText(
+                    self.tr("Approval queued. Close Settings to run the approved proposal.")
+                )
+                return
             run_in_background(
                 lambda: self.service.execute(record["id"], approved=True),
                 lambda _: self.refresh(),
@@ -354,10 +433,52 @@ class AgentDialog(QDialog):
             self.service.reject(record["id"])
         self.refresh()
 
+    def connection_selected(self, _index=-1):
+        index = self.connections.currentRow()
+        record = (
+            self.connection_records[index] if 0 <= index < len(self.connection_records) else None
+        )
+        self.revoke.setEnabled(bool(record and not record["revoked"]))
+        if not record:
+            self.connection_details.clear()
+            return
+        names = {p.id: p.name for p in self.service.setup.settings.client_profiles}
+        mode = (
+            self.tr("Proposals only")
+            if record["mode"] == "propose"
+            else self.tr("Execute permitted actions")
+        )
+        permissions = dict((key, check.text()) for key, check in self.permissions)
+        self.connection_details.setPlainText(
+            "\n".join(
+                [
+                    record["name"],
+                    self.tr("Revoked") if record["revoked"] else self.tr("Active"),
+                    mode,
+                    self.tr("Torrent Clients: {0}").format(
+                        ", ".join(names.get(i, i) for i in record["clients"])
+                    ),
+                    self.tr("Permissions: {0}").format(
+                        ", ".join(permissions.get(p, p) for p in record["permissions"])
+                        or self.tr("Proposals only")
+                    ),
+                    self.tr("Daily download budget (GiB)")
+                    + f": {record['daily_bytes'] / 1024**3:g}",
+                    self.tr("Torrents per day") + f": {record['daily_torrents']}",
+                    self.tr("Keep free (GiB)") + f": {record['reserve_bytes'] / 1024**3:g}",
+                    "",
+                    self.tr(
+                        "Tokens are shown only when created. "
+                        "Revoke a lost token and create a new connection."
+                    ),
+                ]
+            )
+        )
+
     def revoke_selected(self):
-        kind, record = self.current()
-        if kind == "connection":
-            self.service.revoke(record["id"])
+        index = self.connections.currentRow()
+        if 0 <= index < len(self.connection_records):
+            self.service.revoke(self.connection_records[index]["id"])
         self.refresh()
 
     def cancel_selected(self):

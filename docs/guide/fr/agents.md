@@ -4,11 +4,13 @@ Connectez un assistant compatible MCP à TorrentLinker pour consulter vos torren
 
 ## Connecter un assistant
 
-1. Sur le bureau, ouvrez **Paramètres → Accès des agents (MCP) → Ouvrir l'accès des agents**. Sur le web, ouvrez **Paramètres → Accès des agents**.
-2. Activez l'accès, nommez la connexion et sélectionnez les clients torrent autorisés.
+1. Sur le bureau, ouvrez **Paramètres → Accès des agents**. Sur le web, ouvrez **Paramètres → Accès des agents**.
+2. Activez l'accès, choisissez **Nouvelle connexion**, nommez la connexion et sélectionnez les clients torrent autorisés.
 3. Gardez **Propositions uniquement** pour commencer. Réglez le budget quotidien, le nombre de torrents et l'espace disque à préserver.
 4. Créez la connexion et copiez son jeton. Il n'est affiché qu'une fois. Enregistrez-le dans les secrets de votre assistant, jamais dans une discussion partagée ou un dépôt.
 5. Configurez l'assistant avec l'adresse affichée et l'en-tête `Authorization: Bearer VOTRE_JETON`. Laissez TorrentLinker ouvert.
+
+Sur le bureau, **Connexions** affiche les connexions MCP existantes, leur état, leurs clients, autorisations et limites. Sélectionnez une connexion pour la consulter ou la révoquer. **Nouvelle connexion** crée un jeton ; **Enregistrer le jeton dans un fichier…** permet de le conserver dans un fichier privé. Les changements de connexion sont immédiats. Les propositions approuvées dans les paramètres démarrent après leur fermeture ; des paramètres modifiés peuvent invalider une proposition.
 
 Sur le bureau, l'adresse est `http://127.0.0.1:8790/mcp/`. Sur le web, utilisez `/mcp/` à l'adresse du serveur. Une connexion distante nécessite HTTPS. Le jeton MCP est distinct de la session de connexion au site web.
 

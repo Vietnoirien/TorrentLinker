@@ -132,6 +132,8 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
     monkeypatch.setattr(QMessageBox, "information", lambda *args: messages.append(args[1]))
 
     class Dialog:
+        agent_approvals = ()
+
         def __init__(self, settings, parent):
             opened.append(True)
 
@@ -164,6 +166,8 @@ def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, mon
     window, calls, secret = setup_window(qtbot, tmp_path, monkeypatch, saved=False, key="  ")
 
     class Dialog:
+        agent_approvals = ()
+
         def __init__(self, settings, parent):
             pass
 

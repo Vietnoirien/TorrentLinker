@@ -2,7 +2,7 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="fr_FR">
 <context>
-    <name>AgentDialog</name>
+    <name>AgentAccess</name>
     <message>
         <location filename="../gui/agent_access.py" line="39"/>
         <source>Agent access (MCP)</source>
@@ -171,6 +171,50 @@
         <location filename="../gui/agent_access.py" line="82" />
         <source>Media playback, queues and playlists</source>
         <translation>Lecture multimédia, files de lecture et playlists</translation>
+    </message>
+    <message>
+        <source>Connections</source>
+        <translation>Connexions</translation>
+    </message>
+    <message>
+        <source>Connection details</source>
+        <translation>Détails de la connexion</translation>
+    </message>
+    <message>
+        <source>No connections yet. Choose New connection to create one.</source>
+        <translation>Aucune connexion. Choisissez Nouvelle connexion pour en créer une.</translation>
+    </message>
+    <message>
+        <source>Connection changes apply immediately. Approved proposals run after Settings closes.</source>
+        <translation>Les changements de connexion sont immédiats. Les propositions approuvées démarrent après la fermeture des paramètres.</translation>
+    </message>
+    <message>
+        <source>Save token to file…</source>
+        <translation>Enregistrer le jeton dans un fichier…</translation>
+    </message>
+    <message>
+        <source>Revoked</source>
+        <translation>Révoquée</translation>
+    </message>
+    <message>
+        <source>Active</source>
+        <translation>Active</translation>
+    </message>
+    <message>
+        <source>Approval queued. Close Settings to run the approved proposal.</source>
+        <translation>Approbation en attente. Fermez les paramètres pour lancer la proposition approuvée.</translation>
+    </message>
+    <message>
+        <source>Torrent Clients: {0}</source>
+        <translation>Clients torrent : {0}</translation>
+    </message>
+    <message>
+        <source>Permissions: {0}</source>
+        <translation>Autorisations : {0}</translation>
+    </message>
+    <message>
+        <source>Tokens are shown only when created. Revoke a lost token and create a new connection.</source>
+        <translation>Les jetons ne sont affichés qu’à leur création. Révoquez un jeton perdu et créez une nouvelle connexion.</translation>
     </message>
 </context>
 <context>
@@ -2913,6 +2957,10 @@ La mettre à la corbeille ?</translation>
         <source>Play videos and music from your Library Folders.</source>
         <translation>Lisez les vidéos et la musique de vos Dossiers de bibliothèque.</translation>
     </message>
+    <message>
+        <source>Approved proposal started.</source>
+        <translation>La proposition approuvée a démarré.</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -5522,6 +5570,10 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
     <message>
         <source>Assistant</source>
         <translation>Assistant</translation>
+    </message>
+    <message>
+        <source>Retry Agent access</source>
+        <translation>Réessayer l’accès des agents</translation>
     </message>
 </context>
 <context>

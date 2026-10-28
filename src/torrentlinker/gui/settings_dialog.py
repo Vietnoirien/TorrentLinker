@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from keyring.errors import KeyringError
-from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -140,25 +140,20 @@ class SettingsDialog(QDialog):
             self.tabs.addTab(
                 self._page(self.assistant_connections, fill=True), self.tr("Assistant")
             )
-        if parent is not None and hasattr(parent, "open_agent_access"):
-            agent_page = QWidget()
-            agent_layout = QVBoxLayout(agent_page)
-            info = QLabel(
-                self.tr("Connect an assistant, review its proposals and manage its permissions.")
-            )
-            info.setWordWrap(True)
-            agent_layout.addWidget(info)
-            open_agents = QPushButton(self.tr("Open agent access (MCP)"))
-            set_role(open_agents, "quiet")
-
-            def agent_access():
-                self.reject()
-                QTimer.singleShot(0, parent.open_agent_access)
-
-            open_agents.clicked.connect(agent_access)
-            agent_layout.addWidget(open_agents)
-            agent_layout.addStretch()
-            self.tabs.addTab(agent_page, self.tr("Agent access"))
+        self.agent_approvals: list[str] = []
+        self.agent_access = None
+        self.agent_page = None
+        if parent is not None and hasattr(parent, "agent_access_widget"):
+            self._agent_access_factory = parent.agent_access_widget
+            self.agent_page = QWidget()
+            self.agent_layout = QVBoxLayout(self.agent_page)
+            self.agent_layout.setContentsMargins(0, 0, 0, 0)
+            self.agent_retry = QPushButton(self.tr("Retry Agent access"))
+            self.agent_retry.clicked.connect(self._load_agent_access)
+            self.agent_layout.addWidget(self.agent_retry)
+            self.agent_retry.hide()
+            self.tabs.addTab(self.agent_page, self.tr("Agent access"))
+            self.tabs.currentChanged.connect(self._load_agent_access)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -185,6 +180,27 @@ class SettingsDialog(QDialog):
         outer.addWidget(buttons)
         for table in self.findChildren(QTableWidget):
             style_table(table)
+
+    def _load_agent_access(self, _index=None) -> None:
+        if (
+            self.agent_page is None
+            or self.tabs.currentWidget() is not self.agent_page
+            or self.agent_access is not None
+        ):
+            return
+        self.agent_access = self._agent_access_factory(self.agent_page)
+        self.agent_retry.setVisible(self.agent_access is None)
+        if self.agent_access is not None:
+            self.agent_layout.addWidget(self.agent_access)
+            self.agent_access.approval_requested.connect(self._queue_agent_approval)
+
+    def _queue_agent_approval(self, identifier: str) -> None:
+        if identifier not in self.agent_approvals:
+            self.agent_approvals.append(identifier)
+
+    def show_agent_access(self) -> None:
+        if self.agent_page is not None:
+            self.tabs.setCurrentWidget(self.agent_page)
 
     def show_assistant_connections(self) -> None:
         connections = getattr(self, "assistant_connections", None)

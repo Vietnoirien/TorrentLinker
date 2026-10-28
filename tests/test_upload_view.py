@@ -288,7 +288,8 @@ def test_draft_keeps_the_image_with_a_custom_description(  # type: ignore[no-unt
 ) -> None:
     from PySide6.QtWidgets import QMessageBox
 
-    monkeypatch.setattr(QMessageBox, "information", lambda *a: None)
+    shown = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: shown.append(a[2]))
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
     monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
     view, indexer, _ = tab(qtbot, tmp_path)
@@ -310,7 +311,7 @@ def test_draft_keeps_the_image_with_a_custom_description(  # type: ignore[no-unt
     view.local_drafts.pages.setCurrentIndex(4)
     view.local_drafts.reviewed.setChecked(True)
     view.local_drafts.send_button.click()
-    qtbot.waitUntil(lambda: bool(indexer.saved), timeout=5000)
+    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
     description = indexer.saved[0]["description"]
     assert f"[img]{url}[/img]" in description
     assert "[center][b]My desk vise[/b][/center]" in description
@@ -361,6 +362,8 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
     monkeypatch.setattr(window, "_has_indexer_key", lambda: True)
 
     class Dialog:
+        agent_approvals = ()
+
         def __init__(self, settings: Settings, parent: object) -> None:
             self.settings = settings
 

@@ -4,11 +4,13 @@ Connect an MCP-compatible assistant to TorrentLinker to inspect torrents, search
 
 ## Connect an assistant
 
-1. On desktop, open **Settings → Agent access (MCP) → Open agent access**. In the Web UI, open **Settings → Agent access**.
-2. Enable access, name the connection and select the Torrent Clients it may use.
+1. On desktop, open **Settings → Agent access**. In the Web UI, open **Settings → Agent access**.
+2. Enable access, choose **New connection**, name it and select the Torrent Clients it may use.
 3. Leave **Proposals only** selected for the first connection. Set the daily download budget, torrent count and free-space reserve.
 4. Create the connection and copy its token. It is shown once. Store it in your assistant's secret settings, not a shared chat or repository.
 5. Configure the assistant with the endpoint shown in TorrentLinker and an `Authorization: Bearer YOUR_TOKEN` header. Keep TorrentLinker running.
+
+On desktop, **Connections** lists existing MCP connections with their status, clients, permissions and limits. Select a connection to inspect or revoke it. **New connection** creates a token; **Save token to file…** saves it privately for a local MCP host. Connection changes apply immediately. Proposals approved while Settings is open run after it closes, and changed settings can invalidate a proposal.
 
 The desktop endpoint is `http://127.0.0.1:8790/mcp/`. For the Web UI, use `/mcp/` on its server address. A remote connection needs HTTPS. MCP uses its own token, not the Web UI's login cookie.
 
