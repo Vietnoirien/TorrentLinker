@@ -169,6 +169,7 @@ def unpack_and_reseed(
     progress: Callable[[int, int], None] = lambda done, total: None,
     *,
     approve_disk_renames: RenameApproval | None = None,
+    before_reseed: Callable[[], None] = lambda: None,
 ) -> tuple[str, LocalItem]:
     """Unpack the archive into its new folder, then Reseed the torrent against it.
 
@@ -181,6 +182,7 @@ def unpack_and_reseed(
     found = match(local, checked.meta.files, rules)
     if found is None:
         raise ArchiveError("the unpacked files do not match the torrent")
+    before_reseed()
     key = candidate_key(checked.candidate)
     h = start_reseed(
         qbit,

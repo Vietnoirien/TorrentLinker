@@ -145,14 +145,15 @@ function showLibraryCandidate(candidate) {
   const checkButton=button(say("Check Candidate","Vérifier le candidat"),()=>candidateAction("check-candidate"));
   checkButton.disabled=candidate.match!=="unchecked";
   actions.append(checkButton,button(say("Reject Candidate","Rejeter le candidat"),()=>candidateAction("library-reject")));
-  const reseed=button(say("Verify & reseed","Vérifier et seeder"),async()=>{
+  const reseed=button(candidate.archive?say("Unpack and reseed…","Extraire et seeder…"):say("Verify & reseed","Vérifier et seeder"),async()=>{
+    if(candidate.archive) {await previewArchive(candidate);return;}
     const path=libraryUI.item.path, hash=candidate.hash;
     if(!confirm(say(`Verify and reseed ${candidate.title}? Missing files will not be downloaded. Check the Files tab for renamed paths.`,`Vérifier et remettre en seed ${candidate.title} ? Les fichiers manquants ne seront pas téléchargés.`))) return;
     await job({kind:"reseed",path,hashes:[hash]},()=>toast(say("Verification started.","Vérification lancée.")));
   },"primary");
-  reseed.disabled=!candidate.hash || !["full","partial"].includes(candidate.match) || candidate.archive;
+  reseed.disabled=!(candidate.archive?candidate.key:candidate.hash) || !["full","partial"].includes(candidate.match);
   actions.append(reseed);
-  if(candidate.archive) $("candidate-summary").append(element("p",say("Archive extraction requires the desktop application. Review the archive there before reseeding.","L’extraction d’archive nécessite l’application de bureau. Examinez l’archive avant le reseed.")));
+  if(candidate.archive) $("candidate-summary").append(element("p",say("Review the extraction destination and available server space before unpacking and reseeding.","Examinez la destination et l’espace disponible sur le serveur avant d’extraire et de seeder.")));
   if(candidate.website) {const link=element("a",say("Open on website","Ouvrir sur le site"));link.href=candidate.website;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
   candidateTab(libraryUI.tab);
 }
@@ -200,9 +201,11 @@ async function searchLibrary(selected) {
 }
 async function loadLibraryActivity() {
   const rows=await api("jobs"),host=$("library-job-list");host.replaceChildren();
-  for(const row of rows.filter(r=>["scan","check","check-all","reseed","reseed-all","search-library","library-review","library-reject","check-candidate"].includes(r.kind))) {
+  for(const row of rows.filter(r=>["scan","check","check-all","reseed","reseed-all","search-library","library-review","library-reject","check-candidate","preview-unpack","unpack-reseed"].includes(r.kind))) {
     const card=element("div",undefined,"card");card.append(element("p",`${row.kind} · ${row.status}`));
-    if(["queued","running"].includes(row.status)) card.append(button(say("Cancel","Annuler"),async()=>{await api(`jobs/${row.id}/cancel`,{});await loadLibraryActivity();}));
+    if(row.progress?.total) card.append(element("p",`${bytes(row.progress.done)} / ${bytes(row.progress.total)}`));
+    if(row.error) card.append(element("p",row.error));
+    if(["queued","running"].includes(row.status) && row.progress?.cancellable!==false) card.append(button(say("Cancel","Annuler"),async()=>{await api(`jobs/${row.id}/cancel`,{});await loadLibraryActivity();}));
     card.append(button(say("Details","Détails"),()=>navigate("jobs")));host.append(card);
   }
   if(!host.children.length) host.append(element("p",say("No Library activity yet.","Aucune activité pour le moment.")));
@@ -267,3 +270,52 @@ $("scan").onclick=()=>guard(()=>job({kind:"scan"},async result=>{
   await loadLibrary();
   if(result.client_unavailable) toast(say("Files scanned. The Torrent Client is unavailable, so seeding status is unknown.","Fichiers analysés. Le client torrent est indisponible : état du seed inconnu."));
 }));
+
+
+async function previewArchive(candidate) {
+  const body={path:libraryUI.item.path,candidate_key:candidate.key,client_id:state.clientId};
+  const generation=libraryUI.generation;
+  await job({kind:"preview-unpack",...body},preview=>{
+    if(generation!==libraryUI.generation || libraryUI.candidate?.key!==candidate.key) return;
+    const content=$("dialog-content"), dialog=$("dialog");
+    content.replaceChildren(element("h2",say("Unpack and reseed","Extraire et seeder")),
+      element("h3",preview.title),
+      element("p",say("Extraction happens on the TorrentLinker server. The original archive is kept. Nothing is overwritten.","L’extraction a lieu sur le serveur TorrentLinker. L’archive originale est conservée. Aucun fichier n’est écrasé.")),
+      element("p",say("Archive: ","Archive : ")+preview.archive,"archive-path"),
+      element("p",say("Destination: ","Destination : ")+preview.destination,"archive-path"),
+      element("p",say(`${preview.files} files · ${bytes(preview.size)} to unpack · ${bytes(preview.free)} available`,`${preview.files} fichiers · ${bytes(preview.size)} à extraire · ${bytes(preview.free)} disponibles`)),
+      element("p",preview.match==="partial"?say(`Partial Match: ${preview.missing} missing files. Missing files will not be downloaded; the torrent stays stopped after verification.`,`Correspondance partielle : ${preview.missing} fichiers manquants. Ils ne seront pas téléchargés ; le torrent restera arrêté après vérification.`):say("The Torrent Client will verify the extracted files before seeding.","Le client torrent vérifiera les fichiers extraits avant le seed.")));
+    const cancel=button(say("Cancel","Annuler"),()=>dialog.close(),"quiet");
+    const approve=button(say("Unpack and reseed","Extraire et seeder"),async()=>{
+      if(body.client_id!==state.clientId) {dialog.close();return;}
+      approve.disabled=true;cancel.disabled=true;
+      const status=element("p",say("Waiting to extract…","En attente d’extraction…"));
+      status.setAttribute("role","status");
+      const meter=element("progress");meter.max=preview.size;meter.value=0;
+      content.append(status,meter);
+      let identifier, canCancel=true;
+      const showProgress=p=>{
+        if(!p) return;
+        meter.value=p.done;meter.max=p.total;
+        canCancel=p.cancellable!==false;
+        if(!canCancel) {cancel.disabled=true;status.textContent=say("Starting verification…","Démarrage de la vérification…");return;}
+        status.textContent=say(`Extracting ${bytes(p.done)} / ${bytes(p.total)}`,`Extraction ${bytes(p.done)} / ${bytes(p.total)}`);
+      };
+      const finish=message=>{status.textContent=message;cancel.textContent=say("Close","Fermer");cancel.disabled=false;cancel.onclick=()=>dialog.close();};
+      try {
+        identifier=await job({kind:"unpack-reseed",...body,confirmation:preview.token},()=>{
+          meter.value=preview.size;
+          finish(say("Verification started. The original archive has been kept. Follow verification in Torrents.","Vérification lancée. L’archive originale est conservée. Suivez la vérification dans Torrents."));
+          content.append(button(say("Open in Torrents","Ouvrir dans Torrents"),async()=>{dialog.close();await navigate("torrents");}));
+          guard(()=>job({kind:"scan",client_id:body.client_id},loadLibrary));
+        },error=>finish(error || say("Extraction cancelled. The original archive has been kept.","Extraction annulée. L’archive originale est conservée.")),showProgress);
+        // A short extraction can complete during job()'s initial poll.
+        if(state.jobs.has(identifier)) {
+          cancel.disabled=!canCancel;cancel.textContent=say("Cancel extraction","Annuler l’extraction");
+          cancel.onclick=()=>guard(async()=>{cancel.disabled=true;await api(`jobs/${identifier}/cancel`,{});status.textContent=say("Cancelling…","Annulation…");});
+        }
+      } catch(error) {finish(error.message);}
+    },"primary");
+    content.append(cancel,approve);dialog.showModal();cancel.focus();
+  });
+}

@@ -156,15 +156,20 @@ class Jobs:
         return [{**dict(r), "progress": json.loads(r["progress"])} for r in rows]
 
     def cancel(self, identifier: str) -> None:
-        self.get(identifier)
         with self.lock:
+            row = self.get(identifier)
+            if (row["progress"] or {}).get("cancellable") is False:
+                raise ValueError(
+                    "This job cannot be cancelled after Torrent Client submission begins."
+                )
             if identifier in self.stops:
                 self.stops[identifier].set()
 
     def close(self) -> None:
         with self.lock:
             self.closed = True
-            for stop in self.stops.values():
-                stop.set()
+            for identifier, stop in self.stops.items():
+                if (self.get(identifier)["progress"] or {}).get("cancellable") is not False:
+                    stop.set()
         self.executor.shutdown(wait=True)
         self.db.close()

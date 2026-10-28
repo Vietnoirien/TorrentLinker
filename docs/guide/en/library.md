@@ -10,7 +10,7 @@ Use **Folders → Add folder** to register several folders and edit their Conten
 
 In the WebUI, Browse lists folders on the **TorrentLinker server**, within its configured storage roots. It cannot browse the computer running your browser. Registering a readable Library Folder does not require a Torrent Client mapping. If the client is unavailable, a scan can still list files with **Seeding status unknown**; they are not automatically classified as Orphans. The desktop also scans readable folders while the client is offline and labels their seeding status unknown. Unreadable paths retain their previous scanned items.
 
-The WebUI now supports selected-item searches, remembered Candidate review, file comparison and rejection. **Activity** lists server jobs and allows cancelling active work. Archive extraction and µTorrent disk-rename approval still require the desktop application's individual review.
+The WebUI now supports selected-item searches, remembered Candidate review, file comparison and rejection. **Activity** lists server jobs and allows cancelling active work. Archive Matches offer **Unpack and reseed…** in both interfaces. The WebUI previews the destination on the TorrentLinker server, unpacked size, file count, free space and any missing files. Confirm one Candidate at a time; closing or cancelling the preview writes nothing. Approval expires after five minutes and is checked again against the archive and configuration before extraction. Progress and cancellation are available in the dialog and **Activity**. Cancellation is available until Torrent Client submission begins. It stops the extractor and removes its partial output; completed files are kept if a later Reseed fails. The original archive is kept. µTorrent disk-rename approval still requires the desktop application's individual review.
 
 Settings also lists the selected client's default and category Download Folders. Choose a category to see its effective destination. Saving a destination verifies an existing Path Mapping against a seeded file and preserves the other category rules.
 
@@ -45,8 +45,8 @@ Reseeds rename paths inside the torrent client, leaving local filenames and cont
 
 ### Archives
 
-A Local Item that is a .zip, .rar or .7z archive is also compared by what it holds, since torrents usually share the same files unpacked. A Candidate matching the archive's contents shows as **Full match inside the archive**. **Unpack and Reseed…** then unpacks it into a new folder next to the archive, after showing the size and the free space, and Reseeds the torrent against the unpacked files with the usual Verification. Nothing is overwritten. Once the client has verified every unpacked file and the torrent seeds, TorrentLinker offers to move the archive to the trash, or to keep it. Plans never unpack archives.
+A Local Item that is a .zip, .rar or .7z archive is also compared by what it holds, since torrents usually share the same files unpacked. A Candidate matching the archive's contents shows as **Full match inside the archive**. **Unpack and Reseed…** then unpacks it into a new folder next to the archive, after showing the size and the free space, and Reseeds the torrent against the unpacked files with the usual Verification. Nothing is overwritten. Once the client has verified every unpacked file and the torrent seeds, the desktop offers to move the archive to the trash, or to keep it. The WebUI keeps the original archive. Plans never unpack archives.
 
-Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-zip.org/) (or unrar for rar); without it they are compared as plain files.
+Zip archives need nothing more. Rar and 7z archives need [7-Zip](https://www.7-zip.org/) (or unrar for rar); without it they are compared as plain files. For the WebUI, install the extractor on the TorrentLinker server or in its container.
 
 [Documentation](../../README.md) · [Français](../fr/bibliotheque.md)

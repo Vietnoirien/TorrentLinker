@@ -31,6 +31,7 @@ from torrentlinker.torrent_management import (
 from torrentlinker.torrent_search import native_search
 from torrentlinker.torrent_selection import SelectionCriteria, select_rows
 from torrentlinker.upload_queue import reset_local
+from torrentlinker.web.archives import ArchiveReseeds
 from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Setup
 from torrentlinker.web.storage import DownloadClient
@@ -71,6 +72,8 @@ class JobRequest(BaseModel):
         "check-candidate",
         "search-library",
         "reseed",
+        "preview-unpack",
+        "unpack-reseed",
         "check-all",
         "reseed-all",
         "catalogue",
@@ -161,6 +164,7 @@ class Operations:
     def __init__(self, setup: Setup):
         self.setup = setup
         self.library = Library(setup)
+        self.archives = ArchiveReseeds(self.library)
         self.uploads = Uploads(setup, self.library)
         self.candidates: dict[str, Candidate] = {}
         self.rows: list[dict[str, Any]] = []
@@ -637,6 +641,12 @@ class Operations:
             )
         if request.kind == "search-library":
             return self.library.search_items(request.paths, stop, progress)
+        if request.kind == "preview-unpack":
+            return self.archives.preview(request.path, request.candidate_key, stop)
+        if request.kind == "unpack-reseed":
+            return self.archives.start(
+                request.path, request.candidate_key, request.confirmation, stop, progress
+            )
         if request.kind == "reseed":
             return self.library.reseed(request.path, request.hashes[0], stop)
         if request.kind == "check-all":

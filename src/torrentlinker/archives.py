@@ -146,18 +146,29 @@ def _blocks(text: str, separator: str) -> list[dict[str, str]]:
 
 def _seven_zip_listing(tool: str, path: Path) -> dict[str, int]:
     out = _run([tool, "l", "-slt", "-ba", "-sccUTF-8", str(path)])
+    blocks = _blocks(out, " = ")
+    if any(
+        b.get("Symbolic Link")
+        or b.get("Hard Link")
+        or any(a.startswith("l") for a in b.get("Attributes", "").split())
+        for b in blocks
+    ):
+        raise ArchiveError("links inside archives are not supported")
     return {
         b["Path"].replace("\\", "/"): int(b.get("Size") or 0)
-        for b in _blocks(out, " = ")
+        for b in blocks
         if b.get("Path") and b.get("Folder") != "+" and not b.get("Attributes", "").startswith("D")
     }
 
 
 def _unrar_listing(tool: str, path: Path) -> dict[str, int]:
     out = _run([tool, "lt", "-cfg-", str(path)])
+    blocks = _blocks(out, ": ")
+    if any("link" in b.get("Type", "").lower() for b in blocks):
+        raise ArchiveError("links inside archives are not supported")
     return {
         b["Name"].replace("\\", "/"): int(b.get("Size") or 0)
-        for b in _blocks(out, ": ")
+        for b in blocks
         if b.get("Name") and b.get("Type") == "File"
     }
 
@@ -188,10 +199,10 @@ def unpack(
             path = folder.parent / PurePosixPath(name)
             if not path.is_file() or path.stat().st_size != size:
                 raise ArchiveError(f"{name} was not unpacked whole")
+        progress(total, total)
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)  # only this call's new folder
         raise
-    progress(total, total)
 
 
 def _unzip(target: Unpacked, progress: Callable[[int, int], None]) -> None:
@@ -247,9 +258,15 @@ def _run_unpacking(args: list[str], target: Unpacked, progress: Callable[[int, i
             args, stdout=subprocess.DEVNULL, stderr=errors, creationflags=flags
         )
         folder, total = target.item.path, target.size
-        while process.poll() is None:
-            time.sleep(0.5)
-            progress(_bytes_under(folder), total)
+        try:
+            while process.poll() is None:
+                time.sleep(0.5)
+                progress(_bytes_under(folder), total)
+        finally:
+            # Cancellation must stop the writer before unpack() removes partial output.
+            if process.poll() is None:
+                process.kill()
+                process.wait()
         if process.returncode != 0:
             errors.seek(0)
             text = errors.read().decode(errors="replace")

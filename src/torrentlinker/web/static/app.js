@@ -658,12 +658,12 @@ async function navigate(view, section = "connections") {
   }
   if (view === "search" && state.setup.indexer_configured) await loadSearchPage();
 }
-async function job(body, done, failed) {
+async function job(body, done, failed, progress) {
   body = {client_id: state.clientId, ...body};
   if (body.client_id === "all" && body.kind !== "refresh")
     throw Error(say("Choose a target client first.", "Choisissez un client cible."));
   const r = await api("jobs", body);
-  state.jobs.set(r.id, { body, done, failed });
+  state.jobs.set(r.id, { body, done, failed, progress });
   $("work-status").textContent = say("Working…", "En cours…");
   await pollJobs();
   return r.id;
@@ -675,6 +675,7 @@ async function pollJobs() {
   for (const row of rows) {
     if (["running", "queued"].includes(row.status)) running++;
     const pending = state.jobs.get(row.id);
+    if (pending?.progress && pending.body.client_id === state.clientId && row.progress) pending.progress(row.progress);
     if (pending && !["running", "queued"].includes(row.status)) {
       state.jobs.delete(row.id);
       const full = await api(`jobs/${row.id}`);
@@ -711,7 +712,7 @@ function renderJobs(rows) {
         element("small", r.error || JSON.stringify(r.progress || {})),
       );
       card.append(text);
-      if (["queued", "running"].includes(r.status))
+      if (["queued", "running"].includes(r.status) && r.progress?.cancellable !== false)
         card.append(
           button(say("Stop", "Arrêter"), () => api(`jobs/${r.id}/cancel`, {})),
         );
