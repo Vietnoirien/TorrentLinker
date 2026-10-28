@@ -44,11 +44,11 @@ Open `http://localhost:8787` and sign in. The default port binding is host-only.
 
 The image still starts as UID/GID 1000 by default. Existing deployments with `cap_drop: [ALL]` need no change. `TL_UID` and `TL_GID` remain build-time options.
 
-To use the published image with a NAS account, enable initialization explicitly:
+Runtime PUID/PGID support is available from **1.0.0-beta.21**. Select that version or the `beta` tag; the older `latest` stable image does not include it. To use a NAS account, enable initialization explicitly:
 
 ```bash
-PUID=1001 PGID=100 docker compose \
-  -f compose.yaml -f deploy/compose.identity.yaml up -d
+TL_IMAGE_TAG=1.0.0-beta.21 PUID=1001 PGID=100 docker compose \
+  -f compose.yaml -f deploy/compose.identity.yaml up -d --pull always
 ```
 
 The override starts the entrypoint as root and restores `CHOWN`, `DAC_OVERRIDE`, `SETUID` and `SETGID`, which the base Compose file drops. It repairs ownership only under `/config`, then starts the application as `PUID:PGID`, with no supplementary groups or effective capabilities. Both IDs must be positive integers. Without these variables, root initialization uses the image's build-time account IDs. Setting `PUID`/`PGID` alone does not activate initialization.

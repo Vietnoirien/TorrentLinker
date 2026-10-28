@@ -5,6 +5,20 @@ Upload opens on **Local drafts**, with a searchable list beside the editor. Choo
 On desktop, **Open model tools…** in Artwork opens preparation for the same draft. Save to update it. The WebUI keeps model tools inside Artwork. Draft actions are in the **⋯** menu.
 
 
+## Editor sections
+
+Desktop and WebUI use the same sections for a saved Local Draft:
+
+| Section | What to review |
+| --- | --- |
+| Details | Release name, Upload Category, subcategory and Category Options. |
+| Files & NFO | Saved file list and NFO text. |
+| Description | Presentation text and its preview. |
+| Artwork | Hosted image URL and model preparation tools. |
+| Review | Refusals, warnings, current saved revision and confirmation before sending. |
+
+Switching sections does not save changes. Use **Save locally** before previewing or sending the saved revision. **Local drafts**, **New draft** and **c411 drafts** distinguish local work, preparation and the drafts already on the tracker.
+
 [Documentation](../../README.md) · [Français](../fr/upload.md)
 
 1. Search the Library item for matches. Orphans with no results appear in **Upload**.
@@ -47,7 +61,7 @@ Below the subcategory, click **Options** to show the choices c411 asks for: lang
 
 ### The image for the description
 
-c411's image upload only accepts a logged-in browser, so TorrentLinker renders the model itself. The **3D view** page of the Upload tab shows the chosen item's model (STL, binary or ASCII; OBJ; 3MF) at an isometric angle, framed on its bounding box: drag to rotate, scroll to zoom, double-click or **Reset the view** to start over. A folder with several models offers each in a list. Big meshes are read off the interface thread and thinned for display only.
+c411's image upload only accepts a logged-in browser, so TorrentLinker renders the model itself. **Artwork** provides the model tools; on desktop choose **Open model tools…**. The 3D view shows the chosen item's model (STL, binary or ASCII; OBJ; 3MF) at an isometric angle, framed on its bounding box: drag to rotate, scroll to zoom, double-click or **Reset the view** to start over. A folder with several models offers each in a list. Big meshes are read off the interface thread and thinned for display only.
 
 - **Capture** saves the current view as a PNG at least 1000 px wide.
 - For a **Pack**, **Capture the Pack sheet** saves a grid of up to 9 models, each seen from the isometric angle with its file name below.

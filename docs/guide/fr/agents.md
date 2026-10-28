@@ -237,7 +237,7 @@ torrent ou téléchargement n'est lancé.
 
 Dans les discussions de l’Assistant, les cartes d’approbation décrivent d’abord l’action et sa portée. Dépliez **Afficher la commande complète** pour consulter les arguments de l’outil et l’opération résolue en JSON formaté et coloré. Les longues listes de hashes restent dans un bloc de code défilant.
 
-Ouvrez **Propositions et activité** sur le bureau ou **Accès des agents** sur le web. Vérifiez le client, l'opération et les torrents avant d'approuver. Le retrait et la suppression affichent aussi les noms et les dossiers. Une proposition refusée n'est pas exécutée. Une proposition en attente expire après 15 minutes ; une modification des paramètres l'invalide également.
+Sur le bureau et dans l’interface web, ouvrez **Paramètres → Accès des agents → Propositions et activité**. Vérifiez le client, l'opération et les torrents avant d'approuver. Le retrait et la suppression affichent aussi les noms et les dossiers. Une proposition refusée n'est pas exécutée. Une proposition en attente expire après 15 minutes ; une modification des paramètres l'invalide également.
 
 L'assistant peut suivre ses tâches et annuler la suite du travail. L'annulation ne retire pas les téléchargements déjà envoyés au client torrent. Un identifiant de requête stable évite de soumettre deux fois la même action après une coupure. Les tâches interrompues au redémarrage ne sont pas relancées automatiquement.
 

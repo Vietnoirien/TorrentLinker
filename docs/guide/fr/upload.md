@@ -5,6 +5,20 @@ L’onglet Upload s’ouvre sur les **Brouillons locaux**, avec une liste filtra
 Sur le bureau, **Ouvrir les outils 3D…** dans Illustration ouvre la préparation du même brouillon. Enregistrez pour le mettre à jour. L’interface web conserve ces outils dans Illustration. Le menu **⋯** regroupe les actions du brouillon.
 
 
+## Sections de l’éditeur
+
+Le bureau et l’interface web utilisent les mêmes sections pour un brouillon local enregistré :
+
+| Section | Contenu à vérifier |
+| --- | --- |
+| Détails | Nom de la release, catégorie, sous-catégorie et options. |
+| Fichiers et NFO | Liste des fichiers enregistrée et texte du NFO. |
+| Description | Texte de présentation et aperçu. |
+| Illustration | URL de l’image hébergée et outils de préparation des modèles. |
+| Relecture | Refus, avertissements, révision enregistrée et confirmation avant envoi. |
+
+Changer de section n’enregistre pas les modifications. Utilisez **Enregistrer localement** avant de prévisualiser ou d’envoyer la révision enregistrée. Les vues **Brouillons locaux**, **Nouveau brouillon** et **Brouillons c411** distinguent le travail local, la préparation et les brouillons déjà présents sur le tracker.
+
 [Documentation](../../README.md) · [English](../en/upload.md)
 
 1. Dans la Bibliothèque, recherchez les correspondances de votre élément. Les Orphelins sans résultat apparaissent dans **Upload**.
@@ -24,7 +38,7 @@ Cliquez sur **Enregistrer le brouillon** pendant la préparation, ou sur **Enreg
 
 Les brouillons survivent aux redémarrages et appartiennent au client torrent sélectionné. Ils restent sur l’ordinateur ou le serveur qui exécute TorrentLinker. L’enregistrement ne crée pas de `.torrent`, n’envoie rien à c411 et ne lance aucun seed. Vous pouvez conserver un brouillon incomplet, sans URL d’annonce, puis le corriger plus tard.
 
-Quand tout est prêt, enregistrez vos corrections et choisissez **Envoyer à c411…**. Le formulaire web demande aussi de cocher la case de relecture. TorrentLinker contrôle la révision enregistrée, les fichiers actuels, les options obligatoires, l’image hébergée, la description et le NFO. L’envoi nécessite votre URL d’annonce et les accès aux brouillons c411. Si les fichiers ont changé, enregistrez et relisez à nouveau.
+Quand tout est prêt, enregistrez vos corrections et choisissez **Envoyer à c411…**. Les deux interfaces demandent de cocher la case de relecture dans la section **Relecture**. TorrentLinker contrôle la révision enregistrée, les fichiers actuels, les options obligatoires, l’image hébergée, la description et le NFO. L’envoi nécessite votre URL d’annonce et les accès aux brouillons c411. Si les fichiers ont changé, enregistrez et relisez à nouveau.
 
 Sur ordinateur, un envoi réussi poursuit le parcours habituel de vérification et de mise en seed. Sur le web et via MCP, la mise en seed est une action distincte. La publication finale reste manuelle sur c411.
 
@@ -51,7 +65,7 @@ Ouvrez la page d’upload de c411, chargez le brouillon, ajoutez l’image deman
 
 ### Image de présentation
 
-L’upload d’image de c411 nécessite une session de navigateur connectée. TorrentLinker peut produire l’image de vos modèles : la page **Vue 3D** affiche le modèle sélectionné, STL binaire ou ASCII, OBJ ou 3MF, sous un angle isométrique et cadré sur ses dimensions. Faites glisser pour tourner, utilisez la molette pour zoomer, puis double-cliquez ou réinitialisez la vue pour revenir au départ. Un dossier contenant plusieurs modèles propose une liste. Les gros maillages sont chargés en arrière-plan et simplifiés uniquement pour l’affichage.
+L’upload d’image de c411 nécessite une session de navigateur connectée. La section **Illustration** propose les outils de préparation des modèles ; sur le bureau, choisissez **Ouvrir les outils 3D…**. La vue 3D affiche le modèle sélectionné, STL binaire ou ASCII, OBJ ou 3MF, sous un angle isométrique et cadré sur ses dimensions. Faites glisser pour tourner, utilisez la molette pour zoomer, puis double-cliquez ou réinitialisez la vue pour revenir au départ. Un dossier contenant plusieurs modèles propose une liste. Les gros maillages sont chargés en arrière-plan et simplifiés uniquement pour l’affichage.
 
 - **Capturer** enregistre la vue courante en PNG, avec une largeur d’au moins 1 000 pixels.
 - Pour un **Pack**, la capture de planche produit une grille d’au plus neuf modèles, chacun en vue isométrique avec son nom de fichier.

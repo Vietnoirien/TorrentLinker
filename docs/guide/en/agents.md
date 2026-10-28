@@ -226,7 +226,7 @@ settings, refreshes a Torrent Client or starts a download.
 
 In Assistant chats, approval cards describe the action and its scope first. Expand **Show full command** to inspect the complete tool arguments and resolved operation as formatted, colored JSON. Large hash lists stay inside a scrollable code block.
 
-Open **Proposals and activity** on desktop, or the **Agent access** page on the web. Inspect the client, operation and selected hashes before approving. Torrent removal and deletion additionally show the torrent names and folders. Rejected proposals do not execute. A pending proposal expires after 15 minutes; changing settings also invalidates pending proposals.
+On desktop and WebUI, open **Settings → Agent access → Proposals and activity**. Inspect the client, operation and selected hashes before approving. Torrent removal and deletion additionally show the torrent names and folders. Rejected proposals do not execute. A pending proposal expires after 15 minutes; changing settings also invalidates pending proposals.
 
 The assistant can follow its jobs and cancel further work. Cancellation does not undo downloads already sent to a Torrent Client. Stable request IDs prevent duplicate submissions after a network retry. Restarted, interrupted actions are not replayed automatically.
 

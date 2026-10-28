@@ -1,5 +1,5 @@
-# Optional runtime identity for the published image. No rebuild needed:
-# PUID=1001 PGID=100 docker compose -f compose.yaml -f deploy/compose.identity.yaml up -d
+# Optional runtime identity, available from 1.0.0-beta.21. No rebuild needed:
+# TL_IMAGE_TAG=beta PUID=1001 PGID=100 docker compose -f compose.yaml -f deploy/compose.identity.yaml up -d
 # Root only initializes /config, then execs the application as PUID:PGID.
 services:
   torrentlinker:

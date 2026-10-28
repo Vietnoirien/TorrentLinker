@@ -44,11 +44,11 @@ Ouvrez `http://localhost:8787` et saisissez ce mot de passe. Le serveur est acce
 
 L'image démarre toujours avec l'UID/GID 1000 par défaut. Les déploiements existants avec `cap_drop: [ALL]` ne changent pas. `TL_UID` et `TL_GID` restent disponibles à la construction.
 
-Pour utiliser l'image publiée avec un compte du NAS, activez explicitement l'initialisation :
+La prise en charge de PUID/PGID au démarrage est disponible à partir de **1.0.0-beta.21**. Choisissez cette version ou le tag `beta` ; l'ancienne image stable `latest` ne la contient pas. Pour utiliser un compte du NAS, activez explicitement l'initialisation :
 
 ```bash
-PUID=1001 PGID=100 docker compose \
-  -f compose.yaml -f deploy/compose.identity.yaml up -d
+TL_IMAGE_TAG=1.0.0-beta.21 PUID=1001 PGID=100 docker compose \
+  -f compose.yaml -f deploy/compose.identity.yaml up -d --pull always
 ```
 
 La surcharge démarre le point d'entrée en root et rétablit `CHOWN`, `DAC_OVERRIDE`, `SETUID` et `SETGID`, retirées par le fichier Compose de base. Elle corrige les propriétaires uniquement sous `/config`, puis lance l'application sous `PUID:PGID`, sans groupes supplémentaires ni capacités effectives. Les deux identifiants doivent être des entiers strictement positifs. Sans ces variables, l'initialisation utilise les identifiants du compte défini à la construction. Définir uniquement `PUID`/`PGID` n'active pas l'initialisation.
