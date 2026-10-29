@@ -1,5 +1,5 @@
 import { collectProfile } from "./collect.js";
-import { collectDescriptor } from "./descriptor.js";
+import { collectDescriptors } from "./descriptor.js";
 
 const PERIOD = 120000;
 const ready = chrome.storage.local.setAccessLevel({
@@ -98,36 +98,74 @@ async function connect(pending) {
   await sync();
   await commands();
 }
+// A command keeps the worker polling for a short while, so a queued batch does
+// not wait one alarm period per file. Any refusal ends the run immediately.
 async function commands() {
+  let idle = 0;
+  for (let worked = false; idle < 80; ) {
+    const outcome = await step();
+    if (outcome === "stop" || (outcome === "idle" && !worked)) return;
+    worked = true;
+    idle = outcome === "idle" ? idle + 1 : 0;
+    if (outcome === "idle") await new Promise((done) => setTimeout(done, 250));
+  }
+}
+async function step() {
   const { connection, downloadRetryAt = 0 } = await chrome.storage.local.get([
     "connection", "downloadRetryAt",
   ]);
-  if (!connection || connection.paused || Date.now() < downloadRetryAt) return;
+  if (!connection || connection.paused || Date.now() < downloadRetryAt) return "stop";
   const tabs = await chrome.tabs.query({ url: "https://c411.org/*", status: "complete" });
-  if (!tabs.length) return;
+  if (!tabs.length) return "stop";
   try {
-    const { command } = await request(connection, "commands", {});
-    if (!command) return;
-    let result = { id: command.id, accountId: connection.accountId, status: 0 };
-    if (command.accountId === connection.accountId) {
+    const reply = await request(connection, "commands", { limit: 25 });
+    const commands = reply.commands || (reply.command ? [reply.command] : []);
+    if (!commands.length) return "idle";
+    let results = commands.map((c) => ({ id: c.id, accountId: connection.accountId, status: 0 }));
+    if (commands.every((c) => c.accountId === connection.accountId)) {
+      // An extension API call every few seconds stops the browser from
+      // suspending this worker while a slow batch is still running.
+      const beat = setInterval(() => chrome.runtime.getPlatformInfo(), 10000);
       try {
-        const frames = await chrome.scripting.executeScript({
-          target: { tabId: tabs[0].id }, world: "ISOLATED",
-          func: collectDescriptor, args: [command],
-        });
-        result = frames[0]?.result || result;
-      } catch { /* A closed or navigated tab ends this attempt without retrying. */ }
+        // A frozen or discarded tab never answers; report it instead of vanishing.
+        const hung = new Promise((done) => setTimeout(() => done("watchdog"), 90000));
+        const frames = await Promise.race([
+          chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id }, world: "ISOLATED",
+            func: collectDescriptors, args: [commands, reply.concurrency || 1],
+          }),
+          hung,
+        ]);
+        results = frames === "watchdog"
+          ? commands.map((c) => ({ id: c.id, accountId: connection.accountId, status: 0, reason: "watchdog" }))
+          : frames[0]?.result || results;
+      } catch { /* A closed or navigated tab ends this attempt without retrying. */
+      } finally { clearInterval(beat); }
     }
-    if (result.status === 429)
+    const limited = results.find((r) => r.status === 429);
+    if (limited)
       await chrome.storage.local.set({
-        downloadRetryAt: Date.now() + Math.max(60, result.retryAfter || 60) * 1000,
+        downloadRetryAt: Date.now() + Math.max(60, limited.retryAfter || 60) * 1000,
       });
-    await request(connection, "result", result);
+    // Each upload is independent: one rejected result must not strand the rest.
+    let uploadError = "";
+    for (const result of results) {
+      try { await request(connection, "result", result); }
+      catch (error) {
+        if (error.status === 403) throw error;
+        uploadError = String(error.status || error.message || "failed").slice(0, 60);
+      }
+    }
+    if (uploadError) await note("Result upload failed: " + uploadError);
+    return results.every((r) => [200, 404].includes(r.status) || r.reason === "timeout")
+      ? "command" : "stop";
   } catch (error) {
     if (error.status === 403) {
       await chrome.storage.local.remove("connection");
       await note("Connection revoked. Connect again in TorrentLinker.");
     }
+    await note("Download batch error: " + String(error?.message || error).slice(0, 80));
+    return "stop";
   }
 }
 async function sync() {

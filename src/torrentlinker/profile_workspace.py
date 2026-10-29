@@ -281,7 +281,8 @@ class ProfileWorkspace:
                 self.disconnect()
                 return {"disconnected": True}
             if route == "/api/companion/commands":
-                return self.downloads.poll(str(account))
+                limit = body.get("limit", 1)
+                return self.downloads.poll(str(account), limit if type(limit) is int else 1)
             if route == "/api/companion/result":
                 if body.get("accountId") != account:
                     raise PermissionError("Different c411 account.")
@@ -302,6 +303,10 @@ class ProfileWorkspace:
             if not self._pair:
                 raise ValueError("Connect the companion first.")
             return self.downloads.submit(infohash, request_id, actor)
+
+    def set_download_concurrency(self, value: int) -> int:
+        with self.lock:
+            return self.downloads.set_concurrency(value)
 
     def download_test(self, identifier: str, actor: str = "owner") -> dict[str, Any]:
         with self.lock:

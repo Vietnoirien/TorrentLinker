@@ -1,73 +1,125 @@
 // Runs in the c411 tab's isolated world. Session credentials never leave it.
 // Only a fixed-origin descriptor route is allowed; never opens a file or client.
-export async function collectDescriptor(command) {
-  const result = { id: command.id, accountId: command.accountId, status: 0 };
-  if (location.origin !== "https://c411.org" ||
-      !/^[a-f0-9]{40}$/.test(command.infohash)) return result;
-  const signal = AbortSignal.timeout(20000);
+// executeScript serializes only this function, so it must not use outer names.
+export async function collectDescriptors(commands, concurrency = 1) {
+  const MAXIMUM = 8 * 1024 * 1024;
+  const account = commands[0]?.accountId;
   const get = (path) => fetch(path, {
-    credentials: "same-origin", redirect: "error", cache: "no-store", signal,
+    credentials: "same-origin", redirect: "error", cache: "no-store",
+    signal: AbortSignal.timeout(30000),
   });
-  const refused = (response) => {
-    result.status = response.status;
+  const fail = (command, status, reason, extra = {}) => ({
+    id: command.id, accountId: command.accountId, status, reason, ...extra,
+  });
+  const refusal = (command, response) => {
+    const extra = {};
     if (response.status === 429) {
       const value = response.headers.get("retry-after") || "";
       const seconds = /^\d+(?:,\s*\d+)*$/.test(value)
         ? Math.max(...value.split(",").map(Number))
         : Math.ceil((Date.parse(value) - Date.now()) / 1000);
-      result.retryAfter = Number.isFinite(seconds) ? Math.max(60, seconds) : 60;
+      extra.retryAfter = Number.isFinite(seconds) ? Math.max(60, seconds) : 60;
     }
-    return result;
+    return fail(command, response.status, undefined, extra);
   };
-  const account = async () => {
+  // One identity check at each end of the batch, not around every file.
+  const same = async () => {
     const response = await get("/api/user/profile");
-    if (!response.ok) { refused(response); return false; }
-    const profile = await response.json();
-    if (String(profile.id) !== command.accountId) {
-      result.status = 403;
-      return false;
-    }
-    return true;
+    return response.ok ? String((await response.json()).id) === account : response;
+  };
+  const rejected = (response) =>
+    commands.map((c) => ({ ...refusal(c, response), reason: "profile" }));
+  const results = [];
+  const stopAll = (status, reason) => {
+    for (const command of commands.slice(results.length))
+      results.push(fail(command, status, reason));
+    return results;
   };
   try {
-    if (!(await account())) return result;
-    const root = `/api/torrents/${command.infohash}`;
-    const integrity = await get(root + "/check-integrity");
-    // Like the website: a failed check only blocks when c411 explains why.
-    if ([401, 403, 429].includes(integrity.status)) return refused(integrity);
-    if (integrity.ok) {
-      const check = await integrity.json().catch(() => ({}));
-      if (check.ok === false && check.message) return result;
-    }
-    const response = await get(root + "/download");
-    if (!response.ok) return refused(response);
-    const kind = (response.headers.get("content-type") || "").split(";")[0].trim();
-    if (!["application/x-bittorrent", "application/octet-stream"].includes(kind)) return result;
-    const maximum = 8 * 1024 * 1024;
-    if (Number(response.headers.get("content-length")) > maximum) {
-      await response.body?.cancel();
-      return result;
-    }
-    const reader = response.body.getReader();
-    const chunks = [];
-    let size = 0;
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        size += value.length;
-        if (size > maximum) { await reader.cancel(); return result; }
-        chunks.push(value);
+    if (location.origin !== "https://c411.org" ||
+        commands.some((c) => !/^[a-f0-9]{40}$/.test(c.infohash) || c.accountId !== account))
+      return stopAll(0, "origin");
+    const before = await same();
+    if (before !== true)
+      return before === false ? stopAll(403, "account") : rejected(before);
+    // Worker pool: `concurrency` requests at once, results kept in request order.
+    const slots = new Array(commands.length);
+    let next = 0, stalled = 0, halted = false;
+    const one = async (command) => {
+      const started = Date.now();
+      const took = () => ({ ms: Date.now() - started });
+      let response;
+      try {
+        response = await get(`/api/torrents/${command.infohash}/download`);
+      } catch (error) {
+        if (error?.name !== "TimeoutError") throw error;
+        // One slow torrent is skipped; repeated stalls look like throttling.
+        if (++stalled >= 3) halted = true;
+        return fail(command, 0, "timeout", took());
       }
-    } finally { reader.releaseLock(); }
-    if (!size || !(await account())) return result;
-    let binary = "";
-    for (const chunk of chunks)
-      for (let i = 0; i < chunk.length; i += 8192)
-        binary += String.fromCharCode(...chunk.subarray(i, i + 8192));
-    return { ...result, status: 200, data: btoa(binary) };
-  } catch {
+      if (!response.ok) {
+        if (response.status !== 404) halted = true;
+        return { ...refusal(command, response), ...took() };
+      }
+      const kind = (response.headers.get("content-type") || "").split(";")[0].trim();
+      if (!["application/x-bittorrent", "application/octet-stream"].includes(kind) ||
+          Number(response.headers.get("content-length")) > MAXIMUM) {
+        await response.body?.cancel();
+        halted = true;
+        return fail(command, 0, "type");
+      }
+      const reader = response.body.getReader();
+      const chunks = [];
+      let size = 0;
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          size += value.length;
+          if (size > MAXIMUM) { await reader.cancel(); break; }
+          chunks.push(value);
+        }
+      } catch (error) {
+        if (error?.name !== "TimeoutError") throw error;
+        if (++stalled >= 3) halted = true;
+        return fail(command, 0, "timeout", took());
+      } finally { reader.releaseLock(); }
+      if (!size || size > MAXIMUM) {
+        halted = true;
+        return fail(command, 0, size ? "size" : "empty");
+      }
+      stalled = 0;
+      let binary = "";
+      for (const chunk of chunks)
+        for (let i = 0; i < chunk.length; i += 8192)
+          binary += String.fromCharCode(...chunk.subarray(i, i + 8192));
+      return {
+        id: command.id, accountId: command.accountId, status: 200, data: btoa(binary), ...took(),
+      };
+    };
+    const worker = async () => {
+      while (!halted && next < commands.length) {
+        const index = next++;
+        try { slots[index] = await one(commands[index]); }
+        catch (error) {
+          halted = true;
+          slots[index] = fail(commands[index], 0, error?.name === "TimeoutError" ? "timeout" : "network");
+        }
+      }
+    };
+    const width = Math.max(1, Math.min(Number(concurrency) || 1, 16));
+    await Promise.all(Array.from({ length: width }, worker));
+    for (let i = 0; i < commands.length; i++)
+      results.push(slots[i] || fail(commands[i], 0, "stopped"));
+    const after = await same();
+    if (after !== true)
+      return after === false
+        ? commands.map((c) => fail(c, 403, "account")) : rejected(after);
+    return results;
+  } catch (error) {
     // Never send exception messages, response bodies, login tokens or URLs.
-    return { ...result, status: result.status === 429 ? 429 : 0 };
+    const reason = error?.name === "TimeoutError" ? "timeout" : "network";
+    results.push(fail(commands[results.length], 0, reason));
+    return stopAll(0, "stopped");
   }
 }

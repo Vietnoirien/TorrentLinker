@@ -12,6 +12,16 @@ from torrentlinker.torrent_meta import read_torrent
 
 MAX_TORRENT = 8 * 1024 * 1024
 MAX_RESULT = (MAX_TORRENT * 4 // 3) + 4096
+MAX_QUEUE = 100
+MAX_HISTORY = 4000
+FINISHED_KEEP = 600
+MAX_BATCH = 25
+MAX_CONCURRENCY = 16
+
+
+REASONS = frozenset(
+    {"origin", "account", "integrity", "type", "size", "empty", "timeout", "network", "stopped", "profile", "watchdog"}
+)
 
 
 class CompanionDownloads:
@@ -23,17 +33,20 @@ class CompanionDownloads:
         self.last_poll = 0.0
         self.retry_at = 0.0
         self.blocked = False
+        self.concurrency = 1
 
     def clear(self) -> None:
         self.jobs.clear()
         self.last_poll = 0.0
         self.blocked = False
+        self.concurrency = 1
         # Re-pairing must not remove a server-requested cooldown.
 
     def _expire(self) -> None:
         now = self.clock()
         for key, job in list(self.jobs.items()):
-            if now - job["created"] > 600:
+            finished = job["status"] not in ("pending", "running")
+            if now - job["created"] > (FINISHED_KEEP if finished else 600):
                 del self.jobs[key]
             elif job["status"] in ("pending", "running") and now > job["expires"]:
                 job.update(status="failed", error="Companion timed out. No automatic retry.")
@@ -44,6 +57,7 @@ class CompanionDownloads:
             "available": self.last_poll > 0 and self.clock() - self.last_poll < 70,
             "retry_after": max(0, int(self.retry_at - self.clock() + 0.999)),
             "blocked": self.blocked,
+            "concurrency": self.concurrency,
         }
 
     @staticmethod
@@ -51,6 +65,12 @@ class CompanionDownloads:
         return {
             k: v for k, v in job.items() if k not in ("actor", "request_id", "created", "expires")
         }
+
+    def set_concurrency(self, value: int) -> int:
+        if type(value) is not int or not 1 <= value <= MAX_CONCURRENCY:
+            raise ValueError(f"Use a concurrency from 1 to {MAX_CONCURRENCY}.")
+        self.concurrency = value
+        return value
 
     def get(self, identifier: str, actor: str) -> dict[str, Any]:
         self._expire()
@@ -80,9 +100,9 @@ class CompanionDownloads:
             raise ValueError("c411 refused the session. Check the account and reconnect.")
         if state["retry_after"]:
             raise ValueError(f"c411 requested a wait. Retry after {state['retry_after']} seconds.")
-        if any(j["status"] in ("pending", "running") for j in self.jobs.values()):
-            raise ValueError("A companion download is already in progress.")
-        if len(self.jobs) >= 256:
+        if sum(j["status"] in ("pending", "running") for j in self.jobs.values()) >= MAX_QUEUE:
+            raise ValueError("The companion download queue is full.")
+        if len(self.jobs) >= MAX_HISTORY:
             raise ValueError("Recent test history is full. Wait for older results to expire.")
         now = self.clock()
         identifier = secrets.token_hex(16)
@@ -92,22 +112,30 @@ class CompanionDownloads:
             request_id=request_id,
             actor=actor,
             created=now,
-            expires=now + 90,
+            expires=now + 500,
             status="pending",
         )
         self.jobs[identifier] = job
         return self._public(job)
 
-    def poll(self, account: str) -> dict[str, Any]:
+    def poll(self, account: str, limit: int = 1) -> dict[str, Any]:
         self._expire()
-        self.last_poll = self.clock()
+        now = self.clock()
+        self.last_poll = now
+        batch: list[dict[str, str]] = []
+        if self.blocked or now < self.retry_at:
+            return {"command": None, "commands": batch, "concurrency": self.concurrency}
         for job in self.jobs.values():
-            if job["status"] == "pending":
-                job["status"] = "running"
-                return {
-                    "command": {"id": job["id"], "infohash": job["infohash"], "accountId": account}
-                }
-        return {"command": None}
+            if job["status"] == "pending" and len(batch) < max(1, min(limit, MAX_BATCH)):
+                job.update(status="running", expires=now + 240)
+                batch.append(
+                    {"id": job["id"], "infohash": job["infohash"], "accountId": account}
+                )
+        return {
+            "command": batch[0] if batch else None,
+            "commands": batch,
+            "concurrency": self.concurrency,
+        }
 
     def receive(self, body: dict[str, Any]) -> dict[str, bool]:
         self._expire()
@@ -121,8 +149,14 @@ class CompanionDownloads:
         if type(status) is not int or not 0 <= status <= 599:
             raise ValueError("Invalid HTTP status.")
         job.update(status="failed", http_status=status, discarded=True)
+        elapsed = body.get("ms")
+        if type(elapsed) is int and 0 <= elapsed <= 600000:
+            job["ms"] = elapsed
         if status != 200:
             job["error"] = "The session download was refused or unavailable."
+            reason = body.get("reason")
+            if reason in REASONS:
+                job["reason"] = reason
             if status == 429:
                 wait = body.get("retryAfter", 60)
                 if type(wait) is not int or not 0 <= wait <= 2147483647:
@@ -131,6 +165,15 @@ class CompanionDownloads:
                 job["retry_after"] = max(60, wait)
             if status in (401, 403):
                 self.blocked = True
+            if status != 404 and job.get("reason") != "timeout":
+                for other in self.jobs.values():
+                    if other["status"] == "pending":
+                        other.update(
+                            status="failed",
+                            http_status=0,
+                            discarded=True,
+                            error="Cancelled after an earlier failure.",
+                        )
             return {"accepted": True}
         try:
             encoded = body.get("data")

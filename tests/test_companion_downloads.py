@@ -157,3 +157,95 @@ def test_mcp_descriptor_tools_require_execute_downloads_and_hide_other_agents(
         assert job["status"] == "pending"
         assert "error" in invoke(app, read_only, "get_companion_download_test", test_id=job["id"])
         assert invoke(app, allowed, "get_companion_download_test", test_id=job["id"]) == job
+
+
+def test_batch_poll_hands_out_bounded_sequential_work_and_stops_after_failure(
+    tmp_path, monkeypatch
+):
+    app, _ = prepared(tmp_path, monkeypatch)
+    with TestClient(app) as browser:
+        ext = pair(browser)
+        browser.post("/api/companion/commands", headers=ext, json={})
+        ids = [
+            browser.post(
+                "/api/zen/profile/download-tests",
+                headers=OWNER,
+                json={"infohash": f"{n:040x}", "request_id": f"batch-{n}"},
+            ).json()["id"]
+            for n in range(30)
+        ]
+        first = browser.post("/api/companion/commands", headers=ext, json={"limit": 25}).json()
+        assert [c["id"] for c in first["commands"]] == ids[:25]
+        assert first["command"]["id"] == ids[0]
+        # A 404 is only that torrent; any other failure cancels what is still queued.
+        missing = {"id": ids[0], "accountId": "42", "status": 404}
+        assert browser.post("/api/companion/result", headers=ext, json=missing).status_code == 200
+        assert browser.get("/api/zen/profile/download-tests/" + ids[27]).json()["status"] == (
+            "pending"
+        )
+        slow = {"id": ids[2], "accountId": "42", "status": 0, "reason": "timeout"}
+        browser.post("/api/companion/result", headers=ext, json=slow)
+        assert browser.get("/api/zen/profile/download-tests/" + ids[27]).json()["status"] == (
+            "pending"
+        )
+        failed = {"id": ids[1], "accountId": "42", "status": 0, "reason": "network"}
+        browser.post("/api/companion/result", headers=ext, json=failed)
+        cancelled = browser.get("/api/zen/profile/download-tests/" + ids[27]).json()
+        assert cancelled["status"] == "failed"
+        assert "Cancelled" in cancelled["error"]
+        assert browser.get("/api/zen/profile/download-tests/" + ids[1]).json()["reason"] == (
+            "network"
+        )
+
+
+def test_blocked_or_rate_limited_session_hands_out_no_more_work(tmp_path, monkeypatch):
+    app, _ = prepared(tmp_path, monkeypatch)
+    with TestClient(app) as browser:
+        ext = pair(browser)
+        browser.post("/api/companion/commands", headers=ext, json={})
+        job = browser.post(
+            "/api/zen/profile/download-tests",
+            headers=OWNER,
+            json={"infohash": "a" * 40, "request_id": "one"},
+        ).json()
+        browser.post("/api/companion/commands", headers=ext, json={"limit": 25})
+        browser.post(
+            "/api/companion/result",
+            headers=ext,
+            json={"id": job["id"], "accountId": "42", "status": 429, "retryAfter": 120},
+        )
+        assert browser.post(
+            "/api/companion/commands", headers=ext, json={"limit": 25}
+        ).json() == {"command": None, "commands": [], "concurrency": 1}
+
+
+def test_concurrency_is_bounded_and_reaches_the_companion(tmp_path, monkeypatch):
+    from tests.test_agent_media import invoke
+    from torrentlinker.agent.access import Grant
+
+    app, _ = prepared(tmp_path, monkeypatch)
+    with TestClient(app) as browser:
+        ext = pair(browser)
+        assert browser.post("/api/companion/commands", headers=ext, json={}).json()[
+            "concurrency"
+        ] == 1
+        access = app.state.agent_service.access
+        access.enable(True)
+        read_only = access.create(Grant(name="Read only", clients=["default"]))["id"]
+        allowed = access.create(
+            Grant(name="Authorized", clients=["default"], mode="execute", permissions=["downloads"])
+        )["id"]
+        assert "error" in invoke(app, read_only, "set_companion_concurrency", concurrency=2)
+        assert "error" in invoke(app, allowed, "set_companion_concurrency", concurrency=17)
+        assert invoke(app, allowed, "set_companion_concurrency", concurrency=3) == {
+            "concurrency": 3
+        }
+        assert browser.post("/api/companion/commands", headers=ext, json={}).json()[
+            "concurrency"
+        ] == 3
+
+
+def test_fresh_downloads_default_to_one_request_at_a_time():
+    from torrentlinker.companion_downloads import CompanionDownloads
+
+    assert CompanionDownloads(lambda: 0.0).state()["concurrency"] == 1

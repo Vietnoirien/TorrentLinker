@@ -157,6 +157,22 @@ def make_server(service: AgentService):
         service.access.event(actor, "companion descriptor test", result["id"])
         return result
 
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=False), structured_output=True)
+    @safe
+    def set_companion_concurrency(concurrency: int) -> dict[str, object]:
+        """Set how many session descriptor requests the companion runs at once (1-16).
+
+        Requires execute/downloads authority. Raise it only while watching for 401, 403
+        and 429; the companion stops on the first refusal regardless of this value.
+        """
+        actor = ACTOR.get()
+        grant = service.access.grant(actor)
+        if grant.mode != "execute" or "downloads" not in grant.permissions:
+            raise PermissionError("Changing companion concurrency requires execute/downloads.")
+        value = service.setup.profile_workspace().set_download_concurrency(concurrency)
+        service.access.event(actor, "companion concurrency", str(value))
+        return {"concurrency": value}
+
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
     def get_companion_download_test(test_id: str) -> dict[str, object]:

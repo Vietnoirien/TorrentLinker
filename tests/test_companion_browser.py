@@ -101,7 +101,7 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
                 if result["status"] not in ("pending", "running"):
                     break
                 page.wait_for_timeout(100)
-            assert result["status"] == "complete", result
+            assert result["status"] == "complete", str(result)
             assert result["bytes"] == len(descriptor)
             assert result["discarded"]
             assert len([url for url in reads if url.endswith("/download")]) == 1
