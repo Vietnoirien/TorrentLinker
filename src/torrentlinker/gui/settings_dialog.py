@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import logging
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from keyring.errors import KeyringError
@@ -843,10 +844,19 @@ class SettingsDialog(QDialog):
     def _ordered_categories(self) -> list[int]:
         """Categories, each followed by its subcategories."""
         tops = sorted(c for c, v in self._categories.items() if v.parent not in self._categories)
-        ordered = []
-        for top in tops:
-            ordered.append(top)
-            ordered += sorted(c for c, v in self._categories.items() if v.parent == top)
+        ordered: list[int] = []
+        seen: set[int] = set()
+
+        def visit(cat: int) -> None:
+            if cat in seen:
+                return
+            seen.add(cat)
+            ordered.append(cat)
+            for child in sorted(c for c, v in self._categories.items() if v.parent == cat):
+                visit(child)
+
+        for top in [*tops, *sorted(self._categories)]:
+            visit(top)
         return ordered
 
     def _fill_download_table(self, folders: dict[int, str]) -> None:
@@ -857,9 +867,19 @@ class SettingsDialog(QDialog):
             r = table.rowCount()
             table.insertRow(r)
             info = self._categories[cat]
-            indent = "    " if info.parent in self._categories else ""
+            ancestors: list[str] = []
+            parent = info.parent
+            seen = {cat}
+            while parent in self._categories and parent not in seen:
+                seen.add(parent)
+                ancestors.insert(0, self._categories[parent].name)
+                parent = self._categories[parent].parent
+            indent = "    " * (len(ancestors) - 1) + "└─ " if ancestors else ""
             name = QTableWidgetItem(f"{indent}{info.name} ({cat})")
-            name.setToolTip(f"{info.name} ({cat})")
+            name.setToolTip(" › ".join([*ancestors, info.name]) + f" ({cat})")
+            font = name.font()
+            font.setBold(not ancestors)
+            name.setFont(font)
             name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable)
             name.setData(Qt.ItemDataRole.UserRole, cat)
             table.setItem(r, COL_CATEGORY, name)
@@ -926,6 +946,14 @@ class SettingsDialog(QDialog):
                 "each path leads to."
             )
         )
+        intro.setText(
+            intro.text()
+            + "\n"
+            + self.tr(
+                "Empty folders are checked with a temporary file and a stopped test torrent. "
+                "Both are removed afterward. TorrentLinker needs write access for this check."
+            )
+        )
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.mappings = QTableWidget(0, 3)
@@ -935,7 +963,7 @@ class SettingsDialog(QDialog):
         header = self.mappings.horizontalHeader()
         header.setSectionResizeMode(COL_LOCAL, QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(COL_QBIT, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(COL_CHECK, QHeaderView.ResizeMode.ResizeToContents)
         self.mappings.verticalHeader().setVisible(False)
         for m in self.settings.path_mappings:
             self._add_mapping_row(m)
@@ -1105,8 +1133,17 @@ class SettingsDialog(QDialog):
         ]
 
         def work() -> tuple[list[MappingCheck], list[Path], str]:
+            from torrentlinker.folder_probe import verify_folder
+
             default = api.default_save_path()
             checks = check_mappings(api.torrents(with_files=False), mappings)
+            for index, check in enumerate(checks):
+                if check.mapping is not None and check.total == 0:
+                    try:
+                        verify_folder(api, Path(check.mapping.local), check.mapping.qbit)
+                        checks[index] = replace(check, probe="verified")
+                    except Exception as error:
+                        checks[index] = replace(check, probe=safe_error(error))
             return checks, unreachable_download_folders(download_paths, mappings, default), default
 
         self._paths_busy(True)
@@ -1133,6 +1170,20 @@ class SettingsDialog(QDialog):
                 ):
                     cell = self.mappings.item(r, COL_CHECK)
                     assert cell is not None
+                    if c.probe:
+                        ok = c.probe == "verified"
+                        cell.setText(
+                            self.tr("✓ Temporary file verified")
+                            if ok
+                            else self.tr("⚠ Verification failed")
+                        )
+                        cell.setForeground(QColor() if ok else WARNING)
+                        cell.setToolTip(
+                            self.tr("The temporary file and test torrent were removed.")
+                            if ok
+                            else c.probe
+                        )
+                        continue
                     ok = c.found == c.total
                     cell.setText(
                         self.tr("no torrent")

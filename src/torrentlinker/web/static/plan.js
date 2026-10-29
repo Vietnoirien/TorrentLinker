@@ -624,6 +624,7 @@ async function planFolderDialog(clientId = state.clientId, category = null) {
   for (const [id, c] of Object.entries(state.setup.indexer_categories))
     cats.add(new Option(c.name, id));
   cats.value = category === null ? "" : String(category);
+  const categoryTree = categoryPicker(cats, state.setup.indexer_categories);
   async function load() {
     const setup = await api(
       `setup?client_id=${encodeURIComponent(clients.value)}`,
@@ -655,12 +656,13 @@ async function planFolderDialog(clientId = state.clientId, category = null) {
     element(
       "p",
       say(
-        "Paths belong to the TorrentLinker host. Existing Path Mappings and a seeded sample must verify the destination.",
-        "Ces chemins appartiennent à l’hôte TorrentLinker. Les correspondances de chemins et un fichier déjà en seed doivent vérifier la destination.",
+        "Paths belong to the TorrentLinker host. Empty folders are checked automatically with a temporary file, then the test file and torrent are removed.",
+        "Ces chemins appartiennent à l’hôte TorrentLinker. Les dossiers vides sont vérifiés automatiquement avec un fichier temporaire, puis le fichier et le torrent de test sont supprimés.",
       ),
     ),
     clients,
     cats,
+    categoryTree,
     path,
     button(say("Browse host folders", "Parcourir les dossiers de l’hôte"), () =>
       browsePlanFolder(),

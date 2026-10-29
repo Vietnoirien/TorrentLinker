@@ -184,7 +184,7 @@ class AgentService:
         target.validate(body)
         if body.kind == "configure-download-folder":
             checked = target.setup.configure_download_folder(
-                body.path, body.category, body.client_path
+                body.path, body.category, body.client_path, probe=False
             )
             body = body.model_copy(
                 update={"path": checked["local"], "client_path": checked["client"]}
@@ -607,7 +607,7 @@ class AgentService:
             if not value:
                 continue
             try:
-                checked = setup.configure_download_folder(value, category)
+                checked = setup.configure_download_folder(value, category, probe=False)
             except (ValueError, OSError):
                 continue
             suggestions.append({"path": checked["local"], "client_path": checked["client"]})
@@ -625,7 +625,9 @@ class AgentService:
             if not value:
                 continue
             try:
-                checked = setup.configure_download_folder(mapper.to_local(str(value)), category)
+                checked = setup.configure_download_folder(
+                    mapper.to_local(str(value)), category, probe=False
+                )
             except (ValueError, OSError):
                 continue
             item = {"path": checked["local"], "client_path": checked["client"]}

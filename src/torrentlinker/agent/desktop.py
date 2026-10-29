@@ -65,6 +65,7 @@ class DesktopSetup(Setup):
         self.secrets = KeyringSecrets()
         self.connector = connect
         self.lock = threading.RLock()
+        self._folder_proofs = {}
         self._client = None
         self._indexer = None
         self.download_guard = None
@@ -92,7 +93,13 @@ class DesktopSetup(Setup):
         return host in {"localhost", "127.0.0.1", "::1"} and not self.settings.path_mappings
 
     def configure_download_folder(
-        self, local: str, category: int | None = None, client_path: str = "", *, save: bool = False
+        self,
+        local: str,
+        category: int | None = None,
+        client_path: str = "",
+        *,
+        save: bool = False,
+        probe: bool = True,
     ) -> dict[str, Any]:
         import os
 
@@ -124,7 +131,7 @@ class DesktopSetup(Setup):
                     }
                 else:
                     checked = super().configure_download_folder(
-                        local, category, client_path, save=False
+                        local, category, client_path, save=False, probe=probe
                     )
             finally:
                 self._folder_candidate = None
@@ -240,6 +247,7 @@ class DesktopServer:
         self.thread.start()
 
     def reset(self, settings: Settings) -> None:
+        self.setup._folder_proofs.clear()
         if self.app is None:
             self.setup.settings = copy.deepcopy(settings)
             self.setup.store = self.setup.store.for_client(settings.active_client_id)

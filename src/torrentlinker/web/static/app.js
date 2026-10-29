@@ -540,10 +540,13 @@ async function testClient(save = false, turnOffPartialNames = false) {
   }
 }
 async function testFolder(save = false) {
+  $("folder-result").textContent = say("Checking access with the Torrent Client…", "Vérification de l’accès avec le client torrent…");
   const r = await api(`setup/${save ? "folder" : "test-folder"}`, folder());
   $("folder-result").textContent = r.sample
     ? `${r.sample.local}\n→ ${r.sample.client}\n✓ ${say("Matching file and size", "Même fichier, même taille")}`
-    : r.warning;
+    : r.verification === "temporary-file"
+      ? say("✓ Temporary file verified by the Torrent Client. Test file and torrent removed.", "✓ Fichier temporaire vérifié par le client torrent. Fichier et torrent de test supprimés.")
+      : r.warning;
   if (save) await refreshSetup();
 }
 async function testIndexer(save = false) {

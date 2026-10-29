@@ -84,7 +84,7 @@ def preview(
                 try:
                     # Missing or unverified paths never fall back to a parent disk.
                     path = target.setup.path_under_root(folder)
-                    target.setup.configure_download_folder(folder)
+                    target.setup.configure_download_folder(folder, probe=False)
                     if folder not in target.download_destinations():
                         raise ValueError("Destination changed.")
                     if present is None:

@@ -148,6 +148,7 @@ class Setup:
         self.secrets = secrets
         self.connector = connector
         self.lock = threading.RLock()
+        self._folder_proofs: dict[tuple, float] = {}
         self._profile_workspace = ProfileWorkspace(directory)
         self.download_guard: Callable[[bytes, str], None] | None = None
         self._client: ClientApi | None = None
@@ -346,6 +347,7 @@ class Setup:
                         "Finish pending Reseed Verifications before changing Torrent Clients."
                     )
                 self.secrets.update(values)
+                (self._root or self)._folder_proofs.clear()
                 config = getattr(self.settings, name)
                 config.host = body.host
                 if hasattr(config, "username"):
@@ -502,7 +504,9 @@ class Setup:
         parent = str(path.parent) if any(path.parent.is_relative_to(r) for r in self.roots) else ""
         return {"path": str(path), "parent": parent, "folders": sorted(set(children))[:1000]}
 
-    def folder(self, body: FolderSetup, *, save: bool = False) -> dict[str, Any]:
+    def folder(
+        self, body: FolderSetup, *, save: bool = False, probe: bool = False
+    ) -> dict[str, Any]:
         with self.lock:
             local = self.path_under_root(body.local)
             if body.purpose == "library" and not body.client_path.strip():
@@ -569,8 +573,38 @@ class Setup:
                         continue
                 if sample:
                     break
+            verification = "existing-file" if sample else ""
+            if sample is None:
+                import time
+
+                from torrentlinker.folder_probe import verify_folder
+
+                stat = local.stat()
+                config = getattr(self.settings, CLIENT_SETTINGS[self.settings.client])
+                key = (
+                    self.settings.active_client_id,
+                    self.settings.client,
+                    config.host,
+                    getattr(config, "username", ""),
+                    str(local),
+                    body.client_path,
+                    stat.st_dev,
+                    stat.st_ino,
+                )
+                root = self._root or self
+                root._folder_proofs = {
+                    k: expiry
+                    for k, expiry in root._folder_proofs.items()
+                    if expiry > time.monotonic()
+                }
+                if root._folder_proofs.get(key, 0) > time.monotonic():
+                    verification = "temporary-file"
+                elif probe or (save and body.purpose == "download"):
+                    verify_folder(self.client(), local, body.client_path)
+                    root._folder_proofs[key] = time.monotonic() + 300
+                    verification = "temporary-file"
             if save:
-                if body.purpose == "download" and sample is None:
+                if body.purpose == "download" and not verification:
                     raise ValueError(
                         "No existing torrent file confirms this mapping. Verify a seeded "
                         "sample before enabling downloads."
@@ -594,15 +628,22 @@ class Setup:
             return {
                 "readable": True,
                 "sample": sample,
+                "verification": verification,
                 "local": str(local),
                 "client": body.client_path,
                 "warning": ""
-                if sample
+                if verification
                 else "Folder readable, but no matching torrent file confirms the mapping yet.",
             }
 
     def configure_download_folder(
-        self, local: str, category: int | None = None, client_path: str = "", *, save: bool = False
+        self,
+        local: str,
+        category: int | None = None,
+        client_path: str = "",
+        *,
+        save: bool = False,
+        probe: bool = True,
     ) -> dict[str, Any]:
         """Validate one destination using existing mappings; never create a mount or mapping."""
         with self.lock:
@@ -615,8 +656,8 @@ class Setup:
                     "The client folder differs from the existing Path Mapping. "
                     "Configure and verify the Path Mapping in Settings first."
                 )
-            checked = self.folder(FolderSetup(local=str(path), client_path=mapped))
-            if checked["sample"] is None:
+            checked = self.folder(FolderSetup(local=str(path), client_path=mapped), probe=probe)
+            if not checked["verification"]:
                 raise ValueError(
                     "No existing torrent file confirms this Download Folder's Path Mapping. "
                     "Choose a mounted folder containing a seeded sample, or verify its "
@@ -640,8 +681,8 @@ class Setup:
         folder = self.download_folder(category)
         local = self.path_under_root(str(folder) if folder else "")
         client_path = PathMapper(self.settings.path_mappings).to_qbit(str(local))
-        checked = self.folder(FolderSetup(local=str(local), client_path=client_path))
-        if checked["sample"] is None:
+        checked = self.folder(FolderSetup(local=str(local), client_path=client_path), probe=True)
+        if not checked["verification"]:
             raise ValueError(
                 "The Download Folder mapping no longer matches a seeded file. "
                 "Check the storage mount and test the mapping again in Settings."

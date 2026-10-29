@@ -437,7 +437,7 @@ def create_app(
 
     @app.post("/api/setup/test-folder")
     def test_folder(body: FolderSetup) -> dict:
-        return for_client(body.client_id).setup.folder(body)
+        return for_client(body.client_id).setup.folder(body, probe=True)
 
     @app.post("/api/setup/folder")
     def save_folder(body: FolderSetup) -> dict:

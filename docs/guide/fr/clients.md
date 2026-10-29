@@ -6,6 +6,8 @@ Cliquez sur **Clients…**, à côté du sélecteur de client cible de l'applica
 
 Votre connexion actuelle est conservée automatiquement. Chaque client possède ses propres identifiants, dossiers de téléchargement et correspondances de chemins. Ouvrez **Modifier les paramètres**, testez la connexion, puis configurez ses dossiers. Les dossiers de bibliothèque et le compte c411 sont communs à l'application.
 
+Les catégories sont présentées avec leurs sous-catégories en retrait. Dans la WebUI, le chemin complet reste visible après sélection pour distinguer les noms identiques. Une catégorie parente peut avoir son propre dossier, hérité par ses enfants sauf destination spécifique. Une correspondance de chemins vide se vérifie automatiquement avec un fichier temporaire et un torrent de test gardé à l'arrêt, tous deux supprimés ensuite. Ce test nécessite un montage accessible en écriture à TorrentLinker.
+
 Le sélecteur **Client cible** concerne les vérifications et reseeds de la bibliothèque, le seed des uploads, les téléchargements de la recherche et la file du client sélectionné. La file indique le client de chaque torrent. Renommer un profil ou changer le client par défaut ne redirige pas les opérations en attente.
 
 Dans **Torrents**, cochez **Tous les clients** pour afficher une vue commune. Filtrez par nom et utilisez le menu contextuel sur les lignes sélectionnées pour agir sur les clients correspondants. Retirer un torrent conserve les fichiers ; leur suppression demande une confirmation. L'estimation Zen globale ne compte chaque hash qu'une fois.

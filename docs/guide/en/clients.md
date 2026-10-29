@@ -6,6 +6,8 @@ Use **Clients…** beside the desktop's target selector to add a connection, edi
 
 Your existing connection is kept automatically. Each client has its own credentials, Download Folders and Path Mappings. Open **Edit settings**, test the connection, then configure its folders. Library Folders and the c411 account are shared by the application.
 
+Category folder choices show parents followed by indented subcategories. The WebUI picker shows the full category path after selection, so repeated names stay distinguishable. A parent can have its own destination; children inherit it unless they have an override. Empty Path Mappings can be checked automatically with a temporary file and stopped test torrent, both removed afterward. The mounted folder must be writable by TorrentLinker for this check.
+
 The **Target client** selector controls Library checks and Reseeds, Upload seeding, Search downloads and the selected client's queue. Queue entries show their client. Changing the default or renaming a profile does not redirect queued work.
 
 In **Torrents**, select **All clients** for a combined view. Filter by name and use the context menu on selected rows to act on the corresponding clients. Removal keeps files; deletion asks before deleting torrent data. Combined Zen estimates count each torrent hash once.

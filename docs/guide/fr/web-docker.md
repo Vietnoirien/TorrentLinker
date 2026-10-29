@@ -83,7 +83,9 @@ TL_MEDIA_PATH=/srv/media docker compose \
   -f compose.yaml -f deploy/compose.storage.yaml up -d --build
 ```
 
-Le dossier doit déjà exister. TorrentLinker le voit sous `/data`. Si votre client voit les mêmes fichiers sous `/downloads`, l'assistant permet de relier `/data` à `/downloads`. Utilisez **Detect matching folders** pour obtenir des suggestions, ou sélectionnez les deux chemins. Une vérification compare le nom et la taille d'un fichier déjà présent dans le client. Les téléchargements et le planificateur nécessitent un exemple vérifié pour ce dossier.
+Le dossier doit déjà exister. TorrentLinker le voit sous `/data`. Si votre client voit les mêmes fichiers sous `/downloads`, l'assistant permet de relier `/data` à `/downloads`. Utilisez **Detect matching folders** pour obtenir des suggestions, ou sélectionnez les deux chemins et vérifiez la correspondance. Si aucun fichier existant ne la confirme, TorrentLinker crée un fichier temporaire aléatoire de 16 Kio. Le client vérifie ses hashes avec un torrent privé sans tracker, gardé à l'arrêt. Le torrent de test est ensuite retiré sans suppression des données du client, puis TorrentLinker supprime son propre fichier temporaire. Aucun fichier témoin à déposer ni téléchargement n'est nécessaire.
+
+Cette vérification des dossiers vides nécessite un montage accessible en écriture à TorrentLinker. Le montage d'exemple étant en lecture seule, passez-le en lecture/écriture pour utiliser le test temporaire. Les fichiers déjà présents permettent toujours de vérifier un montage en lecture seule. Le test prouve que le client peut lire le contenu, pas qu'il dispose des droits d'écriture.
 
 Le montage de l'exemple est en lecture seule : le client torrent, et non TorrentLinker, écrit les nouveaux téléchargements. Une demande explicite de suppression de fichiers agit également dans le client et n'est donc pas bloquée par le montage en lecture seule de TorrentLinker.
 
@@ -131,7 +133,7 @@ L'extraction d'archives et les renommages sur disque nécessaires à certains re
 
 ## Corriger les dossiers et utiliser le cache
 
-Les paramètres permettent de retirer un dossier, même si son montage est déjà déconnecté. Les téléchargements et le planificateur revérifient un fichier seedé pour éviter de confondre un point de montage déconnecté avec un stockage vide.
+Les paramètres permettent de retirer un dossier, même si son montage est déjà déconnecté. Les téléchargements et le planificateur vérifient la destination avec un fichier existant ou un fichier temporaire. Un test réussi est mémorisé cinq minutes pour le même client, les mêmes chemins et la même identité du dossier monté, sans persister après redémarrage. Un échec bloque l'opération.
 
 Créer un plan actualise les entrées récentes du catalogue. Les estimations Zen et les notes restent provisoires. Le statut indique les limites de pagination connues et la présence de données Zen Lab. Si l’actualisation est lente ou indisponible, arrêtez-la dans Activité, puis cochez **Utiliser le catalogue en cache sans actualiser** et recréez le plan.
 

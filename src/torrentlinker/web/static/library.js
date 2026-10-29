@@ -247,13 +247,15 @@ function renderLibraryDownloads() {
   const categories=state.setup.indexer_categories || {};
   const select=$("library-download-category"), current=select.value;
   select.replaceChildren(new Option(say("Default","Par défaut"),""));
-  for(const [id,category] of Object.entries(categories)) select.add(new Option(category.name,id));
+  for(const row of categoryRows(categories)) select.add(new Option(row.path,row.id));
   select.value=current;
+  select.parentElement.querySelector(".category-picker")?.remove();
+  select.after(categoryPicker(select,categories));
   const host=$("library-download-destinations");host.replaceChildren();
   for(const [id,path] of [["",folders.default],...Object.entries(folders.by_category)]) {
     const row=element("div",undefined,"library-folder-row");
-    row.append(element("span",`${id?(categories[id]?.name || id):say("Default","Par défaut")} · ${path || say("Not set","Non configuré")}`));
-    row.append(button(say("Edit","Modifier"),()=>{select.value=id;$("library-download-path").value=path;}));
+    row.append(element("span",`${id?(categoryRows(categories).find(row=>row.id===id)?.path || id):say("Default","Par défaut")} · ${path || say("Not set","Non configuré")}`));
+    row.append(button(say("Edit","Modifier"),()=>{select.value=id;select.dispatchEvent(new Event("change"));$("library-download-path").value=path;}));
     if(path) row.append(button(id?say("Use inherited destination","Utiliser la destination héritée"):say("Clear default","Retirer le dossier par défaut"),async()=>{
       await api("setup/remove-folder",{purpose:"download",local:path,category:id?Number(id):null});await refreshSetup();
     }));

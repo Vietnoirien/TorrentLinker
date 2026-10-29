@@ -4980,6 +4980,22 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>SettingsDialog</name>
     <message>
+        <source>Empty folders are checked with a temporary file and a stopped test torrent. Both are removed afterward. TorrentLinker needs write access for this check.</source>
+        <translation>Les dossiers vides sont vérifiés avec un fichier temporaire et un torrent de test gardé à l'arrêt. Tous deux sont ensuite supprimés. TorrentLinker a besoin des droits d'écriture pour ce test.</translation>
+    </message>
+    <message>
+        <source>✓ Temporary file verified</source>
+        <translation>✓ Fichier temporaire vérifié</translation>
+    </message>
+    <message>
+        <source>⚠ Verification failed</source>
+        <translation>⚠ Échec de la vérification</translation>
+    </message>
+    <message>
+        <source>The temporary file and test torrent were removed.</source>
+        <translation>Le fichier temporaire et le torrent de test ont été supprimés.</translation>
+    </message>
+    <message>
         <location filename="../gui/client_profiles.py" line="124"/>
         <location filename="../gui/settings_dialog.py" line="1281"/>
         <source>Keyring unavailable</source>

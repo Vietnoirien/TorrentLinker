@@ -260,6 +260,7 @@ class MappingCheck:
     found: int  # torrents whose folder exists on this computer
     total: int
     missing: list[str]  # some qBittorrent save paths that do not exist here
+    probe: str = ""  # empty: not run, "verified": cleaned up successfully, otherwise an error
 
 
 def check_mappings(

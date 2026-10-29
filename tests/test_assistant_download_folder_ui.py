@@ -198,7 +198,7 @@ def test_desktop_remote_folder_uses_existing_mapping_and_seeded_sample(tmp_path)
     empty = root / "empty"
     empty.mkdir()
     with pytest.raises(ValueError, match="seeded sample"):
-        setup.configure_download_folder(str(empty), 7000)
+        setup.configure_download_folder(str(empty), 7000, probe=False)
     assert setup.settings.download_folders.by_category == {}
     checked = setup.configure_download_folder(str(books), 7000, save=True)
     assert checked["client"] == "/downloads/books"

@@ -34,3 +34,11 @@
 #candidate-evidence { max-height:420px; overflow:auto; overflow-wrap:anywhere; padding:10px; }
 #evidence-report section { border:1px solid var(--border); border-radius:8px; padding:12px; margin:12px 0; }
 .library-nav { flex-wrap:wrap; }
+/* A compact picker with a visible parent/child hierarchy and native keyboard controls. */
+.category-picker { position:relative; min-width:0; width:100%; }
+.category-picker > summary { cursor:pointer; border:1px solid var(--line); border-radius:8px; padding:12px; background:var(--panel); overflow-wrap:anywhere; }
+.category-branches { position:absolute; z-index:30; top:100%; left:0; right:0; max-height:360px; overflow:auto; padding:6px; border:1px solid var(--line); border-radius:8px; background:var(--panel); box-shadow:0 12px 32px #0003; }
+.category-branches > button { display:block; width:100%; text-align:start; white-space:normal; border:0; border-radius:4px; background:transparent; margin:1px 0; }
+.category-branches > .category-parent { font-weight:700; margin-top:6px; }
+.category-branches > button[aria-pressed="true"] { background:var(--accent); color:white; }
+.category-branches > button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }

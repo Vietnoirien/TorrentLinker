@@ -81,15 +81,15 @@ TL_MEDIA_PATH=/srv/media docker compose \
   -f compose.yaml -f deploy/compose.storage.yaml up -d --build
 ```
 
-The host directory must already exist. TorrentLinker sees it as `/data`; your client may see the same files as `/downloads`. Use **Detect matching folders** for suggestions, or enter both paths. The check verifies a client's existing file against the mounted copy by name and size. Downloads and planning require a verified sample for the destination.
+The host directory must already exist. TorrentLinker sees it as `/data`; your client may see the same files as `/downloads`. Use **Detect matching folders** for suggestions, or enter both paths and check the mapping. If an existing torrent file cannot confirm the mapping, TorrentLinker creates a random 16 KiB temporary file and asks the Torrent Client to hash-check a private, trackerless torrent while stopped. It then removes the test torrent without deleting client data and deletes its own temporary file. No manual sample or download is needed.
 
-The example mount is read-only. New downloads are written by the Torrent Client through its own filesystem. Explicit deletion of torrent files also happens in the Torrent Client, so TorrentLinker's read-only mount does not prevent it.
+The example mount is read-only. Checking an empty folder with a temporary file requires write access from TorrentLinker; change the storage volume to read/write if you want this check. Existing torrent samples can still verify read-only mounts. The temporary-file check proves that the client can read the mapped content; it does not prove the client's write permissions. New downloads are written by the Torrent Client through its own filesystem. Explicit deletion of torrent files also happens in the Torrent Client, so TorrentLinker's read-only mount does not prevent it.
 
 The folder browser lists server directories within configured storage roots. Web scans reject symbolic links in scanned trees; choose the real directory directly.
 
 For a hosted seedbox, use the provider's HTTPS URL, including any URL prefix. Without a mount, management, Zen and Search remain available. Scan, comparison, Upload preparation, safe downloads and planning require access to the seedbox's actual files. Mount its storage on the host first, then use the same Compose override. TorrentLinker does not mount SSHFS/NFS/SMB shares automatically.
 
-Remove an old folder from Settings before disconnecting its storage. Folder removal remains possible if the mount is already unavailable. Download and Plan jobs recheck a seeded sample so an empty disconnected mountpoint cannot masquerade as empty storage.
+Remove an old folder from Settings before disconnecting its storage. Folder removal remains possible if the mount is already unavailable. Download and Plan jobs validate the destination using an existing sample or the temporary-file check. Successful probes are remembered for five minutes for the same client, paths and mounted directory identity; they are not saved across restarts. A failed check blocks the operation.
 
 Entering a path does not provide access. Missing storage is never treated as empty, and container free space is never substituted for seedbox capacity.
 
