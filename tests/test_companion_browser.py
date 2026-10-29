@@ -76,7 +76,8 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=zen]").first.click()
+            page.locator("[data-view=setup]").first.click()
+            page.locator("[data-settings-section=companion]").click()
             with context.expect_page() as handoff_opened:
                 page.locator("#profile-pair").click()
             handoff = handoff_opened.value
@@ -85,6 +86,10 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             expect(page.locator("#profile-advanced")).to_contain_text("42", timeout=15000)
             assert workspace.state()["paired"]
             assert reads.count("https://c411.org/api/user/profile") == 2
+            expect(page.locator("#session-downloads")).to_be_enabled()
+            page.locator("#session-downloads").check()
+            expect(page.locator("#session-downloads")).to_be_checked()
+            assert workspace.state()["downloads"]["enabled"]
             # Public owner API -> real extension -> fake tracker -> verified summary.
             worker = context.service_workers[0]
             job = page.request.post(
@@ -156,7 +161,8 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
 
             page = context.new_page()
             page.goto(f"http://127.0.0.1:{port}/")
-            page.locator("[data-view=zen]").first.click()
+            page.locator("[data-view=setup]").first.click()
+            page.locator("[data-settings-section=companion]").click()
             page.locator("#profile-disconnect").click()
             expect(page.locator("#profile-advanced")).not_to_contain_text("42")
             assert not workspace.state()["paired"]

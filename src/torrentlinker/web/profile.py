@@ -57,7 +57,20 @@ class DownloadTest(BaseModel):
     request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
+class SessionDownloads(BaseModel):
+    enabled: bool
+
+
 def profile_routes(app: FastAPI, setup: Setup) -> None:
+    @app.post("/api/zen/profile/session-downloads")
+    def session_downloads(body: SessionDownloads):
+        workspace = setup.profile_workspace()
+        try:
+            workspace.set_session_downloads(body.enabled)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        return workspace.state()
+
     @app.post("/api/zen/profile/download-tests")
     def test_download(body: DownloadTest):
         try:

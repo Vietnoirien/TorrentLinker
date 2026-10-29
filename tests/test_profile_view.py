@@ -1,6 +1,7 @@
 from PySide6.QtCore import Qt
 
 from tests.test_web_profile import ORIGIN, prepared, snapshot
+from torrentlinker.gui.companion_panel import CompanionPanel
 from torrentlinker.gui.zen_view import ZenTab
 from torrentlinker.zen import ZenProfile
 
@@ -19,8 +20,12 @@ def test_profile_is_first_desktop_tab_and_shows_api_and_companion(qtbot, tmp_pat
     assert "Demo account" in view.identity.text()
     assert "123.5" in view.balance.text()
     assert "Connect" in view.advanced_status.text()
-    with qtbot.waitSignal(view.pair_requested):
-        qtbot.mouseClick(view.pair_button, Qt.MouseButton.LeftButton)
+    panel = CompanionPanel()
+    qtbot.addWidget(panel)
+    panel.show_state(workspace.state())
+    assert not panel.session_downloads.isEnabled()
+    with qtbot.waitSignal(panel.pair_requested):
+        qtbot.mouseClick(panel.pair_button, Qt.MouseButton.LeftButton)
     code = workspace.pairing()["code"]
     token = workspace.receive("/api/companion/pair", ORIGIN, "", {"code": code, "accountId": "42"})[
         "token"
@@ -28,7 +33,15 @@ def test_profile_is_first_desktop_tab_and_shows_api_and_companion(qtbot, tmp_pat
     workspace.receive("/api/companion/snapshot", ORIGIN, "Bearer " + token, snapshot())
     view.show_state(workspace.state())
     assert "42" in view.active_seeds.text()
-    assert view.disconnect_button.isEnabled()
+    panel.show_state(workspace.state())
+    assert panel.disconnect_button.isEnabled()
+    assert panel.session_downloads.isEnabled() and not panel.session_downloads.isChecked()
+    with qtbot.waitSignal(panel.session_downloads_toggled) as toggled:
+        panel.session_downloads.setChecked(True)
+    assert toggled.args == [True]
+    workspace.set_session_downloads(True)
+    panel.show_state(workspace.state())
+    assert panel.session_downloads.isChecked()
     import os
     from pathlib import Path
 
@@ -76,7 +89,7 @@ def test_desktop_connect_opens_handoff_and_receiver_returns_after_restart(
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         window.account_workspace.remember_receiver(listener.getsockname()[1])
-    qtbot.mouseClick(window.zen_tab.profile_view.pair_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(window.companion_panel_widget().pair_button, Qt.MouseButton.LeftButton)
     assert len(opened) == 1
     payload = json.loads(unquote(urlsplit(opened[0]).fragment))
     address = payload["target"]

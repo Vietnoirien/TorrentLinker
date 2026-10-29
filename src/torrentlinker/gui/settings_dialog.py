@@ -141,6 +141,8 @@ class SettingsDialog(QDialog):
             self.tabs.addTab(
                 self._page(self.assistant_connections, fill=True), self.tr("Assistant")
             )
+        if parent is not None and hasattr(parent, "companion_panel_widget"):
+            self.tabs.addTab(self._page(parent.companion_panel_widget(self)), self.tr("Companion"))
         self.agent_approvals: list[str] = []
         self.agent_access = None
         self.agent_page = None

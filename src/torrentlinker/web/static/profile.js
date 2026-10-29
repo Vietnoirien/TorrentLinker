@@ -246,8 +246,42 @@ function showZenProfile(data) {
     );
   }
   $("profile-privacy").textContent = say(
+    "Connect and manage the companion in Settings → Companion. Your login stays in the browser.",
+    "Connectez et gérez l’extension dans Réglages → Extension. Votre session reste dans le navigateur.",
+  );
+  $("companion-heading").textContent = say(
+    "Browser companion",
+    "Extension navigateur",
+  );
+  $("companion-privacy").textContent = say(
     "Connect once to automatically sync account statistics, transfer totals, seed time and active seed count every two minutes. Your login stays in the browser. Keep a signed-in c411 tab open.",
     "Connectez une fois pour synchroniser automatiquement les statistiques du compte, les transferts, la durée et le nombre de seeds toutes les deux minutes. Votre session reste dans le navigateur. Gardez un onglet c411 connecté ouvert.",
+  );
+  const downloads = data.downloads || {};
+  $("companion-status").textContent = !data.paired
+    ? say("Not connected.", "Non connecté.")
+    : downloads.blocked
+      ? say(
+          "c411 refused the session. Check the account and reconnect.",
+          "c411 a refusé la session. Vérifiez le compte et reconnectez.",
+        )
+      : downloads.retry_after
+        ? `${say("c411 asked us to wait", "c411 demande d’attendre")} ${downloads.retry_after} s`
+        : downloads.available
+          ? say("Connected. The browser tab is ready.", "Connecté. L’onglet du navigateur est prêt.")
+          : say(
+              "Connected. Keep a signed-in c411 tab open.",
+              "Connecté. Gardez un onglet c411 connecté ouvert.",
+            );
+  $("session-downloads").disabled = !data.paired;
+  $("session-downloads").checked = !!data.paired && !!downloads.enabled;
+  $("session-downloads-label").textContent = say(
+    "Download .torrent files with my c411 session",
+    "Télécharger les .torrent avec ma session c411",
+  );
+  $("session-downloads-note").textContent = say(
+    "Only while this is on and the companion is connected. If c411 refuses the session, downloads stop; they never fall back to the API key.",
+    "Uniquement lorsque l’option est activée et l’extension connectée. Si c411 refuse la session, les téléchargements s’arrêtent ; ils ne basculent jamais sur la clé API.",
   );
   $("profile-extension").textContent = say(
     "Download extension",
@@ -326,12 +360,25 @@ $("profile-disconnect").onclick = () =>
     $("profile-pairing").hidden = true;
     showZenProfile(data);
   });
+$("session-downloads").onchange = (event) =>
+  guard(async () => {
+    try {
+      showZenProfile(
+        await api("zen/profile/session-downloads", {
+          enabled: event.target.checked,
+        }),
+      );
+    } catch (error) {
+      await loadZenProfile();
+      throw error;
+    }
+  });
 setInterval(() => {
   if (
     !document.hidden &&
     !$("workspace").hidden &&
-    state.view === "zen" &&
-    !$("zen-profile-panel").hidden
+    ((state.view === "zen" && !$("zen-profile-panel").hidden) ||
+      (state.view === "setup" && state.settingsSection === "companion"))
   ) {
     loadZenProfile().catch(() => {});
   }

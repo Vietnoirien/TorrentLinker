@@ -36,9 +36,6 @@ def timestamp(value: Any) -> str:
 
 class ProfileView(QWidget):
     refresh_requested = Signal()
-    pair_requested = Signal()
-    disconnect_requested = Signal()
-    extension_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -137,42 +134,22 @@ class ProfileView(QWidget):
             metrics.addWidget(box, 1)
         content.addWidget(self.advanced_metrics)
         content.addWidget(self.advanced_values)
-        privacy = self.label()
-        privacy.setText(
-            self.tr(
-                "Connect once to sync account statistics, transfers, seed time and active seeds "
-                "every two minutes. Your login stays in the browser. "
-                "Keep a signed-in c411 tab open."
+        content.addWidget(
+            self.label_with(
+                self.tr(
+                    "Connect and manage the companion in Settings → Companion. "
+                    "Your login stays in the browser."
+                )
             )
         )
-        content.addWidget(privacy)
-        actions = QHBoxLayout()
-        self.extension_button = QPushButton(self.tr("Save extension…"))
-        self.extension_button.clicked.connect(self.extension_requested)
-        self.pair_button = QPushButton(self.tr("Connect companion"))
-        set_role(self.pair_button, "primary")
-        self.pair_button.clicked.connect(self.pair_requested)
-        self.disconnect_button = QPushButton(self.tr("Disconnect & clear").replace("&", "&&"))
-        self.disconnect_button.clicked.connect(self.disconnect_requested)
-        for button in (self.extension_button, self.pair_button, self.disconnect_button):
-            actions.addWidget(button)
-        actions.addStretch()
-        content.addLayout(actions)
-        self.pairing_box = QGroupBox(self.tr("Pair with this account"))
-        pairing = QVBoxLayout(self.pairing_box)
-        instructions = self.label()
-        instructions.setText(
-            self.tr(
-                "Connecting in your browser. Once the companion is installed, connection and "
-                "updates are automatic. Keep the browser connection page open during installation."
-            )
-        )
-        pairing.addWidget(instructions)
-        self.pairing_box.hide()
-        content.addWidget(self.pairing_box)
         layout.addWidget(advanced)
         layout.addStretch()
         self.show_state({})
+
+    def label_with(self, text: str) -> QLabel:
+        label = self.label()
+        label.setText(text)
+        return label
 
     def label(self) -> QLabel:
         label = QLabel()
@@ -180,9 +157,6 @@ class ProfileView(QWidget):
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         return label
-
-    def show_pairing(self) -> None:
-        self.pairing_box.show()
 
     def show_state(self, state: dict[str, Any]) -> None:
         api = state.get("api") or {}
@@ -277,17 +251,6 @@ class ProfileView(QWidget):
         self.paths.setText("\n".join(paths))
         companion = state.get("companion")
         self.advanced_metrics.setVisible(bool(companion))
-        self.pair_button.setEnabled(bool(api.get("account_id")) and not state.get("error"))
-        self.pair_button.setText(
-            self.tr("Connect another browser")
-            if state.get("paired")
-            else self.tr("Connect companion")
-        )
-        self.disconnect_button.setEnabled(
-            bool(companion or state.get("paired") or self.pairing_box.isVisible())
-        )
-        if state.get("paired"):
-            self.pairing_box.hide()
         if companion:
             freshness = (
                 self.tr("Waiting for a browser update")

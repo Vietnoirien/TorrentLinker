@@ -220,7 +220,7 @@ class ProfileWorkspace:
                 "received_at": self.data.get("received_at"),
                 "paired": bool(self._pair),
                 "stale": bool(companion and self.clock() - captured_at(companion) > 300),
-                "downloads": self.downloads.state(),
+                "downloads": {**self.downloads.state(), "enabled": self.session_downloads},
             }
 
     def pairing(self) -> dict[str, Any]:
@@ -240,6 +240,7 @@ class ProfileWorkspace:
             self.data.pop("connection", None)
             self.data.pop("companion", None)
             self.data.pop("received_at", None)
+            self.data.pop("session_downloads", None)
             self._save()
 
     def receive(
@@ -282,6 +283,9 @@ class ProfileWorkspace:
                 return {"disconnected": True}
             if route == "/api/companion/commands":
                 limit = body.get("limit", 1)
+                if not self.session_downloads:
+                    self.downloads.last_poll = self.clock()  # the tab is still there
+                    return {"command": None, "commands": [], "concurrency": 1}
                 return self.downloads.poll(str(account), limit if type(limit) is int else 1)
             if route == "/api/companion/result":
                 if body.get("accountId") != account:
@@ -302,7 +306,27 @@ class ProfileWorkspace:
         with self.lock:
             if not self._pair:
                 raise ValueError("Connect the companion first.")
+            if not self.session_downloads:
+                raise ValueError("Turn on session downloads in Settings → Companion first.")
             return self.downloads.submit(infohash, request_id, actor)
+
+    @property
+    def session_downloads(self) -> bool:
+        """Owner opt-in; a session download never replaces an API one on its own."""
+        with self.lock:
+            return bool(self._pair) and self.data.get("session_downloads") is True
+
+    def set_session_downloads(self, enabled: bool) -> bool:
+        with self.lock:
+            if enabled and not self._pair:
+                raise ValueError("Connect the companion first.")
+            if type(enabled) is not bool:
+                raise ValueError("Use true or false.")
+            self.data["session_downloads"] = enabled
+            if not enabled:
+                self.downloads.clear()
+            self._save()
+            return enabled
 
     def set_download_concurrency(self, value: int) -> int:
         with self.lock:

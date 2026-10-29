@@ -8,13 +8,15 @@ from tests.torrents import make_torrent
 from torrentlinker.torrent_meta import read_torrent
 
 
-def pair(browser):
+def pair(browser, enable=True):
     login(browser)
     browser.post("/api/zen/profile/refresh", headers=OWNER)
     code = browser.post("/api/zen/profile/pairing", headers=OWNER).json()["code"]
     token = browser.post(
         "/api/companion/pair", headers={"Origin": ORIGIN}, json={"code": code, "accountId": "42"}
     ).json()["token"]
+    if enable:
+        browser.post("/api/zen/profile/session-downloads", headers=OWNER, json={"enabled": True})
     return {"Origin": ORIGIN, "Authorization": "Bearer " + token}
 
 
@@ -214,9 +216,11 @@ def test_blocked_or_rate_limited_session_hands_out_no_more_work(tmp_path, monkey
             headers=ext,
             json={"id": job["id"], "accountId": "42", "status": 429, "retryAfter": 120},
         )
-        assert browser.post(
-            "/api/companion/commands", headers=ext, json={"limit": 25}
-        ).json() == {"command": None, "commands": [], "concurrency": 1}
+        assert browser.post("/api/companion/commands", headers=ext, json={"limit": 25}).json() == {
+            "command": None,
+            "commands": [],
+            "concurrency": 1,
+        }
 
 
 def test_concurrency_is_bounded_and_reaches_the_companion(tmp_path, monkeypatch):
@@ -226,9 +230,9 @@ def test_concurrency_is_bounded_and_reaches_the_companion(tmp_path, monkeypatch)
     app, _ = prepared(tmp_path, monkeypatch)
     with TestClient(app) as browser:
         ext = pair(browser)
-        assert browser.post("/api/companion/commands", headers=ext, json={}).json()[
-            "concurrency"
-        ] == 1
+        assert (
+            browser.post("/api/companion/commands", headers=ext, json={}).json()["concurrency"] == 1
+        )
         access = app.state.agent_service.access
         access.enable(True)
         read_only = access.create(Grant(name="Read only", clients=["default"]))["id"]
@@ -240,12 +244,54 @@ def test_concurrency_is_bounded_and_reaches_the_companion(tmp_path, monkeypatch)
         assert invoke(app, allowed, "set_companion_concurrency", concurrency=3) == {
             "concurrency": 3
         }
-        assert browser.post("/api/companion/commands", headers=ext, json={}).json()[
-            "concurrency"
-        ] == 3
+        assert (
+            browser.post("/api/companion/commands", headers=ext, json={}).json()["concurrency"] == 3
+        )
 
 
 def test_fresh_downloads_default_to_one_request_at_a_time():
     from torrentlinker.companion_downloads import CompanionDownloads
 
     assert CompanionDownloads(lambda: 0.0).state()["concurrency"] == 1
+
+
+def test_session_downloads_are_off_until_the_owner_turns_them_on(tmp_path, monkeypatch):
+    app, _ = prepared(tmp_path, monkeypatch)
+    infohash = "a" * 40
+    with TestClient(app) as browser:
+        login(browser)
+        refused = browser.post(
+            "/api/zen/profile/session-downloads", headers=OWNER, json={"enabled": True}
+        )
+        assert refused.status_code == 409  # not connected yet
+        ext = pair(browser, enable=False)
+        assert (
+            browser.get("/api/zen/profile", headers=OWNER).json()["downloads"]["enabled"] is False
+        )
+        browser.post("/api/companion/commands", headers=ext, json={})
+        off = browser.post(
+            "/api/zen/profile/download-tests",
+            headers=OWNER,
+            json={"infohash": infohash, "request_id": "off-1"},
+        )
+        assert off.status_code == 409
+        assert "Settings" in off.json()["detail"]
+        on = browser.post(
+            "/api/zen/profile/session-downloads", headers=OWNER, json={"enabled": True}
+        ).json()
+        assert on["downloads"]["enabled"] is True
+        browser.post("/api/companion/commands", headers=ext, json={})
+        job = browser.post(
+            "/api/zen/profile/download-tests",
+            headers=OWNER,
+            json={"infohash": infohash, "request_id": "on-1"},
+        )
+        assert job.status_code == 200
+        browser.post("/api/zen/profile/session-downloads", headers=OWNER, json={"enabled": False})
+        # Turning it off hands the browser nothing, even with work already queued.
+        polled = browser.post("/api/companion/commands", headers=ext, json={"limit": 5}).json()
+        assert polled["commands"] == [] and polled["command"] is None
+        browser.post("/api/zen/profile/disconnect", headers=OWNER)
+        assert (
+            browser.get("/api/zen/profile", headers=OWNER).json()["downloads"]["enabled"] is False
+        )

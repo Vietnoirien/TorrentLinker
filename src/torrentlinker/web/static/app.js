@@ -619,6 +619,7 @@ async function settingsSection(section) {
   if (section !== "agents") clearAgentToken();
   if (section === "agents") await loadAgents();
   if (section === "assistant") await loadAssistantConnections();
+  if (section === "companion") await loadZenProfile();
 }
 document.querySelectorAll("[data-settings-section]").forEach(el => {
   el.onclick = () => guard(() => settingsSection(el.dataset.settingsSection));

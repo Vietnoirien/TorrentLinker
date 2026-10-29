@@ -310,9 +310,7 @@ class MainWindow(QMainWindow):
         self.review.candidates_checked.connect(self._show_match_zen)
         self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_profile)
-        self.zen_tab.profile_view.pair_requested.connect(self.pair_companion)
-        self.zen_tab.profile_view.disconnect_requested.connect(self.disconnect_companion)
-        self.zen_tab.profile_view.extension_requested.connect(self.save_companion_extension)
+        self.companion_panel = None  # only while Settings is open
         self.profile_timer = QTimer(self)
         self.profile_timer.setInterval(3000)
         self.profile_timer.timeout.connect(self._poll_account_profile)
@@ -922,6 +920,8 @@ class MainWindow(QMainWindow):
         self.account_workspace.bind(self.settings.indexer.url, get_secret(INDEXER_API_KEY))
         state = self.account_workspace.state()
         self.zen_tab.profile_view.show_state(state)
+        if self.companion_panel is not None:
+            self.companion_panel.show_state(state)
         if state["paired"] and self.companion_receiver is None:
             if time.monotonic() >= self._receiver_retry_at:
                 self._receiver_retry_at = time.monotonic() + 30
@@ -964,14 +964,36 @@ class MainWindow(QMainWindow):
             self.account_workspace.remember_receiver(self.companion_receiver.server.server_port)
             address = self.companion_receiver.address
             account_id = self.account_workspace.state()["api"]["account_id"]
-            self.zen_tab.profile_view.show_pairing()
+            if self.companion_panel is not None:
+                self.companion_panel.show_pairing()
             QDesktopServices.openUrl(QUrl(connection_url(address, pairing["code"], account_id)))
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, self.tr("Browser companion"), str(error))
 
+    def companion_panel_widget(self, parent=None):
+        from torrentlinker.gui.companion_panel import CompanionPanel
+
+        panel = self.companion_panel = CompanionPanel(parent)
+        panel.pair_requested.connect(self.pair_companion)
+        panel.disconnect_requested.connect(self.disconnect_companion)
+        panel.extension_requested.connect(self.save_companion_extension)
+        panel.session_downloads_toggled.connect(self.set_session_downloads)
+        panel.destroyed.connect(lambda: setattr(self, "companion_panel", None))
+        panel.show_state(self.account_workspace.state())
+        return panel
+
+    def set_session_downloads(self, enabled: bool) -> None:
+        try:
+            self.account_workspace.set_session_downloads(enabled)
+        except ValueError as error:
+            QMessageBox.warning(self, self.tr("Browser companion"), str(error))
+        if self.companion_panel is not None:
+            self.companion_panel.show_state(self.account_workspace.state())
+
     def disconnect_companion(self) -> None:
         self.account_workspace.disconnect()
-        self.zen_tab.profile_view.pairing_box.hide()
+        if self.companion_panel is not None:
+            self.companion_panel.pairing_box.hide()
         if self.companion_receiver is not None:
             self.companion_receiver.stop()
             self.companion_receiver = None

@@ -20,7 +20,19 @@ MAX_CONCURRENCY = 16
 
 
 REASONS = frozenset(
-    {"origin", "account", "integrity", "type", "size", "empty", "timeout", "network", "stopped", "profile", "watchdog"}
+    {
+        "origin",
+        "account",
+        "integrity",
+        "type",
+        "size",
+        "empty",
+        "timeout",
+        "network",
+        "stopped",
+        "profile",
+        "watchdog",
+    }
 )
 
 
@@ -128,9 +140,7 @@ class CompanionDownloads:
         for job in self.jobs.values():
             if job["status"] == "pending" and len(batch) < max(1, min(limit, MAX_BATCH)):
                 job.update(status="running", expires=now + 240)
-                batch.append(
-                    {"id": job["id"], "infohash": job["infohash"], "accountId": account}
-                )
+                batch.append({"id": job["id"], "infohash": job["infohash"], "accountId": account})
         return {
             "command": batch[0] if batch else None,
             "commands": batch,

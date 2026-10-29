@@ -123,6 +123,7 @@
           <nav class="settings-navigation" aria-label="Settings sections">
             <button data-settings-section="connections" aria-current="page" data-en="Connections and folders" data-fr="Connexions et dossiers">Connections and folders</button>
             <button data-settings-section="interface" data-i18n="interfaceSettings">Interface</button>
+            <button data-settings-section="companion" data-en="Companion" data-fr="Extension">Companion</button>
             <button data-settings-section="assistant">Assistant</button>
             <button data-settings-section="agents" data-i18n="agentAccess">Agent access (MCP)</button>
           </nav>
@@ -381,6 +382,21 @@
           </section>
         </section>
           <section data-settings-panel="interface" hidden class="card interface-settings" aria-labelledby="interface-settings-title"><h2 id="interface-settings-title" data-i18n="interfaceSettings">Interface</h2><label><span data-i18n="mediaLayout">Media layout</span><select id="settings-media-layout" aria-label="Settings Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><p class="muted" data-i18n="mediaLayoutHelp">Choose how your media library opens in this browser. Playback continues when you change layouts.</p></section>
+          <section data-settings-panel="companion" hidden class="card" aria-labelledby="companion-heading">
+            <h2 id="companion-heading">Browser companion</h2>
+            <p id="companion-status" role="status"></p>
+            <p id="companion-privacy" class="muted"></p>
+            <div class="toolbar">
+              <a id="profile-extension" class="button" href="api/zen/profile/extension" download>Download extension</a>
+              <button id="profile-pair" class="primary">Connect companion</button>
+              <button id="profile-disconnect" class="quiet">Disconnect &amp; clear</button>
+            </div>
+            <div id="profile-pairing" hidden>
+              <p id="profile-instructions"></p>
+            </div>
+            <label><input type="checkbox" id="session-downloads" /> <span id="session-downloads-label">Download .torrent files with my c411 session</span></label>
+            <p id="session-downloads-note" class="muted"></p>
+          </section>
           <section data-settings-panel="assistant" hidden id="assistant-connections" class="card" aria-labelledby="assistant-connections-title"><h2 id="assistant-connections-title" data-en="Assistant: model connections" data-fr="Assistant : connexions aux modèles">Assistant: model connections</h2><div id="assistant-connections-body"></div></section>
         <section id="view-agents" data-settings-panel="agents" hidden>
           <div class="toolbar"><label><input type="checkbox" id="agents-enabled" />
@@ -499,14 +515,6 @@
               <h3 id="profile-advanced-heading">Advanced activity · Browser companion</h3>
               <div id="profile-advanced" aria-live="polite"></div>
               <p id="profile-privacy" class="muted"></p>
-              <div class="toolbar">
-                <a id="profile-extension" class="button" href="api/zen/profile/extension" download>Download extension</a>
-                <button id="profile-pair" class="primary">Connect companion</button>
-                <button id="profile-disconnect" class="quiet">Disconnect &amp; clear</button>
-              </div>
-              <div id="profile-pairing" hidden>
-                <p id="profile-instructions"></p>
-              </div>
             </div>
           </section>
           <section id="zen-catalogue-panel" class="card" role="tabpanel" aria-labelledby="zen-catalogue-tab" hidden>
