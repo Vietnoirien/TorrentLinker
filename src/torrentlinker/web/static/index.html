@@ -10,6 +10,7 @@
     <script src="static/app.js" defer></script>
     <script src="static/library.js" defer></script>
     <script src="static/zen.js" defer></script>
+    <script src="static/plan.js" defer></script>
     <script src="static/feeds.js" defer></script>
     <script src="static/search.js" defer></script>
     <script src="static/assistant.js" defer></script>
@@ -331,6 +332,14 @@
               /></label>
               <details>
                 <summary data-i18n="advanced">Advanced settings</summary>
+                <p id="indexer-key-count" role="status"></p>
+                <label><input id="indexer-replace-keys" type="checkbox" /><span data-en="Replace additional API keys (leave unchecked to keep saved keys)" data-fr="Remplacer les clés API supplémentaires (décoché : conserver les clés enregistrées)">Replace additional API keys (leave unchecked to keep saved keys)</span></label>
+                <div class="form-grid">
+                  <label>API key 2<input id="indexer-extra-1" type="password" autocomplete="off" /></label>
+                  <label>API key 3<input id="indexer-extra-2" type="password" autocomplete="off" /></label>
+                  <label>API key 4<input id="indexer-extra-3" type="password" autocomplete="off" /></label>
+                  <label>API key 5<input id="indexer-extra-4" type="password" autocomplete="off" /></label>
+                </div>
                 <label
                   >Torznab URL<input
                     id="indexer-url"
@@ -462,7 +471,7 @@
           </div>
         </section>
         <section id="view-zen" class="view" hidden>
-          <div class="stats">
+          <div class="stats" id="zen-overview">
             <div class="card">
               <p data-i18n="dailyZen">Estimated Zen / day</p>
               <strong id="zen-daily">—</strong>
@@ -481,6 +490,7 @@
             <h2 data-i18n="catalogueTab">Catalogue</h2>
             <p id="catalogue-status" role="status"></p>
             <button id="catalogue" data-i18n="updateCatalogue">Update catalogue</button>
+            <button id="catalogue-pause" hidden data-i18n="pauseCatalogue">Pause after current page</button>
           </section>
           <section id="zen-seeding-panel" role="tabpanel" aria-labelledby="zen-seeding-tab">
             <div class="toolbar">
@@ -502,7 +512,10 @@
             <p id="seeding-status" role="status"></p>
             <div id="seeding-groups"></div>
             <p id="seeding-total"></p>
-            <section class="card"><h2 data-i18n="classComparison">Class comparison</h2><div id="seeding-classes" class="toolbar"></div></section>
+            <section class="card"><h2 data-i18n="classComparison">Class comparison</h2><div id="seeding-classes" class="toolbar"></div>
+              <label><span data-i18n="yourUploads">Your uploads</span><input id="seeding-uploads" type="number" min="0" max="1000000" /></label>
+              <button id="seeding-save-uploads" data-i18n="saveComparison">Save comparison input</button>
+            </section>
           </section>
           <section class="card" id="zen-plan-panel" role="tabpanel" aria-labelledby="zen-plan-tab" hidden>
             <h2 data-i18n="planner">Planner</h2>
@@ -511,22 +524,23 @@
               Cached Zen and note estimates are provisional. Review the plan
               before adding torrents to the queue.
             </p>
-            <details><summary data-i18n="planDestinations">Plan destinations</summary>
+            <details open><summary data-i18n="planDestinations">Plan destinations</summary>
               <p data-i18n="planDestinationHelp">Choose one client or distribute across selected clients. Budget 0 uses available space.</p>
               <div id="plan-clients" class="form-grid"></div>
             </details>
             <form id="plan-form">
             <div class="form-grid">
-              <label><span data-i18n="planCategory">Category / subcategory</span><select id="plan-category"><option value="" data-i18n="allCategories">All categories</option></select></label>
+              <label><span data-i18n="planCategory">Category / subcategory</span><select id="plan-category" multiple size="5"><option value="" data-i18n="allCategories">All categories</option></select></label>
               <label><span data-i18n="optimizeFor">Optimize for</span><select id="plan-goal"><option value="zen" data-i18n="zenPerDay">≈ Zen/day</option><option value="note">Note</option></select></label>
               <label><span data-i18n="maxGiB">Download budget, GiB</span><input id="plan-budget" type="number" value="10" min="0" step="any" required /></label>
-              <label><span><input id="plan-limit-count" type="checkbox" checked /><span data-i18n="maxTorrents">Maximum torrents</span></span><input id="plan-count" type="number" value="20" min="1" max="1000" required /></label>
+              <label><span><input id="plan-limit-count" type="checkbox" checked /><span data-i18n="maxTorrents">Maximum torrents</span></span><input id="plan-count" type="number" value="100" min="1" max="1000000" required /></label>
               <label><span><input id="plan-limit-seeders" type="checkbox" /><span data-i18n="maxSeeders">Maximum seeders</span></span><input id="plan-seeders" type="number" value="10" min="0" required disabled /></label>
               <label><span data-i18n="minTorrentGiB">Minimum torrent size, GiB</span><input id="plan-min-size" type="number" value="0" min="0" step="any" required /></label>
               <label><span data-i18n="maxTorrentGiB">Maximum torrent size, GiB</span><input id="plan-max-size" type="number" value="0" min="0" step="any" required /></label>
             </div>
             <p class="muted" data-i18n="planZeroHelp">A budget or maximum size of 0 means no additional limit. Available disk space still applies to the plan.</p>
-            <div class="toolbar"><button id="refresh-profile" class="quiet" type="button" data-i18n="refreshProfile">Refresh profile</button><button id="plan" type="submit" class="primary" data-i18n="buildPlan">Build plan</button></div>
+            <p class="muted" data-i18n="planReseedHelp">Checked Full Matches from the Library are included as Reseeds for a single destination without a client budget. They use no download budget. Size, seeder and torrent limits still apply.</p>
+            <div class="toolbar"><button id="refresh-profile" class="quiet" type="button" data-i18n="refreshProfile">Refresh profile</button><button id="plan-folders" type="button" data-i18n="planFolders">Category folders…</button><button id="plan" type="submit" class="primary" data-i18n="buildPlan">Build plan</button><button id="plan-now" type="button" hidden data-i18n="planNow">Stop fetching and plan now</button></div>
             <label
               ><input id="plan-cached" type="checkbox" /><span
                 data-i18n="cachedPlan"
@@ -534,14 +548,33 @@
               ></label
             >
             </form>
+            <details id="plan-preferences"><summary data-i18n="planPreferences">Zen profile, disk reserve & exclusions</summary>
+              <form id="zen-preferences-form">
+                <div class="form-grid">
+                  <label><span data-i18n="zenClass">Class for estimates</span><select id="plan-zen-class"><option value="tanker">Tanker</option><option value="swarm-keeper">Swarm Keeper</option><option value="reuploader">Reuploader</option></select></label>
+                  <label><span data-i18n="treeBonus">Tree bonus, %</span><input id="plan-tree" type="number" min="0" max="5" step="any" /></label>
+                  <label><span data-i18n="badgeBonus">Badge bonus, %</span><input id="plan-badge" type="number" min="0" max="100" step="any" /></label>
+                  <label><span data-i18n="seedHours">Seed hours per day</span><input id="plan-hours" type="number" min="0" max="24" step="any" /></label>
+                  <label><span data-i18n="torrentCap">Overall torrent cap, 0 = no cap</span><input id="plan-cap" type="number" min="0" max="100000" /></label>
+                  <label><span data-i18n="diskReserve">Keep free on each disk, %</span><input id="plan-reserve" type="number" min="0" max="90" /></label>
+                  <label><span data-i18n="planExcluded">Excluded title words, one per line</span><textarea id="plan-exclusions" rows="3"></textarea></label>
+                </div>
+                <button type="submit" data-i18n="savePlanPreferences">Save planning preferences</button>
+              </form>
+            </details>
+            <details class="plan-timing"><summary data-en="Download speed and timing estimates" data-fr="Débit de téléchargement et estimations de durée">Download speed and timing estimates</summary>
+              <div class="toolbar"><label><span data-i18n="downloadRate">Download rate, Mbit/s</span><input id="plan-speed" type="number" min="0.001" step="any" /></label><button id="plan-speed-save" data-i18n="saveRate">Use this rate</button><button id="plan-speed-test" data-i18n="testServerSpeed">Test server speed</button></div>
+              <p class="muted" data-i18n="serverSpeedHelp">The speed test downloads anonymously from Cloudflare for about 8 seconds on the TorrentLinker host. Enter a rate manually if the Torrent Client uses another connection.</p>
+            </details>
+            <p id="plan-times" role="status"></p>
             <div id="plan-diagnostics" role="status"></div>
+            <p id="plan-progress" role="status"></p>
             <p id="plan-summary"></p>
             <div id="plan-storage" class="table-wrap"></div>
+            <div class="toolbar"><label><span data-i18n="planSort">Sort proposal by</span><select id="plan-sort"><option value="plan" data-i18n="planOrder">Plan order</option><option value="title" data-i18n="torrentName">Torrent</option><option value="download_size" data-i18n="torrentSize">Size</option><option value="seeders">Seeders</option><option value="note">Note</option><option value="zen">Zen/day</option><option value="folder" data-i18n="downloadFolder">Download Folder</option><option value="client_id">Client</option></select></label><select id="plan-sort-order" aria-label="Plan sort order"><option value="asc" data-i18n="ascending">Ascending</option><option value="desc" data-i18n="descending">Descending</option></select><button id="plan-select-all" data-i18n="selectWholePlan">Select whole Plan</button><button id="plan-select-none" data-i18n="clearSelection">Clear selection</button></div>
             <div id="plan-result" class="table-wrap"></div>
             <div class="pager"><button id="plan-prev" disabled data-i18n="previous">Previous</button><span id="plan-page"></span><button id="plan-next" disabled data-i18n="next">Next</button></div>
-            <button id="queue-plan" data-i18n="queueSelected">
-              Queue selected
-            </button>
+            <div class="toolbar"><span id="plan-selection"></span><button id="queue-plan" data-i18n="queuePlanDownloads" disabled>Queue selected downloads</button><button id="plan-send" class="primary" data-i18n="sendPlan" disabled>Send selected to clients…</button><button id="plan-stop" hidden data-i18n="stopPlan">Stop after current torrent</button></div>
           </section>
         </section>
         <section id="view-feeds" class="view" hidden>

@@ -21,7 +21,7 @@ from torrentlinker.torrent_management import peer_count_order, tracker_group
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
-from torrentlinker.web.operations import JobRequest, Operations
+from torrentlinker.web.operations import DownloadFolderRequired, JobRequest, Operations
 from torrentlinker.web.security import ServerSecrets, Sessions
 from torrentlinker.web.setup import (
     Connection,
@@ -33,6 +33,7 @@ from torrentlinker.web.setup import (
     ProxySetup,
     Setup,
 )
+from torrentlinker.web.zen_preferences import ZenPreferences
 
 
 class ClientSelection(BaseModel):
@@ -214,7 +215,7 @@ def create_app(
             return JSONResponse({"detail": "Sign in to TorrentLinker."}, status_code=401)
         if route.startswith("/api/"):
             length = request.headers.get("content-length", "0")
-            limit = 12_000_000 if route == "/api/jobs" else 256_000
+            limit = 12_000_000 if route in {"/api/jobs", "/api/zen/plan/review"} else 256_000
             if not length.isdigit() or int(length) > limit:
                 return JSONResponse({"detail": "Request too large."}, status_code=413)
             if request.method != "GET" and request.headers.get("X-TorrentLinker") != "1":
@@ -318,6 +319,20 @@ def create_app(
     @app.exception_handler(ValueError)
     async def bad_input(request: Request, error: ValueError) -> JSONResponse:
         return JSONResponse({"detail": error_message(error)}, status_code=400)
+
+    @app.exception_handler(DownloadFolderRequired)
+    async def plan_folder_required(request: Request, error: DownloadFolderRequired) -> JSONResponse:
+        return JSONResponse(
+            {
+                "detail": str(error),
+                "action": {
+                    "kind": "plan-folder",
+                    "client_id": error.client_id,
+                    "category": error.category,
+                },
+            },
+            status_code=400,
+        )
 
     @app.exception_handler(Exception)
     async def failed(request: Request, error: Exception) -> JSONResponse:
@@ -588,6 +603,37 @@ def create_app(
 
         return catalogue_status(service)
 
+    @app.get("/api/zen/plan")
+    def zen_plan(client_id: str = "") -> dict:
+        with jobs.lock:
+            return for_client(client_id).planner.read()
+
+    @app.get("/api/zen/preferences")
+    def zen_preferences() -> dict:
+        from torrentlinker.web.zen_preferences import snapshot
+
+        return snapshot(service.settings)
+
+    @app.post("/api/zen/plan/review")
+    def review_zen_plan(body: JobRequest) -> dict:
+        with jobs.lock:
+            idle()
+            return for_client(body.client_id).planner.review(
+                body.plan_id,
+                body.plan_selection or body.hashes,
+            )
+
+    @app.post("/api/zen/preferences")
+    def save_zen_preferences(body: ZenPreferences) -> dict:
+        with jobs.lock:
+            idle()
+            body.apply(service.settings)
+            service.save()
+            if body.model_fields_set - {"uploads", "download_speed"}:
+                for profile in service.settings.client_profiles:
+                    for_client(profile.id).planner.clear()
+            return zen_preferences()
+
     @app.get("/api/zen/seeding")
     def zen_seeding(
         client_id: str = "",
@@ -820,6 +866,14 @@ def create_app(
     def cancel_job(identifier: str) -> dict:
         try:
             jobs.cancel(identifier)
+        except KeyError:
+            raise HTTPException(404, "Job not found.") from None
+        return {"ok": True}
+
+    @app.post("/api/jobs/{identifier}/plan-now")
+    def plan_from_cache(identifier: str) -> dict:
+        try:
+            jobs.plan_now(identifier)
         except KeyError:
             raise HTTPException(404, "Job not found.") from None
         return {"ok": True}

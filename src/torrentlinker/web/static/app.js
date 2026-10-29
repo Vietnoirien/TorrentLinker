@@ -206,7 +206,7 @@ async function guard(fn) {
 }
 async function api(path, body, method) {
   const scoped = ["setup", "torrents", "library", "queue", "upload/queue", "upload/drafts"];
-  if (body === undefined && scoped.includes(path.split("?")[0]) && state.clientId) {
+  if (body === undefined && scoped.includes(path.split("?")[0]) && state.clientId && !new URLSearchParams(path.split("?")[1]).has("client_id")) {
     const id = state.clientId === "all" && path === "setup" ? state.setup?.default_client_id || "" : state.clientId;
     path += (path.includes("?") ? "&" : "?") + "client_id=" + encodeURIComponent(id);
   }
@@ -357,30 +357,37 @@ async function refreshSetup() {
   selector.replaceChildren(new Option(say("All clients · overview", "Tous les clients · aperçu"), "all"),
     ...state.setup.clients.map(p => new Option(p.name, p.id)));
   selector.value = state.clientId;
-  const oldCategory = $("plan-category").value;
+  const oldCategories = new Set([...$("plan-category").selectedOptions].map(o => o.value));
   $("plan-category").replaceChildren(new Option(say("All categories", "Toutes les catégories"), ""));
   const categories = Object.entries(state.setup.indexer_categories || {});
   const appendCategory = (id, category, depth = 0, visited = new Set()) => {
     if (visited.has(id)) return;
     visited.add(id);
-    $("plan-category").append(new Option("　".repeat(depth) + category.name, id));
+    const missing = !state.setup.download_folders?.effective?.[id];
+    $("plan-category").append(new Option("　".repeat(depth) + category.name + (missing ? say(" · no folder", " · sans dossier") : ""), id));
     for (const [child, value] of categories.filter(([, v]) => String(v.parent) === id)) appendCategory(child, value, depth + 1, visited);
   };
   for (const [id, category] of categories.filter(([, c]) => !c.parent || !categories.some(([key]) => key === String(c.parent)))) appendCategory(id, category);
-  $("plan-category").value = [...$("plan-category").options].some(o => o.value === oldCategory) ? oldCategory : "";
+  for (const option of $("plan-category").options) option.selected = oldCategories.has(option.value);
   $("client-name").value = state.setup.name;
+  const oldDestinations = $("plan-clients").dataset.owner === state.setup.client_id ? new Map(
+    [...$("plan-clients").querySelectorAll("input[data-client-id]")].map(e => [e.dataset.clientId, {
+      checked:e.checked, budget:$("plan-clients").querySelector(`input[data-budget-id="${CSS.escape(e.dataset.clientId)}"]`).value,
+    }])) : new Map();
+  $("plan-clients").dataset.owner = state.setup.client_id;
   $("plan-clients").replaceChildren(...state.setup.clients.filter(p => p.enabled).map(p => {
     const row = element("label");
     const check = document.createElement("input"); check.type = "checkbox";
-    check.dataset.clientId = p.id; check.checked = p.id === state.setup.client_id;
-    const budget = document.createElement("input"); budget.type = "number"; budget.min = "0"; budget.value = "0";
+    check.dataset.clientId = p.id; check.checked = oldDestinations.get(p.id)?.checked ?? (p.id === state.setup.client_id);
+    const budget = document.createElement("input"); budget.type = "number"; budget.min = "0"; budget.step = "any"; budget.value = oldDestinations.get(p.id)?.budget ?? "0";
     budget.dataset.budgetId = p.id; budget.setAttribute("aria-label", p.name + " · GiB");
-    row.append(check, document.createTextNode(p.name + " · GiB"), budget); return row;
+    row.append(check, element("span", p.name + " · GiB"), budget); return row;
   }));
   $("client-kind").value = state.setup.client;
   $("client-host").value = state.setup.host;
   $("client-username").value = state.setup.username;
   $("indexer-url").value = state.setup.indexer_url;
+  $("indexer-key-count").textContent = `${state.setup.indexer_key_count || 0} ${say("API key(s) saved · up to 5 per account", "clé(s) API enregistrée(s) · jusqu’à 5 par compte")}`;
   $("connection-status").textContent = state.setup.configured
     ? `${state.setup.name} · ${state.setup.client.toUpperCase()} · ${new URL(state.setup.host).host}`
     : "TORRENTLINKER WEB";
@@ -483,6 +490,7 @@ function indexer() {
   return {
     url: $("indexer-url").value,
     ...($("indexer-key").value ? { api_key: $("indexer-key").value } : {}),
+    ...($("indexer-replace-keys").checked ? {extra_keys: [1,2,3,4].map(i => $(`indexer-extra-${i}`).value).filter(Boolean)} : {}),
   };
 }
 function showFolders(rows) {
@@ -548,6 +556,8 @@ async function testIndexer(save = false) {
     `✓ ${r.categories} ${say("categories", "catégories")}`;
   if (save) {
     $("indexer-key").value = "";
+    for (const i of [1,2,3,4]) $(`indexer-extra-${i}`).value = "";
+    $("indexer-replace-keys").checked = false;
     await refreshSetup();
     step("ready");
   }
@@ -654,7 +664,7 @@ async function navigate(view, section = "connections") {
   if (view === "jobs") await loadJobs();
   if (view === "zen") {
     await refreshSetup();
-    await Promise.all([loadZenSeeding(), api("zen/catalogue").then(showCatalogue)]);
+    await Promise.all([loadZenSeeding(), api("zen/catalogue").then(showCatalogue), loadZenPlan()]);
   }
   if (view === "search" && state.setup.indexer_configured) await loadSearchPage();
 }
@@ -680,11 +690,11 @@ async function pollJobs() {
       state.jobs.delete(row.id);
       const full = await api(`jobs/${row.id}`);
       if (["completed", "partial"].includes(full.status)) {
-        if (pending.done && (pending.body.client_id === state.clientId || pending.body.kind === "enqueue")) await pending.done(full.result);
+        if (pending.done && (pending.body.client_id === state.clientId || ["enqueue", "configure-download-folder", "catalogue"].includes(pending.body.kind))) await pending.done(full.result);
         if (full.status === "partial") toast(say("Scan incomplete. Some paths could not be read; previous items were kept. See job details.", "Analyse incomplète. Certains chemins sont inaccessibles ; les éléments précédents ont été conservés. Consultez les détails de la tâche."));
       } else {
         if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
-        if (pending.failed && pending.body.client_id === state.clientId) await pending.failed(full.error);
+        if (pending.failed && (pending.body.client_id === state.clientId || ["configure-download-folder", "catalogue"].includes(pending.body.kind))) await pending.failed(full.error);
         toast(full.error || say("Job cancelled", "Tâche annulée"));
       }
     }
@@ -1428,7 +1438,7 @@ $("language").onchange = () => {
   localStorage.setItem("tl-language", language);
   translate();
   if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
-  if (state.view === "zen") guard(loadZenSeeding);
+  if (state.view === "zen") { guard(loadZenSeeding); retranslatePlan(); }
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") { renderUploadQueue(); uploadEditorState(); }
   labelTorrentBar();
@@ -1463,8 +1473,9 @@ $("torrent-next").onclick = () => {
   guard(loadTorrents);
 };
 $("queue-plan").onclick = () => guard(async () => {
+  if (state.planDirty) throw Error(say("Rebuild the Plan after changing its settings.", "Recréez le Plan après modification des paramètres."));
   const grouped = new Map();
-  for (const row of state.planRows.filter(r => state.planSelected.has(r.hash))) {
+  for (const row of state.planRows.filter(r => !r.reseed && state.planSelected.has(r.hash))) {
     const id = row.client_id || state.clientId;
     if (!grouped.has(id)) grouped.set(id, []);
     grouped.get(id).push(row.hash);
@@ -1507,48 +1518,6 @@ $("library-prev").onclick = () => {
 $("library-next").onclick = () => {
   state.libraryOffset += 100;
   guard(loadLibrary);
-};
-$("catalogue").onclick = () =>
-  guard(() => job({ kind: "catalogue" }, showCatalogue));
-$("plan-limit-count").onchange = () => { $("plan-count").disabled = !$("plan-limit-count").checked; };
-$("plan-limit-seeders").onchange = () => { $("plan-seeders").disabled = !$("plan-limit-seeders").checked; };
-$("plan-form").onsubmit = event => {
-  event.preventDefault();
-  guard(() =>
-    job(
-      {
-        kind: "plan",
-        client_ids: [...$("plan-clients").querySelectorAll("input[data-client-id]:checked")].map(e => e.dataset.clientId),
-        client_budgets: Object.fromEntries([...$("plan-clients").querySelectorAll("input[data-budget-id]")].map(e => [e.dataset.budgetId, Math.round(Number(e.value) * 1024 ** 3)])),
-        maximum_torrents: $("plan-limit-count").checked ? Number($("plan-count").value) : 20,
-        limit_torrents: $("plan-limit-count").checked,
-        plan_goal: $("plan-goal").value,
-        category: Number($("plan-category").value) || null,
-        max_seeders: $("plan-limit-seeders").checked ? Number($("plan-seeders").value) : null,
-        min_size: Math.round(Number($("plan-min-size").value) * 1024 ** 3),
-        max_size: Math.round(Number($("plan-max-size").value) * 1024 ** 3),
-        maximum_bytes: Math.round(Number($("plan-budget").value) * 1024 ** 3),
-        cached_only: $("plan-cached").checked,
-      },
-      (r) => {
-        showCatalogue(r.catalogue);
-        if (r.cancelled) return;
-        $("plan-diagnostics").replaceChildren(...(r.issues || []).map(issue => element("p", issue.message)));
-        $("plan-summary").textContent = `${r.rows.length} torrents · ${bytes(r.size)} · +${num(r.zen)} Zen/${say("day", "jour")}`;
-        table("plan-storage", r.storage || [], [
-          {label: say("Download folder", "Dossier de téléchargement"), render: r => r.folder},
-          {label: say("Free now", "Libre actuellement"), render: r => bytes(r.free)},
-          {label: say("Reserved", "Réservé"), render: r => bytes(r.reserved)},
-          {label: say("Plan downloads", "Téléchargements du plan"), render: r => bytes(r.download)},
-          {label: say("Free after plan", "Libre après le plan"), render: r => bytes(r.after_plan)},
-        ]);
-        state.planRows = r.rows;
-        state.planSelected = new Set(r.rows.map((v) => v.hash));
-        state.planOffset = 0;
-        renderPlan();
-      },
-    ),
-  );
 };
 setInterval(() => {
   if (!$("workspace").hidden) guard(pollJobs);
@@ -1847,23 +1816,6 @@ if (matchMedia("(max-width: 1050px)").matches) {
   $("navigation-toggle").setAttribute("aria-expanded", "false");
 }
 
-function renderPlan() {
-  const offset = state.planOffset || 0;
-  const rows = state.planRows.slice(offset, offset + 100);
-  table("plan-result", rows, [...searchColumns(),
-    {label: say("Download folder", "Dossier de téléchargement"), render: row => row.folder || "—"},
-    {label: "Client", render: row => {
-      const select = document.createElement("select");
-      for (const p of state.setup.clients.filter(p => p.enabled)) select.add(new Option(p.name, p.id));
-      select.value = row.client_id || state.clientId;
-      select.onchange = () => { row.client_id = select.value; };
-      return select;
-    }},
-  ], state.planSelected);
-  $("plan-page").textContent = `${state.planRows.length ? offset + 1 : 0}–${offset + rows.length} / ${state.planRows.length}`;
-  $("plan-prev").disabled = offset === 0;
-  $("plan-next").disabled = offset + 100 >= state.planRows.length;
-}
 $("plan-prev").onclick = () => { state.planOffset = Math.max(0, (state.planOffset || 0) - 100); renderPlan(); };
 $("plan-next").onclick = () => { state.planOffset = (state.planOffset || 0) + 100; renderPlan(); };
 

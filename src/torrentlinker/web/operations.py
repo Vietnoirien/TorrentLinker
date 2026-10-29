@@ -86,6 +86,8 @@ class JobRequest(BaseModel):
         "reseed-all",
         "catalogue",
         "plan",
+        "send-plan",
+        "speed-test",
         "details",
         "search-options",
         "upload-preview",
@@ -116,13 +118,15 @@ class JobRequest(BaseModel):
     draft_id: str = Field(default="", max_length=64)
     revision: int = Field(default=0, ge=0)
     maximum_bytes: int = Field(default=0, ge=0)
-    maximum_torrents: int = Field(default=20, ge=1, le=1000)
+    maximum_torrents: int = Field(default=20, ge=1, le=1_000_000)
     limit_torrents: bool = True
     plan_goal: PlanGoal = PlanGoal.ZEN
     max_seeders: int | None = Field(default=None, ge=0)
     min_size: int = Field(default=0, ge=0)
     max_size: int = Field(default=0, ge=0)
     cached_only: bool = False
+    plan_id: str = Field(default="", max_length=64)
+    plan_selection: list[str] = Field(default_factory=list, max_length=1_000_000)
     selection: SelectionCriteria = Field(default_factory=SelectionCriteria)
     selection_id: str = Field(default="", max_length=64)
     catalogue_selection: CatalogueCriteria = Field(default_factory=CatalogueCriteria)
@@ -142,12 +146,13 @@ class JobRequest(BaseModel):
     query: str = Field(default="", max_length=500)
     page: int = Field(default=1, ge=1, le=10000)
     category: int | None = None
+    categories: list[int] | None = Field(default=None, max_length=1000)
     filters: dict[str, str] = Field(default_factory=dict, max_length=30)
     indexer_search: bool = False
     search_exclude_seeded: bool = False
     search_listing: bool = False  # also return the listing's display fields, for the Search page
 
-    @field_validator("hashes")
+    @field_validator("hashes", "plan_selection")
     @classmethod
     def hashes_valid(cls, hashes: list[str]) -> list[str]:
         if any(len(h) != 40 or any(c not in "0123456789abcdefABCDEF" for c in h) for h in hashes):
@@ -170,11 +175,19 @@ class JobRequest(BaseModel):
             max_size=self.max_size,
         )
 
+    def planning_categories(self) -> list[int] | None:
+        if self.categories is not None:
+            return list(dict.fromkeys(self.categories)) or None
+        return [self.category] if self.category is not None else None
+
 
 class Operations:
     def __init__(self, setup: Setup):
         self.setup = setup
         self.library = Library(setup)
+        from torrentlinker.web.plan_session import PlanSession
+
+        self.planner = PlanSession(setup, self.library)
         self.archives = ArchiveReseeds(self.library)
         self.uploads = Uploads(setup, self.library)
         self.candidates: dict[str, Candidate] = {}
@@ -185,6 +198,11 @@ class Operations:
         self.zen: dict[str, Any] = {}
 
     def validate(self, request: JobRequest) -> None:
+        if request.kind == "send-plan":
+            reviewed_plan = self.planner.validate(
+                request.plan_id, request.plan_selection or request.hashes
+            )
+            self.planner.approved_renames(reviewed_plan, request.confirmation)
         if request.kind in {"upload-send", "upload-remove", "upload-reset"} or (
             request.kind in {"upload-queue", "upload-preview"} and request.draft_id
         ):
@@ -268,6 +286,16 @@ class Operations:
                 else [self.setup]
             )
             for target in targets:
+                if request.kind == "plan" and request.planning_categories():
+                    from torrentlinker.catalogue import plan_categories
+
+                    for cid in request.planning_categories() or []:
+                        if not plan_categories(
+                            [cid],
+                            target.settings.download_folders,
+                            target.settings.indexer_categories,
+                        ):
+                            raise DownloadFolderRequired(target.settings.active_client_id, cid)
                 folder = target.download_folder(request.category)
                 if not folder and request.kind == "plan" and request.category is None:
                     folder = next(
@@ -538,21 +566,39 @@ class Operations:
 
             return update_catalogue(self.setup, stop, progress)
         if request.kind == "plan":
-            from torrentlinker.web.planning import catalogue as update_plan_catalogue
-            from torrentlinker.web.planning import catalogue_status, plan, plan_storage
+            root = self.setup._root or self.setup
+            for settings in (root.settings, self.setup.settings):
+                settings.plan_options = request.planning_options()
+                settings.plan_categories = request.planning_categories()
+            root.save()
+            self.planner.clear()
+            from torrentlinker.web.planning import (
+                catalogue_status,
+                plan,
+                plan_result,
+                refresh_for_plan,
+            )
 
-            if request.client_ids:
+            if request.client_ids and not (
+                set(request.client_ids) == {self.setup.settings.active_client_id}
+                and not request.client_budgets.get(self.setup.settings.active_client_id, 0)
+            ):
                 from dataclasses import replace
 
                 from torrentlinker.multi_plan import distributed_plan
-                from torrentlinker.plan_diagnostics import issue_text
 
                 targets = {
                     identifier: self.setup.for_client(identifier)
                     for identifier in dict.fromkeys(request.client_ids)
                 }
+                notice = ""
                 if not request.cached_only:
-                    update_plan_catalogue(self.setup, stop, progress)
+                    notice = refresh_for_plan(
+                        self.setup,
+                        stop,
+                        progress,
+                        request.planning_categories(),
+                    )
                 if stop.is_set():
                     return {
                         "cancelled": True,
@@ -563,9 +609,10 @@ class Operations:
                     }
                 settings = replace(
                     self.setup.settings,
-                    plan_categories=[request.category] if request.category is not None else None,
+                    plan_categories=request.planning_categories(),
                     plan_options=request.planning_options(),
                 )
+                progress({"phase": "planning"})
 
                 def validate(identifier, folder):
                     target = targets[identifier]
@@ -579,33 +626,15 @@ class Operations:
                     request.client_budgets,
                     validate,
                 )
+                self.planner.accept(proposed)
                 return {
-                    "issues": [
-                        {"code": issue.code, "count": issue.count, "message": issue_text(issue)}
-                        for issue in proposed.issues
-                    ],
-                    "provisional": True,
-                    "catalogue": catalogue_status(self.setup),
+                    **plan_result(self.setup, proposed),
+                    "notice": notice,
+                    "plan_id": self.planner.identifier,
                     "indexer_url": getattr(getattr(self.setup, "_indexer", None), "url", None)
                     or self.setup.settings.indexer.url,
-                    "storage": plan_storage(proposed),
-                    "zen": proposed.zen_added,
-                    "size": proposed.download_size,
-                    "rows": [
-                        {
-                            "hash": i.candidate.infohash,
-                            "title": i.candidate.title,
-                            "size": i.candidate.size,
-                            "seeders": i.candidate.seeders,
-                            "zen": i.zen,
-                            "note": i.note,
-                            "client_id": i.candidate.client_id,
-                            "folder": str(i.candidate.folder),
-                        }
-                        for i in proposed.items
-                    ],
                 }
-            return plan(
+            planned_result = plan(
                 self.setup,
                 self.library,
                 request.maximum_bytes,
@@ -614,8 +643,23 @@ class Operations:
                 progress,
                 cached_only=request.cached_only,
                 category=request.category,
+                categories=request.planning_categories(),
                 options=request.planning_options(),
+                on_plan=self.planner.accept,
             )
+            return {**planned_result, "plan_id": self.planner.identifier}
+        if request.kind == "send-plan":
+            return self.planner.send(
+                request.plan_id,
+                request.plan_selection or request.hashes,
+                stop,
+                progress,
+                request.confirmation,
+            )
+        if request.kind == "speed-test":
+            from torrentlinker.web.zen_preferences import measure
+
+            return measure(self.setup)
         if request.kind == "details":
             from torrentlinker.torrent_details import parse_details, preview_html
 

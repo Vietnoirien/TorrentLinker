@@ -89,6 +89,7 @@ def test_web_plan_filters_categories_sizes_seeders_and_optional_count(tmp_path, 
         }
         if distributed:
             request["client_ids"] = ["default"]
+            request["client_budgets"] = {"default": 100_000}
 
         def run(body):
             submitted = browser.post("/api/jobs", json=body)
@@ -109,6 +110,15 @@ def test_web_plan_filters_categories_sizes_seeders_and_optional_count(tmp_path, 
             "Book",
         }
         assert run({**request, "max_seeders": 0})["rows"] == []
+        selected = run({**request, "category": None, "categories": [2030, 7000]})
+        assert {row["title"] for row in selected["rows"]} == {"Film A", "Film B", "Book"}
+        books = run({**request, "category": None, "categories": [7000]})
+        assert [row["title"] for row in books["rows"]] == ["Book"]
+        assert books["average_note"] is not None
+        assert books["payback_days"] == pytest.approx(1000 / 1e9 / books["zen"])
+        assert books["sending_seconds"] == 0
+        assert books["rows"][0]["download_size"] == 1000
+        assert books["rows"][0]["reseed"] is False
         invalid = browser.post("/api/jobs", json={**request, "min_size": 3000})
         assert invalid.status_code == 422
 
@@ -125,3 +135,119 @@ def test_web_plan_filters_categories_sizes_seeders_and_optional_count(tmp_path, 
 def test_plan_rejects_invalid_filters(fields):
     with pytest.raises(ValidationError):
         JobRequest(kind="plan", **fields)
+
+
+@pytest.mark.parametrize("client_ids", [[], ["default"]])
+@pytest.mark.parametrize("disk_rename", [False, True])
+def test_plan_includes_checked_reseeds_without_spending_download_budget(
+    tmp_path, client_ids, disk_rename
+):
+    import hashlib
+
+    from tests.fake_qbit import FakeQbit
+    from tests.torrents import make_torrent
+    from torrentlinker.indexer import Candidate
+    from torrentlinker.review import remember_candidates
+    from torrentlinker.torrent_meta import read_torrent
+    from torrentlinker.web.security import ServerSecrets
+    from torrentlinker.web.setup import Setup
+
+    root, config = tmp_path / "books", tmp_path / "config"
+    root.mkdir()
+    config.mkdir()
+    book = root / "Example.epub"
+    book.write_bytes(b"book" * 100)
+    data = make_torrent(book)
+    if disk_rename:
+        book = book.rename(root / "Renamed.epub")
+    infohash = read_torrent(data).infohash
+    client = FakeQbit()
+    if disk_rename:
+        client.requires_disk_renames = True
+        client.reseed_layout = lambda meta, match: match
+    (root / "existing.epub").write_bytes(b"seed")
+    client.by_hash["f" * 40] = Torrent(
+        "f" * 40, "Existing", root, files={"existing.epub": 4}, size=4
+    )
+    setup = Setup(config, (root,), ServerSecrets(config), lambda *args: client)
+    setup.configured = True
+    setup.settings.zen = ZenProfile(ZenClass.SWARM_KEEPER)
+    setup.settings.indexer_categories = {7000: IndexerCategory("Ebook")}
+    setup.settings.download_folders.default = str(root)
+    setup.secrets.update({"indexer-api-key": "test-key"})
+    indexer = setup.indexer()
+    candidate = Candidate(
+        "Example EPUB", 400, "https://c411.org/download/example", 3, infohash, categories=(7000,)
+    )
+    remember_candidates(setup.store, indexer, book, [candidate])
+    key = hashlib.sha1(indexer.redact(candidate.download_url).encode()).hexdigest()
+    setup.store.cache_torrent(key, data)
+    with TestClient(
+        create_app(
+            config,
+            password="test-password-long",
+            service_override=setup,
+            monitor_verifications=False,
+        )
+    ) as browser:
+        login(browser)
+        assert browser.post("/api/setup/folder", json={"local": str(root)}).is_success
+
+        def run(body):
+            response = browser.post("/api/jobs", json=body)
+            assert response.status_code == 202, response.text
+            result = finished(browser, response.json()["id"])
+            assert result["status"] == "completed", result
+            return result["result"]
+
+        run({"kind": "scan"})
+        run({"kind": "library-review", "path": str(book)})
+        request = {
+            "kind": "plan",
+            "cached_only": True,
+            "maximum_bytes": 1,
+            "client_ids": client_ids,
+            "categories": [7000],
+        }
+        result = run(request)
+        assert len(result["rows"]) == 1
+        assert result["rows"][0]["reseed"] is True
+        assert result["rows"][0]["path"] == str(book)
+        assert result["size"] == 0
+        assert result["payback_days"] == 0
+        assert client.downloads == client.rechecked == []
+        sending = {"kind": "send-plan", "plan_id": result["plan_id"]}
+        if disk_rename:
+            denied = browser.post("/api/jobs", json=sending)
+            assert denied.status_code == 400
+            assert book.exists() and not (root / "Example.epub").exists()
+        preview = browser.post("/api/zen/plan/review", json=sending)
+        assert preview.is_success, preview.text
+        if disk_rename:
+            assert preview.json()["renames"][0]["source"] == str(book)
+            assert preview.json()["renames"][0]["target"] == str(root / "Example.epub")
+            import os
+
+            previous = book.stat()
+            os.utime(book, ns=(previous.st_atime_ns, previous.st_mtime_ns + 1_000_000))
+            stale = browser.post(
+                "/api/jobs", json={**sending, "confirmation": preview.json()["token"]}
+            )
+            assert stale.status_code == 400
+            assert book.exists() and not (root / "Example.epub").exists()
+            preview = browser.post("/api/zen/plan/review", json=sending)
+            assert preview.is_success
+        else:
+            assert preview.json()["renames"] == []
+        sent = run({**sending, "confirmation": preview.json()["token"]})
+        assert len(sent["reseeded"]) == 1, sent
+        assert client.rechecked == [infohash]
+        assert client.started == client.downloads == []
+        assert (root / "Example.epub").read_bytes() == b"book" * 100
+        assert browser.get("/api/zen/plan").json()["rows"] == []
+        # Remove only the fake client state to exercise rejection independently.
+        client.by_hash.pop(infohash)
+        if disk_rename:
+            (root / "Example.epub").rename(book)
+        run({"kind": "library-reject", "path": str(book), "candidate_key": infohash})
+        assert run(request)["rows"] == []

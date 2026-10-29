@@ -13,6 +13,38 @@
     15px/1.5 system-ui,
     sans-serif;
 }
+
+/* Keep desktop planning controls visible together, with the same panel and accent palette. */
+#zen-plan-panel > h2 { margin-bottom: 0; }
+#zen-plan-panel > p { margin-block: 8px; }
+#plan-form .form-grid, #zen-preferences-form .form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+#plan-form .form-grid > label:first-child { grid-row: span 2; }
+#plan-category { min-height: 158px; }
+#plan-clients { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-block: 12px; }
+#plan-clients { max-width: 720px; }
+#plan-clients label { display: grid; grid-template-columns: auto 1fr 100px; align-items: center; gap: 8px; }
+#plan-clients input[type=checkbox], #plan-form input[type=checkbox] { width: auto; }
+#plan-form > label { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+#plan-form .muted { max-width: none; margin-block: 8px; }
+#plan-summary { max-width: none; }
+#zen-plan-panel .toolbar label { min-width: 160px; }
+#plan-preferences, .plan-timing { margin-block: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.plan-timing .toolbar { margin-top: 0; align-items: end; }
+.plan-timing p { margin-bottom: 0; }
+#plan-summary { font-weight: 600; }
+#plan-result td { overflow-wrap: anywhere; }
+#plan-result th { white-space: nowrap; }
+#plan-progress:empty, #plan-diagnostics:empty { display: none; }
+@media (max-width: 1100px) {
+  #plan-form .form-grid, #zen-preferences-form .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  #plan-form .form-grid, #zen-preferences-form .form-grid { grid-template-columns: minmax(0, 1fr); }
+  #plan-form .form-grid > label:first-child { grid-row: auto; }
+}
 * {
   box-sizing: border-box;
 }

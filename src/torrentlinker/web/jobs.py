@@ -13,6 +13,14 @@ from pathlib import Path
 from typing import Any
 
 
+class JobStop(threading.Event):
+    """Cancellation and an independent request to finish a Plan with cached metadata."""
+
+    def __init__(self):
+        super().__init__()
+        self.plan_now = threading.Event()
+
+
 class Jobs:
     def __init__(self, directory: Path, error_message: Callable[[Exception], str] | None = None):
         self.error_message = error_message or (lambda error: type(error).__name__)
@@ -20,7 +28,7 @@ class Jobs:
         self.db = sqlite3.connect(directory / "jobs.sqlite", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="torrentlinker")
-        self.stops: dict[str, threading.Event] = {}
+        self.stops: dict[str, JobStop] = {}
         self.closed = False
         with self.db:
             self.db.execute(
@@ -81,7 +89,7 @@ class Jobs:
             if existing is not None:
                 return existing
             identifier = uuid.uuid4().hex
-            stop = self.stops[identifier] = threading.Event()
+            stop = self.stops[identifier] = JobStop()
             with self.db:
                 self.db.execute(
                     "INSERT INTO jobs VALUES (?,?,'queued',?,'null','null','',?)",
@@ -164,6 +172,15 @@ class Jobs:
                 )
             if identifier in self.stops:
                 self.stops[identifier].set()
+
+    def plan_now(self, identifier: str) -> None:
+        with self.lock:
+            row = self.get(identifier)
+            if row["kind"] != "plan" or row["status"] not in {"queued", "running"}:
+                raise ValueError("This Plan is no longer fetching its Catalogue.")
+            if (row["progress"] or {}).get("phase") == "planning":
+                raise ValueError("This Plan is already being calculated.")
+            self.stops[identifier].plan_now.set()
 
     def close(self) -> None:
         with self.lock:

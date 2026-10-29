@@ -80,6 +80,14 @@ See [CONTEXT.md](../../../CONTEXT.md) for the vocabulary and [docs/adr](../../ad
 
 ### Web planner controls
 
-The web interface has separate **Seeding**, **Plan** and **Catalogue** tabs. In Plan, choose a category or subcategory, optimize for Zen/day or Note, and optionally limit torrent count or seeders. Minimum and maximum sizes are per torrent; a maximum size or download budget of zero adds no limit. Disk space and configured reserves still apply. The result shows total size, added Zen/day and free space before and after the plan. Large results are paged without losing your selection.
+The web interface has separate **Seeding**, **Plan** and **Catalogue** tabs. Plan uses the desktop selection and sending engines. Select multiple categories or subcategories, optimize for Zen/day or Note, set optional torrent and seeder limits, and distribute downloads across clients with separate budgets. Web size inputs are labelled GiB; desktop inputs use decimal GB. Zero adds no budget or maximum-size limit. Categories and planning limits survive restart.
 
-The Catalogue tab shows cache age and coverage, including paging limits and imported snapshot metadata. Updating it does not send any downloads.
+For a single destination with no per-client budget, checked Library Full Matches join the Plan as zero-download Reseeds. As on desktop, distributed Plans contain downloads only. Size, seeder and torrent limits apply to both downloads and Reseeds. Files already in the Library or Download Folders are excluded and listed for review.
+
+Review total size, added Zen/day, payback, the size-weighted average Note, and disk reservations. Folders on the same physical disk share one capacity calculation. Sort and select across pages, then choose **Send selected to clients…** or **Queue selected downloads**. Direct sending asks for confirmation. Reseeds go through hash verification; µTorrent disk renames require an additional review of every old and new path. **Stop after current torrent** retains unsent downloads, which also survive a server restart. Session-only Reseeds must be rebuilt after restarting the server. Failed rows remain available to retry; refused rows and successful sends leave the Plan.
+
+Use **Category folders…** to browse the TorrentLinker host and verify destinations. These are server paths, not paths on the browser's computer. **Zen profile, disk reserve & exclusions** holds the planning settings. You can enter a download rate or test the server connection; that estimate may differ from a remote torrent client's connection. The sending estimate uses the configured API key count. Additional keys are stored privately under **Settings → c411 → Advanced settings**; saved key values are never returned to the browser.
+
+Changing planning inputs requires a new Plan before sending. You can stop Catalogue fetching and build from the cache. A failed refresh uses an existing cache with a visible notice; an empty cache leaves the error visible.
+
+The Catalogue tab shows cache age and coverage, including paging limits and imported snapshot metadata. Its history fetch can be paused after the current page and resumed. Updating it does not send any downloads. In **Seeding**, the upload count used for Class comparison is editable and saved.

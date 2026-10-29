@@ -355,6 +355,21 @@ class Library:
             progress({"done": len(results), "total": len(selected)})
         return {"results": results, "errors": errors}
 
+    def planning_matches(self, stop: threading.Event):
+        """Restore checked Full Matches from this Library, without fetching torrents."""
+        if not self.entries:
+            return []
+        found = []
+        for entry, indexer, candidates in self._remembered(stop):
+            if entry.state is not ItemState.ORPHAN:
+                continue
+            item = self.scan_entry(entry, stop)
+            checked = restore_checked(
+                indexer, item, candidates, self.setup.settings.matching.rules()
+            )
+            found.append((replace(entry, item=item), checked))
+        return found
+
     def _remembered(self, stop: threading.Event):
         """Each not fully seeded Local Item with the Candidates its last search found,
         without rejected ones, as the desktop's Library batch actions use them."""
@@ -456,7 +471,9 @@ class Library:
             "errors": errors[:20],
         }
 
-    def reseed(self, path: str, hash: str, stop: threading.Event) -> dict:
+    def reseed(
+        self, path: str, hash: str, stop: threading.Event, *, approve_disk_renames=None
+    ) -> dict:
         entry = self.entry(path)
         item = self.scan_entry(entry, stop)
         indexer = self.setup.indexer()
@@ -474,10 +491,18 @@ class Library:
                 " the desktop application."
             )
         client = self.client()
-        if client.requires_disk_renames and checked.match.renames:
+        if client.requires_disk_renames and checked.match.renames and approve_disk_renames is None:
             raise ValueError(
                 "This µTorrent Reseed requires disk renames. Review and approve "
                 "those in the desktop application."
             )
-        hash = start_reseed(client, self.setup.store, item, checked.meta, checked.match, hash)
+        hash = start_reseed(
+            client,
+            self.setup.store,
+            item,
+            checked.meta,
+            checked.match,
+            hash,
+            approve_disk_renames=approve_disk_renames,
+        )
         return {"hash": hash, "status": "verifying"}

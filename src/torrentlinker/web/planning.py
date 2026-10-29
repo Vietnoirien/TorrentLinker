@@ -7,18 +7,23 @@ from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
-from torrentlinker.catalogue import plan_categories
+import httpx
+
+from torrentlinker.catalogue import crawl_categories, plan_categories
 from torrentlinker.catalogue_sync import SNAPSHOT_NAME, sync_catalogue
 from torrentlinker.domain import LibraryFolder
+from torrentlinker.indexer import KeyRefused, RateLimited
 from torrentlinker.plan import (
     Plan,
     PlanOptions,
+    ReseedSource,
     catalogue_candidates,
     disk_of,
     disk_space,
     explain_inputs,
     make_plan,
     on_disk,
+    reseed_candidates,
 )
 from torrentlinker.plan_diagnostics import PlanIssue, issue_text
 from torrentlinker.scan import scan
@@ -39,15 +44,47 @@ def catalogue_status(setup: Setup) -> dict:
     }
 
 
-def catalogue(setup: Setup, stop: threading.Event, progress: Callable[[Any], None]) -> dict:
+def fetch_stopped(stop: threading.Event) -> bool:
+    plan_now = getattr(stop, "plan_now", None)
+    return stop.is_set() or (plan_now is not None and plan_now.is_set())
+
+
+def refresh_for_plan(
+    setup: Setup, stop: threading.Event, progress: Callable, chosen: list[int] | None
+) -> str:
+    """A failed refresh may use existing metadata, with an explicit provisional notice."""
+    try:
+        catalogue(setup, stop, progress, full=False, chosen=chosen)
+    except (httpx.HTTPError, KeyRefused, RateLimited, ValueError):
+        if not setup.store.catalogue_size():
+            raise
+        return "Catalogue refresh failed. This provisional Plan uses cached metadata."
+    return ""
+
+
+def catalogue(
+    setup: Setup,
+    stop: threading.Event,
+    progress: Callable[[Any], None],
+    *,
+    full: bool = True,
+    chosen: list[int] | None = None,
+) -> dict:
+    wanted = (
+        crawl_categories(setup.settings.indexer_categories)
+        if full
+        else plan_categories(
+            chosen, setup.settings.download_folders, setup.settings.indexer_categories
+        )
+    )
     sync_catalogue(
         setup.indexer(),
         setup.store,
-        setup.settings.indexer_categories,
+        wanted,
+        full=full,
         bootstrap=True,
-        max_pages=10,
-        stop=stop.is_set,
-        progress=lambda p: progress(asdict(p)),
+        stop=lambda: fetch_stopped(stop),
+        progress=lambda p: progress({"phase": "fetching", **asdict(p)}),
         categories=setup.settings.indexer_categories,
     )
     return catalogue_status(setup)
@@ -63,13 +100,14 @@ def plan(
     *,
     cached_only: bool = False,
     category: int | None = None,
+    categories: list[int] | None = None,
     options: PlanOptions | None = None,
+    on_plan: Callable[[Plan], None] = lambda plan: None,
 ) -> dict:
     settings = setup.settings
-    if category is not None:
-        relevant = plan_categories(
-            [category], settings.download_folders, settings.indexer_categories
-        )
+    chosen = categories if categories is not None else [category] if category is not None else None
+    if chosen is not None:
+        relevant = plan_categories(chosen, settings.download_folders, settings.indexer_categories)
         destinations = (setup.download_folder(c) for c in relevant)
         folders = list(dict.fromkeys(path for path in destinations if path is not None))
         for folder in folders:
@@ -84,23 +122,12 @@ def plan(
                 folders.append(setup.path_under_root(value))
     for folder in folders:
         library.check_tree(folder, stop)
-    if not cached_only:
-        sync_catalogue(
-            setup.indexer(),
-            setup.store,
-            plan_categories(
-                [category] if category is not None else settings.indexer_categories,
-                settings.download_folders,
-                settings.indexer_categories,
-            ),
-            bootstrap=True,
-            max_pages=10,
-            stop=stop.is_set,
-            progress=lambda p: progress(asdict(p)),
-            categories=settings.indexer_categories,
-        )
+    notice = ""
+    if not cached_only and not fetch_stopped(stop):
+        notice = refresh_for_plan(setup, stop, progress, chosen)
     if stop.is_set():
         return {"cancelled": True, "catalogue": catalogue_status(setup)}
+    progress({"phase": "planning"})
     torrents = setup.client().torrents(with_files=False)
     cached = {r.infohash: r for r in setup.store.catalogue()}
     current = seeding(settings.zen, torrents, settings.indexer.url, catalogue=cached)
@@ -111,30 +138,47 @@ def plan(
         settings.indexer_categories,
         {t.hash.lower() for t in torrents},
         disk_of,
-        {category} if category is not None else None,
+        set(chosen) if chosen is not None else None,
         settings.plan_exclusions,
         issues=issues,
     )
-    existing = [
+    existing = on_disk(candidates, [entry.item for entry in library.entries]) + [
         row
         for folder in folders
         for row in on_disk(candidates, scan(LibraryFolder(folder), setup.store).require_complete())
     ]
+    existing = list({row.infohash: row for row in existing}.values())
     exclude = {r.infohash for r in existing}
     spaces = disk_space(folders, settings.free_space_margin)
     available = {space.disk: space.available for space in spaces}
     slots = max(0, settings.zen.torrent_cap - current.count) if settings.zen.torrent_cap else None
+    options = options or PlanOptions(
+        max_download_bytes=maximum_bytes, max_torrents=maximum_torrents
+    )
+    reseeds = reseed_candidates(
+        settings.zen,
+        library.planning_matches(stop),
+        {t.hash.lower() for t in torrents},
+        current.active,
+        options=options,
+    )
+    reseed_hashes = {c.infohash for c in reseeds}
     proposed = make_plan(
         settings.zen,
-        [c for c in candidates if c.infohash not in exclude],
+        reseeds + [c for c in candidates if c.infohash not in exclude | reseed_hashes],
         available,
         current.active,
         slots,
-        options=options
-        or PlanOptions(max_download_bytes=maximum_bytes, max_torrents=maximum_torrents),
+        options=options,
         disk_spaces=spaces,
     )
     proposed = explain_inputs(proposed, issues, existing)
+    on_plan(proposed)
+    return {**plan_result(setup, proposed), "notice": notice}
+
+
+def plan_result(setup: Setup, proposed: Plan) -> dict:
+    """The desktop Plan's summary and rows, without serializing private torrent data."""
     return {
         "issues": [{**asdict(issue), "message": issue_text(issue)} for issue in proposed.issues],
         "provisional": True,
@@ -144,17 +188,33 @@ def plan(
                 "hash": i.candidate.infohash,
                 "title": i.candidate.title,
                 "size": i.candidate.size,
+                "download_size": i.candidate.download_size,
+                "reseed": i.candidate.reseed,
+                "path": (
+                    str(i.candidate.source.entry.item.path)
+                    if isinstance(i.candidate.source, ReseedSource)
+                    else ""
+                ),
                 "seeders": i.candidate.seeders,
                 "zen": i.zen,
                 "note": i.note,
-                "folder": str(i.candidate.folder),
-                "client_id": setup.settings.active_client_id,
+                "folder": str(i.candidate.folder) if i.candidate.folder else "",
+                "client_id": i.candidate.client_id or setup.settings.active_client_id,
             }
             for i in proposed.items
         ],
         "zen": proposed.zen_added,
         "size": proposed.download_size,
-        "excluded": len(existing),
+        "excluded": len(proposed.on_disk),
+        "on_disk": [asdict(row) | {"path": str(row.path)} for row in proposed.on_disk],
+        "average_note": proposed.average_note,
+        "payback_days": proposed.payback_days,
+        "sending_seconds": proposed.sending_seconds(max(1, setup.indexer_key_count())),
+        "download_seconds": (
+            proposed.download_seconds(setup.settings.download_speed)
+            if setup.settings.download_speed
+            else None
+        ),
         "storage": plan_storage(proposed),
     }
 

@@ -2,6 +2,7 @@
 
 const zenSeeding = { generation: 0, expanded: new Set(), client: null, groups: [] };
 function zenTab(name) {
+  $("zen-overview").hidden = name !== "seeding";
   for (const key of ["seeding", "plan", "catalogue"]) {
     const selected = key === name;
     $(`zen-${key}-panel`).hidden = !selected;
@@ -127,6 +128,7 @@ async function loadZenSeeding() {
       $("seeding-classes").append(element(cls.current ? "strong" : "span", text));
     }
     $("seeding-classes").append(element("span", `${say("Your uploads", "Vos uploads")} : ${result.uploads}`));
+    if (document.activeElement !== $("seeding-uploads")) $("seeding-uploads").value = result.uploads;
   } catch (error) {
     if (generation === zenSeeding.generation) $("seeding-status").textContent = error.message;
   }
