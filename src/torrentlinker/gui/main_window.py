@@ -120,7 +120,7 @@ from torrentlinker.plan import (
     saved_items,
 )
 from torrentlinker.plan_diagnostics import PlanIssue
-from torrentlinker.profile import ProfileClient, UserProfile
+from torrentlinker.profile import UserProfile
 from torrentlinker.qbit import AlreadyInClient as ClientAlreadyInClient
 from torrentlinker.qbit import ClientApi
 from torrentlinker.queries import build_queries, find_ids
@@ -160,6 +160,11 @@ class MainWindow(QMainWindow):
         store = store.for_client(settings.active_client_id)
         self.settings = settings
         self.settings_path = settings_path
+        from torrentlinker.companion import CompanionReceiver
+        from torrentlinker.profile_workspace import ProfileWorkspace
+
+        self.account_workspace = ProfileWorkspace(settings_path.parent)
+        self.companion_receiver: CompanionReceiver | None = None
         self.agent_runtime: Any = None
         self.agent_settings_timer = QTimer(self)
         self.agent_settings_timer.setInterval(1000)
@@ -171,7 +176,6 @@ class MainWindow(QMainWindow):
         self._connections = Connections(get_secret)
         self._indexer: Indexer | None = None
         # Kept connections, with what they were made for, the proxy in use included.
-        self._profile: tuple[tuple[object, ...], ProfileClient] | None = None
         self._qbit: tuple[tuple[str, ...], ClientApi, tuple[str | None, str | None]] | None = None
         self.apply_proxy()
         self._indexer_proxy = net.current()  # what the Indexer, once made, goes through
@@ -303,6 +307,15 @@ class MainWindow(QMainWindow):
         self.review.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.review.candidates_checked.connect(self._show_match_zen)
         self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
+        self.zen_tab.profile_view.refresh_requested.connect(self.refresh_profile)
+        self.zen_tab.profile_view.pair_requested.connect(self.pair_companion)
+        self.zen_tab.profile_view.disconnect_requested.connect(self.disconnect_companion)
+        self.zen_tab.profile_view.extension_requested.connect(self.save_companion_extension)
+        self.profile_timer = QTimer(self)
+        self.profile_timer.setInterval(3000)
+        self.profile_timer.timeout.connect(self.show_account_profile)
+        self.profile_timer.start()
+        self.show_account_profile()
         self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
         self.zen_tab.defer_while_hidden(
             lambda: self.isVisible() and not self.zen_tab.seeding_view.table.isVisible()
@@ -881,13 +894,6 @@ class MainWindow(QMainWindow):
             self._indexer_proxy = net.current()
         return current
 
-    def profile_client(self) -> ProfileClient:
-        """One client, so its 30-second freshness window holds across refreshes."""
-        wanted = (self.settings.indexer.url, get_secret(INDEXER_API_KEY))
-        if self._profile is None or self._profile[0] != (*wanted, net.current()):
-            self._profile = ((*wanted, net.current()), ProfileClient(*wanted))
-        return self._profile[1]
-
     def _sync_agent_settings(self) -> None:
         if self.agent_runtime is not None:
             self.agent_runtime.sync(self.settings)
@@ -895,9 +901,63 @@ class MainWindow(QMainWindow):
     def refresh_profile(self) -> None:
         """Read the c411 profile; only at startup and when the user asks."""
         self.band.busy(True)
-        run_in_background(self.profile_client().fetch, self._profile_read, self._profile_failed)
+        self.zen_tab.profile_view.refresh_button.setEnabled(False)
+        credentials = (self.settings.indexer.url, get_secret(INDEXER_API_KEY))
+        run_in_background(
+            lambda: self.account_workspace.refresh(*credentials),
+            self._profile_read,
+            self._profile_failed,
+        )
+
+    def show_account_profile(self) -> None:
+        self.account_workspace.bind(self.settings.indexer.url, get_secret(INDEXER_API_KEY))
+        self.zen_tab.profile_view.show_state(self.account_workspace.state())
+
+    def pair_companion(self) -> None:
+        from torrentlinker.companion import CompanionReceiver
+
+        try:
+            self.show_account_profile()
+            pairing = self.account_workspace.pairing()
+            if self.companion_receiver is None:
+                self.companion_receiver = CompanionReceiver(
+                    self.account_workspace,
+                    lambda: (self.settings.indexer.url, get_secret(INDEXER_API_KEY)),
+                )
+            self.zen_tab.profile_view.show_pairing(self.companion_receiver.address, pairing["code"])
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, self.tr("Browser companion"), str(error))
+
+    def disconnect_companion(self) -> None:
+        self.account_workspace.disconnect()
+        self.zen_tab.profile_view.pairing_box.hide()
+        self.zen_tab.profile_view.code.clear()
+        if self.companion_receiver is not None:
+            self.companion_receiver.stop()
+            self.companion_receiver = None
+        self.show_account_profile()
+
+    def save_companion_extension(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        from torrentlinker.companion import extension_zip
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, self.tr("Save browser companion"), "torrentlinker-companion.zip", "ZIP (*.zip)"
+        )
+        if path:
+            try:
+                Path(path).write_bytes(extension_zip())
+            except OSError:
+                QMessageBox.warning(
+                    self,
+                    self.tr("Browser companion"),
+                    self.tr("Could not save the extension. Choose a writable folder."),
+                )
 
     def _profile_read(self, profile: UserProfile) -> None:
+        self.zen_tab.profile_view.refresh_button.setEnabled(True)
+        self.show_account_profile()
         self.band.show_profile(profile)
         filled = profile.apply(self.settings.zen)
         if filled != self.settings.zen:
@@ -907,6 +967,8 @@ class MainWindow(QMainWindow):
             self.zen_tab.seeding_view.refresh()
 
     def _profile_failed(self, error: Exception) -> None:
+        self.zen_tab.profile_view.refresh_button.setEnabled(True)
+        self.show_account_profile()
         log.info("c411 profile not read: %s", error)
         self.band.show_profile_error(error)
 
@@ -1351,7 +1413,7 @@ class MainWindow(QMainWindow):
 
     def send_plan(self, plan: Plan) -> None:
         self.tabs.setCurrentWidget(self.zen_tab)
-        self.zen_tab.pages.setCurrentIndex(1)
+        self.zen_tab.pages.setCurrentIndex(2)
         if self.send_runner is not None:
             return
         qbit, indexer, reseeder = self.qbit(), self.indexer(), self.plan_reseeder()
@@ -1761,6 +1823,10 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self.profile_timer.stop()
+        if self.companion_receiver is not None:
+            self.companion_receiver.stop()
+            self.companion_receiver = None
         self.reseed_consent.cancel()
         if self.media_tab.window() is self:
             self.media_tab.stop()

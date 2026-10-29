@@ -19,6 +19,7 @@ from torrentlinker.config import ProxySettings, Settings
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, TorrentClient
 from torrentlinker.indexer import Indexer
 from torrentlinker.paths import PathMapper
+from torrentlinker.profile_workspace import ProfileWorkspace
 from torrentlinker.qbit import ClientApi
 from torrentlinker.store import Store
 from torrentlinker.web.security import ServerSecrets
@@ -147,6 +148,7 @@ class Setup:
         self.secrets = secrets
         self.connector = connector
         self.lock = threading.RLock()
+        self._profile_workspace = ProfileWorkspace(directory)
         self.download_guard: Callable[[bytes, str], None] | None = None
         self._client: ClientApi | None = None
         self._indexer: Indexer | None = None
@@ -158,6 +160,11 @@ class Setup:
             net.proxy_url(proxy.address, proxy.username, self.secrets.get("proxy-password")),
             proxy.torrent_client,
         )
+
+    def profile_workspace(self) -> ProfileWorkspace:
+        root = self._root or self
+        root._profile_workspace.bind(root.settings.indexer.url, root.secrets.get("indexer-api-key"))
+        return root._profile_workspace
 
     def for_client(self, identifier: str) -> Setup:
         root = self._root or self

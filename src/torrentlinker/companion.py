@@ -1,0 +1,110 @@
+"""Packaged browser companion and desktop loopback receiver (started on demand)."""
+
+from __future__ import annotations
+
+import io
+import json
+import threading
+import zipfile
+from collections.abc import Callable
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import cast
+
+from torrentlinker.profile_workspace import COMPANION_ROUTES, ProfileWorkspace, extension_origin
+
+
+def extension_zip() -> bytes:
+    result = io.BytesIO()
+    with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED) as bundle:
+        for path in sorted((Path(__file__).parent / "companion_extension").iterdir()):
+            if path.is_file():
+                bundle.write(path, f"torrentlinker-companion/{path.name}")
+    return result.getvalue()
+
+
+class CompanionReceiver:
+    def __init__(
+        self,
+        workspace: ProfileWorkspace,
+        credentials: Callable[[], tuple[str, str]],
+        port: int = 8767,
+    ):
+        class Handler(BaseHTTPRequestHandler):
+            def setup(self) -> None:
+                super().setup()
+                self.connection.settimeout(5)
+
+            def log_message(self, *_args: object) -> None:
+                pass  # Never log account data or pairing credentials.
+
+            def respond(self, status: int, body: dict | None = None) -> None:
+                raw = json.dumps(body or {}).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Cache-Control", "no-store")
+                origin = self.headers.get("Origin", "")
+                if extension_origin(origin):
+                    self.send_header("Access-Control-Allow-Origin", origin)
+                    self.send_header("Vary", "Origin")
+                    if status == 204:
+                        self.send_header("Access-Control-Allow-Methods", "POST")
+                        self.send_header(
+                            "Access-Control-Allow-Headers", "content-type, authorization"
+                        )
+                self.end_headers()
+                if status != 204:
+                    self.wfile.write(raw)
+
+            def allowed(self) -> bool:
+                return (
+                    self.path in COMPANION_ROUTES
+                    and self.headers.get("Host")
+                    == f"127.0.0.1:{cast(ThreadingHTTPServer, self.server).server_port}"
+                    and extension_origin(self.headers.get("Origin", ""))
+                )
+
+            def do_OPTIONS(self) -> None:
+                self.respond(204 if self.allowed() else 403)
+
+            def do_POST(self) -> None:
+                if not self.allowed():
+                    self.respond(403, {"detail": "Use the paired browser extension."})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= 8192:
+                        raise ValueError("Request too large.")
+                    body = json.loads(self.rfile.read(length))
+                    if not isinstance(body, dict):
+                        raise ValueError("Invalid JSON object.")
+                    workspace.bind(*credentials())
+                    result = workspace.receive(
+                        self.path,
+                        self.headers.get("Origin", ""),
+                        self.headers.get("Authorization", ""),
+                        body,
+                    )
+                    self.respond(200, result)
+                except PermissionError as error:
+                    self.respond(403, {"detail": str(error)})
+                except (ValueError, UnicodeError):
+                    self.respond(
+                        400, {"detail": "Invalid or expired snapshot. Read a new preview."}
+                    )
+
+        try:
+            self.server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        except OSError:
+            if not port:
+                raise
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.address = f"http://127.0.0.1:{self.server.server_port}"
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)

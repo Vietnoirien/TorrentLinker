@@ -40,7 +40,7 @@ torrentlinker-web = "torrentlinker.web.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-torrentlinker = ["i18n/*.qm", "assets/*.png", "gui/*.qml", "web/static/*"]
+torrentlinker = ["i18n/*.qm", "assets/*.png", "gui/*.qml", "web/static/*", "companion_extension/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -664,7 +664,7 @@ async function navigate(view, section = "connections") {
   if (view === "jobs") await loadJobs();
   if (view === "zen") {
     await refreshSetup();
-    await Promise.all([loadZenSeeding(), api("zen/catalogue").then(showCatalogue), loadZenPlan()]);
+    await Promise.all([loadZenProfile(true), loadZenSeeding(), api("zen/catalogue").then(showCatalogue), loadZenPlan()]);
   }
   if (view === "search" && state.setup.indexer_configured) await loadSearchPage();
 }
@@ -1438,7 +1438,7 @@ $("language").onchange = () => {
   localStorage.setItem("tl-language", language);
   translate();
   if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
-  if (state.view === "zen") { guard(loadZenSeeding); retranslatePlan(); }
+  if (state.view === "zen") { guard(loadZenSeeding); retranslatePlan(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") { renderUploadQueue(); uploadEditorState(); }
   labelTorrentBar();

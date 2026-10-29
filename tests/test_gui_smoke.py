@@ -1529,6 +1529,7 @@ def test_seeding_views_wait_while_hidden_and_catch_up_when_shown(qtbot):
     assert tab.seeding_view.seeding is view
     tab.resize(900, 600)
     hidden[0] = False
+    tab.pages.setCurrentIndex(1)  # Profile is first; show Seeding to resume its deferred work.
     tab.show()
     qtbot.waitUntil(lambda: "a" in tab.seeding_view.table.torrents, timeout=3000)
     qtbot.waitUntil(lambda: "<b>" in tab.comparison.labels[ZenClass.TANKER].text(), timeout=3000)

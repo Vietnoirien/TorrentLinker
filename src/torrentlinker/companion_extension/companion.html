@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TorrentLinker companion</title><link rel="stylesheet" href="style.css">
+<main><small>TORRENTLINKER · BROWSER COMPANION</small><h1>Bring your c411 profile with you.</h1>
+<p>Read your signed-in account, review the fields, then send this snapshot to your paired TorrentLinker app.</p>
+<section><h2>1. Preview from c411</h2><p>Open c411.org, then click the extension icon. Your login stays in that browser tab.</p>
+<label><input type="checkbox" id="details"> Include transfer totals and seed time</label>
+<label><input type="checkbox" id="seeds"> Include active seed count</label>
+<p>Always included: account ID, username, Zen Balance, Class, level and capture time. No torrent names, hashes, cookies or keys.</p>
+<button id="read">Read and preview</button><pre id="preview">No account read yet.</pre></section>
+<section><h2>2. Pair this receiver</h2><p>In TorrentLinker, open Zen → Profile → Connect companion. Use its receiver address and one-time code. Remote WebUI connections require HTTPS.</p>
+<label>Receiver address<input id="target" value="http://127.0.0.1:8767" spellcheck="false"></label>
+<label>One-time pairing code<input id="code" type="password" autocomplete="off"></label>
+<button id="pair" disabled>Pair with this account</button><p id="destination">Not paired</p></section>
+<section><h2>3. Send the preview</h2><p>Only the fields shown above are sent. Nothing is sent automatically.</p>
+<button id="send" disabled>Send this snapshot</button> <button id="forget">Disconnect and forget</button></section>
+<p role="status" id="status">Ready. Nothing has been read or sent.</p><p>All state lives in this extension tab. Closing it forgets the pairing token. Use Disconnect &amp; clear in TorrentLinker to invalidate it immediately.</p>
+</main><script type="module" src="companion.js"></script></html>

@@ -75,6 +75,22 @@ def test_profile_is_read_with_the_indexer_key_as_a_bearer_token() -> None:
     assert profile.download_allowed
 
 
+def test_profile_retains_account_progression_and_transfer_totals() -> None:
+    profile = client(lambda r: httpx.Response(200, json=PROFILE)).fetch()
+
+    assert profile.account_id == "42"
+    assert profile.member_since == "2025-01-02T00:00:00Z"
+    assert profile.level == 12
+    assert profile.xp_into_level == 200
+    assert profile.xp_to_next_level == 800
+    assert (profile.quests_completed, profile.quests_total) == (4, 10)
+    assert profile.total_earned == 400
+    assert profile.total_spent == 276.5
+    assert profile.uploaded_actual == 10
+    assert profile.downloaded_total == 5
+    assert profile.freeleech is False
+
+
 def test_class_and_tree_bonus_fill_the_zen_profile_keeping_manual_fields() -> None:
     profile = client(lambda r: httpx.Response(200, json=PROFILE)).fetch()
 

@@ -197,6 +197,10 @@ def create_app(
 
     media_routes(app, agent_service, assistant)
     app.state.reset_clients = reset_clients
+    from torrentlinker.profile_workspace import COMPANION_ROUTES
+    from torrentlinker.web.profile import companion_request, profile_routes
+
+    profile_routes(app, service)
 
     def idle() -> None:
         if jobs.active():
@@ -209,6 +213,8 @@ def create_app(
         prefix = request.scope.get("root_path", "")
         if prefix and route.startswith(prefix + "/"):
             route = route[len(prefix) :]
+        if route in COMPANION_ROUTES:
+            return await companion_request(request, route, service)
         if route.startswith("/documentation/") and not sessions.valid(
             request.cookies.get("tl_session", "")
         ):

@@ -10,6 +10,7 @@
     <script src="static/app.js" defer></script>
     <script src="static/library.js" defer></script>
     <script src="static/zen.js" defer></script>
+    <script src="static/profile.js" defer></script>
     <script src="static/plan.js" defer></script>
     <script src="static/feeds.js" defer></script>
     <script src="static/search.js" defer></script>
@@ -482,10 +483,33 @@
             </div>
           </div>
           <div class="toolbar" role="tablist" aria-label="Zen">
+            <button id="zen-profile-tab" role="tab" aria-selected="true" aria-controls="zen-profile-panel">Profile</button>
             <button id="zen-seeding-tab" role="tab" aria-selected="true" aria-controls="zen-seeding-panel" data-i18n="seedingTab">Seeding</button>
             <button id="zen-plan-tab" role="tab" aria-selected="false" aria-controls="zen-plan-panel" tabindex="-1" data-i18n="planTab">Plan</button>
             <button id="zen-catalogue-tab" role="tab" aria-selected="false" aria-controls="zen-catalogue-panel" tabindex="-1" data-i18n="catalogueTab">Catalogue</button>
           </div>
+          <section id="zen-profile-panel" role="tabpanel" aria-labelledby="zen-profile-tab">
+            <div class="toolbar"><h2 id="profile-heading">Your c411 profile</h2><button id="profile-refresh" class="primary">Refresh profile</button></div>
+            <p id="profile-notice" role="status"></p>
+            <div id="profile-identity" class="card"></div>
+            <div id="profile-stats" class="profile-grid"></div>
+            <div class="profile-columns"><div id="profile-progression" class="card"></div><div id="profile-transfers" class="card"></div></div>
+            <div class="card">
+              <h3 id="profile-advanced-heading">Advanced activity · Browser companion</h3>
+              <div id="profile-advanced" aria-live="polite"></div>
+              <p id="profile-privacy" class="muted"></p>
+              <div class="toolbar">
+                <a id="profile-extension" class="button" href="api/zen/profile/extension" download>Download extension</a>
+                <button id="profile-pair" class="primary">Connect companion</button>
+                <button id="profile-disconnect" class="quiet">Disconnect &amp; clear</button>
+              </div>
+              <div id="profile-pairing" hidden>
+                <p id="profile-instructions"></p>
+                <label><span id="profile-address-label">Receiver address</span><input id="profile-address" readonly /></label>
+                <label><span id="profile-code-label">Pairing code</span><input id="profile-code" readonly autocomplete="off" /></label>
+              </div>
+            </div>
+          </section>
           <section id="zen-catalogue-panel" class="card" role="tabpanel" aria-labelledby="zen-catalogue-tab" hidden>
             <h2 data-i18n="catalogueTab">Catalogue</h2>
             <p id="catalogue-status" role="status"></p>

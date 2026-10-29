@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 from urllib.parse import urlsplit
@@ -47,6 +47,25 @@ class UserProfile:
     balance: float  # Zen Balance
     download_allowed: bool
     blocked_reason: str | None
+    account_id: str = ""
+    member_since: str | None = None
+    level: int | None = None
+    xp_into_level: int | None = None
+    xp_to_next_level: int | None = None
+    quests_completed: int | None = None
+    quests_total: int | None = None
+    stars: int | None = None
+    total_earned: float | None = None
+    total_spent: float | None = None
+    uploaded_actual: int | None = None
+    uploaded_credit: int | None = None
+    uploaded_total: int | None = None
+    downloaded_actual: int | None = None
+    downloaded_credit: int | None = None
+    downloaded_total: int | None = None
+    freeleech: bool | None = None
+    grade: str = ""
+    quests: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def apply(self, profile: ZenProfile) -> ZenProfile:
         """The Zen Profile with the Class and tree bonus read from c411."""
@@ -72,6 +91,11 @@ def parse_profile(data: dict[str, Any]) -> UserProfile:
     slug = cls.get("effectiveSlug") or cls.get("slug")
     zen = data.get("zen") or {}
     download = data.get("download") or {}
+    level = data.get("level") or {}
+    progress = cls.get("progress") or {}
+    transfer = data.get("transfer") or {}
+    uploaded = transfer.get("uploaded") or {}
+    downloaded = transfer.get("downloaded") or {}
     return UserProfile(
         username=str(data.get("username", "")),
         class_slug=slug,
@@ -80,6 +104,37 @@ def parse_profile(data: dict[str, Any]) -> UserProfile:
         balance=float(zen.get("balance") or 0),
         download_allowed=bool(download.get("allowed", True)),
         blocked_reason=download.get("blockedReason"),
+        account_id=str(data.get("id") or ""),
+        member_since=data.get("memberSince"),
+        level=level.get("level"),
+        xp_into_level=level.get("xpIntoLevel"),
+        xp_to_next_level=level.get("xpToNextLevel"),
+        quests_completed=progress.get("questsCompleted"),
+        quests_total=progress.get("questsTotal"),
+        stars=progress.get("stars"),
+        total_earned=zen.get("totalEarned"),
+        total_spent=zen.get("totalSpent"),
+        uploaded_actual=uploaded.get("actual"),
+        uploaded_credit=uploaded.get("credit"),
+        uploaded_total=uploaded.get("total"),
+        downloaded_actual=downloaded.get("actual"),
+        downloaded_credit=downloaded.get("credit"),
+        downloaded_total=downloaded.get("total"),
+        freeleech=(data.get("freeleech") or {}).get("active"),
+        grade=" ".join(
+            str(v)
+            for v in (
+                (progress.get("grade") or {}).get("tier"),
+                (progress.get("grade") or {}).get("level"),
+            )
+            if v is not None
+        ),
+        quests={
+            name: {key: value.get(key) for key in ("star", "questsCompleted", "questsTotal")}
+            for name, value in (cls.get("voies") or {}).items()
+            if name in {"seed", "upload", "specialization", "competitivity"}
+            and isinstance(value, dict)
+        },
     )
 
 

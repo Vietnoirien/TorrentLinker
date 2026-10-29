@@ -540,11 +540,9 @@ class Operations:
                 raise ValueError("Select one prepared Upload.")
             return self.uploads.seed(request.hashes[0], stop)
         if request.kind == "profile":
-            from torrentlinker.profile import ProfileClient
-
-            profile = ProfileClient(
+            profile = self.setup.profile_workspace().refresh(
                 self.setup.settings.indexer.url, self.setup.secrets.get("indexer-api-key")
-            ).fetch()
+            )
             self.setup.settings.zen = profile.apply(self.setup.settings.zen)
             self.setup.save()
             return {"balance": profile.balance, "class": profile.class_slug}

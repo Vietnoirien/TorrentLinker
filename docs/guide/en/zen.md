@@ -10,6 +10,35 @@ Screenshots use the English interface, dark theme and example data.
 
 ![Seeding torrents and category notes](../images/en/zen.png)
 
+## Profile and browser companion
+
+**Profile** is the first Zen tab on desktop and WebUI. It shows your API account,
+membership date, Class, level, quest progression, Zen balance and transfer totals.
+Use **Refresh profile** to update it. Missing fields stay blank; an API permission
+or connection error appears alongside the last successful values.
+
+Advanced activity comes from an optional browser companion for Chrome, Brave or
+Edge. It adds the active seed count, validated uploads, total seed time and selected
+transfer statistics from your signed-in c411 account.
+
+1. In **Zen → Profile**, save/download the extension ZIP. Extract it, enable
+   Developer mode on the browser's Extensions page and load the extracted folder.
+   Replace the old prototype extension if you installed that earlier.
+2. Select **Connect companion**. On c411.org, click the extension icon and read a
+   preview. Enter the receiver address and code shown by TorrentLinker, then pair.
+   The browser account must match your API account.
+3. Review the fields and select **Send this snapshot**. Sending is always manual.
+   The desktop receiver runs on this computer; remote WebUI receivers require HTTPS
+   and use the WebUI address, including any reverse-proxy path prefix.
+
+Pairing codes last 10 minutes, connections one hour. Closing the extension tab or
+restarting TorrentLinker requires pairing again. Login cookies and API keys stay
+out of snapshots. Torrent names and hashes are not collected. Saved snapshots have
+a source and sync time; after five minutes they are labelled stale. They never
+replace API values or planning settings. **Disconnect & clear** revokes access
+and deletes the saved companion data. Changing the Indexer address or API key also
+clears cached account data. The private cache lives in the app's configuration folder.
+
 ## Zen integration
 
 The Zen tab brings together c411's reported balance and TorrentLinker's earnings estimates:

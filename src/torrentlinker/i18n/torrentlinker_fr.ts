@@ -2172,6 +2172,19 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
 <context>
     <name>MainWindow</name>
     <message>
+        <source>Save browser companion</source>
+        <translation>Enregistrer l’extension navigateur</translation>
+    </message>
+    <message>
+        <source>Browser companion</source>
+        <translation>Extension navigateur</translation>
+    </message>
+    <message>
+        <source>Could not save the extension. Choose a writable folder.</source>
+        <translation>Impossible d’enregistrer l’extension. Choisissez un dossier accessible en écriture.</translation>
+    </message>
+
+    <message>
         <source>RSS</source>
         <translation>RSS</translation>
     </message>
@@ -7597,6 +7610,11 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
 <context>
     <name>ZenTab</name>
     <message>
+        <source>Profile</source>
+        <translation>Profil</translation>
+    </message>
+
+    <message>
         <location filename="../gui/zen_view.py" line="877"/>
         <source>Seeding</source>
         <translation>En partage</translation>
@@ -9802,6 +9820,240 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Original: </source>
         <translation>Original : </translation>
+    </message>
+</context>
+<context>
+    <name>ProfileView</name>
+    <message>
+        <source>Active seeds</source>
+        <translation>Seeds actifs</translation>
+    </message>
+    <message>
+        <source>Validated uploads</source>
+        <translation>Uploads validés</translation>
+    </message>
+    <message>
+        <source>Total seed time</source>
+        <translation>Durée totale de seed</translation>
+    </message>
+    <message>
+        <source>{0} days</source>
+        <translation>{0} jours</translation>
+    </message>
+    <message>
+        <source>Actual upload {0} · Actual download {1}
+Credited upload {2} · Credited download {3}</source>
+        <translation>Envoi réel {0} · Téléchargement réel {1}
+Envoi crédité {2} · Téléchargement crédité {3}</translation>
+    </message>
+
+    <message>
+        <source>Your c411 profile</source>
+        <translation>Votre profil c411</translation>
+    </message>
+    <message>
+        <source>Refresh profile</source>
+        <translation>Actualiser le profil</translation>
+    </message>
+    <message>
+        <source>Progression</source>
+        <translation>Progression</translation>
+    </message>
+    <message>
+        <source>Transfers · API</source>
+        <translation>Transferts · API</translation>
+    </message>
+    <message>
+        <source>Advanced activity · Browser companion</source>
+        <translation>Activité détaillée · Extension navigateur</translation>
+    </message>
+    <message>
+        <source>Save extension…</source>
+        <translation>Enregistrer l’extension…</translation>
+    </message>
+    <message>
+        <source>Connect companion</source>
+        <translation>Connecter l’extension</translation>
+    </message>
+    <message>
+        <source>Disconnect &amp; clear</source>
+        <translation>Déconnecter et effacer</translation>
+    </message>
+    <message>
+        <source>Pair with this account</source>
+        <translation>Associer à ce compte</translation>
+    </message>
+    <message>
+        <source>Extract the extension ZIP, then load its folder in your browser's Extensions page with Developer mode enabled. Open c411 and click the extension. Read a preview, enter this receiver address and code, pair, then send the snapshot. The code expires in 10 minutes; the connection lasts one hour.</source>
+        <translation>Extrayez le ZIP et chargez son dossier dans la page Extensions du navigateur en mode développeur. Ouvrez c411 et cliquez sur l’extension. Lisez un aperçu, saisissez cette adresse et ce code, associez puis envoyez. Le code expire après 10 minutes ; la connexion dure une heure.</translation>
+    </message>
+    <message>
+        <source>Receiver address</source>
+        <translation>Adresse de réception</translation>
+    </message>
+    <message>
+        <source>Pairing code</source>
+        <translation>Code d’association</translation>
+    </message>
+    <message>
+        <source>Add an API key with profile:read access in Settings → Indexer.</source>
+        <translation>Ajoutez une clé API avec le droit profile:read dans Paramètres → Indexeur.</translation>
+    </message>
+    <message>
+        <source>API key refused. Check Settings → Indexer and refresh.</source>
+        <translation>Clé API refusée. Vérifiez Paramètres → Indexeur puis actualisez.</translation>
+    </message>
+    <message>
+        <source>The API key needs profile:read access.</source>
+        <translation>La clé API nécessite le droit profile:read.</translation>
+    </message>
+    <message>
+        <source>The tracker asked us to wait. Try refreshing later.</source>
+        <translation>Le tracker demande de patienter. Réessayez plus tard.</translation>
+    </message>
+    <message>
+        <source>Profile unavailable. Check your connection and refresh.</source>
+        <translation>Profil indisponible. Vérifiez la connexion puis actualisez.</translation>
+    </message>
+    <message>
+        <source>Allowed</source>
+        <translation>Autorisé</translation>
+    </message>
+    <message>
+        <source>Blocked</source>
+        <translation>Bloqué</translation>
+    </message>
+    <message>
+        <source>Seeding</source>
+        <translation>Seed</translation>
+    </message>
+    <message>
+        <source>Uploading</source>
+        <translation>Upload</translation>
+    </message>
+    <message>
+        <source>Specialization</source>
+        <translation>Spécialisation</translation>
+    </message>
+    <message>
+        <source>Competitiveness</source>
+        <translation>Compétitivité</translation>
+    </message>
+    <message>
+        <source>Zen balance</source>
+        <translation>Solde Zen</translation>
+    </message>
+    <message>
+        <source>Class &amp; level</source>
+        <translation>Classe et niveau</translation>
+    </message>
+    <message>
+        <source>Download access</source>
+        <translation>Accès au téléchargement</translation>
+    </message>
+    <message>
+        <source>Uploaded</source>
+        <translation>Envoyé</translation>
+    </message>
+    <message>
+        <source>Downloaded</source>
+        <translation>Téléchargé</translation>
+    </message>
+    <message>
+        <source>Your browser login stays in the browser. Preview and send only the fields you choose.</source>
+        <translation>Votre session reste dans le navigateur. Prévisualisez et envoyez uniquement les champs choisis.</translation>
+    </message>
+    <message>
+        <source>Connect your c411 account</source>
+        <translation>Connectez votre compte c411</translation>
+    </message>
+    <message>
+        <source>Pair again</source>
+        <translation>Associer à nouveau</translation>
+    </message>
+    <message>
+        <source>Stale snapshot</source>
+        <translation>Données anciennes</translation>
+    </message>
+    <message>
+        <source>Snapshot received</source>
+        <translation>Données reçues</translation>
+    </message>
+    <message>
+        <source>Active seeds, validated uploads and total seed time require a browser snapshot.</source>
+        <translation>Les seeds actifs, uploads validés et la durée de seed nécessitent un aperçu du navigateur.</translation>
+    </message>
+    <message>
+        <source>Actual</source>
+        <translation>Réel</translation>
+    </message>
+    <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
+    </message>
+    <message>
+        <source>Total</source>
+        <translation>Total</translation>
+    </message>
+    <message>
+        <source>API snapshot is older than five minutes. Refresh for current values.</source>
+        <translation>Les données API ont plus de cinq minutes. Actualisez pour les mettre à jour.</translation>
+    </message>
+    <message>
+        <source>Account information from the c411 API.</source>
+        <translation>Informations du compte issues de l’API c411.</translation>
+    </message>
+    <message>
+        <source>Account {0} · Member since {1} · API updated {2}</source>
+        <translation>Compte {0} · Membre depuis {1} · API actualisée {2}</translation>
+    </message>
+    <message>
+        <source>{0} Zen
+Earned {1} · Spent {2}</source>
+        <translation>{0} Zen
+Gagnés {1} · Dépensés {2}</translation>
+    </message>
+    <message>
+        <source>{0}
+Level {1} · Tree bonus {2}%</source>
+        <translation>{0}
+Niveau {1} · Bonus d’arbre {2}%</translation>
+    </message>
+    <message>
+        <source>{0} XP in this level · {1} XP to next level</source>
+        <translation>{0} XP dans ce niveau · {1} XP avant le prochain niveau</translation>
+    </message>
+    <message>
+        <source>Quests {0} / {1} · Stars {2}</source>
+        <translation>Quêtes {0} / {1} · Étoiles {2}</translation>
+    </message>
+    <message>
+        <source>Paired. Send a preview from the extension.</source>
+        <translation>Associé. Envoyez un aperçu depuis l’extension.</translation>
+    </message>
+    <message>
+        <source>Connect the companion to see advanced activity.</source>
+        <translation>Connectez l’extension pour afficher l’activité détaillée.</translation>
+    </message>
+    <message>
+        <source>Freeleech active</source>
+        <translation>Freeleech actif</translation>
+    </message>
+    <message>
+        <source>Standard download rules</source>
+        <translation>Règles de téléchargement standard</translation>
+    </message>
+    <message>
+        <source>{0} · c411 browser · Last sync {1}</source>
+        <translation>{0} · Navigateur c411 · Dernière synchronisation {1}</translation>
+    </message>
+    <message>
+        <source>Active seeds {0}   ·   Validated uploads {1}   ·   Total seed time {2} days
+Actual upload {3} · Actual download {4}
+Credited upload {5} · Credited download {6}</source>
+        <translation>Seeds actifs {0}   ·   Uploads validés {1}   ·   Durée totale de seed {2} jours
+Envoi réel {3} · Téléchargement réel {4}
+Envoi crédité {5} · Téléchargement crédité {6}</translation>
     </message>
 </context>
 </TS>

@@ -10,6 +10,36 @@ Captures de l’interface française en thème sombre, avec des données d’exe
 
 ![Torrents en partage et notes par catégorie](../images/zen.png)
 
+## Profil et extension navigateur
+
+**Profil** est le premier onglet Zen sur le bureau et le WebUI. Il affiche le
+compte API, la date d’inscription, la Classe, le niveau, les quêtes, le Solde Zen et
+les transferts. **Actualiser le profil** met ces données à jour. Les champs absents
+restent vides ; une erreur d’accès ou de connexion accompagne les dernières valeurs connues.
+
+L’extension facultative pour Chrome, Brave ou Edge ajoute les seeds actifs, les
+uploads validés, la durée totale de seed et les statistiques de transfert choisies
+depuis votre session c411.
+
+1. Dans **Zen → Profil**, enregistrez ou téléchargez le ZIP de l’extension. Extrayez-le,
+   activez le mode développeur sur la page Extensions du navigateur et chargez le
+   dossier extrait. Remplacez l’ancien prototype si vous l’aviez installé.
+2. Cliquez sur **Connecter l’extension**. Sur c411.org, ouvrez l’extension et lisez
+   un aperçu. Saisissez l’adresse et le code affichés par TorrentLinker, puis associez.
+   Le compte du navigateur doit correspondre au compte API.
+3. Vérifiez les champs puis cliquez sur **Send this snapshot**. L’envoi reste manuel.
+   Le récepteur bureau fonctionne sur cet ordinateur. Un WebUI distant nécessite
+   HTTPS ; son adresse inclut l’éventuel préfixe de chemin du reverse proxy.
+
+Les codes durent 10 minutes et les connexions une heure. Fermer l’onglet de
+l’extension ou redémarrer TorrentLinker impose une nouvelle association. Les cookies,
+clés API, noms et hashes de torrents ne sont pas transmis. La source et la date de
+synchronisation sont affichées ; après cinq minutes, les données sont signalées
+comme anciennes. Elles ne remplacent ni les données API ni les réglages du Plan.
+**Déconnecter et effacer** révoque l’accès et supprime les données de l’extension.
+Changer l’adresse de l’Indexeur ou la clé API efface aussi les données du compte en
+cache. Ce cache privé est conservé dans le dossier de configuration de l’application.
+
 ## Intégration Zen
 
 L’onglet Zen réunit le solde fourni par c411 et les estimations de TorrentLinker :

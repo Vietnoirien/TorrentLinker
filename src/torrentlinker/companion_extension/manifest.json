@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "TorrentLinker companion",
+  "version": "0.1.0",
+  "description": "Preview selected c411 profile statistics and send them to your paired TorrentLinker app.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Preview c411 profile for TorrentLinker"
+  }
+}

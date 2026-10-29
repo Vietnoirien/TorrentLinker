@@ -1,0 +1,261 @@
+"""Account-bound API cache and explicitly paired browser snapshots.
+
+Pairing secrets live only in memory. Cached account data is private on disk; changing
+the indexer or its key clears it. A browser snapshot never changes planning inputs.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import math
+import os
+import re
+import secrets
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+
+from torrentlinker import net
+from torrentlinker.profile import ProfileClient, ProfileError, ProfileProblem, UserProfile
+
+COMPANION_ROUTES = {f"/api/companion/{name}" for name in ("pair", "snapshot", "disconnect")}
+DETAILS = {
+    "actualDownloaded",
+    "actualUploaded",
+    "creditedDownloaded",
+    "creditedUploaded",
+    "totalSeedingTimeSec",
+    "validatedUploadsCount",
+}
+
+
+def extension_origin(origin: str) -> bool:
+    return re.fullmatch(r"chrome-extension://[a-p]{32}", origin) is not None
+
+
+def captured_at(data: dict[str, Any]) -> float:
+    stamp = datetime.fromisoformat(data["capturedAt"].replace("Z", "+00:00"))
+    if stamp.tzinfo is None:
+        raise ValueError("Capture time requires a timezone.")
+    return stamp.timestamp()
+
+
+def valid_snapshot(data: Any, now: float) -> bool:
+    def text(value: Any) -> bool:
+        return isinstance(value, str) and 0 < len(value) <= 160
+
+    def number(value: Any) -> bool:
+        return value is None or (
+            type(value) in (int, float) and 0 <= value <= 1e30 and math.isfinite(value)
+        )
+
+    if not isinstance(data, dict) or set(data) != {
+        "schema",
+        "source",
+        "capturedAt",
+        "account",
+        "profile",
+        "details",
+        "activeSeeds",
+    }:
+        return False
+    if (
+        type(data["schema"]) is not int
+        or data["schema"] != 1
+        or data["source"] != "https://c411.org"
+    ):
+        return False
+    account, profile, details, seeds = (
+        data[k] for k in ("account", "profile", "details", "activeSeeds")
+    )
+    if (
+        not isinstance(account, dict)
+        or set(account) != {"id", "username"}
+        or not all(text(v) for v in account.values())
+    ):
+        return False
+    if not isinstance(profile, dict) or set(profile) != {"balance", "classSlug", "level"}:
+        return False
+    if (
+        not number(profile["balance"])
+        or not number(profile["level"])
+        or not (profile["classSlug"] is None or text(profile["classSlug"]))
+    ):
+        return False
+    if details is not None and (
+        not isinstance(details, dict)
+        or set(details) != DETAILS
+        or not all(number(v) for v in details.values())
+    ):
+        return False
+    if seeds is not None and (
+        not isinstance(seeds, dict)
+        or set(seeds) != {"total"}
+        or type(seeds["total"]) is not int
+        or not 0 <= seeds["total"] <= 1e12
+    ):
+        return False
+    try:
+        return -30 <= now - captured_at(data) <= 300
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        return False
+
+
+class ProfileWorkspace:
+    def __init__(self, directory: Path, clock: Callable[[], float] = time.time):
+        self.path = directory / "profile-cache.json"
+        self.clock = clock
+        self.lock = threading.RLock()
+        self.data: dict[str, Any] = {}
+        try:
+            saved = json.loads(self.path.read_text())
+            if isinstance(saved, dict):
+                self.data = saved
+        except (OSError, ValueError):
+            pass
+        self._code = ""
+        self._code_until = 0.0
+        self._pair: tuple[str, str, float] | None = None
+        self._client: tuple[tuple[object, ...], ProfileClient] | None = None
+        self.error: str | None = None
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temp = self.path.with_name(self.path.name + ".tmp")
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.chmod(temp, 0o600)
+        with os.fdopen(fd, "w") as output:
+            json.dump(self.data, output, allow_nan=False)
+        os.replace(temp, self.path)
+
+    def bind(self, url: str, key: str) -> str:
+        parts = urlsplit(url)
+        source = f"{parts.scheme}://{parts.netloc}"
+        binding = hashlib.sha256((source + "\0" + key).encode()).hexdigest()
+        with self.lock:
+            if self.data.get("binding") != binding:
+                self.data = {"binding": binding, "source": source}
+                self._code, self._pair, self._client = "", None, None
+                self.error = None
+                self._save()
+        return binding
+
+    def refresh(self, url: str, key: str) -> UserProfile:
+        binding = self.bind(url, key)
+        client_key = (binding, net.current())
+        with self.lock:
+            if self._client is None or self._client[0] != client_key:
+                self._client = (client_key, ProfileClient(url, key))
+            client = self._client[1]
+        try:
+            profile = client.fetch()
+        except ProfileError as error:
+            with self.lock:
+                if self.data.get("binding") == binding:
+                    self.error = error.problem.value
+            raise
+        with self.lock:
+            if self.data.get("binding") != binding:
+                raise ProfileError(
+                    ProfileProblem.FAILED, "Account settings changed; refresh again."
+                )
+            old_id = (self.data.get("api") or {}).get("account_id")
+            if old_id and old_id != profile.account_id:
+                self.disconnect()
+            api = asdict(profile)
+            api.pop("zen_class")
+            self.data.update(api=api, api_updated_at=self.clock())
+            self.error = None
+            self._save()
+        return profile
+
+    def state(self) -> dict[str, Any]:
+        with self.lock:
+            companion = self.data.get("companion")
+            return {
+                "api": self.data.get("api"),
+                "source": self.data.get("source"),
+                "api_updated_at": self.data.get("api_updated_at"),
+                "error": self.error,
+                "api_stale": bool(
+                    self.data.get("api_updated_at")
+                    and self.clock() - self.data["api_updated_at"] > 300
+                ),
+                "companion": companion,
+                "received_at": self.data.get("received_at"),
+                "paired": bool(self._pair and self.clock() < self._pair[2]),
+                "stale": bool(companion and self.clock() - captured_at(companion) > 300),
+            }
+
+    def pairing(self) -> dict[str, Any]:
+        with self.lock:
+            if not (self.data.get("api") or {}).get("account_id") or self.error:
+                raise ValueError("Refresh the API profile successfully before pairing.")
+            if self.data.get("source") != "https://c411.org":
+                raise ValueError("The companion supports https://c411.org accounts.")
+            self._code = secrets.token_urlsafe(32)
+            self._code_until = self.clock() + 600
+            self._pair = None
+            return {"code": self._code, "expiresIn": 600}
+
+    def disconnect(self) -> None:
+        with self.lock:
+            self._code, self._pair = "", None
+            self.data.pop("companion", None)
+            self.data.pop("received_at", None)
+            self._save()
+
+    def receive(
+        self, route: str, origin: str, authorization: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        with self.lock:
+            if not extension_origin(origin):
+                raise PermissionError("Use the paired browser extension.")
+            account = (self.data.get("api") or {}).get("account_id")
+            if route == "/api/companion/pair":
+                code = body.get("code")
+                if (
+                    not isinstance(code, str)
+                    or not self._code
+                    or self.clock() >= self._code_until
+                    or not hmac.compare_digest(code.encode(), self._code.encode())
+                ):
+                    raise PermissionError("Pairing code invalid or expired.")
+                if body.get("accountId") != account:
+                    raise PermissionError("Different c411 account. Use the API profile account.")
+                token = secrets.token_urlsafe(32)
+                self._pair = (
+                    hashlib.sha256(("Bearer " + token).encode()).hexdigest(),
+                    origin,
+                    self.clock() + 3600,
+                )
+                self._code = ""
+                return {"token": token, "expiresIn": 3600}
+            digest = hashlib.sha256(authorization.encode()).hexdigest()
+            if (
+                not self._pair
+                or self.clock() >= self._pair[2]
+                or origin != self._pair[1]
+                or not hmac.compare_digest(digest, self._pair[0])
+            ):
+                raise PermissionError("Pair again from the Profile tab.")
+            if route == "/api/companion/disconnect":
+                self.disconnect()
+                return {"disconnected": True}
+            if route != "/api/companion/snapshot" or not valid_snapshot(body, self.clock()):
+                raise ValueError("Snapshot fields or capture time invalid; read a new preview.")
+            if body["account"]["id"] != account:
+                raise PermissionError("Different c411 account. Use the API profile account.")
+            previous = self.data.get("companion")
+            if previous and captured_at(body) <= captured_at(previous):
+                raise ValueError("Snapshot already received or older than current data.")
+            self.data.update(companion=body, received_at=self.clock())
+            self._save()
+            return {"accepted": True}

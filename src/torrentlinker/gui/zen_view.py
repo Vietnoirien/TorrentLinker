@@ -36,6 +36,7 @@ from shiboken6 import isValid
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
+from torrentlinker.gui.profile_view import ProfileView
 from torrentlinker.gui.seeding_tree import SeedingTree
 from torrentlinker.gui.tables import EmptyState, NumberItem, sortable_table
 from torrentlinker.gui.tasks import run_in_background
@@ -944,6 +945,12 @@ class ZenTab(QWidget):
         self.plan_view = PlanView()
         layout.setContentsMargins(0, 0, 0, 0)
         self.pages = QTabWidget()
+        self.profile_view = ProfileView()
+        profile_scroll = QScrollArea()
+        profile_scroll.setWidgetResizable(True)
+        profile_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        profile_scroll.setWidget(self.profile_view)
+        self.pages.addTab(profile_scroll, self.tr("Profile"))
         seeding_page = QWidget()
         seeding_layout = QVBoxLayout(seeding_page)
         seeding_layout.setContentsMargins(0, 0, 0, 0)

@@ -14,6 +14,28 @@
     sans-serif;
 }
 
+#zen-profile-panel > .toolbar { justify-content: space-between; }
+#zen-profile-panel .card { margin-bottom: 12px; padding: 16px; border-radius: 9px; }
+#zen-profile-panel h2, #zen-profile-panel h3 { margin-top: 0; margin-bottom: 12px; }
+#zen-profile-panel p { margin-block: 10px; }
+#zen-profile-panel .profile-grid .card { margin-bottom: 0; }
+#zen-profile-panel .profile-grid { margin-bottom: 12px; }
+#view-zen [role="tab"] { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; }
+#profile-extension { display: inline-block; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); text-decoration: none; }
+.profile-grid, .profile-columns { display: grid; gap: 16px; }
+.profile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.profile-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.profile-value { display: block; font-size: 1.5rem; color: var(--accent); }
+.profile-row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; }
+#profile-progression progress { width: 100%; accent-color: var(--accent); }
+#profile-advanced .card { box-shadow: none; }
+#zen-profile-panel p { max-width: none; }
+#profile-pairing { border-top: 1px solid var(--line); padding-top: 12px; }
+#profile-pairing input { font-family: monospace; }
+@media (max-width: 750px) {
+  .profile-grid, .profile-columns { grid-template-columns: 1fr; }
+}
+
 /* Keep desktop planning controls visible together, with the same panel and accent palette. */
 #zen-plan-panel > h2 { margin-bottom: 0; }
 #zen-plan-panel > p { margin-block: 8px; }
