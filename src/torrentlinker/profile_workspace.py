@@ -24,9 +24,12 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from torrentlinker import net
+from torrentlinker.companion_downloads import CompanionDownloads
 from torrentlinker.profile import ProfileClient, ProfileError, ProfileProblem, UserProfile
 
-COMPANION_ROUTES = {f"/api/companion/{name}" for name in ("pair", "snapshot", "disconnect")}
+COMPANION_ROUTES = {
+    f"/api/companion/{name}" for name in ("pair", "snapshot", "disconnect", "commands", "result")
+}
 DETAILS = {
     "actualDownloaded",
     "actualUploaded",
@@ -113,6 +116,7 @@ class ProfileWorkspace:
     def __init__(self, directory: Path, clock: Callable[[], float] = time.time):
         self.path = directory / "profile-cache.json"
         self.clock = clock
+        self.downloads = CompanionDownloads(lambda: self.clock())
         self.lock = threading.RLock()
         self.data: dict[str, Any] = {}
         try:
@@ -163,6 +167,7 @@ class ProfileWorkspace:
             if self.data.get("binding") != binding:
                 self.data = {"binding": binding, "source": source}
                 self._code, self._pair, self._client = "", None, None
+                self.downloads.clear()
                 self.error = None
                 self._last_attempt = 0.0
                 self._save()
@@ -215,6 +220,7 @@ class ProfileWorkspace:
                 "received_at": self.data.get("received_at"),
                 "paired": bool(self._pair),
                 "stale": bool(companion and self.clock() - captured_at(companion) > 300),
+                "downloads": self.downloads.state(),
             }
 
     def pairing(self) -> dict[str, Any]:
@@ -230,6 +236,7 @@ class ProfileWorkspace:
     def disconnect(self) -> None:
         with self.lock:
             self._code, self._pair = "", None
+            self.downloads.clear()
             self.data.pop("connection", None)
             self.data.pop("companion", None)
             self.data.pop("received_at", None)
@@ -259,6 +266,7 @@ class ProfileWorkspace:
                     origin,
                 )
                 self.data["connection"] = self._pair
+                self.downloads.clear()
                 self._save()
                 self._code = ""
                 return {"token": token}
@@ -272,6 +280,12 @@ class ProfileWorkspace:
             if route == "/api/companion/disconnect":
                 self.disconnect()
                 return {"disconnected": True}
+            if route == "/api/companion/commands":
+                return self.downloads.poll(str(account))
+            if route == "/api/companion/result":
+                if body.get("accountId") != account:
+                    raise PermissionError("Different c411 account.")
+                return self.downloads.receive(body)
             if route != "/api/companion/snapshot" or not valid_snapshot(body, self.clock()):
                 raise ValueError("Snapshot fields or capture time invalid; read a new preview.")
             if body["account"]["id"] != account:
@@ -282,3 +296,13 @@ class ProfileWorkspace:
             self.data.update(companion=body, received_at=self.clock())
             self._save()
             return {"accepted": True}
+
+    def test_download(self, infohash: str, request_id: str, actor: str = "owner") -> dict[str, Any]:
+        with self.lock:
+            if not self._pair:
+                raise ValueError("Connect the companion first.")
+            return self.downloads.submit(infohash, request_id, actor)
+
+    def download_test(self, identifier: str, actor: str = "owner") -> dict[str, Any]:
+        with self.lock:
+            return self.downloads.get(identifier, actor)

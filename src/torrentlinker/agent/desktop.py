@@ -14,6 +14,7 @@ from typing import Any
 from torrentlinker.agent.coordination import coordinator
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret, set_secret
+from torrentlinker.profile_workspace import ProfileWorkspace
 from torrentlinker.store import Store
 from torrentlinker.torrent_management import safe_error
 from torrentlinker.web.operations import Operations
@@ -66,6 +67,7 @@ class DesktopSetup(Setup):
         self.connector = connect
         self.lock = threading.RLock()
         self._folder_proofs = {}
+        self._profile_workspace = ProfileWorkspace(path.parent)
         self._client = None
         self._indexer = None
         self.download_guard = None
@@ -191,8 +193,18 @@ class DesktopOperations(Operations):
 
 
 class DesktopServer:
-    def __init__(self, settings: Settings, path: Path, store: Store, *, port: int = 8790):
+    def __init__(
+        self,
+        settings: Settings,
+        path: Path,
+        store: Store,
+        *,
+        port: int = 8790,
+        workspace: ProfileWorkspace | None = None,
+    ):
         self.setup = DesktopSetup(settings, path, store)
+        if workspace is not None:
+            self.setup._profile_workspace = workspace
         self.directory = path.parent
         self.server: Any = None
         self.thread: threading.Thread | None = None

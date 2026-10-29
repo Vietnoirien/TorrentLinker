@@ -566,7 +566,9 @@ class MainWindow(QMainWindow):
         from torrentlinker.agent.desktop import DesktopServer
 
         if self.agent_runtime is None:
-            self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
+            self.agent_runtime = DesktopServer(
+                self.settings, self.settings_path, self.store, workspace=self.account_workspace
+            )
             app = QApplication.instance()
             if app is not None:
                 app.aboutToQuit.connect(self.agent_runtime.close)
@@ -595,7 +597,9 @@ class MainWindow(QMainWindow):
             from torrentlinker.gui.agent_access import AgentAccess
 
             if self.agent_runtime is None:
-                self.agent_runtime = DesktopServer(self.settings, self.settings_path, self.store)
+                self.agent_runtime = DesktopServer(
+                    self.settings, self.settings_path, self.store, workspace=self.account_workspace
+                )
                 app = QApplication.instance()
                 if app is not None:
                     app.aboutToQuit.connect(self.agent_runtime.close)
@@ -2077,6 +2081,8 @@ class MainWindow(QMainWindow):
         tab_title = self.tabs.tabText(self.tabs.currentIndex())
         replacement = MainWindow(settings, self.settings_path, self.store)
         replacement.agent_runtime = self.agent_runtime
+        if replacement.agent_runtime:
+            replacement.agent_runtime.setup._profile_workspace = replacement.account_workspace
         same_client = settings.active_client_id == self.settings.active_client_id
         if same_client:
             media_index = replacement.tabs.indexOf(replacement.media_tab)

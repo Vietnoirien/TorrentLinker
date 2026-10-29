@@ -6,7 +6,9 @@ import json
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
+from torrentlinker.companion_downloads import MAX_RESULT
 from torrentlinker.profile import ProfileError
 from torrentlinker.profile_workspace import extension_origin
 from torrentlinker.web.setup import Setup
@@ -32,7 +34,7 @@ async def companion_request(request: Request, route: str, setup: Setup) -> Respo
         raw = b""
         async for chunk in request.stream():
             raw += chunk
-            if len(raw) > 8192:
+            if len(raw) > (MAX_RESULT if route == "/api/companion/result" else 8192):
                 raise ValueError("Request too large.")
         body = json.loads(raw)
         if not isinstance(body, dict):
@@ -50,7 +52,26 @@ async def companion_request(request: Request, route: str, setup: Setup) -> Respo
         )
 
 
+class DownloadTest(BaseModel):
+    infohash: str = Field(pattern=r"^[a-fA-F0-9]{40}$")
+    request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
+
+
 def profile_routes(app: FastAPI, setup: Setup) -> None:
+    @app.post("/api/zen/profile/download-tests")
+    def test_download(body: DownloadTest):
+        try:
+            return setup.profile_workspace().test_download(body.infohash, body.request_id)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+
+    @app.get("/api/zen/profile/download-tests/{identifier}")
+    def download_test(identifier: str):
+        try:
+            return setup.profile_workspace().download_test(identifier)
+        except ValueError as error:
+            raise HTTPException(404, str(error)) from error
+
     @app.get("/api/zen/profile")
     def state():  # type: ignore[no-untyped-def]
         return setup.profile_workspace().state()

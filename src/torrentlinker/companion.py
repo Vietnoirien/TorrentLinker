@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import quote, urlsplit
 
+from torrentlinker.companion_downloads import MAX_RESULT
 from torrentlinker.profile_workspace import COMPANION_ROUTES, ProfileWorkspace, extension_origin
 
 
@@ -127,7 +128,8 @@ class CompanionReceiver:
                     return
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
-                    if not 0 < length <= 8192:
+                    maximum = MAX_RESULT if self.path == "/api/companion/result" else 8192
+                    if not 0 < length <= maximum:
                         raise ValueError("Request too large.")
                     body = json.loads(self.rfile.read(length))
                     if not isinstance(body, dict):

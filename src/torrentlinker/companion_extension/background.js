@@ -1,4 +1,5 @@
 import { collectProfile } from "./collect.js";
+import { collectDescriptor } from "./descriptor.js";
 
 const PERIOD = 120000;
 const ready = chrome.storage.local.setAccessLevel({
@@ -95,6 +96,39 @@ async function connect(pending) {
   if (!(await chrome.tabs.query({ url: "https://c411.org/*" })).length)
     await chrome.tabs.create({ url: "https://c411.org/", active: true });
   await sync();
+  await commands();
+}
+async function commands() {
+  const { connection, downloadRetryAt = 0 } = await chrome.storage.local.get([
+    "connection", "downloadRetryAt",
+  ]);
+  if (!connection || connection.paused || Date.now() < downloadRetryAt) return;
+  const tabs = await chrome.tabs.query({ url: "https://c411.org/*", status: "complete" });
+  if (!tabs.length) return;
+  try {
+    const { command } = await request(connection, "commands", {});
+    if (!command) return;
+    let result = { id: command.id, accountId: connection.accountId, status: 0 };
+    if (command.accountId === connection.accountId) {
+      try {
+        const frames = await chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id }, world: "ISOLATED",
+          func: collectDescriptor, args: [command],
+        });
+        result = frames[0]?.result || result;
+      } catch { /* A closed or navigated tab ends this attempt without retrying. */ }
+    }
+    if (result.status === 429)
+      await chrome.storage.local.set({
+        downloadRetryAt: Date.now() + Math.max(60, result.retryAfter || 60) * 1000,
+      });
+    await request(connection, "result", result);
+  } catch (error) {
+    if (error.status === 403) {
+      await chrome.storage.local.remove("connection");
+      await note("Connection revoked. Connect again in TorrentLinker.");
+    }
+  }
 }
 async function sync() {
   const { connection, lastAttempt = 0 } = await chrome.storage.local.get([
@@ -144,6 +178,8 @@ async function sync() {
 async function ensureAlarm() {
   if (!(await chrome.alarms.get("profile-sync")))
     await chrome.alarms.create("profile-sync", { periodInMinutes: 2 });
+  if (!(await chrome.alarms.get("companion-commands")))
+    await chrome.alarms.create("companion-commands", { periodInMinutes: 0.5 });
 }
 async function state() {
   const { connection, message, lastSync } = await chrome.storage.local.get([
@@ -204,14 +240,16 @@ chrome.action.onClicked.addListener(() =>
 );
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "profile-sync") serial(sync);
+  if (alarm.name === "companion-commands") serial(commands);
 });
 chrome.tabs.onUpdated.addListener((_id, change, tab) => {
   if (change.status === "complete" && tab.url?.startsWith("https://c411.org/"))
-    serial(sync);
+    serial(async () => { await sync(); await commands(); });
 });
 // Recreate alarms after browser restart or extension upgrade. Connection state
 // survives service-worker suspension. No cookies or login tokens are exported.
 serial(async () => {
   await ensureAlarm();
   await sync();
+  await commands();
 });

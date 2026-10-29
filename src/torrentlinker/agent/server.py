@@ -133,6 +133,40 @@ def make_server(service: AgentService):
 
     @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
     @safe
+    def companion_status() -> dict[str, object]:
+        """Check session-descriptor test availability. No cookies or profile data returned."""
+        service.access.grant(ACTOR.get())
+        state = service.setup.profile_workspace().state()
+        return {"paired": state["paired"], **state["downloads"]}
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=False), structured_output=True)
+    @safe
+    def test_companion_download(infohash: str, request_id: str) -> dict[str, object]:
+        """Fetch ONE .torrent through the paired browser session, validate and discard it.
+
+        Requires execute/downloads authority. Uses no API key or Torrent Client.
+        The browser must have the updated companion and a signed-in c411 tab.
+        Poll get_companion_download_test for the result; never use this to bypass
+        API refusals or claim unlimited capacity. Reuse request_id to avoid duplicates.
+        """
+        actor = ACTOR.get()
+        grant = service.access.grant(actor)
+        if grant.mode != "execute" or "downloads" not in grant.permissions:
+            raise PermissionError("Session download tests require execute/downloads permission.")
+        result = service.setup.profile_workspace().test_download(infohash, request_id, actor)
+        service.access.event(actor, "companion descriptor test", result["id"])
+        return result
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
+    def get_companion_download_test(test_id: str) -> dict[str, object]:
+        """Read this agent's descriptor-test summary. Raw torrent bytes are never returned."""
+        actor = ACTOR.get()
+        service.access.grant(actor)
+        return service.setup.profile_workspace().download_test(test_id, actor)
+
+    @mcp.tool(annotations=ToolAnnotations(read_only_hint=True), structured_output=True)
+    @safe
     def list_feeds() -> dict[str, object]:
         """List allowed RSS subscriptions, unread counts, errors and limited coverage."""
         grant = service.access.grant(ACTOR.get())

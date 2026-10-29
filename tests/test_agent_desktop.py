@@ -322,7 +322,7 @@ def test_saved_agent_startup_reuses_runtime_started_for_rss(qtbot, tmp_path, mon
     monkeypatch.setattr(
         desktop,
         "DesktopServer",
-        lambda settings, path, store: server_class(settings, path, store, port=port),
+        lambda settings, path, store, **kw: server_class(settings, path, store, port=port, **kw),
     )
     window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
     qtbot.addWidget(window)
@@ -558,7 +558,7 @@ def test_agent_runtime_started_in_settings_stays_suspended(qtbot, tmp_path, monk
     monkeypatch.setattr(
         desktop,
         "DesktopServer",
-        lambda settings, path, store: server_class(settings, path, store, port=0),
+        lambda settings, path, store, **kw: server_class(settings, path, store, port=0, **kw),
     )
     window = main_window.MainWindow(
         Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db")

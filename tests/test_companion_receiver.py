@@ -61,6 +61,7 @@ def test_extension_bundle_is_installable_and_contains_only_packaged_assets():
                 "manifest.json",
                 "background.js",
                 "collect.js",
+                "descriptor.js",
                 "companion.js",
                 "companion.html",
                 "style.css",

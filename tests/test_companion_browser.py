@@ -37,12 +37,23 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
     extension = Path(companion.__file__).parent / "companion_extension"
     account = {**PROFILE, "username": "Demo account"}
     reads = []
+    from tests.torrents import make_torrent
+    from torrentlinker.torrent_meta import read_torrent
+
+    sample = tmp_path / "sample.txt"
+    sample.write_text("Companion metadata fixture")
+    descriptor = make_torrent(sample)
+    infohash = read_torrent(descriptor).infohash
 
     def tracker(route):
         path = route.request.url
         reads.append(path)
         if "/api/user/profile" in path:
             route.fulfill(json=account)
+        elif path.endswith("/check-integrity"):
+            route.fulfill(json={"ok": True})
+        elif path.endswith("/download"):
+            route.fulfill(content_type="application/x-bittorrent", body=descriptor)
         elif "/api/profile/detailed-stats" in path:
             route.fulfill(json={"stats": snapshot()["details"]})
         elif "/api/profile/active-seeds" in path:
@@ -74,6 +85,26 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             expect(page.locator("#profile-advanced")).to_contain_text("42", timeout=15000)
             assert workspace.state()["paired"]
             assert reads.count("https://c411.org/api/user/profile") == 2
+            # Public owner API -> real extension -> fake tracker -> verified summary.
+            worker = context.service_workers[0]
+            job = page.request.post(
+                f"http://127.0.0.1:{port}/api/zen/profile/download-tests",
+                headers={"X-TorrentLinker": "1"},
+                data={"infohash": infohash, "request_id": "browser-test"},
+            ).json()
+            assert "id" in job, job
+            worker.evaluate("chrome.alarms.create('companion-commands', {delayInMinutes: 0.001})")
+            for _ in range(100):
+                result = page.request.get(
+                    f"http://127.0.0.1:{port}/api/zen/profile/download-tests/{job['id']}"
+                ).json()
+                if result["status"] not in ("pending", "running"):
+                    break
+                page.wait_for_timeout(100)
+            assert result["status"] == "complete", result
+            assert result["bytes"] == len(descriptor)
+            assert result["discarded"]
+            assert len([url for url in reads if url.endswith("/download")]) == 1
             page.reload()
             page.locator("[data-view=zen]").first.click()
             expect(page.locator("#profile-advanced")).to_contain_text("42")
