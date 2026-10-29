@@ -320,8 +320,8 @@ def test_queue_only_sends_to_its_named_client(cluster, name, tmp_path):
     until(lambda: cluster.clients[name].torrent(meta.infohash))
     for label, client in cluster.clients.items():
         assert (client.torrent(meta.infohash) is not None) == (label == name)
-        assert entries(store.for_client(cluster.ids[label]))[0].status == (
-            "sent" if label == name else "queued"
+        assert [e.status for e in entries(store.for_client(cluster.ids[label]))] == (
+            [] if label == name else ["queued"]
         )
     assert str(cluster.clients[name]._inner.torrent(meta.infohash).save_path) == "/data/downloads"
 

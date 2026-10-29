@@ -29,6 +29,12 @@ from torrentlinker.torrent_meta import read_torrent
 SEARCH_TAG = "torrentlinker:search"
 
 
+@dataclass
+class QueueSendReport(SendReport):
+    # Preserve exact receipts after successful entries leave the persistent queue.
+    sent_keys: list[str] = field(default_factory=list)
+
+
 @dataclass(frozen=True)
 class QueueEntry:
     key: str
@@ -118,9 +124,9 @@ def run_queue(
     *,
     only: set[str] | None = None,
     order: list[str] | None = None,
-) -> SendReport:
-    """Send by priority and insertion order, or an explicitly reviewed snapshot order."""
-    report = SendReport()
+) -> QueueSendReport:
+    """Send in order, removing successful entries while retaining unfinished work."""
+    report = QueueSendReport()
     pending = [
         entry
         for entry in entries(store)
@@ -224,7 +230,8 @@ def run_queue(
                 report.stopped = True
                 break
         else:
-            store.download_outcome(entry.key, "sent")
+            store.remove_downloads([entry.key])
+            report.sent_keys.append(entry.key)
             report.added.append(c.title)
         show()
     return report

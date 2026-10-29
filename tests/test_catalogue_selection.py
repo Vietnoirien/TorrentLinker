@@ -336,17 +336,19 @@ def test_send_selection_only_sends_its_queued_rows(catalogue_app, monkeypatch):
         assert approval.is_success, approval.text
         assert finished(browser, approval.json()["job_id"])["status"] == "completed"
     identifier = selection(browser, token)
-    from torrentlinker.download_queue import entries
-    from torrentlinker.send import SendReport
+    from torrentlinker.download_queue import QueueSendReport, entries
 
     sent = []
 
     def send(store, indexer, client, categories, stop, progress, *, only):
+        report = QueueSendReport()
         for entry in entries(store):
             if entry.key in only:
                 sent.append(entry.candidate.infohash)
-                store.download_outcome(entry.key, "added")
-        return SendReport()
+                store.remove_downloads([entry.key])
+                report.sent_keys.append(entry.key)
+                report.added.append(entry.candidate.title)
+        return report
 
     monkeypatch.setattr("torrentlinker.web.operations.run_queue", send)
     proposal = call(

@@ -156,6 +156,37 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#queue-summary")).to_contain_text("0 total")
             expect(page.locator("#remove-queue")).to_be_disabled()
             assert entries(writer) == []
+            # A real queue send removes its row and the open browser follows automatically.
+            import httpx
+
+            from tests.fake_qbit import FakeQbit
+            from tests.test_download_queue import process
+            from tests.test_send import release
+            from torrentlinker.torrent_meta import read_torrent
+
+            data = release(tmp_path, "Queue completion")
+            meta = read_torrent(data)
+            sender = Indexer(
+                "https://example.test/api",
+                "key",
+                http=httpx.Client(
+                    transport=httpx.MockTransport(lambda request: httpx.Response(200, content=data))
+                ),
+            )
+            sent = Candidate(
+                meta.name,
+                sum(meta.files.values()),
+                "https://example.test/download",
+                infohash=meta.infohash,
+            )
+            destination = tmp_path / "queue-downloads"
+            destination.mkdir()
+            enqueue(writer, sender, sent, destination)
+            expect(page.locator("#queue-table")).to_contain_text(sent.title, timeout=6000)
+            process(writer, sender, FakeQbit())
+            expect(page.locator("#queue-summary")).to_contain_text("0 total", timeout=6000)
+            expect(page.locator("#queue-table tbody tr[data-key]")).to_have_count(0)
+            expect(page.locator("#start-queue")).to_be_disabled()
             page.locator("[data-view=torrents]").click()
             if screenshot:
                 for lang in ("fr", "en"):

@@ -229,6 +229,9 @@ class Store:
         with self._lock, self._db:
             self._db.executescript(SCHEMA)
             self._migrate()
+            # Older versions retained completed sends in the queue. Pending and
+            # uncertain work must survive; successful handoffs need no more action.
+            self._db.execute("DELETE FROM download_queue WHERE status='sent'")
             self._db.execute(
                 "UPDATE download_queue SET status='uncertain', retry_safe=0, "
                 "reason='Interrupted send. Check the Torrent Client "

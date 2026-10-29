@@ -64,7 +64,7 @@ def test_queue_survives_restart_without_persisting_keys_or_duplicate_entries(tmp
     torrent = client.torrent(c.infohash)
     assert torrent.save_path == folder
     assert torrent.tags == {SEARCH_TAG, CATEGORY_TAG_PREFIX + "Movies / HD"}
-    assert entries(restored)[0].status == "sent"
+    assert entries(restored) == []
     assert process(restored, indexer, client).handled == 0
 
 
@@ -126,7 +126,7 @@ def test_pause_after_one_send_leaves_remaining_items_queued(tmp_path):
 
     report = process(store, indexer, client, stop=stop, progress=progress)
     assert report.stopped and len(report.added) == 1
-    assert [e.status for e in entries(store)] == ["sent", "queued"]
+    assert [e.status for e in entries(store)] == ["queued"]
 
 
 def test_wrong_hash_and_changed_indexer_are_refused(tmp_path, monkeypatch):
@@ -161,3 +161,53 @@ def test_auth_failure_stops_remaining_queue_and_redacts_errors(tmp_path, monkeyp
     monkeypatch.setattr(indexer, "fetch_torrent", failed)
     process(store, indexer, client)
     assert "private-key" not in str(store.queued_downloads())
+
+
+def test_successful_send_clears_queue_immediately_and_after_restart(tmp_path):
+    store, indexer, client, candidate, data, folder = setup_queue(tmp_path)
+    observed = []
+    report = process(store, indexer, client, progress=lambda p: observed.append(entries(store)))
+    assert report.added == [candidate.title]
+    assert client.downloads == [candidate.infohash]
+    assert observed[-1] == []
+    assert entries(Store(tmp_path / "state.db")) == []
+    assert process(store, indexer, client).handled == 0
+    assert client.downloads == [candidate.infohash]
+
+
+def test_restart_clears_legacy_sent_rows_but_preserves_pending_and_problem_rows(tmp_path):
+    store, indexer, client, candidate, data, folder = setup_queue(tmp_path)
+    store.download_outcome(entries(store)[0].key, "sent")
+    expected = ["queued", "failed", "refused", "uncertain"]
+    for number, status in enumerate(expected, 1):
+        other = replace(candidate, title=status, infohash=f"{number:040x}")
+        enqueue(store, indexer, other, folder)
+        store.download_outcome(entries(store)[-1].key, status)
+    assert [e.status for e in entries(Store(tmp_path / "state.db"))] == expected
+    assert client.downloads == []
+
+
+def test_successful_send_keeps_other_clients_queue(tmp_path):
+    store, indexer, client, candidate, data, folder = setup_queue(tmp_path)
+    other = store.for_client("other")
+    enqueue(other, indexer, candidate, folder)
+    process(store, indexer, client)
+    assert entries(store) == []
+    assert len(entries(other)) == 1
+    assert entries(other)[0].status == "queued"
+
+
+def test_uncertain_handoff_stays_visible_and_is_not_retried(tmp_path, monkeypatch):
+    store, indexer, client, candidate, data, folder = setup_queue(tmp_path)
+    download = client.download
+
+    def accepted_then_disconnected(*args, **kwargs):
+        download(*args, **kwargs)
+        raise RuntimeError("Connection lost after handoff")
+
+    monkeypatch.setattr(client, "download", accepted_then_disconnected)
+    report = process(store, indexer, client)
+    assert report.failed
+    assert entries(store)[0].status == "uncertain"
+    assert process(store, indexer, client).handled == 0
+    assert client.downloads == [candidate.infohash]

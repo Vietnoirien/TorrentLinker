@@ -122,11 +122,13 @@ def test_queue_worker_and_restart_recovery(qtbot, tmp_path):
     view.start.click()
     qtbot.waitUntil(lambda: view.runner is None)
     assert client.downloads == [c.infohash]
-    assert entries(store)[0].status == "sent"
+    assert entries(store) == []
+    assert view.queue.rowCount() == 0
+    assert view.view_queue.text() == "Download queue (0)"
     assert not view.start.isEnabled()
     restored = SearchTab(store, Settings(), lambda: indexer, lambda: client)
     qtbot.addWidget(restored)
-    assert restored.queue.item(0, 5).text() == "Sent to client"
+    assert restored.queue.rowCount() == 0
     assert not restored.start.isEnabled()
     restored.show()
     restored.view_queue.click()
@@ -217,7 +219,7 @@ def test_download_now_sends_only_open_torrent_and_keeps_others_queued(qtbot, tmp
     qtbot.waitUntil(lambda: view.runner is None)
     assert client.downloads == [c.infohash]
     states = {entry.candidate.infohash: entry.status for entry in entries(store)}
-    assert states[c.infohash] == "sent" and states[other.infohash] == "queued"
+    assert states == {other.infohash: "queued"}
 
 
 def test_add_from_details_does_not_start_queue_or_silently_change_folder(qtbot, tmp_path):

@@ -940,7 +940,13 @@ class Operations:
                         "key": e.key,
                         "hash": e.candidate.infohash,
                         "title": e.candidate.title,
-                        "outcome": after[e.key].status if e.key in after else "removed",
+                        "outcome": (
+                            "sent"
+                            if e.key in report.sent_keys
+                            else after[e.key].status
+                            if e.key in after
+                            else "removed"
+                        ),
                         "reason": after[e.key].reason if e.key in after else "",
                     }
                     for e in queued_entries

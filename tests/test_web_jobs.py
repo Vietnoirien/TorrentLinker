@@ -456,7 +456,8 @@ def test_selected_download_uses_verified_client_path_and_survives_queue_reload(
         result = finished(browser, job["id"])
         assert result["status"] == "completed", result
         assert result["result"]["added"] == 1, result
-        assert browser.get("/api/queue").json()[0]["status"] == "sent"
+        assert browser.get("/api/queue").json() == []
+        assert result["result"]["rows"][0]["outcome"] == "sent"
         assert client.by_hash[meta.infohash].save_path == Path("/downloads")
         job = browser.post("/api/jobs", json={"kind": "send-queue"}).json()
         assert finished(browser, job["id"])["result"]["added"] == 0
