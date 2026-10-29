@@ -132,7 +132,16 @@ def test_snapshot_age_replay_credentials_change_and_restart(tmp_path, monkeypatc
 
         restored = ProfileWorkspace(tmp_path, clock=lambda: now)
         restored.bind(setup.settings.indexer.url, "fake-key")
-        assert restored.state()["stale"] and not restored.state()["paired"]
+        assert restored.state()["stale"] and restored.state()["paired"]
+        # A saved connection works after a server restart without another code.
+        fresh = snapshot()
+        fresh["capturedAt"] = datetime.fromtimestamp(now, UTC).isoformat()
+        assert restored.receive("/api/companion/snapshot", ORIGIN, "Bearer " + token, fresh) == {
+            "accepted": True
+        }
+        restored.disconnect()
+        with pytest.raises(PermissionError):
+            restored.receive("/api/companion/snapshot", ORIGIN, "Bearer " + token, fresh)
         setup.secrets.update({"indexer-api-key": "new-account-key"})
         state = browser.get("/api/zen/profile").json()
         assert state["api"] is None and state["companion"] is None and not state["paired"]
@@ -222,5 +231,9 @@ def test_pairing_expiry_origin_binding_and_unexpected_snapshot_fields(tmp_path, 
         )
         assert browser.post("/api/companion/snapshot", headers=ext, json=value).status_code == 200
         now += 3601
-        assert not browser.get("/api/zen/profile").json()["paired"]
-        assert browser.post("/api/companion/snapshot", headers=ext, json=value).status_code == 403
+        assert browser.get("/api/zen/profile").json()["paired"]
+        value["capturedAt"] = datetime.fromtimestamp(now, UTC).isoformat()
+        assert browser.post("/api/companion/snapshot", headers=ext, json=value).status_code == 200
+        # Opening setup and abandoning it must not disconnect a working companion.
+        browser.post("/api/zen/profile/pairing", headers=OWNER)
+        assert browser.get("/api/zen/profile").json()["paired"]

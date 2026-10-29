@@ -52,8 +52,9 @@ def test_extension_bundle_is_installable_and_contains_only_packaged_assets():
     with zipfile.ZipFile(io.BytesIO(extension_zip())) as bundle:
         manifest = json.loads(bundle.read("torrentlinker-companion/manifest.json"))
         assert manifest["manifest_version"] == 3
-        assert manifest["permissions"] == ["activeTab", "scripting"]
-        assert "https://*/*" in manifest["optional_host_permissions"]
+        assert set(manifest["permissions"]) == {"scripting", "storage", "alarms"}
+        assert "https://*/*" not in manifest["host_permissions"]
+        assert "https://*/*" not in manifest["externally_connectable"]["matches"]
         assert set(bundle.namelist()) == {
             f"torrentlinker-companion/{name}"
             for name in (
@@ -63,5 +64,13 @@ def test_extension_bundle_is_installable_and_contains_only_packaged_assets():
                 "companion.js",
                 "companion.html",
                 "style.css",
+                "receiver.json",
             )
+        }
+    with zipfile.ZipFile(io.BytesIO(extension_zip("https://nas.example/torrentlinker/"))) as bundle:
+        manifest = json.loads(bundle.read("torrentlinker-companion/manifest.json"))
+        assert "https://nas.example/*" in manifest["host_permissions"]
+        assert manifest["externally_connectable"]["matches"][-1] == "https://nas.example/*"
+        assert json.loads(bundle.read("torrentlinker-companion/receiver.json")) == {
+            "webTarget": "https://nas.example/torrentlinker"
         }

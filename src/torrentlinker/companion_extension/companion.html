@@ -1,17 +1,40 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TorrentLinker companion</title><link rel="stylesheet" href="style.css">
-<main><small>TORRENTLINKER · BROWSER COMPANION</small><h1>Bring your c411 profile with you.</h1>
-<p>Read your signed-in account, review the fields, then send this snapshot to your paired TorrentLinker app.</p>
-<section><h2>1. Preview from c411</h2><p>Open c411.org, then click the extension icon. Your login stays in that browser tab.</p>
-<label><input type="checkbox" id="details"> Include transfer totals and seed time</label>
-<label><input type="checkbox" id="seeds"> Include active seed count</label>
-<p>Always included: account ID, username, Zen Balance, Class, level and capture time. No torrent names, hashes, cookies or keys.</p>
-<button id="read">Read and preview</button><pre id="preview">No account read yet.</pre></section>
-<section><h2>2. Pair this receiver</h2><p>In TorrentLinker, open Zen → Profile → Connect companion. Use its receiver address and one-time code. Remote WebUI connections require HTTPS.</p>
-<label>Receiver address<input id="target" value="http://127.0.0.1:8767" spellcheck="false"></label>
-<label>One-time pairing code<input id="code" type="password" autocomplete="off"></label>
-<button id="pair" disabled>Pair with this account</button><p id="destination">Not paired</p></section>
-<section><h2>3. Send the preview</h2><p>Only the fields shown above are sent. Nothing is sent automatically.</p>
-<button id="send" disabled>Send this snapshot</button> <button id="forget">Disconnect and forget</button></section>
-<p role="status" id="status">Ready. Nothing has been read or sent.</p><p>All state lives in this extension tab. Closing it forgets the pairing token. Use Disconnect &amp; clear in TorrentLinker to invalidate it immediately.</p>
-</main><script type="module" src="companion.js"></script></html>
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  />
+  <title>TorrentLinker companion</title
+  ><link rel="stylesheet" href="style.css" />
+  <main>
+    <small>TORRENTLINKER · BROWSER COMPANION</small>
+    <h1>Your profile stays up to date.</h1>
+    <p>
+      Click Connect companion in TorrentLinker once. This browser keeps the
+      connection across restarts and updates your profile every two minutes
+      while a signed-in c411 tab is open.
+    </p>
+    <section>
+      <h2>Connection</h2>
+      <p id="destination">Not connected</p>
+      <p role="status" id="status"></p>
+      <p id="last-sync"></p>
+      <button id="pause" disabled>Pause automatic sync</button>
+      <button id="forget" disabled>Disconnect and forget</button>
+    </section>
+    <section>
+      <h2>What is synced</h2>
+      <p>
+        Account identity, Zen balance, class, level, transfer totals, total seed
+        time, validated upload count and active seed count. No torrent names,
+        hashes, cookies or API keys leave c411.
+      </p>
+      <p>
+        Sign in to c411 with the account shown in TorrentLinker. If your session
+        expires or the account changes, updates wait until that account is
+        signed in again.
+      </p>
+    </section>
+  </main>
+  <script type="module" src="companion.js"></script>
+</html>

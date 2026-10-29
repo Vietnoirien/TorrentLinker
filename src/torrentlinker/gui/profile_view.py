@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -138,14 +137,15 @@ class ProfileView(QWidget):
             metrics.addWidget(box, 1)
         content.addWidget(self.advanced_metrics)
         content.addWidget(self.advanced_values)
-        content.addWidget(
-            QLabel(
-                self.tr(
-                    "Your browser login stays in the browser. "
-                    "Preview and send only the fields you choose."
-                )
+        privacy = self.label()
+        privacy.setText(
+            self.tr(
+                "Connect once to sync account statistics, transfers, seed time and active seeds "
+                "every two minutes. Your login stays in the browser. "
+                "Keep a signed-in c411 tab open."
             )
         )
+        content.addWidget(privacy)
         actions = QHBoxLayout()
         self.extension_button = QPushButton(self.tr("Save extension…"))
         self.extension_button.clicked.connect(self.extension_requested)
@@ -163,21 +163,11 @@ class ProfileView(QWidget):
         instructions = self.label()
         instructions.setText(
             self.tr(
-                "Extract the extension ZIP, then load its folder in your browser's Extensions page "
-                "with Developer mode enabled. Open c411 and click the extension. Read a preview, "
-                "enter this receiver address and code, pair, then send the snapshot. "
-                "The code expires in 10 minutes; the connection lasts one hour."
+                "Connecting in your browser. Once the companion is installed, connection and "
+                "updates are automatic. Keep the browser connection page open during installation."
             )
         )
         pairing.addWidget(instructions)
-        self.address = QLineEdit()
-        self.address.setReadOnly(True)
-        self.address.setAccessibleName(self.tr("Receiver address"))
-        self.code = QLineEdit()
-        self.code.setReadOnly(True)
-        self.code.setAccessibleName(self.tr("Pairing code"))
-        pairing.addWidget(self.address)
-        pairing.addWidget(self.code)
         self.pairing_box.hide()
         content.addWidget(self.pairing_box)
         layout.addWidget(advanced)
@@ -191,9 +181,7 @@ class ProfileView(QWidget):
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         return label
 
-    def show_pairing(self, address: str, code: str) -> None:
-        self.address.setText(address)
-        self.code.setText(code)
+    def show_pairing(self) -> None:
         self.pairing_box.show()
 
     def show_state(self, state: dict[str, Any]) -> None:
@@ -208,9 +196,12 @@ class ProfileView(QWidget):
         self.notice.setText(
             errors.get(state.get("error") or "", "")
             or (
-                self.tr("API snapshot is older than five minutes. Refresh for current values.")
+                self.tr("Waiting for an API update. Retrying automatically.")
                 if state.get("api_stale")
-                else self.tr("Account information from the c411 API.")
+                else self.tr(
+                    "Account information from the c411 API. "
+                    "Updates automatically every two minutes."
+                )
             )
         )
         self.identity.setText(api.get("username") or self.tr("Connect your c411 account"))
@@ -288,17 +279,20 @@ class ProfileView(QWidget):
         self.advanced_metrics.setVisible(bool(companion))
         self.pair_button.setEnabled(bool(api.get("account_id")) and not state.get("error"))
         self.pair_button.setText(
-            self.tr("Pair again") if state.get("paired") else self.tr("Connect companion")
+            self.tr("Connect another browser")
+            if state.get("paired")
+            else self.tr("Connect companion")
         )
         self.disconnect_button.setEnabled(
             bool(companion or state.get("paired") or self.pairing_box.isVisible())
         )
         if state.get("paired"):
             self.pairing_box.hide()
-            self.code.clear()
         if companion:
             freshness = (
-                self.tr("Stale snapshot") if state.get("stale") else self.tr("Snapshot received")
+                self.tr("Waiting for a browser update")
+                if state.get("stale")
+                else self.tr("Automatic sync connected")
             )
             self.advanced_status.setText(
                 self.tr("{0} · c411 browser · Last sync {1}").format(
@@ -328,7 +322,7 @@ class ProfileView(QWidget):
             )
         else:
             self.advanced_status.setText(
-                self.tr("Paired. Send a preview from the extension.")
+                self.tr("Connected. Waiting for the first automatic browser update.")
                 if state.get("paired")
                 else self.tr("Connect the companion to see advanced activity.")
             )

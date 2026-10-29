@@ -10,17 +10,53 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
+from urllib.parse import quote, urlsplit
 
 from torrentlinker.profile_workspace import COMPANION_ROUTES, ProfileWorkspace, extension_origin
 
 
-def extension_zip() -> bytes:
+def extension_zip(web_origin: str | None = None) -> bytes:
+    """Allow only this WebUI server to initiate a remote connection."""
     result = io.BytesIO()
     with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted((Path(__file__).parent / "companion_extension").iterdir()):
             if path.is_file():
-                bundle.write(path, f"torrentlinker-companion/{path.name}")
+                name = f"torrentlinker-companion/{path.name}"
+                if (
+                    path.name == "receiver.json"
+                    and web_origin
+                    and urlsplit(web_origin).scheme == "https"
+                ):
+                    bundle.writestr(name, json.dumps({"webTarget": web_origin.rstrip("/")}))
+                    continue
+                if path.name == "manifest.json" and web_origin:
+                    origin = urlsplit(web_origin)
+                    if origin.scheme == "https" and origin.hostname:
+                        manifest = json.loads(path.read_text())
+                        host = f"https://{origin.hostname}/*"
+                        manifest["host_permissions"].append(host)
+                        manifest["externally_connectable"]["matches"].append(host)
+                        bundle.writestr(name, json.dumps(manifest, indent=2))
+                        continue
+                bundle.write(path, name)
     return result.getvalue()
+
+
+def connection_url(address: str, code: str, account_id: str) -> str:
+    payload = {"target": address, "code": code, "accountId": account_id}
+    return address + "/companion/connect#" + quote(json.dumps(payload), safe="")
+
+
+def connection_asset(path: str) -> tuple[bytes, str] | None:
+    names = {
+        "/companion/connect": ("companion-connect.html", "text/html"),
+        "/companion/connect.js": ("companion-connect.js", "text/javascript"),
+        "/companion/connect.css": ("companion-connect.css", "text/css"),
+    }
+    if path not in names:
+        return None
+    name, kind = names[path]
+    return (Path(__file__).parent / "web" / "static" / name).read_bytes(), kind
 
 
 class CompanionReceiver:
@@ -68,6 +104,23 @@ class CompanionReceiver:
             def do_OPTIONS(self) -> None:
                 self.respond(204 if self.allowed() else 403)
 
+            def do_GET(self) -> None:
+                asset = connection_asset(self.path)
+                if not asset or self.headers.get("Host") != (
+                    f"127.0.0.1:{cast(ThreadingHTTPServer, self.server).server_port}"
+                ):
+                    self.respond(404)
+                    return
+                raw, kind = asset
+                self.send_response(200)
+                self.send_header("Content-Type", kind + "; charset=utf-8")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(raw)
+
             def do_POST(self) -> None:
                 if not self.allowed():
                     self.respond(403, {"detail": "Use the paired browser extension."})
@@ -97,10 +150,11 @@ class CompanionReceiver:
         try:
             self.server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
         except OSError:
-            if not port:
+            if not port or workspace.state()["paired"]:
                 raise
             self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.address = f"http://127.0.0.1:{self.server.server_port}"
+        workspace.remember_receiver(self.server.server_port)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
 

@@ -46,3 +46,64 @@ def test_profile_is_first_desktop_tab_and_shows_api_and_companion(qtbot, tmp_pat
     workspace.disconnect()
     view.show_state(workspace.state())
     assert not view.advanced_metrics.isVisible()
+
+
+def test_desktop_connect_opens_handoff_and_receiver_returns_after_restart(
+    qtbot, tmp_path, monkeypatch
+):
+    import json
+    import socket
+    from urllib.parse import unquote, urlsplit
+
+    import httpx
+
+    from torrentlinker.config import Settings
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.store import Store
+
+    prepared(tmp_path, monkeypatch)
+    set_secret("indexer-api-key", "fake-key")
+    opened = []
+    monkeypatch.setattr(
+        "PySide6.QtGui.QDesktopServices.openUrl", lambda url: opened.append(url.toString()) or True
+    )
+    settings = Settings()
+    window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "desktop.db"))
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(lambda: "Demo account" in window.zen_tab.profile_view.identity.text())
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        window.account_workspace.remember_receiver(listener.getsockname()[1])
+    qtbot.mouseClick(window.zen_tab.profile_view.pair_button, Qt.MouseButton.LeftButton)
+    assert len(opened) == 1
+    payload = json.loads(unquote(urlsplit(opened[0]).fragment))
+    address = payload["target"]
+    with httpx.Client(base_url=address, trust_env=False) as browser:
+        assert browser.get("/companion/connect").status_code == 200
+        assert browser.get("/companion/connect.js").status_code == 200
+        token = browser.post(
+            "/api/companion/pair", headers={"Origin": ORIGIN}, json=payload
+        ).json()["token"]
+    window.close()
+    restarted = MainWindow(
+        settings, tmp_path / "settings.json", Store(tmp_path / "desktop-restarted.db")
+    )
+    qtbot.addWidget(restarted)
+    restarted.show()
+    qtbot.waitUntil(lambda: restarted.companion_receiver is not None)
+    with httpx.Client(base_url=address, trust_env=False) as browser:
+        assert (
+            browser.post(
+                "/api/companion/snapshot",
+                headers={"Origin": ORIGIN, "Authorization": "Bearer " + token},
+                json=snapshot(),
+            ).status_code
+            == 200
+        )
+    qtbot.waitUntil(
+        lambda: restarted.zen_tab.profile_view.active_seeds.text() == "42", timeout=5000
+    )
+    assert len(opened) == 1  # No new handoff or consent on restart.
+    restarted.close()

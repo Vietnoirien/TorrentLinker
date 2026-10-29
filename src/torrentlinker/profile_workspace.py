@@ -1,7 +1,8 @@
 """Account-bound API cache and explicitly paired browser snapshots.
 
-Pairing secrets live only in memory. Cached account data is private on disk; changing
-the indexer or its key clears it. A browser snapshot never changes planning inputs.
+One-time codes live only in memory. Connection hashes and cached account data are
+private on disk; changing the indexer or its key clears them. Browser snapshots
+never change planning inputs.
 """
 
 from __future__ import annotations
@@ -122,8 +123,18 @@ class ProfileWorkspace:
             pass
         self._code = ""
         self._code_until = 0.0
-        self._pair: tuple[str, str, float] | None = None
+        self._pair: tuple[str, str] | None = None
+        saved_pair = self.data.get("connection")
+        if (
+            isinstance(saved_pair, list)
+            and len(saved_pair) == 2
+            and all(isinstance(value, str) for value in saved_pair)
+            and re.fullmatch(r"[a-f0-9]{64}", saved_pair[0])
+            and extension_origin(saved_pair[1])
+        ):
+            self._pair = (saved_pair[0], saved_pair[1])
         self._client: tuple[tuple[object, ...], ProfileClient] | None = None
+        self._last_attempt = 0.0
         self.error: str | None = None
 
     def _save(self) -> None:
@@ -135,6 +146,15 @@ class ProfileWorkspace:
             json.dump(self.data, output, allow_nan=False)
         os.replace(temp, self.path)
 
+    def remember_receiver(self, port: int) -> None:
+        with self.lock:
+            self.data["receiver_port"] = port
+            self._save()
+
+    def receiver_port(self) -> int:
+        port = self.data.get("receiver_port", 8767)
+        return port if type(port) is int and 0 < port < 65536 else 8767
+
     def bind(self, url: str, key: str) -> str:
         parts = urlsplit(url)
         source = f"{parts.scheme}://{parts.netloc}"
@@ -144,6 +164,7 @@ class ProfileWorkspace:
                 self.data = {"binding": binding, "source": source}
                 self._code, self._pair, self._client = "", None, None
                 self.error = None
+                self._last_attempt = 0.0
                 self._save()
         return binding
 
@@ -151,6 +172,7 @@ class ProfileWorkspace:
         binding = self.bind(url, key)
         client_key = (binding, net.current())
         with self.lock:
+            self._last_attempt = self.clock()
             if self._client is None or self._client[0] != client_key:
                 self._client = (client_key, ProfileClient(url, key))
             client = self._client[1]
@@ -183,6 +205,7 @@ class ProfileWorkspace:
                 "api": self.data.get("api"),
                 "source": self.data.get("source"),
                 "api_updated_at": self.data.get("api_updated_at"),
+                "refresh_after": max(self.data.get("api_updated_at", 0), self._last_attempt) + 120,
                 "error": self.error,
                 "api_stale": bool(
                     self.data.get("api_updated_at")
@@ -190,7 +213,7 @@ class ProfileWorkspace:
                 ),
                 "companion": companion,
                 "received_at": self.data.get("received_at"),
-                "paired": bool(self._pair and self.clock() < self._pair[2]),
+                "paired": bool(self._pair),
                 "stale": bool(companion and self.clock() - captured_at(companion) > 300),
             }
 
@@ -202,12 +225,12 @@ class ProfileWorkspace:
                 raise ValueError("The companion supports https://c411.org accounts.")
             self._code = secrets.token_urlsafe(32)
             self._code_until = self.clock() + 600
-            self._pair = None
             return {"code": self._code, "expiresIn": 600}
 
     def disconnect(self) -> None:
         with self.lock:
             self._code, self._pair = "", None
+            self.data.pop("connection", None)
             self.data.pop("companion", None)
             self.data.pop("received_at", None)
             self._save()
@@ -234,14 +257,14 @@ class ProfileWorkspace:
                 self._pair = (
                     hashlib.sha256(("Bearer " + token).encode()).hexdigest(),
                     origin,
-                    self.clock() + 3600,
                 )
+                self.data["connection"] = self._pair
+                self._save()
                 self._code = ""
-                return {"token": token, "expiresIn": 3600}
+                return {"token": token}
             digest = hashlib.sha256(authorization.encode()).hexdigest()
             if (
                 not self._pair
-                or self.clock() >= self._pair[2]
                 or origin != self._pair[1]
                 or not hmac.compare_digest(digest, self._pair[0])
             ):

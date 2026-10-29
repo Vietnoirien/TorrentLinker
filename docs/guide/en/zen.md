@@ -14,30 +14,42 @@ Screenshots use the English interface, dark theme and example data.
 
 **Profile** is the first Zen tab on desktop and WebUI. It shows your API account,
 membership date, Class, level, quest progression, Zen balance and transfer totals.
-Use **Refresh profile** to update it. Missing fields stay blank; an API permission
-or connection error appears alongside the last successful values.
+It refreshes automatically every two minutes while the desktop app is running or
+the WebUI Profile tab is visible. **Refresh profile** remains available for an
+immediate check. Errors appear alongside the last successful values.
 
-Advanced activity comes from an optional browser companion for Chrome, Brave or
-Edge. It adds the active seed count, validated uploads, total seed time and selected
-transfer statistics from your signed-in c411 account.
+The optional companion for Chrome, Brave or Edge adds active seed count, validated
+uploads, total seed time and transfer statistics from your signed-in c411 account.
 
-1. In **Zen → Profile**, save/download the extension ZIP. Extract it, enable
-   Developer mode on the browser's Extensions page and load the extracted folder.
-   Replace the old prototype extension if you installed that earlier.
-2. Select **Connect companion**. On c411.org, click the extension icon and read a
-   preview. Enter the receiver address and code shown by TorrentLinker, then pair.
-   The browser account must match your API account.
-3. Review the fields and select **Send this snapshot**. Sending is always manual.
-   The desktop receiver runs on this computer; remote WebUI receivers require HTTPS
-   and use the WebUI address, including any reverse-proxy path prefix.
+1. In **Zen → Profile**, save/download the extension ZIP, extract it and load the
+   folder using **Developer mode → Load unpacked** on your browser's Extensions page.
+   In Brave, use **brave://extensions**. Replace the earlier manual companion.
+2. Click **Connect companion** in TorrentLinker. That click authorizes the connection
+   and automatic profile updates. The app opens your browser and passes the connection
+   details directly to the installed extension. There is no code to copy, preview to
+   approve or Send button.
+3. Keep a c411 tab signed in with the same account as your API key. The companion
+   opens c411 during connection if needed. It refreshes and sends profile statistics
+   every two minutes, including when the extension's own tab is closed.
 
-Pairing codes last 10 minutes, connections one hour. Closing the extension tab or
-restarting TorrentLinker requires pairing again. Login cookies and API keys stay
-out of snapshots. Torrent names and hashes are not collected. Saved snapshots have
-a source and sync time; after five minutes they are labelled stale. They never
-replace API values or planning settings. **Disconnect & clear** revokes access
-and deletes the saved companion data. Changing the Indexer address or API key also
-clears cached account data. The private cache lives in the app's configuration folder.
+The connection survives app and browser restarts. If the browser is closed, c411 is
+signed out or another account is active, the last data stays visible with its sync
+time. After five minutes it is marked as waiting for a browser update. Updates resume
+automatically when the matching signed-in tab is available.
+
+For a remote WebUI, use HTTPS and install the ZIP downloaded from **that server**.
+Its connection access is restricted to that server, including its reverse-proxy
+path. The release ZIP supports the local desktop receiver and a localhost WebUI.
+The desktop connection page opens in your default browser; install the companion
+there. If installation is needed, return to the app and click Connect afterward.
+
+The companion never exports login cookies, API keys, torrent names or hashes.
+Account statistics never replace API values or planning settings. The connection
+token stays in the extension's local storage; the app keeps only its hash in its
+private configuration cache. Use **Pause automatic sync** in the extension to pause
+updates, or **Disconnect & clear** in TorrentLinker to revoke access and erase the
+saved companion data. Changing the Indexer address or API key clears the connection
+and cached account data. A new Connect click is then required.
 
 ## Zen integration
 

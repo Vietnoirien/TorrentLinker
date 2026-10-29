@@ -3004,6 +3004,10 @@ La mettre à la corbeille ?</translation>
         <source>Scan failed; showing the previous scan</source>
         <translation>Échec de l’analyse ; affichage de l’analyse précédente</translation>
     </message>
+    <message>
+        <source>Browser connection unavailable. Close the other TorrentLinker instance; retrying automatically.</source>
+        <translation>Connexion navigateur indisponible. Fermez l’autre instance de TorrentLinker ; nouvelle tentative automatique.</translation>
+    </message>
 </context>
 <context>
     <name>ModelPanel</name>
@@ -10054,6 +10058,38 @@ Credited upload {5} · Credited download {6}</source>
         <translation>Seeds actifs {0}   ·   Uploads validés {1}   ·   Durée totale de seed {2} jours
 Envoi réel {3} · Téléchargement réel {4}
 Envoi crédité {5} · Téléchargement crédité {6}</translation>
+    </message>
+    <message>
+        <source>Connect once to sync account statistics, transfers, seed time and active seeds every two minutes. Your login stays in the browser. Keep a signed-in c411 tab open.</source>
+        <translation>Connectez une fois pour synchroniser les statistiques du compte, les transferts, la durée et le nombre de seeds toutes les deux minutes. Votre session reste dans le navigateur. Gardez un onglet c411 connecté ouvert.</translation>
+    </message>
+    <message>
+        <source>Connecting in your browser. Once the companion is installed, connection and updates are automatic. Keep the browser connection page open during installation.</source>
+        <translation>Connexion dans votre navigateur. Une fois l’extension installée, la connexion et les mises à jour sont automatiques. Gardez la page de connexion ouverte pendant l’installation.</translation>
+    </message>
+    <message>
+        <source>Waiting for an API update. Retrying automatically.</source>
+        <translation>En attente des données API. Nouvelle tentative automatique.</translation>
+    </message>
+    <message>
+        <source>Account information from the c411 API. Updates automatically every two minutes.</source>
+        <translation>Informations du compte issues de l’API c411. Mise à jour automatique toutes les deux minutes.</translation>
+    </message>
+    <message>
+        <source>Connect another browser</source>
+        <translation>Connecter un autre navigateur</translation>
+    </message>
+    <message>
+        <source>Waiting for a browser update</source>
+        <translation>En attente du navigateur</translation>
+    </message>
+    <message>
+        <source>Automatic sync connected</source>
+        <translation>Synchronisation automatique connectée</translation>
+    </message>
+    <message>
+        <source>Connected. Waiting for the first automatic browser update.</source>
+        <translation>Connecté. En attente de la première mise à jour automatique du navigateur.</translation>
     </message>
 </context>
 </TS>

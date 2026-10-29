@@ -57,12 +57,12 @@ function showZenProfile(data) {
     errors[data.error] ||
     (data.api_stale
       ? say(
-          "API snapshot is older than five minutes. Refresh for current values.",
-          "Les données API ont plus de cinq minutes. Actualisez pour les mettre à jour.",
+          "Waiting for an API update. Retrying automatically.",
+          "En attente des données API. Nouvelle tentative automatique.",
         )
       : say(
-          "Account information from the c411 API.",
-          "Informations du compte issues de l’API c411.",
+          "Account information from the c411 API. Updates automatically every two minutes.",
+          "Informations du compte issues de l’API c411. Mise à jour automatique toutes les deux minutes.",
         ));
   $("profile-identity").replaceChildren(
     element(
@@ -189,7 +189,7 @@ function showZenProfile(data) {
     advanced.append(
       element(
         "p",
-        `${data.stale ? say("Stale snapshot", "Données anciennes") : say("Snapshot received", "Données reçues")} · ${say("c411 browser · Last sync", "Navigateur c411 · Dernière synchronisation")} ${profileTime(data.received_at)}`,
+        `${data.stale ? say("Waiting for a browser update", "En attente du navigateur") : say("Automatic sync connected", "Synchronisation automatique connectée")} · ${say("c411 browser · Last sync", "Navigateur c411 · Dernière synchronisation")} ${profileTime(data.received_at)}`,
       ),
     );
     const details = snapshot.details || {},
@@ -228,8 +228,8 @@ function showZenProfile(data) {
         "p",
         data.paired
           ? say(
-              "Paired. Send a preview from the extension.",
-              "Associé. Envoyez un aperçu depuis l’extension.",
+              "Connected. Waiting for the first automatic browser update.",
+              "Connecté. En attente de la première mise à jour automatique du navigateur.",
             )
           : say(
               "Connect the companion to see advanced activity.",
@@ -246,15 +246,15 @@ function showZenProfile(data) {
     );
   }
   $("profile-privacy").textContent = say(
-    "Your browser login stays in the browser. Preview and send only the fields you choose.",
-    "Votre session reste dans le navigateur. Prévisualisez et envoyez uniquement les champs choisis.",
+    "Connect once to automatically sync account statistics, transfer totals, seed time and active seed count every two minutes. Your login stays in the browser. Keep a signed-in c411 tab open.",
+    "Connectez une fois pour synchroniser automatiquement les statistiques du compte, les transferts, la durée et le nombre de seeds toutes les deux minutes. Votre session reste dans le navigateur. Gardez un onglet c411 connecté ouvert.",
   );
   $("profile-extension").textContent = say(
     "Download extension",
     "Télécharger l’extension",
   );
   $("profile-pair").textContent = data.paired
-    ? say("Pair again", "Associer à nouveau")
+    ? say("Connect another browser", "Connecter un autre navigateur")
     : say("Connect companion", "Connecter l’extension");
   $("profile-pair").disabled = !p.account_id || !!data.error;
   $("profile-disconnect").textContent = say(
@@ -265,14 +265,16 @@ function showZenProfile(data) {
     !snapshot && !data.paired && $("profile-pairing").hidden;
   if (data.paired) {
     $("profile-pairing").hidden = true;
-    $("profile-code").value = "";
   }
 }
 async function loadZenProfile(initial = false) {
   if (profileLoading) return;
   const data = await api("zen/profile");
   showZenProfile(data);
-  if (initial && !data.api && state.setup?.indexer_configured)
+  if (
+    state.setup?.indexer_configured &&
+    Date.now() / 1000 >= (data.refresh_after || 0)
+  )
     await refreshZenProfile();
 }
 async function refreshZenProfile() {
@@ -287,38 +289,41 @@ async function refreshZenProfile() {
   }
 }
 $("profile-refresh").onclick = () => guard(refreshZenProfile);
-$("profile-pair").onclick = () =>
+$("profile-pair").onclick = () => {
+  const tab = window.open("about:blank", "torrentlinker-companion");
   guard(async () => {
-    // Revalidate the API account before granting the browser a write capability.
-    await refreshZenProfile();
-    const pairing = await api("zen/profile/pairing", {});
-    $("profile-address").value = new URL(".", document.baseURI).href.replace(
-      /\/$/,
-      "",
-    );
-    $("profile-code").value = pairing.code;
-    $("profile-address-label").textContent = say(
-      "Receiver address",
-      "Adresse de réception",
-    );
-    $("profile-code-label").textContent = say(
-      "Pairing code",
-      "Code d’association",
-    );
-    $("profile-instructions").textContent = say(
-      "Extract the extension ZIP and load its folder in your browser’s Extensions page with Developer mode enabled. Open c411 and click the extension. Read a preview, enter this address and code, pair, then send. The code expires in 10 minutes; the connection lasts one hour. Remote WebUI connections require HTTPS.",
-      "Extrayez le ZIP et chargez son dossier dans la page Extensions du navigateur en mode développeur. Ouvrez c411 et cliquez sur l’extension. Lisez un aperçu, saisissez l’adresse et le code, associez puis envoyez. Le code expire après 10 minutes ; la connexion dure une heure. Le WebUI distant nécessite HTTPS.",
-    );
-    $("profile-pairing").hidden = false;
-    $("profile-disconnect").disabled = false;
-    $("profile-code").focus();
-    $("profile-code").select();
+    try {
+      // Revalidate the API account before granting the browser a write capability.
+      await refreshZenProfile();
+      const pairing = await api("zen/profile/pairing", {});
+      const target = new URL(".", document.baseURI).href.replace(/\/$/, "");
+      const payload = {
+        target,
+        code: pairing.code,
+        accountId: profileState.api.account_id,
+      };
+      const url =
+        target +
+        "/companion/connect#" +
+        encodeURIComponent(JSON.stringify(payload));
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+      $("profile-instructions").textContent = say(
+        "Connecting in your browser. Once the companion is installed, connection and updates are automatic. Remote WebUI: install the extension downloaded from this server and use HTTPS.",
+        "Connexion dans votre navigateur. Une fois l’extension installée, la connexion et les mises à jour sont automatiques. WebUI distant : installez l’extension téléchargée depuis ce serveur et utilisez HTTPS.",
+      );
+      $("profile-pairing").hidden = false;
+      $("profile-disconnect").disabled = false;
+    } catch (error) {
+      tab?.close();
+      throw error;
+    }
   });
+};
 $("profile-disconnect").onclick = () =>
   guard(async () => {
     const data = await api("zen/profile/disconnect", {});
     $("profile-pairing").hidden = true;
-    $("profile-code").value = "";
     showZenProfile(data);
   });
 setInterval(() => {

@@ -82,11 +82,27 @@ def profile_routes(app: FastAPI, setup: Setup) -> None:
         return workspace.state()
 
     @app.get("/api/zen/profile/extension")
-    def extension() -> Response:
+    def extension(request: Request) -> Response:
         from torrentlinker.companion import extension_zip
 
         return Response(
-            extension_zip(),
+            extension_zip(str(request.base_url)),
             media_type="application/zip",
             headers={"Content-Disposition": 'attachment; filename="torrentlinker-companion.zip"'},
+        )
+
+    @app.get("/companion/connect")
+    @app.get("/companion/connect.js")
+    @app.get("/companion/connect.css")
+    def connect_page(request: Request) -> Response:
+        from torrentlinker.companion import connection_asset
+
+        path = "/companion/" + request.url.path.rsplit("/", 1)[-1]
+        asset = connection_asset(path)
+        assert asset is not None
+        raw, kind = asset
+        return Response(
+            raw,
+            media_type=kind,
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )

@@ -1,0 +1,143 @@
+"""Real extension APIs, with a fake c411 website and a local test receiver."""
+
+import os
+import socket
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from tests.test_profile import PROFILE
+from tests.test_web_profile import prepared, snapshot
+
+pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+
+
+def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, monkeypatch):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker import companion
+
+    (tmp_path / "server").mkdir()
+    app, setup = prepared(tmp_path / "server", monkeypatch)
+    workspace = setup.profile_workspace()
+    workspace.refresh(setup.settings.indexer.url, "fake-key")
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    extension = Path(companion.__file__).parent / "companion_extension"
+    account = {**PROFILE, "username": "Demo account"}
+    reads = []
+
+    def tracker(route):
+        path = route.request.url
+        reads.append(path)
+        if "/api/user/profile" in path:
+            route.fulfill(json=account)
+        elif "/api/profile/detailed-stats" in path:
+            route.fulfill(json={"stats": snapshot()["details"]})
+        elif "/api/profile/active-seeds" in path:
+            route.fulfill(json={"meta": {"total": 42}})
+        else:
+            route.fulfill(content_type="text/html", body="<h1>Fake c411 account</h1>")
+
+    try:
+        with sync_playwright() as pw:
+            context = pw.chromium.launch_persistent_context(
+                str(tmp_path / "browser"),
+                channel="chromium",
+                headless=True,
+                args=[f"--disable-extensions-except={extension}", f"--load-extension={extension}"],
+            )
+            context.route("https://c411.org/**", tracker)
+            tracker_tab = context.new_page()
+            tracker_tab.goto("https://c411.org/")
+            page = context.new_page()
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            page.locator("[data-view=zen]").first.click()
+            with context.expect_page() as handoff_opened:
+                page.locator("#profile-pair").click()
+            handoff = handoff_opened.value
+            expect(handoff.locator("h1")).to_have_css("color", "rgb(101, 212, 202)")
+            # This is the only user action after installing the companion.
+            expect(page.locator("#profile-advanced")).to_contain_text("42", timeout=15000)
+            assert workspace.state()["paired"]
+            assert reads.count("https://c411.org/api/user/profile") == 2
+            page.reload()
+            page.locator("[data-view=zen]").first.click()
+            expect(page.locator("#profile-advanced")).to_contain_text("42")
+
+            # Closing extension/app tabs and restarting the browser retains consent.
+            before_restart = workspace.state()["received_at"]
+            for opened in context.pages:
+                opened.close()
+            context.close()
+            context = pw.chromium.launch_persistent_context(
+                str(tmp_path / "browser"),
+                channel="chromium",
+                headless=True,
+                args=[f"--disable-extensions-except={extension}", f"--load-extension={extension}"],
+            )
+            context.route("https://c411.org/**", tracker)
+            tracker_tab = context.new_page()
+            tracker_tab.goto("https://c411.org/")
+            worker = (
+                context.service_workers[0]
+                if context.service_workers
+                else context.wait_for_event("serviceworker")
+            )
+            # Advance the service worker's clock and fire the browser alarm. Neither
+            # the app nor the extension's own sync functions are called by the test.
+            worker.evaluate("""() => {
+                const clock = Date.now;
+                Date.now = () => clock() + 120001;
+                return chrome.alarms.create('profile-sync', {delayInMinutes: 0.001});
+            }""")
+            extension_page = context.new_page()
+            extension_page.goto(worker.url.replace("background.js", "companion.html"))
+            expect(extension_page.locator("#status")).to_contain_text("Connected.", timeout=15000)
+            assert workspace.state()["received_at"] > before_restart
+
+            # A different signed-in browser account must never overwrite the app.
+            account["id"] = 99
+            last_sync = workspace.state()["received_at"]
+            worker.evaluate("""() => {
+                const clock = Date.now;
+                Date.now = () => clock() + 120001;
+                return chrome.alarms.create('profile-sync', {delayInMinutes: 0.001});
+            }""")
+            expect(extension_page.locator("#status")).to_contain_text(
+                "Different c411 account", timeout=15000
+            )
+            assert workspace.state()["received_at"] == last_sync
+            account["id"] = 42
+
+            page = context.new_page()
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("[data-view=zen]").first.click()
+            page.locator("#profile-disconnect").click()
+            expect(page.locator("#profile-advanced")).not_to_contain_text("42")
+            assert not workspace.state()["paired"]
+            worker.evaluate("""() => {
+                const clock = Date.now;
+                Date.now = () => clock() + 120001;
+                return chrome.alarms.create('profile-sync', {delayInMinutes: 0.001});
+            }""")
+            expect(extension_page.locator("#destination")).to_have_text(
+                "Not connected", timeout=15000
+            )
+            context.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)

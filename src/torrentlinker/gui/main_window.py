@@ -165,6 +165,8 @@ class MainWindow(QMainWindow):
 
         self.account_workspace = ProfileWorkspace(settings_path.parent)
         self.companion_receiver: CompanionReceiver | None = None
+        self._profile_refreshing = False
+        self._receiver_retry_at = 0.0
         self.agent_runtime: Any = None
         self.agent_settings_timer = QTimer(self)
         self.agent_settings_timer.setInterval(1000)
@@ -313,7 +315,7 @@ class MainWindow(QMainWindow):
         self.zen_tab.profile_view.extension_requested.connect(self.save_companion_extension)
         self.profile_timer = QTimer(self)
         self.profile_timer.setInterval(3000)
-        self.profile_timer.timeout.connect(self.show_account_profile)
+        self.profile_timer.timeout.connect(self._poll_account_profile)
         self.profile_timer.start()
         self.show_account_profile()
         self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
@@ -899,7 +901,10 @@ class MainWindow(QMainWindow):
             self.agent_runtime.sync(self.settings)
 
     def refresh_profile(self) -> None:
-        """Read the c411 profile; only at startup and when the user asks."""
+        """Refresh automatically, with at most one desktop request in flight."""
+        if self._profile_refreshing:
+            return
+        self._profile_refreshing = True
         self.band.busy(True)
         self.zen_tab.profile_view.refresh_button.setEnabled(False)
         credentials = (self.settings.indexer.url, get_secret(INDEXER_API_KEY))
@@ -911,27 +916,58 @@ class MainWindow(QMainWindow):
 
     def show_account_profile(self) -> None:
         self.account_workspace.bind(self.settings.indexer.url, get_secret(INDEXER_API_KEY))
-        self.zen_tab.profile_view.show_state(self.account_workspace.state())
+        state = self.account_workspace.state()
+        self.zen_tab.profile_view.show_state(state)
+        if state["paired"] and self.companion_receiver is None:
+            if time.monotonic() >= self._receiver_retry_at:
+                self._receiver_retry_at = time.monotonic() + 30
+                try:
+                    self._start_companion_receiver()
+                except OSError:
+                    self.zen_tab.profile_view.advanced_status.setText(
+                        self.tr(
+                            "Browser connection unavailable. "
+                            "Close the other TorrentLinker instance; retrying automatically."
+                        )
+                    )
+
+    def _poll_account_profile(self) -> None:
+        self.show_account_profile()
+        if time.time() >= self.account_workspace.state()["refresh_after"]:
+            self.refresh_profile()
+
+    def _start_companion_receiver(self) -> None:
+        from torrentlinker.companion import CompanionReceiver
+
+        if self.companion_receiver is None:
+            self.companion_receiver = CompanionReceiver(
+                self.account_workspace,
+                lambda: (self.settings.indexer.url, get_secret(INDEXER_API_KEY)),
+                port=self.account_workspace.receiver_port(),
+            )
 
     def pair_companion(self) -> None:
-        from torrentlinker.companion import CompanionReceiver
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        from torrentlinker.companion import connection_url
 
         try:
             self.show_account_profile()
             pairing = self.account_workspace.pairing()
-            if self.companion_receiver is None:
-                self.companion_receiver = CompanionReceiver(
-                    self.account_workspace,
-                    lambda: (self.settings.indexer.url, get_secret(INDEXER_API_KEY)),
-                )
-            self.zen_tab.profile_view.show_pairing(self.companion_receiver.address, pairing["code"])
+            self._start_companion_receiver()
+            assert self.companion_receiver is not None
+            self.account_workspace.remember_receiver(self.companion_receiver.server.server_port)
+            address = self.companion_receiver.address
+            account_id = self.account_workspace.state()["api"]["account_id"]
+            self.zen_tab.profile_view.show_pairing()
+            QDesktopServices.openUrl(QUrl(connection_url(address, pairing["code"], account_id)))
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, self.tr("Browser companion"), str(error))
 
     def disconnect_companion(self) -> None:
         self.account_workspace.disconnect()
         self.zen_tab.profile_view.pairing_box.hide()
-        self.zen_tab.profile_view.code.clear()
         if self.companion_receiver is not None:
             self.companion_receiver.stop()
             self.companion_receiver = None
@@ -956,6 +992,7 @@ class MainWindow(QMainWindow):
                 )
 
     def _profile_read(self, profile: UserProfile) -> None:
+        self._profile_refreshing = False
         self.zen_tab.profile_view.refresh_button.setEnabled(True)
         self.show_account_profile()
         self.band.show_profile(profile)
@@ -967,6 +1004,7 @@ class MainWindow(QMainWindow):
             self.zen_tab.seeding_view.refresh()
 
     def _profile_failed(self, error: Exception) -> None:
+        self._profile_refreshing = False
         self.zen_tab.profile_view.refresh_button.setEnabled(True)
         self.show_account_profile()
         log.info("c411 profile not read: %s", error)

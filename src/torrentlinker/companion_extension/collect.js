@@ -2,7 +2,7 @@
 // Never accepts a URL, reads cookies/storage, follows redirects or writes to c411.
 export async function collectProfile(options) {
   if (location.origin !== "https://c411.org")
-    throw new Error("Open c411.org and click the companion there.");
+    throw new Error("Open c411.org. Sync resumes automatically.");
   const get = async (path) => {
     const r = await fetch(path, {
       credentials: "same-origin",
@@ -11,7 +11,7 @@ export async function collectProfile(options) {
       signal: AbortSignal.timeout(12000),
     });
     if (r.status === 401 || r.status === 403)
-      throw new Error("Sign in on c411, then preview again.");
+      throw new Error("Sign in on c411. Sync resumes automatically.");
     if (r.status === 429)
       throw new Error("c411 rate limit reached. Wait before retrying.");
     if (
@@ -73,7 +73,7 @@ export async function collectProfile(options) {
   }
   const last = await get("/api/user/profile");
   if (id(last) !== snapshot.account.id)
-    throw new Error("Account changed during the read. Preview again.");
+    throw new Error("Account changed during the read. Waiting for the connected account.");
   snapshot.capturedAt = new Date().toISOString();
   return snapshot;
 }
