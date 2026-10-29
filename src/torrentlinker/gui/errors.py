@@ -9,7 +9,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QMessageBox, QWidget
 
 from torrentlinker.gui.tasks import run_in_background
-from torrentlinker.indexer import KeyRefused, RateLimited
+from torrentlinker.indexer import KeyRefused, RateLimited, SessionRefused
 from torrentlinker.library import LibraryReadTimeout
 from torrentlinker.transmission import PartialNamesOn
 
@@ -43,6 +43,12 @@ def error_text(error: Exception) -> str:
                 "The previous Library list has been kept to avoid marking seeded files as Orphans.",
             )
         )
+    if isinstance(error, SessionRefused):
+        return QCoreApplication.translate(
+            "Errors",
+            "The c411 session download stopped: {0} Check Settings → Companion. "
+            "It never falls back to your API key.",
+        ).format(str(error))
     if isinstance(error, KeyRefused) and error.scope == "drafts:rw":
         return QCoreApplication.translate(
             "Errors",

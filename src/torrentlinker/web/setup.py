@@ -207,6 +207,7 @@ class Setup:
                     cache=self.store,
                     extra_keys=self.extra_indexer_keys(),
                 )
+                self._indexer.session = (self._root or self)._profile_workspace
             return self._indexer
 
     def extra_indexer_keys(self) -> list[str]:
@@ -418,6 +419,7 @@ class Setup:
                     k: IndexerCategory(v, caps.parents.get(k)) for k, v in caps.categories.items()
                 }
                 self.save()
+                indexer.session = (self._root or self)._profile_workspace
                 self._indexer = indexer
             return {"ok": True, "categories": len(caps.categories)}
 

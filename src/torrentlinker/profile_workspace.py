@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from torrentlinker import net
-from torrentlinker.companion_downloads import CompanionDownloads
+from torrentlinker.companion_downloads import CompanionDownloads, SessionFetchError
 from torrentlinker.profile import ProfileClient, ProfileError, ProfileProblem, UserProfile
 
 COMPANION_ROUTES = {
@@ -327,6 +327,44 @@ class ProfileWorkspace:
                 self.downloads.clear()
             self._save()
             return enabled
+
+    def fetch_descriptor(self, infohash: str, timeout: float = 150.0) -> bytes:
+        """One .torrent through the browser session; blocks. Never uses the API key."""
+        with self.lock:
+            if not self.session_downloads:
+                raise SessionFetchError("Session downloads are off.")
+            try:
+                job = self.downloads.submit(
+                    infohash, "app-" + secrets.token_hex(8), "app", keep=True
+                )
+            except ValueError as error:
+                raise SessionFetchError(str(error)) from error
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                with self.lock:
+                    job = self.downloads.get(job["id"], "app")
+                    if job["status"] == "complete":
+                        raw = self.downloads.take(job["id"])
+                        if raw is not None:
+                            return raw
+                        raise SessionFetchError("The descriptor was not kept.")
+                    if job["status"] == "failed":
+                        status = int(job.get("http_status") or 0)
+                        raise SessionFetchError(
+                            job.get("error") or "Session download failed.",
+                            status,
+                            int(job.get("retry_after") or 0),
+                            fatal=job.get("reason") != "timeout",
+                        )
+                if time.monotonic() > deadline:
+                    raise SessionFetchError("The browser did not answer in time.")
+                time.sleep(0.1)
+        except ValueError as error:  # the job expired
+            raise SessionFetchError(str(error)) from error
+        finally:
+            with self.lock:
+                self.downloads.take(job["id"])
 
     def set_download_concurrency(self, value: int) -> int:
         with self.lock:

@@ -295,3 +295,88 @@ def test_session_downloads_are_off_until_the_owner_turns_them_on(tmp_path, monke
         assert (
             browser.get("/api/zen/profile", headers=OWNER).json()["downloads"]["enabled"] is False
         )
+
+
+def test_workspace_fetch_keeps_the_descriptor_once_and_blocks_until_the_browser_answers(
+    tmp_path, monkeypatch
+):
+    import threading
+
+    app, setup = prepared(tmp_path, monkeypatch)
+    content = tmp_path / "sample.txt"
+    content.write_text("A harmless test file")
+    torrent = make_torrent(content)
+    infohash = read_torrent(torrent).infohash
+    workspace = setup.profile_workspace()
+    with TestClient(app) as browser:
+        ext = pair(browser)
+        browser.post("/api/companion/commands", headers=ext, json={})
+        fetched = {}
+        worker = threading.Thread(
+            target=lambda: fetched.update(data=workspace.fetch_descriptor(infohash, timeout=20))
+        )
+        worker.start()
+        command = None
+        for _ in range(100):
+            command = browser.post("/api/companion/commands", headers=ext, json={}).json()[
+                "command"
+            ]
+            if command:
+                break
+            threading.Event().wait(0.05)
+        assert command and command["infohash"] == infohash
+        browser.post(
+            "/api/companion/result",
+            headers=ext,
+            json={
+                "id": command["id"],
+                "accountId": "42",
+                "status": 200,
+                "data": base64.b64encode(torrent).decode(),
+            },
+        )
+        worker.join(10)
+        assert fetched["data"] == torrent
+        assert all("raw" not in job for job in workspace.downloads.jobs.values())
+
+
+def test_workspace_fetch_reports_refusals_and_refuses_when_off(tmp_path, monkeypatch):
+    import threading
+
+    from torrentlinker.companion_downloads import SessionFetchError
+
+    app, setup = prepared(tmp_path, monkeypatch)
+    workspace = setup.profile_workspace()
+    with TestClient(app) as browser:
+        ext = pair(browser, enable=False)
+        with pytest.raises(SessionFetchError, match="off"):
+            workspace.fetch_descriptor("a" * 40, timeout=1)
+        browser.post("/api/zen/profile/session-downloads", headers=OWNER, json={"enabled": True})
+        browser.post("/api/companion/commands", headers=ext, json={})
+        errors = []
+
+        def attempt():
+            try:
+                workspace.fetch_descriptor("b" * 40, timeout=20)
+            except SessionFetchError as error:
+                errors.append(error)
+
+        worker = threading.Thread(target=attempt)
+        worker.start()
+        command = None
+        for _ in range(100):
+            command = browser.post("/api/companion/commands", headers=ext, json={}).json()[
+                "command"
+            ]
+            if command:
+                break
+            threading.Event().wait(0.05)
+        browser.post(
+            "/api/companion/result",
+            headers=ext,
+            json={"id": command["id"], "accountId": "42", "status": 403},
+        )
+        worker.join(10)
+        assert errors and errors[0].status == 403 and errors[0].fatal
+        with pytest.raises(SessionFetchError):  # the session is now blocked
+            workspace.fetch_descriptor("c" * 40, timeout=1)

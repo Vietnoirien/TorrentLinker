@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -47,6 +48,16 @@ class KeyRefused(Exception):
         self.status = status
         self.key_number = key_number
         self.scope = scope
+
+
+class SessionRefused(KeyRefused):
+    """The browser session could not deliver a .torrent; never retried with the API key."""
+
+    def __init__(self, message: str, status: int = 0) -> None:
+        Exception.__init__(self, message)
+        self.status = status
+        self.key_number = 0
+        self.scope = "session"
 
 
 class TorrentUnavailable(Exception):
@@ -223,6 +234,7 @@ class Indexer:
         self._sleep = sleep
         self._cache = cache
         self.extra_keys = tuple(extra_keys)
+        self.session: Any = None  # a ProfileWorkspace; set by the app, never persisted
         keys = [k for k in dict.fromkeys([api_key, *extra_keys]) if k][:MAX_KEYS] or [api_key]
         # Per key, two queues: c411 limits searches and .torrent downloads separately.
         self.slots = [
@@ -291,6 +303,11 @@ class Indexer:
         """
         if (data := self.cached_torrent(candidate)) is not None:
             return data
+        if self.session is not None and self.session.session_downloads:
+            data = self._session_torrent(candidate)
+            if self._cache:
+                self._cache.cache_torrent(self._torrent_key(candidate), data)
+            return data
         url = candidate.download_url
         try:
             data = self._request(
@@ -303,6 +320,27 @@ class Indexer:
         if self._cache:
             self._cache.cache_torrent(self._torrent_key(candidate), data)
         return data
+
+    def _session_torrent(self, candidate: Candidate) -> bytes:
+        """Through the owner's signed-in browser only; a refusal never falls back to the key."""
+        from torrentlinker.companion_downloads import SessionFetchError
+
+        infohash = (candidate.infohash or "").lower()
+        if not re.fullmatch(r"[a-f0-9]{40}", infohash):
+            match = re.search(r"[?&]id=([A-Fa-f0-9]{40})(?:&|$)", candidate.download_url)
+            infohash = match.group(1).lower() if match else ""
+        if not infohash:
+            raise SessionRefused("This result has no info hash for a session download.")
+        try:
+            return self.session.fetch_descriptor(infohash)
+        except SessionFetchError as error:
+            if error.status == 404:
+                raise TorrentUnavailable() from None
+            if error.status == 429:
+                raise RateLimited(max(error.retry_after, 60)) from None
+            if not error.fatal:
+                raise RuntimeError(str(error)) from None
+            raise SessionRefused(str(error), error.status) from None
 
     def cached_torrent(self, candidate: Candidate) -> bytes | None:
         """The Candidate's .torrent if it was fetched before; never uses the network."""

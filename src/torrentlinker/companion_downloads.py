@@ -36,6 +36,18 @@ REASONS = frozenset(
 )
 
 
+class SessionFetchError(Exception):
+    """A descriptor the browser session could not deliver."""
+
+    def __init__(
+        self, message: str, status: int = 0, retry_after: int = 0, fatal: bool = True
+    ) -> None:
+        super().__init__(message)
+        self.fatal = fatal  # every later torrent would fail the same way
+        self.status = status
+        self.retry_after = retry_after
+
+
 class CompanionDownloads:
     """Called under the ProfileWorkspace lock; raw descriptors are never retained."""
 
@@ -58,6 +70,8 @@ class CompanionDownloads:
         now = self.clock()
         for key, job in list(self.jobs.items()):
             finished = job["status"] not in ("pending", "running")
+            if finished and job.get("raw") and now - job["created"] > 120:
+                job.pop("raw")  # an abandoned request must not hold a descriptor
             if now - job["created"] > (FINISHED_KEEP if finished else 600):
                 del self.jobs[key]
             elif job["status"] in ("pending", "running") and now > job["expires"]:
@@ -75,7 +89,9 @@ class CompanionDownloads:
     @staticmethod
     def _public(job: dict[str, Any]) -> dict[str, Any]:
         return {
-            k: v for k, v in job.items() if k not in ("actor", "request_id", "created", "expires")
+            k: v
+            for k, v in job.items()
+            if k not in ("actor", "request_id", "created", "expires", "raw", "keep")
         }
 
     def set_concurrency(self, value: int) -> int:
@@ -91,7 +107,14 @@ class CompanionDownloads:
             raise ValueError("Download test unavailable or expired.")
         return self._public(job)
 
-    def submit(self, infohash: str, request_id: str, actor: str) -> dict[str, Any]:
+    def take(self, identifier: str) -> bytes | None:
+        """Hand over a kept descriptor once; it is never retained after this."""
+        job = self.jobs.get(identifier)
+        return job.pop("raw", None) if job else None
+
+    def submit(
+        self, infohash: str, request_id: str, actor: str, keep: bool = False
+    ) -> dict[str, Any]:
         self._expire()
         if not re.fullmatch(r"[a-fA-F0-9]{40}", infohash):
             raise ValueError("Use a torrent info hash, not a URL.")
@@ -126,6 +149,7 @@ class CompanionDownloads:
             created=now,
             expires=now + 500,
             status="pending",
+            keep=keep,
         )
         self.jobs[identifier] = job
         return self._public(job)
@@ -196,6 +220,8 @@ class CompanionDownloads:
             if meta.infohash.lower() != job["infohash"] or not meta.files:
                 raise ValueError()
             job.update(status="complete", bytes=len(raw), files=len(meta.files))
+            if job.get("keep"):
+                job["raw"] = raw
         except Exception:
             # Never expose parser errors, announce URLs or arbitrary tracker bodies.
             job["error"] = "Invalid torrent metadata or unexpected info hash."

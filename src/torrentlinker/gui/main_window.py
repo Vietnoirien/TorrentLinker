@@ -895,6 +895,7 @@ class MainWindow(QMainWindow):
             != (url, key, extra)
         ):
             current = self._indexer = Indexer(url, key, cache=self.store, extra_keys=extra)
+            current.session = self.account_workspace
             self._indexer_proxy = net.current()
         return current
 
