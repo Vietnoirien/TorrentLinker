@@ -175,12 +175,15 @@ def test_download_all_tabs_leaves_unrelated_queue_entries_waiting(qtbot, tmp_pat
     qtbot.waitUntil(lambda: view.runner is None)
     assert client.downloads == [c.infohash, second.infohash]
     states = {entry.candidate.infohash: entry.status for entry in entries(store)}
-    assert states[c.infohash] == states[second.infohash] == "sent"
-    assert states[other.infohash] == "queued"
+    assert states == {other.infohash: "queued"}
     assert view.browser.currentWidget() is view.home and view.pages.currentIndex() == 1
     assert len(view._detail_tabs) == 2
     view.queue_open_tabs(True)
-    assert view.runner is None and client.downloads == [c.infohash, second.infohash]
+    qtbot.waitUntil(lambda: view.runner is None)
+    assert client.downloads == [c.infohash, second.infohash]
+    states = {entry.candidate.infohash: entry.status for entry in entries(store)}
+    assert states[c.infohash] == states[second.infohash] == "refused"
+    assert states[other.infohash] == "queued"
 
 
 def test_closed_tab_ignores_pending_metadata_and_can_be_reopened(qtbot, tmp_path, monkeypatch):

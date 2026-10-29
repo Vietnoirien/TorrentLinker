@@ -28,7 +28,7 @@ Changer de section n’enregistre pas les modifications. Utilisez **Enregistrer 
 
 Captures de l’interface française en thème sombre, avec des données d’exemple.
 
-![Préparer un brouillon d’upload](../images/upload.png)
+![Modifier un brouillon local enregistré](../images/upload.png)
 
 ## Relire dans la file de brouillons locaux
 
@@ -88,3 +88,7 @@ L’Assistant utilise `preview_upload` pour examiner un élément de la Biblioth
 Un brouillon incomplet peut être enregistré localement. La vérification indique précisément chaque champ manquant dans la description ou le NFO. Conservez les libellés techniques du modèle et remplissez la section Présentation/Synopsis. Une valeur inconnue ou un texte à compléter ne compte pas comme un champ rempli. Certaines exigences dépendent du contenu : plateforme WEB, détails d’un livre audio, profondeur du son sans perte, durée de chaque piste. La langue des métadonnées EPUB est contrôlée lorsqu’elle est disponible ; déclarer « Français » ne rend pas admissible un fichier dans une autre langue.
 
 `present_upload_drafts` refuse les fiches incomplètes. L’Assistant doit corriger le formulaire enregistré puis présenter sa nouvelle révision, ou vous demander les informations manquantes. L’aperçu de la file reste accessible pour relire un travail en cours. Chaque envoi revérifie les champs avant de créer le torrent ou de contacter c411, sur ordinateur comme sur le web. Des champs complets ne garantissent ni leur exactitude ni l’acceptation par le site : les refus de catégorie, les doublons et la relecture restent à traiter. Conservez les NFO originaux ; les rapports vidéo MediaInfo sont reconnus sans réécriture.
+
+![Relire un brouillon local enregistré avant l’envoi](../images/upload-review.png)
+
+![Éditeur Upload dans le navigateur](../images/web/web-upload-details-fr-dark.png)

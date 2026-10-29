@@ -28,7 +28,7 @@ Switching sections does not save changes. Use **Save locally** before previewing
 
 Screenshots use the English interface, dark theme and example data.
 
-![Prepare an Upload Draft](../images/en/upload.png)
+![Edit a saved Local Draft](../images/en/upload.png)
 
 ## Review in the local draft queue
 
@@ -84,3 +84,7 @@ The Assistant uses `preview_upload` to inspect a Library item, `get_upload_requi
 You can save incomplete Local Drafts. Preview and validation identify each missing description or NFO field by name. Keep the template's technical labels and fill the presentation/synopsis section. Unknown values and placeholders do not count as completed fields. Conditional requirements include WEB platform, audiobook details, lossless audio bit depth and individual track durations. EPUB language metadata is checked when available; a foreign-language file cannot be made eligible by labelling it French.
 
 The Assistant cannot display incomplete drafts with `present_upload_drafts`. It must correct the saved form and present the new revision, or ask you for the missing facts. The queue preview remains available so you can inspect unfinished work. All sends recheck completeness before hashing or contacting c411, on both desktop and WebUI. Complete fields do not guarantee factual accuracy or tracker acceptance: category refusals, duplicate checks and human review still matter. Preserve original release NFOs; standard video MediaInfo text is recognized without rewriting it.
+
+![Review a saved Local Draft before sending](../images/en/upload-review.png)
+
+![Upload editor in the browser](../images/web/web-upload-details-en-dark.png)

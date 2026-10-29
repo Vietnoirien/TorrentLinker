@@ -4,7 +4,7 @@
 
 Desktop and WebUI use the same Library layout: **Local Items**, **Folders**, and **Activity**. Choose a Library Folder in the left rail, filter the Local Items, then select an item to open its Candidate review below the table. **Expand review** gives the Candidates more room; **Back to Local Items** restores the table without losing the selected Candidate.
 
-Review **Summary**, **Files**, **Description**, and **NFO** before acting. Files shows local counterparts, renamed paths and absent files. A Full Match compares file names and sizes; **Verify & reseed** still requires the Torrent Client's hash Verification. **Reject Candidate** remembers your decision for this Local Item. Searching, checking and rejecting never start a Reseed.
+Review **Summary**, **Files**, **Description**, **NFO**, and **Evidence** before acting. Files shows local counterparts, renamed paths and absent files. A Full Match compares file names and sizes; **Verify & reseed** still requires the Torrent Client's hash Verification. **Reject Candidate** remembers your decision for this Local Item. Searching, checking and rejecting never start a Reseed.
 
 Use **Folders → Add folder** to register several folders and edit their Content Kind and scan grouping. Depth 1 treats each direct child as one Local Item. Removing a registration leaves files on disk. Settings opens the same folder editor. Download destinations and Path Mappings remain separate, per Torrent Client.
 
@@ -25,7 +25,7 @@ Screenshots use the English interface, dark theme and example data.
 
 ![Library and Reseed actions](../images/en/bibliotheque.png)
 
-![Add a Library Folder](../images/en/ajouter-dossier.png)
+![Manage registered Library Folders](../images/en/ajouter-dossier.png)
 
 ## Add folders and use batch actions
 
@@ -59,6 +59,8 @@ Open **Evidence** in the Local Item inspector, then **Inspect metadata**. Torren
 
 Upload preparation offers **Use a verified original name…** after an import verifies the Local Item. This changes the proposed release name only. Check the Files preview before saving a draft; nested filenames are not automatically restored. Current tracker rules and the uploader's review still apply.
 
+![Metadata evidence in Candidate review](../images/en/library-evidence.png)
+
 ## More torrents from existing files
 
 **Find compatible torrents** also works for already seeded items. Series searches include series, season and episode scopes supported by the Indexer. A smaller episode can match files in a larger pack. Searches are bounded to 30 requests and 100 Candidates; a limit notice means the results are incomplete. Search counts and catalogue coverage are not guarantees of exhaustive results.
@@ -74,3 +76,9 @@ For an eligible result, choose a destination for an independent copy. WebUI dest
 The missing-byte estimate describes useful content, not total network traffic. Repair history persists across restarts; restarting never starts a pending repair. Failed or uncertain operations remain for manual inspection in the Torrent Client. Incomplete copies are kept; removal of a torrent alone does not delete them. The original is always retained. Tests use synthetic data; repair success rates on real media collections are not established.
 
 Before preparing a copy, explicitly enable experimental repair. Representative real-library trials are still pending; diagnosis remains available without enabling downloads.
+
+## WebUI examples
+
+![Library in the browser](../images/web/library-web.png)
+
+![Archive extraction confirmation](../images/web/web-archive-confirmation-en.png)

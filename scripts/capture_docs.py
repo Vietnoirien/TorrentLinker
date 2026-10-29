@@ -22,6 +22,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplitter
 
 from torrentlinker import i18n
+from torrentlinker.agent.access import Grant
+from torrentlinker.agent.desktop import DesktopSetup
 from torrentlinker.config import Settings
 from torrentlinker.domain import (
     ContentKind,
@@ -33,14 +35,19 @@ from torrentlinker.domain import (
 )
 from torrentlinker.download_queue import enqueue
 from torrentlinker.downloads import IndexerCategory
-from torrentlinker.gui.library_folder_dialog import LibraryFolderDialog
+from torrentlinker.gui.agent_access import AgentAccess
 from torrentlinker.gui.main_window import MainWindow
 from torrentlinker.gui.settings_dialog import SettingsDialog
 from torrentlinker.gui.theme import ThemeFollower, apply_theme
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
+from torrentlinker.matching import FileComparison, Match
+from torrentlinker.review import CheckedCandidate
 from torrentlinker.seeding import Seeding, SeedingRow, zen_torrent
 from torrentlinker.store import Store
+from torrentlinker.torrent_meta import TorrentMeta
+from torrentlinker.web.app import create_app
+from torrentlinker.web.uploads import UploadForm
 from torrentlinker.zen import estimate
 
 OUTPUT = Path(__file__).resolve().parents[1] / "docs/guide/images"
@@ -111,7 +118,7 @@ def main():
             language=language, theme="dark", library_folders=folders, indexer_categories=categories
         )
         window = MainWindow(settings, root / "settings.json", Store(root / "state.db"))
-        window.resize(1440, 920)
+        window.resize(1600, 1000)
         window.show()
         window.open_settings = lambda: None
 
@@ -142,6 +149,20 @@ def main():
                 "Données d’exemple pour la documentation", "Example data for the documentation"
             )
         )
+        agent_setup = DesktopSetup(settings, root / "settings.json", window.store)
+        agent_service = create_app(
+            root / "agents",
+            password="offline-documentation-only",
+            service_override=agent_setup,
+            monitor_verifications=False,
+        ).state.agent_service
+        # Temporary offline grant; discard its token and never display it in the capture.
+        agent_service.access.create(
+            Grant(name=localize("Mon assistant", "My assistant"), clients=["default"])
+        )
+        window.agent_access_widget = lambda parent: AgentAccess(
+            agent_service, "http://127.0.0.1:8790/mcp/", parent
+        )
         settings_dialog = SettingsDialog(settings, window)
         settings_dialog.resize(1120, 940)
         settings_dialog.show()
@@ -154,6 +175,12 @@ def main():
         )
         settings_dialog.tabs.setCurrentIndex(4)
         capture(settings_dialog, "chemins", output)
+        settings_dialog.show_agent_access()
+        for _ in range(100):
+            QTest.qWait(20)
+            if settings_dialog.agent_access.connections.count():
+                break
+        capture(settings_dialog, "agent-access", output)
         settings_dialog.reject()
 
         names = [
@@ -178,16 +205,49 @@ def main():
             entries[2].item.path, localize("2 candidats à vérifier", "2 candidates to check")
         )
         window.tabs.setCurrentIndex(1)
-        window.findChild(QSplitter).setSizes([850, 350])
+        window.library_workspace.split.setSizes([260, 440])
         for col, width in enumerate((300, 265, 90, 145, 90)):
             window.library_view.setColumnWidth(col, width)
+        selected = entries[1]
+        relative, size = next(iter(selected.item.files.items()))
+        checked = CheckedCandidate(
+            Candidate(
+                "Sintel.2010.1080p",
+                size,
+                "https://example.invalid/sintel",
+                seeders=12,
+                infohash="a" * 40,
+            ),
+            meta=TorrentMeta(relative, "a" * 40, {relative: size}, b""),
+            comparison=FileComparison({relative: relative}),
+            match=Match({relative: relative}),
+        )
+        window.review.remember(selected, [checked])
+        window.review.set_entry(selected)
+        window.review.details_tabs.setCurrentIndex(1)
         capture(window, "bibliotheque", output)
-        folder_dialog = LibraryFolderDialog(folders[0].path, window)
-        folder_dialog.kind.setCurrentIndex(folder_dialog.kind.findData(ContentKind.MOVIE))
-        folder_dialog.resize(540, 240)
-        folder_dialog.show()
-        capture(folder_dialog, "ajouter-dossier", output)
-        folder_dialog.reject()
+        window.library_workspace.sections.setCurrentIndex(1)
+        capture(window, "ajouter-dossier", output)
+        window.library_workspace.sections.setCurrentIndex(0)
+        window.review.details_tabs.setCurrentIndex(4)
+        window.library_workspace.expand_review()
+        window.review.evidence.render(
+            {
+                "observations": [
+                    {
+                        "file": relative,
+                        "source": "embedded-title",
+                        "field": "resolution",
+                        "claim": "2160p",
+                        "observed": "1080p",
+                        "confidence": "measured",
+                    }
+                ],
+                "provenance": [],
+            }
+        )
+        capture(window, "library-evidence", output)
+        window.library_workspace.expand_review()
 
         rows = [
             SeedingRow(
@@ -306,8 +366,34 @@ def main():
         upload.set_entries([entry])
         upload.remember(entry, [])
         upload.select(item.path)
+        form = UploadForm(
+            category=upload.profile().category,
+            subcategory=upload.subcategory.currentData(),
+            title=upload.name.text(),
+            description=localize(
+                "Support de téléphone de démonstration. À relire avant envoi.",
+                "Example phone stand. Review before sending.",
+            ),
+            nfo=upload.nfo.toPlainText(),
+        ).model_dump()
+        record = window.store.save_local_draft(
+            {
+                "path": str(item.path),
+                "form": form,
+                "files": [{"path": name, "size": size} for name, size in item.files.items()],
+                "extra": {},
+                "review": {},
+            }
+        )
+        upload.local_drafts.options_callback = lambda _: []
+        upload.local_drafts.record = record
+        upload.local_drafts.load()
+        upload.local_drafts.refresh()
+        upload.workspaces.setCurrentWidget(upload.local_drafts)
         window.tabs.setCurrentIndex(2)
         capture(window, "upload", output)
+        upload.local_drafts.pages.setCurrentIndex(4)
+        capture(window, "upload-review", output)
         manager = window.torrents_tab
         manager.refresh = lambda: None
         manager.set_seeding(view)
@@ -323,9 +409,10 @@ def main():
             ]
         )
         manager._group()
-        window.tabs.setCurrentWidget(manager)
+        window.tabs.setCurrentWidget(window.torrent_stack.parentWidget())
+        window.torrent_stack.setCurrentWidget(manager)
         QTest.qWait(150)
-        manager.tree.parentWidget().setSizes([260, 920])
+        manager.findChild(QSplitter).setSizes([260, 1080])
         manager.tree.expandAll()
         manager.connection.setText(
             localize("Connecté · données d’exemple", "Connected · example data")

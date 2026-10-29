@@ -25,7 +25,7 @@ Captures de l’interface française en thème sombre, avec des données d’exe
 
 ![Bibliothèque et actions de remise en seed](../images/bibliotheque.png)
 
-![Ajouter un dossier à la Bibliothèque](../images/ajouter-dossier.png)
+![Gérer les dossiers de la Bibliothèque](../images/ajouter-dossier.png)
 
 ## Ajouter des dossiers et utiliser les actions par lot
 
@@ -76,3 +76,9 @@ Pour un résultat admissible, choisissez la destination d’une copie indépenda
 L’estimation concerne le contenu utile manquant, pas le trafic réseau total. L’historique persiste après redémarrage ; aucune réparation en attente ne démarre automatiquement. Les opérations échouées ou incertaines nécessitent une inspection du client torrent. Les copies incomplètes sont conservées ; retirer un torrent seul ne les supprime pas. L’original reste disponible. Les tests utilisent des données synthétiques ; le taux de réussite sur des vidéothèques réelles reste à mesurer.
 
 Avant de préparer une copie, activez explicitement la réparation expérimentale. Les essais sur des bibliothèques réelles restent à mener ; le diagnostic reste disponible sans activer les téléchargements.
+
+## Captures des nouveaux outils
+
+![Éléments de preuve dans l’examen des candidats](../images/library-evidence.png)
+
+![Confirmation de l’extraction dans le WebUI](../images/web/web-archive-confirmation-fr.png)
