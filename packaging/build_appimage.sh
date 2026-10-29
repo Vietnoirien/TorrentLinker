@@ -16,6 +16,12 @@ appdir=build/AppDir
 rm -rf "$appdir"
 mkdir -p "$appdir/usr/bin"
 cp -a dist/torrentlinker/. "$appdir/usr/bin/"
+# Use the host compiler runtime together with its Mesa/LLVM drivers. The runtime
+# collected on Ubuntu 22.04 can lack symbols required by newer system drivers,
+# preventing GLX initialization. Remove versioned files and symlinks, including
+# nested copies; keep the original PyInstaller output untouched.
+find "$appdir/usr/bin" \( -type f -o -type l \) \
+  \( -name 'libstdc++.so*' -o -name 'libgcc_s.so*' \) -delete
 cp packaging/torrentlinker.desktop "$appdir/"
 cp src/torrentlinker/assets/icon.png "$appdir/torrentlinker.png"
 cat > "$appdir/AppRun" <<'RUN'

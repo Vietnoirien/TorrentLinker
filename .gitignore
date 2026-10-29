@@ -10,3 +10,6 @@ dist/
 # Web server deployment credentials and local state
 /deploy/web-password.txt
 /torrentlinker-data/
+
+# Local SearXNG service, configuration and secrets
+/deploy/searxng/

@@ -27,6 +27,14 @@ jobs:
           assert list(Path('dist/torrentlinker').rglob('libpulse.so.0')), 'PulseAudio library missing from bundle'
           PY
       - run: packaging/build_appimage.sh
+      - name: Verify host graphics runtime policy
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('build/AppDir')
+          forbidden = [p for pattern in ('libstdc++.so*', 'libgcc_s.so*') for p in root.rglob(pattern)]
+          assert not forbidden, f'Compiler runtimes would shadow system Mesa dependencies: {forbidden}'
+          PY
       - name: Smoke test
         run: APPIMAGE_EXTRACT_AND_RUN=1 timeout 120 dist/TorrentLinker-x86_64.AppImage --smoke-test
       - uses: actions/upload-artifact@v4
@@ -154,12 +162,25 @@ jobs:
         with:
           path: artifacts
           pattern: "{linux,windows,macos}"
+      - name: Package browser companion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          source = Path('src/torrentlinker/companion_extension')
+          assert (source / 'manifest.json').is_file()
+          with ZipFile('artifacts/TorrentLinker-companion.zip', 'w', ZIP_DEFLATED) as bundle:
+              for path in sorted(source.iterdir()):
+                  if path.is_file():
+                      bundle.write(path, f'torrentlinker-companion/{path.name}')
+          PY
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/linux/TorrentLinker-x86_64.AppImage
             artifacts/windows/TorrentLinker.exe
             artifacts/macos/TorrentLinker-macOS-arm64.dmg
+            artifacts/TorrentLinker-companion.zip
           name: TorrentLinker ${{ github.ref_name }}
           body_path: docs/releases/${{ github.ref_name }}.md
           generate_release_notes: false

@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from collections import Counter
 from contextlib import asynccontextmanager
+from html import escape
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 from torrentlinker import documentation
 from torrentlinker.clients import connect
 from torrentlinker.torrent_management import peer_count_order, tracker_group
+from torrentlinker.updates import installed_version
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
@@ -61,6 +63,7 @@ def create_app(
     monitor_verifications: bool = True,
     assistant_transport=None,
 ) -> FastAPI:
+    app_version = escape(installed_version())
     directory.mkdir(parents=True, exist_ok=True)
     sessions = Sessions(password)
     service = service_override or Setup(
@@ -293,7 +296,7 @@ def create_app(
         return HTMLResponse(
             '<!doctype html><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width">'
-            "<title>TorrentLinker documentation</title><main>" + html + "</main>"
+            f"<title>TorrentLinker {app_version} documentation</title><main>" + html + "</main>"
         )
 
     @app.get("/api/documentation/page/{name:path}")
@@ -892,7 +895,8 @@ def create_app(
         return {"status": "ok"}
 
     @app.get("/")
-    def shell() -> FileResponse:
-        return FileResponse(assets / "index.html")
+    def shell() -> HTMLResponse:
+        html = (assets / "index.html").read_text(encoding="utf-8")
+        return HTMLResponse(html.replace("{{ app_version }}", app_version))
 
     return app

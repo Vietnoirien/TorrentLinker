@@ -14,6 +14,16 @@ Téléchargez le fichier Windows ou Linux depuis la [dernière version](https://
 
 ![Accueil sans clé API](../images/bienvenue.png)
 
+### AppImage : erreur GLX au démarrage
+
+Sur certains systèmes Mesa récents, les anciennes AppImages embarquent une `libstdc++.so.6` trop ancienne pour les pilotes du système. Le lancement échoue avec `Could not initialize GLX`. Sur Ubuntu x86_64, ce contournement utilise les bibliothèques du système pour ce lancement :
+
+```sh
+LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6:/usr/lib/x86_64-linux-gnu/libgcc_s.so.1 ./TorrentLinker-x86_64.AppImage
+```
+
+Ne désactivez pas GLX avec `QT_XCB_GL_INTEGRATION=none` : Qt peut alors échouer à créer la fenêtre. La correction retire ces deux bibliothèques des prochaines AppImages. Celles du système doivent être au moins compatibles avec Ubuntu 22.04, le système de compilation.
+
 ## Configuration initiale
 
 Au premier lancement, ou si aucune clé API d’indexeur n’est enregistrée, un message de bienvenue ouvre les Paramètres de connexion. Les chargements automatiques attendent la configuration. Après enregistrement de la clé, l’application charge vos données sans redémarrage. Si vous annulez ou enregistrez sans clé, elle reste en attente avec un lien vers les Paramètres.
