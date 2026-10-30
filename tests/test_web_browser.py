@@ -469,6 +469,16 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
             page.locator('[data-view="upload"]').click()
             expect(page.locator("#upload-local-queue")).to_contain_text("Cable.Holder.NOTAG.STL")
             page.locator("#upload-local-queue button").first.click()
+            page.locator("[data-upload-section=review]").click()
+            expect(page.locator("#upload-rules")).to_contain_text(
+                "c411 forbids files from independent creators who live off them"
+            )
+            page.locator("#language").select_option("fr")
+            expect(page.locator("#upload-rules")).to_contain_text(
+                "c411 interdit les fichiers de créateurs indépendants"
+            )
+            expect(page.locator("#upload-rules")).not_to_contain_text("paid-creators:")
+            page.locator("#language").select_option("en")
             page.locator("[data-upload-section=description]").click()
             expect(page.locator("#upload-description")).to_have_value(
                 re.compile("A small cable holder")
@@ -480,6 +490,13 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
             )
             page.locator("#upload-save-local").click()
             expect(page.locator("#toast")).to_contain_text("Saved locally")
+            page.locator("[data-upload-section=review]").click()
+            page.locator("#language").select_option("fr")
+            expect(page.locator("#upload-rules")).to_be_visible()
+            expect(page.locator("#upload-rules")).to_contain_text(
+                "c411 interdit les fichiers de créateurs indépendants"
+            )
+            page.locator("#language").select_option("en")
             assert posted == []
             assert not list((tmp_path / "config" / "uploads").glob("**/*.torrent"))
             page.set_viewport_size({"width": 600, "height": 800})

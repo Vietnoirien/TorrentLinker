@@ -159,14 +159,19 @@ def run(browser, thread, message, name):
     return wait(browser, submitted.json()["id"], name)
 
 
-def wait(browser, identifier, name):
+def wait(browser, identifier, name, *, terminal=False):
     deadline = time.monotonic() + 270
     while time.monotonic() < deadline:
         response = browser.get("/api/assistant/jobs/" + identifier)
         assert response.is_success, (response.status_code, response.text)
         result = response.json()
         assert "status" in result, result
-        if result["status"] not in {"queued", "running"}:
+        done = (
+            result["status"] in {"completed", "failed", "cancelled"}
+            if terminal
+            else result["status"] not in {"queued", "running"}
+        )
+        if done:
             record(name, result)
             return result
         time.sleep(0.25)
@@ -207,6 +212,10 @@ def test_live_proposal_approval_and_followup(controlled):
             break
         time.sleep(0.02)
     assert clients["https://one.invalid"].paused == ["23e8f7e81e16d78a9b191fbb0988f13c9dba5c34"]
+    # Approval resumes this run automatically. A paused client alone does not mean
+    # its model follow-up is finished or the conversation accepts another message.
+    resumed = wait(browser, result["id"], "approval-resumed", terminal=True)
+    assert resumed["status"] == "completed", resumed
     result = run(
         browser,
         thread,
@@ -653,6 +662,7 @@ def test_live_oversized_queue_with_zero_download_budget_does_not_start_downloads
     controlled, tmp_path, monkeypatch
 ):
     from collections import namedtuple
+    from decimal import Decimal
     from types import SimpleNamespace
 
     from tests.fake_qbit import FakeQbit
@@ -723,13 +733,26 @@ def test_live_oversized_queue_with_zero_download_budget_does_not_start_downloads
 
     queued = entries(setup.store)
     assert len(queued) == 500, result
-    assert sum(row.candidate.size for row in queued) > usage.total * 3
+    assert {row.candidate.infohash for row in queued} == {f"{i:040x}" for i in range(1, 501)}
+    total = sum(row.candidate.size for row in queued)
+    assert total == 536871037250
+    assert total > usage.total * 3
     assert all(row.candidate.categories == (2030,) for row in queued)
     assert client.downloads == []
-    # Exact arithmetic is supplied by the tool. The model must not invent positive
-    # budgets or disk capacity absent from any result, as the first live run did.
-    answer = re.sub(r"[\s,\u202f\u00a0]", "", result["messages"][-1]["content"]).casefold()
-    assert "536871037250" in answer, result
+    # Saved scope and arithmetic are exact; prose may round to a named size unit.
+    # Reject invented totals, budgets or disk capacity, as the first live run gave.
+    text = result["messages"][-1]["content"].casefold()
+    answer = re.sub(r"[\s,\u202f\u00a0]", "", text)
+    sizes = re.findall(
+        r"(?<![\d.\-])(\d+(?:\.\d+)?)\s*(gib|gio|gb|go)\b",
+        text.replace(",", ".").replace("*", "").replace("`", ""),
+    )
+    rounded_total = any(
+        abs(Decimal(value) - Decimal(total) / (1024**3 if unit in {"gib", "gio"} else 1000**3))
+        <= Decimal(10) ** Decimal(value).as_tuple().exponent / 2
+        for value, unit in sizes
+    )
+    assert str(total) in answer or rounded_total, result
     assert "49927" not in answer.replace(".", ""), result
     assert "5go/jour" not in answer and "5gb/day" not in answer, result
     assert all(
