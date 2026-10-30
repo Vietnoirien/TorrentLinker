@@ -17,6 +17,37 @@ Regressions now live in `tests/test_reseed.py`, `tests/test_review_reseed.py`, `
 
 Final validation passed with 1,800 tests and 144 skips in the full suite, clean Ruff checks and formatting, and successful typechecking of 201 source files. An initial full run caught a changed µTorrent preflight order; restoring compatibility checks before client reads fixed it, and the full rerun passed. Independent Standards and Spec reviews reported no findings, including a follow-up review of that correction.
 
+## Expanded validation before beta.25
+
+The subsequent full test run at `ff101a4` enabled every opt-in environment and
+executed all 1,944 distinct tests: 1,925 passed, 19 failed, none skipped. Of the
+144 previously skipped tests, 125 passed and 19 failed. No application or test
+source was changed during this run.
+
+Live integrations passed against qBittorrent 5.2.4, Deluge 2.2.0, Transmission
+4.1.3 and µTorrent Classic 3.6 build 47390 in a disposable Wine prefix. This
+included the authenticated qBittorrent sandbox, Docker path mappings, all 17
+multi-client Docker scenarios, and all 15 application-container tests. The real
+tracker search and metadata-matching test also passed, with reseeding disabled.
+Client data was synthetic and temporary; production clients were not used.
+
+The 41 assistant acceptance tests used the existing local
+`Qwen3.8-27B-MXFP4-off` endpoint: 25 passed and 16 failed. Three browser checks
+also failed and reproduced in isolation. Two upload-draft card fixtures omit
+the `upload-draft-search` element expected by the current renderer. Guided setup
+expects `zen-seeding-panel` to be visible, but it remains hidden.
+
+The combined run deadlocked in native media playback. GDB showed the main thread
+waiting in widget styling/`QObject::disconnect` while an audio thread waited for
+the Python GIL. The blocked process was stopped, completed results were preserved,
+and every unfinished test was run. All 13 native media tests passed in a separate
+process. The cause of the combined-run hang is not yet established.
+
+The local evidence is in `/tmp/tl-all-tests/results.txt`, `audit.json`, the pytest
+logs and JUnit reports, `model-records/`, and `media-hang-stack.txt`. The inventory
+audit found zero missing or unexpected tests. Temporary clients and the test
+image were removed after validation.
+
 ## Findings
 
 ### P1 Reject overlapping disk paths before staging torrent renames
