@@ -16,6 +16,7 @@ The [beta.25 validation report](../research/reseed-path-review.md#expanded-valid
 
 | Order | Tracking issue | Remaining evidence |
 | --- | --- | --- |
+| 1 | [#51: Windows Library rescan freeze](https://github.com/Vietnoirien/TorrentLinker/issues/51) | User reports that the first Library scan completes, then subsequent scans freeze the Windows desktop app. Exact build and trigger remain unverified. Reproduce in one process, capture thread stacks and verify repeated scans on a packaged Windows build. |
 | 1 | [#44: native-media deadlock](https://github.com/Vietnoirien/TorrentLinker/issues/44) | Workaround and regression pass. Frozen Linux playback/shutdown and three isolated AppImage runs pass. Official release-platform/Qt matrix remains. |
 | 1 | [#45: browser acceptance](https://github.com/Vietnoirien/TorrentLinker/issues/45) | Original browser failures fixed; browser CI passed on beta.26 release commit `64a16d5`. |
 | 1 | [#46: local-model failures](https://github.com/Vietnoirien/TorrentLinker/issues/46) | All 16 historical scenarios passed twice with saved temperature 0 on Radiance; exact-removal approval enforced. Final candidate validation and documented model limitations remain. |
@@ -25,6 +26,15 @@ The [beta.25 validation report](../research/reseed-path-review.md#expanded-valid
 | 5 | [#50: upgrades and release readiness](https://github.com/Vietnoirien/TorrentLinker/issues/50) | Candidate upgrades, backup/restore, platform/support matrix and real-user observation. |
 
 The issues distinguish known failures from missing evidence. Their acceptance checks are the completion criteria. Features already delivered include the Search, Torrents, Upload and Library desktop/web redesigns, web Zen planning parity and the companion setup guide. Audit those workflows in their current form; do not restart their redesigns.
+
+### Windows user report, 2026-10-30
+
+> Toute dernière version. Page principale pour vérifier les fichiers (Bibliothèque)
+> La première analyse passe, mais si je fais d'autres analyses là c'est bon il freeze
+
+Recorded as [#51](https://github.com/Vietnoirien/TorrentLinker/issues/51), a P1 blocker before the final 1.0 walkthrough/readiness decision. The report identifies Windows desktop and Library rescans in the same session. "Latest version" is the user's description; the exact release, Windows version, Torrent Client, library size and storage type are still needed. The report does not establish whether every second scan freezes or whether it takes several scans.
+
+Investigate scan worker completion, Qt callback lifetimes, database access and cleanup between scans, guided by captured stacks. Do not attribute this to the media deadlock in #44 without evidence. Completion requires a reproduced trigger or a documented evidence gap, a bounded regression, and at least ten consecutive scans on a packaged Windows build with a responsive UI, preserved files/results and clean shutdown. Linux-only results do not close this report. It is not claimed fixed by beta.27.
 
 ## First stabilization pass, 2026-10-30
 
