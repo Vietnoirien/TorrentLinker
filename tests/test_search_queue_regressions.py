@@ -107,6 +107,30 @@ def test_retry_preserves_uncertain_and_unsafe_entries(qtbot, tmp_path):
     assert not view.retry.isEnabled()
 
 
+def test_uncertain_download_explains_reconciliation_and_removes_only_local_record(qtbot, tmp_path):
+    view, rows, _ = make_view(qtbot, tmp_path)
+    source = tmp_path / "kept.bin"
+    source.write_bytes(b"Keep the source files")
+    view._add_candidates(rows[:1])
+    entry = entries(view.store)[0]
+    view.store.download_outcome(entry.key, "uncertain", "Check the Torrent Client")
+    view.refresh_queue()
+    view.queue.selectRow(0)
+    assert "Check Torrent Client before retrying" in view.queue.item(0, 5).text()
+    assert "1 need attention" in view.queue_summary.text()
+    assert not view.retry.isEnabled()
+    assert not view.start.isEnabled()
+
+    def no_client_call():
+        raise AssertionError("Local reconciliation must not contact the Torrent Client")
+
+    view.client = no_client_call
+    view.remove.click()
+    assert entries(view.store) == []
+    assert source.read_bytes() == b"Keep the source files"
+    assert not view.remove.isEnabled()
+
+
 def test_animation_series_explains_its_missing_folder_without_using_tv_folder(qtbot, tmp_path):
     view, rows, _ = make_view(qtbot, tmp_path)
     view.settings.download_folders.default = ""

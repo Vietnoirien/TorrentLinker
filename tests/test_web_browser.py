@@ -156,6 +156,27 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#queue-summary")).to_contain_text("0 total")
             expect(page.locator("#remove-queue")).to_be_disabled()
             assert entries(writer) == []
+            # An ambiguous handoff requires checking the client, not a direct retry.
+            source = tmp_path / "preserved-source.bin"
+            source.write_bytes(b"Keep the source files")
+            enqueue(writer, indexer, candidate, tmp_path)
+            uncertain = entries(writer)[0]
+            writer.download_outcome(uncertain.key, "uncertain", "Interrupted send")
+            expect(page.locator("#queue-table")).to_contain_text(
+                "Check Torrent Client before retrying", timeout=6000
+            )
+            expect(page.locator("#queue-table")).to_contain_text(
+                "Check the Torrent Client before removing and queueing this entry again."
+            )
+            checkbox.check()
+            expect(page.locator("#retry-queue")).to_be_disabled()
+            expect(page.locator("#start-queue")).to_be_disabled()
+            jobs_before = page.evaluate("async () => await api('jobs')")
+            page.locator("#remove-queue").click()
+            expect(page.locator("#queue-summary")).to_contain_text("0 total")
+            assert entries(writer) == []
+            assert page.evaluate("async () => await api('jobs')") == jobs_before
+            assert source.read_bytes() == b"Keep the source files"
             # A real queue send removes its row and the open browser follows automatically.
             import httpx
 
