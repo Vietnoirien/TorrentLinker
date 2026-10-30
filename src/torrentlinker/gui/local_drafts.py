@@ -459,7 +459,7 @@ class LocalDrafts(QWidget):
             record.get("result", {}).get("message", ""),
             *(stored_rule_text(r) for r in record.get("review", {}).get("refusals", [])),
             *(
-                f"{row['field']}: {row['message']}"
+                stored_rule_text(f"{row['field']}: {row['message']}")
                 for row in assess(form, record.get("review", {}).get("file_facts"), local=True)[
                     "missing_fields"
                 ]

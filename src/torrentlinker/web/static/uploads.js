@@ -66,15 +66,34 @@ const uploadRuleMessages = {
   "one-per-console": ["One version per console game", "Une seule version par jeu console"],
   "region": ["Region {detail}: PAL/EU, NTSC/US, NTSC-J/JP or HK, one release each", "Région {detail} : PAL/EU, NTSC/US, NTSC-J/JP ou HK, une release chacune", "State the region: PAL/EU, NTSC/US, NTSC-J/JP or HK", "Indiquez la région : PAL/EU, NTSC/US, NTSC-J/JP ou HK"],
 };
+// Match complete diagnostics so a conflict on the same field stays visible.
+function uploadPresentationMessages(value) {
+  const messages = {
+    "title: Add the release title.": ["Add the release title.", "Ajoutez le titre de la release."],
+    "nfo: Add the NFO describing these exact files.": ["Add the NFO describing these exact files.", "Ajoutez le NFO décrivant ces fichiers précis."],
+    "description.image: Add a public HTTP(S) cover/image inside the description: [img]URL[/img].": ["Add a public HTTP(S) cover/image inside the description: [img]URL[/img].", "Ajoutez une couverture ou une image publique HTTP(S) dans la description : [img]URL[/img]."],
+    "description.synopsis: Fill the [h3]Présentation[/h3] section with a synopsis before [h3]Informations[/h3].": ["Fill the [h3]Présentation[/h3] section with a synopsis before [h3]Informations[/h3].", "Remplissez la section [h3]Présentation[/h3] avec un résumé avant [h3]Informations[/h3]."],
+    "image: Set the hosted image URL before sending.": ["Set the hosted image URL before sending.", "Renseignez l'URL de l'image hébergée avant l'envoi."],
+    "description.image: Public image hosting required before sending.": ["Public image hosting required before sending.", "Hébergez l'image sur une adresse publique avant l'envoi."],
+  };
+  if (Object.hasOwn(messages, value)) return messages[value];
+  const description = value.match(/^description\.[^:]+: (Fill '([^'\n]+)' in the description: \[b\]\2 :\[\/b\] value\.)$/);
+  if (description) return [description[1], `Renseignez la rubrique '${description[2]}' dans la description : [b]${description[2]} :[/b] valeur.`];
+  const nfo = value.match(/^nfo\.[^:]+: (NFO field missing: (.+)\. For a generated NFO use '\2 : value'\. Keep original release NFOs unaltered; obtain a complete original NFO\.)$/);
+  if (nfo) return [nfo[1], `Rubrique NFO manquante : ${nfo[2]}. Pour un NFO généré, utilisez '${nfo[2]} : valeur'. Conservez les NFO d'origine sans les modifier ; obtenez un NFO d'origine complet.`];
+  return null;
+}
+
 function uploadRuleParagraph(value, cls) {
   const separator = value.indexOf(":");
   const code = separator < 0 ? value : value.slice(0, separator);
   const detail = separator < 0 ? "" : value.slice(separator + 1).trim();
-  const messages = Object.hasOwn(uploadRuleMessages, code) ? uploadRuleMessages[code] : null;
+  const rule = Object.hasOwn(uploadRuleMessages, code) ? uploadRuleMessages[code] : null;
+  const messages = rule || uploadPresentationMessages(value);
   if (!messages) return element("p", value, cls);
   const offset = !detail && messages.length === 4 ? 2 : 0;
-  const en = messages[offset].split("{detail}").join(detail);
-  const fr = messages[offset + 1].split("{detail}").join(detail);
+  const en = rule ? messages[offset].split("{detail}").join(detail) : messages[0];
+  const fr = rule ? messages[offset + 1].split("{detail}").join(detail) : messages[1];
   const paragraph = element("p", say(en, fr), cls);
   paragraph.dataset.en = en;
   paragraph.dataset.fr = fr;

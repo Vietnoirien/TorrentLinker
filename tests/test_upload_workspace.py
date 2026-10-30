@@ -6,6 +6,40 @@ from tests.test_upload_view import model, tab
 
 
 @pytest.mark.parametrize("language", ["en", "fr"])
+def test_completeness_review_preserves_fields_and_unknown_diagnostics(qapp, language):
+    from torrentlinker import i18n
+    from torrentlinker.gui.upload_rules import stored_rule_text
+    from torrentlinker.upload_presentation import assess
+
+    translators = i18n.install(qapp, language)
+    try:
+        findings = assess({"category": 10, "subcategory": 51, "nfo": "Release notes"})[
+            "missing_fields"
+        ]
+        for row in findings:
+            rendered = stored_rule_text(f"{row['field']}: {row['message']}")
+            assert not rendered.startswith(row["field"] + ":")
+            if language == "en":
+                assert rendered == row["message"]
+            else:
+                assert rendered != row["message"]
+                if row["field"].startswith("nfo."):
+                    assert "Conservez les NFO d'origine sans les modifier" in rendered
+                    assert "obtenez un NFO d'origine complet" in rendered
+                if row["field"] == "description.size":
+                    assert "[b]Taille totale :[/b] valeur." in rendered
+        for finding in (
+            "description.image: New validation rule: <details> & values",
+            "nfo.codec: NFO conflict: 'FLAC'; file facts require 'MP3'.",
+            "Old review prose without a diagnostic code",
+        ):
+            assert stored_rule_text(finding) == finding
+    finally:
+        for translator in translators:
+            qapp.removeTranslator(translator)
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
 def test_desktop_explains_rules_from_a_web_saved_draft(qtbot, tmp_path, request, language):
     from fastapi.testclient import TestClient
     from PySide6.QtWidgets import QApplication
@@ -57,9 +91,19 @@ def test_desktop_explains_rules_from_a_web_saved_draft(qtbot, tmp_path, request,
         assert (
             "c411 refuse les archives (zip)" if language == "fr" else "c411 refuses archives (zip)"
         ) in view.status.text()
-        for finding in before["review"]["refusals"]:
-            if finding.startswith("description."):
-                assert view.status.text().count(finding) == 1
+        image_message = (
+            "Ajoutez une couverture ou une image publique HTTP(S) "
+            "dans la description : [img]URL[/img]."
+            if language == "fr"
+            else "Add a public HTTP(S) cover/image inside the description: [img]URL[/img]."
+        )
+        assert view.status.text().count(image_message) == 1
+        assert "description.image:" not in view.status.text()
+        assert "description.synopsis:" not in view.status.text()
+        assert "description.format:" not in view.status.text()
+        if language == "fr":
+            assert "Remplissez la section" in view.status.text()
+            assert "Fill '" not in view.status.text()
         assert not view.reviewed.isChecked()
         assert store.local_draft(before["id"]) == before
         import os

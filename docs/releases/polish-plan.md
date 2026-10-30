@@ -76,6 +76,13 @@ A Windows beta.23 report identified a separate Transmission-in-Docker send failu
 - Repeated the native seek/browse/playback test 20 times in one Qt process using distinct test parameters: all 20 passed in 19.42 seconds. Combined-suite evidence and this stress run still do not reproduce or explain the original native deadlock. No speculative player change was made; #44 stays open.
 - Ruff, formatting and typechecking of 202 source files pass. The 70 agent/access/assistant tests in the broader regression run also passed. These focused results do not replace final full-suite, installed-package or platform validation.
 
+### Upload completeness wording, 2026-10-30
+
+- Continued #48 with missing title, NFO, hosted image, synopsis and required-field messages in desktop and browser Upload review. Recognized diagnostics now have English/French display wording without technical field prefixes. Required BBCode labels remain exact so the suggested correction still satisfies validation. The original-NFO preservation instructions remain explicit.
+- Stored diagnostics, draft revisions, validation and send permissions are unchanged. Desktop deduplicates the translated saved/current findings; browser language changes update rendered findings. Unknown messages and other conflict diagnostics remain visible verbatim. This covers missing-field wording, not every presentation diagnostic: conflicting facts, track durations, artwork coverage and language restrictions still need localization.
+- The paired regression first failed in both interfaces. After the fix, 97 Upload, translation and browser tests passed, including reopening/editing a saved draft, explicit send, unchanged review state, NFO guidance and unknown-message preservation. English/French review screenshots were inspected. Ruff, formatting and typechecking passed. Screenshots also retain two separate #48 follow-ups: the browser's French status badge says "Up to date", and the English desktop draft category says "Imprimante 3D".
+- This is a source fix after beta.27. No package was published or user draft submitted during this check. The complete paired workflow audit remains open.
+
 ### Owner approval for queue removals, 2026-10-30
 
 - The user chose mandatory owner approval for assistant-initiated queue removals. The shared Agent Service now enforces this for external MCP and the built-in assistant, including execute mode with queue permission. The generic action tool and direct unapproved execution cannot bypass the rule. Priority changes and safe retries retain their existing permissions.

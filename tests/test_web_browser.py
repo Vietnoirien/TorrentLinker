@@ -499,6 +499,39 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
                 "c411 interdit les fichiers de créateurs indépendants"
             )
             expect(page.locator("#upload-rules")).not_to_contain_text("paid-creators:")
+            expect(page.locator("#upload-rules")).to_contain_text("Remplissez la section")
+            expect(page.locator("#upload-rules")).not_to_contain_text("description.image:")
+            expect(page.locator("#upload-rules")).not_to_contain_text("Fill '")
+            # The same formatter handles preview and saved review. Details remain
+            # text, including markup, and unknown diagnostics remain visible.
+            from torrentlinker.upload_presentation import assess
+
+            findings = assess({"category": 10, "subcategory": 51, "nfo": "Release notes"})[
+                "missing_fields"
+            ]
+            rendered = page.evaluate(
+                "values => values.map(value => { const p = uploadRuleParagraph(value); "
+                "return {text: p.textContent, en: p.dataset.en, children: p.children.length}; })",
+                [f"{row['field']}: {row['message']}" for row in findings],
+            )
+            for row, paragraph in zip(findings, rendered, strict=True):
+                assert paragraph["en"] == row["message"]
+                assert paragraph["text"] != row["message"]
+                assert paragraph["children"] == 0
+                if row["field"].startswith("nfo."):
+                    assert "Conservez les NFO d'origine sans les modifier" in paragraph["text"]
+            unknown = "description.image: New validation rule: <details> & values"
+            assert page.evaluate(
+                "value => { const p = uploadRuleParagraph(value); "
+                "return [p.textContent, p.children.length]; }",
+                unknown,
+            ) == [unknown, 0]
+            if screenshots := os.getenv("TL_WEB_SCREENSHOTS"):
+                target = Path(screenshots)
+                target.mkdir(parents=True, exist_ok=True)
+                for language in ("en", "fr"):
+                    page.locator("#language").select_option(language)
+                    page.screenshot(path=str(target / f"web-incomplete-review-{language}.png"))
             page.locator("#language").select_option("en")
             page.locator("[data-upload-section=description]").click()
             expect(page.locator("#upload-description")).to_have_value(

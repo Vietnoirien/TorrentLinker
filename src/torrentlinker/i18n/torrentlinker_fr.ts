@@ -10773,4 +10773,39 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <translation>Catalogue</translation>
     </message>
 </context>
+  <context>
+    <name>UploadPresentation</name>
+    <message>
+      <source>Add the release title.</source>
+      <translation>Ajoutez le titre de la release.</translation>
+    </message>
+    <message>
+      <source>Add the NFO describing these exact files.</source>
+      <translation>Ajoutez le NFO décrivant ces fichiers précis.</translation>
+    </message>
+    <message>
+      <source>Add a public HTTP(S) cover/image inside the description: [img]URL[/img].</source>
+      <translation>Ajoutez une couverture ou une image publique HTTP(S) dans la description : [img]URL[/img].</translation>
+    </message>
+    <message>
+      <source>Fill the [h3]Présentation[/h3] section with a synopsis before [h3]Informations[/h3].</source>
+      <translation>Remplissez la section [h3]Présentation[/h3] avec un résumé avant [h3]Informations[/h3].</translation>
+    </message>
+    <message>
+      <source>Set the hosted image URL before sending.</source>
+      <translation>Renseignez l'URL de l'image hébergée avant l'envoi.</translation>
+    </message>
+    <message>
+      <source>Public image hosting required before sending.</source>
+      <translation>Hébergez l'image sur une adresse publique avant l'envoi.</translation>
+    </message>
+    <message>
+      <source>Fill '{0}' in the description: [b]{0} :[/b] value.</source>
+      <translation>Renseignez la rubrique '{0}' dans la description : [b]{0} :[/b] valeur.</translation>
+    </message>
+    <message>
+      <source>NFO field missing: {0}. For a generated NFO use '{0} : value'. Keep original release NFOs unaltered; obtain a complete original NFO.</source>
+      <translation>Rubrique NFO manquante : {0}. Pour un NFO généré, utilisez '{0} : valeur'. Conservez les NFO d'origine sans les modifier ; obtenez un NFO d'origine complet.</translation>
+    </message>
+  </context>
 </TS>

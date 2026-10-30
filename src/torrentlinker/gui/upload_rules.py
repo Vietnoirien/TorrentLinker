@@ -1,6 +1,8 @@
-"""Localized category rules for Upload preparation and saved draft review."""
+"""Localized rules for Upload preparation and saved draft review."""
 
-from PySide6.QtCore import QCoreApplication
+import re
+
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication
 
 from torrentlinker.upload import Judgement, Problem, Refusal, UploadWarning
 
@@ -240,6 +242,68 @@ def stored_rule_text(message: str) -> str:
         try:
             judgement = Judgement(code)
         except ValueError:
-            return message
+            return presentation_text(message)
         return warning_text(UploadWarning(judgement, detail.strip()))
     return refusal_text(Refusal(problem, detail.strip()))
+
+
+def presentation_text(message: str) -> str:
+    """Translate recognized completeness findings; leave unknown diagnostics intact."""
+    field, _, detail = message.partition(": ")
+    # Match both field and wording: the same field can report a missing value,
+    # a conflicting fact or a rejected language. Never hide an unfamiliar finding.
+    messages = {
+        ("title", QT_TRANSLATE_NOOP("UploadPresentation", "Add the release title.")),
+        (
+            "nfo",
+            QT_TRANSLATE_NOOP("UploadPresentation", "Add the NFO describing these exact files."),
+        ),
+        (
+            "description.image",
+            QT_TRANSLATE_NOOP(
+                "UploadPresentation",
+                "Add a public HTTP(S) cover/image inside the description: [img]URL[/img].",
+            ),
+        ),
+        (
+            "description.synopsis",
+            QT_TRANSLATE_NOOP(
+                "UploadPresentation",
+                "Fill the [h3]Présentation[/h3] section with a synopsis "
+                "before [h3]Informations[/h3].",
+            ),
+        ),
+        (
+            "image",
+            QT_TRANSLATE_NOOP("UploadPresentation", "Set the hosted image URL before sending."),
+        ),
+        (
+            "description.image",
+            QT_TRANSLATE_NOOP(
+                "UploadPresentation", "Public image hosting required before sending."
+            ),
+        ),
+    }
+    if (field, detail) in messages:
+        return QCoreApplication.translate("UploadPresentation", detail)
+    if field.startswith("description.") and (
+        match := re.fullmatch(
+            r"Fill '([^'\n]+)' in the description: \[b\]\1 :\[/b\] value\.", detail
+        )
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation", "Fill '{0}' in the description: [b]{0} :[/b] value."
+        ).format(match[1])
+    if field.startswith("nfo.") and (
+        match := re.fullmatch(
+            r"NFO field missing: (.+)\. For a generated NFO use '\1 : value'\. "
+            r"Keep original release NFOs unaltered; obtain a complete original NFO\.",
+            detail,
+        )
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation",
+            "NFO field missing: {0}. For a generated NFO use '{0} : value'. "
+            "Keep original release NFOs unaltered; obtain a complete original NFO.",
+        ).format(match[1])
+    return message
