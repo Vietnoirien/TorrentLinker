@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from PySide6.QtCore import QObject, QProcess, Qt
+from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -29,6 +29,18 @@ def gnome_desktop() -> bool:
     return sys.platform == "linux" and bool(set(desktops) & {"gnome", "unity", "budgie"})
 
 
+def desktop_environment() -> dict[str, str]:
+    """Host gsettings must not load the frozen app's bundled GLib/GIO libraries."""
+    environment = os.environ.copy()
+    if getattr(sys, "frozen", False):
+        original = environment.get("LD_LIBRARY_PATH_ORIG")
+        if original is None:
+            environment.pop("LD_LIBRARY_PATH", None)
+        else:
+            environment["LD_LIBRARY_PATH"] = original
+    return environment
+
+
 class ThemeFollower(QObject):
     """GNOME's explicit preference can disagree with Qt's GTK platform plugin."""
 
@@ -47,6 +59,11 @@ class ThemeFollower(QObject):
         app.aboutToQuit.connect(self.stop)
         app.styleHints().colorSchemeChanged.connect(self.refresh)
         if gnome_desktop():
+            environment = desktop_environment()
+            monitor_environment = QProcessEnvironment()
+            for name, value in environment.items():
+                monitor_environment.insert(name, value)
+            self.monitor.setProcessEnvironment(monitor_environment)
             try:
                 result = subprocess.run(
                     ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
@@ -54,6 +71,7 @@ class ThemeFollower(QObject):
                     text=True,
                     timeout=1,
                     check=False,
+                    env=environment,
                 )
                 self.set_preference(result.stdout)
             except (OSError, subprocess.TimeoutExpired):

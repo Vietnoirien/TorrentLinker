@@ -1,3 +1,4 @@
+import os
 import subprocess
 
 import pytest
@@ -41,6 +42,44 @@ def test_manual_theme_overrides_desktop_and_auto_resumes_following(qapp, desktop
     assert qapp.palette().window().color().lightness() > 128
     theme.set_theme("dark")
     assert qapp.palette().window().color().lightness() < 128
+
+
+@pytest.mark.parametrize("original", [None, "", "/host/vendor-libraries"])
+def test_frozen_theme_probe_and_monitor_use_host_libraries(qapp, monkeypatch, original):
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+    monkeypatch.setattr(theme.sys, "platform", "linux")
+    monkeypatch.setattr(theme.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/frozen/_internal")
+    if original is None:
+        monkeypatch.delenv("LD_LIBRARY_PATH_ORIG", raising=False)
+    else:
+        monkeypatch.setenv("LD_LIBRARY_PATH_ORIG", original)
+    probes, monitors = [], []
+
+    def probe(args, **kwargs):
+        probes.append(kwargs.get("env", os.environ).get("LD_LIBRARY_PATH"))
+        # The reproduced broken GIO backend returns a default despite prefer-dark.
+        value = "default" if probes[-1] == "/frozen/_internal" else "prefer-dark"
+        return subprocess.CompletedProcess(args, 0, f"'{value}'\n")
+
+    def monitor(process, *args):
+        env = process.processEnvironment()
+        monitors.append(env.value("LD_LIBRARY_PATH") if env.contains("LD_LIBRARY_PATH") else None)
+
+    monkeypatch.setattr(subprocess, "run", probe)
+    monkeypatch.setattr(QProcess, "start", monitor)
+    theme._update_theme(qapp, Qt.ColorScheme.Light)
+    follower = theme.ThemeFollower(qapp)
+    try:
+        assert qapp.palette().window().color().lightness() < 128
+        assert probes == [original]
+        assert monitors == [original]
+        assert os.environ["LD_LIBRARY_PATH"] == "/frozen/_internal"
+    finally:
+        follower.stop()
+        follower.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        theme._update_theme(qapp, Qt.ColorScheme.Light)
 
 
 def test_theme_setting_is_saved_and_old_settings_default_to_auto(tmp_path, qtbot):
