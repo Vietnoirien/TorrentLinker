@@ -37,6 +37,7 @@ from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.library_model import human_size
 from torrentlinker.gui.selection_cards import SelectionDetail
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.gui.upload_rules import stored_rule_text
 from torrentlinker.torrent_details import web_url
 from torrentlinker.upload import PROFILES, category_name
 from torrentlinker.upload_presentation import assess
@@ -454,21 +455,18 @@ class LocalDrafts(QWidget):
                 record["path"],
             )
         )
-        self.status.setText(
-            "\n".join(
-                [
-                    record.get("result", {}).get("message", ""),
-                    *record.get("review", {}).get("refusals", []),
-                    *(
-                        f"{row['field']}: {row['message']}"
-                        for row in assess(
-                            form, record.get("review", {}).get("file_facts"), local=True
-                        )["missing_fields"]
-                    ),
-                    *record.get("review", {}).get("warnings", []),
+        findings = [
+            record.get("result", {}).get("message", ""),
+            *(stored_rule_text(r) for r in record.get("review", {}).get("refusals", [])),
+            *(
+                f"{row['field']}: {row['message']}"
+                for row in assess(form, record.get("review", {}).get("file_facts"), local=True)[
+                    "missing_fields"
                 ]
-            )
-        )
+            ),
+            *(stored_rule_text(w) for w in record.get("review", {}).get("warnings", [])),
+        ]
+        self.status.setText("\n".join(dict.fromkeys(finding for finding in findings if finding)))
         self.loading = False
         self.load_options()
         self.buttons()

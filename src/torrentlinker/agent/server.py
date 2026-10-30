@@ -834,7 +834,9 @@ def make_server(service: AgentService):
     ) -> dict[str, object]:
         """Filter/sort the entire cached Catalogue and save up to 1000 exact rows.
 
-        Use only for explicitly requested cached bulk ranking/counts or offline work.
+        Use for explicit local/cached Catalogue queries, rankings/counts or offline work.
+        The Catalogue holds Indexer metadata, not Library/Media files: no Library Folder
+        or Media scan is needed. Use criteria.query to find named cached titles.
         Genre/year recommendations and their refinements require search_indexer instead:
         cached title matches and seen_at timestamps do not verify genre or release year.
         Use catalogue_categories for IDs. For the 500 smallest films, set categories
@@ -1471,7 +1473,8 @@ def make_server(service: AgentService):
         """Save this agent connection's objective. revision=0 creates; edits require its revision.
 
         This changes only the saved objective, never the user's c411 Class or torrents.
-        Set category to restrict the goal's Plan. For exact catalogue rankings or byte
+        Set category from catalogue_categories to restrict the goal's Plan. These are
+        Torznab IDs, not Upload or native search category IDs. For exact catalogue rankings or byte
         totals, use select_catalogue instead of a Zen-optimized Plan.
         """
         return goals.save(service, ACTOR.get(), goal_id, revision, goal)

@@ -5,6 +5,76 @@ import pytest
 from tests.test_upload_view import model, tab
 
 
+@pytest.mark.parametrize("language", ["en", "fr"])
+def test_desktop_explains_rules_from_a_web_saved_draft(qtbot, tmp_path, request, language):
+    from fastapi.testclient import TestClient
+    from PySide6.QtWidgets import QApplication
+
+    from tests.test_web_jobs import finished, login
+    from torrentlinker import i18n
+    from torrentlinker.gui.local_drafts import LocalDrafts
+    from torrentlinker.web.app import create_app
+
+    qt_app = QApplication.instance()
+    translators = i18n.install(qt_app, language)
+    request.addfinalizer(lambda: [qt_app.removeTranslator(t) for t in translators])
+    root = tmp_path / "models"
+    root.mkdir()
+    item = root / "Object"
+    item.mkdir()
+    (item / "model.stl").write_text("solid model\nendsolid model\n")
+    (item / "unreadable.zip").write_bytes(b"unreadable archive")
+    app = create_app(tmp_path / "config", password="test-password-long", roots=(root,))
+    with TestClient(app) as browser:
+        login(browser)
+        added = browser.post("/api/setup/folder", json={"local": str(root), "kind": "3d-model"})
+        assert added.is_success, added.text
+        scan = browser.post("/api/jobs", json={"kind": "scan"}).json()
+        assert finished(browser, scan["id"])["status"] == "completed"
+        submitted = browser.post(
+            "/api/jobs", json={"kind": "upload-queue", "path": str(item), "upload": {}}
+        ).json()
+        saved = finished(browser, submitted["id"])
+        assert saved["status"] == "completed", saved
+        store = app.state.agent_service.setup.store
+        before = store.local_drafts()[0]
+        assert "paid-creators: " in before["review"]["warnings"]
+
+        def no_mutation(*args):
+            pytest.fail("Opening the review must not save or send the draft")
+
+        view = LocalDrafts(store, no_mutation, no_mutation)
+        qtbot.addWidget(view)
+        view.refresh()
+        view.table.selectRow(0)
+        expected = (
+            "c411 interdit les fichiers de créateurs indépendants qui en vivent"
+            if language == "fr"
+            else "c411 forbids files from independent creators who live off them"
+        )
+        assert expected in view.status.text()
+        assert "paid-creators:" not in view.status.text()
+        assert (
+            "c411 refuse les archives (zip)" if language == "fr" else "c411 refuses archives (zip)"
+        ) in view.status.text()
+        for finding in before["review"]["refusals"]:
+            if finding.startswith("description."):
+                assert view.status.text().count(finding) == 1
+        assert not view.reviewed.isChecked()
+        assert store.local_draft(before["id"]) == before
+        import os
+        from pathlib import Path
+
+        if output := os.getenv("TL_UPLOAD_SCREENSHOTS"):
+            target = Path(output)
+            target.mkdir(parents=True, exist_ok=True)
+            view.pages.setCurrentIndex(4)
+            view.resize(1100, 800)
+            view.show()
+            qtbot.waitExposed(view)
+            assert view.grab().save(str(target / f"desktop-web-draft-review-{language}.png"))
+
+
 def test_upload_opens_local_drafts_and_preparation_only_saves(qtbot, tmp_path):
     view, indexer, _ = tab(qtbot, tmp_path, announce="")
     assert view.workspaces.currentWidget() is view.local_drafts
@@ -43,6 +113,10 @@ def test_editing_revokes_review_and_refresh_preserves_unsaved_text(qtbot, tmp_pa
     qtbot.waitUntil(lambda: not drafts.busy)
     assert not drafts.reviewed.isChecked()
     assert drafts.record["revision"] == 2, drafts.status.text()
+    # Browser review can translate stable rule codes after a desktop edit too.
+    assert drafts.record["review"]["warnings"] == ["paid-creators: "]
+    drafts.load()
+    assert "c411 forbids files from independent creators" in drafts.status.text()
 
 
 def test_reopen_selected_draft_after_external_edit(qtbot, tmp_path):

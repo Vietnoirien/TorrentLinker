@@ -23,7 +23,12 @@ class Goal(BaseModel):
     desired_class: ZenClass | None = None
     maximum_bytes: int = Field(default=10 * 1024**3, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1000)
-    category: int | None = Field(default=None, gt=0)
+    category: int | None = Field(
+        default=None,
+        gt=0,
+        description="Torznab Catalogue category ID from catalogue_categories, not an Upload "
+        "or native search category ID. Omit for all categories.",
+    )
     prefer_existing_files: bool = True
 
 

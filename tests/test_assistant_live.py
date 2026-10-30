@@ -447,7 +447,7 @@ def test_live_search_plan_and_simulated_download(controlled, tmp_path, monkeypat
                     "name": "Downloads test",
                     "clients": ["default"],
                     "mode": "execute",
-                    "permissions": ["downloads"],
+                    "permissions": ["queue", "downloads"],
                     "daily_bytes": 4 * 1024**2,
                     "daily_torrents": 4,
                     "reserve_bytes": 0,
