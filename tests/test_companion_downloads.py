@@ -380,3 +380,77 @@ def test_workspace_fetch_reports_refusals_and_refuses_when_off(tmp_path, monkeyp
         assert errors and errors[0].status == 403 and errors[0].fatal
         with pytest.raises(SessionFetchError):  # the session is now blocked
             workspace.fetch_descriptor("c" * 40, timeout=1)
+
+
+@pytest.mark.parametrize("recovery", ["disconnect", "restart"])
+def test_companion_recovery_rejects_late_results_and_requires_a_fresh_request(
+    tmp_path, monkeypatch, recovery
+):
+    app, _ = prepared(tmp_path, monkeypatch)
+    content = tmp_path / "sample.txt"
+    content.write_text("A harmless test file")
+    torrent = make_torrent(content)
+    infohash = read_torrent(torrent).infohash
+    with TestClient(app) as browser:
+        old_extension = pair(browser)
+        browser.post("/api/companion/commands", headers=old_extension, json={})
+        submitted = browser.post(
+            "/api/zen/profile/download-tests",
+            headers=OWNER,
+            json={"infohash": infohash, "request_id": "interrupted-descriptor"},
+        )
+        assert submitted.status_code == 200
+        old_id = submitted.json()["id"]
+        dispatched = browser.post("/api/companion/commands", headers=old_extension, json={}).json()[
+            "command"
+        ]
+        assert dispatched["id"] == old_id
+        if recovery == "disconnect":
+            assert browser.post("/api/zen/profile/disconnect", headers=OWNER).is_success
+
+    # Reopen the workspace from disk, as after a server restart. A descriptor is a
+    # read-only request, but its stale completion must not be accepted or replayed.
+    restored, _ = prepared(tmp_path, monkeypatch)
+    with TestClient(restored) as browser:
+        login(browser)
+        if recovery == "disconnect":
+            assert (
+                browser.post("/api/companion/commands", headers=old_extension, json={}).status_code
+                == 403
+            )
+            extension = pair(browser)
+        else:
+            extension = old_extension
+        polled = browser.post("/api/companion/commands", headers=extension, json={})
+        assert polled.is_success and polled.json()["commands"] == []
+        late = {
+            "id": old_id,
+            "accountId": "42",
+            "status": 200,
+            "data": base64.b64encode(torrent).decode(),
+        }
+        assert (
+            browser.post("/api/companion/result", headers=extension, json=late).status_code == 400
+        )
+        assert browser.get(f"/api/zen/profile/download-tests/{old_id}").status_code == 404
+        fresh = browser.post(
+            "/api/zen/profile/download-tests",
+            headers=OWNER,
+            json={"infohash": infohash, "request_id": "fresh-descriptor"},
+        )
+        assert fresh.is_success
+        new_id = fresh.json()["id"]
+        assert new_id != old_id
+        command = browser.post("/api/companion/commands", headers=extension, json={}).json()
+        assert command["command"]["id"] == new_id
+        assert browser.post(
+            "/api/companion/result", headers=extension, json={**late, "id": new_id}
+        ).is_success
+        assert browser.get(f"/api/zen/profile/download-tests/{new_id}").json()["status"] == (
+            "complete"
+        )
+        assert (
+            browser.post("/api/companion/commands", headers=extension, json={}).json()["commands"]
+            == []
+        )
+    assert content.read_text() == "A harmless test file"

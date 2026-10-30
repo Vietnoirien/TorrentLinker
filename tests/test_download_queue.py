@@ -211,3 +211,66 @@ def test_uncertain_handoff_stays_visible_and_is_not_retried(tmp_path, monkeypatc
     assert entries(store)[0].status == "uncertain"
     assert process(store, indexer, client).handled == 0
     assert client.downloads == [candidate.infohash]
+
+
+def _exit_after_download_handoff(directory):
+    import json
+    import os
+    from pathlib import Path
+
+    store, indexer, client, candidate, data, folder = setup_queue(directory)
+    enqueue(store.for_client("other"), indexer, candidate, folder)
+
+    def accept_then_exit(data, folder, tags):
+        # Durable stand-in for a Torrent Client accepting the request before the
+        # app receives its response. No finally blocks or graceful shutdown run.
+        Path(directory / "accepted.json").write_text(
+            json.dumps({"hash": read_torrent(data).infohash, "folder": folder})
+        )
+        os._exit(0)
+
+    client.download = accept_then_exit
+    process(store, indexer, client)
+
+
+def test_process_exit_after_handoff_preserves_uncertainty_and_client_scope(tmp_path):
+    import json
+    import multiprocessing
+
+    child = multiprocessing.get_context("spawn").Process(
+        target=_exit_after_download_handoff, args=(tmp_path,)
+    )
+    child.start()
+    try:
+        child.join(10)
+        assert child.exitcode == 0
+        accepted = json.loads((tmp_path / "accepted.json").read_text())
+        store = Store(tmp_path / "state.db")
+        try:
+            recovered = entries(store)
+            assert len(recovered) == 1
+            entry = recovered[0]
+            assert entry.status == "uncertain" and not entry.retry_safe
+            assert entry.candidate.infohash == accepted["hash"]
+            assert str(entry.folder) == accepted["folder"]
+            assert entry.client_id == "default"
+            assert "Check the Torrent Client" in entry.reason
+            other = entries(store.for_client("other"))
+            assert len(other) == 1 and other[0].status == "queued"
+            assert other[0].client_id == "other"
+            client = FakeQbit()
+            with httpx.Client(
+                transport=httpx.MockTransport(lambda request: httpx.Response(500))
+            ) as http:
+                indexer = Indexer("https://example.test/api", "private-key", http=http)
+                assert process(store, indexer, client).handled == 0
+            assert client.downloads == []
+            assert (tmp_path / "elsewhere" / entry.candidate.title / "film.mkv").read_bytes() == (
+                b"x" * 5000
+            )
+        finally:
+            store._db.close()
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join()

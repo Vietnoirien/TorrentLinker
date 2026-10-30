@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QRunnable, QThreadPool, Signal
 
 from torrentlinker.agent.coordination import desktop_worker
 
@@ -33,6 +33,24 @@ class _Job(QRunnable):
 
 
 _alive: set[_Job] = set()
+_closing = False
+
+
+def shutdown() -> None:
+    """Finish running work while its signals and GUI callbacks are still alive."""
+    global _closing
+    _closing = True
+    pool = QThreadPool.globalInstance()
+    for job in tuple(_alive):
+        if pool.tryTake(job):
+            _alive.discard(job)
+    # Completion callbacks may save results. Deliver them on the GUI thread, but
+    # refuse follow-up work once exit has begun. A plain waitForDone() would leave
+    # those callbacks queued until after their widgets or databases are destroyed.
+    while not pool.waitForDone(10):
+        QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+    QCoreApplication.sendPostedEvents()
+    _alive.clear()
 
 
 def run_in_background(
@@ -40,6 +58,8 @@ def run_in_background(
     on_done: Callable[[Any], object],
     on_error: Callable[[Exception], object],
 ) -> None:
+    if _closing:
+        return
     job = _Job(fn)
     job.setAutoDelete(False)
     _alive.add(job)
@@ -63,6 +83,8 @@ def run_with_progress(
     on_error: Callable[[Exception], object],
 ) -> None:
     """Like run_in_background; `fn(report)` may report progress, shown by `on_progress`."""
+    if _closing:
+        return
     signals: list[_Signals] = []
 
     def work() -> Any:

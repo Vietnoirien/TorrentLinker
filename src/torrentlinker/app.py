@@ -4,7 +4,7 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QStandardPaths, QTimer
+from PySide6.QtCore import QStandardPaths, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -28,7 +28,6 @@ def smoke_checks() -> None:
 
     from torrentlinker import documentation
     from torrentlinker.domain import LocalItem
-    from torrentlinker.gui.media_audio import create_audio_output
     from torrentlinker.queries import parse_name
 
     httpx.Client(proxy="socks5://127.0.0.1:1080").close()  # needs socksio
@@ -47,13 +46,55 @@ def smoke_checks() -> None:
             assert documentation.document_path(guide["path"]).read_text(encoding="utf-8")
     assert documentation.document_path("guide/images/zen.png").is_file()
     assert documentation.document_path("guide/images/en/zen.png").is_file()
-    # Native playback needs the QtMultimedia QML plugin as well as its Python module.
-    audio_parent = QObject()
-    audio = create_audio_output(audio_parent)
-    audio.setVolume(0.5)
-    assert audio.volume() == 0.5
+    media_smoke_checks()
     agent_smoke_checks()
     print("smoke test OK")
+
+
+def media_smoke_checks() -> None:
+    """Decode local audio and exercise cleanup with the actual bundled Qt plugins."""
+    import tempfile
+    import time
+    import wave
+
+    from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QUrl
+    from PySide6.QtMultimedia import QMediaPlayer
+    from PySide6.QtWidgets import QPushButton, QWidget
+
+    from torrentlinker.gui.media_audio import create_audio_output
+
+    with tempfile.TemporaryDirectory(prefix="torrentlinker-media-smoke-") as folder:
+        path = Path(folder) / "silence.wav"
+        with wave.open(str(path), "wb") as track:
+            track.setparams((1, 2, 22050, 0, "NONE", "not compressed"))
+            track.writeframes(b"\0\0" * 22050 * 2)
+        for _ in range(8):
+            parent = QWidget()
+            player = QMediaPlayer(parent)
+            try:
+                output = create_audio_output(parent)
+                output.setMuted(True)
+                player.setAudioOutput(output)
+                player.setSource(QUrl.fromLocalFile(str(path)))
+                player.play()
+                deadline = time.monotonic() + 5
+                while player.position() == 0 and time.monotonic() < deadline:
+                    loop = QEventLoop()
+                    QTimer.singleShot(10, loop.quit)
+                    loop.exec()
+                if player.position() == 0:
+                    raise RuntimeError(
+                        f"Bundled audio playback did not advance: {player.errorString()}"
+                    )
+                player.stop()
+                for _ in range(200):
+                    QPushButton("Playback cleanup check", parent)
+            finally:
+                player.stop()
+                player.setSource(QUrl())
+                parent.deleteLater()
+                QCoreApplication.sendPostedEvents(parent, QEvent.Type.DeferredDelete)
+    print("native media playback smoke test OK")
 
 
 def agent_smoke_checks() -> None:
@@ -154,24 +195,30 @@ def main() -> int:
     from torrentlinker.gui.stall_watchdog import install as watch_for_stalls
 
     watch_for_stalls(window)
-    if "--smoke-test" in sys.argv:  # used by CI on packaged builds
-        try:
-            smoke_checks()
-        except Exception:
-            import logging
+    try:
+        if "--smoke-test" in sys.argv:  # used by CI on packaged builds
+            try:
+                smoke_checks()
+            except Exception:
+                import logging
 
-            logging.getLogger("torrentlinker").exception("Packaged smoke test failed")
-            return 1  # no modal error dialog that could hang a headless build
-        QTimer.singleShot(500, app.quit)
-    else:
-        update_timer = QTimer(window)
-        update_timer.setInterval(CHECK_INTERVAL * 1000)
-        update_timer.timeout.connect(window.check_for_updates)
-        update_timer.start()
-        QTimer.singleShot(1000, window.check_for_updates)
-        QTimer.singleShot(0, window.startup)
-        QTimer.singleShot(2000, window.start_saved_agent_access)
-    return app.exec()
+                logging.getLogger("torrentlinker").exception("Packaged smoke test failed")
+                return 1  # no modal error dialog that could hang a headless build
+            QTimer.singleShot(500, app.quit)
+        else:
+            update_timer = QTimer(window)
+            update_timer.setInterval(CHECK_INTERVAL * 1000)
+            update_timer.timeout.connect(window.check_for_updates)
+            update_timer.start()
+            QTimer.singleShot(1000, window.check_for_updates)
+            QTimer.singleShot(0, window.startup)
+            QTimer.singleShot(2000, window.start_saved_agent_access)
+        return app.exec()
+    finally:
+        from torrentlinker.gui.tasks import shutdown
+
+        window.close()
+        shutdown()
 
 
 if __name__ == "__main__":

@@ -63,4 +63,4 @@ Local captures and experimental scripts are retained in `/tmp/tl-media-freeze/`.
 QT_QPA_PLATFORM=offscreen .venv/bin/pytest tests/test_media_audio.py -q
 ```
 
-Installed Windows/macOS/Linux packages and other Qt versions still need validation. Local reproduction and a passing regression do not replace that release coverage.
+The [package and recovery follow-up](recovery-audit.md) subsequently verified real playback and shutdown in the frozen Linux executable and three isolated AppImage runs. It also found and fixed a separate desktop-worker teardown failure. Windows/macOS packages, the official Linux release-runner build, graphical desktop behavior and other Qt versions still need validation.

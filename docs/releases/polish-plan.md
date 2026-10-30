@@ -16,10 +16,10 @@ The [beta.25 validation report](../research/reseed-path-review.md#expanded-valid
 
 | Order | Tracking issue | Remaining evidence |
 | --- | --- | --- |
-| 1 | [#44: native-media deadlock](https://github.com/Vietnoirien/TorrentLinker/issues/44) | Qt/PySide lock inversion reproduced and worked around locally; 115 combined GUI/media tests pass. Verify the audio factory in installed packages and the supported Qt/platform matrix. |
-| 1 | [#45: browser acceptance](https://github.com/Vietnoirien/TorrentLinker/issues/45) | Repair stale Upload fixtures and verify Profile, Seeding and Plan navigation against the real page. |
-| 1 | [#46: local-model failures](https://github.com/Vietnoirien/TorrentLinker/issues/46) | Classify all 16 failures; fix application/test defects and record model limitations without weakening safeguards. |
-| 2 | [#47: interruption and recovery](https://github.com/Vietnoirien/TorrentLinker/issues/47) | Scenario-to-test coverage for cancellation, restart, uncertain sends and destination scope. |
+| 1 | [#44: native-media deadlock](https://github.com/Vietnoirien/TorrentLinker/issues/44) | Workaround and regression pass. Frozen Linux playback/shutdown and three isolated AppImage runs pass. Official release-platform/Qt matrix remains. |
+| 1 | [#45: browser acceptance](https://github.com/Vietnoirien/TorrentLinker/issues/45) | Original browser failures fixed and verified locally; CI coverage added. Remote CI remains pending a push. |
+| 1 | [#46: local-model failures](https://github.com/Vietnoirien/TorrentLinker/issues/46) | All 16 historical scenarios passed twice with saved temperature 0 on Radiance; exact-removal approval enforced. Final candidate validation and documented model limitations remain. |
+| 2 | [#47: interruption and recovery](https://github.com/Vietnoirien/TorrentLinker/issues/47) | First audit and shutdown fix complete; see the [evidence matrix](../research/recovery-audit.md). Owner reconciliation, interrupted Upload POST, real extension lifecycle and platform checks remain. |
 | 3 | [#48: desktop/web walkthrough](https://github.com/Vietnoirien/TorrentLinker/issues/48) | Paired screenshots, reproducible usability findings and verified fixes. |
 | 4 | [#49: support and performance](https://github.com/Vietnoirien/TorrentLinker/issues/49) | Recorded baselines and useful, credential-redacted diagnostic exports. |
 | 5 | [#50: upgrades and release readiness](https://github.com/Vietnoirien/TorrentLinker/issues/50) | Candidate upgrades, backup/restore, platform/support matrix and real-user observation. |
@@ -85,6 +85,13 @@ The issues distinguish known failures from missing evidence. Their acceptance ch
 - The regression first froze on cycle 0 and failed at its 30-second subprocess deadline. With the workaround, 29 focused media tests passed. The final combined run passed 115 tests, including earlier GUI workflows, native audio/video playback, track selection, shutdown, themes, packaging smoke checks and another 80-cycle deadlock regression. Ruff, formatting, typechecking and diff checks passed. Installed-package/platform validation remains outstanding; no release or remote issue closure is implied.
 - A separate dark-theme layout assertion surfaced during diagnosis: the Media pane's minimum width was 548 pixels against a 520-pixel expectation. That is a layout follow-up, not the deadlock; the diagnostic log is `/tmp/tl-media-freeze/styled-single.log`.
 
+### Linux package and recovery follow-up, 2026-10-30
+
+- The first frozen Linux smoke run aborted because a desktop worker emitted after Qt deleted its signal object. A controlled application-lifecycle subprocess reproduced that failure in 1.76 seconds. Shutdown now cancels queued desktop tasks, refuses follow-up work, and drains running tasks and their callbacks before Qt teardown. Five cases cover success, failure, progress, failed smoke checks and a late dialog.
+- Expanded the packaged smoke test to decode eight generated muted WAV streams, stop playback and create widgets during cleanup. The frozen Linux executable and three consecutive AppImage runs passed playback, MCP smoke and traceback checks in a private loopback-only network namespace, with fresh data and a null keyring. The initial XDG-only diagnostic runs did not isolate the system keyring and are excluded from those isolated results. Windows/macOS smoke commands now have the same 120-second bound as Linux, but have not run remotely.
+- Added actual process-exit coverage immediately after a simulated download acceptance: restart preserves uncertainty, client/folder scope, other queued work and source bytes, with no resend. Companion disconnect/restart tests reject stale responses, redispatch nothing automatically and complete only a fresh explicit descriptor request.
+- The final affected recovery, GUI, shutdown and native-media suite passed 209 tests in 101.88 seconds. Lint, formatting, typechecking, workflow YAML and diff checks passed. The [recovery audit](../research/recovery-audit.md) records the artifact hash, evidence matrix and remaining work. Linux/offscreen package checks do not establish Windows/macOS, official release-runner, upgrade or graphical-desktop readiness. No artifacts or issue updates were published.
+
 ### Historical assistant failure triage
 
 These are observations from the preserved beta.25 artifacts, not results for Radiance. No assertion or permission rule has been relaxed to make them pass.
@@ -123,7 +130,7 @@ The audit starts from these tests rather than assuming recovery is unimplemented
 | RSS queue-only behavior | `tests/test_feed_api.py::test_app_queue_scheduler_never_contacts_clients_and_restart_keeps_rule` | User-visible waiting, cancellation and resumption. |
 | Destination scope | `tests/test_enqueue_destinations.py` and `tests/test_web_jobs.py::test_selected_download_uses_verified_client_path_and_survives_queue_reload` | Changing active client/folder with existing work. |
 | Companion refusal/rate limit | `tests/test_companion_downloads.py` and `tests/test_indexer_session.py` | Browser disconnect/reconnect and process restart during dispatch. |
-| Media storage cleanup | `tests/test_media_lifecycle.py` | Original combined-run deadlock remains unexplained. |
+| Media and desktop cleanup | `tests/test_media_lifecycle.py`, `tests/test_media_audio.py`, `tests/test_desktop_shutdown.py` | Audio lock inversion and desktop task teardown now covered locally and in Linux package smoke; broader installed-platform checks remain. |
 
 ## Delivery order
 

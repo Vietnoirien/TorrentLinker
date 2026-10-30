@@ -57,7 +57,11 @@ jobs:
       - name: Smoke test
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist\TorrentLinker.exe -ArgumentList "--smoke-test" -Wait -PassThru
+          $p = Start-Process -FilePath dist\TorrentLinker.exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $p.WaitForExit(120000)) {
+            $p.Kill()
+            throw "smoke test exceeded 120 seconds"
+          }
           if ($p.ExitCode -ne 0) {
             Get-ChildItem "$env:APPDATA\TorrentLinker" -Filter torrentlinker.log -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
             throw "smoke test failed with exit code $($p.ExitCode)"
@@ -83,7 +87,7 @@ jobs:
         working-directory: packaging
       - name: Smoke test
         run: |
-          if ! dist/TorrentLinker.app/Contents/MacOS/torrentlinker --smoke-test; then
+          if ! python -c 'import subprocess; subprocess.run(["dist/TorrentLinker.app/Contents/MacOS/torrentlinker", "--smoke-test"], check=True, timeout=120)'; then
             find "$HOME/Library" -name torrentlinker.log -exec cat {} \; 2>/dev/null
             exit 1
           fi
