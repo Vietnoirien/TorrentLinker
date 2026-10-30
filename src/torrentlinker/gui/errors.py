@@ -11,10 +11,28 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.indexer import KeyRefused, RateLimited, SessionRefused
 from torrentlinker.library import LibraryReadTimeout
+from torrentlinker.qbit import AlreadyInClient
 from torrentlinker.transmission import PartialNamesOn
 
 
 def error_text(error: Exception) -> str:
+    if isinstance(error, AlreadyInClient):
+        message = QCoreApplication.translate(
+            "Errors", "This torrent is already in the Torrent Client."
+        )
+        if (torrent := error.torrent) is not None:
+            status = (
+                QCoreApplication.translate("Errors", "It is already seeding.")
+                if torrent.is_seeding
+                else QCoreApplication.translate(
+                    "Errors", "Check its state and save path in your torrent client."
+                )
+            )
+            details = QCoreApplication.translate(
+                "Errors", "Name: {0}\nHash: {1}\nState: {2}\nSave path: {3}"
+            ).format(torrent.name, torrent.hash, torrent.state, torrent.save_path)
+            message += " " + status + "\n\n" + details
+        return message
     if isinstance(error, LibraryReadTimeout):
         if error.operation == "folder":
             return QCoreApplication.translate(

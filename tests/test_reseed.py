@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from tests.fake_qbit import FakeQbit
 from tests.torrents import make_torrent
 from torrentlinker.domain import LocalItem
@@ -9,9 +11,11 @@ from torrentlinker.reseed import (
     TAG,
     VERIFYING,
     Outcome,
+    ReseedAborted,
     check_verifications,
     start_reseed,
 )
+from torrentlinker.scan import scan_item
 from torrentlinker.store import Store
 from torrentlinker.torrent_meta import read_torrent
 
@@ -146,6 +150,29 @@ def test_swapped_names_are_renamed_without_collisions(tmp_path: Path) -> None:
         files[new] = files.pop(old)
 
     assert files == {"S/b.mkv": 1, "S/a.mkv": 2}
+
+
+def test_reseed_refuses_occupied_rename_sources_before_changing_the_client(tmp_path: Path) -> None:
+    source, local = tmp_path / "source" / "Show", tmp_path / "library" / "Show"
+    source.mkdir(parents=True)
+    local.mkdir(parents=True)
+    (source / "a.mkv").write_bytes(b"a" * 40)
+    (source / "b.mkv").write_bytes(b"b" * 50)
+    (local / "a.mkv").write_bytes(b"b" * 50)
+    (local / "b.mkv").write_bytes(b"a" * 40)
+    meta, item = read_torrent(make_torrent(source)), scan_item(local)
+    found = match(item, meta.files)
+    assert found is not None
+    qbit, store = FakeQbit(), Store(tmp_path / "s.db")
+
+    with pytest.raises(ReseedAborted, match="would move an existing local path"):
+        start_reseed(qbit, store, item, meta, found, meta.infohash)
+
+    assert qbit.torrents() == [] and qbit.removed == [] and qbit.calls == []
+    assert store.verification_hashes() == []
+    assert (local / "a.mkv").read_bytes() == b"b" * 50
+    assert (local / "b.mkv").read_bytes() == b"a" * 40
+    assert sorted(p.name for p in local.iterdir()) == ["a.mkv", "b.mkv"]
 
 
 def partial_pack(tmp_path: Path) -> tuple[LocalItem, bytes]:
@@ -313,3 +340,50 @@ def test_a_verification_is_not_accepted_if_a_local_file_was_moved_meanwhile(
     assert qbit.started == [] and qbit.removed == [(h, False)]
     assert moved.exists()
     assert store.rejections(item.path) == {}
+
+
+@pytest.mark.parametrize("phase", ["settle", "rename"])
+@pytest.mark.parametrize("removal_fails", [False, True])
+def test_setup_timeout_cleans_up_only_after_successful_removal(
+    tmp_path: Path, phase: str, removal_fails: bool
+):
+    item, _ = ebook(tmp_path)
+    scene = tmp_path / "scene.epub"
+    scene.write_bytes(item.path.read_bytes())
+    meta = read_torrent(make_torrent(scene))
+    found = match(item, meta.files)
+    assert found is not None
+
+    class StuckClient(FakeQbit):
+        def add(self, *args):
+            h = super().add(*args)
+            if phase == "settle":
+                self._set(h, state="checkingResumeData")
+            return h
+
+        def rename_file(self, *args):
+            pass  # accepted asynchronously, but never reflected in the client's paths
+
+        def remove(self, *args, **kwargs):
+            if removal_fails:
+                raise ConnectionError("removal unavailable")
+            return super().remove(*args, **kwargs)
+
+    client, store = StuckClient(), Store(tmp_path / "s.db")
+    error, message = (
+        (ConnectionError, "removal unavailable") if removal_fails else (ReseedAborted, "Timed out")
+    )
+    with pytest.raises(error, match=message):
+        start_reseed(client, store, item, meta, found, meta.infohash, sleep=lambda _: None)
+
+    if removal_fails:
+        assert client.torrent(meta.infohash) is not None
+        assert store.verification_hashes() == [meta.infohash]
+        removal_fails = False
+        assert check_verifications(client, store) == []
+    assert client.torrent(meta.infohash) is None
+    assert client.removed == [(meta.infohash, False)]
+    assert store.verification_hashes() == []
+    assert check_verifications(client, store) == []
+    assert store.rejections(item.path) == {}
+    assert item.path.read_bytes() == scene.read_bytes()

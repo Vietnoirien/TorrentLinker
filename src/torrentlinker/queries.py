@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import PurePosixPath
 from typing import Any
 
 from guessit import guessit
@@ -59,8 +60,26 @@ def find_ids(item: LocalItem) -> ExternalIds:
 
 
 def parse_name(item: LocalItem) -> dict[str, Any]:
-    """Title, year, season, episode… guessed from the Local Item's name."""
-    return dict(_guess(item.path.name))
+    """Identity from the name, with episode evidence for unnamed season folders."""
+    info = dict(_guess(item.path.name))
+    if info.get("title") or "season" not in info or is_single_file(item):
+        return info
+    titles = {}
+    has_episodes = False
+    for name in item.files:
+        episode = dict(_guess(PurePosixPath(name).name))
+        title = episode.get("title")
+        if "episode" in episode and str(episode.get("mimetype", "")).startswith("video/"):
+            has_episodes = True
+            if title:
+                titles[str(title).casefold()] = title
+    if len(titles) == 1:
+        info["title"] = next(iter(titles.values()))
+    elif not titles and has_episodes:
+        parent = dict(_guess(item.path.parent.name))
+        if parent.get("title") and "season" not in parent and "episode" not in parent:
+            info["title"] = parent["title"]
+    return info
 
 
 @lru_cache(maxsize=4096)

@@ -29,7 +29,7 @@ from torrentlinker.disk_rename import (
 )
 from torrentlinker.domain import LocalItem, Torrent
 from torrentlinker.matching import Match
-from torrentlinker.qbit import Qbit
+from torrentlinker.qbit import AlreadyInClient, Qbit
 from torrentlinker.store import Store, Verification
 from torrentlinker.torrent_meta import TorrentMeta, pieces_inside
 
@@ -45,10 +45,6 @@ PIECE_VERIFIED = 2  # qBittorrent pieceStates: 0 missing, 1 downloading, 2 have
 
 # Held for a whole Reseed set-up and for every check, so a poll never sees a half-made Reseed.
 _LOCK = threading.Lock()
-
-
-class AlreadyInClient(Exception):
-    pass
 
 
 @dataclass(frozen=True)
@@ -97,9 +93,20 @@ def _start_reseed(
     # uses paths relative to the content root for a multifile torrent.
     prepare = getattr(qbit, "reseed_layout", None)
     client_match = prepare(meta, match) if prepare else match
-    if qbit.torrent(meta.infohash) is not None:
-        raise AlreadyInClient(meta.name)
-    h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
+    if existing := qbit.torrent(meta.infohash):
+        raise AlreadyInClient(existing)
+    renames = rename_plan(client_match, set(meta.files))
+    _require_absent_rename_sources(item.save_path, renames)
+    try:
+        h = qbit.add(meta.data, str(item.save_path), [TAG, VERIFYING])
+    except AlreadyInClient as error:
+        # Another process may have added it since the preflight. Reads are best
+        # effort; failure to fetch details must not hide the duplicate result.
+        try:
+            existing = qbit.torrent(meta.infohash)
+        except Exception:
+            raise error from None
+        raise AlreadyInClient(existing) from error
     added()
     absent = set(match.unwanted)
     required = pieces_inside(meta, absent) if absent else None
@@ -109,9 +116,10 @@ def _start_reseed(
     # when a check starts. A rename it has not taken in yet is then undone on disk,
     # which moves the user's file back to the torrent's original path. So: rename only
     # once the torrent has settled, and check only once qBittorrent lists the new paths.
-    _wait_for(lambda: _settled(qbit.torrent(h)), sleep, h, qbit, "the torrent to settle")
+    _wait_for(lambda: _settled(qbit.torrent(h)), sleep, h, qbit, store, "the torrent to settle")
     try:
-        for old, new in rename_plan(client_match, set(meta.files)):
+        for old, new in renames:
+            _require_absent_rename_sources(item.save_path, [(old, new)])
             qbit.rename_file(h, old, new)
     except Exception as e:  # e.g. a client that cannot rename into other folders
         qbit.remove(h)  # never deletes files
@@ -125,6 +133,7 @@ def _start_reseed(
         sleep,
         h,
         qbit,
+        store,
         "the torrent client to take in the renamed files",
     )
     if missing := _missing(item.save_path, sorted(match.pairs.values())):
@@ -148,6 +157,20 @@ class ReseedAborted(Exception):
     """qBittorrent did not reach a safe state; the torrent was removed, data untouched."""
 
 
+def _require_absent_rename_sources(save_path: Path, renames: list[tuple[str, str]]) -> None:
+    # Client renames also move disk entries at the old path. In particular, staging
+    # a filename swap through temporary names moves the user's original files.
+    for old, _new in renames:
+        try:
+            (save_path / old).lstat()  # also detects dangling symlinks; unreadable is not absent
+        except FileNotFoundError:
+            continue
+        raise ReseedAborted(
+            f"Reseeding would move an existing local path: {save_path / old}. "
+            "This layout cannot be reseeded safely without changing your files."
+        )
+
+
 def _start_disk_reseed(
     qbit: Qbit,
     store: Store,
@@ -164,8 +187,8 @@ def _start_disk_reseed(
     prepare = getattr(qbit, "reseed_layout", None)
     assert prepare is not None
     prepare(meta, identity)
-    if qbit.torrent(meta.infohash) is not None:
-        raise AlreadyInClient(meta.name)
+    if existing := qbit.torrent(meta.infohash):
+        raise AlreadyInClient(existing)
     folder = store.torrent_dir.parent
     if journal_path(folder, meta.infohash).exists():
         raise ReseedAborted("A previous disk rename needs recovery before this torrent can retry")
@@ -239,6 +262,7 @@ def _wait_for(
     sleep: Callable[[float], None],
     hash: str,
     qbit: Qbit,
+    store: Store,
     what: str,
 ) -> None:
     for _ in range(int(SET_UP_TIMEOUT / POLL_INTERVAL)):
@@ -246,6 +270,7 @@ def _wait_for(
             return
         sleep(POLL_INTERVAL)
     qbit.remove(hash)  # never deletes files
+    store.end_verification(hash)  # keep recovery state if removal raises instead
     raise ReseedAborted(f"Timed out waiting for {what}")
 
 

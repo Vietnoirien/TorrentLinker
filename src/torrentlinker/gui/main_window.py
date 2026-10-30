@@ -121,11 +121,9 @@ from torrentlinker.plan import (
 )
 from torrentlinker.plan_diagnostics import PlanIssue
 from torrentlinker.profile import UserProfile
-from torrentlinker.qbit import AlreadyInClient as ClientAlreadyInClient
-from torrentlinker.qbit import ClientApi
+from torrentlinker.qbit import AlreadyInClient, ClientApi
 from torrentlinker.queries import build_queries, find_ids
 from torrentlinker.reseed import (
-    AlreadyInClient,
     Outcome,
     check_verifications,
     pending_verifications,
@@ -2418,7 +2416,7 @@ class MainWindow(QMainWindow):
                         )
                         seen.add(infohash)
                         result.append(value)
-                except (AlreadyInClient, ClientAlreadyInClient):
+                except AlreadyInClient:
                     assert value.meta is not None
                     seen.add(value.meta.infohash.lower())
                     runner.signals.already_present.emit(entry, value.meta.infohash)

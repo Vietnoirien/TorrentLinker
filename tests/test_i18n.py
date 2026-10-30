@@ -29,6 +29,19 @@ def test_installing_french_translates_the_ui(qapp) -> None:  # type: ignore[no-u
     translators = i18n.install(qapp, "fr")
     try:
         assert QCoreApplication.translate("MainWindow", "Scan") == "Analyser"
+        assert (
+            QCoreApplication.translate("ReviewPanel", "Torrent already present")
+            == "Torrent déjà présent"
+        )
+        from torrentlinker.domain import Torrent
+        from torrentlinker.gui.errors import error_text
+        from torrentlinker.qbit import AlreadyInClient
+
+        message = error_text(
+            AlreadyInClient(Torrent("abc", "Film", Path("/Films"), state="missingFiles"))
+        )
+        assert "déjà présent" in message and "Vérifiez son état" in message
+        assert "Dossier de destination : /Films" in message
     finally:
         for t in translators:
             qapp.removeTranslator(t)

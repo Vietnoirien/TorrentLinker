@@ -425,8 +425,7 @@ class Library:
     def reseed_all(self, stop: threading.Event, progress: Callable[[Any], None]) -> dict:
         """Reseed every confirmed Full Match across the Library, like the desktop's
         "Reseed all Full Matches". Archives and disk renames need the item's own review."""
-        from torrentlinker.qbit import AlreadyInClient as ClientAlreadyInClient
-        from torrentlinker.reseed import AlreadyInClient
+        from torrentlinker.qbit import AlreadyInClient
         from torrentlinker.review import candidate_key
 
         rules = self.setup.settings.matching.rules()
@@ -459,7 +458,7 @@ class Library:
                     )
                     seen.add(infohash)
                     started += 1
-                except (AlreadyInClient, ClientAlreadyInClient):
+                except AlreadyInClient:
                     present += 1
                 except Exception as error:
                     errors.append(f"{candidate.title}: {type(error).__name__}")

@@ -233,5 +233,7 @@ def test_a_torrent_added_meanwhile_by_a_reseed_is_refused_not_failed(tmp_path: P
 
     report = send_plan(plan, qbit, lambda c: data[c.infohash])
 
-    assert [why for _, why in report.refused] == ["already in qBittorrent"] * 2
+    assert [why for _, why in report.refused] == [
+        "This torrent is already in the Torrent Client."
+    ] * 2
     assert report.failed == []

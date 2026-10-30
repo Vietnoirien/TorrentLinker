@@ -35,7 +35,7 @@ from torrentlinker.gui.torrent_details import DescriptionBrowser
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import MatchRules
-from torrentlinker.qbit import Qbit
+from torrentlinker.qbit import AlreadyInClient, Qbit
 from torrentlinker.reseed import start_reseed
 from torrentlinker.review import (
     CheckedCandidate,
@@ -658,10 +658,11 @@ class ReviewPanel(QWidget):
             return
         self.reseed_button.setEnabled(False)
 
-        def work() -> tuple[list[str], list[str], Exception | None]:
+        def work() -> tuple[list[str], list[str], Exception | None, list[str]]:
             """Reseed each Match; one failing must not hide the ones already added."""
             hashes: list[str] = []
             errors: list[str] = []
+            present: list[str] = []
             for v in chosen:
                 assert v.meta is not None and v.match is not None
                 key = candidate_key(v.candidate)
@@ -678,10 +679,12 @@ class ReviewPanel(QWidget):
                         )
                     )
                 except PartialNamesOn as e:
-                    return hashes, errors, e  # the user may let Transmission change, then retry
+                    return hashes, errors, e, present  # may retry after changing Transmission
+                except AlreadyInClient as e:
+                    present.append(f"{v.candidate.title}: {error_text(e)}")
                 except Exception as e:  # noqa: BLE001 - reported to the user below
-                    errors.append(f"{v.candidate.title}: {e or type(e).__name__}")
-            return hashes, errors, None
+                    errors.append(f"{v.candidate.title}: {error_text(e)}")
+            return hashes, errors, None, present
 
         run_in_background(work, lambda done: self._reseeded(entry, *done), self._reseed_failed)
 
@@ -691,11 +694,14 @@ class ReviewPanel(QWidget):
         hashes: list[str],
         errors: list[str],
         refused: Exception | None = None,
+        present: list[str] | None = None,
     ) -> None:
+        self._update_actions()
         if hashes:
             self.reseed_started.emit(entry.item.path)
+        if present:
+            QMessageBox.information(self, self.tr("Torrent already present"), "\n\n".join(present))
         if refused is not None:
-            self._update_actions()
             if offer_whole_names(self, refused, then=self._reseed_selected):
                 return
         if errors:
@@ -825,4 +831,4 @@ class ReviewPanel(QWidget):
 
     def _reseed_failed(self, error: Exception) -> None:
         self._update_actions()
-        QMessageBox.warning(self, self.tr("Reseed failed"), str(error) or type(error).__name__)
+        QMessageBox.warning(self, self.tr("Reseed failed"), error_text(error))

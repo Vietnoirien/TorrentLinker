@@ -24,10 +24,11 @@ from torrentlinker.reseed import (
     PARTIAL,
     VERIFYING,
     Outcome,
+    ReseedAborted,
     check_verifications,
     start_reseed,
 )
-from torrentlinker.scan import scan
+from torrentlinker.scan import scan, scan_item
 from torrentlinker.store import Store
 from torrentlinker.torrent_meta import read_torrent
 
@@ -102,6 +103,32 @@ def test_full_match_under_another_name_is_renamed_verified_and_started(
     assert VERIFYING not in t.tags
     assert classify([item], qbit.torrents()) == {item.path: ItemState.SEEDED}
     assert digest(item.path) == before
+
+
+def test_occupied_original_names_are_refused_without_moving_files(
+    tmp_path: Path, qbit: QbitApi
+) -> None:
+    source, local = tmp_path / "source" / "Show", tmp_path / "library" / "Show"
+    source.mkdir(parents=True)
+    local.mkdir(parents=True)
+    (source / "a.mkv").write_bytes(b"a" * 40000)
+    (source / "b.mkv").write_bytes(b"b" * 50000)
+    (local / "a.mkv").write_bytes(b"b" * 50000)
+    (local / "b.mkv").write_bytes(b"a" * 40000)
+    meta = read_torrent(make_torrent(source))
+    item = scan_item(local)
+    found = match(item, meta.files)
+    assert found is not None
+    store = Store(tmp_path / "s.db")
+    before = {p.name: digest(p) for p in local.iterdir()}
+
+    with pytest.raises(ReseedAborted, match="would move an existing local path"):
+        start_reseed(qbit, store, item, meta, found, meta.infohash)
+
+    time.sleep(2)  # queued client renames used to finish after the failure and removal
+    assert {p.name: digest(p) for p in local.iterdir()} == before
+    assert qbit.torrent(meta.infohash) is None
+    assert store.verification_hashes() == []
 
 
 def test_partial_match_is_verified_on_local_pieces_and_left_stopped(

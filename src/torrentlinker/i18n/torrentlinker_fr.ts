@@ -2013,6 +2013,28 @@ Le contenu des fichiers reste inchangé. Une destination existante n’est jamai
 <context>
     <name>Errors</name>
     <message>
+        <source>This torrent is already in the Torrent Client.</source>
+        <translation>Ce torrent est déjà présent dans le client torrent.</translation>
+    </message>
+    <message>
+        <source>It is already seeding.</source>
+        <translation>Il est déjà en partage.</translation>
+    </message>
+    <message>
+        <source>Check its state and save path in your torrent client.</source>
+        <translation>Vérifiez son état et son dossier de destination dans votre client torrent.</translation>
+    </message>
+    <message>
+        <source>Name: {0}
+Hash: {1}
+State: {2}
+Save path: {3}</source>
+        <translation>Nom : {0}
+Hash : {1}
+État : {2}
+Dossier de destination : {3}</translation>
+    </message>
+    <message>
         <location filename="../gui/errors.py" line="20"/>
         <source>Reading the Library Folder timed out: {0}
 
@@ -6343,6 +6365,10 @@ Envoi crédité {5} · Téléchargement crédité {6}</translation>
 </context>
 <context>
     <name>ReviewPanel</name>
+    <message>
+        <source>Torrent already present</source>
+        <translation>Torrent déjà présent</translation>
+    </message>
     <message>
         <location filename="../gui/review_panel.py" line="122"/>
         <source>Search query</source>

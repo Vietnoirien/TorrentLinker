@@ -37,7 +37,7 @@ def test_a_refused_add_says_when_the_torrent_is_already_there(
     with pytest.raises(error) as raised:
         api.download(data, str(tmp_path), [])
 
-    assert ("already in qBittorrent" in str(raised.value)) == listed
+    assert ("already in the Torrent Client" in str(raised.value)) == listed
 
 
 class Synced:

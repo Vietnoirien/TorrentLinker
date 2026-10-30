@@ -48,7 +48,7 @@ def make_library(tmp_path, monkeypatch):
 
     def start_reseed(client, store, item, meta, match, key):
         if key == "d" * 40:
-            raise AlreadyInClient("already there")
+            raise AlreadyInClient()
         started.append(item.path.name)
         return meta.infohash
 

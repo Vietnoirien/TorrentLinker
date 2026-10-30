@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from torrentlinker.domain import LocalItem
 from torrentlinker.queries import name_query
 
@@ -72,6 +74,43 @@ def test_season_pack_is_searched_by_title_and_season() -> None:
     queries = build_queries(item, ContentKind.SERIES, (5000,), ExternalIds(), FULL_CAPS)
 
     assert queries == [SearchQuery(q="The Show", mode="tvsearch", categories=(5000,), season=2)]
+
+
+@pytest.mark.parametrize("folder", ["Season 1", "S01", "Saison 01"])
+def test_generic_season_folder_uses_the_show_title_from_its_episodes(folder: str) -> None:
+    item = LocalItem(
+        Path("/lib/Unsorted") / folder,
+        {
+            f"{folder}/Black.Mirror.S01E01.mkv": 100,
+            f"{folder}/Black.Mirror.S01E02.mkv": 200,
+            f"{folder}/release.nfo": 20,
+        },
+    )
+
+    queries = build_queries(item, ContentKind.SERIES, (5000,), ExternalIds(), FULL_CAPS)
+
+    assert queries == [SearchQuery(q="Black Mirror", mode="tvsearch", categories=(5000,), season=1)]
+
+
+def test_generic_season_with_unnamed_episodes_uses_its_parent_show() -> None:
+    item = LocalItem(Path("/lib/Black Mirror/Season 1"), {"Season 1/S01E01.mkv": 100})
+
+    queries = build_queries(item, ContentKind.SERIES, (), ExternalIds(), FULL_CAPS)
+
+    assert queries == [SearchQuery(q="Black Mirror", mode="tvsearch", season=1)]
+
+
+def test_mixed_show_episodes_do_not_choose_a_show_from_the_folder_or_first_file() -> None:
+    item = LocalItem(
+        Path("/lib/Black Mirror/Season 1"),
+        {"Season 1/Black.Mirror.S01E01.mkv": 100, "Season 1/Severance.S01E01.mkv": 200},
+    )
+
+    queries = build_queries(item, ContentKind.SERIES, (), ExternalIds(), FULL_CAPS)
+    override = build_queries(item, ContentKind.SERIES, (), ExternalIds(), FULL_CAPS, "My show")
+
+    assert queries == [SearchQuery(q="Season 1", mode="tvsearch", season=1)]
+    assert override == [SearchQuery(q="My show", mode="tvsearch", season=1)]
 
 
 def test_single_episode_is_searched_with_season_and_episode() -> None:

@@ -83,10 +83,22 @@ class ClientApi(Qbit, Protocol):
 
 
 class AlreadyInClient(RuntimeError):
-    """qBittorrent already has this torrent, e.g. added meanwhile by a Plan or a Reseed."""
+    """The Torrent Client already has this hash; it must not be replaced or retargeted."""
 
-    def __init__(self) -> None:
-        super().__init__("already in qBittorrent")
+    def __init__(self, torrent: Torrent | None = None) -> None:
+        self.torrent = torrent
+        message = "This torrent is already in the Torrent Client."
+        if torrent is not None:
+            message += (
+                " It is already seeding."
+                if torrent.is_seeding
+                else " Check its state and save path in your torrent client."
+            )
+            message += (
+                f"\nName: {torrent.name}\nHash: {torrent.hash}\nState: {torrent.state}"
+                f"\nSave path: {torrent.save_path}"
+            )
+        super().__init__(message)
 
 
 API_KEY_PATTERN = re.compile(r"^qbt_[A-Za-z0-9]{28}$")
