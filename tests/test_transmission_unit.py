@@ -99,6 +99,49 @@ def api_for(rpc: FakeRpc, user: str = "", password: str = "") -> TransmissionApi
     return TransmissionApi("nas:9091", user, password, http=http)
 
 
+@pytest.mark.parametrize("child", ["", "ebooks"])
+def test_download_from_resolved_windows_share_uses_docker_path(tmp_path, monkeypatch, child):
+    from pathlib import PureWindowsPath
+
+    from torrentlinker.domain import PathMapping
+    from torrentlinker.paths import MappedQbit, PathMapper
+
+    drive = "Y:/mnt/disque2/DL2/TRANSMI/complete"
+    share = PureWindowsPath(r"\\nas\root\mnt\disque2\DL2\TRANSMI\complete")
+    original = Path.resolve
+
+    def mapped_drive(path, *args, **kwargs):
+        if str(path).replace("\\", "/") == drive:
+            return share
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", mapped_drive)
+    rpc = FakeRpc()
+
+    def linux_transmission(request):
+        body = json.loads(request.content)
+        if body["method"] == "torrent-add":
+            destination = body["arguments"]["download-dir"]
+            if not destination.startswith("/"):
+                return httpx.Response(
+                    200, json={"result": "download directory path is not absolute", "arguments": {}}
+                )
+        return rpc.handler(request)
+
+    api = TransmissionApi(
+        "nas:9091", http=httpx.Client(transport=httpx.MockTransport(linux_transmission))
+    )
+    client = MappedQbit(api, PathMapper([PathMapping(drive, "/downloads/complete")]))
+    source = tmp_path / "Book.epub"
+    source.write_bytes(b"book")
+    queued_folder = str(share / child)
+    identity = client.download(make_torrent(source), queued_folder, ["torrentlinker:search"])
+    expected = "/downloads/complete" + ("/" + child if child else "")
+    assert rpc.torrents[identity]["downloadDir"] == expected
+    assert rpc.torrents[identity]["status"] == 4
+    assert len(rpc.torrents) == 1
+
+
 def pack(tmp_path: Path, *names: str) -> bytes:
     root = tmp_path / "Pack"
     for n in names:

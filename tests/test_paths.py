@@ -36,6 +36,46 @@ def test_longest_matching_mapping_wins() -> None:
     assert m.to_local("/movies/a") == "/mnt/nas/films/a"
 
 
+def test_resolved_local_alias_uses_longest_root_and_respects_boundaries(tmp_path):
+    root = tmp_path / "storage"
+    (root / "films").mkdir(parents=True)
+    alias = tmp_path / "mounted"
+    alias.symlink_to(root, target_is_directory=True)
+    mapper = PathMapper(
+        [PathMapping(str(alias), "/data"), PathMapping(str(alias / "films"), "/movies")]
+    )
+    assert mapper.to_qbit(str(root / "films" / "a.mkv")) == "/movies/a.mkv"
+    assert mapper.to_qbit(str(root / "book.epub")) == "/data/book.epub"
+    sibling = str(tmp_path / "storage-other" / "a.mkv")
+    assert mapper.to_qbit(sibling) == sibling
+    assert mapper.to_local("/movies/a.mkv") == str(alias / "films" / "a.mkv")
+
+
+def test_explicit_identity_mapping_never_probes_or_overrides_local_paths(monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise AssertionError("A matching explicit mapping must not access the filesystem")
+
+    monkeypatch.setattr(Path, "resolve", unavailable)
+    mapper = PathMapper([PathMapping("/data", "/data")])
+    assert mapper.to_qbit("/data/film") == "/data/film"
+    assert mapper.to_local("/data/film") == "/data/film"
+
+
+def test_unavailable_alias_is_not_guessed_or_reused_after_remount(tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    alias = tmp_path / "mounted"
+    mapper = PathMapper([PathMapping(str(alias), "/data")])
+    assert mapper.to_qbit(str(first / "film")) == str(first / "film")
+    alias.symlink_to(first, target_is_directory=True)
+    assert mapper.to_qbit(str(first / "film")) == "/data/film"
+    alias.unlink()
+    alias.symlink_to(second, target_is_directory=True)
+    assert mapper.to_qbit(str(first / "film")) == str(first / "film")
+    assert mapper.to_qbit(str(second / "film")) == "/data/film"
+
+
 def test_qbittorrent_behind_a_mapping_still_reports_items_as_seeded(tmp_path) -> None:  # type: ignore[no-untyped-def]
     from pathlib import Path
 

@@ -49,19 +49,34 @@ class PathMapper:
         self.mappings = list(mappings)
 
     def to_qbit(self, local: str) -> str:
-        return self._translate(local, [(m.local, m.qbit) for m in self.mappings])
+        translated = self._translate(local, [(m.local, m.qbit) for m in self.mappings])
+        if translated is not None:
+            return translated
+        # Queue destinations are resolved before sending. On Windows this turns
+        # a mapped drive into its UNC path; on POSIX it can resolve a symlink.
+        # Resolve local roots only on a miss, never remote client paths. Do not
+        # cache aliases: a network drive may be remounted between operations.
+        aliases = []
+        for mapping in self.mappings:
+            try:
+                aliases.append((str(Path(mapping.local).resolve(strict=True)), mapping.qbit))
+            except (OSError, RuntimeError):
+                continue  # An unavailable root does not establish an alias.
+        translated = self._translate(local, aliases)
+        return local if translated is None else translated
 
     def to_local(self, qbit: str) -> str:
-        return self._translate(qbit, [(m.qbit, m.local) for m in self.mappings])
+        translated = self._translate(qbit, [(m.qbit, m.local) for m in self.mappings])
+        return qbit if translated is None else translated
 
     @staticmethod
-    def _translate(path: str, pairs: list[tuple[str, str]]) -> str:
+    def _translate(path: str, pairs: list[tuple[str, str]]) -> str | None:
         best: tuple[int, str, list[str]] | None = None
         for src, dst in pairs:
             rest = _strip_prefix(path, src)
             if rest is not None and (best is None or len(_split(src)) > best[0]):
                 best = (len(_split(src)), dst, rest)
-        return path if best is None else _join(best[1], best[2])
+        return None if best is None else _join(best[1], best[2])
 
 
 class MappedQbit:

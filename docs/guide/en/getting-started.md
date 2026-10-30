@@ -64,6 +64,8 @@ You can also add a path by hand with **Add folder…**: choose the folder on thi
 
 Detection and checks only talk to your torrent client.
 
+On Windows, a mapped drive such as `Y:\` can appear in the queue as its full network path, such as `\\nas\share\`. If Transmission in Docker rejects a download with "download directory path is not absolute", compare the queue's Download Folder with **On this computer** in Client Paths. In versions through beta.27, use that same full network path on the local side. Keep the container's Linux path, such as `/downloads/complete`, on the client side. Listing existing torrents confirms the connection but does not prove that a new download's destination is translated correctly.
+
 ## Proxy
 
 To reach the internet through a proxy, enter it in **Settings → Connections → Proxy**: `http://host:port`, `https://…`, `socks5://host:port`, or `socks5h://…` to resolve names through the proxy too, with a username and password if it needs them (the password stays in the system keyring). Every connection to c411, TMDb, the Zen Lab snapshot, images and the speed test then goes through it. Your torrent client is reached directly, as it usually runs on this computer or your network, unless you tick **Also for the torrent client**. **Test proxy** shows the address c411 sees. A new proxy applies as soon as you save.

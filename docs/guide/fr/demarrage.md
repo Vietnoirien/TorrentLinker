@@ -55,6 +55,8 @@ Dans **Paramètres → Chemins du client** :
 
 Vous pouvez ajouter une correspondance manuellement avec **Ajouter un dossier…** : choisissez le dossier sur cet ordinateur, puis indiquez son chemin tel que le client le voit. Une correspondance couvre tous les sous-dossiers ; si plusieurs correspondent, la plus précise s’applique.
 
+Sous Windows, un lecteur réseau comme `Y:\` peut apparaître dans la file sous sa forme réseau complète, par exemple `\\nas\partage\`. Si Transmission dans Docker refuse un téléchargement avec « download directory path is not absolute », comparez le Dossier de téléchargement affiché dans la file avec la colonne **Sur cet ordinateur**. Sur les versions jusqu'à beta.27, utilisez le même chemin réseau complet dans cette colonne. Gardez le chemin Linux du conteneur, par exemple `/downloads/complete`, dans **Dans le client**. Voir les torrents existants confirme la connexion, mais ne garantit pas que le chemin d'un nouvel envoi est correctement traduit.
+
 | Installation | Sur cet ordinateur | Dans le client |
 | --- | --- | --- |
 | Docker local, volume `-v /srv/media:/data` | `/srv/media` | `/data` |
