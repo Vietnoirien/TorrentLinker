@@ -12,48 +12,22 @@ Captures de l’interface française en thème sombre, avec des données d’exe
 
 ## Profil et extension navigateur
 
-**Profil** est le premier onglet Zen sur le bureau et le WebUI. Il affiche le compte
-API, la date d’inscription, la Classe, le niveau, les quêtes, le Solde Zen et les
-transferts. Les données sont actualisées automatiquement toutes les deux minutes
-tant que l’application bureau tourne ou que l’onglet Profil du WebUI est visible.
-**Actualiser le profil** permet une vérification immédiate. Les erreurs apparaissent
-à côté des dernières valeurs connues.
+**Profil** est le premier onglet Zen sur le bureau et dans l'interface web. Il
+présente le compte API, la date d'inscription, la Classe, le niveau, la progression,
+le solde Zen et les transferts. Il s'actualise toutes les deux minutes lorsque
+l'application de bureau est ouverte ou que le Profil web est visible.
+**Actualiser le profil** permet une mise à jour immédiate ; les erreurs restent
+affichées à côté des dernières valeurs reçues.
 
-L’extension facultative pour Chrome, Brave ou Edge ajoute les seeds actifs, les
-uploads validés, la durée totale de seed et les transferts depuis votre session c411.
+L'extension facultative pour Chrome, Brave ou Edge ajoute les seeds actifs, les
+uploads validés, la durée totale de seed et les statistiques de transfert. Gérez
+son installation et sa connexion dans **Paramètres → Extension** sur le bureau,
+ou **Réglages → Extension** dans l'interface web. Cette page propose aussi
+**Télécharger les .torrent avec ma session c411**, désactivé par défaut.
 
-1. Dans **Zen → Profil**, téléchargez le ZIP, extrayez-le et chargez le dossier depuis
-   **Mode développeur → Charger l’extension non empaquetée** sur la page Extensions.
-   Dans Brave, ouvrez **brave://extensions**. Remplacez l’ancienne extension manuelle.
-2. Cliquez sur **Connecter l’extension** dans TorrentLinker. Ce clic autorise la connexion
-   et les mises à jour automatiques. L’application ouvre le navigateur et transmet
-   directement les informations à l’extension installée. Aucun code à copier,
-   aperçu à confirmer ou bouton d’envoi.
-3. Gardez un onglet c411 connecté au même compte que votre clé API. L’extension ouvre
-   c411 lors de la connexion si nécessaire, puis actualise et envoie les statistiques
-   toutes les deux minutes, même si son propre onglet est fermé.
-
-La connexion est conservée après redémarrage de l’application et du navigateur.
-Si le navigateur est fermé, si c411 est déconnecté ou si un autre compte est actif,
-les dernières données restent affichées avec leur date. Après cinq minutes, elles
-sont signalées comme en attente du navigateur. Les mises à jour reprennent
-automatiquement quand un onglet connecté au bon compte est disponible.
-
-Pour un WebUI distant, utilisez HTTPS et installez le ZIP téléchargé depuis **ce
-serveur**. L’accès de connexion est limité à ce serveur, avec son éventuel préfixe
-de reverse proxy. Le ZIP de la release fonctionne avec le récepteur bureau et un
-WebUI sur localhost. Sur le bureau, la page s’ouvre dans le navigateur par défaut ;
-installez l’extension dans celui-ci. Si vous devez l’installer, revenez dans
-l’application et cliquez sur Connecter ensuite.
-
-L’extension ne transmet ni cookies de connexion, ni clés API, ni noms ou hashes de
-torrents. Les statistiques ne remplacent ni les données API ni les réglages du Plan.
-Le jeton est conservé dans le stockage local de l’extension ; l’application conserve
-uniquement son empreinte dans son cache privé. **Pause automatic sync** dans
-l’extension suspend les mises à jour. **Déconnecter et effacer** dans TorrentLinker
-révoque l’accès et efface les données enregistrées. Changer l’adresse de l’Indexeur
-ou la clé API efface la connexion et le cache du compte. Il faut alors cliquer à
-nouveau sur Connecter.
+Consultez [Extension navigateur](companion.md) pour l'installation, la WebUI
+distante, les téléchargements par session, les données échangées, la pause,
+les mises à jour et le dépannage.
 
 ## Intégration Zen
 

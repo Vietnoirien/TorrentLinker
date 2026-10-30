@@ -14,42 +14,17 @@ Screenshots use the English interface, dark theme and example data.
 
 **Profile** is the first Zen tab on desktop and WebUI. It shows your API account,
 membership date, Class, level, quest progression, Zen balance and transfer totals.
-It refreshes automatically every two minutes while the desktop app is running or
-the WebUI Profile tab is visible. **Refresh profile** remains available for an
-immediate check. Errors appear alongside the last successful values.
+It refreshes every two minutes while the desktop app is running or the WebUI
+Profile tab is visible. **Refresh profile** requests an immediate update; errors
+appear alongside the last successful values.
 
-The optional companion for Chrome, Brave or Edge adds active seed count, validated
-uploads, total seed time and transfer statistics from your signed-in c411 account.
+The optional Chrome, Brave or Edge companion adds active seed count, validated
+uploads, total seed time and transfer statistics. Manage its installation and
+connection in **Settings → Companion**. That page also offers the optional
+**Download .torrent files with my c411 session** setting, which is off by default.
 
-1. In **Zen → Profile**, save/download the extension ZIP, extract it and load the
-   folder using **Developer mode → Load unpacked** on your browser's Extensions page.
-   In Brave, use **brave://extensions**. Replace the earlier manual companion.
-2. Click **Connect companion** in TorrentLinker. That click authorizes the connection
-   and automatic profile updates. The app opens your browser and passes the connection
-   details directly to the installed extension. There is no code to copy, preview to
-   approve or Send button.
-3. Keep a c411 tab signed in with the same account as your API key. The companion
-   opens c411 during connection if needed. It refreshes and sends profile statistics
-   every two minutes, including when the extension's own tab is closed.
-
-The connection survives app and browser restarts. If the browser is closed, c411 is
-signed out or another account is active, the last data stays visible with its sync
-time. After five minutes it is marked as waiting for a browser update. Updates resume
-automatically when the matching signed-in tab is available.
-
-For a remote WebUI, use HTTPS and install the ZIP downloaded from **that server**.
-Its connection access is restricted to that server, including its reverse-proxy
-path. The release ZIP supports the local desktop receiver and a localhost WebUI.
-The desktop connection page opens in your default browser; install the companion
-there. If installation is needed, return to the app and click Connect afterward.
-
-The companion never exports login cookies, API keys, torrent names or hashes.
-Account statistics never replace API values or planning settings. The connection
-token stays in the extension's local storage; the app keeps only its hash in its
-private configuration cache. Use **Pause automatic sync** in the extension to pause
-updates, or **Disconnect & clear** in TorrentLinker to revoke access and erase the
-saved companion data. Changing the Indexer address or API key clears the connection
-and cached account data. A new Connect click is then required.
+See [Browser companion](companion.md) for installation, remote WebUI setup,
+session downloads, exchanged data, pausing, updates and troubleshooting.
 
 ## Zen integration
 

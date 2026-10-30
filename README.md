@@ -51,7 +51,7 @@ Le [guide de démarrage illustré](docs/guide/fr/demarrage.md) détaille la conf
 
 Le bouton **Documentation**, au-dessus des Paramètres, ouvre les guides illustrés dans l’application, même hors ligne.
 
-[Torrents et dossiers du client](docs/guide/fr/torrents.md) · [Bibliothèque](docs/guide/fr/bibliotheque.md) · [Recherche et téléchargements](docs/guide/fr/recherche.md) · [Zen et Plans](docs/guide/fr/zen.md) · [Uploads](docs/guide/fr/upload.md)
+[Torrents et dossiers du client](docs/guide/fr/torrents.md) · [Bibliothèque](docs/guide/fr/bibliotheque.md) · [Recherche et téléchargements](docs/guide/fr/recherche.md) · [Zen et Plans](docs/guide/fr/zen.md) · [Extension navigateur](docs/guide/fr/companion.md) · [Uploads](docs/guide/fr/upload.md)
 
 [Documentation complète](docs/README.md) · [Dépannage](docs/guide/fr/donnees.md) · [Signaler un problème](https://github.com/Vietnoirien/TorrentLinker/issues) · [Contribuer](docs/guide/fr/developpement.md)
 

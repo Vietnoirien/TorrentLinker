@@ -49,7 +49,7 @@ The [illustrated setup guide](docs/guide/en/getting-started.md) covers connectio
 
 Open **Documentation**, above Settings, to read the illustrated guides inside the app, even offline.
 
-[Torrents and client folders](docs/guide/en/torrents.md) · [Library](docs/guide/en/library.md) · [Search and downloads](docs/guide/en/search.md) · [Zen and Plans](docs/guide/en/zen.md) · [Uploads](docs/guide/en/upload.md)
+[Torrents and client folders](docs/guide/en/torrents.md) · [Library](docs/guide/en/library.md) · [Search and downloads](docs/guide/en/search.md) · [Zen and Plans](docs/guide/en/zen.md) · [Browser companion](docs/guide/en/companion.md) · [Uploads](docs/guide/en/upload.md)
 
 [All documentation](docs/README.md) · [Troubleshooting](docs/guide/en/data.md) · [Report an issue](https://github.com/Vietnoirien/TorrentLinker/issues) · [Contribute](docs/guide/en/development.md)
 
