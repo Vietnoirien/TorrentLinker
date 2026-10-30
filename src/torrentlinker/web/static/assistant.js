@@ -138,7 +138,7 @@ function aConfirmExecute() {
   let confirmed = false;
   try { confirmed = localStorage.getItem("tl-execute-confirmed") === "1"; } catch { /* storage unavailable */ }
   if (confirmed) return true;
-  if (!confirm(at("In this mode the assistant runs the actions allowed in this discussion's settings without asking, within its limits on clients, size and downloads per day. Removing torrents and deleting files still need your approval.\n\nSwitch to Execute within limits? You will not be asked again.", "Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des torrents ou supprimer des fichiers demande toujours votre accord.\n\nPasser en mode Exécuter dans les limites ? Cette question ne sera plus posée."))) return false;
+  if (!confirm(at("In this mode the assistant runs the actions allowed in this discussion's settings without asking, within its limits on clients, size and downloads per day. Removing queue entries or torrents and deleting files still need your approval.\n\nSwitch to Execute within limits? You will not be asked again.", "Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des entrées de la file ou des torrents, ou supprimer des fichiers, demande toujours votre accord.\n\nPasser en mode Exécuter dans les limites ? Cette question ne sera plus posée."))) return false;
   try { localStorage.setItem("tl-execute-confirmed", "1"); } catch { /* storage unavailable */ }
   return true;
 }
@@ -495,7 +495,17 @@ function aRunCard(run) {
 
 async function aReview(id, completed = aRefreshChat) {
   const review = await api(`agents/proposals/${id}/review`), {dialog, form} = aDialog(at("Review action", "Vérifier l’action"));
-  if (review.groups?.length) {
+  if (review.operation?.kind === "edit-queue-selection" && review.operation.queue_action === "remove") {
+    const rows = review.operation.selection_rows || [];
+    form.append(element("h3", at(`Remove ${rows.length} queue entries`, `Retirer ${rows.length} entrées de la file`)));
+    form.append(element("p", `${at("Torrent Client", "Client torrent")} : ${review.client} (${review.operation.client_id})`));
+    form.append(element("p", at("Queue entries only. Files and torrents in the client are kept. No download starts.", "Uniquement les entrées de la file. Les fichiers et les torrents du client sont conservés. Aucun téléchargement ne démarre.")));
+    const targets = element("ul", undefined, "queue-removal-targets");
+    targets.style.maxHeight = "20rem"; targets.style.overflowY = "auto";
+    for (const row of rows) targets.append(element("li", `${row.title} [${row.hash || row.key}] · ${row.folder}`));
+    form.append(targets);
+    const details = element("details"); details.append(element("summary", at("Full review", "Revue complète")), element("pre", JSON.stringify(review, null, 2))); form.append(details);
+  } else if (review.groups?.length) {
     form.append(element("p", `${review.action}: ${review.torrent_instance_count} ${at("torrent instances", "instances de torrent")}`));
     for (const group of review.groups) {
       form.append(element("h3", `${group.client} (${group.client_id})`));

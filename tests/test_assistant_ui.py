@@ -118,6 +118,14 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1000, "height": 740}, locale="en-US")
+
+            def new_discussion():
+                previous = page.locator("#assistant-prompt").element_handle()
+                page.get_by_role("button", name="New discussion", exact=True).click()
+                # The old controls remain visible until the asynchronous reload replaces them.
+                previous.wait_for_element_state("hidden")
+                expect(page.locator("#assistant-prompt")).to_be_visible()
+
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
             page.goto(f"http://127.0.0.1:{port}/")
@@ -153,7 +161,7 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             expect(page.locator("#assistant-prompt")).to_have_value(
                 "Find ten films I don't seed yet and show them before any action."
             )
-            page.get_by_role("button", name="New discussion", exact=True).click()
+            new_discussion()
             expect(page.locator(".assistant-dialog")).to_have_count(0)
             page.locator("#assistant-prompt").fill("Help me build a Plan.")
             page.locator("#assistant-prompt").press("Enter")
@@ -174,7 +182,7 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             dialog.get_by_role("button", name="Save", exact=True).click()
             expect(page.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
             expect(page.locator("#assistant-transcript")).to_contain_text("Ready to prepare")
-            page.get_by_role("button", name="New discussion", exact=True).click()
+            new_discussion()
             expect(page.locator(".assistant-dialog")).to_have_count(0)
             page.locator("#assistant-more").click()
             page.get_by_role("menuitem", name="Discussion settings", exact=True).click()
@@ -182,7 +190,7 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             expect(dialog.get_by_label("Allow public Web research", exact=True)).not_to_be_checked()
             dialog.get_by_label("Allow public Web research", exact=True).check()
             dialog.get_by_role("button", name="Save", exact=True).click()
-            page.get_by_role("button", name="New discussion", exact=True).click()
+            new_discussion()
             page.locator("#assistant-more").click()
             page.get_by_role("menuitem", name="Discussion settings", exact=True).click()
             dialog = page.locator(".assistant-dialog")

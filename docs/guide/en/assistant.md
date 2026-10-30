@@ -49,7 +49,7 @@ exact arguments and results as formatted, colored JSON. Expanded details stay op
 during refresh. Approval cards and questions stay visible. **Review proposal** opens
 the approval dialog. Proposals can expire or become invalid after settings change; request a new proposal in that case.
 
-**Execute within limits** allows the action types selected under **Permissions and limits**. You choose the clients, daily download size and count, and free-space reserve. Removing torrents and deleting files always require approval.
+**Execute within limits** allows the action types selected under **Permissions and limits**. You choose the clients, daily download size and count, and free-space reserve. Removing queue entries or torrents and deleting files always require approval. Check the exact entries in the review before approving a queue removal; reject a proposal that includes anything you did not request.
 
 Download budgets belong to each discussion or task. They are not a global budget shared by every agent.
 

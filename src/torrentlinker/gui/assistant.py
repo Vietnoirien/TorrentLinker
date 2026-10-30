@@ -573,7 +573,8 @@ class AssistantTab(QWidget):
                 self.tr(
                     "In this mode the assistant runs the actions allowed in this discussion's "
                     "settings without asking, within its limits on clients, size and downloads "
-                    "per day. Removing torrents and deleting files still need your approval.\n\n"
+                    "per day. Removing queue entries or torrents and deleting files still need "
+                    "your approval.\n\n"
                     "Switch to Execute within limits? You will not be asked again."
                 ),
             )

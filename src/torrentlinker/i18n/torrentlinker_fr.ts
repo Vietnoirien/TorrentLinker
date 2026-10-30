@@ -1049,10 +1049,10 @@
     </message>
     <message>
         <location filename="../gui/assistant.py" line="574"/>
-        <source>In this mode the assistant runs the actions allowed in this discussion&apos;s settings without asking, within its limits on clients, size and downloads per day. Removing torrents and deleting files still need your approval.
+        <source>In this mode the assistant runs the actions allowed in this discussion&apos;s settings without asking, within its limits on clients, size and downloads per day. Removing queue entries or torrents and deleting files still need your approval.
 
 Switch to Execute within limits? You will not be asked again.</source>
-        <translation>Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des torrents ou supprimer des fichiers demande toujours votre accord.
+        <translation>Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des entrées de la file ou des torrents, ou supprimer des fichiers, demande toujours votre accord.
 
 Passer en mode Exécuter dans les limites ? Cette question ne sera plus posée.</translation>
     </message>

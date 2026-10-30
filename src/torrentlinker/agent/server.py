@@ -920,6 +920,8 @@ def make_server(service: AgentService):
         Applies to EVERY row in selection_id. For named entries, first select_queue with
         criteria.query for each title and check the returned titles/count. Never pass an
         earlier whole-queue selection when the user requested only a named subset.
+        Removal ALWAYS requires owner approval of the exact entries, even with execute
+        mode and queue permission. Do not retry through another tool to bypass review.
         Remove only definitively unsent entries. Retry only known pre-send failures after
         destination validation. Uncertain or interrupted sends require owner investigation.
         Priority is persistent; larger values send first, then insertion order.
@@ -1421,6 +1423,8 @@ def make_server(service: AgentService):
         draft_id/revision and always owner approval. It sends only that saved description.
         upload-remove removes only the local record, never files or a c411 Draft.
         upload-reset requires owner approval after checking c411 for an interrupted send.
+        Queue removal always requires owner approval of the exact entries, including
+        in execute mode with queue permission. Wait for review; never bypass it.
         Poll the returned job_id with job_status. Reuse request_id only for exact retries.
         """
         try:

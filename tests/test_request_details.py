@@ -2,11 +2,116 @@ import json
 import os
 
 import pytest
-from PySide6.QtWidgets import QLabel, QPushButton
+from PySide6.QtWidgets import QLabel, QPlainTextEdit, QPushButton
 
 from torrentlinker.agent.presentation import request_summary
 from torrentlinker.gui.chat_transcript import ChatTranscript
 from torrentlinker.gui.request_details import RequestDetails
+
+
+def queue_removal_event():
+    return {
+        "review": {
+            "client": "Test client",
+            "operation": {
+                "kind": "edit-queue-selection",
+                "queue_action": "remove",
+                "client_id": "default",
+                "selection_rows": [
+                    {
+                        "title": "Film 01 <img src=x>",
+                        "hash": "a" * 40,
+                        "key": "first",
+                        "folder": "/downloads/films",
+                    },
+                    {
+                        "title": "Film 02",
+                        "hash": None,
+                        "key": "hashless-entry",
+                        "folder": "/downloads/other",
+                    },
+                ],
+            },
+            "selection": {"selected_count": 2, "total_size_bytes": 20, "criteria": {}},
+        }
+    }
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
+def test_queue_removal_review_shows_exact_entries_without_opening_json(qtbot, qapp, language):
+    previous = qapp.property("language")
+    qapp.setProperty("language", language)
+    try:
+        widget = RequestDetails(queue_removal_event())
+        qtbot.addWidget(widget)
+        widget.show()
+        targets = widget.findChild(QPlainTextEdit, "queueRemovalTargets")
+        assert targets.isVisible() and targets.isReadOnly()
+        assert "Film 01 <img src=x>" in targets.toPlainText()
+        assert "a" * 40 in targets.toPlainText()
+        assert "Film 02\nhashless-entry\n/downloads/other" in targets.toPlainText()
+        assert not widget.code.isVisible()
+        summary = "\n".join(label.text() for label in widget.findChildren(QLabel))
+        assert ("Retirer 2" if language == "fr" else "Remove 2") in summary
+    finally:
+        qapp.setProperty("language", previous)
+
+
+@pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+@pytest.mark.parametrize("language,decision", [("en", "approve"), ("fr", "reject")])
+def test_browser_queue_removal_review_lists_targets_before_deciding(tmp_path, language, decision):
+    from pathlib import Path
+
+    from playwright.sync_api import expect, sync_playwright
+
+    static = Path(__file__).parents[1] / "src/torrentlinker/web/static"
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1000, "height": 800})
+        page.set_content("<main></main>")
+        page.add_style_tag(path=str(static / "app.css"))
+        page.add_script_tag(
+            content="""
+            let language = 'en'; const calls = [];
+            const say = (en, fr) => language === 'fr' ? fr : en;
+            function element(tag, text, cls) {
+              const el = document.createElement(tag);
+              if (text !== undefined) el.textContent = text;
+              if (cls) el.className = cls;
+              return el;
+            }
+            function button(text, action, cls) {
+              const el = element('button', text, cls); el.type = 'button';
+              el.onclick = action; return el;
+            }
+            async function api(path, body) {
+              calls.push(path); return window.review;
+            }
+        """
+        )
+        page.add_script_tag(path=str(static / "assistant.js"))
+        page.evaluate(
+            "data => { language = data.language; window.review = data.review; }",
+            {"language": language, "review": queue_removal_event()["review"]},
+        )
+        page.evaluate("aReview('removal', async () => {})")
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_contain_text("Retirer 2" if language == "fr" else "Remove 2")
+        expect(dialog.locator(".queue-removal-targets li")).to_have_count(2)
+        expect(dialog).to_contain_text("Film 01 <img src=x>")
+        expect(dialog.locator("img")).to_have_count(0)
+        expect(dialog).to_contain_text("hashless-entry")
+        assert page.evaluate("calls") == ["agents/proposals/removal/review"]
+        if output := os.getenv("TL_WEB_SCREENSHOTS"):
+            target = Path(output)
+            target.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(target / f"queue-removal-review-{language}.png"))
+        dialog.get_by_role(
+            "button", name="Approve this action" if decision == "approve" else "Refuser", exact=True
+        ).click()
+        expect(dialog).not_to_be_visible()
+        assert page.evaluate("calls")[-1] == f"agents/proposals/removal/{decision}"
+        browser.close()
 
 
 def queued_event():

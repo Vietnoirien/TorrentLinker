@@ -45,7 +45,7 @@ Exemple de première demande :
 
 Les liens vers les actions permettent de consulter les paramètres et les résultats. **Examiner la proposition** ouvre la validation. Une proposition peut expirer ou devenir invalide après un changement de paramètres : demandez alors une nouvelle proposition.
 
-Le mode **Exécuter dans les limites** autorise les types d'actions cochés dans **Autorisations et limites**. Vous gardez le choix des clients, du volume et du nombre de téléchargements par jour, ainsi que de l'espace à conserver libre. Le retrait d'un torrent et la suppression de ses fichiers demandent toujours une validation.
+Le mode **Exécuter dans les limites** autorise les types d'actions cochés dans **Autorisations et limites**. Vous gardez le choix des clients, du volume et du nombre de téléchargements par jour, ainsi que de l'espace à conserver libre. Le retrait d’entrées de la file ou de torrents et la suppression de fichiers demandent toujours une validation. Vérifiez les entrées exactes avant d’approuver un retrait de la file ; refusez une proposition qui contient des entrées non demandées.
 
 Les limites de téléchargement appartiennent à chaque discussion ou tâche. Ne les considérez pas comme un budget global partagé par tous les agents.
 

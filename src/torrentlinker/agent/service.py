@@ -68,6 +68,17 @@ class AgentRequest(JobRequest):
     exclude_only_on_client_id: str = Field(default="", max_length=64)
     model_config = ConfigDict(extra="forbid")
 
+    def requires_owner_approval(self) -> bool:
+        return (
+            (self.kind == "manage" and self.action in {"delete", "remove"})
+            or (self.kind == "edit-queue-selection" and self.queue_action == "remove")
+            or self.kind in {"upload-send", "upload-reset", "configure-download-folder"}
+            or (
+                self.kind == "feed-action"
+                and self.feed_definition.get("mode") == "automatic_download"
+            )
+        )
+
     def same_intent(self, other: AgentRequest) -> bool:
         return self.model_dump(exclude={"queue_binding"}) == other.model_dump(
             exclude={"queue_binding"}
@@ -217,12 +228,7 @@ class AgentService:
             automatic = (
                 grant.mode == "execute"
                 and PERMISSIONS.get(body.kind) in grant.permissions
-                and not (body.kind == "manage" and body.action in {"delete", "remove"})
-                and body.kind not in {"upload-send", "upload-reset", "configure-download-folder"}
-                and not (
-                    body.kind == "feed-action"
-                    and body.feed_definition.get("mode") == "automatic_download"
-                )
+                and not body.requires_owner_approval()
             )
             if body.kind in READ_JOBS or automatic:
                 return self.execute(identifier, approved=False)
@@ -688,12 +694,7 @@ class AgentService:
                 if (
                     grant.mode != "execute"
                     or PERMISSIONS.get(body.kind) not in grant.permissions
-                    or (body.kind == "manage" and body.action in {"remove", "delete"})
-                    or body.kind in {"upload-send", "upload-reset", "configure-download-folder"}
-                    or (
-                        body.kind == "feed-action"
-                        and body.feed_definition.get("mode") == "automatic_download"
-                    )
+                    or body.requires_owner_approval()
                 ):
                     raise ValueError("Owner approval is required.")
             self.limits(identifier, actor, grant, target, body)

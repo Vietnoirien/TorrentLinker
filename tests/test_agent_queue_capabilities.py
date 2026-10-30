@@ -102,7 +102,7 @@ def test_preview_is_read_only_and_batch_caps_bind_an_exact_subset(catalogue_app)
     assert rejected.status_code == 400
 
 
-def test_queue_only_permission_edits_priority_and_removes_without_download_right(catalogue_app):
+def test_queue_only_permission_edits_priority_but_removal_requires_owner_review(catalogue_app):
     app, browser, token = catalogue_app
     queue_films(browser, token)
     created = browser.post(
@@ -146,12 +146,151 @@ def test_queue_only_permission_edits_priority_and_removes_without_download_right
         selection_id=fresh,
         action="remove",
     )
-    assert finished(browser, removed["job_id"])["result"]["removed"] == 1
+    assert removed["requires_owner_approval"]
+    assert len(browser.get("/api/queue").json()) == 2
+    with pytest.raises(ValueError, match="Owner approval"):
+        app.state.agent_service.execute(removed["id"], approved=False)
+    approved = browser.post(f"/api/agents/proposals/{removed['id']}/approve")
+    assert approved.is_success, approved.text
+    assert finished(browser, approved.json()["job_id"])["result"]["removed"] == 1
     assert [r["hash"] for r in browser.get("/api/queue").json()] == ["a" * 40]
     assert (
         app.state.agent_service.access.db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0]
         == 0
     )
+
+
+@pytest.mark.parametrize("generic", [False, True])
+def test_overbroad_queue_removal_can_be_rejected_without_changing_entries(catalogue_app, generic):
+    app, browser, token = catalogue_app
+    queue_films(browser, token)
+    token = browser.post(
+        "/api/agents",
+        json={
+            "name": "Queue helper",
+            "clients": ["default"],
+            "mode": "execute",
+            "permissions": ["queue"],
+        },
+    ).json()["token"]
+    identifier = queue_selection(browser, token)
+    before = browser.get("/api/queue").json()
+    removal = tool(
+        browser,
+        token,
+        "edit_queue_selection",
+        request_id="remove-all",
+        selection_id=identifier,
+        action="remove",
+    )
+    assert removal["requires_owner_approval"]
+    if generic:
+        review = browser.get(f"/api/agents/proposals/{removal['id']}/review").json()
+        removal = tool(
+            browser,
+            token,
+            "propose_action",
+            request_id="generic-removal",
+            operation=review["operation"],
+        )
+        assert removal["requires_owner_approval"]
+    with pytest.raises(ValueError, match="Owner approval"):
+        app.state.agent_service.execute(removal["id"], approved=False)
+    assert browser.get("/api/queue").json() == before
+    assert browser.post(f"/api/agents/proposals/{removal['id']}/reject").is_success
+    assert browser.get("/api/queue").json() == before
+    assert app.state.agent_service.proposal(removal["id"])["status"] == "rejected"
+
+
+def test_assistant_wrong_selection_waits_for_owner_and_rejection_preserves_queue(catalogue_app):
+    import json
+
+    from tests.test_assistant import generation_transport, wait_run
+    from tests.test_assistant_waits import response, terminal
+    from tests.test_assistant_waits import tool as model_tool
+
+    app, browser, token = catalogue_app
+    queue_films(browser, token)
+    before = browser.get("/api/queue").json()
+    calls = []
+
+    def provider(request):
+        payload = json.loads(request.content)
+        calls.append(payload)
+        if len(calls) == 1:
+            return response(
+                [
+                    model_tool(
+                        "select_queue",
+                        {
+                            "request_id": "whole-queue",
+                            "client_id": "default",
+                            "criteria": {"count": 10},
+                        },
+                    )
+                ]
+            )
+        if len(calls) == 2:
+            result = json.loads(
+                next(m["content"] for m in reversed(payload["messages"]) if m["role"] == "tool")
+            )
+            return response(
+                [
+                    model_tool(
+                        "edit_queue_selection",
+                        {
+                            "request_id": "wrong-removal",
+                            "selection_id": result["job_id"],
+                            "action": "remove",
+                        },
+                    )
+                ]
+            )
+        return response(text="The owner rejected the removal; the queue is unchanged.")
+
+    app.state.assistant.models.transport = generation_transport(provider)
+    configured = browser.post(
+        "/api/setup/assistant/providers",
+        json={
+            "name": "Controlled",
+            "kind": "compatible",
+            "url": "http://model.invalid/v1",
+            "model": "test",
+        },
+    ).json()
+    chat = browser.post(
+        "/api/assistant/conversations",
+        json={
+            "provider_id": configured["id"],
+            "policy": {
+                "name": "Queue only",
+                "clients": ["default"],
+                "mode": "execute",
+                "permissions": ["queue"],
+            },
+        },
+    ).json()
+    run = browser.post(
+        "/api/assistant/jobs",
+        json={
+            "conversation_id": chat["id"],
+            "message": "Remove only Film A from the queue. Keep Film B.",
+        },
+    ).json()
+    waiting = wait_run(browser, run["id"])
+    assert waiting["status"] == "awaiting_approval", waiting
+    assert len(calls) == 2
+    assert browser.get("/api/queue").json() == before
+    index = len(waiting["events"]) - 1
+    proposal = waiting["events"][index]["result"]["id"]
+    review = browser.get(f"/api/agents/proposals/{proposal}/review").json()
+    assert review["selection"]["selected_count"] == 2
+    assert {r["title"] for r in review["operation"]["selection_rows"]} == {"Film A", "Film B"}
+    assert browser.post(
+        f"/api/assistant/jobs/{run['id']}/decisions/{index}", json={"approve": False}
+    ).is_success
+    assert terminal(browser, run["id"])["status"] == "completed"
+    assert browser.get("/api/queue").json() == before
 
 
 def test_refinement_and_comparison_save_new_exact_snapshots(catalogue_app):

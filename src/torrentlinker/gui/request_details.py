@@ -73,6 +73,24 @@ class RequestDetails(QWidget):
             label.setWordWrap(True)
             label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             layout.addWidget(label)
+        operation = (event.get("review") or {}).get("operation", {})
+        if (
+            operation.get("kind") == "edit-queue-selection"
+            and operation.get("queue_action") == "remove"
+        ):
+            targets = QPlainTextEdit()
+            targets.setObjectName("queueRemovalTargets")
+            targets.setReadOnly(True)
+            targets.setAccessibleName(request_summary(event, language)[0])
+            targets.setPlainText(
+                "\n\n".join(
+                    f"{i}. {row['title']}\n{row.get('hash') or row['key']}\n{row['folder']}"
+                    for i, row in enumerate(operation.get("selection_rows", []), 1)
+                )
+            )
+            targets.setMinimumHeight(160)
+            targets.setMaximumHeight(240)
+            layout.addWidget(targets)
         self.toggle = QToolButton()
         self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle.setCheckable(True)

@@ -1728,7 +1728,8 @@ async function loadAgents(background = false) {
     const details = element("pre", JSON.stringify(p.body, null, 2)); row.append(details);
     if (p.status === "pending") {
       row.append(button(say("Approve", "Approuver"), async () => {
-        if (["upload-send", "upload-reset", "upload-remove"].includes(p.body.kind)) {
+        if (["upload-send", "upload-reset", "upload-remove"].includes(p.body.kind) ||
+          (p.body.kind === "edit-queue-selection" && p.body.queue_action === "remove")) {
           await aReview(p.id, loadAgents); return;
         }
         const destructive = p.body.kind === "manage" && ["remove", "delete"].includes(p.body.action);

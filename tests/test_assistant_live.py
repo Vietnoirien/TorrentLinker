@@ -159,7 +159,7 @@ def run(browser, thread, message, name):
     return wait(browser, submitted.json()["id"], name)
 
 
-def wait(browser, identifier, name, *, terminal=False):
+def wait(browser, identifier, name, *, terminal=False, decided_event=None):
     deadline = time.monotonic() + 270
     while time.monotonic() < deadline:
         response = browser.get("/api/assistant/jobs/" + identifier)
@@ -171,6 +171,11 @@ def wait(browser, identifier, name, *, terminal=False):
             if terminal
             else result["status"] not in {"queued", "running"}
         )
+        if not terminal and decided_event is not None and result["status"] == "awaiting_approval":
+            done = any(
+                index > decided_event and event["status"] == "waiting"
+                for index, event in enumerate(result["events"])
+            )
         if done:
             record(name, result)
             return result
@@ -902,7 +907,35 @@ def test_live_queue_preview_batch_and_queue_only_edit(controlled, tmp_path):
         "ne supprime aucun torrent du client et ne démarre aucun téléchargement.",
         "queue-only-edit",
     )
+    remaining = {"Film 01", "Film 02"}
+    while edited["status"] == "awaiting_approval" and remaining:
+        assert {row.candidate.title for row in entries(setup.store)} == {
+            f"Film {i:02}" for i in range(3, 11)
+        } | remaining
+        index, event = next(
+            (i, e)
+            for i, e in enumerate(edited["events"])
+            if e["status"] == "waiting" and "decision" not in e
+        )
+        review = browser.get(f"/api/agents/proposals/{event['result']['id']}/review").json()
+        operation = review["operation"]
+        targets = {row["title"] for row in operation.get("selection_rows", [])}
+        allowed = (
+            operation["kind"] == "edit-queue-selection"
+            and operation["queue_action"] == "remove"
+            and operation["client_id"] == "default"
+            and bool(targets)
+            and targets <= remaining
+        )
+        decision = browser.post(
+            f"/api/assistant/jobs/{edited['id']}/decisions/{index}", json={"approve": allowed}
+        )
+        assert decision.is_success, decision.text
+        assert allowed, {"blocked_wrong_removal": review, "queue_preserved": True}
+        remaining -= targets
+        edited = wait(browser, edited["id"], "queue-only-edit-reviewed", decided_event=index)
     assert edited["status"] == "completed", edited
+    assert not remaining, edited
     assert any(event["tool"] == "edit_queue_selection" for event in edited["events"]), edited
     assert [row.candidate.title for row in entries(setup.store)] == [
         f"Film {i:02}" for i in range(3, 11)

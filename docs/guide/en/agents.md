@@ -193,8 +193,12 @@ larger queue intact and starts nothing. Only an explicit `send_selection` reques
 starts that saved batch, with normal owner approval and fresh send checks.
 
 `edit_queue_selection` accepts `remove`, `retry` or `priority`. Removal affects local
-unsent queue records only. Retry requires a definite pre-send failure and a verified
-current destination. Higher persistent priority sends first, then insertion order;
+unsent queue records only and always requires owner approval, including with execute
+mode and queue permission. Review the exact entries and count before approving;
+reject the proposal if its selection differs from your request. Priority changes and
+safe retries can still run under queue permission. Retry requires a definite
+pre-send failure and a verified current destination. Higher persistent priority
+sends first, then insertion order;
 a saved batch preserves its explicitly selected order. Queue permission permits
 queueing/editing; **Start downloads** is a separate permission. Old saved download
 grants retain their previous queue rights through a one-time migration.
@@ -230,7 +234,7 @@ On desktop and WebUI, open **Settings → Agent access → Proposals and activit
 
 The assistant can follow its jobs and cancel further work. Cancellation does not undo downloads already sent to a Torrent Client. Stable request IDs prevent duplicate submissions after a network retry. Restarted, interrupted actions are not replayed automatically.
 
-You may choose **Execute permitted actions** and grant only the permissions you need. Torrent Client removal and file deletion always require approval in TorrentLinker. Upload preparation saves Local Drafts; sending a saved revision to c411 always requires approval. Publication remains manual on c411. µTorrent/BitTorrent Classic operations requiring on-disk renames must use the desktop confirmation workflow.
+You may choose **Execute permitted actions** and grant only the permissions you need. Queue entry removal, Torrent Client removal and file deletion always require approval in TorrentLinker. Upload preparation saves Local Drafts; sending a saved revision to c411 always requires approval. Publication remains manual on c411. µTorrent/BitTorrent Classic operations requiring on-disk renames must use the desktop confirmation workflow.
 
 Budgets are cumulative per connection and reset at UTC midnight. Failed or interrupted sends remain counted conservatively. Pending client downloads count against free space across clients sharing a physical disk. If an interrupted send cannot be reconciled, check the Torrent Client first and use **Release uncertain storage reservation**. This releases the storage hold, not the daily spending record.
 

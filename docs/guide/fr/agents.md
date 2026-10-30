@@ -203,7 +203,11 @@ Seul un appel explicite à `send_selection` démarre ce lot, avec les approbatio
 habituelles et de nouveaux contrôles avant l'envoi.
 
 `edit_queue_selection` accepte `remove`, `retry` ou `priority`. Le retrait concerne
-uniquement les entrées locales non envoyées. Réessayer exige un échec certain avant
+uniquement les entrées locales non envoyées et demande toujours votre approbation,
+même en mode exécution avec la permission de modifier la file. Vérifiez le nombre
+et les entrées affichées avant d'approuver ; refusez une sélection incorrecte.
+Les priorités et les nouvelles tentatives sûres peuvent rester automatiques.
+Réessayer exige un échec certain avant
 l'ajout au client et un dossier actuel vérifié. Les priorités élevées passent en
 premier, puis l'ordre d'ajout ; un lot enregistré conserve son ordre explicite.
 Le droit de préparer/modifier la file est distinct du droit de démarrer les
@@ -241,7 +245,7 @@ Sur le bureau et dans l’interface web, ouvrez **Paramètres → Accès des age
 
 L'assistant peut suivre ses tâches et annuler la suite du travail. L'annulation ne retire pas les téléchargements déjà envoyés au client torrent. Un identifiant de requête stable évite de soumettre deux fois la même action après une coupure. Les tâches interrompues au redémarrage ne sont pas relancées automatiquement.
 
-Vous pouvez choisir **Exécuter les actions autorisées** et limiter les permissions. Le retrait d'un torrent et la suppression de ses fichiers demandent toujours votre approbation dans TorrentLinker. La préparation des uploads enregistre des brouillons locaux. Leur envoi à c411 exige toujours votre approbation. La publication reste manuelle sur le site. Les opérations µTorrent/BitTorrent Classic nécessitant un renommage sur disque passent par la confirmation de l'application de bureau.
+Vous pouvez choisir **Exécuter les actions autorisées** et limiter les permissions. Le retrait d'une entrée de la file ou d'un torrent et la suppression de fichiers demandent toujours votre approbation dans TorrentLinker. La préparation des uploads enregistre des brouillons locaux. Leur envoi à c411 exige toujours votre approbation. La publication reste manuelle sur le site. Les opérations µTorrent/BitTorrent Classic nécessitant un renommage sur disque passent par la confirmation de l'application de bureau.
 
 Les budgets se cumulent par connexion et repartent à zéro à minuit UTC. Les envois échoués ou interrompus restent comptés par prudence. Les téléchargements incomplets réduisent l'espace disponible, y compris entre clients partageant un disque. Si un envoi interrompu reste incertain, vérifiez d'abord le client torrent puis utilisez **Libérer la réserve disque incertaine**. Le budget quotidien reste débité.
 

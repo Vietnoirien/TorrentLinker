@@ -112,6 +112,8 @@ def test_presentation_receipt_keeps_cards_in_history_without_inviting_prose_dupl
                 "kind": "compatible",
                 "url": "http://model.invalid/v1",
                 "model": "test",
+                # This scripted provider reads raw receipts; context recovery is tested separately.
+                "context_window": 131072,
             },
         ).json()["id"]
         chat = browser.post(

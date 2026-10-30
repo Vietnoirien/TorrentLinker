@@ -789,6 +789,8 @@ class Assistant:
                 "subset; zero caps mean zero. This never starts downloads or removes queued items. "
                 "Only use send_selection for an explicit request to start the saved batch. "
                 "Use edit_queue_selection for removal, safe retries and persistent priority. "
+                "Queue removal always requires owner approval of the exact entries, even with "
+                "execute mode and queue permission. Wait for review; never bypass it. "
                 "That operation edits EVERY row of its saved selection. When the user names "
                 "specific queue entries, do not reuse a whole-queue preview or batch. Use "
                 "select_queue with criteria.query for each requested title, inspect the "

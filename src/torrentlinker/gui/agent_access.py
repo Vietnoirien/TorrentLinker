@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.agent.access import Grant
 from torrentlinker.gui.controls import set_role
+from torrentlinker.gui.request_details import RequestDetails
 from torrentlinker.gui.tasks import run_in_background
 
 
@@ -364,7 +365,12 @@ class AgentAccess(QWidget):
             return
 
         def reviewed(preview):
-            if "local_draft" in preview or "groups" in preview:
+            operation = preview.get("operation", {})
+            queue_removal = (
+                operation.get("kind") == "edit-queue-selection"
+                and operation.get("queue_action") == "remove"
+            )
+            if "local_draft" in preview or "groups" in preview or queue_removal:
                 dialog = QDialog(self)
                 dialog.setWindowTitle(self.tr("Approve proposal"))
                 dialog.resize(720, 520)
@@ -384,9 +390,12 @@ class AgentAccess(QWidget):
                     content = "\n".join(lines)
                 else:
                     content = json.dumps(preview, indent=2, ensure_ascii=False)
-                text = QPlainTextEdit(content)
-                text.setReadOnly(True)
-                layout.addWidget(text)
+                if queue_removal:
+                    layout.addWidget(RequestDetails({"review": preview}))
+                else:
+                    text = QPlainTextEdit(content)
+                    text.setReadOnly(True)
+                    layout.addWidget(text)
                 buttons = QDialogButtonBox(
                     QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
                 )
