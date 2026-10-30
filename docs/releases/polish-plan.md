@@ -16,7 +16,7 @@ The [beta.25 validation report](../research/reseed-path-review.md#expanded-valid
 
 | Order | Tracking issue | Remaining evidence |
 | --- | --- | --- |
-| 1 | [#44: native-media deadlock](https://github.com/Vietnoirien/TorrentLinker/issues/44) | Reproduce the combined-run freeze, identify its cause and verify playback plus shutdown together. |
+| 1 | [#44: native-media deadlock](https://github.com/Vietnoirien/TorrentLinker/issues/44) | Qt/PySide lock inversion reproduced and worked around locally; 115 combined GUI/media tests pass. Verify the audio factory in installed packages and the supported Qt/platform matrix. |
 | 1 | [#45: browser acceptance](https://github.com/Vietnoirien/TorrentLinker/issues/45) | Repair stale Upload fixtures and verify Profile, Seeding and Plan navigation against the real page. |
 | 1 | [#46: local-model failures](https://github.com/Vietnoirien/TorrentLinker/issues/46) | Classify all 16 failures; fix application/test defects and record model limitations without weakening safeguards. |
 | 2 | [#47: interruption and recovery](https://github.com/Vietnoirien/TorrentLinker/issues/47) | Scenario-to-test coverage for cancellation, restart, uncertain sends and destination scope. |
@@ -77,6 +77,13 @@ The issues distinguish known failures from missing evidence. Their acceptance ch
 - The expanded regression run exposed a context-recovery fixture that triggered proactive compaction before its deliberate provider rejection. It now declares enough context to isolate that rejection while retaining the assertion that recovery compacts exactly once. Production context handling is unchanged.
 - After the Upload interface and card receipt changes, the Plan and synopsis-edit scenarios passed twice each. Two final runs of all 16 historical scenarios then passed through the saved-provider configuration with `temperature=0`, in 255.13 and 289.11 seconds. Existing acceptance assertions still check exact state, scope and preservation. This verifies the tested Radiance configuration; existing connections keep server defaults until explicitly changed, and these runs do not guarantee future model behavior. Local evidence is retained under `/tmp/tl-polish-issues/radiance-final-{1,2}` as logs, XML reports and conversation records. No real torrent clients or tracker mutations were used.
 - Final affected regression coverage passed 305 tests with 41 skipped in 135.02 seconds, including enabled browser checks. Ruff, formatting of 393 files, typechecking of 202 source files, JavaScript syntax and diff checks passed. The separate native-media deadlock remains unresolved, and installed-platform and release checks remain outstanding.
+
+### Native-media deadlock diagnosis and workaround, 2026-10-30
+
+- Reproduced the GUI/audio lock inversion in an isolated Qt playback program, including with Python's normal scheduling interval. Full stacks show audio renderer destruction requesting the GIL through PySide's virtual-method lookup while widget construction waits for a Qt connection mutex. Qt's destructor holds a connection mutex during `disconnectNotify`. The old eight-frame capture showed the same waits but omitted the audio caller. See the [investigation and evidence](../research/native-media-deadlock.md).
+- Disabled garbage collection as a control; the deadlock persisted. Replacing only the Python-created audio output with a Qt-created QML `AudioOutput` completed 100 cycles. The native player now uses that factory, with the output and its QML engine owned and destroyed together. The package smoke check constructs this output to detect missing QML plugins.
+- The regression first froze on cycle 0 and failed at its 30-second subprocess deadline. With the workaround, 29 focused media tests passed. The final combined run passed 115 tests, including earlier GUI workflows, native audio/video playback, track selection, shutdown, themes, packaging smoke checks and another 80-cycle deadlock regression. Ruff, formatting, typechecking and diff checks passed. Installed-package/platform validation remains outstanding; no release or remote issue closure is implied.
+- A separate dark-theme layout assertion surfaced during diagnosis: the Media pane's minimum width was 548 pixels against a 520-pixel expectation. That is a layout follow-up, not the deadlock; the diagnostic log is `/tmp/tl-media-freeze/styled-single.log`.
 
 ### Historical assistant failure triage
 

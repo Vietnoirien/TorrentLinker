@@ -4,7 +4,7 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, QTimer
+from PySide6.QtCore import QObject, QStandardPaths, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -28,6 +28,7 @@ def smoke_checks() -> None:
 
     from torrentlinker import documentation
     from torrentlinker.domain import LocalItem
+    from torrentlinker.gui.media_audio import create_audio_output
     from torrentlinker.queries import parse_name
 
     httpx.Client(proxy="socks5://127.0.0.1:1080").close()  # needs socksio
@@ -46,6 +47,11 @@ def smoke_checks() -> None:
             assert documentation.document_path(guide["path"]).read_text(encoding="utf-8")
     assert documentation.document_path("guide/images/zen.png").is_file()
     assert documentation.document_path("guide/images/en/zen.png").is_file()
+    # Native playback needs the QtMultimedia QML plugin as well as its Python module.
+    audio_parent = QObject()
+    audio = create_audio_output(audio_parent)
+    audio.setVolume(0.5)
+    assert audio.volume() == 0.5
     agent_smoke_checks()
     print("smoke test OK")
 

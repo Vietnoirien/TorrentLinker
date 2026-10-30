@@ -1503,7 +1503,7 @@ def test_a_category_whose_subcategories_have_folders_can_skip_its_own(
 
 
 @pytest.mark.parametrize("version", ["0.12.2", "0.13.0b1", "0.13.0-beta.1"])
-def test_packaging_smoke_accepts_stable_and_prerelease_versions(monkeypatch, version):
+def test_packaging_smoke_accepts_stable_and_prerelease_versions(monkeypatch, version, qapp):
     from torrentlinker import app
 
     monkeypatch.setattr(app, "installed_version", lambda: version)

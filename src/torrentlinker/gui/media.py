@@ -44,7 +44,7 @@ from PySide6.QtGui import (
     QPixmap,
     QTextDocumentFragment,
 )
-from PySide6.QtMultimedia import QAudioOutput, QMediaMetaData, QMediaPlayer, QVideoSink
+from PySide6.QtMultimedia import QMediaMetaData, QMediaPlayer, QVideoSink
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -79,6 +79,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from torrentlinker.gui.controls import icon_button, set_role
+from torrentlinker.gui.media_audio import create_audio_output
 from torrentlinker.gui.media_rows import MediaRow, SeriesEpisodes
 from torrentlinker.gui.tasks import run_in_background
 
@@ -1727,7 +1728,7 @@ class MediaTab(QWidget):
                 self.current_playlist = self.state.get("context", {}).get("playlist", "")
                 self.command_ack = int(self.state.get("command_ack", 0))
                 self.player = QMediaPlayer(self)
-                self.audio = QAudioOutput(self)
+                self.audio = create_audio_output(self)
                 self.player.setAudioOutput(self.audio)
                 self.decoder_sink = QVideoSink(self.player)
                 self.decoder_sink.videoFrameChanged.connect(
