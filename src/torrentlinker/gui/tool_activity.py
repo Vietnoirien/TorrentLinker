@@ -90,9 +90,10 @@ class ToolActivity(QWidget):
         self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle.setCheckable(True)
         usage = (
-            self.tr("%1 calls · %2 tokens")
+            self.tr("Model calls: %1 · Tool calls: %2 · Tokens: %3")
             .replace("%1", str(run["calls"]))
-            .replace("%2", str(run["tokens"]))
+            .replace("%2", str(len(run["events"])))
+            .replace("%3", str(run["tokens"]))
         )
         failures = [(event, tool_error(event)) for _, event in indexed_events if tool_error(event)]
         label = (
@@ -100,7 +101,7 @@ class ToolActivity(QWidget):
             if failures
             else description(indexed_events[-1][1])
             if indexed_events
-            else usage
+            else self.tr("No tools called")
         )
         count = f" · {len(indexed_events)}" if indexed_events else ""
         group_status = (
@@ -121,9 +122,17 @@ class ToolActivity(QWidget):
             if group_status == "finished":
                 group_status = "failed"
             self.toggle.setStyleSheet(error_style)
-        self.toggle.setText(f"{label[:96]}{count} · {status_text(group_status)}")
+        reply_only = run["status"] == "completed" and not run["events"]
+        status = self.tr("Reply only") if reply_only else status_text(group_status)
+        self.toggle.setText(f"{label[:96]}{count} · {status}")
         self.toggle.setToolTip(label)
         layout.addWidget(self.toggle)
+        if reply_only:
+            notice = QLabel(self.tr("No application action was performed in this reply."))
+            notice.setObjectName("assistantExecutionNotice")
+            notice.setWordWrap(True)
+            notice.setProperty("role", "muted")
+            layout.addWidget(notice)
         self.scroll = QScrollArea()
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setWidgetResizable(True)

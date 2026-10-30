@@ -407,17 +407,19 @@ function aActivity(card, run, indexed, anchor) {
   const activity = element("details", undefined, "assistant-activity");
   activity.open = assistantExpandedActivity.has(key);
   activity.addEventListener("toggle", () => { if (activity.isConnected) activity.open ? assistantExpandedActivity.add(key) : assistantExpandedActivity.delete(key); });
-  const usage = `${run.calls} ${at("calls", "appels")} · ${run.tokens} tokens`;
+  const usage = `${at("Model calls", "Appels au modèle")}: ${run.calls} · ${at("Tool calls", "Appels d’outils")}: ${run.events.length} · Tokens: ${run.tokens}`;
   const failures = indexed.filter(([, event]) => aToolError(event));
-  const label = indexed.length ? `${aToolDescription((failures.at(-1) || indexed.at(-1))[1])} · ${indexed.length}` : usage;
+  const label = indexed.length ? `${aToolDescription((failures.at(-1) || indexed.at(-1))[1])} · ${indexed.length}` : at("No tools called", "Aucun outil appelé");
   let groupStatus = indexed.length ? (indexed.find(([, event]) => ["running", "waiting", "failed"].includes(event.status))?.[1].status || "finished") : run.status;
   if (groupStatus === "waiting") groupStatus = run.status;
   if (failures.length) { if (groupStatus === "finished") groupStatus = "failed"; activity.classList.add("has-tool-error"); }
-  activity.append(element("summary", `${label} · ${aStatus(groupStatus)}`));
+  const replyOnly = run.status === "completed" && !run.events.length;
+  activity.append(element("summary", `${label} · ${replyOnly ? at("Reply only", "Réponse uniquement") : aStatus(groupStatus)}`));
   const entries = element("div", undefined, "assistant-tool-list");
   entries.append(element("p", usage, "assistant-usage"));
   if (run.compactions) entries.append(element("p", at("Context compacted; full history retained.", "Contexte compacté ; historique complet conservé."), "assistant-usage"));
   activity.append(entries); card.append(activity);
+  if (replyOnly) card.append(element("p", at("No application action was performed in this reply.", "Cette réponse n’a exécuté aucune action dans l’application."), "assistant-execution-notice muted"));
   for (const [index, event] of indexed) {
     const detail = element("details", undefined, "assistant-tool"), result = event.result || {};
     const eventKey = `${run.id}:${index}`;

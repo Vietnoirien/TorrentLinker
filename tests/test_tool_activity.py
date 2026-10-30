@@ -9,6 +9,34 @@ from torrentlinker.gui.chat_transcript import ChatTranscript, MessageText
 from torrentlinker.gui.request_details import JsonCode
 
 
+def test_unexecuted_success_claim_is_explicitly_marked_as_reply_only(qtbot):
+    run = narrative_run()
+    run.update(
+        calls=1,
+        events=[],
+        messages=[
+            {"role": "user", "content": "lance le telechargement"},
+            {
+                "role": "assistant",
+                "content": "Téléchargement lancé, statut sent (1/1).",
+                "phase": "final",
+            },
+        ],
+    )
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    transcript.set_runs([run], str)
+    group = transcript.findChild(QToolButton, "toolActivitySummary")
+    assert "No tools called" in group.text()
+    assert "Reply only" in group.text()
+    notice = transcript.findChild(QLabel, "assistantExecutionNotice")
+    assert notice and notice.text() == "No application action was performed in this reply."
+    assert not notice.isHidden()
+    group.click()
+    labels = [label.text() for label in transcript.findChildren(QLabel)]
+    assert "Model calls: 1 · Tool calls: 0 · Tokens: 100" in labels
+
+
 @pytest.mark.parametrize(
     "operation",
     [

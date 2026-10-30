@@ -8,6 +8,80 @@ from tests.test_assistant import login, wait_run
 from torrentlinker.web.app import create_app
 
 
+def test_followup_receives_execution_evidence_for_unexecuted_success_claim(tmp_path):
+    import json
+
+    requests = []
+
+    def server(request):
+        if request.method == "GET":
+            return httpx.Response(404)
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Téléchargement lancé, statut sent (1/1).",
+                        }
+                    }
+                ]
+            },
+        )
+
+    with TestClient(
+        create_app(
+            tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(server)
+        )
+    ) as browser:
+        login(browser)
+        provider = browser.post(
+            "/api/setup/assistant/providers",
+            json={
+                "name": "Replay",
+                "kind": "compatible",
+                "url": "http://model.invalid/v1",
+                "model": "test",
+            },
+        ).json()
+        chat = browser.post(
+            "/api/assistant/conversations",
+            json={
+                "provider_id": provider["id"],
+                "policy": {"name": "Read", "clients": ["default"]},
+            },
+        ).json()
+        identifiers = []
+        for message in ("lance le telechargement", "retry"):
+            submitted = browser.post(
+                "/api/assistant/jobs", json={"conversation_id": chat["id"], "message": message}
+            ).json()
+            identifiers.append(submitted["id"])
+            result = wait_run(browser, submitted["id"])
+            assert result["status"] == "completed"
+            assert result["events"] == []
+        context = next(
+            m["content"]
+            for m in requests[1]["messages"]
+            if str(m.get("content", "")).startswith("Application execution evidence")
+        )
+        ledger = json.loads(context.split("\n", 1)[1])
+        assert ledger == [
+            {
+                "run_id": identifiers[0],
+                "reply_status": "completed",
+                "tool_calls": 0,
+                "recent_tools": [],
+            }
+        ]
+        assert "Zero tool calls means" in context
+        assert "did not measure disk space" in context
+        assert browser.get("/api/queue").json() == []
+        assert browser.get("/api/agents").json()["proposals"] == []
+
+
 def test_active_server_context_is_used_for_each_run(tmp_path):
     window = 262144
     requests = []

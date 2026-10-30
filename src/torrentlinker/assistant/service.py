@@ -650,6 +650,7 @@ class Assistant:
             bounded_receipts,
             compact_context,
             current_list_state,
+            execution_evidence,
             input_budget,
             message_size,
             model_receipt,
@@ -960,6 +961,7 @@ class Assistant:
                 )
 
             messages.append(list_state_message())
+            messages.append(self.models.user(provider, execution_evidence(previous[-8:])))
             media_context = self.agent.media.actor_context(actor)
             if media_context:
                 messages.append(

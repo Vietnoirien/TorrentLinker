@@ -9007,8 +9007,20 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
     <name>ToolActivity</name>
     <message>
         <location filename="../gui/tool_activity.py" line="93"/>
-        <source>%1 calls · %2 tokens</source>
-        <translation>%1 appels · %2 tokens</translation>
+        <source>Model calls: %1 · Tool calls: %2 · Tokens: %3</source>
+        <translation>Appels au modèle : %1 · Appels d’outils : %2 · Tokens : %3</translation>
+    </message>
+    <message>
+        <source>No tools called</source>
+        <translation>Aucun outil appelé</translation>
+    </message>
+    <message>
+        <source>Reply only</source>
+        <translation>Réponse uniquement</translation>
+    </message>
+    <message>
+        <source>No application action was performed in this reply.</source>
+        <translation>Cette réponse n’a exécuté aucune action dans l’application.</translation>
     </message>
     <message>
         <location filename="../gui/tool_activity.py" line="190"/>

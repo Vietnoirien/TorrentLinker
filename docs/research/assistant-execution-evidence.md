@@ -1,0 +1,33 @@
+# Assistant replies without execution evidence
+
+Reported on 2026-10-30 during 1.0 polish, tracked with #46.
+
+## Reproduction
+
+The restarted desktop app's saved responses claimed a film was queued and sent, but each affected run contained only a user message and an assistant message: zero tool calls and zero tool events. The companion/session-download code was never reached. Earlier turns had invented disk-space rejection messages in the same way.
+
+The discussion's actual grant allowed media control, not automatic downloads. A correct send request should therefore create an owner-approval proposal, not bypass the grant or treat a conversational "yes" as approval.
+
+The controlled replay is `tests/test_assistant_execution_live.py::test_live_send_after_unexecuted_retry_claims_requires_real_proposal`. It uses a temporary media-only discussion, a fake queued film, simulated clients and blocked tracker/client connections. Three previous assistant replies claim actions without any recorded events. The current request is "lance le telechargement".
+
+Before the change, Radiance returned a completed answer in one model call with zero tool events. It invented another disk-space rejection and a queue limit. The replay failed in 4.25 seconds. The native transcript regression also failed because it displayed `1 calls · 100 tokens · completed`, without explaining that no application action occurred.
+
+## Cause and correction
+
+Recent assistant prose was replayed as ordinary conversation history. Only previous tool receipts were added; tool-free turns had no explicit execution record contradicting their claims. The loop treated a final text answer as a completed model run, and the UI's "calls" count described model calls without distinguishing tool calls.
+
+The model now receives an authoritative execution ledger for recent replies. It records the actual tool-call count, bounds the tool-name preview, and explains that a zero-tool reply did not queue, send, retry, edit or measure disk space. Completed reply status is explicitly separate from action completion. Compacted history keeps the same distinction. Existing receipts, client observations and approval rules remain authoritative.
+
+Desktop and browser activity now distinguish model calls from tool calls. Completed zero-tool replies show "Reply only", "No tools called", and a visible statement that no application action was performed. Writing-only replies remain supported. The notice derives from recorded events, not from trusting the model's text.
+
+This does not attempt to prove every natural-language claim made after arbitrary tool calls. A successful read or search is still not evidence of a download. Actual operation receipts must establish the requested outcome.
+
+## Validation
+
+- The controlled Radiance replay passed twice with server-default sampling, matching the reported provider setting. It reached owner approval in seven and five model calls. The second run also checked the proposal was `send-queue` for exactly the one fixture hash.
+- No owner approval was granted during those runs, no tracker was contacted and the queue remained unchanged.
+- The native, Chromium, assistant/provider/context and translation regression suite passed 80 tests. A follow-up check covers the bounded ledger representation.
+- Companion-download and queue-capability regressions passed 45 tests. Ruff and mypy also passed.
+- The real user's download was not retried, their permissions were not broadened, and disk-space limits were not changed.
+
+This fix follows the published beta.27 artifact.
