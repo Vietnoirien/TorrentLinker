@@ -86,10 +86,14 @@ def make_server(service: AgentService):
     mcp = StrictMCPServer(
         "TorrentLinker",
         instructions=(
-            "Call overview first. Use explicit client IDs and stable request IDs. "
+            "When application tools are needed and allowed, call overview first. "
+            "Respect writing-only and no-tool requests; do not call tools just to draft text "
+            "from supplied material. Use explicit client IDs and stable request IDs. "
             "For app setup/how-to guidance, search_documentation then read_documentation "
             "and cite the installed guide heading/reference URL and source metadata. "
             "Mutations may return proposals requiring approval in TorrentLinker. "
+            "Submit the exact requested action through its tool to create that proposal; "
+            "asking for approval in prose does not create one. "
             "For bulk torrent management, use select_torrents then manage_selection; "
             "the server filters, ranks, counts and retains the exact selection. "
             "For title/genre/year discovery prefer LIVE search_indexer_options then "
@@ -1412,6 +1416,8 @@ def make_server(service: AgentService):
     def propose_action(request_id: str, operation: AgentRequest) -> dict[str, object]:
         """Propose an operation. Read/preview jobs run now; changes require owner policy/approval.
 
+        In propose mode, allowed clients can receive proposals without execution permissions.
+        Call this tool to create the owner's approval request; a prose question is not a proposal.
         Kinds: refresh, search, search-options, details, scan, check, plan, catalogue,
         upload-preview, enqueue, send-queue, manage, reseed, upload-queue, upload-send,
         upload-remove, upload-reset, upload-seed. upload-draft is a legacy alias for upload-queue.

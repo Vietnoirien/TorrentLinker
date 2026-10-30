@@ -159,19 +159,15 @@ def run(browser, thread, message, name):
     return wait(browser, submitted.json()["id"], name)
 
 
-def wait(browser, identifier, name, *, terminal=False, decided_event=None):
+def wait(browser, identifier, name, *, decided_event=None):
     deadline = time.monotonic() + 270
     while time.monotonic() < deadline:
         response = browser.get("/api/assistant/jobs/" + identifier)
         assert response.is_success, (response.status_code, response.text)
         result = response.json()
         assert "status" in result, result
-        done = (
-            result["status"] in {"completed", "failed", "cancelled"}
-            if terminal
-            else result["status"] not in {"queued", "running"}
-        )
-        if not terminal and decided_event is not None and result["status"] == "awaiting_approval":
+        done = result["status"] not in {"queued", "running"}
+        if decided_event is not None and result["status"] == "awaiting_approval":
             done = any(
                 index > decided_event and event["status"] == "waiting"
                 for index, event in enumerate(result["events"])
@@ -219,7 +215,11 @@ def test_live_proposal_approval_and_followup(controlled):
     assert clients["https://one.invalid"].paused == ["23e8f7e81e16d78a9b191fbb0988f13c9dba5c34"]
     # Approval resumes this run automatically. A paused client alone does not mean
     # its model follow-up is finished or the conversation accepts another message.
-    resumed = wait(browser, result["id"], "approval-resumed", terminal=True)
+    # Ignore the old pending event until continuation starts, but return a new
+    # question/proposal so the completion assertion reports it immediately.
+    resumed = wait(
+        browser, result["id"], "approval-resumed", decided_event=len(result["events"]) - 1
+    )
     assert resumed["status"] == "completed", resumed
     result = run(
         browser,

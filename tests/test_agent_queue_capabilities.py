@@ -256,6 +256,8 @@ def test_assistant_wrong_selection_waits_for_owner_and_rejection_preserves_queue
             "kind": "compatible",
             "url": "http://model.invalid/v1",
             "model": "test",
+            # This provider reads raw receipts; context recovery is tested separately.
+            "context_window": 131072,
         },
     ).json()
     chat = browser.post(
