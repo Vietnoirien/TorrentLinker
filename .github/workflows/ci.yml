@@ -22,6 +22,41 @@ jobs:
       - run: mypy
       - run: pytest -q
 
+  windows-library:
+    name: Windows Library rescan regression
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[dev]'
+      - run: pytest -q tests/test_library_rescans.py tests/test_library_timeout.py tests/test_stall_watchdog.py -o faulthandler_timeout=30
+      - run: pip install '.[package]'
+      - run: pyinstaller --noconfirm --distpath ../dist --workpath ../build torrentlinker.spec
+        working-directory: packaging
+      - name: Packaged smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\TorrentLinker.exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $p.WaitForExit(120000)) {
+            $p.Kill()
+            throw "Packaged smoke test exceeded 120 seconds"
+          }
+          if ($p.ExitCode -ne 0) { throw "Packaged smoke test failed: $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-library-diagnostics
+          path: dist/TorrentLinker.exe
+      - name: Collect diagnostic logs
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:APPDATA\TorrentLinker" -Filter torrentlinker.log -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName }
+
   browser:
     name: Browser workflow acceptance
     runs-on: ubuntu-latest
