@@ -73,7 +73,7 @@ jobs:
 
   macos:
     # Apple Silicon only; the app is ad-hoc signed, not notarized, so Gatekeeper asks once
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     env:
       QT_QPA_PLATFORM: offscreen
