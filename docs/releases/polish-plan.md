@@ -17,9 +17,9 @@ The [beta.25 validation report](../research/reseed-path-review.md#expanded-valid
 | Order | Tracking issue | Remaining evidence |
 | --- | --- | --- |
 | 1 | [#44: native-media deadlock](https://github.com/Vietnoirien/TorrentLinker/issues/44) | Workaround and regression pass. Frozen Linux playback/shutdown and three isolated AppImage runs pass. Official release-platform/Qt matrix remains. |
-| 1 | [#45: browser acceptance](https://github.com/Vietnoirien/TorrentLinker/issues/45) | Original browser failures fixed and verified locally; CI coverage added. Remote CI remains pending a push. |
+| 1 | [#45: browser acceptance](https://github.com/Vietnoirien/TorrentLinker/issues/45) | Original browser failures fixed; browser CI passed on beta.26 release commit `64a16d5`. |
 | 1 | [#46: local-model failures](https://github.com/Vietnoirien/TorrentLinker/issues/46) | All 16 historical scenarios passed twice with saved temperature 0 on Radiance; exact-removal approval enforced. Final candidate validation and documented model limitations remain. |
-| 2 | [#47: interruption and recovery](https://github.com/Vietnoirien/TorrentLinker/issues/47) | First audit and shutdown fix complete; see the [evidence matrix](../research/recovery-audit.md). Owner reconciliation, interrupted Upload POST, real extension lifecycle and platform checks remain. |
+| 2 | [#47: interruption and recovery](https://github.com/Vietnoirien/TorrentLinker/issues/47) | Shutdown fix, interrupted Upload POST and desktop/browser Upload reset checks pass; see the [evidence matrix](../research/recovery-audit.md). Download reconciliation, interrupted Upload wording, real extension lifecycle and platform checks remain. |
 | 3 | [#48: desktop/web walkthrough](https://github.com/Vietnoirien/TorrentLinker/issues/48) | Paired screenshots, reproducible usability findings and verified fixes. |
 | 4 | [#49: support and performance](https://github.com/Vietnoirien/TorrentLinker/issues/49) | Recorded baselines and useful, credential-redacted diagnostic exports. |
 | 5 | [#50: upgrades and release readiness](https://github.com/Vietnoirien/TorrentLinker/issues/50) | Candidate upgrades, backup/restore, platform/support matrix and real-user observation. |

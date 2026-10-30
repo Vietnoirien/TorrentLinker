@@ -22,7 +22,7 @@ Paths below are under `tests/`. All application operations use fake clients or c
 | --- | --- | --- |
 | Download queue paused during a rate limit or after one send | `test_download_queue.py::test_pause_during_rate_limit_leaves_item_queued_and_resume_sends_once`, `test_pause_after_one_send_leaves_remaining_items_queued` | Remaining entries stay queued; resume does not duplicate the completed send. Browser/desktop walkthrough remains. |
 | Process exits after a Torrent Client accepts a queued download | New `test_download_queue.py::test_process_exit_after_handoff_preserves_uncertainty_and_client_scope` | Child exits with `os._exit` inside the simulated handoff, after recording acceptance. Restart preserves an uncertain, non-retryable entry, its client and folder, another client's queued entry and source bytes. Processing does not resend it. Installed remote-client reconciliation remains. |
-| Upload POST has an uncertain result | `test_upload_queue.py::test_uncertain_send_is_kept_and_does_not_retry_automatically` | Draft and description remain; repeat send is refused. Explicit reset creates a new revision. Abrupt process death during POST and paired UI reconciliation walkthroughs remain. |
+| Upload POST has an uncertain result | `test_upload_queue.py::test_uncertain_send_is_kept_and_does_not_retry_automatically`, new `test_upload_restart.py` | A child exits inside the simulated POST after recording acceptance. Restart marks the job interrupted, preserves the draft and refuses a repeat send. Reset requires owner approval, increments the revision and invalidates prior send approval. Source bytes remain unchanged. Desktop cancellation/confirmation and Chromium recovery pass; installed-platform and real-site reconciliation remain. |
 | Saved Upload Draft and owner approval | `test_upload_queue.py::test_local_draft_survives_restart_and_only_explicit_send_contacts_site`, `test_mcp_automations_queue_locally_and_sending_needs_current_revision_approval` | Saving stays local; sending uses the reviewed revision and owner approval. No real tracker publication was performed. |
 | Running job interrupted; browser logs out | `test_web_jobs.py::test_abrupt_restart_records_interruption_without_replaying_mutation`, `test_job_survives_browser_logout_and_is_visible_after_server_restart` | Abrupt restart marks interruption without replay. Logout does not cancel application-owned work. Installed-server termination remains. |
 | Reseed interrupted before or during Verification | `test_reseed.py::test_verification_started_before_a_restart_is_settled_after_it`, `test_reseed_interrupted_before_its_check_is_undone_without_a_rejection`, `test_setup_timeout_cleans_up_only_after_successful_removal` | Controlled clients verify recovery and safe cleanup. This pass did not repeat real-client integrations or the supported-version matrix. |
@@ -59,7 +59,15 @@ This was a local Linux/offscreen build using Python 3.13.11 and Qt 6.12.0. It is
 
 ## Remaining audit order
 
-1. Exercise owner reconciliation for uncertain download and Upload results through both desktop and browser. Check that warnings and explicit reset/removal cannot be confused with a completed remote operation.
-2. Kill an isolated process during an Upload POST and verify saved revision, uncertainty and approval requirements after restart.
+1. Exercise owner reconciliation for uncertain download results through both desktop and browser. Upload reset cancellation and confirmation now pass in both interfaces with controlled transports.
+2. Improve interrupted Upload status wording. After abrupt exit, the job is interrupted and sending is blocked, but the draft retains `sending` and both interfaces say "Sending to c411" until the owner reconciles it. Preserve protection against duplicate sends while distinguishing an active send from a result that needs checking.
 3. Exercise actual companion-tab disconnect/reconnect during queued work, retaining the no-fallback and no-duplicate checks.
 4. Run the package/recovery scenarios on the agreed Windows, Linux and Docker configurations, including source-file preservation and database/worker cleanup after remote calls.
+
+## Upload recovery continuation
+
+The follow-up to the beta.26 release commit adds an abrupt-process-exit test using mocked HTTP and a private in-memory keyring. The recovery test verifies the saved form and revision, refusal to resend, owner approval for reset, invalidation of stale send approval and a fresh approval requirement. No real c411 upload occurs.
+
+The desktop test covers both `sending` and `uncertain` states. Dismissing the confirmation leaves the record unchanged. Confirming resets the revision, clears review and leaves sending disabled. The Chromium test follows the actual Draft actions menu after the process crash and checks the same cancellation and reset behavior against the temporary server. The initial browser test omitted opening that menu; correcting the test navigation produced a passing run without an application change.
+
+Validation: 14 targeted Upload queue/workspace/restart tests passed; the explicit browser run passed both restart tests. Ruff, formatting and diff checks passed. Browser CI now includes the new recovery file. These follow-up tests are separate from the beta.26 release commit.

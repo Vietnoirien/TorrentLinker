@@ -149,6 +149,53 @@ def test_reopen_selected_draft_after_external_edit(qtbot, tmp_path):
     assert drafts.record["revision"] == 2
 
 
+@pytest.mark.parametrize("state", ["sending", "uncertain"])
+def test_recovery_reset_requires_confirmation_and_revokes_review(
+    qtbot, tmp_path, monkeypatch, state
+):
+    from PySide6.QtWidgets import QMessageBox
+
+    view, indexer, _ = tab(qtbot, tmp_path)
+    entry = model(tmp_path)
+    view.set_entries([entry])
+    view.select(entry.item.path)
+    qtbot.waitUntil(lambda: bool(view.files))
+    view.queue_button.click()
+    drafts = view.local_drafts
+    qtbot.waitUntil(lambda: drafts.record is not None)
+    record = drafts.record
+    drafts.store.claim_local_draft(record["id"], record["revision"])
+    if state == "uncertain":
+        drafts.store.local_draft_outcome(record["id"], state, {"message": "Connection lost"})
+    drafts.record = drafts.store.local_draft(record["id"])
+    drafts.load()
+    drafts.reviewed.setChecked(True)
+    assert drafts.reset_button.isEnabled()
+    assert not drafts.send_button.isEnabled()
+    before = drafts.store.local_draft(record["id"])
+    prompts = []
+
+    def cancel(parent, title, text):
+        prompts.append(text)
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", cancel)
+    drafts.reset_button.trigger()
+    assert "Check c411" in prompts[0]
+    assert "no Draft was created" in prompts[0]
+    assert drafts.store.local_draft(record["id"]) == before
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+    drafts.reset_button.trigger()
+    after = drafts.store.local_draft(record["id"])
+    assert after["status"] == "queued"
+    assert after["revision"] == record["revision"] + 1
+    assert after["form"] == before["form"]
+    assert not drafts.reviewed.isChecked()
+    assert not drafts.send_button.isEnabled()
+    assert not drafts.reset_button.isEnabled()
+    assert indexer.saved == []
+
+
 def test_category_options_stay_disabled_during_save(qtbot, tmp_path):
     from threading import Event
 
