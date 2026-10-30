@@ -34,7 +34,7 @@ function aCardSize(item) {
   return item.presentation_type === "upload_drafts" ? size : size + " · " + (item.seeders ?? "—") + " sources";
 }
 function aUploadSummary(item) {
-  const states = {queued: at("Awaiting review", "À relire"), sending: at("Sending to c411", "Envoi vers c411"),
+  const states = {queued: at("Awaiting review", "À relire"), sending: at("Send started; verify the result on c411", "Envoi lancé ; vérifiez le résultat sur c411"),
     sent: at("Sent to c411", "Envoyé à c411"), uncertain: at("Check c411 before retrying", "Vérifiez c411 avant de réessayer")};
   const status = states[(item.draft_changed ? item.saved_status : item.current_status) || item.saved_status] || at("Saved draft", "Brouillon enregistré");
   let text = `${at("Upload draft", "Brouillon Upload")} · ${at("revision", "révision")} ${item.draft_revision} · ${status}`;

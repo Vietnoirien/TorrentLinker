@@ -351,7 +351,7 @@ class LocalDrafts(QWidget):
     def status_text(self, value):
         return {
             "queued": self.tr("Awaiting review"),
-            "sending": self.tr("Sending to c411"),
+            "sending": self.tr("Send started; verify the result on c411"),
             "sent": self.tr("Sent to c411"),
             "uncertain": self.tr("Check c411 before retrying"),
         }.get(value, value)

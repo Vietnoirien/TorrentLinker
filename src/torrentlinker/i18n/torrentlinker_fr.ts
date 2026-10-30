@@ -3331,8 +3331,8 @@ Désactiver « Ajouter .part aux noms des fichiers incomplets » dans Transmissi
     </message>
     <message>
         <location filename="../gui/local_drafts.py" line="353"/>
-        <source>Sending to c411</source>
-        <translation>Envoi à c411</translation>
+        <source>Send started; verify the result on c411</source>
+        <translation>Envoi lancé ; vérifiez le résultat sur c411</translation>
     </message>
     <message>
         <location filename="../gui/local_drafts.py" line="354"/>
@@ -10056,8 +10056,8 @@ Seeders annoncés par le tracker : {1}</translation>
     </message>
     <message>
         <location filename="../gui/selection_cards.py" line="55"/>
-        <source>Sending to c411</source>
-        <translation>Envoi vers c411</translation>
+        <source>Send started; verify the result on c411</source>
+        <translation>Envoi lancé ; vérifiez le résultat sur c411</translation>
     </message>
     <message>
         <location filename="../gui/selection_cards.py" line="56"/>

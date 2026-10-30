@@ -314,7 +314,7 @@ function uploadDirty() {
   return Boolean(uploadUI.baseline && state.uploadPath && uploadCanonical(uploadForm()) !== uploadUI.baseline);
 }
 function uploadStatus(value) {
-  return {queued: say("Awaiting review", "À relire"), sending: say("Sending to c411", "Envoi à c411"),
+  return {queued: say("Awaiting review", "À relire"), sending: say("Send started; verify the result on c411", "Envoi lancé ; vérifiez le résultat sur c411"),
     uncertain: say("Check c411 before retrying", "Vérifier c411 avant un nouvel essai"),
     sent: say("Sent to c411", "Envoyé à c411")}[value] || value;
 }

@@ -52,7 +52,9 @@ def scores(item):
 def upload_summary(item):
     status = {
         "queued": QCoreApplication.translate("UploadCards", "Awaiting review"),
-        "sending": QCoreApplication.translate("UploadCards", "Sending to c411"),
+        "sending": QCoreApplication.translate(
+            "UploadCards", "Send started; verify the result on c411"
+        ),
         "sent": QCoreApplication.translate("UploadCards", "Sent to c411"),
         "uncertain": QCoreApplication.translate("UploadCards", "Check c411 before retrying"),
     }.get(

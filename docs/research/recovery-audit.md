@@ -59,9 +59,8 @@ This was a local Linux/offscreen build using Python 3.13.11 and Qt 6.12.0. It is
 
 ## Remaining audit order
 
-1. Improve interrupted Upload status wording. After abrupt exit, the job is interrupted and sending is blocked, but the draft retains `sending` and both interfaces say "Sending to c411" until the owner reconciles it. Preserve protection against duplicate sends while distinguishing an active send from a result that needs checking.
-2. Exercise actual companion-tab disconnect/reconnect during queued work, retaining the no-fallback and no-duplicate checks.
-3. Run the package/recovery scenarios on the agreed Windows, Linux and Docker configurations, including source-file preservation and database/worker cleanup after remote calls. Download removal and Upload reset are covered through controlled desktop/browser tests; actual remote-state reconciliation remains.
+1. Exercise actual companion-tab disconnect/reconnect during queued work, retaining the no-fallback and no-duplicate checks.
+2. Run the package/recovery scenarios on the agreed Windows, Linux and Docker configurations, including source-file preservation and database/worker cleanup after remote calls. Download removal and Upload reset are covered through controlled desktop/browser tests; actual remote-state reconciliation remains.
 
 ## Upload recovery continuation
 
@@ -74,3 +73,9 @@ Validation: 14 targeted Upload queue/workspace/restart tests passed; the explici
 ## Download reconciliation continuation
 
 The desktop and Chromium checks now verify that an uncertain download displays "Check Torrent Client before retrying", disables direct retry and start, and allows removal of only the selected local queue record. The desktop test refuses any Torrent Client connection. The browser check verifies that removal creates no background job. Both preserve source bytes. The affected desktop/browser suite passed 11 tests. These additions follow the beta.27 release commit and do not change application behavior.
+
+## Unresolved Upload wording
+
+An abrupt exit preserves the protected `sending` state. That stored value records that submission started, not whether a process is still sending. Desktop/web workspaces and assistant cards now say "Send started; verify the result on c411", with matching French wording. This avoids implying an active send after restart and does not infer that another process has stopped. Send protection, explicit reconciliation and fresh approval requirements remain unchanged.
+
+The affected native, Chromium, card and translation suite passed 26 tests. This wording change follows the beta.27 release commit.

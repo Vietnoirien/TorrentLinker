@@ -254,7 +254,9 @@ def test_browser_reconciles_interrupted_upload_only_after_confirmation(tmp_path,
             expect(page.locator("#workspace")).to_be_visible()
             page.evaluate("async () => { await navigate('upload'); }")
             page.locator("#upload-local-queue button").click()
-            expect(page.locator("#upload-save-state")).to_contain_text("Sending to c411")
+            expect(page.locator("#upload-save-state")).to_contain_text(
+                "Send started; verify the result on c411"
+            )
             page.locator("[data-upload-section=review]").click()
             expect(page.locator("#upload-send-local")).to_be_disabled()
             expect(page.locator("#upload-reviewed")).to_be_disabled()
