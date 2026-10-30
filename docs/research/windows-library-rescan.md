@@ -18,6 +18,8 @@ The monitor now writes a sample as soon as the threshold is exceeded and again a
 
 The Library scan, timeout, recovery, filesystem and stall-monitor regression set passed 45 tests on Linux. A dedicated Windows CI job runs the same-process rescan, timeout and stall-monitor checks, builds a diagnostic executable, smoke-tests its packaged media/MCP startup and shutdown, and retains the executable as `windows-library-diagnostics`. The packaged smoke test is separate from the ten-scan source test.
 
+The [Windows job for `47e267b`](https://github.com/Vietnoirien/TorrentLinker/actions/runs/41121968333/job/124289977818) passed all 21 checks, including ten rescans in one source process, and the packaged smoke test. Its [diagnostic executable artifact](https://github.com/Vietnoirien/TorrentLinker/actions/runs/41121968333/artifacts/13008374611) contains the immediate stack logging. This is CI evidence on a clean runner, not a reproduction on the affected machine or a packaged ten-rescan walkthrough.
+
 ## Capture on the affected Windows machine
 
 Use a build containing this diagnostic fix. Close other TorrentLinker instances, open PowerShell in the folder containing the executable, and launch:

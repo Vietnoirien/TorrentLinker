@@ -32,6 +32,8 @@ This does not attempt to prove every natural-language claim made after arbitrary
 
 This fix follows the published beta.27 artifact.
 
+Full CI subsequently exposed eight assistant regressions: the history-evidence note was also sent with an empty history, pushing fresh chats over the fallback context budget. Early compaction replaced raw tool receipts with archived memory, which the scripted approval/recovery providers did not understand. The note is now added only when previous replies exist. Fresh chats avoid the unnecessary context cost, while follow-ups retain the recorded execution ledger. The original failures reproduced locally; the affected folder, tool-error, guard and context suite then passed all 53 tests. A ninth CI failure was a stale assertion expecting a reserve error when the disk was actually full; it now checks the insufficient-space explanation while retaining the no-client-add assertion.
+
 ## Optional reserve for direct downloads
 
 The next report contained a real `send_selection` receipt refusing the download because of the free-space reserve. The owner requested an opt-in reserve and explicitly approved disabling it for the current Media discussion. Its saved grant kept 10 GiB free; the Plan margin was already zero.

@@ -236,7 +236,7 @@ def test_last_moment_download_checks_prevent_client_add(
     else:
         assert row.status in {"failed", "refused"}
         reason = {
-            "space": "reserve",
+            "space": "insufficient disk space",
             "size": "size or identity",
             "identity": "does not match",
             "revoked": "revoked",

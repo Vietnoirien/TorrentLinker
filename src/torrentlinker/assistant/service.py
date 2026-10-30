@@ -961,7 +961,8 @@ class Assistant:
                 )
 
             messages.append(list_state_message())
-            messages.append(self.models.user(provider, execution_evidence(previous[-8:])))
+            if previous:
+                messages.append(self.models.user(provider, execution_evidence(previous[-8:])))
             media_context = self.agent.media.actor_context(actor)
             if media_context:
                 messages.append(
