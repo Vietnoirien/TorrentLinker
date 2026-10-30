@@ -910,11 +910,13 @@ class SearchTab(QWidget):
 
     def _refresh_queue_estimates(self) -> None:
         # Use each saved origin, before any search and after changing Indexers.
+        # Estimate the displayed snapshot: a background send can remove entries
+        # from the Store before the next queue poll rebuilds the table.
         self._refresh_table_estimates(
             self.queue,
             {
                 entry.key: (entry.candidate, urlsplit(entry.indexer_url).hostname == "c411.org")
-                for entry in entries(self.store)
+                for entry in self._queue_snapshot
             },
             2,
             3,

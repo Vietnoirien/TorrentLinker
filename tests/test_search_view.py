@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+import pytest
 from PySide6.QtCore import Qt
 
 from tests.fake_qbit import FakeQbit
@@ -311,6 +312,64 @@ def test_queue_estimates_refresh_with_profile_and_current_seeding_after_sorting(
     assert view.selected_keys() == selected
     view.refresh_queue()
     assert view.selected_keys() == selected
+
+
+@pytest.mark.parametrize("during_refresh", [False, True])
+def test_queue_estimates_keep_displayed_snapshot_when_background_send_removes_entry(
+    qtbot, tmp_path, monkeypatch, during_refresh
+):
+    from types import SimpleNamespace
+
+    from torrentlinker.gui import search_view
+    from torrentlinker.seeding import Seeding, SeedingRow
+    from torrentlinker.zen import ZenDay, ZenTorrent
+
+    store = Store(tmp_path / "background-send.db")
+    indexer = Indexer("https://c411.org/api", "key")
+    sent = Candidate("Sent film", 10**9, "sent", 5, "a" * 40, categories=(2030,))
+    kept = Candidate("Keep queued", 2 * 10**9, "kept", 10, "b" * 40, categories=(2030,))
+    for candidate in (sent, kept):
+        enqueue(store, indexer, candidate, tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    monkeypatch.setattr(view, "isVisible", lambda: True)
+    view.queue.sortItems(0, Qt.SortOrder.AscendingOrder)
+    view.queue.selectRow(0)
+    selected = view.selected_keys()
+    sent_key = next(e.key for e in entries(store) if e.candidate == sent)
+    if during_refresh:
+        original = search_view.entries
+
+        def read_then_send(current_store):
+            snapshot = original(current_store)
+            # Successful sends remove the row after the UI's database read.
+            store.remove_downloads([sent_key])
+            return snapshot
+
+        monkeypatch.setattr(search_view, "entries", read_then_send)
+        view.refresh_queue()
+    else:
+        store.remove_downloads([sent_key])
+    view.set_seeding(
+        Seeding(
+            [SeedingRow(SimpleNamespace(hash=sent.infohash), 0.89)],
+            ZenDay(),
+            [ZenTorrent(sent.size, 6, category=2030)],
+        )
+    )
+    assert view.queue.rowCount() == 2
+    assert view.queue.item(1, 0).text() == "Sent film"
+    assert view.queue.item(1, 2).text() == "≈ 0.89"
+    assert view.selected_keys() == selected
+    assert view.queue.isSortingEnabled()
+    assert not view.queue.signalsBlocked()
+    # The normal queue poll reconciles the displayed rows with the next snapshot.
+    view._poll_queue()
+    assert view.queue.rowCount() == 1
+    assert view.queue.item(0, 0).text() == "Keep queued"
+    assert view.selected_keys() == selected
+    assert view.view_queue.text() == "Download queue (1)"
 
 
 def test_queue_estimates_use_saved_origin_when_current_indexer_changes(qtbot, tmp_path):

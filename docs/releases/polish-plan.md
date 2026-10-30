@@ -47,6 +47,8 @@ The assistant send report was subsequently reproduced on the restarted app and i
 
 The subsequent real send receipt hit the configured 10 GiB reserve. At the owner's request, extra reserve is now opt-in for new discussions and agent connections, and direct sends no longer inherit the Plan percentage. Existing reserves remain owner-controlled. Checks for selected and pending downloads still apply, with separate errors for insufficient space and optional reserve. See the same follow-up for the regression evidence.
 
+The next download succeeded, then exposed a repeating native queue-display `KeyError`. Successful sends remove their entries while the table can still display its previous snapshot. Seeding refreshes incorrectly looked up those displayed keys in a newer database read. Queue estimates now use the same snapshot as the displayed rows; the normal poll reconciles removals. Two deterministic regressions reproduce removal before a seeding refresh and during a table rebuild. Both failed at the reported lookup before the fix; all 67 related native search and download-queue tests now pass, preserving sorting and selection.
+
 ## First stabilization pass, 2026-10-30
 
 - Browser acceptance reproduced all three beta.25 failures. The two Upload cases used an obsolete partial page; they now reload the production workspace and open the saved-draft preview from Description. Guided setup explicitly checks Profile, then selects Seeding and Plan. Both files pass together: 12 tests. Screenshot capture also exposed a CSP-incompatible expression in a test wait; function-form predicates preserve the existing image-loaded assertion without relaxing CSP.
