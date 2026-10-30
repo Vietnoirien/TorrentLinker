@@ -197,7 +197,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#guide-select").select_option("guide/en/torrents.md")
             expect(page.locator("#guide-content h1")).to_have_text("Manage torrents")
             page.wait_for_function(
-                "Array.from(document.querySelectorAll('#guide-content img'))"
+                "() => Array.from(document.querySelectorAll('#guide-content img'))"
                 ".every(i => i.complete && i.naturalWidth > 0)"
             )
             if screenshot:
@@ -210,7 +210,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.locator("#guide-select").select_option("guide/fr/torrents.md")
                 expect(page.locator("#guide-content h1")).to_have_text("Gérer les torrents")
                 page.wait_for_function(
-                    "Array.from(document.querySelectorAll('#guide-content img'))"
+                    "() => Array.from(document.querySelectorAll('#guide-content img'))"
                     ".every(i => i.complete && i.naturalWidth > 0)"
                 )
                 page.screenshot(path=str(Path(screenshot) / "documentation-fr.png"))
@@ -245,6 +245,8 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#torrent-table")).to_contain_text("Remote Deluge")
             page.locator("#target-client").select_option("default")
             page.locator("[data-view=zen]").click()
+            expect(page.locator("#zen-profile-panel")).to_be_visible()
+            page.locator("#zen-seeding-tab").click()
             expect(page.locator("#zen-seeding-panel")).to_be_visible()
             page.locator("#zen-plan-tab").click()
             expect(page.locator("#plan-clients")).to_contain_text("Remote Deluge")

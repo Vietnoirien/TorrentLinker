@@ -421,6 +421,7 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
                                 "status": "queued",
                                 "form": {"title": "The Lunar Archive"},
                                 "path": "/saved/release.epub",
+                                "files": [{"path": "release.epub", "size": 1234}],
                             }
                         ]
                     ),
@@ -432,12 +433,20 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
                     route.fulfill(json=dict(saved["items"][0], description="Saved description"))
 
                 page.route("**/api/upload/queue/demo-draft/preview?**", preview_response)
+                # Reload the production workspace after the isolated chat-card view.
+                # The queue and selected-draft actions now share the full editor.
+                page.reload()
+                expect(page.locator("#workspace")).to_be_visible()
                 page.evaluate("""async () => {
-                    document.querySelector('main').replaceChildren();
-                    const queue = element('div'); queue.id = 'upload-local-queue';
-                    document.querySelector('main').append(queue);
-                    state.clientId = 'default'; await loadUploadQueue();
+                    state.clientId = 'default';
+                    await navigate('upload');
+                    state.uploadDraft = uploadUI.rows[0];
+                    $('upload-editor').hidden = false;
+                    $('upload-help').hidden = true;
+                    uploadEditorState();
                 }""")
+                expect(page.locator("#upload-local-queue")).to_contain_text("The Lunar Archive")
+                page.locator("[data-upload-section=description]").click()
                 page.get_by_role("button", name="Preview saved draft", exact=True).click()
                 expect(page.locator("dialog h2")).to_have_text("Upload draft review")
                 expect(page.locator("dialog .selection-description")).to_have_text(

@@ -62,6 +62,36 @@ def select(browser, token, **criteria):
     return submitted["job_id"]
 
 
+def test_unknown_selection_arguments_fail_before_default_scope_is_used(tmp_path):
+    client = SelectionClient([book(1, 3000), book(9, 100)])
+    with TestClient(
+        create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+    ) as browser:
+        token = connect(browser)
+        tools = rpc(browser, token, "tools/list").json()["result"]["tools"]
+        schema = next(t["inputSchema"] for t in tools if t["name"] == "select_torrents")
+        assert schema["additionalProperties"] is False
+        before = browser.get("/api/agents").json()["proposals"]
+        result = call(
+            browser,
+            token,
+            "select_torrents",
+            {
+                "request_id": "wrong-field",
+                "client_id": "default",
+                "selection": {"count": 1, "ranking": "largest_size"},
+            },
+        )
+        assert result.get("isError"), result
+        assert "selection" in result["content"][0]["text"]
+        assert browser.get("/api/agents").json()["proposals"] == before
+        assert client.paused == []
+        identifier = select(browser, token, count=1, ranking="largest_size")
+        saved = finished(browser, identifier)["result"]
+        assert saved["selected_count"] == 1
+        assert saved["rows"][0]["hash"] == "0" * 39 + "1"
+
+
 def test_mcp_selects_exactly_1000_across_the_entire_client_not_one_page(tmp_path):
     client = SelectionClient(
         [book(i, i * 1024**2) for i in range(1, 1006)]

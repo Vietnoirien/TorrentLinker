@@ -3,6 +3,7 @@
 import json
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.test_assistant import generation_transport, login, wait_run
@@ -10,7 +11,15 @@ from torrentlinker.store import CatalogueRow
 from torrentlinker.web.app import create_app
 
 
-def test_mcp_validation_failure_is_failed_then_model_can_correct_arguments(tmp_path):
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"criteria": {"count": 0}},
+        {"selection": {"count": 1}},
+        {"criteria": {"count": 1}, "selection": {"count": 1}},
+    ],
+)
+def test_mcp_validation_failure_is_failed_then_model_can_correct_arguments(tmp_path, invalid):
     turns = 0
     errors = []
 
@@ -39,7 +48,7 @@ def test_mcp_validation_failure_is_failed_then_model_can_correct_arguments(tmp_p
                                 {
                                     "request_id": f"attempt-{turns}",
                                     "client_id": "default",
-                                    "criteria": {"count": 0 if turns == 1 else 1},
+                                    **(invalid if turns == 1 else {"criteria": {"count": 1}}),
                                 }
                             ),
                         },

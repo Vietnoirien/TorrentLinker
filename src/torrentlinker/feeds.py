@@ -93,7 +93,15 @@ class Subscription(BaseModel):
     id: str = ""
     name: str = Field(min_length=1, max_length=100)
     query: str = Field(default="", max_length=500)
-    categories: list[int] = Field(default_factory=list, max_length=100)
+    categories: list[int] = Field(
+        default_factory=list,
+        max_length=100,
+        description=(
+            "Torznab category IDs. For c411: films 2030, TV 5000, music 3010, "
+            "books/ebooks/EPUB 7020, all 3D models 8010. "
+            "3010 is music, not books. Do not use native Search or Upload category IDs."
+        ),
+    )
     paused: bool = False
     interval_minutes: int = Field(default=30, ge=15, le=1440)
     mode: Literal["review_only", "app_queue", "automatic_download"] = "review_only"

@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import CallToolResult, ImageContent, ToolAnnotations
 from pydantic import Field
@@ -31,6 +32,29 @@ from torrentlinker.web.uploads import UploadForm
 ACTOR: ContextVar[str] = ContextVar("mcp_actor")
 Page = Annotated[int, Field(ge=0)]
 Limit = Annotated[int, Field(ge=1, le=100)]
+
+
+class StrictMCPServer(MCPServer):
+    """Reject misspelled arguments before the SDK can discard them and apply defaults."""
+
+    async def list_tools(self):
+        tools = await super().list_tools()
+        for tool in tools:
+            tool.input_schema = {**tool.input_schema, "additionalProperties": False}
+        return tools
+
+    async def call_tool(self, name, arguments, context=None):
+        for tool in await self.list_tools():
+            if tool.name != name:
+                continue
+            unknown = set(arguments) - set(tool.input_schema.get("properties", {}))
+            if unknown:
+                raise ToolError(
+                    f"Unknown arguments for {name}: {', '.join(sorted(unknown))}. "
+                    "Use the declared tool parameters. No operation was started."
+                )
+            break
+        return await super().call_tool(name, arguments, context)
 
 
 class Authenticate:
@@ -59,7 +83,7 @@ class Authenticate:
 
 
 def make_server(service: AgentService):
-    mcp = MCPServer(
+    mcp = StrictMCPServer(
         "TorrentLinker",
         instructions=(
             "Call overview first. Use explicit client IDs and stable request IDs. "
@@ -891,6 +915,9 @@ def make_server(service: AgentService):
     ) -> dict[str, object]:
         """Edit exact saved queue rows under the queue permission, without sending downloads.
 
+        Applies to EVERY row in selection_id. For named entries, first select_queue with
+        criteria.query for each title and check the returned titles/count. Never pass an
+        earlier whole-queue selection when the user requested only a named subset.
         Remove only definitively unsent entries. Retry only known pre-send failures after
         destination validation. Uncertain or interrupted sends require owner investigation.
         Priority is persistent; larger values send first, then insertion order.
