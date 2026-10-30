@@ -1487,6 +1487,17 @@ class MainWindow(QMainWindow):
             assert isinstance(c.source, CatalogueRow)
             return indexer.fetch_torrent(candidate(indexer, c.source), retry=False)
 
+        def ahead(candidates: list[PlanCandidate]) -> None:
+            if not hasattr(indexer, "prefetch"):  # test stubs have none
+                return
+            indexer.prefetch(
+                [
+                    candidate(indexer, c.source)
+                    for c in candidates
+                    if isinstance(c.source, CatalogueRow)
+                ]
+            )
+
         store = self.store
         from torrentlinker.client_profiles import Connections
 
@@ -1497,17 +1508,24 @@ class MainWindow(QMainWindow):
             store.mark_plan_item(c.infohash, outcome, reason)
 
         def work(stop: threading.Event, progress: Callable[[SendProgress], None]) -> SendReport:
-            with indexer.background():  # the user's own searches and Reseeds go first
-                return send_plan(
-                    plan,
-                    qbit,
-                    fetch,
-                    reseeder,
-                    on_progress=progress,
-                    on_outcome=record,
-                    stop=stop,
-                    client_for=lambda identifier: connections.client(settings_snapshot, identifier),
-                )
+            try:
+                with indexer.background():  # the user's own searches and Reseeds go first
+                    return send_plan(
+                        plan,
+                        qbit,
+                        fetch,
+                        reseeder,
+                        on_progress=progress,
+                        on_outcome=record,
+                        stop=stop,
+                        client_for=lambda identifier: connections.client(
+                            settings_snapshot, identifier
+                        ),
+                        ahead=ahead,
+                    )
+            finally:
+                if hasattr(indexer, "drop_prefetch"):
+                    indexer.drop_prefetch()
 
         runner = SendRunner(work)
         runner.signals.progress.connect(self._send_progress)

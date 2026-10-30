@@ -84,3 +84,35 @@ def test_rate_limit_carries_the_wait_c411_asked_for():
     with pytest.raises(RateLimited) as info:
         indexer(Session(result=SessionFetchError("wait", 429, 120)), []).fetch_torrent(candidate())
     assert info.value.retry_after == 120
+
+
+def test_prefetch_asks_for_a_batch_at_once_and_fetch_takes_each_result():
+    import threading
+
+    gate = threading.Barrier(3, timeout=5)
+    asked = []
+
+    class Slow(Session):
+        def fetch_descriptor(self, infohash):
+            asked.append(infohash)
+            gate.wait()  # only passes when three requests are in flight together
+            return infohash.encode()
+
+    calls, session = [], Slow()
+    ix = indexer(session, calls)
+    hashes = [c * 40 for c in "abc"]
+    batch = [
+        Candidate("x", 1, f"https://c411.org/api?t=get&id={h}&apikey=key", infohash=h)
+        for h in hashes
+    ]
+    ix.prefetch(batch)
+    assert [ix.fetch_torrent(c) for c in batch] == [h.encode() for h in hashes]
+    assert sorted(asked) == sorted(hashes) and calls == []
+    ix.drop_prefetch()
+
+
+def test_prefetch_does_nothing_when_session_downloads_are_off():
+    calls, session = [], Session(enabled=False)
+    ix = indexer(session, calls)
+    ix.prefetch([candidate()])
+    assert session.asked == [] and ix._ahead == {}

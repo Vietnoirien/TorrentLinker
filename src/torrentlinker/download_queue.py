@@ -138,7 +138,30 @@ def run_queue(
             raise ValueError("The send order must explicitly include every selected queue entry.")
         pending.sort(key=lambda entry: positions[entry.key])
     wait = wait or stop.wait
-    for entry in pending:
+
+    def ahead(start: int) -> None:
+        # With session downloads on, the next torrents are already on their way.
+        if not hasattr(indexer, "prefetch"):  # test stubs have none
+            return
+        indexer.prefetch(
+            [
+                replace(e.candidate, download_url=indexer.unredact(e.candidate.download_url))
+                for e in pending[start : start + 100]
+            ]
+        )
+
+    try:
+        return _send_pending(
+            store, indexer, client, categories, stop, progress, wait, pending, report, ahead
+        )
+    finally:
+        if hasattr(indexer, "drop_prefetch"):
+            indexer.drop_prefetch()
+
+
+def _send_pending(store, indexer, client, categories, stop, progress, wait, pending, report, ahead):
+    for position, entry in enumerate(pending):
+        ahead(position)
         if stop.is_set():
             report.stopped = True
             break

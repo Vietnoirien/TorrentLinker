@@ -113,6 +113,7 @@ def send_plan(
     wait: Callable[[float], bool] | None = None,
     client_for: Callable[[str], Qbit] | None = None,
     now: Callable[[], float] = time.time,
+    ahead: Callable[[list[PlanCandidate]], None] | None = None,
 ) -> SendReport:
     """Send every Plan item; one failing never stops the others.
 
@@ -153,7 +154,16 @@ def send_plan(
                     raise _Stopped from e
                 progress(c.title)
 
-    for item in plan.items:
+    for position, item in enumerate(plan.items):
+        if ahead is not None:
+            # The next torrents may already be on their way (session downloads).
+            ahead(
+                [
+                    i.candidate
+                    for i in plan.items[position : position + 100]
+                    if not i.candidate.reseed
+                ]
+            )
         c = item.candidate
         if stop.is_set():
             report.stopped = True

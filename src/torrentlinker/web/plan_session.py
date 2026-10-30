@@ -207,6 +207,17 @@ class PlanSession:
                 }
             )
 
+        def ahead(candidates: list[PlanCandidate]) -> None:
+            if not hasattr(indexer, "prefetch"):  # test stubs have none
+                return
+            indexer.prefetch(
+                [
+                    candidate(indexer, c.source)
+                    for c in candidates
+                    if isinstance(c.source, CatalogueRow)
+                ]
+            )
+
         try:
             with indexer.background():
                 report = send_plan(
@@ -218,6 +229,7 @@ class PlanSession:
                     on_outcome=record,
                     stop=stop,
                     client_for=lambda key: clients[key or self.setup.settings.active_client_id],
+                    ahead=ahead,
                 )
             result = asdict(report)
             result["failed"] = [
@@ -228,6 +240,8 @@ class PlanSession:
             ]
             return result
         finally:
+            if hasattr(indexer, "drop_prefetch"):
+                indexer.drop_prefetch()
             self.setup.store.set_plan_sending(False)
             if self.current is not None:
                 remaining = [i for i in self.current.items if i.candidate.infohash not in handled]

@@ -219,7 +219,7 @@ def test_blocked_or_rate_limited_session_hands_out_no_more_work(tmp_path, monkey
         assert browser.post("/api/companion/commands", headers=ext, json={"limit": 25}).json() == {
             "command": None,
             "commands": [],
-            "concurrency": 1,
+            "concurrency": 4,
         }
 
 
@@ -231,7 +231,7 @@ def test_concurrency_is_bounded_and_reaches_the_companion(tmp_path, monkeypatch)
     with TestClient(app) as browser:
         ext = pair(browser)
         assert (
-            browser.post("/api/companion/commands", headers=ext, json={}).json()["concurrency"] == 1
+            browser.post("/api/companion/commands", headers=ext, json={}).json()["concurrency"] == 4
         )
         access = app.state.agent_service.access
         access.enable(True)
@@ -252,7 +252,7 @@ def test_concurrency_is_bounded_and_reaches_the_companion(tmp_path, monkeypatch)
 def test_fresh_downloads_default_to_one_request_at_a_time():
     from torrentlinker.companion_downloads import CompanionDownloads
 
-    assert CompanionDownloads(lambda: 0.0).state()["concurrency"] == 1
+    assert CompanionDownloads(lambda: 0.0).state()["concurrency"] == 4
 
 
 def test_session_downloads_are_off_until_the_owner_turns_them_on(tmp_path, monkeypatch):

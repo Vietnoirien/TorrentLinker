@@ -8,6 +8,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -70,6 +71,8 @@ class TorrentUnavailable(Exception):
         )
 
 
+PREFETCH_THREADS = 16  # session requests in flight; the browser runs them in batches
+PREFETCH_AHEAD = 100  # torrents asked for ahead of the one being sent
 MAX_KEYS = 5  # c411's limit per account
 # A request the user waits for gives up, rather than wait longer than this for c411.
 FOREGROUND_PATIENCE = 30.0  # seconds
@@ -235,6 +238,9 @@ class Indexer:
         self._cache = cache
         self.extra_keys = tuple(extra_keys)
         self.session: Any = None  # a ProfileWorkspace; set by the app, never persisted
+        self._pool: ThreadPoolExecutor | None = None
+        self._ahead: dict[str, Future[bytes]] = {}
+        self._ahead_lock = threading.Lock()
         keys = [k for k in dict.fromkeys([api_key, *extra_keys]) if k][:MAX_KEYS] or [api_key]
         # Per key, two queues: c411 limits searches and .torrent downloads separately.
         self.slots = [
@@ -304,7 +310,9 @@ class Indexer:
         if (data := self.cached_torrent(candidate)) is not None:
             return data
         if self.session is not None and self.session.session_downloads:
-            data = self._session_torrent(candidate)
+            with self._ahead_lock:
+                ahead = self._ahead.pop(self._torrent_key(candidate), None)
+            data = ahead.result() if ahead is not None else self._session_torrent(candidate)
             if self._cache:
                 self._cache.cache_torrent(self._torrent_key(candidate), data)
             return data
@@ -320,6 +328,27 @@ class Indexer:
         if self._cache:
             self._cache.cache_torrent(self._torrent_key(candidate), data)
         return data
+
+    def prefetch(self, candidates: Sequence[Candidate]) -> None:
+        """Ask the session for these .torrent files now, so a batch is not fetched one at a
+        time. `fetch_torrent` later takes each result; with session downloads off this does
+        nothing. Call again as the batch advances to keep the window full, and
+        `drop_prefetch` when it ends."""
+        if self.session is None or not self.session.session_downloads:
+            return
+        with self._ahead_lock:
+            if self._pool is None:
+                self._pool = ThreadPoolExecutor(PREFETCH_THREADS, "session-torrents")
+            for candidate in candidates[:PREFETCH_AHEAD]:
+                key = self._torrent_key(candidate)
+                if key not in self._ahead and self.cached_torrent(candidate) is None:
+                    self._ahead[key] = self._pool.submit(self._session_torrent, candidate)
+
+    def drop_prefetch(self) -> None:
+        with self._ahead_lock:
+            for future in self._ahead.values():
+                future.cancel()
+            self._ahead.clear()
 
     def _session_torrent(self, candidate: Candidate) -> bytes:
         """Through the owner's signed-in browser only; a refusal never falls back to the key."""
