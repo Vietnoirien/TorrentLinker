@@ -72,7 +72,7 @@ const french = {
   agentPropose: "Propositions uniquement", agentExecute: "Exécuter les actions autorisées",
   agentPermissions: "Actions automatiques", agentControls: "Pause, vérification et reprise des torrents complets",
   agentUploads: "Brouillons d’upload et mise en seed", agentDailyGiB: "Budget quotidien (Gio)",
-  agentDailyCount: "Torrents par jour", agentReserve: "Espace à conserver (Gio)",
+  agentDailyCount: "Torrents par jour", agentReserve: "Espace à conserver, Gio (0 = désactivé)",
   agentCreate: "Créer la connexion", agentConnections: "Connexions", agentProposals: "Propositions et tâches",
   agentGoals: "Objectifs enregistrés", agentHide: "Masquer le jeton",
   agentTokenHelp: "Copiez ce jeton maintenant. Il ne sera affiché qu’une fois. Utilisez-le comme jeton Bearer ou TL_MCP_TOKEN pour le pont stdio. Gardez-le privé.",

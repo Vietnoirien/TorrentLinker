@@ -31,3 +31,13 @@ This does not attempt to prove every natural-language claim made after arbitrary
 - The real user's download was not retried, their permissions were not broadened, and disk-space limits were not changed.
 
 This fix follows the published beta.27 artifact.
+
+## Optional reserve for direct downloads
+
+The next report contained a real `send_selection` receipt refusing the download because of the free-space reserve. The owner requested an opt-in reserve and explicitly approved disabling it for the current Media discussion. Its saved grant kept 10 GiB free; the Plan margin was already zero.
+
+New discussions and agent connections now default to zero extra reserve. Desktop controls label zero as "No extra reserve", and browser controls explain that zero disables it. Existing saved nonzero reserves remain in effect until their owner changes them. The Plan's percentage margin applies to Plan generation, not to direct sends. RSS feeds retain their separately configured reserve.
+
+Preview, approval and the final send guard still account for selected downloads, unfinished client downloads and unresolved send reservations. A zero reserve does not permit a download that exceeds actual available space. Errors distinguish insufficient space from an optional reserve, with directions to change the latter.
+
+The regression first failed for the default 10 GiB reserve and the inherited Plan percentage. Four cases now cover a successful direct send, an explicitly chosen reserve, pending downloads exhausting space, and space disappearing before the client receives the torrent. The related agent, catalogue, native/browser and translation suite passed 71 tests; the focused cases and Plan checks passed 78 tests.

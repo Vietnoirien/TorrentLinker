@@ -92,10 +92,7 @@ def preview(
                     disk = str(disk_of(path))
                     usage = shutil.disk_usage(path)
                     pending = outstanding(service.access, target, disk, reconcile=False)
-                    reserve = max(
-                        grant.reserve_bytes,
-                        int(usage.total * target.setup.settings.free_space_margin),
-                    )
+                    reserve = grant.reserve_bytes
                     observation.update(
                         capacity_bytes=usage.total,
                         free_bytes=usage.free,
@@ -112,7 +109,11 @@ def preview(
             if observation["available_bytes"] is None:
                 blockers.append("destination_unverified")
             elif row["size"] + allocations.get(disk, 0) > observation["available_bytes"]:
-                blockers.append("space_reserve")
+                needed = row["size"] + allocations.get(disk, 0)
+                free_after_pending = observation["free_bytes"] - observation["pending_bytes"]
+                blockers.append(
+                    "insufficient_space" if needed > free_after_pending else "space_reserve"
+                )
             if row["size"] + fit_bytes > bytes_left:
                 blockers.append("daily_bytes")
             if fit_count >= torrents_left:

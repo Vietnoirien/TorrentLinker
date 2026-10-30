@@ -8,6 +8,103 @@ from tests.test_web_jobs import finished
 catalogue_app = test_catalogue_selection.catalogue_app
 
 
+@pytest.mark.parametrize("case", ["default", "explicit-reserve", "pending-space", "space-changed"])
+def test_direct_download_reserve_is_opt_in_but_pending_space_is_required(
+    catalogue_app, tmp_path, monkeypatch, case
+):
+    from collections import namedtuple
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import torf
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import Torrent
+    from torrentlinker.store import CatalogueRow
+    from torrentlinker.torrent_meta import read_torrent
+
+    app, browser, _ = catalogue_app
+    setup = app.state.agent_service.setup
+    # This margin belongs to Plan generation, not a direct, explicitly selected send.
+    setup.settings.free_space_margin = 0.2
+    source = tmp_path / "Selected-film.mkv"
+    source.write_bytes(b"film" * 1024)
+    torrent = torf.Torrent(path=source, trackers=["https://test.invalid/announce"])
+    torrent.generate()
+    data = bytes(torrent.dump())
+    meta = read_torrent(data)
+    client = FakeQbit()
+    client.by_hash["a" * 40] = Torrent(
+        "a" * 40, "book", Path("/downloads/books"), files={"book.epub": 4}
+    )
+    client.by_hash["c" * 40] = Torrent(
+        "c" * 40, "Pending", Path("/downloads/books"), size=1000, progress=0
+    )
+    setup._client = client
+    free = 5000 if case == "pending-space" else 6000
+    usage = namedtuple("usage", "total used free")
+    monkeypatch.setattr(
+        "torrentlinker.agent.budgets.shutil.disk_usage",
+        lambda _: usage(1000000, 1000000 - free, free),
+    )
+
+    def fetch(*args, **kwargs):
+        nonlocal free
+        if case == "space-changed":
+            free = 5000
+        return data
+
+    setup.store.save_catalogue(
+        [
+            CatalogueRow(
+                meta.infohash, "Selected film", 4096, 5, 2030, "https://test.invalid/file", "", 1
+            )
+        ]
+    )
+    setup._indexer = SimpleNamespace(
+        url="https://test.invalid", redact=lambda v: v, unredact=lambda v: v, fetch_torrent=fetch
+    )
+    policy = {"name": "Direct downloads", "clients": ["default"]}
+    if case == "explicit-reserve":
+        policy["reserve_bytes"] = 2000
+    created = browser.post("/api/agents", json=policy).json()
+    token = created["token"]
+    original = selection(browser, token, query="Selected film")
+    approve(
+        browser,
+        tool(browser, token, "enqueue_selection", request_id="queue", selection_id=original),
+    )
+    selected = queue_selection(browser, token)
+    preview = tool(browser, token, "preview_download", selection_id=selected)
+    disk = preview["destinations"][0]
+    assert disk["reserve_bytes"] == (2000 if case == "explicit-reserve" else 0)
+    assert disk["pending_bytes"] == 1000
+    fits = case not in {"explicit-reserve", "pending-space"}
+    assert preview["fit_count"] == int(fits)
+    if not fits:
+        assert preview["rows"][0]["blockers"] == [
+            "space_reserve" if case == "explicit-reserve" else "insufficient_space"
+        ]
+    proposal = tool(browser, token, "send_selection", request_id="send", selection_id=selected)
+    assert proposal["requires_owner_approval"]
+    assert client.downloads == []
+    response = browser.post(f"/api/agents/proposals/{proposal['id']}/approve")
+    if not fits:
+        assert response.status_code == 400
+        assert (
+            "reserve" if case == "explicit-reserve" else "Insufficient disk space"
+        ) in response.text
+    else:
+        assert response.is_success, response.text
+        result = finished(browser, response.json()["job_id"])
+        assert result["status"] == "completed", result
+        if case == "space-changed":
+            queue = browser.get("/api/queue").json()
+            assert queue[0]["status"] == "refused"
+            assert "Insufficient disk space" in str(result)
+    assert client.downloads == ([meta.infohash] if case == "default" else [])
+
+
 def tool(browser, token, name, **arguments):
     result = call(browser, token, name, arguments)
     assert not result.get("isError"), result

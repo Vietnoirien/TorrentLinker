@@ -316,7 +316,7 @@ def test_large_queue_is_allowed_but_actual_send_respects_limits(catalogue_app, m
     )["structuredContent"]
     denied = browser.post(f"/api/agents/proposals/{send['id']}/approve")
     assert denied.status_code == 400
-    assert ("reserve" if limit == "space" else "budget") in denied.text
+    assert ("Insufficient disk space" if limit == "space" else "budget") in denied.text
     assert browser.get("/api/queue").json()[0]["status"] == "queued"
 
 

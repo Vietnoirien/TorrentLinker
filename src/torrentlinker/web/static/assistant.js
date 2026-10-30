@@ -669,7 +669,7 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
   const updateMode = () => { for (const [, el] of permissions) el.disabled = mode.value === "propose"; }; mode.onchange = updateMode; updateMode();
   const bytes = aField(details, at("Downloads per day, GiB", "Téléchargements par jour, Gio"), (existing?.policy.daily_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
   const torrents = aField(details, at("Torrents per day", "Torrents par jour"), existing?.policy.daily_torrents ?? 20, "number");
-  const reserve = aField(details, at("Keep free, GiB", "Conserver libres, Gio"), (existing?.policy.reserve_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
+  const reserve = aField(details, at("Keep free, GiB (0 = off)", "Conserver libres, Gio (0 = désactivé)"), (existing?.policy.reserve_bytes ?? 0) / 1024 ** 3, "number");
   const calls = aField(details, at("Maximum model calls per run", "Appels au modèle par exécution"), existing?.max_calls ?? (scheduled ? 12 : 0), "number");
   const seconds = aField(details, at("Maximum duration, seconds", "Durée maximale, secondes"), existing?.max_seconds ?? (scheduled ? 300 : 0), "number");
   if (!scheduled) details.append(element("p", at("Set calls or duration to 0 for no per-run limit. Stop remains available.", "Indiquez 0 pour ne pas limiter les appels ou la durée. Le bouton Arrêter reste disponible.")));

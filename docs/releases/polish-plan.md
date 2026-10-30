@@ -45,6 +45,8 @@ The local theme-fix AppImage passed the isolated playback/MCP/shutdown smoke che
 
 The assistant send report was subsequently reproduced on the restarted app and in an isolated Radiance replay. The model invented outcomes without invoking tools; the session-download code was not reached. The [execution-evidence follow-up](../research/assistant-execution-evidence.md) records the fix and its limits. New controlled runs request approval for the exact queued film under the unchanged media-only grant.
 
+The subsequent real send receipt hit the configured 10 GiB reserve. At the owner's request, extra reserve is now opt-in for new discussions and agent connections, and direct sends no longer inherit the Plan percentage. Existing reserves remain owner-controlled. Checks for selected and pending downloads still apply, with separate errors for insufficient space and optional reserve. See the same follow-up for the regression evidence.
+
 ## First stabilization pass, 2026-10-30
 
 - Browser acceptance reproduced all three beta.25 failures. The two Upload cases used an obsolete partial page; they now reload the production workspace and open the saved-draft preview from Description. Guided setup explicitly checks Profile, then selects Seeding and Plan. Both files pass together: 12 tests. Screenshot capture also exposed a CSP-incompatible expression in a test wait; function-form predicates preserve the existing image-loaded assertion without relaxing CSP.

@@ -132,10 +132,11 @@ class AssistantEditor(QDialog):
         self.reserve = self.number(
             af,
             self.tr("Keep free, GiB"),
-            policy.get("reserve_bytes", 10 * 1024**3) // 1024**3,
+            policy.get("reserve_bytes", 0) // 1024**3,
             0,
             1000000,
         )
+        self.reserve.setSpecialValueText(self.tr("No extra reserve"))
         self.calls = self.number(
             af,
             self.tr("Model calls per run"),

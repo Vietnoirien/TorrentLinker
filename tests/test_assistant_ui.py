@@ -58,6 +58,7 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkey
         assert len(chats) == 1
         assert chats[0]["name"] == "Help me build a Plan."
         assert chats[0]["policy"]["mode"] == "propose"
+        assert chats[0]["policy"]["reserve_bytes"] == 0
         assert widget.send.isEnabled()
         assert widget.prompt.height() <= 115
         from PySide6.QtWidgets import QFrame, QToolButton

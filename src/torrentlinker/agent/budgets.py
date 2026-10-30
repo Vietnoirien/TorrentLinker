@@ -121,12 +121,7 @@ def reserve(
     disk = str(disk_of(folder))
     pending = outstanding(access, target, disk)
     usage = shutil.disk_usage(folder)
-    reserve_bytes = max(
-        grant.reserve_bytes,
-        int(usage.total * target.setup.settings.free_space_margin),
-    )
-    if usage.free - pending - sum(sizes.values()) < reserve_bytes:
-        raise ValueError("The selected downloads would consume the required free-space reserve.")
+    check_space(usage.free, pending, sum(sizes.values()), grant.reserve_bytes)
     with access.db:
         access.db.execute(
             "INSERT INTO reservations (proposal_id,grant_id,day,bytes,torrents,disk) "
@@ -134,6 +129,17 @@ def reserve(
             (identifier, actor, day, sum(sizes.values()), len(sizes), disk),
         )
     return sizes
+
+
+def check_space(free: int, pending: int, selected: int, reserve: int) -> None:
+    remaining = free - pending - selected
+    if remaining < 0:
+        raise ValueError("Insufficient disk space for the selected and pending downloads.")
+    if remaining < reserve:
+        raise ValueError(
+            "The selected downloads would consume the optional free-space reserve. "
+            "Lower 'Keep free' in this discussion or connection's settings, or set it to 0."
+        )
 
 
 def download_guard(
@@ -158,10 +164,7 @@ def download_guard(
         with access.lock:
             pending = outstanding(access, target, str(disk_of(Path(folder))), identifier)
         usage = shutil.disk_usage(Path(folder))
-        if usage.free - pending - sum(remaining.values()) < max(
-            grant.reserve_bytes, int(usage.total * target.setup.settings.free_space_margin)
-        ):
-            raise ValueError("The free-space reserve is no longer available.")
+        check_space(usage.free, pending, sum(remaining.values()), grant.reserve_bytes)
         remaining.pop(meta.infohash)
 
     return check

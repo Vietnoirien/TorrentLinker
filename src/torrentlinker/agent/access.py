@@ -24,7 +24,7 @@ class Grant(BaseModel):
     )
     daily_bytes: int = Field(default=10 * 1024**3, ge=0)
     daily_torrents: int = Field(default=20, ge=0, le=1000)
-    reserve_bytes: int = Field(default=10 * 1024**3, ge=0)
+    reserve_bytes: int = Field(default=0, ge=0)
 
 
 class Access:

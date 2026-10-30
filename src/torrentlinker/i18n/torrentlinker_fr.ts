@@ -94,6 +94,10 @@
         <translation>Espace à préserver (Gio)</translation>
     </message>
     <message>
+        <source>No extra reserve</source>
+        <translation>Aucune réserve supplémentaire</translation>
+    </message>
+    <message>
         <location filename="../gui/agent_access.py" line="130"/>
         <source>Create connection</source>
         <translation>Créer la connexion</translation>
@@ -520,6 +524,10 @@
         <location filename="../gui/assistant.py" line="134"/>
         <source>Keep free, GiB</source>
         <translation>Conserver libres, Gio</translation>
+    </message>
+    <message>
+        <source>No extra reserve</source>
+        <translation>Aucune réserve supplémentaire</translation>
     </message>
     <message>
         <location filename="../gui/assistant.py" line="141"/>

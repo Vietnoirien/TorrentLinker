@@ -121,12 +121,13 @@ class AgentAccess(QWidget):
         for field, maximum, value in (
             (self.budget, 100000, 10),
             (self.count, 1000, 20),
-            (self.reserve, 100000, 10),
+            (self.reserve, 100000, 0),
         ):
             field.setRange(0, maximum)
             field.setValue(value)
         form.addRow(self.tr("Daily download budget (GiB)"), self.budget)
         form.addRow(self.tr("Torrents per day"), self.count)
+        self.reserve.setSpecialValueText(self.tr("No extra reserve"))
         form.addRow(self.tr("Keep free (GiB)"), self.reserve)
         button = QPushButton(self.tr("Create connection"))
         set_role(button, "primary")
