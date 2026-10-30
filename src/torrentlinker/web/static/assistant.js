@@ -74,6 +74,7 @@ function aMoveConversation(current, conversations) {
 }
 function aField(form, label, value = "", type = "text", options = null) {
   const wrapper = element("label", label), input = element(options ? "select" : type === "textarea" ? "textarea" : "input");
+  input.setAttribute("aria-label", label);
   if (options) for (const [id, name] of options) { const o = element("option", name); o.value = id; input.append(o); }
   else if (type !== "textarea") input.type = type;
   if (type === "checkbox") input.checked = !!value; else input.value = value;
@@ -567,11 +568,21 @@ function aProvider(existing = null) {
   const contextAuto = aField(form, at("Detect context automatically", "Détecter automatiquement le contexte"), existing?.context_auto ?? true, "checkbox");
   const contextWindow = aField(form, at("Context window (tokens)", "Fenêtre de contexte (tokens)"), existing?.context_window ?? 32768, "number");
   contextWindow.min = 512; contextWindow.max = 2000000;
+  const serverSampling = aField(form, at("Use server sampling defaults", "Utiliser les paramètres d’échantillonnage du serveur"), existing?.temperature == null, "checkbox");
+  const temperature = aField(form, at("Temperature (0 = least variation)", "Température (0 = variation minimale)"), existing?.temperature ?? 0, "number");
+  temperature.min = 0; temperature.max = 2; temperature.step = 0.1;
+  const updateSampling = () => {
+    const supported = ["ollama", "lmstudio", "compatible"].includes(kind.value);
+    if (!supported) serverSampling.checked = true;
+    serverSampling.disabled = !supported; temperature.disabled = !supported || serverSampling.checked;
+  };
+  serverSampling.addEventListener("change", updateSampling); kind.addEventListener("change", updateSampling); updateSampling();
+  form.append(element("p", at("Sampling overrides are available for Ollama, LM Studio and compatible endpoints. Lower variation does not guarantee correct answers or actions.", "Les réglages d’échantillonnage sont disponibles pour Ollama, LM Studio et les connexions compatibles. Une variation réduite ne garantit pas des réponses ou des actions correctes."), "muted"));
   const key = aField(form, at("API key", "Clé API"), "", "password"); key.autocomplete = "new-password";
   key.placeholder = at("Leave blank to keep the saved key", "Laisser vide pour conserver la clé");
   form.append(element("p", at("Detection runs before each task. The configured value is a fallback when metadata is unavailable. Disable detection for a manual override.", "La détection s’effectue avant chaque tâche. La valeur configurée sert de repli si les métadonnées sont indisponibles. Désactivez la détection pour utiliser une valeur manuelle."), "muted"));
   const contextStatus = element("p", "", "muted");
-  const contextBody = () => ({name: name.value || "Discovery", kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, ...(key.value ? {api_key: key.value} : {})});
+  const contextBody = () => ({name: name.value || "Discovery", kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, temperature: temperature.disabled ? null : (temperature.value.trim() === "" ? "" : +temperature.value), ...(key.value ? {api_key: key.value} : {})});
   const checkContext = button(at("Check context", "Vérifier le contexte"), async () => {
     const snapshot = JSON.stringify(contextBody());
     checkContext.disabled = true;
@@ -596,8 +607,8 @@ function aProvider(existing = null) {
     form.append(list); model.setAttribute("list", list.id); if (!model.value && models.length) model.value = models[0];
   }));
   aActions(dialog, form, async () => {
-    const saved = await api("setup/assistant/providers" + (existing ? `/${existing.id}` : ""), {name: name.value, kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, ...(key.value ? {api_key: key.value} : {})}, existing ? "PUT" : "POST");
-    if (!existing || existing.kind !== kind.value || existing.url !== url.value || existing.model !== model.value) {
+    const saved = await api("setup/assistant/providers" + (existing ? `/${existing.id}` : ""), {name: name.value, kind: kind.value, url: url.value, model: model.value, context_window: +contextWindow.value, context_auto: contextAuto.checked, temperature: temperature.disabled ? null : (temperature.value.trim() === "" ? "" : +temperature.value), ...(key.value ? {api_key: key.value} : {})}, existing ? "PUT" : "POST");
+    if (!existing || existing.kind !== kind.value || existing.url !== url.value || existing.model !== model.value || (existing.temperature ?? null) !== saved.temperature) {
       await api(`setup/assistant/providers/${saved.id}/test`, {});
     }
   });

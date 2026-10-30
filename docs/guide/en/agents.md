@@ -245,6 +245,12 @@ Revoke a connection to invalidate its token and cancel pending jobs. Disable age
 
 Use `list_items` with `collection: "upload-queue"` and the chosen `client_id`. Each record includes its ID, revision, status, saved form, files and review findings. Use pagination to inspect the queue.
 
+For a synopsis-only edit, call `update_upload_fields` with the draft ID, exact
+revision and top-level `synopsis` argument; omit `fields`. This preserves the image,
+title, NFO and other saved form values. For labelled facts, `fields` uses the stable
+IDs returned by `get_upload_requirements`. Do not put `description`, `synopsis` or
+`description.synopsis` inside that mapping.
+
 Submit these operations through `propose_action`, with a fresh stable `request_id` for each intended change:
 
 - `upload-queue`: save a new local draft using `path` and `upload`. To edit, also include `draft_id` and its current `revision`, with the complete updated form.

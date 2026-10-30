@@ -256,6 +256,13 @@ Révoquez une connexion pour invalider son jeton et annuler ses tâches en atten
 
 Appelez `list_items` avec `collection: "upload-queue"` et le `client_id` choisi. Chaque entrée fournit son identifiant, sa révision, son état, le formulaire enregistré, les fichiers et les résultats des contrôles. La liste est paginée.
 
+Pour modifier uniquement le résumé, appelez `update_upload_fields` avec l'identifiant,
+la révision exacte et l'argument `synopsis` au premier niveau, sans `fields`.
+L'image, le titre, le NFO et les autres valeurs du formulaire sont conservés.
+Pour les données à libellé, `fields` utilise les identifiants stables de
+`get_upload_requirements`. N'y placez pas `description`, `synopsis` ou
+`description.synopsis`.
+
 Soumettez ces opérations via `propose_action`, avec un nouveau `request_id` stable pour chaque modification voulue :
 
 - `upload-queue` : enregistrer un nouveau brouillon local avec `path` et `upload`. Pour modifier une entrée, ajoutez `draft_id` et sa `revision` actuelle, ainsi que le formulaire complet corrigé.

@@ -25,6 +25,13 @@ Les captures ci-dessous utilisent des données fictives.
 
 L'identifiant du modèle reste libre. La liste peut contenir des modèles sans appels d'outils : le test est donc nécessaire. Certains fournisseurs facturent les requêtes, y compris le test.
 
+Pour Ollama, LM Studio et les connexions compatibles, **Utiliser les paramètres
+d’échantillonnage du serveur** est coché au départ. Décochez cette option pour régler
+la **Température (0 = variation minimale)**. Zéro demande la variation minimale,
+sans garantir des réponses ou des actions correctes. Recochez l’option pour revenir
+aux réglages du serveur. Ce changement exige d’arrêter les discussions actives et
+invalide les résultats précédents du test de capacités.
+
 Dans Docker, `localhost` désigne le conteneur TorrentLinker. Utilisez l'adresse accessible depuis ce conteneur pour joindre Ollama, LM Studio ou un autre serveur. Consultez le [guide Web et Docker](web-docker.md) pour les connexions.
 
 Les clés sont conservées dans le coffre de secrets utilisé par TorrentLinker, le trousseau système sur le bureau. Elles ne sont pas retournées par l'API de configuration. Un fournisseur distant reçoit vos messages et les résultats des outils, qui peuvent contenir des noms de torrents et des chemins. Une connexion locale ne bascule jamais automatiquement vers un fournisseur distant.

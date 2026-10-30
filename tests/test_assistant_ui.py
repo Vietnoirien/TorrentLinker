@@ -142,6 +142,9 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             dialog = page.locator(".assistant-dialog")
             dialog.get_by_label("Name", exact=True).fill("Local test")
             dialog.get_by_label("Model ID", exact=True).fill("test")
+            expect(dialog.get_by_label("Use server sampling defaults", exact=True)).to_be_checked()
+            dialog.get_by_label("Use server sampling defaults", exact=True).uncheck()
+            dialog.get_by_label("Temperature (0 = least variation)", exact=True).fill("0")
             expect(dialog.get_by_label("Detect context automatically")).to_be_checked()
             dialog.get_by_role("button", name="Check context", exact=True).click()
             expect(dialog).to_contain_text("262,144 tokens")
@@ -151,6 +154,24 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             expect(dialog).to_contain_text("Manual context: 65,536 tokens")
             dialog.get_by_role("button", name="Save", exact=True).click()
             expect(page.get_by_role("heading", name="Local test")).to_be_visible()
+            assert app.state.assistant.setup()["providers"][0]["temperature"] == 0
+            page.locator("#assistant-connections-body").get_by_role(
+                "button", name="Edit", exact=True
+            ).click()
+            dialog = page.locator(".assistant-dialog")
+            expect(
+                dialog.get_by_label("Use server sampling defaults", exact=True)
+            ).not_to_be_checked()
+            expect(
+                dialog.get_by_label("Temperature (0 = least variation)", exact=True)
+            ).to_have_value("0")
+            page.screenshot(path=str(tmp_path / "sampling-editor-web.png"))
+            dialog.get_by_label("Provider", exact=True).select_option("openai")
+            expect(dialog.get_by_label("Use server sampling defaults", exact=True)).to_be_checked()
+            expect(
+                dialog.get_by_label("Temperature (0 = least variation)", exact=True)
+            ).to_be_disabled()
+            dialog.get_by_role("button", name="Cancel", exact=True).click()
             page.locator("#navigation-toggle").click()
             page.locator('[data-view="assistant"]').click()
             page.locator("#navigation-close").click()
@@ -231,6 +252,7 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
         QApplication,
         QCheckBox,
         QDialogButtonBox,
+        QDoubleSpinBox,
         QLabel,
         QPushButton,
         QSpinBox,
@@ -266,6 +288,14 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
             dialog.grab().save(str(tmp_path / "context-editor.png"))
             automatic.setChecked(False)
             dialog.findChild(QSpinBox).setValue(65536)
+            sampling = next(
+                box
+                for box in dialog.findChildren(QCheckBox)
+                if box.text() == "Use server sampling defaults"
+            )
+            assert sampling.isChecked()
+            sampling.setChecked(False)
+            dialog.findChild(QDoubleSpinBox).setValue(0)
             dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
 
         QTimer.singleShot(0, configure)
@@ -273,6 +303,25 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
         result = browser.get(f"/api/setup/assistant/providers/{saved['id']}/context").json()
         assert result["context_window"] == 65536
         assert result["source"] == "manual"
+        updated = app.state.assistant.setup()["providers"][0]
+        assert updated["temperature"] == 0
+
+        def restore_defaults():
+            dialog = QApplication.activeModalWidget()
+            sampling = next(
+                box
+                for box in dialog.findChildren(QCheckBox)
+                if box.text() == "Use server sampling defaults"
+            )
+            assert not sampling.isChecked()
+            assert dialog.findChild(QDoubleSpinBox).value() == 0
+            sampling.setChecked(True)
+            assert not dialog.findChild(QDoubleSpinBox).isEnabled()
+            dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
+
+        QTimer.singleShot(0, restore_defaults)
+        widget.provider_editor(updated)
+        assert app.state.assistant.setup()["providers"][0]["temperature"] is None
         widget.close()
 
 

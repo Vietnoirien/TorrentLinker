@@ -375,13 +375,16 @@ def make_server(service: AgentService):
         client_id: str,
         draft_id: str,
         revision: int,
-        fields: dict[str, str],
+        fields: dict[str, str] | None = None,
         synopsis: str | None = None,
         field_sources: dict[str, str] | None = None,
     ) -> dict[str, object]:
         """Edit labelled presentation fields in one exact Local Draft revision.
 
-        Use stable IDs from get_upload_requirements. Keeps unrelated form fields and
+        For presentation prose, pass the top-level synopsis argument and omit fields.
+        Never put description, synopsis or description.synopsis inside fields.
+        For labelled fields, use stable IDs from get_upload_requirements.
+        Keeps unrelated form fields and
         original release NFOs. Generated NFO fields follow the same edits. Saving may
         remain incomplete, and always invalidates prior send approvals.
         """
@@ -389,6 +392,13 @@ def make_server(service: AgentService):
 
         from torrentlinker.upload_presentation import update_fields
 
+        fields = fields or {}
+        if set(fields) & {"description", "synopsis", "description.synopsis"}:
+            raise ValueError(
+                "Use the top-level synopsis argument for presentation prose and omit fields. "
+                "The fields mapping accepts only labelled IDs from get_upload_requirements. "
+                "This request changed nothing."
+            )
         target = service.target(ACTOR.get(), client_id)
         record = target.setup.store.local_draft(draft_id)
         if record["revision"] != revision:

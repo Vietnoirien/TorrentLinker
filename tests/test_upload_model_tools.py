@@ -176,3 +176,86 @@ def test_mcp_renders_all_parts_then_saves_and_edits_private_review(tmp_path):
         assert evidence["fields"]["format"]["extracted_value"] == "obj"
         assert saved_conflict["review"]["presentation"]["local_review_ready"] is False
         assert all(path.read_text() == OBJ for path in pack.glob("*.obj"))
+
+
+def test_synopsis_only_mcp_edit_preserves_every_other_form_field(tmp_path):
+    from tests.test_agent_access import call
+
+    media = tmp_path / "media"
+    media.mkdir()
+    path = media / "Object.stl"
+    path.write_text("solid model\nendsolid model\n")
+    app = create_app(
+        tmp_path / "config",
+        password="test-password-long",
+        roots=(media,),
+        connector=lambda *args: UploadClient(),
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        browser.post(
+            "/api/setup/client", json={"client": "qbittorrent", "host": "https://box.example"}
+        )
+        browser.post(
+            "/api/setup/folder",
+            json={"local": str(media), "client_path": "/models", "kind": "3d-model"},
+        )
+        scan = browser.post("/api/jobs", json={"kind": "scan"}).json()
+        assert finished(browser, scan["id"])["status"] == "completed"
+        queued = browser.post(
+            "/api/jobs",
+            json={
+                "kind": "upload-queue",
+                "path": str(path),
+                "upload": {**complete_form(10, 51), "image": "", "nfo_origin": "original"},
+            },
+        ).json()
+        saved = finished(browser, queued["id"])
+        assert saved["status"] == "completed", saved
+        draft = saved["result"]
+        grant = browser.post(
+            "/api/agents",
+            json={
+                "name": "Editor",
+                "clients": ["default"],
+                "mode": "execute",
+                "permissions": ["uploads"],
+            },
+        ).json()
+        browser.put("/api/agents", json={"enabled": True})
+        for misplaced in ("description", "synopsis", "description.synopsis"):
+            rejected = call(
+                browser,
+                grant["token"],
+                "update_upload_fields",
+                {
+                    "request_id": "wrong-" + misplaced,
+                    "client_id": "default",
+                    "draft_id": draft["id"],
+                    "revision": draft["revision"],
+                    "fields": {misplaced: "Texte relu localement."},
+                },
+            )["structuredContent"]
+            assert "top-level synopsis" in rejected["error"]
+            unchanged = browser.get("/api/upload/queue").json()[0]
+            assert unchanged["revision"] == draft["revision"]
+            assert unchanged["form"] == draft["form"]
+        edited = tool(
+            browser,
+            grant["token"],
+            "update_upload_fields",
+            request_id="synopsis-only",
+            client_id="default",
+            draft_id=draft["id"],
+            revision=draft["revision"],
+            synopsis="Texte relu localement.",
+        )
+        changed = finished(browser, edited["job_id"])
+        assert changed["status"] == "completed", changed
+        result = changed["result"]
+        assert result["id"] == draft["id"] and result["revision"] == draft["revision"] + 1
+        assert "Texte relu localement." in result["form"]["description"]
+        assert {k: v for k, v in result["form"].items() if k != "description"} == {
+            k: v for k, v in draft["form"].items() if k != "description"
+        }
+        assert path.read_text() == "solid model\nendsolid model\n"

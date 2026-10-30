@@ -25,6 +25,12 @@ The screenshots below use fictional data.
 
 You can enter any model ID. A provider's model list may include models without tool support, so run the test. Providers may charge for requests, including connection tests.
 
+For Ollama, LM Studio and compatible endpoints, **Use server sampling defaults**
+is initially enabled. Disable it to set **Temperature (0 = least variation)**.
+Zero requests the lowest sampling variation; it does not guarantee correct answers
+or actions. Restore the checkbox to omit the override. Changing this setting
+requires stopping active discussions and invalidates previous capability results.
+
 Inside Docker, `localhost` means the TorrentLinker container. Use an address reachable from that container to connect to Ollama, LM Studio or another server. See [Web UI and Docker](web-docker.md).
 
 Keys stay in TorrentLinker's secret store, using the system keyring on desktop. Configuration APIs never return them. Hosted providers receive messages and tool results, which may include torrent names and paths. Local connections never fall back to a hosted provider automatically.

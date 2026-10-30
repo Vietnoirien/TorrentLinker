@@ -20,6 +20,8 @@ PRESETS = {
     "compatible": "",
 }
 
+SAMPLING_PROVIDERS = {"ollama", "lmstudio", "compatible"}
+
 
 class InvalidModelResponse(ValueError):
     """Response cannot be used; no tools from this turn may execute."""
@@ -35,6 +37,7 @@ class Provider(BaseModel):
     model: str = Field(min_length=1, max_length=200)
     context_window: int = Field(default=32768, ge=512, le=2000000)
     context_auto: bool = True
+    temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
     api_key: str | None = Field(default=None, max_length=4096, exclude=True)
 
     @model_validator(mode="before")
@@ -47,6 +50,10 @@ class Provider(BaseModel):
 
     @model_validator(mode="after")
     def endpoint(self):
+        if self.temperature is not None and self.kind not in SAMPLING_PROVIDERS:
+            raise ValueError(
+                "Sampling overrides require Ollama, LM Studio or a compatible endpoint."
+            )
         self.url = (self.url or PRESETS[self.kind]).rstrip("/")
         parsed = urlsplit(self.url)
         if (
@@ -241,6 +248,8 @@ class Models:
                 "max_tokens": maximum,
                 "stream": False,
             }
+            if p.temperature is not None:
+                body["temperature"] = p.temperature
             result = self.request(p, key, "/chat/completions", body, timeout)
             self.check_output(result)
             message = result["choices"][0]["message"]

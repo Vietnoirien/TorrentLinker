@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from torrentlinker.assistant.providers import PRESETS, Provider
+from torrentlinker.assistant.providers import PRESETS, SAMPLING_PROVIDERS, Provider
 from torrentlinker.assistant.research import SearchSettings
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.tasks import run_in_background
@@ -124,7 +125,7 @@ class AssistantConnections(QWidget):
         existing = existing or {}
         dialog = QDialog(self)
         dialog.setWindowTitle(self.tr("Model connection"))
-        dialog.resize(600, 360)
+        dialog.resize(600, 600)
         form = QFormLayout(dialog)
         name = QLineEdit(existing.get("name", ""))
         kind = QComboBox()
@@ -139,6 +140,27 @@ class AssistantConnections(QWidget):
         context_window.setValue(existing.get("context_window", 32768))
         context_auto = QCheckBox(self.tr("Detect context automatically"))
         context_auto.setChecked(existing.get("context_auto", True))
+        server_sampling = QCheckBox(self.tr("Use server sampling defaults"))
+        server_sampling.setChecked(existing.get("temperature") is None)
+        temperature = QDoubleSpinBox()
+        temperature.setObjectName("assistantTemperature")
+        temperature.setRange(0, 2)
+        temperature.setSingleStep(0.1)
+        temperature.setValue(existing.get("temperature") or 0)
+
+        def sampling_controls():
+            supported = kind.currentText() in SAMPLING_PROVIDERS
+            if not supported:
+                server_sampling.setChecked(True)
+            server_sampling.setEnabled(supported)
+            temperature.setEnabled(supported and not server_sampling.isChecked())
+
+        def sampling_value():
+            return temperature.value() if temperature.isEnabled() else None
+
+        server_sampling.toggled.connect(sampling_controls)
+        kind.currentTextChanged.connect(sampling_controls)
+        sampling_controls()
         key = QLineEdit()
         key.setEchoMode(QLineEdit.EchoMode.Password)
         key.setPlaceholderText(self.tr("Leave blank to keep the saved key"))
@@ -149,6 +171,8 @@ class AssistantConnections(QWidget):
             (self.tr("Model ID"), model),
             ("", context_auto),
             (self.tr("Context window (tokens)"), context_window),
+            ("", server_sampling),
+            (self.tr("Temperature (0 = least variation)"), temperature),
             (self.tr("API key"), key),
         ]:
             form.addRow(label, widget)
@@ -160,6 +184,14 @@ class AssistantConnections(QWidget):
         )
         context_hint.setWordWrap(True)
         form.addRow(context_hint)
+        sampling_hint = QLabel(
+            self.tr(
+                "Sampling overrides are available for Ollama, LM Studio and compatible endpoints. "
+                "Lower variation does not guarantee correct answers or actions."
+            )
+        )
+        sampling_hint.setWordWrap(True)
+        form.addRow(sampling_hint)
         context_status = QLabel()
         context_status.setWordWrap(True)
         form.addRow(context_status)
@@ -279,13 +311,15 @@ class AssistantConnections(QWidget):
                         api_key=key.text() or None,
                         context_window=context_window.value(),
                         context_auto=context_auto.isChecked(),
+                        temperature=sampling_value(),
                     )
                 )
                 saved = self.service.save_provider(p, existing.get("id", ""))
                 dialog.accept()
                 self.refresh()
                 if not existing or any(
-                    existing.get(k) != getattr(p, k) for k in ("kind", "url", "model")
+                    existing.get(k) != getattr(p, k)
+                    for k in ("kind", "url", "model", "temperature")
                 ):
                     self._notify(self.tr("Assessing model capabilities…"))
                     run_in_background(

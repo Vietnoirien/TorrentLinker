@@ -118,6 +118,11 @@ def controlled(tmp_path, monkeypatch, request):
                 "kind": "compatible",
                 "url": os.environ["TL_LIVE_MODEL_URL"],
                 "model": os.environ["TL_LIVE_MODEL_ID"],
+                **(
+                    {"temperature": float(os.environ["TL_LIVE_MODEL_TEMPERATURE"])}
+                    if os.getenv("TL_LIVE_MODEL_TEMPERATURE") is not None
+                    else {}
+                ),
             },
         ).json()
         yield browser, provider["id"], clients, remote

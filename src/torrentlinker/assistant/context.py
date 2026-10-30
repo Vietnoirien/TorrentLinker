@@ -256,7 +256,10 @@ def model_receipt(result, run_id, index, budget=24000):
             if key in result
         }
         result["response_guidance"] = (
-            "Cards are displayed in chat. Reply briefly; do not repeat items, images, tables "
+            "Cards are displayed in chat. This display does not complete other requested work, "
+            "such as creating a saved list or computing a Zen Plan. Finish remaining requested "
+            "operations and verify their results before replying briefly; do not repeat items, "
+            "images, tables "
             "or internal IDs unless the user explicitly asks for a separate "
             "text, table or image response."
         )

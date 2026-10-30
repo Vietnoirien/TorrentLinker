@@ -253,6 +253,8 @@ def test_context_recovery_accepts_valid_json_encoded_operation_history(tmp_path)
                 "kind": "compatible",
                 "url": "http://model.invalid/v1",
                 "model": "test",
+                # Exercise the explicit provider rejection, not proactive prompt-size compaction.
+                "context_window": 131072,
             },
         ).json()["id"]
         chat = browser.post(

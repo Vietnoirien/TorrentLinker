@@ -217,10 +217,11 @@ class Assistant:
         with self.lock, self.db:
             if identifier:
                 previous = self.provider(identifier)
-                if (previous.kind, previous.url, previous.model) != (
+                if (previous.kind, previous.url, previous.model, previous.temperature) != (
                     body.kind,
                     body.url,
                     body.model,
+                    body.temperature,
                 ):
                     for row in self.db.execute(
                         "SELECT DISTINCT conversations.body FROM conversations JOIN runs "
@@ -233,10 +234,16 @@ class Assistant:
                             )
                 if previous.url != body.url and body.api_key is None:
                     self.secrets.update({"assistant:" + identifier: ""})
-            if identifier and (previous.kind, previous.url, previous.model) != (
+            if identifier and (
+                previous.kind,
+                previous.url,
+                previous.model,
+                previous.temperature,
+            ) != (
                 body.kind,
                 body.url,
                 body.model,
+                body.temperature,
             ):
                 self.db.execute("DELETE FROM options WHERE key=?", ("assessment:" + identifier,))
             identifier = identifier or uuid4().hex
@@ -274,10 +281,11 @@ class Assistant:
         result["context"]["verified"] = False
         with self.lock, self.db:
             current = self.provider(identifier)
-            if (current.kind, current.url, current.model) != (
+            if (current.kind, current.url, current.model, current.temperature) != (
                 provider.kind,
                 provider.url,
                 provider.model,
+                provider.temperature,
             ):
                 raise ValueError("Model connection changed during assessment. Retest it.")
             self.db.execute(

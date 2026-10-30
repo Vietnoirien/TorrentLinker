@@ -412,6 +412,18 @@
         <source>Use Brave Search or SearXNG for search. Page reading and book metadata need no search key. Film metadata uses your TMDb key.</source>
         <translation>Utilisez Brave Search ou SearXNG pour la recherche. La lecture de pages et les métadonnées des livres ne nécessitent pas de clé de recherche. Les films utilisent votre clé TMDb.</translation>
     </message>
+    <message>
+        <source>Use server sampling defaults</source>
+        <translation>Utiliser les paramètres d’échantillonnage du serveur</translation>
+    </message>
+    <message>
+        <source>Temperature (0 = least variation)</source>
+        <translation>Température (0 = variation minimale)</translation>
+    </message>
+    <message>
+        <source>Sampling overrides are available for Ollama, LM Studio and compatible endpoints. Lower variation does not guarantee correct answers or actions.</source>
+        <translation>Les réglages d’échantillonnage sont disponibles pour Ollama, LM Studio et les connexions compatibles. Une variation réduite ne garantit pas des réponses ou des actions correctes.</translation>
+    </message>
 </context>
 <context>
     <name>AssistantEditor</name>
