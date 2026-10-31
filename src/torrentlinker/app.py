@@ -46,7 +46,10 @@ def smoke_checks() -> None:
             assert documentation.document_path(guide["path"]).read_text(encoding="utf-8")
     assert documentation.document_path("guide/images/zen.png").is_file()
     assert documentation.document_path("guide/images/en/zen.png").is_file()
+    from torrentlinker.library_smoke import library_smoke_checks
+
     media_smoke_checks()
+    library_smoke_checks()
     agent_smoke_checks()
     print("smoke test OK")
 

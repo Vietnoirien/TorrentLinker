@@ -43,3 +43,16 @@ New discussions and agent connections now default to zero extra reserve. Desktop
 Preview, approval and the final send guard still account for selected downloads, unfinished client downloads and unresolved send reservations. A zero reserve does not permit a download that exceeds actual available space. Errors distinguish insufficient space from an optional reserve, with directions to change the latter.
 
 The regression first failed for the default 10 GiB reserve and the inherited Plan percentage. Four cases now cover a successful direct send, an explicitly chosen reserve, pending downloads exhausting space, and space disappearing before the client receives the torrent. The related agent, catalogue, native/browser and translation suite passed 71 tests; the focused cases and Plan checks passed 78 tests.
+
+## Workstation acceptance replay, 2026-10-31
+
+At `e054892`, Radiance at the previously configured local endpoint still advertised
+`Qwen3.8-27B-MXFP4-off`. Both controlled scenarios passed with server-default sampling
+in 44.96 seconds. The retry-claim replay reached an exact one-film `send-queue` approval
+proposal in four model calls. Queue preview prepared the bounded batch without sending;
+the removal follow-up required approval of Film 01 and Film 02 and left Film 03 through
+Film 10 intact. Simulated clients recorded no downloads or removals, and no send
+reservations remained. No real tracker, user queue or Torrent Client was used.
+
+These are two focused replays after the workstation changes, not a new complete
+16-scenario acceptance pass or proof that every model selection is correct.

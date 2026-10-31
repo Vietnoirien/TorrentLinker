@@ -20,6 +20,33 @@ The Library scan, timeout, recovery, filesystem and stall-monitor regression set
 
 The [Windows job for `47e267b`](https://github.com/Vietnoirien/TorrentLinker/actions/runs/41121968333/job/124289977818) passed all 21 checks, including ten rescans in one source process, and the packaged smoke test. Its [diagnostic executable artifact](https://github.com/Vietnoirien/TorrentLinker/actions/runs/41121968333/artifacts/13008374611) contains the immediate stack logging. This is CI evidence on a clean runner, not a reproduction on the affected machine or a packaged ten-rescan walkthrough.
 
+## Packaged rescan probe, 2026-10-31
+
+The packaged `--smoke-test` now also runs `library_smoke_checks`. It creates a separate
+window with temporary settings, 25 local files and a simulated read-only Torrent Client.
+It alternates cached scans and full rescans ten times, modifies one fixture file between
+rescans, verifies all displayed sizes and source bytes, and requires GUI heartbeat and
+background-job completion on every pass. Worker failures are returned to the smoke
+command instead of opening a modal warning. The temporary empty keyring is restored
+on success and failure.
+
+The new isolation and failure-cleanup tests passed together with the existing rescan,
+timeout, stall and shutdown checks: 31 passed. A fresh Linux frozen executable and
+AppImage both passed the ten scans, eight media-playback cycles, MCP startup and clean
+shutdown with temporary profiles, null credentials and a loopback-only network
+namespace. Total times were 5.93 and 7.43 seconds. Neither reported a traceback.
+
+The local AppImage is `/tmp/tl-library-package-20261031/dist/TorrentLinker-x86_64.AppImage`,
+SHA-256 `e0df91fd800977b77485f838be41eb906852fa3e4fd5dc55b84ffa50b283ef89`.
+Its source is `e054892` plus the probe and smoke hook committed with this report.
+It has not been published or installed over the user's running app.
+
+Windows CI now runs the probe from source and then inside its packaged executable.
+The packaged step enables one-second stall diagnostics and retains the existing
+120-second process timeout. Its result must be recorded after CI completes. This
+remains controlled-fixture evidence, not the reporter's large Library, storage or
+Torrent Client, and does not establish the cause of the original freeze.
+
 ## Capture on the affected Windows machine
 
 Use a build containing this diagnostic fix. Close other TorrentLinker instances, open PowerShell in the folder containing the executable, and launch:
