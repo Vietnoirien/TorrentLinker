@@ -29,6 +29,7 @@ def main() -> None:
 
         from torrentlinker.config import Settings
         from torrentlinker.gui.search_view import SearchTab
+        from torrentlinker.send import SendProgress
         from torrentlinker.store import Store
 
         store = Store(Path(temporary) / "state.db")
@@ -111,6 +112,16 @@ def main() -> None:
                 )
                 measurements.setdefault("changed_poll", []).append(measure(view._poll_queue))
                 assert view.selected_keys() == selected
+            progress = SendProgress(0, args.count, "Fixture release", 0, 0, 0)
+            for i in range(3):
+                store.download_outcome(str(args.count - 1), "sending" if i % 2 == 0 else "queued")
+                measurements.setdefault("native_progress", []).append(
+                    measure(lambda: view._progress(progress))
+                )
+                assert view.selected_keys() == selected
+            measurements["unchanged_native_progress"] = [
+                measure(lambda: view._progress(progress)) for _ in range(3)
+            ]
             result = {
                 "count": args.count,
                 "python": platform.python_version(),

@@ -65,7 +65,28 @@ are not a full-suite result for this queue patch.
 The 50,000-entry queue remains slow on first display, full rebuilds and estimate
 updates. A single status update still stalls for over a second at that size. Moving
 large reads off the GUI thread and avoiding per-cell table construction need further
-work. Native sending progress still uses the full refresh path; these status timings
-measure queue polling, not end-to-end dispatch. Chat-history and cancellation
+work. The table above measures queue polling, not end-to-end dispatch. Native progress
+was measured separately in the follow-up below. Chat-history and cancellation
 baselines, and installed Windows measurements, also remain open. These workstation
 numbers are observations, not universal CI timing limits or a completed #49 audit.
+
+## Native progress and Pause follow-up
+
+A regression against `55e83f9` confirmed that native send notifications still replaced
+all queue rows, including unchanged retry-wait notifications. Native progress and
+completion now use the same database-change and status-only refresh logic as polling.
+They update hidden pages too. Completion and worker failure refresh buttons even when
+the last progress event already displayed the database change.
+
+At 12,000 entries, the median status-changing native notification fell from 1,580 to
+274 ms. An unchanged retry-wait notification fell from 1,537 to 21 ms, again mostly the
+20 ms event-loop drain. Both measurements use three notifications in the same isolated
+benchmark as above. [Raw native-progress measurements](queue-native-progress-2026-10-31.json).
+Successful sends remove entries, so they still require a full table rebuild. These
+measurements do not include an Indexer request or a Torrent Client transfer.
+
+The native worker test starts a controlled two-minute rate-limit wait, clicks Pause,
+and requires the worker to finish within two seconds. The item remains queued, the
+exact selection survives, and Resume sends it once. A worker-failure regression checks
+that interrupted sends remain uncertain and cannot be retried automatically. The final
+focused suite passes 83 tests; lint, formatting and typechecking also pass.

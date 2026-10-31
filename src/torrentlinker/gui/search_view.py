@@ -1277,8 +1277,10 @@ class SearchTab(QWidget):
         ]
 
     def _poll_queue(self) -> None:
-        if not self.isVisible():
-            return
+        if self.isVisible():
+            self._sync_queue()
+
+    def _sync_queue(self) -> None:
         version = self.store.change_token()
         if version == self._queue_version:
             return
@@ -1438,7 +1440,7 @@ class SearchTab(QWidget):
         return True
 
     def _progress(self, progress: SendProgress) -> None:
-        self.refresh_queue()
+        self._sync_queue()
         message = self.tr("{0}/{1} processed · {2}").format(
             progress.done, progress.total, progress.title
         )
@@ -1450,7 +1452,8 @@ class SearchTab(QWidget):
 
     def _finished(self, report: SendReport) -> None:
         self.runner = None
-        self.refresh_queue()
+        self._sync_queue()
+        self._buttons()  # The worker can finish without another database change.
         self.queue_status.setText(
             self.tr("{0} sent · {1} skipped · {2} failed").format(
                 len(report.added), len(report.refused), len(report.failed)
@@ -1466,7 +1469,8 @@ class SearchTab(QWidget):
                     "uncertain",
                     "Interrupted send. Check the Torrent Client before retrying.",
                 )
-        self.refresh_queue()
+        self._sync_queue()
+        self._buttons()
         self.queue_status.setText(error_text(error))
 
     def stop(self) -> None:

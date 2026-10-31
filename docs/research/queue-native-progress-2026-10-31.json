@@ -1,0 +1,179 @@
+{
+  "baseline_commit": "55e83f9",
+  "before": {
+    "count": 12000,
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "qt_platform": "offscreen",
+    "measurements": {
+      "first_display": {
+        "elapsed_ms": 1455.87,
+        "max_heartbeat_gap_ms": 1436.4
+      },
+      "first_usable_ms": 2841.05,
+      "unchanged_poll": [
+        {
+          "elapsed_ms": 20.31,
+          "max_heartbeat_gap_ms": 7.5
+        },
+        {
+          "elapsed_ms": 20.6,
+          "max_heartbeat_gap_ms": 10.73
+        },
+        {
+          "elapsed_ms": 20.65,
+          "max_heartbeat_gap_ms": 9.8
+        }
+      ],
+      "estimate_refresh": [
+        {
+          "elapsed_ms": 444.25,
+          "max_heartbeat_gap_ms": 425.04
+        },
+        {
+          "elapsed_ms": 447.11,
+          "max_heartbeat_gap_ms": 427.68
+        },
+        {
+          "elapsed_ms": 451.85,
+          "max_heartbeat_gap_ms": 432.57
+        }
+      ],
+      "selection": {
+        "elapsed_ms": 21.6,
+        "max_heartbeat_gap_ms": 8.67
+      },
+      "changed_poll": [
+        {
+          "elapsed_ms": 387.2,
+          "max_heartbeat_gap_ms": 369.42
+        },
+        {
+          "elapsed_ms": 273.88,
+          "max_heartbeat_gap_ms": 255.13
+        },
+        {
+          "elapsed_ms": 366.4,
+          "max_heartbeat_gap_ms": 348.04
+        }
+      ],
+      "native_progress": [
+        {
+          "elapsed_ms": 1465.94,
+          "max_heartbeat_gap_ms": 1452.72
+        },
+        {
+          "elapsed_ms": 1635.77,
+          "max_heartbeat_gap_ms": 1621.17
+        },
+        {
+          "elapsed_ms": 1580.47,
+          "max_heartbeat_gap_ms": 1566.66
+        }
+      ],
+      "unchanged_native_progress": [
+        {
+          "elapsed_ms": 1473.51,
+          "max_heartbeat_gap_ms": 1460.1
+        },
+        {
+          "elapsed_ms": 1605.35,
+          "max_heartbeat_gap_ms": 1590.75
+        },
+        {
+          "elapsed_ms": 1536.54,
+          "max_heartbeat_gap_ms": 1521.94
+        }
+      ]
+    },
+    "peak_rss_mib": 289.7
+  },
+  "after": {
+    "count": 12000,
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "qt_platform": "offscreen",
+    "measurements": {
+      "first_display": {
+        "elapsed_ms": 1482.51,
+        "max_heartbeat_gap_ms": 1463.6
+      },
+      "first_usable_ms": 2885.83,
+      "unchanged_poll": [
+        {
+          "elapsed_ms": 20.51,
+          "max_heartbeat_gap_ms": 8.53
+        },
+        {
+          "elapsed_ms": 20.74,
+          "max_heartbeat_gap_ms": 9.8
+        },
+        {
+          "elapsed_ms": 20.71,
+          "max_heartbeat_gap_ms": 9.77
+        }
+      ],
+      "estimate_refresh": [
+        {
+          "elapsed_ms": 449.97,
+          "max_heartbeat_gap_ms": 430.25
+        },
+        {
+          "elapsed_ms": 478.05,
+          "max_heartbeat_gap_ms": 458.75
+        },
+        {
+          "elapsed_ms": 462.73,
+          "max_heartbeat_gap_ms": 443.57
+        }
+      ],
+      "selection": {
+        "elapsed_ms": 21.98,
+        "max_heartbeat_gap_ms": 9.77
+      },
+      "changed_poll": [
+        {
+          "elapsed_ms": 421.51,
+          "max_heartbeat_gap_ms": 403.51
+        },
+        {
+          "elapsed_ms": 290.07,
+          "max_heartbeat_gap_ms": 271.16
+        },
+        {
+          "elapsed_ms": 378.44,
+          "max_heartbeat_gap_ms": 360.56
+        }
+      ],
+      "native_progress": [
+        {
+          "elapsed_ms": 274.35,
+          "max_heartbeat_gap_ms": 255.71
+        },
+        {
+          "elapsed_ms": 367.13,
+          "max_heartbeat_gap_ms": 348.37
+        },
+        {
+          "elapsed_ms": 274.25,
+          "max_heartbeat_gap_ms": 255.98
+        }
+      ],
+      "unchanged_native_progress": [
+        {
+          "elapsed_ms": 20.72,
+          "max_heartbeat_gap_ms": 9.75
+        },
+        {
+          "elapsed_ms": 20.78,
+          "max_heartbeat_gap_ms": 9.81
+        },
+        {
+          "elapsed_ms": 20.69,
+          "max_heartbeat_gap_ms": 9.76
+        }
+      ]
+    },
+    "peak_rss_mib": 281.8
+  }
+}

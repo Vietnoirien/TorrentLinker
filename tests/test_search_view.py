@@ -552,3 +552,95 @@ def test_queue_poll_detects_a_replacement_database_with_the_same_client_id(
     view.store = other
     view._poll_queue()
     assert view.queue.item(0, 0).text() == "Second"
+
+
+def test_native_send_progress_keeps_rows_and_finishes_without_another_database_read(
+    qtbot, tmp_path, monkeypatch
+):
+    from torrentlinker.gui import search_view
+    from torrentlinker.send import SendProgress, SendReport
+
+    store = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    enqueue(store, indexer, Candidate("Queued", 1024, "fixture"), tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    view.queue.selectRow(0)
+    key = view.selected_keys()[0]
+    title = view.queue.item(0, 0)
+    # Native progress must also update while this page is hidden.
+    assert not view.isVisible()
+    view.runner = object()
+    store.download_outcome(key, "sending")
+    view._progress(SendProgress(0, 1, "Queued", 0, 0, 0))
+    assert view.queue.item(0, 0) is title, "Send progress recreated the queue rows"
+    assert view.queue.item(0, 5).text() == "Sending…"
+    assert view.pause.isEnabled() and not view.start.isEnabled()
+    monkeypatch.setattr(
+        search_view, "entries", lambda *a: pytest.fail("Unchanged progress decoded the queue")
+    )
+    view._progress(SendProgress(0, 1, "Queued", 0, 0, 0, retry_at=1))
+    assert "waiting until" in view.queue_status.text()
+    view._finished(SendReport(stopped=True))
+    assert view.runner is None
+    assert not view.pause.isEnabled()
+    assert view.remove.isEnabled()
+    assert view.selected_keys() == [key]
+
+
+def test_native_queue_pause_interrupts_retry_wait_and_resume_sends_once(
+    qtbot, tmp_path, monkeypatch
+):
+    from torrentlinker.indexer import RateLimited
+
+    store, indexer, client, candidate, data, folder = setup_queue(tmp_path)
+
+    def limited(*args, **kwargs):
+        raise RateLimited(120)
+
+    monkeypatch.setattr(indexer, "fetch_torrent", limited)
+    view = SearchTab(store, Settings(), lambda: indexer, lambda: client)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    view.queue.selectRow(0)
+    selected = view.selected_keys()
+    assert view.start_queue()
+    try:
+        qtbot.waitUntil(lambda: "waiting until" in view.queue_status.text())
+        view.pause.click()
+        qtbot.waitUntil(lambda: view.runner is None, timeout=2000)
+        assert not client.downloads
+        assert entries(store)[0].status == "queued"
+        assert view.selected_keys() == selected
+        assert view.start.isEnabled() and not view.pause.isEnabled()
+        monkeypatch.setattr(indexer, "fetch_torrent", lambda *a, **kw: data)
+        assert view.start_queue()
+        qtbot.waitUntil(lambda: view.runner is None)
+        assert client.downloads == [candidate.infohash]
+        assert not entries(store) and view.queue.rowCount() == 0
+        assert not view.start.isEnabled() and not view.pause.isEnabled()
+    finally:
+        if view.runner:
+            view.stop()
+            qtbot.waitUntil(lambda: view.runner is None)
+
+
+def test_native_queue_worker_failure_keeps_uncertain_entry_without_retry(qtbot, tmp_path):
+    store = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    enqueue(store, indexer, Candidate("Queued", 1024, "fixture"), tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    view.queue.selectRow(0)
+    key = view.selected_keys()[0]
+    view.runner = object()
+    store.download_outcome(key, "sending")
+    view._failed(RuntimeError("Fixture worker failure"))
+    assert view.runner is None
+    assert entries(store)[0].status == "uncertain"
+    assert view.queue.item(0, 5).text() == "Check Torrent Client before retrying"
+    assert view.selected_keys() == [key]
+    assert not view.pause.isEnabled() and not view.retry.isEnabled()
+    assert view.queue_status.text() == "Fixture worker failure"
