@@ -12,6 +12,10 @@ TorrentLinker vérifie sur GitHub si une nouvelle version stable est disponible 
 
 Vérifiez la connexion au client et à l’indexeur dans les Paramètres. Pour un NAS ou Docker, vérifiez aussi les [correspondances de chemins](demarrage.md). Indiquez votre version, votre système, le client torrent et les étapes qui reproduisent le problème dans un [ticket GitHub](https://github.com/Vietnoirien/TorrentLinker/issues). Joignez le message exact ou le journal après avoir masqué les clés API, mots de passe et URL d’annonce privées.
 
+Sur ordinateur, utilisez **Paramètres → Général → Exporter le rapport de diagnostic…**. Dans le navigateur, ouvrez **Paramètres → Interface → Exporter le rapport de diagnostic…**. Le fichier JSON contient les versions de l’application et du système, les types de clients, les formats des correspondances de chemins, les compteurs de configuration, les états des files et les types et résultats des 20 tâches les plus récentes. Les noms et identifiants des clients sont remplacés par des alias propres au rapport. Les identifiants de connexion, adresses de serveurs, chemins, noms de torrents, conversations et journaux bruts sont exclus. L’export ne contacte pas vos clients, ne relance aucune tâche et n’envoie le fichier nulle part. Vous choisissez de le joindre ou non à votre signalement.
+
+Ce rapport décrit l’état actuel de l’application. Il ne mesure pas l’espace disque disponible et ne vérifie pas les correspondances de chemins. Sur ordinateur, l’historique des tâches est inclus quand le service local des agents fonctionne ; sinon, `recent_jobs` vaut `null`. Les étapes de reproduction et le message d’erreur visible restent utiles pour trouver la cause.
+
 ## Emplacement des données
 
 | Système | Dossier |

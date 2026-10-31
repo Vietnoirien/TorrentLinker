@@ -239,6 +239,19 @@ class Store:
                 "WHERE status='sending'"
             )
 
+    def diagnostic_counts(self) -> dict:
+        """Counts across all clients, without reading paths, titles, or payloads."""
+        with self._lock:
+            counts = {
+                table: self._db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("catalogue", "scan_cache", "verification")
+            }
+            for table in ("download_queue", "local_draft"):
+                counts[table] = dict(
+                    self._db.execute(f"SELECT status, COUNT(*) FROM {table} GROUP BY status")
+                )
+        return counts
+
     def for_client(self, identifier: str) -> Store:
         """An immutable client scope sharing caches, SQLite connection and its lock."""
         if not identifier or not identifier.replace("-", "").isalnum():

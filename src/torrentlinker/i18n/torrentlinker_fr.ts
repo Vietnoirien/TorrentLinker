@@ -7912,6 +7912,14 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>SettingsDialog</name>
     <message>
+        <source>Export support report…</source>
+        <translation>Exporter le rapport de diagnostic…</translation>
+    </message>
+    <message>
+        <source>Export versions, configuration counts and recent job outcomes. Credentials, addresses, paths, torrent names and conversations are excluded. Nothing is sent automatically.</source>
+        <translation>Exporte les versions, les compteurs de configuration et les résultats des tâches récentes. Les identifiants de connexion, adresses, chemins, noms de torrents et conversations sont exclus. Rien n’est envoyé automatiquement.</translation>
+    </message>
+    <message>
         <location filename="../gui/settings_dialog.py" line="955"/>
         <source>Empty folders are checked with a temporary file and a stopped test torrent. Both are removed afterward. TorrentLinker needs write access for this check.</source>
         <translation>Les dossiers vides sont vérifiés avec un fichier temporaire et un torrent de test gardé à l&apos;arrêt. Tous deux sont ensuite supprimés. TorrentLinker a besoin des droits d&apos;écriture pour ce test.</translation>
@@ -10848,4 +10856,23 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
       <translation>{0} : informations contradictoires, valeur extraite {1}, valeur déclarée {2}. Vérifiez et corrigez la valeur ou utilisez celle extraite du fichier.</translation>
     </message>
   </context>
+<context>
+    <name>Diagnostics</name>
+    <message>
+        <source>Export support report</source>
+        <translation>Exporter le rapport de diagnostic</translation>
+    </message>
+    <message>
+        <source>JSON files (*.json)</source>
+        <translation>Fichiers JSON (*.json)</translation>
+    </message>
+    <message>
+        <source>Support report</source>
+        <translation>Rapport de diagnostic</translation>
+    </message>
+    <message>
+        <source>The report could not be saved. Choose a writable folder and try again.</source>
+        <translation>Impossible d’enregistrer le rapport. Choisissez un dossier accessible en écriture et réessayez.</translation>
+    </message>
+</context>
 </TS>

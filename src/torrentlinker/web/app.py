@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from torrentlinker import documentation
 from torrentlinker.clients import connect
+from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.torrent_management import peer_count_order, tracker_group
 from torrentlinker.updates import installed_version
 from torrentlinker.web.confirmations import Confirmations
@@ -319,6 +320,18 @@ def create_app(
     @app.get("/api/setup")
     def setup(client_id: str = "") -> dict:
         return for_client(client_id).setup.snapshot()
+
+    @app.get("/api/diagnostics")
+    def diagnostics() -> Response:
+        with service.lock:
+            report = build_report(service.settings, service.store, jobs)
+        return Response(
+            report_json(report),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="torrentlinker-diagnostics.json"',
+            },
+        )
 
     @app.exception_handler(PartialNamesRefused)
     async def partial_names(request: Request, error: PartialNamesRefused) -> JSONResponse:

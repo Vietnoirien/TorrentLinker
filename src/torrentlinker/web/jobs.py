@@ -155,6 +155,14 @@ class Jobs:
             result[key] = json.loads(result[key])
         return result
 
+    def diagnostic_rows(self) -> list[dict[str, Any]]:
+        """Bounded metadata only; never read errors, progress or results for export."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT kind,status,client_id FROM jobs ORDER BY created DESC LIMIT 20"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def list(self) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.db.execute(

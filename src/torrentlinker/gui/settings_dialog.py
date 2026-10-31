@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from keyring.errors import KeyringError
-from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
+from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -99,6 +99,8 @@ def kind_label(kind: ContentKind) -> str:
 
 
 class SettingsDialog(QDialog):
+    diagnostics_requested = Signal()
+
     def __init__(
         self,
         settings: Settings,
@@ -285,6 +287,18 @@ class SettingsDialog(QDialog):
             max(self.media_layout.findData(self.settings.media_layout), 0)
         )
         form.addRow(self.tr("Media interface"), self.media_layout)
+        self.diagnostics_button = QPushButton(self.tr("Export support report…"))
+        self.diagnostics_button.clicked.connect(self.diagnostics_requested)
+        form.addRow(self.diagnostics_button)
+        explanation = QLabel(
+            self.tr(
+                "Export versions, configuration counts and recent job outcomes. "
+                "Credentials, addresses, paths, torrent names and conversations are excluded. "
+                "Nothing is sent automatically."
+            )
+        )
+        explanation.setWordWrap(True)
+        form.addRow(explanation)
         return box
 
     # Zen -------------------------------------------------------------------

@@ -1,5 +1,6 @@
 """Opt-in real-browser tests against a temporary server and fake Torrent Client."""
 
+import json
 import os
 import re
 import socket
@@ -316,6 +317,18 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(page.locator("#agent-token-box")).to_be_visible()
             page.locator("[data-settings-section=interface]").click()
             expect(page.locator("#settings-media-layout")).to_be_visible()
+            expect(page.locator("#export-diagnostics")).to_have_text("Export support report…")
+            page.locator("#language").select_option("fr")
+            expect(page.locator("#export-diagnostics")).to_have_text(
+                "Exporter le rapport de diagnostic…"
+            )
+            with page.expect_download() as diagnostic_download:
+                page.locator("#export-diagnostics").click()
+            assert diagnostic_download.value.suggested_filename == "torrentlinker-diagnostics.json"
+            support = json.loads(Path(diagnostic_download.value.path()).read_text())
+            assert support["schema_version"] == 1
+            assert token not in json.dumps(support)
+            page.locator("#language").select_option("en")
             expect(page.locator("#agent-token")).to_have_value("")
             page.locator("[data-settings-section=agents]").click()
             page.locator("[data-agent-tab=connections]").click()

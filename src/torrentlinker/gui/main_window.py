@@ -2201,12 +2201,20 @@ class MainWindow(QMainWindow):
             finally:
                 self._settings_stack = None
 
+    def _export_diagnostics(self, parent: QWidget) -> None:
+        from torrentlinker.diagnostics import build_report
+        from torrentlinker.gui.diagnostics import export_report
+
+        jobs = self.agent_runtime.service.jobs if self.agent_runtime else None
+        export_report(parent, lambda: build_report(self.settings, self.store, jobs))
+
     def _edit_settings(self, *, assistant: bool, agents: bool) -> None:
         if self.agent_runtime and self.agent_runtime.busy():
             self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
             return
         folders = list(self.settings.library_folders)
         dialog = SettingsDialog(self.settings, self)
+        dialog.diagnostics_requested.connect(lambda: self._export_diagnostics(dialog))
         dialog.folder_editor.set_scan_errors(
             self.library_workspace.scan_errors, self.library_workspace.editor.scanned
         )
