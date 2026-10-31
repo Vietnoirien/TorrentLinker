@@ -1,3 +1,4 @@
+import pytest
 from PySide6.QtCore import Qt
 
 from tests.test_web_profile import ORIGIN, prepared, snapshot
@@ -120,3 +121,41 @@ def test_desktop_connect_opens_handoff_and_receiver_returns_after_restart(
     )
     assert len(opened) == 1  # No new handoff or consent on restart.
     restarted.close()
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_profile_completion_after_window_destruction_is_ignored(
+    qtbot, tmp_path, monkeypatch, failed
+):
+    import threading
+
+    from shiboken6 import delete, isValid
+
+    from torrentlinker.config import Settings
+    from torrentlinker.gui import tasks
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.store import Store
+
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "state.db"))
+    window.profile_timer.stop()
+    started, release = threading.Event(), threading.Event()
+
+    def read_profile(*args):
+        started.set()
+        assert release.wait(5)
+        if failed:
+            raise ValueError("controlled profile failure")
+        from torrentlinker.profile import UserProfile
+
+        return UserProfile("Fixture", None, None, 0, 0, True, None)
+
+    monkeypatch.setattr(window.account_workspace, "refresh", read_profile)
+    window.refresh_profile()
+    assert started.wait(1)
+    try:
+        window.close()
+        delete(window)
+        assert not isValid(window)
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: not tasks._alive, timeout=5000)

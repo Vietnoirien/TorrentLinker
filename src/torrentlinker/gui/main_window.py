@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from torrentlinker import i18n, net
 from torrentlinker.agent.desktop import agent_settings_change
@@ -903,7 +904,7 @@ class MainWindow(QMainWindow):
 
     def refresh_profile(self) -> None:
         """Refresh automatically, with at most one desktop request in flight."""
-        if self._profile_refreshing:
+        if not isValid(self) or self._profile_refreshing:
             return
         self._profile_refreshing = True
         self.band.busy(True)
@@ -1018,6 +1019,8 @@ class MainWindow(QMainWindow):
 
     def _profile_read(self, profile: UserProfile) -> None:
         self._profile_refreshing = False
+        if not isValid(self):
+            return
         self.zen_tab.profile_view.refresh_button.setEnabled(True)
         self.show_account_profile()
         self.band.show_profile(profile)
@@ -1030,6 +1033,8 @@ class MainWindow(QMainWindow):
 
     def _profile_failed(self, error: Exception) -> None:
         self._profile_refreshing = False
+        if not isValid(self):
+            return
         self.zen_tab.profile_view.refresh_button.setEnabled(True)
         self.show_account_profile()
         log.info("c411 profile not read: %s", error)
