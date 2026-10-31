@@ -90,6 +90,12 @@ A Windows beta.23 report identified a separate Transmission-in-Docker send failu
 - Corrected the earlier classification of "Imprimante 3D" as an English UI translation defect. `category_name` intentionally uses c411's official category names, consistent with the domain documentation and English Upload guide. That label remains unchanged.
 - Validation: 97 tests passed in the broader Upload/translation/browser run. Its final browser case stalled because the new test route callback treated Playwright's request argument as a default status value. After correcting that fixture signature, the final case passed separately, completing all 98 selected tests. It checks desktop/browser diagnostic parity in both languages, literal markup in filenames, unchanged draft data and the existing explicit-send flow. Ruff, formatting of 399 files and typechecking of 203 source files pass. Desktop diagnostic and browser review screenshots were inspected in English/French. No real submission, package publication or Windows freeze fix is claimed.
 
+### Linux package follow-up, 2026-10-31
+
+- A fresh frozen server exposed missing PySide version metadata in the support report. The package spec now includes it; the existing smoke test checks report versions so future bundles fail if metadata is lost.
+- The corrected executable and three AppImage runs passed media playback, MCP, report-version and shutdown checks. The AppImage also opened isolated fixtures created by actual 0.12.2 and beta.27 sources; settings, client-scoped drafts, queues, conversation state and fixture-file hashes survived. Authentication and bilingual packaged guides passed in the frozen server.
+- Recorded [artifact, timings and limits](../research/linux-package-2026-10-31.md). Thirteen focused packaging/diagnostic/shutdown tests, lint, formatting and typechecking passed. This is local offscreen Linux evidence; complete installed workflows and other platforms remain open. No release or restart of the user's app occurred.
+
 ### Workstation upgrade and restore evidence, 2026-10-31
 
 - Actual 0.12.2 and beta.27 source processes produced isolated settings, both clients’ Local Drafts, desktop/web queues, conversation history, fixture credentials and Upload attachments. Current code preserved their settings and payloads through upgrade, second restart and offline backup restoration. Interrupted downloads became uncertain and running jobs became interrupted without replay.

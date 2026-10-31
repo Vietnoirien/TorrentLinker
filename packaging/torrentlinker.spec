@@ -20,6 +20,7 @@ datas = (
     + collect_data_files("guessit")
     + collect_data_files("babelfish")
     + copy_metadata("torrentlinker")
+    + copy_metadata("PySide6")  # support reports must identify the bundled Qt bindings
     + copy_metadata("mcp")
     + copy_metadata("mcp-types")
 )

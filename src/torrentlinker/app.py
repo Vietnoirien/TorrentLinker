@@ -113,6 +113,11 @@ def agent_smoke_checks() -> None:
         runtime = DesktopServer(Settings(), directory / "settings.json", store, port=0)
         try:
             runtime.start()
+            from torrentlinker.diagnostics import build_report
+
+            report = build_report(runtime.setup.settings, store, runtime.service.jobs)
+            assert report["runtime"]["app_version"] == installed_version()
+            assert report["runtime"]["pyside"] != "unavailable", "Bundled PySide metadata missing"
             with httpx.Client(
                 base_url=runtime.url.removesuffix("/mcp/"), trust_env=False
             ) as client:
