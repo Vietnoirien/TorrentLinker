@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from urllib.parse import unquote, urlsplit
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
@@ -186,6 +187,8 @@ class ChatTranscript(QScrollArea):
         self.expanded_commands = set()
         self.expanded_events = set()
         self.plain_text = ""
+        self._run_cards = {}
+        self._run_layout = None
         self.examples: list[str] = []
         self.example_columns = 2
         # History mixes discussions: a callable that names each run's discussion and time.
@@ -210,6 +213,8 @@ class ChatTranscript(QScrollArea):
         return self.plain_text
 
     def content(self):
+        self._run_cards = {}
+        self._run_layout = None
         old = self.takeWidget()
         if old:
             old.deleteLater()
@@ -411,40 +416,78 @@ class ChatTranscript(QScrollArea):
         if not rows:
             self.welcome()
             return
-        layout = self.content()
         dark = QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
-        for run in reversed(rows):
-            if self.run_heading:
-                heading = QLabel(self.run_heading(run))
-                heading.setObjectName("runHeading")
-                heading.setTextFormat(Qt.TextFormat.PlainText)
-                layout.addWidget(heading)
-            messages = run["messages"]
-            fallback = len(messages) - 1
-            if messages and messages[-1]["role"] == "assistant":
-                fallback -= 1
-            groups = {}
-            for index, event in enumerate(run["events"]):
-                anchor = event.get("after_message_index", fallback)
-                anchor = max(-1, min(anchor, len(messages) - 1))
-                groups.setdefault(anchor, []).append((index, event))
-            if -1 in groups:
-                self.add_activity(layout, run, groups[-1], -1, status_text, dark)
-            for index, message in enumerate(messages):
-                self.add_message(layout, message, dark)
-                if index in groups:
-                    self.add_activity(layout, run, groups[index], index, status_text, dark)
-            self.add_presentations(layout, run)
-            if not run["events"]:
-                self.add_activity(layout, run, [], len(messages), status_text, dark)
-            if run["error"]:
-                error = QLabel(run["error"])
-                error.setTextFormat(Qt.TextFormat.PlainText)
-                error.setWordWrap(True)
-                error.setStyleSheet("color: #dc756d; padding: 12px;")
-                layout.addWidget(error)
-            if run["status"] in {"queued", "running"}:
-                busy = QLabel(self.tr("Working…"))
-                busy.setStyleSheet("color: #62bdb8; padding: 4px;")
-                layout.addWidget(busy)
-        layout.addStretch()
+        context = (dark, QApplication.instance().property("language"), status_text)
+        reusable = {}
+        headings = {}
+        previous_cards = self._run_cards
+        for run in rows:
+            identifier = run["id"]
+            heading = self.run_heading(run) if self.run_heading else None
+            headings[identifier] = heading
+            previous = self._run_cards.get(identifier)
+            if previous and previous[:3] == (run, context, heading):
+                reusable[identifier] = previous
+        layout = self._run_layout
+        if layout is None:
+            layout = self.content()
+            layout.addStretch()
+            self._run_layout = layout
+        for identifier, (_, _, _, card) in previous_cards.items():
+            if identifier not in reusable:
+                layout.removeWidget(card)
+                card.hide()
+                card.setParent(None)
+                card.deleteLater()
+        self._run_cards = {}
+        for index, run in enumerate(reversed(rows)):
+            identifier = run["id"]
+            if identifier in reusable:
+                snapshot, _, heading, card = reusable[identifier]
+            else:
+                heading = headings[identifier]
+                card = QWidget()
+                box = QVBoxLayout(card)
+                box.setContentsMargins(0, 0, 0, 0)
+                box.setSpacing(18)
+                self._render_run(box, run, status_text, dark, heading)
+                # Callers may mutate nested messages/events between refreshes.
+                snapshot = deepcopy(run)
+            self._run_cards[identifier] = (snapshot, context, heading, card)
+            if layout.indexOf(card) != index:
+                layout.insertWidget(index, card)
+
+    def _render_run(self, layout, run, status_text, dark, heading_text):
+        if heading_text is not None:
+            heading = QLabel(heading_text)
+            heading.setObjectName("runHeading")
+            heading.setTextFormat(Qt.TextFormat.PlainText)
+            layout.addWidget(heading)
+        messages = run["messages"]
+        fallback = len(messages) - 1
+        if messages and messages[-1]["role"] == "assistant":
+            fallback -= 1
+        groups = {}
+        for index, event in enumerate(run["events"]):
+            anchor = event.get("after_message_index", fallback)
+            anchor = max(-1, min(anchor, len(messages) - 1))
+            groups.setdefault(anchor, []).append((index, event))
+        if -1 in groups:
+            self.add_activity(layout, run, groups[-1], -1, status_text, dark)
+        for index, message in enumerate(messages):
+            self.add_message(layout, message, dark)
+            if index in groups:
+                self.add_activity(layout, run, groups[index], index, status_text, dark)
+        self.add_presentations(layout, run)
+        if not run["events"]:
+            self.add_activity(layout, run, [], len(messages), status_text, dark)
+        if run["error"]:
+            error = QLabel(run["error"])
+            error.setTextFormat(Qt.TextFormat.PlainText)
+            error.setWordWrap(True)
+            error.setStyleSheet("color: #dc756d; padding: 12px;")
+            layout.addWidget(error)
+        if run["status"] in {"queued", "running"}:
+            busy = QLabel(self.tr("Working…"))
+            busy.setStyleSheet("color: #62bdb8; padding: 4px;")
+            layout.addWidget(busy)

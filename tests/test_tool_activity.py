@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 
 import pytest
 from PySide6.QtCore import QPoint, Qt
@@ -7,6 +8,92 @@ from PySide6.QtWidgets import QApplication, QLabel, QToolButton
 
 from torrentlinker.gui.chat_transcript import ChatTranscript, MessageText
 from torrentlinker.gui.request_details import JsonCode
+
+
+def test_changed_chat_run_keeps_other_messages_and_expanded_receipts(qtbot):
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    older = narrative_run()
+    current = deepcopy(older)
+    current["id"] = "current"
+    transcript.set_runs([current, older], str)
+    transcript.show()
+    old_messages = transcript.findChildren(MessageText)[:3]
+    activity = transcript.findChildren(QToolButton, "toolActivitySummary")[0]
+    activity.click()
+    transcript.findChildren(QToolButton, "toolEventSummary")[0].click()
+    command = transcript.findChild(JsonCode)
+    assert command.isVisible()
+    current["messages"][-1]["content"] = "A new answer."
+    transcript.set_runs([current, older], str)
+    assert transcript.findChildren(MessageText)[:3] == old_messages, (
+        "An unrelated response rebuilt the completed history"
+    )
+    assert transcript.findChild(JsonCode) is command
+    assert transcript.findChildren(MessageText)[-1].toPlainText().strip() == "A new answer."
+    qtbot.waitUntil(command.isVisible)
+
+
+def test_chat_reuse_respects_language_theme_headings_and_removed_history(qtbot, qapp):
+    from torrentlinker import i18n
+
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    run = narrative_run()
+    heading = "Original discussion"
+    transcript.run_heading = lambda run: heading
+    transcript.set_runs([run], str)
+    original = transcript.findChildren(MessageText)[0]
+    heading = "Renamed discussion"
+    transcript.set_runs([run], str)
+    assert transcript.findChild(QLabel, "runHeading").text() == heading
+    assert transcript.findChildren(MessageText)[0] is not original
+    previous_language = qapp.property("language")
+    previous_palette = qapp.palette()
+    translators = i18n.install(qapp, "fr")
+    try:
+        transcript.set_runs([run], str)
+        activity = transcript.findChild(QToolButton, "toolActivitySummary")
+        assert "Lire le guide" in activity.text()
+        original = transcript.findChildren(MessageText)[0]
+        palette = QPalette(previous_palette)
+        dark = palette.color(QPalette.ColorRole.Window).lightness() < 128
+        palette.setColor(
+            QPalette.ColorRole.Window, Qt.GlobalColor.white if dark else Qt.GlobalColor.black
+        )
+        qapp.setPalette(palette)
+        transcript.set_runs([run], str)
+        assert transcript.findChildren(MessageText)[0] is not original
+        transcript.set_runs([], str)
+        assert not transcript.findChildren(MessageText)
+        assert not transcript.findChildren(QToolButton, "toolActivitySummary")
+        transcript.set_runs([run], str)
+        assert len(transcript.findChildren(MessageText)) == 3
+    finally:
+        qapp.setPalette(previous_palette)
+        for translator in translators:
+            qapp.removeTranslator(translator)
+        qapp.setProperty("language", previous_language)
+
+
+def test_chat_incremental_history_keeps_chronology_when_runs_arrive_or_disappear(qtbot):
+    transcript = ChatTranscript()
+    qtbot.addWidget(transcript)
+    transcript.resize(900, 900)
+    transcript.show()
+    transcript.run_heading = lambda run: run["id"]
+    runs = [dict(narrative_run(), id=f"run-{i}") for i in range(3)]
+    for rows in ([runs[1], runs[0]], [runs[2], runs[1], runs[0]], [runs[2], runs[0]]):
+        transcript.set_runs(rows, str)
+        qtbot.waitUntil(
+            lambda count=len(rows): len(transcript.findChildren(QLabel, "runHeading")) == count
+        )
+        # Layout geometry settles on the next event-loop iteration.
+        QApplication.processEvents()
+        headings = transcript.findChildren(QLabel, "runHeading")
+        headings.sort(key=lambda label: label.mapTo(transcript.widget(), QPoint()).y())
+        assert [label.text() for label in headings] == [run["id"] for run in reversed(rows)]
+        assert len(transcript.findChildren(MessageText)) == 3 * len(rows)
 
 
 def test_unexecuted_success_claim_is_explicitly_marked_as_reply_only(qtbot):

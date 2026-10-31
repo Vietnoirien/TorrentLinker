@@ -211,6 +211,13 @@ def test_large_approval_stays_compact_and_full_command_survives_refresh(qtbot):
         ).click()
     assert signal.args == ["run", 0, True]
 
+    # A changed receipt must replace its previously reusable approval controls.
+    event["decision"] = "approved"
+    event["status"] = "finished"
+    rows[0]["status"] = "completed"
+    widget.set_runs(rows, str)
+    assert not any(b.text() == "Approve once" for b in widget.findChildren(QPushButton))
+
 
 def test_summary_keeps_destructive_effect_and_global_folder_scope_visible():
     deleted = {"review": {"operation": {"kind": "manage", "action": "delete", "hashes": ["a"]}}}

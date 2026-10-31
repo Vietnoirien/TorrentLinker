@@ -1,0 +1,59 @@
+{
+  "baseline_commit": "56745c9",
+  "before": {
+    "runs": 100,
+    "messages": 200,
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "qt_platform": "offscreen",
+    "measurements": {
+      "first_render": {
+        "elapsed_ms": 748.67,
+        "max_heartbeat_gap_ms": 746.05
+      },
+      "one_run_changed": [
+        {
+          "elapsed_ms": 833.33,
+          "max_heartbeat_gap_ms": 807.94
+        },
+        {
+          "elapsed_ms": 818.41,
+          "max_heartbeat_gap_ms": 793.63
+        },
+        {
+          "elapsed_ms": 824.99,
+          "max_heartbeat_gap_ms": 798.33
+        }
+      ]
+    },
+    "peak_rss_mib": 225.4
+  },
+  "after": {
+    "runs": 100,
+    "messages": 200,
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "qt_platform": "offscreen",
+    "measurements": {
+      "first_render": {
+        "elapsed_ms": 808.2,
+        "max_heartbeat_gap_ms": 805.48
+      },
+      "one_run_changed": [
+        {
+          "elapsed_ms": 29.86,
+          "max_heartbeat_gap_ms": 18.18
+        },
+        {
+          "elapsed_ms": 27.69,
+          "max_heartbeat_gap_ms": 10.11
+        },
+        {
+          "elapsed_ms": 28.49,
+          "max_heartbeat_gap_ms": 10.19
+        }
+      ]
+    },
+    "peak_rss_mib": 182.3
+  }
+}
