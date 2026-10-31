@@ -16,6 +16,21 @@ Use **Settings → General → Export support report…** on desktop, or **Setti
 
 This report describes the current application state. It does not check available disk space or prove a Path Mapping works. Desktop job history is included when the local agent service is running; otherwise `recent_jobs` is `null`. Reproduction steps and the visible error still help locate the problem.
 
+## Back up before upgrading
+
+1. Finish or cancel active work, then quit TorrentLinker. For Docker, stop the TorrentLinker service and wait for it to stop. A copy made while the app is writing its databases is not the procedure tested here.
+2. Copy the **entire application data folder**, including subfolders, to a dated backup outside that folder. Use the desktop location below, the server's configured `--config` directory, or the Docker volume mounted at `/config`. Preserve permissions and include every file, including any SQLite journal files. Copy the whole folder rather than selecting individual databases.
+3. Keep your deployment configuration and externally supplied secret/password files separately. Desktop credentials are in your operating system's keyring, outside this folder. On a new OS account or computer, enter those credentials again. The web server's `credentials.key` and `credentials.enc` belong together in the backup; externally supplied secret files still need their original mounts.
+4. Install the new version and reopen the same data folder. Check client selection, Download Folders, Local Drafts, conversations and queues before starting new work. A download interrupted during submission should require checking the client, not be sent again automatically.
+
+This backup contains private conversations, client configuration and, for the web server, decryptable credentials. Keep it private. The support-report export above is a separate, limited file intended for sharing. Neither backup includes your media files or the Torrent Client's own configuration; back those up separately if needed.
+
+## Restore a backup
+
+Stop TorrentLinker first. Keep a separate copy of the current data folder, then restore the complete backup into the original location with its original ownership and permissions. Do not merge selected database files from different backups. Reopen with the same app version that made the backup or a version whose upgrade path you have verified. Running older code against a database already migrated by newer code is not a tested downgrade procedure.
+
+Keep the same Library and Download Folder mounts so saved paths still refer to the same files. Verify credentials and connections, then inspect pending and uncertain actions against the Torrent Client or c411 before retrying. Restoring app data does not undo downloads or Draft submissions accepted since that backup. Review any enabled schedules before resuming unattended operation.
+
 ## Where TorrentLinker keeps its data
 
 | System | Folder |
@@ -29,6 +44,7 @@ It holds:
 - `uploads/`: the `.torrent` and `.nfo` of each Upload, as sent in its Draft, and a folder per Upload with the images captured for its description.
 - `state.db`: the Catalogue, remembered searches, Rejections, Verifications in progress, the saved Plan, the Uploads made and c411's Category Options.
 - `settings.json`: your settings. API keys and passwords are not in it: they stay in the system keyring.
+- `assistant.sqlite`, `agents.sqlite`, `jobs.sqlite` and other state databases: conversations, permissions, job history and feature-specific state. The web server uses `catalogue.sqlite` for the state held in desktop `state.db`. Keep the whole folder to preserve these together.
 - `torrentlinker.log`: the log, useful when reporting a problem.
 
 Your torrent client keeps its own copy of every torrent added to it, in its own profile folder.

@@ -1,0 +1,24 @@
+{
+  "target_commit": "b021a7cc31758b81f4ef840b57ba05f882e7684b",
+  "python": "3.13.11",
+  "results": [
+    {
+      "from": "v0.12.2",
+      "source_commit": "f4685ecc1fc0d08424520099fcd79bdd0488aa43",
+      "upgrade": "passed",
+      "second_restart": "passed",
+      "offline_restore": "passed",
+      "backup_unchanged": true,
+      "network_connections": 0
+    },
+    {
+      "from": "v1.0.0-beta.27",
+      "source_commit": "ad24628ae879e856a74c7b5e6509ddd0500a43ff",
+      "upgrade": "passed",
+      "second_restart": "passed",
+      "offline_restore": "passed",
+      "backup_unchanged": true,
+      "network_connections": 0
+    }
+  ]
+}
