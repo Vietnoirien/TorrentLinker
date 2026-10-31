@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -126,6 +127,7 @@ class SearchTab(QWidget):
         self._seeding: Seeding | None = None
         self._client_hashes: set[str] = set()
         self._queued_hashes: set[str] = set()
+        self._queue_version: tuple[object, str, int, int] | None = None
         self._results: list[Candidate] = []
         self._offset = 0
         self._query = SearchQuery()
@@ -1275,12 +1277,38 @@ class SearchTab(QWidget):
         ]
 
     def _poll_queue(self) -> None:
-        if self.isVisible() and entries(self.store) != self._queue_snapshot:
-            self.refresh_queue()
+        if not self.isVisible():
+            return
+        version = self.store.change_token()
+        if version == self._queue_version:
+            return
+        rows = entries(self.store)
+        if rows == self._queue_snapshot:
+            self._queue_version = version
+            return
+        # A send outcome does not change release metadata or Zen estimates. Keep
+        # the displayed items and exact selection instead of rebuilding every row.
+        status_only = len(rows) == len(self._queue_snapshot) and all(
+            row == previous
+            or replace(
+                row,
+                status=previous.status,
+                reason=previous.reason,
+                retry_safe=previous.retry_safe,
+            )
+            == previous
+            for row, previous in zip(rows, self._queue_snapshot, strict=True)
+        )
+        self._show_queue(rows, status_only=status_only)
+        self._queue_version = version
 
     def refresh_queue(self) -> None:
+        version = self.store.change_token()
+        self._show_queue(entries(self.store))
+        self._queue_version = version
+
+    def _show_queue(self, rows: list[QueueEntry], *, status_only: bool = False) -> None:
         selected = set(self.selected_keys())
-        rows = entries(self.store)
         self._queue_snapshot = rows
         self._queued_hashes = {
             (e.candidate.infohash or "").lower() for e in rows if e.status in {"queued", "sending"}
@@ -1296,28 +1324,46 @@ class SearchTab(QWidget):
         }
         self.queue.blockSignals(True)
         self.queue.setSortingEnabled(False)
-        self.queue.setRowCount(len(rows))
-        for row, entry in enumerate(rows):
-            item = QTableWidgetItem(entry.candidate.title)
-            item.setData(Qt.ItemDataRole.UserRole, entry.key)
-            self.queue.setItem(row, 0, item)
-            self.queue.setItem(
-                row, 1, NumberItem(human_size(entry.candidate.size), entry.candidate.size)
-            )
-            self.queue.setItem(row, 2, QTableWidgetItem())
-            self.queue.setItem(row, 3, QTableWidgetItem())
-            self.queue.setItem(row, 4, QTableWidgetItem(str(entry.folder)))
-            self.queue.setItem(row, 5, QTableWidgetItem(labels.get(entry.status, entry.status)))
-            self.queue.setItem(row, 6, QTableWidgetItem(entry.reason))
-            self.queue.setItem(
-                row, 7, QTableWidgetItem(self.settings.profile(entry.client_id).name)
-            )
-            for column in range(8):
-                cell = self.queue.item(row, column)
-                assert cell is not None
-                cell.setSelected(entry.key in selected)
-                cell.setToolTip(cell.text())
-        self._refresh_queue_estimates()
+        if status_only:
+            by_key = {entry.key: entry for entry in rows}
+            for row in range(self.queue.rowCount()):
+                title = self.queue.item(row, 0)
+                assert title is not None
+                entry = by_key[title.data(Qt.ItemDataRole.UserRole)]
+                for column, text in (
+                    (5, labels.get(entry.status, entry.status)),
+                    (6, entry.reason),
+                    (7, self.settings.profile(entry.client_id).name),
+                ):
+                    cell = self.queue.item(row, column)
+                    assert cell is not None
+                    if cell.text() != text:
+                        cell.setText(text)
+                        cell.setToolTip(text)
+            self.queue.setSortingEnabled(True)
+        else:
+            self.queue.setRowCount(len(rows))
+            for row, entry in enumerate(rows):
+                item = QTableWidgetItem(entry.candidate.title)
+                item.setData(Qt.ItemDataRole.UserRole, entry.key)
+                self.queue.setItem(row, 0, item)
+                self.queue.setItem(
+                    row, 1, NumberItem(human_size(entry.candidate.size), entry.candidate.size)
+                )
+                self.queue.setItem(row, 2, QTableWidgetItem())
+                self.queue.setItem(row, 3, QTableWidgetItem())
+                self.queue.setItem(row, 4, QTableWidgetItem(str(entry.folder)))
+                self.queue.setItem(row, 5, QTableWidgetItem(labels.get(entry.status, entry.status)))
+                self.queue.setItem(row, 6, QTableWidgetItem(entry.reason))
+                self.queue.setItem(
+                    row, 7, QTableWidgetItem(self.settings.profile(entry.client_id).name)
+                )
+                for column in range(8):
+                    cell = self.queue.item(row, column)
+                    assert cell is not None
+                    cell.setSelected(entry.key in selected)
+                    cell.setToolTip(cell.text())
+            self._refresh_queue_estimates()
         self.queue.blockSignals(False)
         count = len(rows)
         self.queue_summary.setText(
@@ -1484,10 +1530,12 @@ class SearchTab(QWidget):
         self.add_button.setEnabled(
             not busy and not self._searching and bool(self.results.selectionModel().selectedRows())
         )
-        self.start.setEnabled(not busy and any(e.status == "queued" for e in entries(self.store)))
+        # Button state follows the displayed snapshot. Dispatch and edits still
+        # re-read and validate current persisted entries in their action handlers.
+        rows = self._queue_snapshot
+        self.start.setEnabled(not busy and any(e.status == "queued" for e in rows))
         self.pause.setEnabled(busy)
         selected = set(self.selected_keys())
-        rows = entries(self.store)
         self.retry.setEnabled(
             not busy
             and any(

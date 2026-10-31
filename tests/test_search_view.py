@@ -443,3 +443,112 @@ def test_search_queue_poll_keeps_client_scope(qtbot, tmp_path):
     view._poll_queue()
     assert view.queue.rowCount() == 1
     assert view.queue.item(0, 0).text() == "Other client"
+
+
+def test_queue_selection_uses_displayed_snapshot_without_reloading_store(
+    qtbot, tmp_path, monkeypatch
+):
+    from torrentlinker.gui import search_view
+
+    store = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    enqueue(store, indexer, Candidate("Queued", 1024, "fixture"), tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    reads = []
+    original = search_view.entries
+
+    def read(current):
+        reads.append(True)
+        return original(current)
+
+    monkeypatch.setattr(search_view, "entries", read)
+    view.queue.selectRow(0)
+    assert not reads, "Selection reloaded the entire queue"
+    assert view.remove.isEnabled()
+    assert view.start.isEnabled()
+    assert not view.retry.isEnabled()
+
+
+@pytest.mark.parametrize("sort_column", [0, 5])
+def test_queue_status_poll_updates_only_status_cells_and_keeps_exact_selection(
+    qtbot, tmp_path, monkeypatch, sort_column
+):
+    from torrentlinker.gui import search_view
+
+    store = Store(tmp_path / "state.db")
+    indexer = Indexer("https://c411.org/api", "key")
+    for i in range(3):
+        enqueue(store, indexer, Candidate(f"Fixture {i}", 10**9, f"fixture-{i}", i), tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    monkeypatch.setattr(view, "isVisible", lambda: True)
+    view.queue.sortItems(sort_column, Qt.SortOrder.AscendingOrder)
+    view.queue.selectRow(0)
+    selected = view.selected_keys()
+    changed_columns = set()
+    view.queue.model().dataChanged.connect(
+        lambda top, bottom, roles: changed_columns.update(range(top.column(), bottom.column() + 1))
+    )
+    reads = []
+    original = search_view.entries
+
+    def read(current):
+        reads.append(True)
+        return original(current)
+
+    monkeypatch.setattr(search_view, "entries", read)
+    store.download_outcome(selected[0], "refused", "Fixture refusal")
+    view._poll_queue()
+    assert len(reads) == 1, "One queue poll decoded the database more than once"
+    assert changed_columns <= {5, 6}, "Status-only change rebuilt unrelated queue cells"
+    selected_row = view.queue.selectionModel().selectedRows()[0].row()
+    assert view.queue.item(selected_row, 5).text() == "Skipped"
+    assert view.queue.item(selected_row, 6).toolTip() == "Fixture refusal"
+    assert view.selected_keys() == selected
+    assert view.retry.isEnabled()
+    assert "1 need attention" in view.queue_summary.text()
+    assert view.queue.isSortingEnabled() and not view.queue.signalsBlocked()
+
+    store.download_outcome(selected[0], "failed", "Uncertain transport", retry_safe=False)
+    view._poll_queue()
+    assert not view.retry.isEnabled()
+    store.download_outcome(selected[0], "failed", "Known refusal", retry_safe=True)
+    view._poll_queue()
+    assert view.retry.isEnabled()
+    assert view.selected_keys() == selected
+
+
+def test_unchanged_queue_poll_does_not_decode_entries(qtbot, tmp_path, monkeypatch):
+    from torrentlinker.gui import search_view
+
+    store = Store(tmp_path / "state.db")
+    indexer = Indexer("https://example.test/api", "key")
+    enqueue(store, indexer, Candidate("Queued", 1024, "fixture"), tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    monkeypatch.setattr(view, "isVisible", lambda: True)
+    monkeypatch.setattr(
+        search_view, "entries", lambda *a: pytest.fail("Unchanged poll decoded the entire queue")
+    )
+    view._poll_queue()
+
+
+def test_queue_poll_detects_a_replacement_database_with_the_same_client_id(
+    qtbot, tmp_path, monkeypatch
+):
+    store = Store(tmp_path / "first.db")
+    other = Store(tmp_path / "second.db")
+    indexer = Indexer("https://example.test/api", "key")
+    enqueue(store, indexer, Candidate("First", 1024, "first"), tmp_path)
+    enqueue(other, indexer, Candidate("Second", 1024, "second"), tmp_path)
+    view = SearchTab(store, Settings(), lambda: indexer, FakeQbit)
+    qtbot.addWidget(view)
+    view.queue_timer.stop()
+    monkeypatch.setattr(view, "isVisible", lambda: True)
+    assert view.queue.item(0, 0).text() == "First"
+    view.store = other
+    view._poll_queue()
+    assert view.queue.item(0, 0).text() == "Second"

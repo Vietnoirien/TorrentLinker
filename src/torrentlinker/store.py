@@ -252,6 +252,21 @@ class Store:
                 )
         return counts
 
+    def change_token(self) -> tuple[object, str, int, int]:
+        """An in-process token for this connection, client scope and database state.
+
+        data_version catches other connections' commits, while total_changes
+        catches this connection's writes. Read before loading a display snapshot:
+        a concurrent write then causes another refresh rather than being missed.
+        """
+        with self._lock:
+            return (
+                self._db,
+                self.client_id,
+                self._db.total_changes,
+                self._db.execute("PRAGMA data_version").fetchone()[0],
+            )
+
     def for_client(self, identifier: str) -> Store:
         """An immutable client scope sharing caches, SQLite connection and its lock."""
         if not identifier or not identifier.replace("-", "").isalnum():

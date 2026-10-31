@@ -1,0 +1,367 @@
+{
+  "baseline_commit": "9cdd729e2f6fca385c278929eed6e91b550c2f84",
+  "baseline": [
+    {
+      "count": 1000,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 146.99,
+          "max_heartbeat_gap_ms": 128.17
+        },
+        "first_usable_ms": 339.11,
+        "unchanged_poll": [
+          {
+            "elapsed_ms": 34.28,
+            "max_heartbeat_gap_ms": 13.66
+          },
+          {
+            "elapsed_ms": 32.33,
+            "max_heartbeat_gap_ms": 11.83
+          },
+          {
+            "elapsed_ms": 33.01,
+            "max_heartbeat_gap_ms": 12.36
+          }
+        ],
+        "estimate_refresh": [
+          {
+            "elapsed_ms": 54.02,
+            "max_heartbeat_gap_ms": 35.44
+          },
+          {
+            "elapsed_ms": 55.89,
+            "max_heartbeat_gap_ms": 37.27
+          },
+          {
+            "elapsed_ms": 54.62,
+            "max_heartbeat_gap_ms": 35.46
+          }
+        ],
+        "selection": {
+          "elapsed_ms": 41.76,
+          "max_heartbeat_gap_ms": 22.6
+        },
+        "changed_poll": [
+          {
+            "elapsed_ms": 248.69,
+            "max_heartbeat_gap_ms": 234.71
+          },
+          {
+            "elapsed_ms": 170.83,
+            "max_heartbeat_gap_ms": 156.94
+          },
+          {
+            "elapsed_ms": 170.72,
+            "max_heartbeat_gap_ms": 157.58
+          }
+        ]
+      },
+      "peak_rss_mib": 153.6
+    },
+    {
+      "count": 12000,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 1807.31,
+          "max_heartbeat_gap_ms": 1788.92
+        },
+        "first_usable_ms": 3519.25,
+        "unchanged_poll": [
+          {
+            "elapsed_ms": 199.23,
+            "max_heartbeat_gap_ms": 178.82
+          },
+          {
+            "elapsed_ms": 279.58,
+            "max_heartbeat_gap_ms": 259.12
+          },
+          {
+            "elapsed_ms": 216.7,
+            "max_heartbeat_gap_ms": 196.3
+          }
+        ],
+        "estimate_refresh": [
+          {
+            "elapsed_ms": 615.19,
+            "max_heartbeat_gap_ms": 595.69
+          },
+          {
+            "elapsed_ms": 454.96,
+            "max_heartbeat_gap_ms": 435.72
+          },
+          {
+            "elapsed_ms": 471.41,
+            "max_heartbeat_gap_ms": 452.9
+          }
+        ],
+        "selection": {
+          "elapsed_ms": 383.86,
+          "max_heartbeat_gap_ms": 364.39
+        },
+        "changed_poll": [
+          {
+            "elapsed_ms": 2207.73,
+            "max_heartbeat_gap_ms": 2194.09
+          },
+          {
+            "elapsed_ms": 2169.49,
+            "max_heartbeat_gap_ms": 2155.95
+          },
+          {
+            "elapsed_ms": 2175.71,
+            "max_heartbeat_gap_ms": 2161.99
+          }
+        ]
+      },
+      "peak_rss_mib": 288.2
+    },
+    {
+      "count": 50000,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 8542.0,
+          "max_heartbeat_gap_ms": 8522.99
+        },
+        "first_usable_ms": 16678.38,
+        "unchanged_poll": [
+          {
+            "elapsed_ms": 1344.13,
+            "max_heartbeat_gap_ms": 1325.96
+          },
+          {
+            "elapsed_ms": 1355.73,
+            "max_heartbeat_gap_ms": 1335.21
+          },
+          {
+            "elapsed_ms": 1432.71,
+            "max_heartbeat_gap_ms": 1412.09
+          }
+        ],
+        "estimate_refresh": [
+          {
+            "elapsed_ms": 1826.15,
+            "max_heartbeat_gap_ms": 1806.81
+          },
+          {
+            "elapsed_ms": 2130.67,
+            "max_heartbeat_gap_ms": 2111.85
+          },
+          {
+            "elapsed_ms": 1870.71,
+            "max_heartbeat_gap_ms": 1851.76
+          }
+        ],
+        "selection": {
+          "elapsed_ms": 1995.21,
+          "max_heartbeat_gap_ms": 1975.59
+        },
+        "changed_poll": [
+          {
+            "elapsed_ms": 10282.77,
+            "max_heartbeat_gap_ms": 10269.7
+          },
+          {
+            "elapsed_ms": 10309.89,
+            "max_heartbeat_gap_ms": 10295.94
+          },
+          {
+            "elapsed_ms": 10318.01,
+            "max_heartbeat_gap_ms": 10304.86
+          }
+        ]
+      },
+      "peak_rss_mib": 748.6
+    }
+  ],
+  "final": [
+    {
+      "count": 1000,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 131.52,
+          "max_heartbeat_gap_ms": 111.9
+        },
+        "first_usable_ms": 303.56,
+        "unchanged_poll": [
+          {
+            "elapsed_ms": 20.23,
+            "max_heartbeat_gap_ms": 7.55
+          },
+          {
+            "elapsed_ms": 20.61,
+            "max_heartbeat_gap_ms": 10.84
+          },
+          {
+            "elapsed_ms": 20.76,
+            "max_heartbeat_gap_ms": 9.82
+          }
+        ],
+        "estimate_refresh": [
+          {
+            "elapsed_ms": 54.67,
+            "max_heartbeat_gap_ms": 35.43
+          },
+          {
+            "elapsed_ms": 54.76,
+            "max_heartbeat_gap_ms": 35.18
+          },
+          {
+            "elapsed_ms": 54.22,
+            "max_heartbeat_gap_ms": 34.82
+          }
+        ],
+        "selection": {
+          "elapsed_ms": 20.62,
+          "max_heartbeat_gap_ms": 8.6
+        },
+        "changed_poll": [
+          {
+            "elapsed_ms": 40.31,
+            "max_heartbeat_gap_ms": 22.3
+          },
+          {
+            "elapsed_ms": 40.75,
+            "max_heartbeat_gap_ms": 22.96
+          },
+          {
+            "elapsed_ms": 39.27,
+            "max_heartbeat_gap_ms": 20.55
+          }
+        ]
+      },
+      "peak_rss_mib": 152.8
+    },
+    {
+      "count": 12000,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 1470.02,
+          "max_heartbeat_gap_ms": 1450.42
+        },
+        "first_usable_ms": 2841.09,
+        "unchanged_poll": [
+          {
+            "elapsed_ms": 20.4,
+            "max_heartbeat_gap_ms": 7.54
+          },
+          {
+            "elapsed_ms": 20.73,
+            "max_heartbeat_gap_ms": 9.83
+          },
+          {
+            "elapsed_ms": 20.68,
+            "max_heartbeat_gap_ms": 9.82
+          }
+        ],
+        "estimate_refresh": [
+          {
+            "elapsed_ms": 443.42,
+            "max_heartbeat_gap_ms": 423.82
+          },
+          {
+            "elapsed_ms": 435.34,
+            "max_heartbeat_gap_ms": 416.07
+          },
+          {
+            "elapsed_ms": 436.13,
+            "max_heartbeat_gap_ms": 416.6
+          }
+        ],
+        "selection": {
+          "elapsed_ms": 21.7,
+          "max_heartbeat_gap_ms": 9.68
+        },
+        "changed_poll": [
+          {
+            "elapsed_ms": 388.32,
+            "max_heartbeat_gap_ms": 370.4
+          },
+          {
+            "elapsed_ms": 280.66,
+            "max_heartbeat_gap_ms": 261.8
+          },
+          {
+            "elapsed_ms": 360.89,
+            "max_heartbeat_gap_ms": 342.22
+          }
+        ]
+      },
+      "peak_rss_mib": 282.2
+    },
+    {
+      "count": 50000,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 6440.68,
+          "max_heartbeat_gap_ms": 6421.57
+        },
+        "first_usable_ms": 12840.78,
+        "unchanged_poll": [
+          {
+            "elapsed_ms": 21.05,
+            "max_heartbeat_gap_ms": 7.45
+          },
+          {
+            "elapsed_ms": 20.65,
+            "max_heartbeat_gap_ms": 9.7
+          },
+          {
+            "elapsed_ms": 20.67,
+            "max_heartbeat_gap_ms": 9.79
+          }
+        ],
+        "estimate_refresh": [
+          {
+            "elapsed_ms": 1804.32,
+            "max_heartbeat_gap_ms": 1784.86
+          },
+          {
+            "elapsed_ms": 2022.02,
+            "max_heartbeat_gap_ms": 2002.95
+          },
+          {
+            "elapsed_ms": 1767.82,
+            "max_heartbeat_gap_ms": 1748.41
+          }
+        ],
+        "selection": {
+          "elapsed_ms": 25.69,
+          "max_heartbeat_gap_ms": 9.78
+        },
+        "changed_poll": [
+          {
+            "elapsed_ms": 1756.64,
+            "max_heartbeat_gap_ms": 1738.11
+          },
+          {
+            "elapsed_ms": 1704.71,
+            "max_heartbeat_gap_ms": 1686.82
+          },
+          {
+            "elapsed_ms": 1388.46,
+            "max_heartbeat_gap_ms": 1370.23
+          }
+        ]
+      },
+      "peak_rss_mib": 709.2
+    }
+  ]
+}
