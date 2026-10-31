@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
@@ -67,6 +68,7 @@ from torrentlinker.torrent_management import (
 )
 
 SORT = Qt.ItemDataRole.UserRole + 1
+FILTER = Qt.ItemDataRole.UserRole + 2
 
 
 class ProgressBarDelegate(QStyledItemDelegate):
@@ -215,7 +217,7 @@ class TorrentModel(QAbstractTableModel):
                     continue
                 before = (
                     old.name,
-                    (old.state, old.tags),
+                    (old.state, old.tags, status(old)),
                     old.progress,
                     old.total_size,
                     old.download_rate,
@@ -231,7 +233,7 @@ class TorrentModel(QAbstractTableModel):
                 )
                 after = (
                     new.name,
-                    (new.state, new.tags),
+                    (new.state, new.tags, status(new)),
                     new.progress,
                     new.total_size,
                     new.download_rate,
@@ -250,7 +252,12 @@ class TorrentModel(QAbstractTableModel):
                         changed.setdefault(col, []).append(row)
             self.rows = [incoming[t.hash] for t in self.rows]
             for col, indexes in changed.items():
-                self.dataChanged.emit(self.index(indexes[0], col), self.index(indexes[-1], col))
+                roles = [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole, SORT]
+                if col in (0, 1):
+                    roles.append(FILTER)
+                self.dataChanged.emit(
+                    self.index(indexes[0], col), self.index(indexes[-1], col), roles
+                )
         else:
             self.beginResetModel()
             self.rows = list(incoming.values())
@@ -268,8 +275,24 @@ class TorrentFilter(QSortFilterProxyModel):
         self.path: tuple[str, ...] = ()
         self.paths: dict[str, tuple[tuple[str, ...], ...]] = {}
         self.setSortRole(SORT)
+        # Filtering depends on names, status and tags, not every changing rate.
+        self.setFilterRole(FILTER)
         self.setFilterKeyColumn(-1)
         self.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.setDynamicSortFilter(False)
+        model.dataChanged.connect(self._source_changed)
+
+    def _source_changed(self, top, bottom, roles):
+        # Qt's default dynamic filter revisits every changed row even when a
+        # rate/ratio update cannot affect our name/status/tag/path predicates.
+        if not roles or FILTER in roles:
+            if hasattr(self, "endFilterChange"):
+                self.beginFilterChange()
+                self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
+            else:
+                self.invalidateRowsFilter()
+        if (not roles or SORT in roles) and top.column() <= self.sortColumn() <= bottom.column():
+            self.sort(self.sortColumn(), self.sortOrder())
 
     def filterAcceptsRow(self, row: int, parent: QModelIndex | QPersistentModelIndex) -> bool:
         t = self.source.rows[row]
@@ -396,6 +419,9 @@ class TorrentsTab(QWidget):
         saved = settings.value("torrents/header")
         if saved is not None:
             self.table.horizontalHeader().restoreState(saved)
+        self._legacy_header = saved is not None and not settings.value(
+            "torrents/connection_columns", False, type=bool
+        )
         if not settings.value("torrents/connection_columns", False, type=bool):
             header = self.table.horizontalHeader()
             for offset, column in enumerate((12, 13)):
@@ -468,7 +494,7 @@ class TorrentsTab(QWidget):
         listing = QListWidget()
         listing.setFrameShape(QListWidget.Shape.NoFrame)
         listing.setUniformItemSizes(True)
-        listing.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        listing.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         listing.setAccessibleName(title)
         listing.currentRowChanged.connect(lambda row, c=combo: row >= 0 and c.setCurrentIndex(row))
         combo.currentIndexChanged.connect(lambda _i, c=combo, w=listing: self._mirror(c, w))
@@ -483,7 +509,7 @@ class TorrentsTab(QWidget):
                 listing.addItem(combo.itemText(i))
             listing.setCurrentRow(combo.currentIndex())
         listing.setFixedHeight(
-            max(1, listing.count()) * listing.sizeHintForRow(0) + 6 if listing.count() else 0
+            min(8, listing.count()) * listing.sizeHintForRow(0) + 6 if listing.count() else 0
         )
 
     def _column(self, column: int, visible: bool) -> None:
@@ -528,7 +554,9 @@ class TorrentsTab(QWidget):
         if self.model.rows:
             self._group()
             self.model.dataChanged.emit(
-                self.model.index(0, 8), self.model.index(len(self.model.rows) - 1, 11)
+                self.model.index(0, 8),
+                self.model.index(len(self.model.rows) - 1, 11),
+                [Qt.ItemDataRole.DisplayRole, SORT],
             )
 
     def refresh(self) -> None:
@@ -549,13 +577,19 @@ class TorrentsTab(QWidget):
             scroll = self.table.verticalScrollBar().value()
             self.model.update(rows)
             self._group()
+            if self._legacy_header and rows:
+                # Qt must reconcile restored 12-column headers with the populated
+                # 14-column proxy once before their next state can be saved.
+                self.proxy.invalidate()
+                self._legacy_header = False
+            state_counts = Counter(status(t) for t in rows)
             for i in range(1, self.states.count()):
                 key = self.states.itemData(i)
-                n = sum(1 for t in rows if status(t) == key)
+                n = state_counts[key]
                 self.states.setItemText(i, f"{self.model.states[key]} ({n})")
             current_tag = self.tags.currentData()
-            available = sorted({tag for t in rows for tag in t.tags})
-            tag_counts = {tag: sum(1 for t in rows if tag in t.tags) for tag in available}
+            tag_counts = Counter(tag for t in rows for tag in t.tags)
+            available = sorted(tag_counts)
             if available != [self.tags.itemData(i) for i in range(1, self.tags.count())]:
                 with QSignalBlocker(self.tags):
                     self.tags.clear()
@@ -617,8 +651,6 @@ class TorrentsTab(QWidget):
             for leaf in leaves:
                 for size in range(len(leaf) + 1):
                     groups.setdefault(leaf[:size], set()).add(t.hash)
-        paths_changed = self.proxy.paths != paths
-        self.proxy.paths = paths
         counts = {key: len(hashes) for key, hashes in groups.items()}
         if counts != self._tree_counts:
             expanded = set()
@@ -655,16 +687,28 @@ class TorrentsTab(QWidget):
                     item.setExpanded(not path or path in expanded)
                 self.tree.setCurrentItem(nodes.get(current, nodes[()]))
             self._tree_counts = counts
-        if paths_changed:
-            self._filter()
+        self._filter(paths=paths)
 
-    def _filter(self, *_: Any) -> None:
-        self.proxy.query = self.search.text().strip().casefold()
-        self.proxy.state = self.states.currentData() or ""
-        self.proxy.tag = self.tags.currentData() or ""
+    def _filter(self, *_: Any, paths: dict[str, tuple[tuple[str, ...], ...]] | None = None) -> None:
+        query = self.search.text().strip().casefold()
+        state = self.states.currentData() or ""
+        tag = self.tags.currentData() or ""
         item = self.tree.currentItem()
-        self.proxy.path = item.data(0, Qt.ItemDataRole.UserRole) if item else ()
-        self.proxy.invalidate()
+        path = item.data(0, Qt.ItemDataRole.UserRole) if item else ()
+        proxy = self.proxy
+        paths = proxy.paths if paths is None else paths
+        changed = (query, state, tag, path) != (proxy.query, proxy.state, proxy.tag, proxy.path)
+        changed = changed or bool(path and paths != proxy.paths)
+        modern = hasattr(proxy, "endFilterChange")
+        if changed and modern:
+            proxy.beginFilterChange()
+        proxy.query, proxy.state, proxy.tag, proxy.path = query, state, tag, path
+        proxy.paths = paths
+        if changed:
+            if modern:
+                proxy.endFilterChange(QSortFilterProxyModel.Direction.Rows)
+            else:  # Qt 6.6–6.9, still supported by the desktop dependency.
+                proxy.invalidateRowsFilter()
 
     def selected(self) -> list[Torrent]:
         return [

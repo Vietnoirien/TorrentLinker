@@ -521,3 +521,115 @@ def test_progress_bar_fills_from_left_to_right(qtbot):
     top_left = image.pixelColor(rect.left() + 12, rect.top() + 6)
     assert left != right  # filled on the left, empty on the right, whatever the row height
     assert top_left == left or top_left != right
+
+
+def test_unchanged_filters_do_not_repeat_sorting(qtbot, monkeypatch):
+    from torrentlinker.gui.torrents_view import TorrentFilter
+
+    class CountingFilter(TorrentFilter):
+        comparisons = 0
+
+        def lessThan(self, left, right):
+            self.comparisons += 1
+            return super().lessThan(left, right)
+
+    monkeypatch.setattr("torrentlinker.gui.torrents_view.TorrentFilter", CountingFilter)
+    tab, _ = make_tab(qtbot, **{str(i): torrent(str(i)) for i in range(128)})
+    tab.proxy.comparisons = 0
+    tab._filter()
+    assert tab.proxy.rowCount() == 128
+    assert tab.proxy.comparisons == 0
+    # A different query which retains all rows must not discard their sorted order.
+    tab.search.setText("Torrent")
+    assert tab.proxy.rowCount() == 128
+    assert tab.proxy.comparisons == 0
+
+
+def test_rate_refresh_does_not_refilter_every_torrent(qtbot, monkeypatch):
+    from torrentlinker.gui.torrents_view import TorrentFilter
+
+    class CountingFilter(TorrentFilter):
+        checks = 0
+
+        def filterAcceptsRow(self, row, parent):
+            self.checks += 1
+            return super().filterAcceptsRow(row, parent)
+
+    monkeypatch.setattr("torrentlinker.gui.torrents_view.TorrentFilter", CountingFilter)
+    tab, client = make_tab(qtbot, **{str(i): torrent(str(i)) for i in range(128)})
+    tab.search.setText("Torrent")
+    tab.proxy.checks = 0
+    client.by_hash = {
+        key: replace(row, upload_rate=1024, ratio=2.0) for key, row in client.by_hash.items()
+    }
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab._loading)
+    assert tab.proxy.rowCount() == 128
+    assert tab.proxy.checks == 0
+    assert tab.proxy.index(0, 5).data() == "1.0 KiB"
+
+
+def test_progress_refresh_updates_status_filter_and_sort(qtbot):
+    tab, client = make_tab(qtbot, a=torrent(state="", progress=0.5), b=torrent("b", state=""))
+    tab.states.setCurrentIndex(tab.states.findData("downloading"))
+    assert [t.hash for t in tab.proxy.source.rows if status(t) == "downloading"] == ["a"]
+    assert tab.proxy.rowCount() == 1
+    client.by_hash["a"] = replace(client.by_hash["a"], progress=1.0)
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab._loading)
+    assert tab.proxy.rowCount() == 0
+
+
+@pytest.mark.parametrize("filter_kind", ["name", "tag", "category"])
+def test_refresh_reassigns_filtered_membership_without_changing_group_counts(qtbot, filter_kind):
+    tab, client = make_tab(
+        qtbot,
+        a=replace(torrent(tags=frozenset({"wanted"}), category="Books"), name="Target"),
+        b=replace(torrent("b", tags=frozenset({"other"}), category="Films"), name="Other"),
+    )
+    if filter_kind == "name":
+        tab.search.setText("Target")
+    elif filter_kind == "tag":
+        tab.tags.setCurrentIndex(tab.tags.findData("wanted"))
+    else:
+        root = tab.tree.topLevelItem(0)
+        tracker = root.child(0)
+        tab.tree.setCurrentItem(tracker.child(0))
+    assert tab.proxy.rowCount() == 1
+    assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == "a"
+    client.by_hash["a"] = replace(
+        client.by_hash["a"], name="Other", tags=frozenset({"other"}), category="Films"
+    )
+    client.by_hash["b"] = replace(
+        client.by_hash["b"], name="Target", tags=frozenset({"wanted"}), category="Books"
+    )
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab._loading)
+    assert tab.proxy.rowCount() == 1
+    assert tab.proxy.index(0, 0).data(Qt.ItemDataRole.UserRole) == "b"
+
+
+def test_rate_sort_refresh_keeps_exact_selected_hash(qtbot):
+    tab, client = make_tab(qtbot, a=torrent(upload_rate=10), b=torrent("b", upload_rate=20))
+    tab.table.sortByColumn(5, Qt.SortOrder.DescendingOrder)
+    tab.table.selectRow(0)
+    assert tab.selected()[0].hash == "b"
+    client.by_hash["a"] = replace(client.by_hash["a"], upload_rate=30)
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab._loading)
+    assert [tab.proxy.index(i, 0).data(Qt.ItemDataRole.UserRole) for i in range(2)] == ["a", "b"]
+    assert [row.hash for row in tab.selected()] == ["b"]
+
+
+def test_many_tags_scroll_without_forcing_a_tall_window(qtbot):
+    tags = frozenset(f"tag-{i:03d}" for i in range(100))
+    tab, _ = make_tab(qtbot, a=torrent(tags=tags))
+    assert tab.height() <= 850
+    assert tab.tag_list.height() <= 220
+    assert tab.tag_list.verticalScrollBar().maximum() > 0
+    # The last tag remains reachable and applies its exact filter.
+    tab.tag_list.setCurrentRow(tab.tag_list.count() - 1)
+    tab.tag_list.scrollToItem(tab.tag_list.currentItem())
+    assert tab.proxy.tag == "tag-099"
+    assert tab.proxy.rowCount() == 1
+    assert tab.tree.height() >= 100

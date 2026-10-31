@@ -1,0 +1,398 @@
+{
+  "baseline_revision": "f1cbef15eff77d7b62da3da40a37f88ac0b1a8ba",
+  "followup_revision": "commit containing this report",
+  "cpu": "Intel Core i9-9900KF @ 3.60GHz",
+  "logical_cpus": 16,
+  "memory_gib": 125.7,
+  "before": [
+    {
+      "count": 1000,
+      "distinct_tags": 33,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+      "peak_rss_mib": 119.28,
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 198.81,
+          "max_heartbeat_gap_ms": 150.03
+        },
+        "unchanged_refresh": [
+          {
+            "elapsed_ms": 33.87,
+            "max_heartbeat_gap_ms": 13.33
+          },
+          {
+            "elapsed_ms": 32.31,
+            "max_heartbeat_gap_ms": 11.44
+          },
+          {
+            "elapsed_ms": 32.61,
+            "max_heartbeat_gap_ms": 11.88
+          }
+        ],
+        "changing_refresh": [
+          {
+            "elapsed_ms": 79.51,
+            "max_heartbeat_gap_ms": 58.6
+          },
+          {
+            "elapsed_ms": 75.06,
+            "max_heartbeat_gap_ms": 54.23
+          },
+          {
+            "elapsed_ms": 75.59,
+            "max_heartbeat_gap_ms": 54.63
+          }
+        ],
+        "selected_refresh": {
+          "elapsed_ms": 33.85,
+          "max_heartbeat_gap_ms": 11.73
+        },
+        "filter": {
+          "elapsed_ms": 23.3,
+          "max_heartbeat_gap_ms": 10.85
+        },
+        "clear_filter": {
+          "elapsed_ms": 60.26,
+          "max_heartbeat_gap_ms": 39.89
+        }
+      },
+      "limits": "Synthetic client, Linux/offscreen; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+    },
+    {
+      "count": 12000,
+      "distinct_tags": 33,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+      "peak_rss_mib": 147.08,
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 1924.82,
+          "max_heartbeat_gap_ms": 1876.06
+        },
+        "unchanged_refresh": [
+          {
+            "elapsed_ms": 116.93,
+            "max_heartbeat_gap_ms": 96.23
+          },
+          {
+            "elapsed_ms": 115.42,
+            "max_heartbeat_gap_ms": 94.62
+          },
+          {
+            "elapsed_ms": 116.38,
+            "max_heartbeat_gap_ms": 95.53
+          }
+        ],
+        "changing_refresh": [
+          {
+            "elapsed_ms": 539.64,
+            "max_heartbeat_gap_ms": 518.61
+          },
+          {
+            "elapsed_ms": 472.0,
+            "max_heartbeat_gap_ms": 451.15
+          },
+          {
+            "elapsed_ms": 462.61,
+            "max_heartbeat_gap_ms": 441.57
+          }
+        ],
+        "selected_refresh": {
+          "elapsed_ms": 116.82,
+          "max_heartbeat_gap_ms": 94.69
+        },
+        "filter": {
+          "elapsed_ms": 31.62,
+          "max_heartbeat_gap_ms": 11.04
+        },
+        "clear_filter": {
+          "elapsed_ms": 591.47,
+          "max_heartbeat_gap_ms": 570.37
+        }
+      },
+      "limits": "Synthetic client, Linux/offscreen; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+    },
+    {
+      "count": 50000,
+      "distinct_tags": 33,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+      "peak_rss_mib": 243.95,
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 8272.5,
+          "max_heartbeat_gap_ms": 8223.61
+        },
+        "unchanged_refresh": [
+          {
+            "elapsed_ms": 485.96,
+            "max_heartbeat_gap_ms": 465.24
+          },
+          {
+            "elapsed_ms": 453.78,
+            "max_heartbeat_gap_ms": 432.92
+          },
+          {
+            "elapsed_ms": 445.37,
+            "max_heartbeat_gap_ms": 424.35
+          }
+        ],
+        "changing_refresh": [
+          {
+            "elapsed_ms": 2082.82,
+            "max_heartbeat_gap_ms": 2061.77
+          },
+          {
+            "elapsed_ms": 1875.72,
+            "max_heartbeat_gap_ms": 1854.72
+          },
+          {
+            "elapsed_ms": 1855.95,
+            "max_heartbeat_gap_ms": 1834.97
+          }
+        ],
+        "selected_refresh": {
+          "elapsed_ms": 450.48,
+          "max_heartbeat_gap_ms": 428.39
+        },
+        "filter": {
+          "elapsed_ms": 59.09,
+          "max_heartbeat_gap_ms": 38.14
+        },
+        "clear_filter": {
+          "elapsed_ms": 2600.12,
+          "max_heartbeat_gap_ms": 2578.77
+        }
+      },
+      "limits": "Synthetic client, Linux/offscreen; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+    }
+  ],
+  "after": [
+    {
+      "count": 1000,
+      "distinct_tags": 33,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "qt_platform": "offscreen",
+      "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+      "peak_rss_mib": 119.32,
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 117.01,
+          "max_heartbeat_gap_ms": 68.74
+        },
+        "unchanged_refresh": [
+          {
+            "elapsed_ms": 30.94,
+            "max_heartbeat_gap_ms": 10.34
+          },
+          {
+            "elapsed_ms": 30.24,
+            "max_heartbeat_gap_ms": 10.89
+          },
+          {
+            "elapsed_ms": 29.25,
+            "max_heartbeat_gap_ms": 9.79
+          }
+        ],
+        "changing_refresh": [
+          {
+            "elapsed_ms": 48.72,
+            "max_heartbeat_gap_ms": 28.06
+          },
+          {
+            "elapsed_ms": 46.29,
+            "max_heartbeat_gap_ms": 25.38
+          },
+          {
+            "elapsed_ms": 45.7,
+            "max_heartbeat_gap_ms": 24.93
+          }
+        ],
+        "selected_refresh": {
+          "elapsed_ms": 30.57,
+          "max_heartbeat_gap_ms": 9.82
+        },
+        "filter": {
+          "elapsed_ms": 22.66,
+          "max_heartbeat_gap_ms": 10.88
+        },
+        "clear_filter": {
+          "elapsed_ms": 57.98,
+          "max_heartbeat_gap_ms": 37.45
+        }
+      },
+      "limits": "Synthetic client; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+    },
+    {
+      "count": 12000,
+      "distinct_tags": 33,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+      "peak_rss_mib": 147.21,
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 764.87,
+          "max_heartbeat_gap_ms": 715.14
+        },
+        "unchanged_refresh": [
+          {
+            "elapsed_ms": 94.96,
+            "max_heartbeat_gap_ms": 72.0
+          },
+          {
+            "elapsed_ms": 90.18,
+            "max_heartbeat_gap_ms": 69.51
+          },
+          {
+            "elapsed_ms": 91.48,
+            "max_heartbeat_gap_ms": 70.54
+          }
+        ],
+        "changing_refresh": [
+          {
+            "elapsed_ms": 213.02,
+            "max_heartbeat_gap_ms": 192.45
+          },
+          {
+            "elapsed_ms": 149.98,
+            "max_heartbeat_gap_ms": 129.05
+          },
+          {
+            "elapsed_ms": 152.4,
+            "max_heartbeat_gap_ms": 131.63
+          }
+        ],
+        "selected_refresh": {
+          "elapsed_ms": 98.15,
+          "max_heartbeat_gap_ms": 75.98
+        },
+        "filter": {
+          "elapsed_ms": 31.82,
+          "max_heartbeat_gap_ms": 10.75
+        },
+        "clear_filter": {
+          "elapsed_ms": 620.94,
+          "max_heartbeat_gap_ms": 600.54
+        }
+      },
+      "limits": "Synthetic client, Linux/offscreen; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+    },
+    {
+      "count": 50000,
+      "distinct_tags": 33,
+      "python": "3.13.11",
+      "qt": "6.12.0",
+      "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+      "peak_rss_mib": 243.91,
+      "measurements": {
+        "first_display": {
+          "elapsed_ms": 3220.39,
+          "max_heartbeat_gap_ms": 3171.26
+        },
+        "unchanged_refresh": [
+          {
+            "elapsed_ms": 366.96,
+            "max_heartbeat_gap_ms": 343.96
+          },
+          {
+            "elapsed_ms": 318.8,
+            "max_heartbeat_gap_ms": 298.15
+          },
+          {
+            "elapsed_ms": 319.38,
+            "max_heartbeat_gap_ms": 298.55
+          }
+        ],
+        "changing_refresh": [
+          {
+            "elapsed_ms": 736.35,
+            "max_heartbeat_gap_ms": 715.23
+          },
+          {
+            "elapsed_ms": 563.22,
+            "max_heartbeat_gap_ms": 542.39
+          },
+          {
+            "elapsed_ms": 508.37,
+            "max_heartbeat_gap_ms": 487.54
+          }
+        ],
+        "selected_refresh": {
+          "elapsed_ms": 325.24,
+          "max_heartbeat_gap_ms": 303.21
+        },
+        "filter": {
+          "elapsed_ms": 62.75,
+          "max_heartbeat_gap_ms": 42.05
+        },
+        "clear_filter": {
+          "elapsed_ms": 2653.82,
+          "max_heartbeat_gap_ms": 2633.33
+        }
+      },
+      "limits": "Synthetic client, Linux/offscreen; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+    }
+  ],
+  "many_tags": {
+    "count": 12000,
+    "distinct_tags": 1001,
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "qt_platform": "offscreen",
+    "platform": "Linux-7.2.11+deb14-amd64-x86_64-with-glibc2.43",
+    "peak_rss_mib": 151.27,
+    "measurements": {
+      "first_display": {
+        "elapsed_ms": 704.76,
+        "max_heartbeat_gap_ms": 657.67
+      },
+      "unchanged_refresh": [
+        {
+          "elapsed_ms": 95.18,
+          "max_heartbeat_gap_ms": 74.51
+        },
+        {
+          "elapsed_ms": 93.8,
+          "max_heartbeat_gap_ms": 72.95
+        },
+        {
+          "elapsed_ms": 93.87,
+          "max_heartbeat_gap_ms": 73.13
+        }
+      ],
+      "changing_refresh": [
+        {
+          "elapsed_ms": 210.77,
+          "max_heartbeat_gap_ms": 189.78
+        },
+        {
+          "elapsed_ms": 148.75,
+          "max_heartbeat_gap_ms": 127.78
+        },
+        {
+          "elapsed_ms": 147.4,
+          "max_heartbeat_gap_ms": 126.63
+        }
+      ],
+      "selected_refresh": {
+        "elapsed_ms": 96.34,
+        "max_heartbeat_gap_ms": 74.44
+      },
+      "filter": {
+        "elapsed_ms": 31.32,
+        "max_heartbeat_gap_ms": 11.02
+      },
+      "clear_filter": {
+        "elapsed_ms": 559.33,
+        "max_heartbeat_gap_ms": 538.6
+      }
+    },
+    "limits": "Synthetic client; excludes real RPC and disk/network IO. Timings include a 20 ms heartbeat drain. No cancellation scenario is exercised."
+  }
+}
