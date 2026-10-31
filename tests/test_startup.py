@@ -1,3 +1,4 @@
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QMessageBox
 
 from torrentlinker.config import Settings
@@ -132,10 +133,12 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
     save = [False]
     monkeypatch.setattr(QMessageBox, "information", lambda *args: messages.append(args[1]))
 
-    class Dialog:
+    class Dialog(QObject):
+        diagnostics_requested = Signal()
         agent_approvals = ()
 
         def __init__(self, settings, parent):
+            super().__init__(parent)
             opened.append(True)
             self.folder_editor = FolderEditor(settings.library_folders, parent)
 
@@ -167,10 +170,12 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
 def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, monkeypatch):
     window, calls, secret = setup_window(qtbot, tmp_path, monkeypatch, saved=False, key="  ")
 
-    class Dialog:
+    class Dialog(QObject):
+        diagnostics_requested = Signal()
         agent_approvals = ()
 
         def __init__(self, settings, parent):
+            super().__init__(parent)
             self.folder_editor = FolderEditor(settings.library_folders, parent)
 
         def exec(self):

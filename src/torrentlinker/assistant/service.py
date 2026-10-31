@@ -273,25 +273,33 @@ class Assistant:
     def test_provider(self, identifier):
         from torrentlinker.assistant.capabilities import assess
 
-        provider = self.provider(identifier)
+        with self.lock:
+            if self.closed:
+                raise ValueError("Assistant is shutting down.")
+            provider = self.provider(identifier)
         result = assess(self.models, provider, self.secrets.get("assistant:" + identifier))
         result["context"] = self.models.context(
             provider, self.secrets.get("assistant:" + identifier)
         )
         result["context"]["verified"] = False
-        with self.lock, self.db:
-            current = self.provider(identifier)
-            if (current.kind, current.url, current.model, current.temperature) != (
-                provider.kind,
-                provider.url,
-                provider.model,
-                provider.temperature,
-            ):
-                raise ValueError("Model connection changed during assessment. Retest it.")
-            self.db.execute(
-                "INSERT OR REPLACE INTO options VALUES (?,?)",
-                ("assessment:" + identifier, json.dumps(result)),
-            )
+        with self.lock:
+            # Desktop capability probes use the Qt pool, not self.worker. They
+            # can finish after close() has drained the Assistant's own executor.
+            if self.closed:
+                raise ValueError("Assistant is shutting down.")
+            with self.db:
+                current = self.provider(identifier)
+                if (current.kind, current.url, current.model, current.temperature) != (
+                    provider.kind,
+                    provider.url,
+                    provider.model,
+                    provider.temperature,
+                ):
+                    raise ValueError("Model connection changed during assessment. Retest it.")
+                self.db.execute(
+                    "INSERT OR REPLACE INTO options VALUES (?,?)",
+                    ("assessment:" + identifier, json.dumps(result)),
+                )
         return result
 
     def chat_defaults(self):
@@ -1660,7 +1668,9 @@ class Assistant:
         for stop in list(self.stops.values()):
             stop.set()
         self.worker.shutdown(wait=True, cancel_futures=False)
-        self.db.close()
+        # External desktop/HTTP readers and writers use this same lock.
+        with self.lock:
+            self.db.close()
 
     def save_schedule(self, body, identifier=""):
         import time

@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 
 from tests.fake_qbit import FakeQbit
 from tests.test_upload_completeness import complete_description, complete_form
@@ -362,10 +362,12 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
     window._startup_complete = True
     monkeypatch.setattr(window, "_has_indexer_key", lambda: True)
 
-    class Dialog:
+    class Dialog(QObject):
+        diagnostics_requested = Signal()
         agent_approvals = ()
 
         def __init__(self, settings: Settings, parent: object) -> None:
+            super().__init__(parent)
             self.settings = settings
             self.folder_editor = FolderEditor(settings.library_folders, window)
 

@@ -311,6 +311,9 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
         assert result["source"] == "manual"
         updated = app.state.assistant.setup()["providers"][0]
         assert updated["temperature"] == 0
+        from torrentlinker.gui import tasks
+
+        qtbot.waitUntil(lambda: not tasks._alive, timeout=5000)
 
         def restore_defaults():
             dialog = QApplication.activeModalWidget()
@@ -328,6 +331,9 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
         QTimer.singleShot(0, restore_defaults)
         widget.provider_editor(updated)
         assert app.state.assistant.setup()["providers"][0]["temperature"] is None
+        # Saving changed sampling starts an assessment in the Qt pool. Keep the
+        # service and its widgets alive until that test-owned work has completed.
+        qtbot.waitUntil(lambda: not tasks._alive, timeout=5000)
         widget.close()
 
 

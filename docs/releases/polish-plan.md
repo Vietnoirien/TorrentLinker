@@ -90,6 +90,13 @@ A Windows beta.23 report identified a separate Transmission-in-Docker send failu
 - Corrected the earlier classification of "Imprimante 3D" as an English UI translation defect. `category_name` intentionally uses c411's official category names, consistent with the domain documentation and English Upload guide. That label remains unchanged.
 - Validation: 97 tests passed in the broader Upload/translation/browser run. Its final browser case stalled because the new test route callback treated Playwright's request argument as a default status value. After correcting that fixture signature, the final case passed separately, completing all 98 selected tests. It checks desktop/browser diagnostic parity in both languages, literal markup in filenames, unchanged draft data and the existing explicit-send flow. Ruff, formatting of 399 files and typechecking of 203 source files pass. Desktop diagnostic and browser review screenshots were inspected in English/French. No real submission, package publication or Windows freeze fix is claimed.
 
+### Assistant shutdown race and CI follow-up, 2026-10-31
+
+- CI on `908c589` crashed while a Qt-pool provider assessment wrote to SQLite and the web application's shutdown closed that same connection. A controlled two-thread local reproduction produced the same segmentation fault at the assessment insert. The durable regression uses a gated connection to detect premature close without deliberately crashing SQLite.
+- Assistant shutdown now closes its database under the same lock used by readers and writers. Capability probes reject work started or completed after shutdown, before accessing a closed database. Late provider UI notifications/errors are ignored after service shutdown or widget destruction. The UI test waits for its own background assessments before changing sampling again or leaving the service context.
+- CI on `b021a7c` separately completed with three failures because older Settings-dialog test doubles lacked the newly added diagnostic-export signal. Those doubles now implement that signal; startup and Library-folder rescan assertions are unchanged.
+- Validation: the initial assistant/shutdown group passed 51 tests with two optional browser skips. The final shutdown/UI/startup/Upload/diagnostic group passed 63 tests with two optional browser skips. Lint, formatting and typechecking passed. Full-suite CI is the next gate; the earlier package artifact predates this shutdown fix.
+
 ### Linux package follow-up, 2026-10-31
 
 - A fresh frozen server exposed missing PySide version metadata in the support report. The package spec now includes it; the existing smoke test checks report versions so future bundles fail if metadata is lost.

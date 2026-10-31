@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from torrentlinker.assistant.providers import PRESETS, SAMPLING_PROVIDERS, Provider
 from torrentlinker.assistant.research import SearchSettings
@@ -100,9 +101,13 @@ class AssistantConnections(QWidget):
         self.providers.setCurrentRow(selected if selected >= 0 else 0)
 
     def _notify(self, text):
+        if not isValid(self) or (self.service and self.service.closed):
+            return
         self.status.setText(text)
 
     def error(self, error):
+        if not isValid(self) or (self.service and self.service.closed):
+            return
         detail = self.service.secrets.redact(str(error)) if self.service else str(error)
         QMessageBox.warning(self, self.tr("Assistant"), detail)
 
