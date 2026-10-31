@@ -46,9 +46,11 @@ Lint, formatting and typechecking passed.
 
 ## Artifact and remaining limits
 
-Local artifact: `/tmp/tl-polish-package-20261031/dist/TorrentLinker-x86_64.AppImage`.
+Former local artifact: `/tmp/tl-polish-package-20261031/dist/TorrentLinker-x86_64.AppImage`.
 SHA-256: `03ce752ca5eb74ed0b7e565d605aba57a04411497ee79ab04bd8a6c308c32dc5`.
-Logs and JSON results are under `/tmp/tl-polish-package-20261031/`.
+The temporary package, build files and raw results under `/tmp/tl-polish-package-20261031/`
+were deleted at the owner's request after validation to free RAM-backed `/tmp` storage.
+The measurements and conclusions above remain the recorded evidence.
 Nothing was published and the user's running app was not replaced or restarted.
 
 These offscreen checks add Linux package startup, migration and shutdown evidence.

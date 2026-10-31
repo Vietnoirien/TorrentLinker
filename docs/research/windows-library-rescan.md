@@ -36,14 +36,20 @@ AppImage both passed the ten scans, eight media-playback cycles, MCP startup and
 shutdown with temporary profiles, null credentials and a loopback-only network
 namespace. Total times were 5.93 and 7.43 seconds. Neither reported a traceback.
 
-The local AppImage is `/tmp/tl-library-package-20261031/dist/TorrentLinker-x86_64.AppImage`,
-SHA-256 `e0df91fd800977b77485f838be41eb906852fa3e4fd5dc55b84ffa50b283ef89`.
+The validated local AppImage had SHA-256 `e0df91fd800977b77485f838be41eb906852fa3e4fd5dc55b84ffa50b283ef89`.
 Its source is `e054892` plus the probe and smoke hook committed with this report.
-It has not been published or installed over the user's running app.
+It was not published or installed over the user's running app. Its temporary build,
+package and raw logs were deleted at the owner's request after validation to free RAM-backed `/tmp` storage. The same AppImage
+also passed controlled upgrades from archived 0.12.2 and beta.27 fixtures in 7.75 and
+7.64 seconds. Persisted settings, queue and conversation state and fixture file hashes
+matched the expected upgrade result; both original fixture directories stayed unchanged.
 
 Windows CI now runs the probe from source and then inside its packaged executable.
 The packaged step enables one-second stall diagnostics and retains the existing
-120-second process timeout. Its result must be recorded after CI completes. This
+120-second process timeout. The [Windows job at `c2965bb`](https://github.com/Vietnoirien/TorrentLinker/actions/runs/41188641793/job/124500639562)
+passed 40 source checks and the frozen Library/media/MCP smoke step. Its
+[diagnostic executable artifact](https://github.com/Vietnoirien/TorrentLinker/actions/runs/41188641793/artifacts/13038225855)
+contains the rescan probe and immediate stall logging. This
 remains controlled-fixture evidence, not the reporter's large Library, storage or
 Torrent Client, and does not establish the cause of the original freeze.
 
