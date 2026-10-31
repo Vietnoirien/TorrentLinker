@@ -398,7 +398,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
         thread.join(timeout=10)
 
 
-def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch):
+def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch, qapp):
     import httpx
     import uvicorn
     from fastapi.testclient import TestClient
@@ -494,6 +494,51 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
             expect(page.locator("#upload-rules")).to_contain_text(
                 "c411 forbids files from independent creators who live off them"
             )
+            await_status = page.evaluate(
+                "async () => { await pollJobs(); return $('work-status').textContent; }"
+            )
+            assert await_status == "Up to date"
+            # Changing language must update the existing status immediately,
+            # without waiting for another network poll.
+            assert (
+                page.evaluate(
+                    "() => { $('language').value = 'fr'; "
+                    "$('language').dispatchEvent(new Event('change')); "
+                    "return $('work-status').textContent; }"
+                )
+                == "À jour"
+            )
+            client_id = page.evaluate("state.clientId")
+            for status, en, fr in (
+                ("running", "1 active job(s)", "1 tâche(s) active(s)"),
+                ("partial", "Scan incomplete · see jobs", "Analyse incomplète · voir les tâches"),
+            ):
+                page.route(
+                    "**/api/jobs",
+                    lambda route, *, status=status: route.fulfill(
+                        json=[
+                            {
+                                "id": "status-audit",
+                                "kind": "scan",
+                                "status": status,
+                                "client_id": client_id,
+                            }
+                        ]
+                    ),
+                )
+                page.evaluate("pollJobs()")
+                for lang, expected in (("en", en), ("fr", fr)):
+                    assert (
+                        page.evaluate(
+                            "lang => { $('language').value = lang; "
+                            "$('language').dispatchEvent(new Event('change')); "
+                            "return $('work-status').textContent; }",
+                            lang,
+                        )
+                        == expected
+                    )
+                page.unroute("**/api/jobs")
+            page.evaluate("pollJobs()")
             page.locator("#language").select_option("fr")
             expect(page.locator("#upload-rules")).to_contain_text(
                 "c411 interdit les fichiers de créateurs indépendants"
@@ -520,6 +565,25 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch)
                 assert paragraph["children"] == 0
                 if row["field"].startswith("nfo."):
                     assert "Conservez les NFO d'origine sans les modifier" in paragraph["text"]
+            from tests.test_upload_completeness import presentation_review_findings
+            from torrentlinker import i18n
+            from torrentlinker.gui.upload_rules import stored_rule_text
+
+            diagnostics = [f"{r['field']}: {r['message']}" for r in presentation_review_findings()]
+            for lang in ("en", "fr"):
+                page.locator("#language").select_option(lang)
+                translators = i18n.install(qapp, lang)
+                try:
+                    expected = [stored_rule_text(value) for value in diagnostics]
+                    actual = page.evaluate(
+                        "values => values.map(value => { const p = uploadRuleParagraph(value); "
+                        "return [p.textContent, p.children.length]; })",
+                        diagnostics,
+                    )
+                    assert actual == [[message, 0] for message in expected]
+                finally:
+                    for translator in translators:
+                        qapp.removeTranslator(translator)
             unknown = "description.image: New validation rule: <details> & values"
             assert page.evaluate(
                 "value => { const p = uploadRuleParagraph(value); "

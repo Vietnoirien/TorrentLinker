@@ -10807,5 +10807,45 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
       <source>NFO field missing: {0}. For a generated NFO use '{0} : value'. Keep original release NFOs unaltered; obtain a complete original NFO.</source>
       <translation>Rubrique NFO manquante : {0}. Pour un NFO généré, utilisez '{0} : valeur'. Conservez les NFO d'origine sans les modifier ; obtenez un NFO d'origine complet.</translation>
     </message>
+    <message>
+      <source>Choose a supported Upload Category in Details.</source>
+      <translation>Choisissez une catégorie Upload prise en charge dans Détails.</translation>
+    </message>
+    <message>
+      <source>Choose a subcategory belonging to this Upload Category.</source>
+      <translation>Choisissez une sous-catégorie appartenant à cette catégorie Upload.</translation>
+    </message>
+    <message>
+      <source>Ebooks require French content. Verify the file language; do not relabel foreign content.</source>
+      <translation>Les ebooks doivent être en français. Vérifiez la langue du fichier ; ne modifiez pas sa langue déclarée pour masquer un contenu étranger.</translation>
+    </message>
+    <message>
+      <source>{0}: EPUB metadata declares {1}. French content is required. Choose an eligible file, do not relabel it.</source>
+      <translation>{0} : les métadonnées EPUB indiquent {1}. Le contenu doit être en français. Choisissez un fichier admissible ; ne modifiez pas sa langue déclarée.</translation>
+    </message>
+    <message>
+      <source>NFO, track/chapter {0}: add its duration, for example 03:42.</source>
+      <translation>NFO, piste ou chapitre {0} : ajoutez sa durée, par exemple 03:42.</translation>
+    </message>
+    <message>
+      <source>Description, track/chapter {0}: add its duration, for example 03:42.</source>
+      <translation>Description, piste ou chapitre {0} : ajoutez sa durée, par exemple 03:42.</translation>
+    </message>
+    <message>
+      <source>Selected piece missing from attached render pages: {0}.</source>
+      <translation>Pièce sélectionnée absente des planches de rendu jointes : {0}.</translation>
+    </message>
+    <message>
+      <source>Use the actual file count: {0}.</source>
+      <translation>Indiquez le nombre réel de fichiers : {0}.</translation>
+    </message>
+    <message>
+      <source>NFO, {0}: declared {1}; file facts/presentation require {2}. Preserve the original NFO and obtain one for these exact files.</source>
+      <translation>NFO, {0} : valeur déclarée {1} ; les fichiers ou la présentation exigent {2}. Conservez le NFO d'origine et obtenez-en un correspondant à ces fichiers précis.</translation>
+    </message>
+    <message>
+      <source>{0}: conflicting facts, extracted {1}, declared {2}. Verify and correct the value or use the extracted fact.</source>
+      <translation>{0} : informations contradictoires, valeur extraite {1}, valeur déclarée {2}. Vérifiez et corrigez la valeur ou utilisez celle extraite du fichier.</translation>
+    </message>
   </context>
 </TS>

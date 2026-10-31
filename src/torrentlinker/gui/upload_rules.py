@@ -5,6 +5,7 @@ import re
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication
 
 from torrentlinker.upload import Judgement, Problem, Refusal, UploadWarning
+from torrentlinker.upload_presentation import FIELDS
 
 
 def refusal_text(r: Refusal) -> str:
@@ -306,4 +307,92 @@ def presentation_text(message: str) -> str:
             "NFO field missing: {0}. For a generated NFO use '{0} : value'. "
             "Keep original release NFOs unaltered; obtain a complete original NFO.",
         ).format(match[1])
+    if field == "category":
+        if detail == (
+            "Use upload IDs, not Catalogue IDs: 1 Video, 2 Ebook, 3 Audio, 4 Apps, "
+            "5 Games, 6 Emulation, 7 GPS, 10 3D. Call get_upload_requirements() to list them."
+        ):
+            return QCoreApplication.translate(
+                "UploadPresentation", "Choose a supported Upload Category in Details."
+            )
+        if detail == "Choose a subcategory belonging to this Upload Category.":
+            return QCoreApplication.translate(
+                "UploadPresentation", "Choose a subcategory belonging to this Upload Category."
+            )
+    if field == "description.language" and detail == (
+        "Ebooks require French content. Verify the file language; do not relabel foreign content."
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation",
+            "Ebooks require French content. Verify the file language; "
+            "do not relabel foreign content.",
+        )
+    if field == "description.language" and (
+        match := re.fullmatch(
+            r"(.+): EPUB metadata declares (.+)\. French content is required\. "
+            r"Choose an eligible file, do not relabel it\.",
+            detail,
+        )
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation",
+            "{0}: EPUB metadata declares {1}. French content is required. "
+            "Choose an eligible file, do not relabel it.",
+        ).format(*match.groups())
+    if (
+        match := re.fullmatch(r"(description|nfo)\.tracklist\[(\d+)\]\.duration", field)
+    ) and detail == "Add the duration of each track/chapter, for example 01. Title (03:42).":
+        template = (
+            QT_TRANSLATE_NOOP(
+                "UploadPresentation", "NFO, track/chapter {0}: add its duration, for example 03:42."
+            )
+            if match[1] == "nfo"
+            else QT_TRANSLATE_NOOP(
+                "UploadPresentation",
+                "Description, track/chapter {0}: add its duration, for example 03:42.",
+            )
+        )
+        return QCoreApplication.translate("UploadPresentation", str(template)).format(match[2])
+    if field == "description.image.coverage" and (
+        match := re.fullmatch(r"Selected piece missing from attached render pages: (.+)\.", detail)
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation", "Selected piece missing from attached render pages: {0}."
+        ).format(match[1])
+    if field == "description.files" and (
+        match := re.fullmatch(r"Use the actual file count: (\d+)\.", detail)
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation", "Use the actual file count: {0}."
+        ).format(match[1])
+    key = field.removeprefix("description.").removeprefix("nfo.")
+    label = FIELDS.get(key, ("", ""))[0]
+    if (
+        label
+        and field.startswith("nfo.")
+        and (
+            match := re.fullmatch(
+                r"NFO conflict: (.+); file facts/presentation require (.+)\. "
+                r"Preserve the original NFO and obtain one for these exact files\.",
+                detail,
+            )
+        )
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation",
+            "NFO, {0}: declared {1}; file facts/presentation require {2}. "
+            "Preserve the original NFO and obtain one for these exact files.",
+        ).format(label, *match.groups())
+    if label and (
+        match := re.fullmatch(
+            r"Conflicting facts: extracted (.+), declared (.+)\. "
+            r"Verify and correct the value or use the extracted fact\.",
+            detail,
+        )
+    ):
+        return QCoreApplication.translate(
+            "UploadPresentation",
+            "{0}: conflicting facts, extracted {1}, declared {2}. "
+            "Verify and correct the value or use the extracted fact.",
+        ).format(label, *match.groups())
     return message

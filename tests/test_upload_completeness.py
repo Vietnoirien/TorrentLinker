@@ -373,3 +373,35 @@ def test_original_mediainfo_compares_all_video_durations_without_inventing_total
         row["field"] == "nfo.duration" and "conflict:" in row["message"]
         for row in assess(form, evidence)["missing_fields"]
     )
+
+
+def presentation_review_findings():
+    """Real validator output for the desktop/browser presentation audit."""
+    from torrentlinker.upload_presentation import update_fields
+
+    ebook = complete_form()
+    ebook["description"] = update_fields(ebook["description"], {"language": "English"})
+    evidence = {
+        "file_count": 2,
+        "image_coverage": {"missing": ["Piece <one> & two.stl"]},
+        "ebooks": [{"file": "Book <one> & two.epub", "languages": ["en", "de"]}],
+        "conflicting_fields": [
+            {
+                "field": "description.author",
+                "extracted_value": "Lewis Carroll",
+                "declared_value": "Someone else",
+                "blocks_review": True,
+            }
+        ],
+    }
+    audio = complete_form(3, 18)
+    for key in ("description", "nfo"):
+        audio[key] = audio[key].replace("01. Silence (00:01)", "01. First (03:42)\n02. Second")
+    audio["nfo"] = update_fields(audio["nfo"], {"codec": "MP3"}, bbcode=False)
+    audio["description"] = update_fields(audio["description"], {"codec": "FLAC"})
+    return [
+        *assess(ebook, evidence)["missing_fields"],
+        *assess(audio)["missing_fields"],
+        *assess({"category": 999})["missing_fields"],
+        *assess({"category": 2, "subcategory": 999})["missing_fields"],
+    ]

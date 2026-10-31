@@ -66,6 +66,52 @@ const uploadRuleMessages = {
   "one-per-console": ["One version per console game", "Une seule version par jeu console"],
   "region": ["Region {detail}: PAL/EU, NTSC/US, NTSC-J/JP or HK, one release each", "Région {detail} : PAL/EU, NTSC/US, NTSC-J/JP ou HK, une release chacune", "State the region: PAL/EU, NTSC/US, NTSC-J/JP or HK", "Indiquez la région : PAL/EU, NTSC/US, NTSC-J/JP ou HK"],
 };
+// Exact BBCode field labels, matching upload_presentation.FIELDS.
+const uploadPresentationFields = {
+  "title": "Titre",
+  "files": "Fichiers",
+  "size": "Taille totale",
+  "author": "Auteur",
+  "format": "Format",
+  "language": "Langue",
+  "duration": "Durée",
+  "video_codec": "Codec vidéo",
+  "video_bitrate": "Débit vidéo",
+  "video_resolution": "Résolution vidéo",
+  "audio_codec": "Codecs audio",
+  "audio_bitrate": "Débits audio",
+  "audio_channels": "Canaux audio",
+  "audio_languages": "Langues audio",
+  "audio": "Audio",
+  "subtitles": "Sous-titres",
+  "subtitle_formats": "Formats des sous-titres",
+  "subtitle_types": "Types des sous-titres",
+  "subtitle_languages": "Langues des sous-titres",
+  "source": "Source",
+  "platform": "Plateforme VOD",
+  "artist": "Artiste",
+  "album": "Album",
+  "year": "Année",
+  "tracks": "Pistes",
+  "tracklist": "Liste des pistes",
+  "codec": "Codec",
+  "bitrate": "Débit",
+  "sample_rate": "Fréquence",
+  "bit_depth": "Profondeur",
+  "catalogue_number": "Numéro de catalogue",
+  "release_link": "Discogs / MusicBrainz",
+  "install_size": "Taille installée",
+  "version": "Version",
+  "os": "Système",
+  "activation": "Activation",
+  "requirements": "Configuration requise",
+  "installation": "Installation",
+  "region": "Région",
+  "resolution": "Résolution des images",
+  "contents": "Contenu",
+  "narrator": "Narrateur"
+};
+
 // Match complete diagnostics so a conflict on the same field stays visible.
 function uploadPresentationMessages(value) {
   const messages = {
@@ -75,12 +121,33 @@ function uploadPresentationMessages(value) {
     "description.synopsis: Fill the [h3]Présentation[/h3] section with a synopsis before [h3]Informations[/h3].": ["Fill the [h3]Présentation[/h3] section with a synopsis before [h3]Informations[/h3].", "Remplissez la section [h3]Présentation[/h3] avec un résumé avant [h3]Informations[/h3]."],
     "image: Set the hosted image URL before sending.": ["Set the hosted image URL before sending.", "Renseignez l'URL de l'image hébergée avant l'envoi."],
     "description.image: Public image hosting required before sending.": ["Public image hosting required before sending.", "Hébergez l'image sur une adresse publique avant l'envoi."],
+    "category: Use upload IDs, not Catalogue IDs: 1 Video, 2 Ebook, 3 Audio, 4 Apps, 5 Games, 6 Emulation, 7 GPS, 10 3D. Call get_upload_requirements() to list them.": ["Choose a supported Upload Category in Details.", "Choisissez une catégorie Upload prise en charge dans Détails."],
+    "category: Choose a subcategory belonging to this Upload Category.": ["Choose a subcategory belonging to this Upload Category.", "Choisissez une sous-catégorie appartenant à cette catégorie Upload."],
+    "description.language: Ebooks require French content. Verify the file language; do not relabel foreign content.": ["Ebooks require French content. Verify the file language; do not relabel foreign content.", "Les ebooks doivent être en français. Vérifiez la langue du fichier ; ne modifiez pas sa langue déclarée pour masquer un contenu étranger."],
   };
   if (Object.hasOwn(messages, value)) return messages[value];
   const description = value.match(/^description\.[^:]+: (Fill '([^'\n]+)' in the description: \[b\]\2 :\[\/b\] value\.)$/);
   if (description) return [description[1], `Renseignez la rubrique '${description[2]}' dans la description : [b]${description[2]} :[/b] valeur.`];
   const nfo = value.match(/^nfo\.[^:]+: (NFO field missing: (.+)\. For a generated NFO use '\2 : value'\. Keep original release NFOs unaltered; obtain a complete original NFO\.)$/);
   if (nfo) return [nfo[1], `Rubrique NFO manquante : ${nfo[2]}. Pour un NFO généré, utilisez '${nfo[2]} : valeur'. Conservez les NFO d'origine sans les modifier ; obtenez un NFO d'origine complet.`];
+  const separator = value.indexOf(": ");
+  const field = value.slice(0, separator), detail = value.slice(separator + 2);
+  const key = field.replace(/^(description|nfo)\./, "");
+  const label = Object.hasOwn(uploadPresentationFields, key) ? uploadPresentationFields[key] : null;
+  const fill = (templates, values) => templates.map(t => t.replace(/\{(\d+)\}/g, (_, i) => values[Number(i)]));
+  let match;
+  if (field === "description.language" && (match = detail.match(/^(.+): EPUB metadata declares (.+)\. French content is required\. Choose an eligible file, do not relabel it\.$/)))
+    return fill(["{0}: EPUB metadata declares {1}. French content is required. Choose an eligible file, do not relabel it.", "{0} : les métadonnées EPUB indiquent {1}. Le contenu doit être en français. Choisissez un fichier admissible ; ne modifiez pas sa langue déclarée."], match.slice(1));
+  if (field === "description.image.coverage" && (match = detail.match(/^Selected piece missing from attached render pages: (.+)\.$/)))
+    return fill(["Selected piece missing from attached render pages: {0}.", "Pièce sélectionnée absente des planches de rendu jointes : {0}."], match.slice(1));
+  if (field === "description.files" && (match = detail.match(/^Use the actual file count: (\d+)\.$/)))
+    return fill(["Use the actual file count: {0}.", "Indiquez le nombre réel de fichiers : {0}."], match.slice(1));
+  if (label && field.startsWith("nfo.") && (match = detail.match(/^NFO conflict: (.+); file facts\/presentation require (.+)\. Preserve the original NFO and obtain one for these exact files\.$/)))
+    return fill(["NFO, {0}: declared {1}; file facts/presentation require {2}. Preserve the original NFO and obtain one for these exact files.", "NFO, {0} : valeur déclarée {1} ; les fichiers ou la présentation exigent {2}. Conservez le NFO d'origine et obtenez-en un correspondant à ces fichiers précis."], [label, ...match.slice(1)]);
+  if (label && (match = detail.match(/^Conflicting facts: extracted (.+), declared (.+)\. Verify and correct the value or use the extracted fact\.$/)))
+    return fill(["{0}: conflicting facts, extracted {1}, declared {2}. Verify and correct the value or use the extracted fact.", "{0} : informations contradictoires, valeur extraite {1}, valeur déclarée {2}. Vérifiez et corrigez la valeur ou utilisez celle extraite du fichier."], [label, ...match.slice(1)]);
+  if ((match = field.match(/^(description|nfo)\.tracklist\[(\d+)\]\.duration$/)) && detail === "Add the duration of each track/chapter, for example 01. Title (03:42).")
+    return fill(match[1] === "nfo" ? ["NFO, track/chapter {0}: add its duration, for example 03:42.", "NFO, piste ou chapitre {0} : ajoutez sa durée, par exemple 03:42."] : ["Description, track/chapter {0}: add its duration, for example 03:42.", "Description, piste ou chapitre {0} : ajoutez sa durée, par exemple 03:42."], [match[2]]);
   return null;
 }
 

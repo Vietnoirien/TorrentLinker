@@ -117,6 +117,20 @@ def test_desktop_explains_rules_from_a_web_saved_draft(qtbot, tmp_path, request,
             view.show()
             qtbot.waitExposed(view)
             assert view.grab().save(str(target / f"desktop-web-draft-review-{language}.png"))
+            # Exercise the real review widget with all diagnostic variants.
+            # Only the displayed copy changes; the saved draft remains untouched.
+            from copy import deepcopy
+
+            from tests.test_upload_completeness import presentation_review_findings
+
+            view.record = deepcopy(before)
+            view.record["review"]["refusals"] = [
+                f"{r['field']}: {r['message']}" for r in presentation_review_findings()
+            ]
+            view.load()
+            qtbot.wait(50)
+            assert view.grab().save(str(target / f"desktop-review-diagnostics-{language}.png"))
+            assert store.local_draft(before["id"]) == before
 
 
 def test_upload_opens_local_drafts_and_preparation_only_saves(qtbot, tmp_path):
@@ -326,3 +340,41 @@ def test_capture_upload_workspace(qtbot, tmp_path, request, language):
     view.new_button.click()
     assert view.grab().save(str(target / f"desktop-upload-new-{language}-dark.png"))
     assert not indexer.saved[:-1]
+
+
+def test_french_review_explains_conflicts_and_preserves_evidence(qapp):
+    from copy import deepcopy
+
+    from tests.test_upload_completeness import presentation_review_findings
+    from torrentlinker import i18n
+    from torrentlinker.gui.upload_rules import stored_rule_text
+
+    findings = presentation_review_findings()
+    before = deepcopy(findings)
+    translators = i18n.install(qapp, "fr")
+    try:
+        messages = [stored_rule_text(f"{r['field']}: {r['message']}") for r in findings]
+        for row, message in zip(findings, messages, strict=True):
+            assert message != f"{row['field']}: {row['message']}"
+            assert not message.startswith(row["field"] + ":")
+        text = "\n".join(messages)
+        for evidence in (
+            "Piece <one> & two.stl",
+            "Book <one> & two.epub",
+            "en, de",
+            "Lewis Carroll",
+            "Someone else",
+            "'MP3'",
+            "'FLAC'",
+            "2",
+            "03:42",
+        ):
+            assert evidence in text
+        assert "Conservez le NFO d'origine" in text
+        assert "ne modifiez pas sa langue déclarée" in text
+        assert "Description, piste ou chapitre 2" in text
+        assert "NFO, piste ou chapitre 2" in text
+        assert findings == before
+    finally:
+        for translator in translators:
+            qapp.removeTranslator(translator)

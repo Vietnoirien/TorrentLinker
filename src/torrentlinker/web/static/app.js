@@ -678,9 +678,15 @@ async function job(body, done, failed, progress) {
     throw Error(say("Choose a target client first.", "Choisissez un client cible."));
   const r = await api("jobs", body);
   state.jobs.set(r.id, { body, done, failed, progress });
-  $("work-status").textContent = say("Working…", "En cours…");
+  workStatus("Working…", "En cours…");
   await pollJobs();
   return r.id;
+}
+function workStatus(en, fr) {
+  const status = $("work-status");
+  status.dataset.en = en;
+  status.dataset.fr = fr;
+  status.textContent = say(en, fr);
 }
 async function pollJobs() {
   if ($("workspace").hidden) return;
@@ -703,11 +709,10 @@ async function pollJobs() {
       }
     }
   }
-  $("work-status").textContent = running
-    ? `${running} ${say("active job(s)", "tâche(s) active(s)")}`
-    : rows.find(row => row.kind === "scan" && row.client_id === state.clientId)?.status === "partial"
-      ? say("Scan incomplete · see jobs", "Analyse incomplète · voir les tâches")
-      : say("Up to date", "À jour");
+  if (running) workStatus(`${running} active job(s)`, `${running} tâche(s) active(s)`);
+  else if (rows.find(row => row.kind === "scan" && row.client_id === state.clientId)?.status === "partial")
+    workStatus("Scan incomplete · see jobs", "Analyse incomplète · voir les tâches");
+  else workStatus("Up to date", "À jour");
   if (state.view === "jobs") renderJobs(rows);
   if (state.view === "queue") await loadQueue();
 }
