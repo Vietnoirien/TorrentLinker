@@ -11,7 +11,12 @@
   const text = (en, fr) => {const value=say(en,fr);translations.set(value,[en,fr]);return value;};
   const names = () => ({comment: text("Comments", "Commentaires"), vote: text("Votes", "Votes"), chat: text("Chat messages", "Messages du chat")});
   const el = (tag, value, cls) => {const e=element(tag,value,cls);const pair=translations.get(value);
-    if(pair){e.dataset.en=pair[0];e.dataset.fr=pair[1];}return e;};
+    if(pair){
+      // Only translate the text node, never a container with timers or controls.
+      const label=tag==="option"?e:element("span",value);
+      label.dataset.en=pair[0];label.dataset.fr=pair[1];
+      if(label!==e)e.replaceChildren(label);
+    }return e;};
   const field = (label, input) => {const l = el("label"); l.append(el("span",label),input); return l;};
   const input = (type, id) => {const e=el("input"); e.type=type; e.id=id; return e;};
   const button = (en, fr, fn) => {const e=el("button", text(en,fr)); e.type="button"; e.onclick=()=>guard(fn); return e;};
@@ -142,5 +147,6 @@
         for(const e of Object.values(templates))e.value="";
       }
     }finally{loading=false;}}
+  document.addEventListener("tl-language-changed",()=>{signature="";render();});
   reset();kindChanged();setInterval(refresh,3000);setInterval(timers,1000);
 })();

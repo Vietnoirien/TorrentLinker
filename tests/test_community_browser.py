@@ -373,6 +373,9 @@ def test_webui_to_real_extension_and_durable_receipt(tmp_path, monkeypatch):
             expect(page.locator("#community-content")).to_have_value(
                 "Un brouillon à conserver sans aucune modification"
             )
+            expect(page.get_by_role("button", name="Suspendre la file", exact=True)).to_be_visible()
+            expect(page.locator("#community-table")).to_contain_text("XP en attente, 24 h")
+            expect(page.locator("#zen-community-panel")).to_contain_text("Connecté.")
             page.set_viewport_size({"width": 600, "height": 900})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=str(target / "tl-community-web-fr.png"), full_page=True)

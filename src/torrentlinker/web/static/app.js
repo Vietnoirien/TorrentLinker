@@ -1529,6 +1529,7 @@ $("language").onchange = () => {
   language = $("language").value;
   localStorage.setItem("tl-language", language);
   translate();
+  document.dispatchEvent(new Event("tl-language-changed"));
   if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
   if (state.view === "zen") { guard(loadZenSeeding); retranslatePlan(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
