@@ -647,7 +647,7 @@ document.querySelectorAll("[data-agent-tab]").forEach(el => {
 
 // Only workspace locations belong in the fragment. Form state and filters stay local.
 const viewTabs = {
-  torrents: [], zen: ["profile", "seeding", "plan", "catalogue"], search: [],
+  torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["items", "reseed", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
   setup: ["connections", "interface", "companion", "assistant", "agents"],
