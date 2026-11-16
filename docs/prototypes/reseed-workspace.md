@@ -43,4 +43,10 @@ The proposal reopens ADR-0002, which intentionally avoided links, and the disk-r
 
 Manually exercised in the browser: prepare → verify → seed, retained links after sharing, inaccessible target, failed hash, batch preparation, layout switching and desktop/Web UI switching. Inspected the Web UI at phone width and corrected page overflow. All checks use simulated operations; no real links or torrent changes were made.
 
-No variant has been selected yet. Keep this prototype on `prototype/reseed-workspace` until review.
+Layout A was selected after review. Keep this exploratory prototype on `prototype/reseed-workspace`.
+
+## Approved direction
+
+The user approved layout A (the column board), including desktop/Web UI parity. The preview now includes Run all and Run selected: a scoped confirmation, sequential stage transitions, per-item feedback, pause/resume, stop, and reduced-motion support. Its timers remain demonstration-only.
+
+Production implementation lives on `feat/reseed-workspace`, with shared persisted operations and actual hash/client progress. ADR-0020 records the persistent symlink-layout decision. The prototype stays separate from the shipped application.
