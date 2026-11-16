@@ -453,7 +453,7 @@ class CommunityActions:
                 # A rolling window is deliberately conservative until c411 publishes its reset zone.
                 if (
                     len(recent) >= cap
-                    or rule["today"] + sum(r["started"] > row["synced"] for r in recent) >= cap
+                    or rule["today"] + sum(r["started"] >= row["synced"] for r in recent) >= cap
                 ):
                     continue
                 if recent and now < recent[-1]["started"] + interval:

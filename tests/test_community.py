@@ -220,3 +220,20 @@ def test_punctuation_or_accent_change_does_not_repeat_chat(queue):
     draft(q, "chat", "1", "Le café est prêt pour demain.")
     with pytest.raises(ValueError):
         draft(q, "chat", "135", "LE CAFE est prêt pour demain !")
+
+
+def test_site_quota_reserves_sends_at_the_same_clock_tick_as_snapshot(queue):
+    q, now = queue
+    settings = deepcopy(DEFAULTS)
+    settings["enabled"] = True
+    settings["intervals"]["comment"] = 30
+    q.settings("42", settings)
+    q.observe("42", observation(3))
+    for i in range(3):
+        draft(q, subject=f"{i:040x}")
+    receipt(q, q.claim("42"))
+    now[0] += 30
+    receipt(q, q.claim("42"))
+    now[0] += 30
+    # Three external actions plus the two reserved locally exhaust the quota.
+    assert q.claim("42") is None
