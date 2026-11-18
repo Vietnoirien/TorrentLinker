@@ -71,7 +71,7 @@ function event(i, s) {
 let displayLimit = 100;
 let loadMoreObserver;
 function render() {
-  if (mode === "web") window.parent.postMessage({type: "upload-tab", tab: {sources:"sources", drafts:"local", tracking:"remote"}[tab]}, location.origin);
+  if (mode === "web") window.parent.postMessage({type: "upload-tab", navigationId: environment.navigation?.id, tab: {sources:"sources", drafts:"local", tracking:"remote"}[tab]}, location.origin);
   document.body.dataset.mode = mode;
   document
     .querySelectorAll("[data-mode]")

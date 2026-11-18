@@ -71,6 +71,9 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
                 viewport={"width": 1560, "height": 1050},
                 color_scheme="light" if host_fails else "dark",
             )
+            page.add_init_script("""window.addEventListener('message', event => {
+                if (event.data?.type === 'upload-tab') window.uploadTabMessage = event.data;
+            });""")
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
             base = f"http://127.0.0.1:{port}"
@@ -80,7 +83,21 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
             page.locator("#language").select_option("fr")
             page.locator("[data-view=upload]").first.click()
             frame = page.frame_locator("#upload-frame")
+            frame.locator('[data-tab="sources"]').click()
+            expect(frame.locator('[data-tab="sources"]')).to_have_class("on")
+            page.wait_for_function("() => window.uploadTabMessage?.tab === 'sources'")
+            previous_tab_message = page.evaluate("window.uploadTabMessage")
             page.evaluate("location.hash = '#/upload/remote'")
+            expect(frame.locator('[data-tab="tracking"]')).to_have_class("on")
+            # A panel render queued before navigation must not replace the new route.
+            page.evaluate(
+                """message => window.dispatchEvent(new MessageEvent('message', {
+                source: document.querySelector('#upload-frame').contentWindow,
+                origin: location.origin, data: message
+            }))""",
+                previous_tab_message,
+            )
+            expect(page).to_have_url(base + "/#/upload/remote")
             expect(frame.locator('[data-tab="tracking"]')).to_have_class("on")
             frame.locator('[data-tab="sources"]').click()
             expect(page).to_have_url(base + "/#/upload/sources")

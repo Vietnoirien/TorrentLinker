@@ -32,6 +32,9 @@ window.addEventListener("message", async (e) => {
     return;
   const m = e.data;
   if (m?.type === "upload-tab" && ["sources", "local", "remote"].includes(m.tab)) {
+    // A render acknowledgement can arrive after a newer URL navigation.
+    // Only the currently requested route may update browser history.
+    if (m.navigationId !== uploadNavigation?.id || location.hash !== activeRoute) return;
     rememberTab("upload", m.tab);
     return;
   }
