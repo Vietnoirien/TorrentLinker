@@ -599,3 +599,14 @@ input[type="checkbox"] {
   max-height: calc(100vh - 20px);
   overflow: auto;
 }
+
+
+#dialog.folder-dialog{width:min(620px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:24px;overflow:auto;box-sizing:border-box}
+#dialog.folder-dialog label{padding:0;display:block;margin:16px 0 6px}#dialog.folder-dialog input:not([type=checkbox]),#dialog.folder-dialog select{width:100%;min-width:0;background:var(--bg)}
+#dialog.folder-dialog .row{margin:0}#dialog.folder-dialog .row input{flex:1}.folder-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.folder-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+#dialog.folder-dialog .callout{margin:20px 0 0}#dialog.folder-dialog .callout p{margin:7px 0}.sample-list{list-style:none;padding:0;margin:12px 0 0}.sample-list li{padding:6px 0;border-top:1px solid var(--line);font-size:13px}.sample-list small{display:block}
+.folder-entry{display:flex;align-items:center;gap:12px;padding:18px 0;border-bottom:1px solid var(--line)}.folder-entry:first-child{padding-top:0}.folder-entry>div{flex:1;min-width:0}.folder-entry b{overflow-wrap:anywhere}.folder-entry small{display:block}.folder-entry button{padding:6px 10px}.fixture-note{font-size:11px;color:var(--muted);margin-top:14px!important}
+@media(max-width:650px){.folder-grid{grid-template-columns:1fr;gap:0}.folder-entry{flex-wrap:wrap}.folder-entry>div{flex-basis:100%}#dialog.folder-dialog{padding:18px}.folder-actions{flex-wrap:wrap}}
+
+.folder-list{margin-top:22px;padding:22px}.folder-list>p{margin-top:20px}
+.folder-entry small{display:block}

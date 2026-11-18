@@ -429,3 +429,69 @@ def test_announce_saved_status_exposes_no_private_url(tmp_path):
         # An empty submission is refused without removing the saved URL.
         assert browser.post("/api/setup/announce", json={"value": ""}).status_code == 400
         assert browser.get("/api/setup").json()["has_announce_url"] is True
+
+
+def test_folder_preview_is_read_only_and_respects_storage_roots(tmp_path):
+    root = tmp_path / "library"
+    root.mkdir()
+    (root / "Book.epub").write_bytes(b"book")
+    (root / "Atlas.pdf").write_bytes(b"atlas")
+    with TestClient(
+        create_app(tmp_path / "config", password="test-password-long", roots=(root,))
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        result = browser.post(
+            "/api/setup/preview-folder", json={"local": str(root), "kind": "ebook", "depth": None}
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["count"] == 2
+        assert {r["name"] for r in result.json()["items"]} == {"Book.epub", "Atlas.pdf"}
+        assert browser.get("/api/setup").json()["folders"] == []
+        result = browser.post(
+            "/api/setup/preview-folder", json={"local": str(root), "kind": "ebook", "depth": 0}
+        )
+        assert result.json()["count"] == 1
+        assert result.json()["items"][0]["name"] == "library"
+        assert (
+            browser.post(
+                "/api/setup/preview-folder", json={"local": str(tmp_path), "kind": "ebook"}
+            ).status_code
+            == 400
+        )
+
+
+def test_edit_folder_path_keeps_registration_during_pending_verification(tmp_path):
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.web.security import ServerSecrets
+    from torrentlinker.web.setup import Setup
+
+    root = tmp_path / "storage"
+    old, new = root / "old", root / "new"
+    old.mkdir(parents=True)
+    new.mkdir()
+    config = tmp_path / "config"
+    config.mkdir()
+    setup = Setup(config, (root,), ServerSecrets(config))
+    setup.settings.library_folders = [LibraryFolder(old)]
+    setup.store.start_verification("a" * 40, old / "file.mkv", "candidate")
+    with TestClient(
+        create_app(config, password="test-password-long", service_override=setup)
+    ) as browser:
+        browser.headers["X-TorrentLinker"] = "1"
+        browser.post("/api/login", json={"password": "test-password-long"})
+        body = {
+            "local": str(new / ".." / "new"),
+            "original_local": str(old),
+            "kind": "movie",
+            "depth": None,
+        }
+        response = browser.post("/api/setup/folder", json=body)
+        assert response.status_code == 400
+        assert browser.get("/api/setup").json()["folders"][0]["local"] == str(old)
+        setup.store.end_verification("a" * 40)
+        response = browser.post("/api/setup/folder", json=body)
+        assert response.status_code == 200, response.text
+        assert response.json()["local"] == str(new)
+        assert [f["local"] for f in browser.get("/api/setup").json()["folders"]] == [str(new)]
+        assert old.is_dir()

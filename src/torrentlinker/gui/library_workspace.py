@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -200,6 +199,7 @@ class LibraryWorkspace(QWidget):
         super().__init__()
         self.owner = window
         self.scan_errors: list[ScanError] = []
+        self.scanned = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.setProperty("ownsScrolling", True)
@@ -225,7 +225,6 @@ class LibraryWorkspace(QWidget):
         self.rail.currentRowChanged.connect(self.select_folder)
         rail_layout.addWidget(self.rail)
         add = QPushButton(self.tr("Manage folders"))
-        self.editor: FolderEditor
         add.clicked.connect(self.open_folders)
         rail_layout.addWidget(add)
         body.addWidget(rail)
@@ -247,23 +246,6 @@ class LibraryWorkspace(QWidget):
         body.addWidget(content, 1)
         self.explorer = explorer
         self.sections.addTab(explorer, self.tr("Local Items"))
-        self.editor = FolderEditor(
-            window.settings.library_folders, adult=window.settings.adult_content
-        )
-        save = QPushButton(self.tr("Save folders"))
-        save.setProperty("role", "primary")
-        save.clicked.connect(self.save_folders)
-        editor_layout = self.editor.layout()
-        assert editor_layout is not None
-        editor_layout.addWidget(save)
-        self.sections.addTab(self.editor, self.tr("Folders"))
-        self.activity = QPlainTextEdit()
-        self.activity.setReadOnly(True)
-        self.activity.setMaximumBlockCount(300)
-        self.activity.setPlaceholderText(
-            self.tr("Scan, search and Verification progress appears here.")
-        )
-        self.sections.addTab(self.activity, self.tr("Activity"))
         from torrentlinker.gui.reseed_workspace import ReseedBoard
 
         self.reseed = ReseedBoard(window)
@@ -286,21 +268,12 @@ class LibraryWorkspace(QWidget):
         self.refresh()
 
     def open_folders(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(self.tr("Library Folders"))
-        dialog.resize(1000, 650)
-        layout = QVBoxLayout(dialog)
-        index = self.sections.indexOf(self.editor)
-        self.sections.removeTab(index)
-        self.editor.set_folders(self.owner.settings.library_folders)
-        layout.addWidget(self.editor)
-        self.editor.show()
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        dialog.exec()
-        self.sections.insertTab(index, self.editor, self.tr("Folders"))
+        review = self.explorer.window()
+        if isinstance(review, QDialog):
+            review.accept()
         self.sections.setCurrentWidget(self.reseed)
+        self.reseed.requested_tab = "folders"
+        self.reseed.refresh()
 
     def open_review(self, path: str) -> None:
         entry = next(
@@ -330,7 +303,10 @@ class LibraryWorkspace(QWidget):
 
     def record_activity(self, message: str) -> None:
         if message:
-            self.activity.appendPlainText(message)
+            import time
+
+            self.reseed.activity.append({"at": time.time(), "name": "", "message": message})
+            self.reseed.activity[:] = self.reseed.activity[-300:]
 
     def expand_review(self) -> None:
         expanded = not self.items.isHidden()
@@ -389,9 +365,6 @@ class LibraryWorkspace(QWidget):
 
     def set_scan_errors(self, errors: list[ScanError]) -> None:
         self.scan_errors = list(errors)
-        self.editor.set_scan_errors(errors)
+        self.scanned = True
+        self.reseed.scan_errors = [str(e.path) for e in errors]
         self.refresh()
-
-    def save_folders(self) -> None:
-        if self.owner.save_library_folders(self.editor.folders()):
-            self.sections.setCurrentIndex(0)

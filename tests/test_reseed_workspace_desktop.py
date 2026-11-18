@@ -104,6 +104,7 @@ def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeyp
     fixture.mkdir()
     service, _, _, _, _ = workspace(fixture)
     view = window.library_workspace.reseed
+    view.language = "fr"
     monkeypatch.setattr(view, "service", lambda: service)
     view.refresh_rows()
     view.setParent(None)
@@ -116,8 +117,9 @@ def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeyp
         == "Chaque fichier avance à son rythme."
     )
     assert js(qtbot, view, "document.querySelectorAll('.stage').length") == 7
-    folder = tmp_path / "Films"
+    folder = service.setup.roots[0] / "Films"
     folder.mkdir()
+    (folder / "Example.mkv").write_bytes(b"example")
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a: str(folder))
     js(qtbot, view, "document.querySelector('[data-command=disk]').click()")
     js(qtbot, view, "document.querySelector('[data-command=add-folder]').click()")
@@ -125,8 +127,23 @@ def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeyp
     wait_js(
         qtbot, view, f"document.querySelector('[name=local]').value==={json.dumps(str(folder))}"
     )
+    wait_js(
+        qtbot, view, "document.querySelector('#folder-live').textContent.includes('Example.mkv')"
+    )
+    if output := os.getenv("TL_WEB_SCREENSHOTS"):
+        from pathlib import Path
+
+        Path(output).mkdir(parents=True, exist_ok=True)
+        view.grab().save(str(Path(output) / "folder-dialog-desktop.png"))
+    js(
+        qtbot,
+        view,
+        "document.querySelector('[name=depth]').value='2'; "
+        "document.querySelector('[name=scan]').checked=false",
+    )
     js(qtbot, view, "document.querySelector('#folder-form').requestSubmit()")
     qtbot.waitUntil(lambda: any(f.path == folder for f in window.settings.library_folders))
+    assert next(f for f in window.settings.library_folders if f.path == folder).depth == 2
     qtbot.waitUntil(lambda: not view.scanning)
     wait_js(qtbot, view, "!document.querySelector('dialog').open")
 

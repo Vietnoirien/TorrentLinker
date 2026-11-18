@@ -129,22 +129,14 @@ function render() {
     .forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
   let folders = snapshot.setup.folders || [];
   if (tab === "folders") {
-    $("content").innerHTML =
-      `<div class="row between"><h2>${t("Dossiers de bibliothèque")}</h2><button data-command="manage-folders">${t("Modifier les dossiers")}</button><button data-command="add-folder">${t("+ Ajouter un dossier")}</button></div><div class="panel folder-list" style="margin-top:20px">${folders.map((f) => `<div class="tools"><b>${esc(f.local)}</b><small>${esc(f.kind)} · ${f.depth == null ? t("Automatique") : t("Profondeur ") + f.depth}</small></div>`).join("") || `<p>${t("Aucun dossier configuré.")}</p>`}</div>`;
+    $("content").innerHTML = `<div class="row between"><h2>${t("Dossiers de bibliothèque")}</h2><button data-command="add-folder">${t("+ Ajouter un dossier")}</button></div><p class="muted">${t("Les emplacements analysés par le parcours.")}</p><div class="panel folder-list">${folders.map(f => `<div class="folder-entry"><div><b>${esc(f.local)}</b><small>${kindName(f.kind)} · ${f.depth == null ? t("Automatique") : t("Profondeur ")+f.depth}</small></div><span class="badge">${(snapshot.folder_errors || []).some(path=>path===f.local || path.startsWith(f.local+"/")) ? t("Analyse incomplète · éléments précédents conservés") : t("Analyser pour vérifier l’accès aux fichiers")}</span><button data-edit-folder="${esc(f.local)}">${t("Modifier")}</button><button data-remove-folder="${esc(f.local)}">${t("Retirer")}</button></div>`).join("") || `<p class="muted">${t("Aucun dossier configuré.")}</p>`}<p><button data-command="disk">${t("Analyser maintenant")}</button></p></div>`;
+    window.scrollTo(0, scroll);
     return;
   }
   if (tab === "activity") {
-    $("content").innerHTML =
-      `<h2>${t("Activité du parcours")}</h2><div class="panel" style="margin-top:20px">` +
-      snapshot.rows
-        .flatMap((r) => (r.events || []).map((e) => ({ ...e, name: r.name })))
-        .sort((a, b) => b.at - a.at)
-        .map(
-          (e) =>
-            `<div class="tools"><small>${new Date(e.at * 1000).toLocaleString()}</small><b>${esc(e.name)}</b><span>${esc({ prepared: t("Liens prêts"), verified: t("Contenu vérifié"), checking: t("Vérification du client") }[e.phase] || labels[e.phase] || e.phase)}</span></div>`,
-        )
-        .join("") +
-      "</div>";
+    const events = [...snapshot.rows.flatMap(r => (r.events || []).map(e => ({...e, name:r.name}))), ...(snapshot.activity || [])].sort((a,b) => b.at-a.at);
+    $("content").innerHTML = `<h2>${t("Activité du parcours")}</h2><p class="muted">${t("Chaque élément conserve ses propres étapes.")}</p><div class="panel" style="margin-top:20px">${events.map(e => `<div class="tools"><small>${new Date(e.at*1000).toLocaleString(environment.language)}</small><b>${esc(e.kind ? t(activityKinds[e.kind] || e.kind) : e.name)}</b><span>${esc(e.message || (e.status ? t(activityStates[e.status] || e.status) : "") || ({prepared:t("Liens prêts"),verified:t("Contenu vérifié"),checking:t("Vérification du client")}[e.phase] || labels[e.phase] || e.phase))}</span></div>`).join("") || `<div class="empty">${t("Les prochaines transitions apparaîtront ici.")}</div>`}</div>`;
+    window.scrollTo(0, scroll);
     return;
   }
   const rows = visible(),
@@ -228,6 +220,8 @@ function dialog(content) {
   const html = dialogRenderer();
   $("dialog-error").textContent = "";
   $("dialog-body").innerHTML = html;
+  $("dialog").classList.toggle("folder-dialog", !!$("folder-form"));
+  $("dialog").querySelector(":scope > [data-command=close]").hidden = !!$("folder-form");
   if (!$("dialog").open) $("dialog").showModal();
 }
 function settings() {
@@ -242,11 +236,42 @@ function disk() {
       `<div class="eyebrow">${t("02 · DISQUE")}</div><h2>${t("Parcourir mes dossiers")}</h2><p class="muted">${environment.mode === "desktop" ? t("Dossiers sur cet ordinateur") : t("Dossiers accessibles au serveur TorrentLinker")}</p>${(snapshot.setup.folders || []).map((f) => `<label><input type="checkbox" data-scan-folder="${esc(f.local)}" checked> ${esc(f.local)}</label>`).join("")}<button data-command="add-folder">${t("+ Ajouter un dossier")}</button><p><button class="primary" data-command="scan" ${snapshot.scanning ? "disabled" : ""}>${snapshot.scanning ? t("Analyse en cours…") : t("Parcourir mon disque maintenant")}</button></p>`,
   );
 }
-function folderForm() {
-  dialog(
-    () =>
-      `<h2>${t("Ajouter à la bibliothèque")}</h2><form id="folder-form"><label>${t("Chemin accessible à TorrentLinker")}<div class="row"><input name="local" required style="min-width:0;width:100%"><button type="button" data-command="browse-folder">${t("Parcourir…")}</button></div></label><small>${environment.mode === "desktop" ? t("Sur cet ordinateur") : t("Sur le serveur TorrentLinker")}</small><label>${t("Contenu")}<select name="kind"><option value="movie">${t("Films")}</option><option value="series">${t("Séries")}</option><option value="music">Audio</option><option value="ebook">${t("Livres")}</option><option value="game">${t("Jeux vidéo")}</option><option value="3d-model">${t("Impression 3D")}</option><option value="other">${t("Autre")}</option></select></label><label><input type="checkbox" name="scan" checked>${t(" Analyser après l’ajout")}</label><button class="primary">${t("Ajouter le dossier")}</button></form>`,
-  );
+const activityKinds = {scan:"Analyse des dossiers",check:"Recherche de candidats","check-all":"Recherche de candidats",reseed:"Remise en seed","reseed-all":"Remise en seed","reseed-workspace":"Remise en seed","search-library":"Recherche de candidats","library-review":"Examen des candidats","library-reject":"Candidat écarté","check-candidate":"Vérification du candidat","preview-unpack":"Aperçu de l’extraction","unpack-reseed":"Extraction et remise en seed","library-evidence":"Éléments de preuve","import-provenance":"Import de provenance","find-compatible":"Recherche de torrents compatibles","combine-library":"Regroupement des éléments","diagnose-repair":"Diagnostic de réparation","prepare-repair":"Préparation de la réparation","refresh-repair":"Actualisation de la réparation","start-repair":"Réparation"};
+const activityStates = {queued:"En attente",running:"En cours",completed:"Terminé",partial:"Partiel",failed:"Échec",cancelled:"Annulé",interrupted:"Interrompu"};
+const kinds = {movie:"Films",series:"Séries",music:"Audio",ebook:"Livres",game:"Jeux vidéo","3d-model":"Impression 3D",other:"Autre",adult:"Adulte"};
+const kindName = kind => t(kinds[kind] || kind);
+let previewTimer, previewSequence = 0, previewRunning = false;
+function folderForm(folder = null) {
+  browseForm = null;
+  dialog(() => `<div class="eyebrow">${t("DOSSIER DE BIBLIOTHÈQUE")}</div><h2>${t(folder ? "Modifier le dossier" : "Ajouter à la bibliothèque")}</h2><form id="folder-form"><input type="hidden" name="original_local" value="${esc(folder?.local || "")}"><label for="folder-local">${t("Chemin accessible à TorrentLinker")}</label><div class="row"><input id="folder-local" name="local" required value="${esc(folder?.local || "")}"><button type="button" data-command="browse-folder">${t("Parcourir…")}</button></div><small>${environment.mode === "desktop" ? t("Sur cet ordinateur") : t("Sur le serveur TorrentLinker")}</small><div class="folder-grid"><div><label for="folder-kind">${t("Contenu")}</label><select id="folder-kind" name="kind">${Object.keys(kinds).filter(k => k !== "adult" || snapshot.setup.adult_content || folder?.kind === "adult").map(k=>`<option value="${k}" ${k === (folder?.kind || "movie") ? "selected" : ""}>${kindName(k)}</option>`).join("")}</select></div><div><label for="folder-depth">${t("Regroupement des éléments")}</label><select id="folder-depth" name="depth"><option value="auto">${t("Automatique")}</option>${Array.from({length:11},(_,i)=>`<option value="${i}" ${folder?.depth === i ? "selected" : ""}>${t("Profondeur ")}${i}</option>`).join("")}</select></div></div><div class="callout" aria-live="polite"><div class="eyebrow">${t("APERÇU DES ÉLÉMENTS LOCAUX")}</div><div id="folder-live"></div></div><label><input type="checkbox" name="scan" checked> ${t("Analyser après l’enregistrement")}</label><div class="folder-actions"><button type="button" data-command="close">${t("Annuler")}</button><button class="primary">${t(folder ? "Enregistrer" : "Ajouter le dossier")}</button></div></form>`);
+  schedulePreview();
+}
+function schedulePreview() {
+  previewSequence++;
+  clearTimeout(previewTimer);
+  if (!$("folder-live")) return;
+  $("folder-live").textContent = t("Recherche des éléments locaux…");
+  previewTimer = setTimeout(loadFolderPreview, 350);
+}
+async function loadFolderPreview() {
+  const form = $("folder-form");
+  if (!form || !$("dialog").open) return;
+  if (previewRunning) { previewTimer = setTimeout(loadFolderPreview, 350); return; }
+  const sequence = previewSequence, clientGeneration = generation;
+  const body = Object.fromEntries(new FormData(form));
+  if (!body.local.trim()) { $("folder-live").textContent=t("Choisissez un dossier pour voir comment ses éléments seront regroupés."); return; }
+  body.depth = body.depth === "auto" ? null : Number(body.depth);
+  previewRunning = true;
+  try {
+    const result = await api("preview-folder", body);
+    if (sequence !== previewSequence || clientGeneration !== generation || !$("folder-live")) return;
+    $("folder-live").innerHTML = `<p><b>${result.count} ${t("éléments locaux")}${result.episodes ? ` · ${result.episodes} ${t("épisodes inclus")}` : ""}</b></p><p class="muted">${body.depth == null ? t("Les dossiers contenant une release restent entiers. Les dossiers de genres et de collections sont parcourus.") : t("Chaque entrée à la profondeur choisie forme un élément local. Les fichiers rencontrés avant comptent aussi.")}</p><ul class="sample-list">${result.items.map(item=>`<li>${esc(item.name)}${item.within ? `<small>${t("Épisode inclus dans le pack")}</small>` : ""}</li>`).join("")}</ul><p><small>${t("L’analyse affinera ces résultats avec les torrents déjà en partage.")}</small></p>${result.errors.map(error=>`<p class="error">${esc(error)}</p>`).join("")}`;
+  } catch(error) {
+    if (sequence === previewSequence && clientGeneration === generation && $("folder-live")) $("folder-live").textContent=error.message;
+  } finally { previewRunning=false; }
+}
+function removeFolder(path) {
+  dialog(() => `<h2>${t("Retirer ce dossier ?")}</h2><p>${esc(path)}</p><p class="muted">${t("Il ne sera plus analysé par la bibliothèque. Tous les fichiers restent sur le disque.")}</p><div class="folder-actions"><button data-command="close">${t("Annuler")}</button><button class="primary" data-confirm-remove="${esc(path)}">${t("Retirer de la bibliothèque")}</button></div>`);
 }
 function clientForm() {
   dialog(
@@ -258,7 +283,7 @@ async function browse(target, path = "") {
   browseTarget = target;
   const result = await perform("browse", { path });
   if (result.selected !== undefined) {
-    if (result.selected) document.querySelector(target).value = result.selected;
+    if (result.selected) { document.querySelector(target).value = result.selected; schedulePreview(); }
     return;
   }
   if (!browseForm)
@@ -273,19 +298,19 @@ async function browse(target, path = "") {
       `<h2>${t("Dossiers du serveur TorrentLinker")}</h2><p>${esc(result.path || t("Racines montées"))}</p>${result.parent ? `<button data-browse="${esc(result.parent)}">↑ Parent</button>` : ""}${(result.folders || result.children || []).map((f) => `<button data-browse="${esc(typeof f === "string" ? f : f.path)}">${esc(typeof f === "string" ? f : f.name)}</button>`).join("")}${result.path ? `<button id="choose-folder" class="primary">${t("Choisir ce dossier")}</button>` : ""}`,
   );
   const choose = $("choose-folder");
-  if (choose)
-    choose.onclick = () => {
-      dialog(browseForm.renderer);
-      for (const [name, value, checked] of browseForm.values) {
-        const n = document.querySelector(`[name="${name}"]`);
-        if (n) {
-          n.value = value;
-          n.checked = checked;
-        }
-      }
-      document.querySelector(target).value = result.path;
-      browseForm = null;
-    };
+  if (choose) choose.onclick = () => restoreBrowse(result.path);
+}
+function restoreBrowse(path) {
+  const saved = browseForm;
+  if (!saved) return;
+  dialog(saved.renderer);
+  for (const [name, value, checked] of saved.values) {
+    const node = [...$("dialog-body").querySelectorAll("input,select")].find(n=>n.name===name);
+    if (node) { node.value=value; node.checked=checked; }
+  }
+  if (path) document.querySelector(browseTarget).value = path;
+  browseForm = null;
+  schedulePreview();
 }
 async function start(paths, key = "") {
   if (!paths.length) return;
@@ -313,6 +338,7 @@ async function handleClick(e) {
   const b = e.target.closest("button");
   if (b?.dataset.tab) {
     tab = b.dataset.tab;
+    await api("tab", {tab});
     render();
     return;
   }
@@ -344,10 +370,15 @@ async function handleClick(e) {
     await browse(browseTarget, b.dataset.browse);
     return;
   }
+  if (b?.dataset.editFolder) { folderForm(snapshot.setup.folders.find(f=>f.local===b.dataset.editFolder)); return; }
+  if (b?.dataset.removeFolder) { removeFolder(b.dataset.removeFolder); return; }
+  if (b?.dataset.confirmRemove) { await perform("remove-folder", {local:b.dataset.confirmRemove}); $("dialog").close(); await refresh(); return; }
   const cmd = b?.dataset.command;
   if (!cmd) return;
   switch (cmd) {
     case "close":
+      if (browseForm) { restoreBrowse(); break; }
+      previewSequence++;
       $("dialog").close();
       break;
     case "close-inspector":
@@ -375,10 +406,12 @@ async function handleClick(e) {
       break;
     case "browse-folder":
       browseForm = null;
+      schedulePreview();
       await browse("#folder-form [name=local]");
       break;
     case "browse-root":
       browseForm = null;
+      schedulePreview();
       await browse("#root-form [name=path]");
       break;
     case "scan":
@@ -428,6 +461,7 @@ async function handleClick(e) {
   await refresh();
 }
 document.addEventListener("input", (e) => {
+  if (e.target.closest("#folder-form")) schedulePreview();
   if (e.target.id === "search") {
     query = e.target.value;
     limit = 100;
@@ -447,8 +481,8 @@ async function submit(e) {
   if (e.target.id === "folder-form") {
     const scan = !!body.scan;
     delete body.scan;
-    await perform("add-folder", { ...body, depth: null });
-    if (scan) await perform("scan");
+    const saved = await perform("add-folder", { ...body, depth: body.depth === "auto" ? null : Number(body.depth) });
+    if (scan) await perform("scan", {folders:[saved.local]});
   } else if (e.target.id === "client-form") await perform("add-client", body);
   else if (e.target.id === "root-form") await perform("save-root", body);
   $("dialog").close();
@@ -457,13 +491,17 @@ async function submit(e) {
 window.addEventListener("reseed-environment", (e) => {
   const value = e.detail;
   const languageChanged = value.language !== environment.language;
+  const openFolder = value.folder_dialog_request && value.folder_dialog_request !== environment.folder_dialog_request;
   if (value.clear || value.client !== environment.client) {
     generation++;
+    previewSequence++;
+    browseForm = null;
     snapshot = { rows: [], setup: { folders: [] }, progress: {} };
     selected = "";
     checked.clear();
     $("dialog").close();
   }
+  if (value.tab && value.tab !== environment.tab) tab = value.tab;
   environment = value;
   window.TLPanel.setLanguage(value.language);
   if (languageChanged && $("dialog").open && dialogRenderer)
@@ -478,6 +516,8 @@ window.addEventListener("reseed-environment", (e) => {
   document.querySelector('[data-command="close"]').textContent = t("Fermer");
   active = !!value.active;
   render();
+  if (languageChanged && $("folder-form")) schedulePreview();
+  if (openFolder) folderForm();
   if (active) refresh();
 });
 window.reseedTransport.then(() => window.reseedReady());

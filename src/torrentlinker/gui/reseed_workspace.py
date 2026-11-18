@@ -9,13 +9,13 @@ from PySide6.QtCore import QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication, QFileDialog
 
 from torrentlinker.agent.desktop import DesktopSetup
-from torrentlinker.domain import ContentKind, LibraryFolder
+from torrentlinker.domain import LibraryFolder
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.reseed_workspace import ReseedWorkspace
 from torrentlinker.web.jobs import JobStop
 from torrentlinker.web.library import Library
-from torrentlinker.web.setup import Connection
+from torrentlinker.web.setup import Connection, FolderSetup
 
 ASSETS = Path(__file__).parents[1] / "web" / "static" / "reseed"
 
@@ -46,7 +46,12 @@ class ReseedBridge(ViewBridge):
             ):
                 raise ValueError("The target client changed. Reopen the Library.")
             body.pop("_client", None)
-            if action == "add-client":
+            if action == "preview-folder":
+                setup = self.board.service().setup
+                # Desktop paths are chosen by the local owner, not server roots.
+                setup._folder_candidate = Path(body["local"]).expanduser().resolve()
+                run_in_background(lambda: setup.preview_folder(FolderSetup(**body)), done, failed)
+            elif action == "add-client":
                 self.board.add_client(body, done, failed)
             else:
                 done(self.board.request(action, body))
@@ -65,6 +70,10 @@ class ReseedBoard(BundledView):
         self.error = ""
         self.current_service: ReseedWorkspace | None = None
         self.configuring = False
+        self.activity: list[dict] = []
+        self.scan_errors: list[str] = []
+        self.requested_tab = "reseed"
+        self.folder_dialog_request = 0
         self.scanning = False
         super().__init__(ReseedBridge(self), ASSETS, "reseed", window.settings.language)
         self.setMinimumHeight(620)
@@ -103,6 +112,8 @@ class ReseedBoard(BundledView):
                 "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
                 "active": self.isVisible(),
                 "client": self.owner.settings.active_client_id,
+                "tab": self.requested_tab,
+                "folder_dialog_request": self.folder_dialog_request,
             }
         )
         self.bridge.ready()
@@ -112,6 +123,8 @@ class ReseedBoard(BundledView):
             setup = self.service().setup.snapshot()
             return {
                 "rows": self.rows,
+                "activity": self.activity,
+                "folder_errors": self.scan_errors,
                 "setup": setup,
                 "running": self.running,
                 "paused": self.stop.paused.is_set(),
@@ -119,7 +132,9 @@ class ReseedBoard(BundledView):
                 "error": self.error,
                 "scanning": self.scanning or "" in self.progress_value.get("active", {}),
             }
-        if action == "run":
+        if action == "tab":
+            self.requested_tab = body["tab"]
+        elif action == "run":
             self.start(body.get("paths", []), "all", body.get("key", ""))
         elif action == "enqueue":
             if not self.current_service:
@@ -160,17 +175,47 @@ class ReseedBoard(BundledView):
             self.owner.library_workspace.open_folders()
         elif action == "review":
             self.owner.library_workspace.open_review(body["path"])
-        elif action in {"settings", "add-folder", "save-root"}:
+        elif action in {"settings", "add-folder", "remove-folder", "save-root"}:
             if self.running or self.scanning or self.configuring:
                 raise ValueError("Stop the current operation before changing settings.")
             if action == "settings":
                 self.owner.open_settings()
+            elif action == "remove-folder":
+                if self.owner.store.for_client(
+                    self.owner.settings.active_client_id
+                ).verification_hashes():
+                    raise ValueError("Finish pending Reseed Verifications before removing folders.")
+                folders = [
+                    f for f in self.owner.settings.library_folders if str(f.path) != body["local"]
+                ]
+                if not self.owner.save_library_folders(folders, scan=False):
+                    raise ValueError("Wait for the current Library operation to finish.")
             elif action == "add-folder":
                 path = Path(body["local"]).expanduser().resolve()
                 if not path.is_dir():
                     raise ValueError("Folder is unavailable.")
-                folders = [f for f in self.owner.settings.library_folders if f.path != path]
-                folders.append(LibraryFolder(path, None, ContentKind(body.get("kind", "other"))))
+                values = FolderSetup(**body)
+                original = body.get("original_local", "")
+                if (
+                    original
+                    and Path(original) != path
+                    and self.owner.store.for_client(
+                        self.owner.settings.active_client_id
+                    ).verification_hashes()
+                ):
+                    raise ValueError(
+                        "Finish pending Reseed Verifications before changing folder paths."
+                    )
+                if original and not any(
+                    str(f.path) == original for f in self.owner.settings.library_folders
+                ):
+                    raise ValueError("The Library Folder no longer exists. Reopen the dialog.")
+                folders = [
+                    f
+                    for f in self.owner.settings.library_folders
+                    if f.path != path and str(f.path) != original
+                ]
+                folders.append(LibraryFolder(path, values.depth, values.kind))
                 if not self.owner.save_library_folders(folders, scan=False):
                     raise ValueError(
                         "The folder could not be saved. Wait for the current operation."
@@ -183,6 +228,8 @@ class ReseedBoard(BundledView):
                     raise ValueError("Wait for the current settings operation to finish.")
                 self.link_root = str(path)
             self.refresh_rows()
+            if action == "add-folder":
+                return {"ok": True, "local": str(path)}
         else:
             raise ValueError("Unknown reseed operation.")
         return {"ok": True}

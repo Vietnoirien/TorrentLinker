@@ -40,8 +40,6 @@ def test_candidate_review_can_expand_without_losing_the_local_item(qtbot, tmp_pa
     assert [tabs.tabText(i) for i in range(tabs.count())] == [
         "Local Items",
         "Reseed",
-        "Folders",
-        "Activity",
     ]
     expand = window.findChild(QPushButton, "expandCandidateReview")
     assert expand is not None
@@ -155,7 +153,7 @@ def test_desktop_review_preserves_candidate_selection_across_local_items(
     if destination := os.getenv("TL_WEB_SCREENSHOTS"):
         Path(destination).mkdir(parents=True, exist_ok=True)
         window.grab().save(str(Path(destination) / "library-desktop.png"))
-        window.library_workspace.sections.setCurrentWidget(window.library_workspace.editor)
+        window.library_workspace.open_folders()
         qtbot.wait(50)
         window.grab().save(str(Path(destination) / "library-desktop-folders.png"))
 
@@ -237,7 +235,7 @@ def test_disconnected_folder_keeps_items_and_visible_health_warning(qtbot, tmp_p
     qtbot.waitUntil(lambda: window.scan_action.isEnabled())
     assert window.library_model.rowCount() == 1
     assert "Scan incomplete" in window.library_workspace.rail.item(1).text()
-    assert "previous items kept" in window.library_workspace.editor.table.item(0, 3).text()
+    assert str(folder) in window.library_workspace.reseed.request("state", {})["folder_errors"]
 
 
 def test_desktop_evidence_inspects_claims_and_keeps_the_original(

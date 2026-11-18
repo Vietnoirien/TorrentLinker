@@ -17,7 +17,9 @@ def test_fragment_navigation_and_subtabs():
     enter = app[app.index("async function enter()") : app.index('$("library-check-all")')]
     library = (static / "library.js").read_text()
     library = library[
-        library.index("async function libraryTab(") : library.index("function editLibraryFolder(")
+        library.index("async function libraryTab(") : library.index(
+            "async function browseLibraryFolder("
+        )
     ]
     zen = (static / "zen.js").read_text()
     zen = zen[zen.index("function zenTab(") : zen.index("for (const name of")]
@@ -33,7 +35,7 @@ const document = {querySelectorAll:()=>[],
   body:{classList:{contains:()=>false,toggle(){}}}};
 const state = {view:'torrents', setup:{configured:true, indexer_configured:true}};
 const media = {kind:'video', view:'recent'};
-const loaded = [];
+const loaded = []; const reseedUI = {tab:'reseed'};
 function clearAgentToken() {}
 function step() {}
 async function refreshSetup() {}
@@ -55,9 +57,7 @@ async function loadRemoteUploads() { loaded.push('upload/remote'); }
 async function loadUploadSources() { loaded.push('upload/sources'); }
 function showUploadView(tab) { rememberTab('upload', tab); }
 async function loadLibrary() { loaded.push('library/items'); }
-async function loadReseed() { loaded.push('library/reseed'); }
-async function loadLibraryActivity() { loaded.push('library/activity'); }
-function renderLibraryFolders() { loaded.push('library/folders'); }
+async function loadReseed() { loaded.push('library/'+reseedUI.tab); }
 async function loadJobs() { loaded.push('jobs'); }
 async function loadZenSeeding() {}
 async function loadZenPlan() {}
@@ -111,8 +111,9 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
   history.back();await settle();assert.equal(state.view,'library');
   history.forward();await settle();assert.equal(state.view,'queue');
   await navigate('library');await libraryTab('folders');await settle();
-  history.back();await settle();assert.equal($('library-activity').hidden,false);
-  history.forward();await settle();assert.equal($('library-folder-manager').hidden,false);
+  history.back();await settle();assert.equal(reseedUI.tab,'activity');
+  history.forward();await settle();assert.equal($('library-reseed').hidden,false);
+  assert.equal(reseedUI.tab,'folders');
   // Every top-level location and supported tab can be reopened from the URL.
   for(const [view,tabs] of Object.entries(viewTabs)){
     for(const tab of tabs.length?tabs:[undefined]){

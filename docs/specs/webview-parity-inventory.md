@@ -28,9 +28,9 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 |---|---|---|---|---|---|---|
 | 7 | Reseed landing | **BV** `ReseedBoard` | `reseed.js` iframe | **Done** | `reseed-guided/` (WebView) | folder picker vs server browser (deliberate) |
 | 8 | Local Items + candidate review | Native `TreeTable`, `ReviewPanel` (`review_panel.py:72`, 5 tabs), modal "Compare files and repair" (`library_workspace.py:305`) | `library.js`, `index.html:742-757` | NU | `library-evidence.md` (behaviour only) | thousands of rows, pack/episode grouping, batch runner |
-| 9 | Folders (`FolderEditor`) | Native, modal (`library_workspace.py:37,288`) | `#library-folder-manager` | NU | none | native picker |
-| 10 | Add Library Folder | Native `LibraryFolderDialog` with live preview | form in Folders page | NU | none | native picker, live scan preview |
-| 11 | Activity / Activité | Native log, tab bar hidden (`library_workspace.py:260,278`), apparently unreachable | `library-activity` | NU | none | — |
+| 9 | Library Folders | **BV** `ReseedBoard` Folders page | Same bundled Folders page | **Done** (#95) | `reseed-guided/folders-activity-implementation.md` | Settings editor remains separate (#113) |
+| 10 | Add/Edit Library Folder | Shared dialog with live Local Item preview | Same dialog and read-only preview API | **Done** (#95) | Approved dialog archived at `e5d8f962` | native picker vs server browser (deliberate) |
+| 11 | Activity / Activité | Shared event list plus session status log | Same event list plus persisted Library jobs | **Done** (#95) | `reseed-guided/folders-activity-implementation.md` | Web job Cancel/Details remain in global Activity |
 | 12 | Disk-rename consent | Native `ReseedConsent`, `RenameDialog` | none; Web refuses (`web/library.py:576`, `web/archives.py:70`) | DO | ADR-0013/0017 | — |
 | 13 | Unpack-and-reseed dialog | Native `ReseedDialog` | `library.js` jobs | NU | none | — |
 | 14 | Repair-copy dialog | Native `RepairDialog` | `library.js` | NU | `library-evidence.md` | — |

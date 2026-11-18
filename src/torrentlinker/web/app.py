@@ -566,6 +566,10 @@ def create_app(
             setup.save()
             return {"reseed_link_root": path}
 
+    @app.post("/api/setup/preview-folder")
+    def preview_folder(body: FolderSetup) -> dict:
+        return for_client(body.client_id).setup.preview_folder(body)
+
     @app.post("/api/setup/test-folder")
     def test_folder(body: FolderSetup) -> dict:
         return for_client(body.client_id).setup.folder(body, probe=True)
@@ -712,6 +716,7 @@ def create_app(
         target = for_client(client_id)
         return {
             "rows": target.reseed_workspace.rows(),
+            "folder_errors": [str(e.path) for e in target.library.folder_errors],
             "link_root": target.setup.settings.profile().reseed_link_root,
             "paused_paths": sorted(target.reseed_workspace.paused_paths()),
         }

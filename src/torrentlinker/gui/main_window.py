@@ -81,7 +81,6 @@ from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.documentation import DocumentationTab
 from torrentlinker.gui.ebook_reader import ReadingRoom
 from torrentlinker.gui.errors import error_text
-from torrentlinker.gui.library_folder_dialog import LibraryFolderDialog
 from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
 from torrentlinker.gui.library_workspace import LibraryWorkspace
 from torrentlinker.gui.reseed_consent import ReseedConsent
@@ -2297,40 +2296,10 @@ class MainWindow(QMainWindow):
     def add_library_folder(self) -> None:
         if not self.add_folder_action.isEnabled():
             return
-        chosen = choose_directory(self, self.tr("Choose a Library Folder"))
-        if not chosen:
-            return
-        path = Path(chosen).expanduser()
-        if not path.is_dir():
-            QMessageBox.warning(self, self.tr("Library"), self.tr("Not a folder: {0}").format(path))
-            return
-        if any(f.path.resolve() == path.resolve() for f in self.settings.library_folders):
-            QMessageBox.information(
-                self, self.tr("Library"), self.tr("This folder is already in the Library.")
-            )
-            return
-        dialog = LibraryFolderDialog(path, self, adult=self.settings.adult_content)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        folders = [*self.settings.library_folders, dialog.folder()]
-        try:
-            replace(self.settings, library_folders=folders).save(self.settings_path)
-        except OSError as error:
-            QMessageBox.warning(
-                self, self.tr("Library"), self.tr("Could not save the folder: {0}").format(error)
-            )
-            return
-        self.settings.library_folders = folders
-        if self.agent_runtime:
-            self.agent_runtime.reset(self.settings)
-        self._fill_folder_filter()
-        self.library_search.clear()
-        self.state_filter.setCurrentIndex(0)
-        self.folder_filter.setCurrentIndex(self.folder_filter.findData(path))
-        if self.tabs.currentWidget() is self.media_tab:
-            self.media_tab.start_scan()
-        else:
-            self.scan()
+        self.tabs.setCurrentWidget(self.library_workspace)
+        self.library_workspace.open_folders()
+        self.library_workspace.reseed.folder_dialog_request += 1
+        self.library_workspace.reseed.refresh()
 
     @agent_settings_change
     def save_library_folders(self, folders: list[LibraryFolder], *, scan: bool = True) -> bool:
@@ -2544,7 +2513,7 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         dialog.diagnostics_requested.connect(lambda: self._export_diagnostics(dialog))
         dialog.folder_editor.set_scan_errors(
-            self.library_workspace.scan_errors, self.library_workspace.editor.scanned
+            self.library_workspace.scan_errors, self.library_workspace.scanned
         )
         if assistant:
             dialog.show_assistant_connections()
@@ -2620,7 +2589,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "library_workspace"):
             self.library_workspace.refresh()
             self.library_workspace.reseed.refresh()
-            self.library_workspace.editor.set_folders(self.settings.library_folders)
 
     def _apply_filters(self) -> None:
         state = self.state_filter.currentData()  # Qt hands enum data back as plain str

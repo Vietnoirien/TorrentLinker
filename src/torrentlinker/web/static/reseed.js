@@ -1,6 +1,6 @@
 "use strict";
 document.querySelector("#view-library > p").hidden = true;
-const reseedUI = { root: "", job: null };
+const reseedUI = { root: "", job: null, tab: "reseed" };
 const reseedFrame = document.createElement("iframe");
 reseedFrame.id = "reseed-frame";
 reseedFrame.title = "Bibliothèque";
@@ -16,6 +16,7 @@ const reseedEnvironment = () => {
       type: "reseed-environment",
       value: {
         mode: "web",
+        tab: reseedUI.tab,
         language,
         theme: ["light", "dark"].includes(
           document.documentElement.dataset.theme,
@@ -68,7 +69,9 @@ async function reseedRequest(action, body) {
       .join("\n");
     return {
       error,
+      activity: jobs.filter(j => j.client_id === client && /^(scan|check|reseed|search-library|library-|unpack|find-compatible|combine-library|.*repair)/.test(j.kind)).map(j => ({at: j.created || 0, kind: j.kind, status: j.status, message: j.error || ""})),
       rows: data.rows,
+      folder_errors: data.folder_errors,
       setup,
       running: !!current,
       paused: !!progress.paused,
@@ -83,6 +86,9 @@ async function reseedRequest(action, body) {
         ),
     };
   }
+  if (action === "tab") { reseedUI.tab = body.tab; return {}; }
+  if (action === "preview-folder") return api("setup/preview-folder", body);
+  if (action === "remove-folder") return api("setup/remove-folder", body);
   if (action === "run")
     return api("jobs", {
       kind: "reseed-workspace",
