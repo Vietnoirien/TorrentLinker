@@ -68,6 +68,30 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
     board = tab.board
     wait_js(qtbot, board, "document.querySelector('#search-pills').textContent.includes('Films')")
     wait_js(qtbot, board, "document.querySelectorAll('.sr-row').length===2")
+    js(qtbot, board, "document.querySelector('.sr-title').click()")
+    wait_js(
+        qtbot,
+        board,
+        "document.querySelector('.torrent-detail')?.textContent.includes('Sent by up1')",
+    )
+    from PySide6.QtGui import QDesktopServices
+
+    opened = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    js(qtbot, board, "document.querySelector('.dt-head a').click()")
+    qtbot.waitUntil(lambda: bool(opened))
+    assert opened[0].startswith("https://c411.org/torrents/")
+    tab.focus_search()
+    wait_js(qtbot, board, "!document.querySelector('#results').hidden")
+    js(qtbot, board, "document.querySelector('.sr-title').click()")
+    wait_js(qtbot, board, "!document.querySelector('#detail-pages').hidden")
+    if screenshots := os.getenv("TL_SEARCH_SCREENSHOTS"):
+        from pathlib import Path
+
+        Path(screenshots).mkdir(parents=True, exist_ok=True)
+        board.grab().save(str(Path(screenshots) / "details-desktop.png"))
+    tab.tab_shortcut("close")
+    wait_js(qtbot, board, "!document.querySelector('#results').hidden")
     js(
         qtbot,
         board,
@@ -165,3 +189,60 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
     )
     reopened.stop()
     reopened.board.close()
+
+
+def test_rss_details_use_shared_readonly_panel(qtbot, tmp_path, monkeypatch, request):
+    if not os.getenv("TL_SEARCH_NATIVE_CHILD"):
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", request.node.nodeid],
+            env={
+                **os.environ,
+                "TL_SEARCH_NATIVE_CHILD": "1",
+                "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu",
+                "QT_QUICK_BACKEND": "software",
+            },
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return
+    import httpx
+
+    from tests.test_community_interfaces import js, wait_js
+    from tests.test_torrent_details import DETAILS, fake_indexer, png
+    from torrentlinker.gui.torrent_details import TorrentDetailsDialog
+    from torrentlinker.indexer import Candidate
+
+    monkeypatch.setattr(
+        "torrentlinker.torrent_details.net.client",
+        lambda **kw: httpx.Client(
+            transport=httpx.MockTransport(
+                lambda r: httpx.Response(200, content=png(), headers={"Content-Type": "image/png"})
+            ),
+            **kw,
+        ),
+    )
+    dialog = TorrentDetailsDialog(
+        Candidate("RSS release", 1024, "", infohash="a" * 40),
+        fake_indexer(lambda r: httpx.Response(200, json=DETAILS)),
+        0.25,
+        "",
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    wait_js(
+        qtbot,
+        dialog.board,
+        "document.querySelector('.description')?.textContent.includes('A journey.')",
+    )
+    wait_js(
+        qtbot, dialog.board, "document.querySelector('.description img')?.src.startsWith('data:')"
+    )
+    assert "Download now" not in js(qtbot, dialog.board, "document.body.innerText")
+    dialog.board.language = "fr"
+    dialog.board.refresh()
+    wait_js(
+        qtbot, dialog.board, "document.querySelector('.dt-bar')?.textContent.includes('Réessayer')"
+    )
+    dialog.close()

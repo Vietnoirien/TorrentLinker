@@ -84,9 +84,12 @@ async function api() {
   }
   return value.rows;
 }
-const details = (row) => request("details", { row });
+const details = (row) => openDetail(row);
 async function navigate(page) {
+  if (page === "details" && selectedDetail) { selectDetail(selectedDetail); return; }
   activePage = page;
+  $("detail-pages").hidden = true;
+  renderDetailTabs();
   $("results").hidden = page !== "search";
   $("queue").hidden = page !== "queue";
   hideHover();

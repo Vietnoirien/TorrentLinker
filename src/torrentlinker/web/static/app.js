@@ -1208,150 +1208,9 @@ function showCatalogue(r) {
     );
   $("catalogue-status").textContent = parts.join(" · ");
 }
-async function details(row, queueAction = null) {
-  const content = $("dialog-content");
-  const chip = (text, kind) => element("span", text, "dt-chip" + (kind ? " dt-" + kind : ""));
-  const flags = element("div", undefined, "dt-flags"),
-    badge = element("span", undefined, "dt-badge"),
-    byline = element("p", undefined, "muted"),
-    banner = element("div", undefined, "dt-banner"),
-    stats = element("div", undefined, "dt-row"),
-    hash = element("p", `${say("Hash", "Hash")}: ${row.hash}`, "muted dt-hash"),
-    facts = element("div", undefined, "dt-row"),
-    card = element("div", undefined, "dt-card"),
-    ids = element("div", undefined, "dt-row"),
-    trust = element("div", undefined, "dt-trust"),
-    extras = element("div");
-  badge.hidden = banner.hidden = card.hidden = trust.hidden = true;
-  const head = element("div", undefined, "dt-head");
-  head.append(badge, flags, element("span", undefined, "spacer"));
-  if (row.website && /^https?:\/\//.test(row.website)) {
-    const link = element("a", say("Open on website", "Ouvrir sur le site"), "button-link");
-    link.href = row.website;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    head.append(link);
-  }
-  if (row.published_at) byline.textContent = say("Published ", "Publié ") + new Date(row.published_at * 1000).toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
-  stats.append(chip(bytes(row.size)), chip(say(`${row.seeders} seeders`, `${row.seeders} seeders`), "up"), chip(`≈ ${num(row.zen)} Zen / ${say("day", "j")}`, "zen"));
-  const bar = element("div", undefined, "dt-bar");
-  bar.append(button(say("Add to queue", "Ajouter à la file"), queueAction || (() => enqueue([row.hash])), "primary"));
-  content.replaceChildren(head, element("h2", row.title, "dt-title"), byline, banner, stats, hash, facts, extras, card, ids, trust, bar);
-  $("dialog").showModal();
-  if (new URL(state.setup.indexer_url).hostname !== "c411.org") return;
-  await job({ kind: "details", hashes: [row.hash] }, (r) => {
-    if (!$("dialog").open) return;
-    const info = r.info || {};
-    const kind = info.subcategory || info.category;
-    if (kind) {
-      badge.textContent = kind.toUpperCase();
-      badge.hidden = false;
-    }
-    if (info.exclusive) flags.append(chip("★ " + say("Exclusive", "Exclusivité"), "warn"));
-    if (info.low_bitrate) flags.append(chip(say("Low bitrate", "Bitrate faible"), "warn"));
-    const tr = info.trust || {};
-    flags.append(chip(tr.tested ? say("Tested", "Testé") : say("Not tested", "Non testé"), tr.tested ? "ok" : "warn"));
-    const by = [];
-    if (info.uploader) by.push(say(`Sent by ${info.uploader}`, `Envoyé par ${info.uploader}`));
-    if (info.team) by.push(`Team ${info.team}`);
-    if (info.created_at) by.push(say("Published ", "Publié ") + new Date(info.created_at * 1000).toLocaleString(language === "fr" ? "fr-FR" : "en-GB"));
-    if (by.length) byline.textContent = by.join(" · ");
-    if (tr.status && !tr.tested) {
-      banner.append(
-        element("strong", say("Torrent not tested by the community", "Torrent non testé par la communauté")),
-        element("p", say("This torrent has not yet received enough trust votes. Be careful and check the content before use.", "Ce torrent n’a pas encore reçu suffisamment de votes de confiance. Soyez prudent et vérifiez le contenu avant utilisation.")),
-      );
-      banner.hidden = false;
-    }
-    if (info.leechers !== null && info.leechers !== undefined) stats.append(chip(say(`${info.leechers} leechers`, `${info.leechers} leechers`), "down"));
-    if (info.completions !== null && info.completions !== undefined) stats.append(chip(say(`${info.completions} completed`, `${info.completions} complétés`), "done"));
-    if (info.seeders === 0) stats.append(chip(say("Seeds wanted", "Demande de seeds"), "warn"));
-    if (r.files?.length) hash.textContent += `  ·  ${say("Files", "Fichiers")}: ${r.files.length}`;
-    for (const [name, values] of info.facts || []) facts.append(chip(`${name}: ${values.join(", ")}`));
-    const m = info.media;
-    if (m && (m.title || m.tmdb_id)) {
-      if (info.poster) {
-        const img = element("img", undefined, "dt-poster");
-        img.alt = "";
-        img.src = "api/poster?url=" + encodeURIComponent(info.poster);
-        img.onerror = () => img.remove();
-        card.append(img);
-      }
-      const text = element("div");
-      const year = m.year ? ` (${m.year})` : "";
-      const type = { movie: "Film", tv: say("TV series", "Série TV") }[m.kind];
-      text.append(element("h3", m.title + year + (type ? "  ·  " + type : ""), "dt-card-title"));
-      if (m.original_title && m.original_title !== m.title) text.append(element("p", m.original_title, "muted"));
-      if (m.genres?.length) {
-        const g = element("div", undefined, "dt-row");
-        m.genres.forEach((x) => g.append(chip(x)));
-        text.append(g);
-      }
-      const line = [];
-      if (m.rating) line.push(`★ ${m.rating.toFixed(1)}/10 TMDB` + (m.votes ? ` · ${m.votes} ${say("votes", "votes")}` : ""));
-      if (m.runtime) line.push(`${m.runtime} min`);
-      if (m.directors?.length) line.push(say("Director: ", "Réalisateur : ") + m.directors.join(", "));
-      if (line.length) text.append(element("p", line.join("  ·  ")));
-      if (m.cast?.length) text.append(element("p", say("With ", "Avec ") + m.cast.join(", ") + "…", "muted"));
-      const links = element("div", undefined, "dt-row");
-      const site = (label, url) => {
-        const a = element("a", label);
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        links.append(a);
-      };
-      if (m.tmdb_id) site(say("View on TMDB", "Voir sur TMDB"), `https://www.themoviedb.org/${m.kind === "tv" ? "tv" : "movie"}/${m.tmdb_id}`);
-      if (m.imdb_id) site(say("View on IMDb", "Voir sur IMDb"), `https://www.imdb.com/title/${m.imdb_id}/`);
-      text.append(links);
-      card.append(text);
-      card.hidden = false;
-      if (m.tmdb_id) ids.append(chip(`TMDB ${m.tmdb_id}`, "id"));
-      if (m.imdb_id) ids.append(chip(`IMDb ${m.imdb_id}`, "id"));
-    }
-    if (tr.status || tr.positive || tr.negative) {
-      trust.append(
-        element("strong", say("Community trust", "Confiance communautaire")),
-        element("p", `${tr.tested ? say("Tested", "Testé") : say("Not tested", "Non testé")}  ·  👍 ${tr.positive}  ·  👎 ${tr.negative}` + (tr.required && !tr.tested ? `  ·  ${say(`(${tr.required} votes required)`, `(${tr.required} votes requis)`)}` : "")),
-      );
-      trust.hidden = false;
-    }
-    if (r.nfo) {
-      const d = element("details");
-      d.append(element("summary", say("Show the NFO", "Afficher le NFO")), element("pre", r.nfo));
-      extras.append(d);
-    }
-    if (r.files?.length) {
-      const d = element("details");
-      d.append(element("summary", say(`Show the files (${r.files.length})`, `Afficher les fichiers (${r.files.length})`)));
-      const list = element("ul", undefined, "dt-files");
-      r.files.forEach(([path, size]) => list.append(element("li", `${path}  ·  ${bytes(size)}`)));
-      d.append(list);
-      extras.append(d);
-    }
-    const description = element("div", undefined, "description");
-    description.innerHTML = r.description;
-    description.querySelectorAll("a").forEach((a) => {
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-    });
-    content.insertBefore(description, bar);
-    if (r.images.length) {
-      const links = element("details");
-      links.append(element("summary", say("Images on the host website", "Images sur le site hébergeur")));
-      r.images.forEach((url) => {
-        if (!/^https?:\/\//.test(url)) return;
-        const a = element("a", url);
-        a.href = url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        const p = element("p");
-        p.append(a);
-        links.append(p);
-      });
-      content.insertBefore(links, bar);
-    }
-  });
+async function details(row) {
+  await navigate("search");
+  searchFrame.contentWindow.postMessage({type:"search-open-detail", row}, location.origin);
 }
 // Library batch actions, as on the desktop: they use the Candidates earlier searches found.
 async function checkAllCandidates() {
@@ -1625,13 +1484,10 @@ $("guide-content").onclick = event => {
 $("target-client").onchange = () => guard(async () => {
   state.clientId = $("target-client").value;
   uploadEnvironment();
-  state.uploadDraft = null;
-  state.uploadSavedOptions = null;
   state.addingClient = false;
   $("client-password").value = ""; $("client-key").value = "";
   state.selected.clear(); state.queueSelected.clear(); state.planSelected.clear();
   state.offset = 0; state.libraryOffset = 0; state.localItem = "";
-  $("candidates").hidden = true; $("upload-editor").hidden = true;
   await refreshSetup();
   await navigate(state.clientId === "all" && state.view !== "zen" ? "torrents" : state.view);
   if (state.setup.configured && state.view !== "media") await job({kind: "refresh"}, state.view === "zen" ? loadZenSeeding : loadTorrents);

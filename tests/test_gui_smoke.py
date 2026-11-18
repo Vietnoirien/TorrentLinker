@@ -312,9 +312,7 @@ def test_class_comparison_highlights_the_current_class_and_labels_reuploader_rou
     assert "4.30" in widget.labels[ZenClass.REUPLOADER].text()
 
 
-def test_library_retains_zen_estimates_for_orphans_with_a_match(
-    qtbot, tmp_path: Path
-) -> None:  # type: ignore[no-untyped-def]
+def test_library_retains_zen_estimates_for_orphans_with_a_match(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
 
     from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
     from torrentlinker.gui.library_model import LibraryModel

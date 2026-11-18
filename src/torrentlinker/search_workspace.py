@@ -70,6 +70,17 @@ class SearchWorkspace:
         return result
 
     def request(self, action: str, body: dict[str, Any]) -> Any:
+        if action in {"detail", "detail-image"}:
+            from torrentlinker.details_workspace import DetailsWorkspace
+
+            indexer = self.setup.indexer()
+            workspace = getattr(self.operations, "detail_workspace", None)
+            if workspace is None or workspace.indexer is not indexer:
+                workspace = DetailsWorkspace(indexer)
+                self.operations.detail_workspace = workspace
+            if action == "detail":
+                return workspace.load(body.get("hash", ""))
+            return workspace.image(body.get("hash", ""), body.get("position", -1))
         if action == "poster":
             import base64
 

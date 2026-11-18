@@ -173,6 +173,7 @@ function openQueueMenu(key, rect) {
         menu.hidden = true;
         source.click();
       });
+    b.setAttribute("role", "menuitem");
     b.disabled = source.disabled;
     menu.append(b);
   }
@@ -194,6 +195,13 @@ document.addEventListener("pointerdown", (e) => {
   if (!e.target.closest("#queue-menu")) $("queue-menu").hidden = true;
 });
 document.addEventListener("keydown", (e) => {
+  if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+    const row = e.target.closest("#queue-table tr[data-key]");
+    if (row) {
+      e.preventDefault();
+      openQueueMenu(row.dataset.key, row.getBoundingClientRect());
+    }
+  }
   if (e.key === "Escape") {
     $("queue-menu").hidden = true;
     document.querySelectorAll(".fdrop[open]").forEach((d) => (d.open = false));
@@ -372,9 +380,11 @@ async function loadPoster(img, url) {
 window.addEventListener("search-environment", (event) => {
   const next = event.detail,
     changed = env.client !== next.client,
-    langChanged = language !== next.language;
+    langChanged = language !== (next.language?.startsWith("fr") ? "fr" : "en"),
+    pageChanged = env.page !== next.page;
   if (changed) {
     generation++;
+    clearDetailTabs();
     SS.loaded = false;
     SS.loading = null;
     SS.searched = false;
@@ -391,11 +401,22 @@ window.addEventListener("search-environment", (event) => {
   language = next.language?.startsWith("fr") ? "fr" : "en";
   document.documentElement.dataset.theme = next.theme || "dark";
   translate();
+  if (langChanged) {
+    renderDetailTabs();
+    for (const tab of detailTabs.values()) guard(() => loadDetail(tab));
+  }
+  if (next.standalone) {
+    if (next.active && next.row) guard(() => openDetail(next.row));
+    return;
+  }
   if (changed || langChanged) searchRetranslate();
-  if (next.active) guard(() => navigate(next.page || activePage));
+  if (next.active)
+    guard(() =>
+      navigate(changed || pageChanged ? next.page || "search" : activePage),
+    );
 });
 setInterval(async () => {
-  if (polling || !env.active) return;
+  if (polling || !env.active || env.standalone) return;
   polling = true;
   try {
     if (activePage === "queue") await loadQueue();
@@ -405,7 +426,6 @@ setInterval(async () => {
     polling = false;
   }
 }, 2000);
-window.searchTransport.then(() => window.searchReady());
 
 window.addEventListener("message", (event) => {
   if (

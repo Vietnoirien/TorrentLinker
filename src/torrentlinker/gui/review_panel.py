@@ -561,9 +561,7 @@ class ReviewPanel(QWidget):
             blocker or self.tr("c411 does not have it: make it a c411 Draft in the Upload tab")
         )
         self.reseed_button.setEnabled(
-            bool(chosen)
-            and all(c.match for c in chosen)
-            and not (archive and len(chosen) > 1)
+            bool(chosen) and all(c.match for c in chosen) and not (archive and len(chosen) > 1)
         )
         if archive:
             self.reseed_button.setText(self.tr("Unpack and Reseed…"))

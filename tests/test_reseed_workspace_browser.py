@@ -336,7 +336,7 @@ def test_candidate_inspector_reviews_files_imports_and_rejects_in_place(tmp_path
             expect(frame.locator(".review-header")).to_contain_text("Aucun candidat", timeout=15000)
             frame.locator(".torrent").click()
             frame.get_by_role("button", name="Historique des réparations…", exact=True).click()
-            expect(page.locator("#dialog-content")).to_contain_text(
+            expect(frame.locator("#recovery-dialog")).to_contain_text(
                 "Aucune réparation enregistrée."
             )
             assert not client.calls

@@ -13,6 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from torrentlinker.catalogue_selection import CatalogueCriteria, select_catalogue_rows
+from torrentlinker.details_workspace import DetailsWorkspace
 from torrentlinker.domain import Torrent
 from torrentlinker.download_queue import enqueue, entries, run_queue
 from torrentlinker.indexer import Candidate, SearchQuery
@@ -213,6 +214,7 @@ class Operations:
         self.archives = ArchiveReseeds(self.library)
         self.uploads = Uploads(setup, self.library)
         self.candidates: dict[str, Candidate] = {}
+        self.detail_workspace: DetailsWorkspace | None = None
         self.rows: list[dict[str, Any]] = []
         self.observed: list[Torrent] = []
         self.feed_observed_at: float = 0

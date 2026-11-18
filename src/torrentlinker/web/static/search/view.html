@@ -5,15 +5,19 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <link rel="stylesheet" href="../panel/base.css" />
     <link rel="stylesheet" href="view.css" />
+    <link rel="stylesheet" href="details.css" />
     <script src="../panel/i18n.js" defer></script>
     <script src="../panel/transport.js" defer></script>
     <script src="transport.js" defer></script>
     <script src="view.js" defer></script>
     <script src="results.js" defer></script>
     <script src="queue.js" defer></script>
+    <script src="details.js" defer></script>
   </head>
   <body>
     <main>
+      <nav id="detail-tabs" hidden></nav>
+      <section id="detail-pages" hidden></section>
       <section id="results">
         <div class="search-head">
           <span class="search-tools">

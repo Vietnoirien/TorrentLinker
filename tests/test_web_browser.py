@@ -132,32 +132,31 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 "Assistant queue entry", 1024, "https://example.test/a", 2, "b" * 40
             )
             page.locator("[data-view=queue]").click()
+            queue = page.frame_locator("#search-frame")
             enqueue(writer, indexer, candidate, tmp_path)
-            expect(page.locator("#queue-table")).to_contain_text(candidate.title, timeout=6000)
-            checkbox = page.locator("#queue-table tbody input[type=checkbox]")
+            expect(queue.locator("#queue-table")).to_contain_text(candidate.title, timeout=6000)
+            checkbox = queue.locator("#queue-table tbody input[type=checkbox]")
             checkbox.check()
             writer.download_outcome(entries(writer)[0].key, "sent")
-            expect(page.locator("#queue-table")).to_contain_text("sent", timeout=6000)
+            expect(queue.locator("#queue-table")).to_contain_text("Sent", timeout=6000)
             expect(checkbox).to_be_checked()
-            expect(page.locator("#queue-summary")).to_contain_text(
-                "1 total · 0 queued · 0 sending · 1 sent"
-            )
-            expect(page.locator("#start-queue")).to_be_disabled()
-            page.locator("#queue-table tbody tr").click(button="right")
-            expect(page.locator("#queue-menu")).to_be_visible()
+            expect(queue.locator("#queue-summary")).to_contain_text("1 total · 0 waiting · 1 sent")
+            expect(queue.locator("#start-queue")).to_be_disabled()
+            queue.locator("#queue-table tbody tr").click(button="right")
+            expect(queue.locator("#queue-menu")).to_be_visible()
             expect(
-                page.locator("#queue-menu").get_by_role("menuitem", name="Retry selected")
+                queue.locator("#queue-menu").get_by_role("menuitem", name="Retry selected")
             ).to_be_disabled()
             if screenshot:
                 page.screenshot(path=str(Path(screenshot) / "queue-web-context-menu.png"))
             page.keyboard.press("Escape")
-            expect(page.locator("#queue-menu")).to_be_hidden()
+            expect(queue.locator("#queue-menu")).to_be_hidden()
             checkbox.focus()
             page.keyboard.press("Shift+F10")
-            expect(page.locator("#queue-menu")).to_be_visible()
-            page.locator("#queue-menu").get_by_role("menuitem", name="Remove selected").click()
-            expect(page.locator("#queue-summary")).to_contain_text("0 total")
-            expect(page.locator("#remove-queue")).to_be_disabled()
+            expect(queue.locator("#queue-menu")).to_be_visible()
+            queue.locator("#queue-menu").get_by_role("menuitem", name="Remove selected").click()
+            expect(queue.locator("#queue-summary")).to_contain_text("0 total")
+            expect(queue.locator("#remove-queue")).to_be_disabled()
             assert entries(writer) == []
             # An ambiguous handoff requires checking the client, not a direct retry.
             source = tmp_path / "preserved-source.bin"
@@ -165,18 +164,16 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             enqueue(writer, indexer, candidate, tmp_path)
             uncertain = entries(writer)[0]
             writer.download_outcome(uncertain.key, "uncertain", "Interrupted send")
-            expect(page.locator("#queue-table")).to_contain_text(
-                "Check Torrent Client before retrying", timeout=6000
-            )
-            expect(page.locator("#queue-table")).to_contain_text(
-                "Check the Torrent Client before removing and queueing this entry again."
+            expect(queue.locator("#queue-table")).to_contain_text("Check client", timeout=6000)
+            expect(queue.locator("#queue-table")).to_contain_text(
+                "Check the client before removing and queueing again."
             )
             checkbox.check()
-            expect(page.locator("#retry-queue")).to_be_disabled()
-            expect(page.locator("#start-queue")).to_be_disabled()
+            expect(queue.locator("#retry-queue")).to_be_disabled()
+            expect(queue.locator("#start-queue")).to_be_disabled()
             jobs_before = page.evaluate("async () => await api('jobs')")
-            page.locator("#remove-queue").click()
-            expect(page.locator("#queue-summary")).to_contain_text("0 total")
+            queue.locator("#remove-queue").click()
+            expect(queue.locator("#queue-summary")).to_contain_text("0 total")
             assert entries(writer) == []
             assert page.evaluate("async () => await api('jobs')") == jobs_before
             assert source.read_bytes() == b"Keep the source files"
@@ -206,11 +203,11 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             destination = tmp_path / "queue-downloads"
             destination.mkdir()
             enqueue(writer, sender, sent, destination)
-            expect(page.locator("#queue-table")).to_contain_text(sent.title, timeout=6000)
+            expect(queue.locator("#queue-table")).to_contain_text(sent.title, timeout=6000)
             process(writer, sender, FakeQbit())
-            expect(page.locator("#queue-summary")).to_contain_text("0 total", timeout=6000)
-            expect(page.locator("#queue-table tbody tr[data-key]")).to_have_count(0)
-            expect(page.locator("#start-queue")).to_be_disabled()
+            expect(queue.locator("#queue-summary")).to_contain_text("0 total", timeout=6000)
+            expect(queue.locator("#queue-table tbody tr[data-key]")).to_have_count(0)
+            expect(queue.locator("#start-queue")).to_be_disabled()
             page.locator("[data-view=torrents]").click()
             if screenshot:
                 for lang in ("fr", "en"):
@@ -571,178 +568,62 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             page.locator("#login-form button").click()
             page.locator("#navigation-toggle").click()
             page.locator('[data-view="upload"]').click()
-            # This test covers the retained specialist tools, reached through the guided view.
             upload = page.frame_locator("#upload-frame")
             upload.locator("[data-tab=drafts]").click()
+            expect(upload.locator(".item")).to_contain_text("Cable.Holder.NOTAG.STL")
             upload.locator(".item").first.click()
             upload.locator("[data-action=edit]").click()
             upload.locator("[data-action=drawer-close]").click()
-            upload.locator("[data-step='2']").click()
-            upload.locator("[data-action=advanced]").click()
-            expect(page.locator("#upload-local-queue")).to_contain_text("Cable.Holder.NOTAG.STL")
-            page.locator("#upload-local-queue button").first.click()
-            page.locator("[data-upload-section=review]").click()
-            expect(page.locator("#upload-rules")).to_contain_text(
+            upload.locator("[data-step='4']").click()
+            expect(upload.locator(".editor pre").first).to_contain_text("A small cable holder")
+            expect(upload.locator("#reviewed")).to_be_disabled()
+            expect(upload.locator(".editor")).to_contain_text(
                 "c411 forbids files from independent creators who live off them"
             )
-            await_status = page.evaluate(
-                "async () => { await pollJobs(); return $('work-status').textContent; }"
-            )
-            assert await_status == "Up to date"
-            # Changing language must update the existing status immediately,
-            # without waiting for another network poll.
-            assert (
-                page.evaluate(
-                    "() => { $('language').value = 'fr'; "
-                    "$('language').dispatchEvent(new Event('change')); "
-                    "return $('work-status').textContent; }"
-                )
-                == "À jour"
-            )
-            client_id = page.evaluate("state.clientId")
-            for status, en, fr in (
-                ("running", "1 active job(s)", "1 tâche(s) active(s)"),
-                ("partial", "Scan incomplete · see jobs", "Analyse incomplète · voir les tâches"),
-            ):
-                page.route(
-                    "**/api/jobs",
-                    lambda route, *, status=status: route.fulfill(
-                        json=[
-                            {
-                                "id": "status-audit",
-                                "kind": "scan",
-                                "status": status,
-                                "client_id": client_id,
-                            }
-                        ]
-                    ),
-                )
-                page.evaluate("pollJobs()")
-                for lang, expected in (("en", en), ("fr", fr)):
-                    assert (
-                        page.evaluate(
-                            "lang => { $('language').value = lang; "
-                            "$('language').dispatchEvent(new Event('change')); "
-                            "return $('work-status').textContent; }",
-                            lang,
-                        )
-                        == expected
-                    )
-                page.unroute("**/api/jobs")
-            page.evaluate("pollJobs()")
             page.locator("#language").select_option("fr")
-            expect(page.locator("#upload-rules")).to_contain_text(
+            expect(upload.locator(".editor")).to_contain_text(
                 "c411 interdit les fichiers de créateurs indépendants"
             )
-            expect(page.locator("#upload-rules")).not_to_contain_text("paid-creators:")
-            expect(page.locator("#upload-rules")).to_contain_text("Remplissez la section")
-            expect(page.locator("#upload-rules")).not_to_contain_text("description.image:")
-            expect(page.locator("#upload-rules")).not_to_contain_text("Fill '")
-            # The same formatter handles preview and saved review. Details remain
-            # text, including markup, and unknown diagnostics remain visible.
-            from torrentlinker.upload_presentation import assess
-
-            findings = assess({"category": 10, "subcategory": 51, "nfo": "Release notes"})[
-                "missing_fields"
-            ]
-            rendered = page.evaluate(
-                "values => values.map(value => { const p = uploadRuleParagraph(value); "
-                "return {text: p.textContent, en: p.dataset.en, children: p.children.length}; })",
-                [f"{row['field']}: {row['message']}" for row in findings],
-            )
-            for row, paragraph in zip(findings, rendered, strict=True):
-                assert paragraph["en"] == row["message"]
-                assert paragraph["text"] != row["message"]
-                assert paragraph["children"] == 0
-                if row["field"].startswith("nfo."):
-                    assert "Conservez les NFO d'origine sans les modifier" in paragraph["text"]
-            from tests.test_upload_completeness import presentation_review_findings
-            from torrentlinker import i18n
-            from torrentlinker.gui.upload_rules import stored_rule_text
-
-            diagnostics = [f"{r['field']}: {r['message']}" for r in presentation_review_findings()]
-            for lang in ("en", "fr"):
-                page.locator("#language").select_option(lang)
-                translators = i18n.install(qapp, lang)
-                try:
-                    expected = [stored_rule_text(value) for value in diagnostics]
-                    actual = page.evaluate(
-                        "values => values.map(value => { const p = uploadRuleParagraph(value); "
-                        "return [p.textContent, p.children.length]; })",
-                        diagnostics,
-                    )
-                    assert actual == [[message, 0] for message in expected]
-                finally:
-                    for translator in translators:
-                        qapp.removeTranslator(translator)
-            unknown = "description.image: New validation rule: <details> & values"
-            assert page.evaluate(
-                "value => { const p = uploadRuleParagraph(value); "
-                "return [p.textContent, p.children.length]; }",
-                unknown,
-            ) == [unknown, 0]
-            if screenshots := os.getenv("TL_WEB_SCREENSHOTS"):
-                target = Path(screenshots)
-                target.mkdir(parents=True, exist_ok=True)
-                for language in ("en", "fr"):
-                    page.locator("#language").select_option(language)
-                    page.screenshot(path=str(target / f"web-incomplete-review-{language}.png"))
+            expect(upload.locator(".editor")).to_contain_text("Remplissez la section")
+            expect(upload.locator(".editor")).not_to_contain_text("paid-creators:")
             page.locator("#language").select_option("en")
-            page.locator("[data-upload-section=description]").click()
-            expect(page.locator("#upload-description")).to_have_value(
+            # Edit through the same preparation dialog used by desktop.
+            upload.locator("[data-step='2']").click()
+            upload.locator("[data-action=advanced]").click()
+            upload.locator("[data-prep-tab=description]").click()
+            expect(upload.locator("#prep-description")).to_have_value(
                 re.compile("A small cable holder")
             )
-            page.locator("#upload-description").fill(
+            upload.locator("#prep-description").fill(
                 complete_description(
                     text="Reviewed cable holder description for a generated test object."
                 )
             )
-            page.locator("#upload-save-local").click()
-            expect(page.locator("#toast")).to_contain_text("Saved locally")
-            page.locator("[data-upload-section=review]").click()
-            page.locator("#language").select_option("fr")
-            expect(page.locator("#upload-rules")).to_be_visible()
-            expect(page.locator("#upload-rules")).to_contain_text(
-                "c411 interdit les fichiers de créateurs indépendants"
+            expect(upload.locator("#prep-description-preview")).to_contain_text(
+                "Reviewed cable holder description"
             )
-            page.locator("#language").select_option("en")
+            upload.locator("[data-prep=save]").click()
+            expect(upload.locator("#prep-status")).to_contain_text("Saved")
+            upload.locator("[data-prep=close]").last.click()
+            upload.locator("[data-step='4']").click()
+            expect(upload.locator(".editor pre").first).to_contain_text(
+                "Reviewed cable holder description"
+            )
             assert posted == []
             assert not list((tmp_path / "config" / "uploads").glob("**/*.torrent"))
             page.set_viewport_size({"width": 600, "height": 800})
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            screenshots = os.getenv("TL_WEB_SCREENSHOTS")
-            if screenshots:
-                target = Path(screenshots)
-                target.mkdir(parents=True, exist_ok=True)
-                page.locator("#toast").evaluate("e => e.hidden = true")
-                page.set_viewport_size({"width": 1280, "height": 900})
-                for lang in ("en", "fr"):
-                    page.locator("#language").select_option(lang)
-                    for theme in ("dark", "light"):
-                        page.locator("#theme").select_option(theme)
-                        for section in ("details", "files", "description", "artwork", "review"):
-                            page.locator(f"[data-upload-section={section}]").click()
-                            page.mouse.move(1, 1)
-                            page.wait_for_timeout(160)
-                            page.screenshot(
-                                path=str(target / f"web-upload-{section}-{lang}-{theme}.png")
-                            )
-                page.locator("#language").select_option("en")
-                page.locator("#theme").select_option("dark")
+            assert upload.locator("body").evaluate("el => el.scrollWidth <= innerWidth")
+            for language in ("fr", "en"):
+                page.locator("#language").select_option(language)
+                expect(upload.locator(".editor pre").first).to_contain_text(
+                    "Reviewed cable holder description"
+                )
             page.on("dialog", lambda dialog: dialog.accept())
-            page.locator("[data-upload-section=review]").click()
-            page.locator("#upload-reviewed").check()
-            page.locator("#upload-send-local").click()
-            expect(page.locator("#upload-local-queue")).to_contain_text(
-                "Sent to c411", timeout=10000
-            )
-            page.locator("[data-upload-view=remote]").click()
-            expect(page.locator("#upload-remote-list")).to_contain_text("No drafts on c411")
-            if screenshots:
-                page.screenshot(path=str(target / "web-upload-c411-en-dark.png"))
-                page.locator("#upload-new").click()
-                expect(page.locator("#upload-sources")).to_be_visible()
-                page.screenshot(path=str(target / "web-upload-new-en-dark.png"))
+            upload.locator("#reviewed").check()
+            upload.locator("[data-action=next]").click()
+            upload.locator("[data-action=send]").click()
+            upload.locator("[data-action=confirm-send]").click()
+            expect(upload.locator(".track")).to_contain_text("c411 draft", timeout=10000)
             assert len(posted) == 1
             assert "Reviewed cable holder description" in posted[0].content.decode()
             assert not errors

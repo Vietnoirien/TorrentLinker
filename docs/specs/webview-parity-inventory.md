@@ -50,7 +50,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 |---|---|---|---|---|---|---|
 | 19 | Results | Native `SearchTab` (`search_view.py`, 1,586 lines), delegate-painted rows | `search.js`, `index.html:666-720` | NU | `search-redesign.md` (native first) | poster loading, QSettings state |
 | 20 | Download queue | hidden sub-page of Search | own top-level nav item | NU | none | — |
-| 21 | Torrent details / tabs | Native `TorrentDetailsDialog` in `BrowserTabs` | `app.js:1319-1456` `<dialog>` | NU | none | inline remote images, tab shortcuts |
+| 21 | Torrent details / tabs | Shared Search detail tabs; readonly RSS dialog | Same bundled detail tabs | **Done** (#101) | `search-redesign.md` addendum | inline images/retry, movable tabs, Download now with category routing; browser-reserved Ctrl shortcuts remain a platform limit |
 
 ### RSS
 
@@ -157,9 +157,10 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - Postimages uses the existing isolated desktop popup or browser tab. Local render PNGs can be saved before selection in the host. See `upload-guided/preparation-tools.md` for extraction, cancellation and persisted-draft behavior.
 
 ### Search
-- Desktop-only (Gap): open results in movable tabs, "Queue all tabs", "Download all tabs", tab shortcuts; inline description images, "Download now" with folder picker, "Retry images"; per-search download folder and "Use category folders"; queue Pause / Start selected.
-- Web-only (Gap): queue context menu; Web queue has Remove/Retry selected, Clear sent.
-- Differs (Gap): pagination (numbered `PageBar` vs Previous/Next/Last).
+- **Done #100/#101:** shared Search, numbered pagination, queue controls/context menu, movable detail tabs, Queue/Download all tabs, inline images and retry.
+- Downloads use configured category folders. The folder dialog appears only for a missing category destination and persists it.
+- Desktop supports Ctrl+W / Ctrl+Tab / Ctrl+Shift+Tab. Browsers reserve these shortcuts for browser tabs; both hosts provide arrow-key tab navigation, close buttons, middle-click close and the Open tabs menu.
+- The readonly RSS desktop dialog uses the same detail assets without download controls.
 
 ### RSS
 - Differs (Gap): criteria editor (click to prefer/require/avoid, right-click to rank on Web vs list pickers with Add/Move on desktop).

@@ -75,9 +75,21 @@ def test_rss_preview_sidebar_unread_and_saved_selection(tmp_path):
                 )
             ).to_be_visible()
             page.locator("#dialog .close").click()
+            # An inbox-only release keeps RSS's destination-selection flow.
+            page.locator("#feeds-results tbody tr").filter(has_text="New film").get_by_role(
+                "button"
+            ).first.click()
+            panel = page.frame_locator("#search-frame")
+            expect(panel.locator(".dt-title")).to_contain_text("New film")
+            expect(panel.get_by_role("button", name="Download now", exact=True)).to_have_count(0)
+            panel.get_by_role("button", name="Add to queue", exact=True).click()
+            expect(page.locator("#dialog-content")).to_contain_text("Queue selected releases")
+            page.locator("#dialog .close").click()
+            panel.locator("#detail-tabs [role=tab]").first.click()
             page.locator("[data-view=search]").click()
-            page.locator("#search-query").fill("A new title")
-            page.locator("#subscribe-search").click()
+            panel = page.frame_locator("#search-frame")
+            panel.locator("#search-query").fill("A new title")
+            panel.locator("#subscribe-search").click()
             expect(
                 page.locator("#dialog-content").get_by_label("Title contains", exact=True)
             ).to_have_value("A new title")

@@ -146,7 +146,10 @@ class BundledView(QWidget):
                             "inspector.js",
                             "recovery.js",
                             "preparation.js",
+                            "rules.js",
                             "results.js",
+                            "details.js",
+                            "details.css",
                             "queue.js",
                         )
                     }
@@ -190,6 +193,15 @@ class BundledView(QWidget):
                 is_main_frame: bool,
             ) -> bool:
                 target = QUrl(url)
+                if (
+                    channel_name == "search"
+                    and navigation_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked
+                    and target.scheme() in {"http", "https"}
+                    and target.host()
+                    and not target.userInfo()
+                ):
+                    QDesktopServices.openUrl(target)
+                    return False
                 if (
                     navigation_type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked
                     and target.scheme() == "https"

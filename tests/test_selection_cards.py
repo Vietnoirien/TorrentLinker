@@ -410,56 +410,6 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
             expect(page.locator(".selection-card")).to_have_count(1)
             assert not remote
             assert len([c for c in calls if "/items/" not in c]) == (3 if upload else 2)
-            if upload:
-                page.route(
-                    "**/api/upload/queue?**",
-                    lambda route: route.fulfill(
-                        json=[
-                            {
-                                "id": "demo-draft",
-                                "revision": 1,
-                                "status": "queued",
-                                "form": {"title": "The Lunar Archive"},
-                                "path": "/saved/release.epub",
-                                "files": [{"path": "release.epub", "size": 1234}],
-                            }
-                        ]
-                    ),
-                )
-                preview_calls = []
-
-                def preview_response(route):
-                    preview_calls.append(route.request.url)
-                    route.fulfill(json=dict(saved["items"][0], description="Saved description"))
-
-                page.route("**/api/upload/queue/demo-draft/preview?**", preview_response)
-                # Reload the production workspace after the isolated chat-card view.
-                # The queue and selected-draft actions now share the full editor.
-                page.reload()
-                expect(page.locator("#workspace")).to_be_visible()
-                page.evaluate("""async () => {
-                    state.clientId = 'default';
-                    await navigate('upload');
-                    uploadLegacy.hidden = false;
-                    uploadFrame.hidden = true;
-                    state.uploadDraft = uploadUI.rows[0];
-                    $('upload-editor').hidden = false;
-                    $('upload-help').hidden = true;
-                    uploadEditorState();
-                }""")
-                expect(page.locator("#upload-local-queue")).to_contain_text("The Lunar Archive")
-                page.locator("[data-upload-section=description]").click()
-                page.get_by_role("button", name="Preview saved draft", exact=True).click()
-                expect(page.locator("dialog h2")).to_have_text("Upload draft review")
-                expect(page.locator("dialog .selection-description")).to_have_text(
-                    "Saved description"
-                )
-                assert parse_qs(urlsplit(preview_calls[0]).query) == {
-                    "revision": ["1"],
-                    "client_id": ["default"],
-                }
-                page.screenshot(path=str(tmp_path / "upload-queue-preview-web.png"))
-                page.get_by_role("button", name="Close", exact=True).click()
             browser.close()
     finally:
         server.should_exit = True

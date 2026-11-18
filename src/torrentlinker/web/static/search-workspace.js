@@ -19,6 +19,7 @@ function searchEnvironment() {
       type: "search-environment",
       value: {
         mode: "web",
+        indexer: state.setup?.indexer_url,
         language,
         client: state.clientId,
         active,
@@ -64,17 +65,10 @@ window.addEventListener("message", async (e) => {
       if (!["search", "queue"].includes(body.page))
         throw Error("Invalid page.");
       await navigate(body.page);
+    } else if (m.path === "feed-queue") {
+      await feedEnqueue(body.hashes);
     } else if (m.path === "subscribe") await editFeed(null, body.query);
     else if (m.path === "torrents") await navigate("torrents");
-    else if (m.path === "details")
-      await details(body.row, async () => {
-        const child = searchFrame.contentWindow;
-        child.postMessage(
-          { type: "search-enqueue", hash: body.row.hash },
-          location.origin,
-        );
-        $("dialog").close();
-      });
     else
       value = await api(
         "search/workspace/" +

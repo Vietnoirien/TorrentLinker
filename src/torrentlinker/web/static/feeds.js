@@ -126,8 +126,9 @@ async function loadFeeds() {
     render: r => button(`${r.unread ? "● " : ""}${r.title}`, () => details({
       ...r,
       hash: r.infohash,
-      website: r.details_url
-    }, () => feedEnqueue([r.infohash])), "link-button")
+      website: r.details_url,
+      queueSource: "feed"
+    }), "link-button")
   }, {
     label: feedText("Size", "Taille"),
     render: r => feedHuman.size(r.size)

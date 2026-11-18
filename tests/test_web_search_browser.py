@@ -155,7 +155,7 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             until(lambda: listing()[-1].get("sortBy") == "leechers")
             # The details tab shows c411's page: header, banner, facts, TMDB card, trust.
             panel.locator("#search-table .sr-release").first.click()
-            dialog = page.locator("#dialog-content")
+            dialog = panel.locator(".torrent-detail:visible")
             expect(dialog).to_contain_text("Sent by up1")
             expect(dialog).to_contain_text("Team BOUBA")
             expect(dialog.locator(".dt-banner")).to_contain_text("not tested")
@@ -164,8 +164,10 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             expect(dialog.locator(".dt-card")).to_contain_text("Title 1 (2020)")
             expect(dialog.locator(".dt-trust")).to_contain_text("Community trust")
             expect(dialog.locator("details", has_text="Show the NFO")).to_be_visible()
-            expect(dialog.locator(".dt-poster")).to_have_attribute("src", re.compile("^api/poster"))
-            page.keyboard.press("Escape")
+            expect(dialog.locator(".dt-poster")).to_have_attribute(
+                "src", re.compile("^data:image/")
+            )
+            panel.locator("#detail-tabs [role=tab]").first.click()
             page.reload()
             page.locator("[data-view=search]").click()
             expect(panel.locator("#search-density-compact")).to_have_attribute(
@@ -271,10 +273,22 @@ def test_missing_category_folder_is_picked_once_and_reused(tmp_path, monkeypatch
             except AssertionError:
                 print(panel.locator("body").inner_text())
                 raise
-            panel.locator(".dl-button").nth(1).click()
+            starts = []
+            page.route(
+                "**/api/search/workspace/start?**",
+                lambda route: (
+                    starts.append(route.request.post_data_json),
+                    route.fulfill(json={"job": "simulated"}),
+                ),
+            )
+            panel.locator(".sr-title").nth(1).click()
+            panel.get_by_role("button", name="Download now", exact=True).click()
+            expect(panel.locator("#queue-table")).to_contain_text("Release.2")
+            assert len(starts) == 1 and len(starts[0]["keys"]) == 1
+            chosen = panel.locator("#queue-table tr[data-key]").filter(has_text="Release.2")
+            assert chosen.get_attribute("data-key") == starts[0]["keys"][0]
             expect(panel.locator("#search-queue-link")).to_contain_text("(2)")
             expect(panel.locator("#folder-dialog")).not_to_be_visible()
-            panel.locator("#search-queue-link").click()
             expect(panel.locator("#queue-table")).to_contain_text(str(target))
             assert not errors
             browser.close()
@@ -344,6 +358,99 @@ def test_entering_search_loads_latest_once_and_keeps_results_on_return(tmp_path,
             expect(panel.locator(".sr-row")).to_have_count(2)
             page.wait_for_timeout(500)
             assert len(listings()) == 1
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
+
+
+def test_torrent_details_open_in_shared_tabs_and_return_to_search(tmp_path, monkeypatch):
+    from playwright.sync_api import expect, sync_playwright
+
+    fake_net(monkeypatch, [])
+    server, base = serve(tmp_path)
+    try:
+        with sync_playwright() as playwright:
+            browser, page, errors = open_search(playwright, base)
+            panel = page.frame_locator("#search-frame")
+            expect(panel.locator(".sr-row")).to_have_count(2)
+            panel.locator(".sr-title").first.click()
+            try:
+                expect(panel.locator(".torrent-detail:visible")).to_contain_text("Sent by up1")
+            except AssertionError:
+                print(errors, panel.locator("body").inner_text())
+                raise
+            expect(panel.locator("#detail-tabs [role=tab]")).to_have_count(2)
+            panel.locator("#detail-tabs [role=tab]").first.click()
+            panel.locator(".sr-title").nth(1).click()
+            expect(panel.locator("#detail-tabs [role=tab]")).to_have_count(3)
+            panel.locator("#detail-tabs [role=tab]").last.focus()
+            page.keyboard.press("ArrowLeft")
+            expect(panel.locator(".torrent-detail:visible .dt-title")).to_contain_text("Release.1")
+            page.locator("#language").select_option("fr")
+            expect(panel.locator(".torrent-detail:visible")).to_contain_text(
+                "Télécharger maintenant"
+            )
+            expect(panel.locator(".torrent-detail:visible")).to_contain_text("Envoyé par up1")
+            page.locator("#language").select_option("en")
+            expect(panel.locator(".torrent-detail:visible")).to_contain_text("Download now")
+            panel.locator(".detail-tab").nth(2).drag_to(panel.locator(".detail-tab").nth(1))
+            expect(panel.locator("#detail-tabs [role=tab]").nth(1)).to_contain_text("Release.2")
+            panel.locator("#detail-tabs [aria-label='Close tab']").first.click()
+            expect(panel.locator("#detail-tabs [role=tab]")).to_have_count(2)
+            panel.locator("#detail-tabs [role=tab]").first.click()
+            expect(panel.locator(".sr-row")).to_have_count(2)
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
+
+
+def test_details_inline_image_retry_and_language_changes(tmp_path, monkeypatch):
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_web_search import DETAIL, POSTER
+
+    monkeypatch.setitem(DETAIL, "description", f'<p>Synopsis</p><img src="{POSTER}">')
+    fake_net(monkeypatch, [])
+    server, base = serve(tmp_path)
+    try:
+        with sync_playwright() as playwright:
+            browser, page, errors = open_search(playwright, base)
+            attempts = []
+
+            def unavailable_once(route):
+                attempts.append(route.request.post_data_json)
+                if len(attempts) == 1:
+                    route.fulfill(json={"error": "Image unavailable", "retry_after": 0})
+                else:
+                    route.continue_()
+
+            page.route("**/api/search/workspace/detail-image?**", unavailable_once)
+            panel = page.frame_locator("#search-frame")
+            panel.locator(".sr-title").first.click()
+            expect(panel.locator(".detail-image-error")).to_contain_text("Image unavailable")
+            panel.get_by_role("button", name="Retry images", exact=True).click()
+            expect(panel.locator(".description img")).to_be_visible()
+            expect(panel.locator(".description img")).to_have_attribute(
+                "src", re.compile("^data:image/png")
+            )
+            expect(panel.locator(".detail-image-error")).to_have_count(0)
+            assert len(attempts) == 2
+            for language in ("fr", "en"):
+                page.locator("#language").select_option(language)
+                for theme in ("dark", "light"):
+                    page.locator("#theme").select_option(theme)
+                    expect(panel.locator(".torrent-detail:visible .dt-bar")).to_contain_text(
+                        "Télécharger maintenant" if language == "fr" else "Download now"
+                    )
+                    if target := os.getenv("TL_SEARCH_SCREENSHOTS"):
+                        from pathlib import Path
+
+                        Path(target).mkdir(parents=True, exist_ok=True)
+                        page.screenshot(
+                            path=str(Path(target) / f"details-web-{language}-{theme}.png")
+                        )
             assert not errors
             browser.close()
     finally:
