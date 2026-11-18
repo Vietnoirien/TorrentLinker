@@ -1544,10 +1544,13 @@ $("logout").onclick = () =>
 $("theme").value = localStorage.getItem("tl-theme") || "auto";
 function theme() {
   const value = $("theme").value;
-  document.documentElement.dataset.theme = value;
+  document.documentElement.dataset.theme = value === "auto"
+    ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : value;
   localStorage.setItem("tl-theme", value);
 }
 $("theme").onchange = theme;
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", theme);
 theme();
 $("language").onchange = () => {
   if (state.view === "documentation") setTimeout(() => guard(loadGuides), 0);

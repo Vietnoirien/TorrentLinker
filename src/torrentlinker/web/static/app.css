@@ -1,14 +1,4 @@
 :root {
-  color-scheme: light dark;
-  --bg: #f5f7fa;
-  --panel: #fff;
-  --ink: #1b2938;
-  --muted: #657485;
-  --line: #dce3ea;
-  --accent: #087f79;
-  --tint: #e2f2ef;
-  --danger: #b63848;
-  --shadow: 0 16px 60px #172b3e12;
   font:
     15px/1.5 system-ui,
     sans-serif;
@@ -97,7 +87,7 @@ select:focus-visible {
 }
 .primary {
   background: var(--accent);
-  color: white;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 /* Button roles, matching the desktop (gui/controls.py): .primary, the plain
@@ -486,32 +476,6 @@ dialog .description img {
   text-align: left;
   margin: 6px 0;
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #161d23;
-  --panel: #202932;
-  --ink: #e4ebf0;
-  --muted: #a2b1c1;
-  --line: #32424f;
-  --accent: #45bdb2;
-  --tint: #203e43;
-  --danger: #ff8b95;
-  --shadow: none;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #161d23;
-    --panel: #202932;
-    --ink: #e4ebf0;
-    --muted: #a2b1c1;
-    --line: #32424f;
-    --accent: #45bdb2;
-    --tint: #203e43;
-    --danger: #ff8b95;
-    --shadow: none;
-  }
-}
 @media (max-width: 850px) {
   .sidebar {
     position: static;
@@ -803,7 +767,7 @@ dialog .description img {
 .feed-chip-flow {display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .feed-chip-flow .feed-chip-add {width:90px;min-width:0;padding:7px 10px}
 .feed-chip.prefer {border-color:var(--accent);color:var(--accent)}
-.feed-chip.must {background:var(--accent);border-color:var(--accent);color:#fff}
+.feed-chip.must {background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
 .feed-chip.avoid {border-color:var(--danger);color:var(--danger)}
 .feed-priority {display:flex;align-items:center;gap:.2rem}
 .feed-priority span {flex:1}
@@ -839,7 +803,7 @@ dialog:has(.feed-editor) {width:min(820px,94vw)}
 .assistant-field:focus-within { border-color: var(--accent); }
 /* The field's border shows focus; the textarea inside needs no second outline. */
 .assistant-field textarea:focus-visible { outline: none; }
-.assistant-send { width: 34px; height: 34px; padding: 0; border-radius: 50%; background: var(--accent); border-color: var(--accent); color: white; flex-shrink: 0; }
+.assistant-send { width: 34px; height: 34px; padding: 0; border-radius: 50%; background: var(--accent); border-color: var(--accent); color: var(--accent-text); flex-shrink: 0; }
 .assistant-send:hover { background: var(--accent); filter: brightness(1.12); }
 .assistant-chips { display: flex; gap: 4px; align-items: center; padding: 0 4px; }
 .assistant-chip { width: auto; max-width: 300px; padding: 4px 8px; font-size: .86rem; color: var(--muted); background: transparent; border-color: transparent; }
@@ -885,7 +849,7 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 .fdrop-item:hover { background: var(--tint); }
 .fdrop-item input { width: auto; }
 .chip.page { min-width: 34px; border-radius: 8px; }
-.chip.page[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; }
+.chip.page[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 650; }
 .results-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin: 4px 0 12px; overflow: hidden; }
 .results-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 16px 2px; }
 .results-head h2 { margin: 0; font-size: 1.1em; }
@@ -1082,8 +1046,4 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 .queue-context-menu { position: fixed; z-index: 1000; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 8px 30px #0005; max-width: 100vw; }
 .queue-context-menu button { display: block; width: 100%; text-align: left; margin: 2px 0; }
 
-/* Shared workspace palette, including application navigation. */
-:root[data-theme="dark"] { --bg:#161d23; --panel:#202932; --ink:#e2e9ed; --muted:#98aab7; --line:#33404b; --accent:#80bdb6; --tint:#263e43; }
-:root[data-theme="dark"] .primary { color:#102a2b; }
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161d23;--panel:#202932;--ink:#e2e9ed;--muted:#98aab7;--line:#33404b;--accent:#80bdb6;--tint:#263e43} :root:not([data-theme="light"]) .primary{color:#102a2b}}
 #upload-frame[hidden]{display:none!important}

@@ -87,6 +87,26 @@ def test_profile_first_pair_snapshot_disconnect_browser(tmp_path, monkeypatch):
             )
             page.locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
+            assert (
+                page.locator("html").evaluate(
+                    "e => getComputedStyle(e).getPropertyValue('--bg').trim()"
+                )
+                == "#f3f6fa"
+            )
+            assert (
+                page.locator("html").evaluate(
+                    "e => getComputedStyle(e).getPropertyValue('--text').trim()"
+                )
+                == "#203047"
+            )
+            page.emulate_media(color_scheme="dark")
+            expect(page.locator("html")).to_have_attribute("data-theme", "light")
+            page.locator("#theme").select_option("auto")
+            expect(page.locator("html")).to_have_attribute("data-theme", "dark")
+            expect(panel.locator("html")).to_have_attribute("data-theme", "dark")
+            page.emulate_media(color_scheme="light")
+            expect(page.locator("html")).to_have_attribute("data-theme", "light")
+            expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             page.set_viewport_size({"width": 600, "height": 900})
             assert (
                 panel.locator("#profile-tiles").evaluate(

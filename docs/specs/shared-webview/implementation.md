@@ -28,3 +28,11 @@ Standards and spec reviews against pre-work commit `1a5bdcf` found automatic-lan
 `~/.local/share/applications/torrentlinker.desktop` launches `/home/viet/git-perso/TorrentLinker/.venv/bin/torrentlinker`, whose editable package resolves to this checkout's `src/torrentlinker`. The running application was not restarted. No version bump, companion change, publication or tracker write is part of this change.
 
 Final serial regression run: **88 passed** across Community interfaces/browser, Reseed service/browser, Upload workspace/view/browser and the real-display startup guard. Mypy reports no issues in 231 source files; Ruff and whitespace checks pass.
+
+## Native and Web theme alignment, issue #78
+
+`panel/base.css` now owns both default palettes. Qt reads its two literal token blocks; the Web shell loads the same stylesheet before `app.css`. The default light palette comes from the existing native and Upload design. Approved panel-specific light overrides and the separate Media design remain unchanged.
+
+The duplicate Web dark palettes are removed. Web automatic mode resolves the system color scheme and follows changes, while explicit light or dark choices remain fixed. Accent-filled controls use the shared foreground token for readable contrast in both modes. No layout or navigation changes are included.
+
+Verification: 11 tests passed across native theme selection, browser theme switching and Profile interactions, and the real-display first-panel window check. Ruff, mypy and whitespace checks passed. Tests use isolated data and do not send tracker actions.

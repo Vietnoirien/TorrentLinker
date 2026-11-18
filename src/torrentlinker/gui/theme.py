@@ -1,8 +1,11 @@
 """A system-aware palette and shared visual hierarchy, retaining native Qt controls."""
 
 import os
+import re
 import subprocess
 import sys
+from functools import lru_cache
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Qt
 from PySide6.QtGui import QColor, QPalette
@@ -110,23 +113,34 @@ class ThemeFollower(QObject):
         self.monitor.waitForFinished(200)
 
 
+@lru_cache(maxsize=2)
+def _panel_colors(dark: bool) -> dict[str, str]:
+    """Read the two literal palette blocks shared with the Web shell.
+
+    This is deliberately not a general CSS parser. Layout rules and page-specific
+    overrides are not part of the native palette.
+    """
+    source = (Path(__file__).parents[1] / "web/static/panel/base.css").read_text()
+    blocks = dict(re.findall(r"(:root(?:\[data-theme=\"light\"\])?)\s*\{([^}]+)\}", source))
+    declarations = blocks[":root"]
+    if not dark:
+        declarations += blocks[':root[data-theme="light"]']
+    return dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{6});", declarations))
+
+
 def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
     dark = scheme == Qt.ColorScheme.Dark or (
         scheme == Qt.ColorScheme.Unknown and app.palette().window().color().lightness() < 128
     )
-    bg, panel, alt = (
-        ("#161d23", "#202932", "#26323c") if dark else ("#f3f6fa", "#ffffff", "#f7f9fc")
+    colors = _panel_colors(dark)
+    bg, panel, alt = (colors[name] for name in ("bg", "panel", "raised"))
+    text, muted, border = (colors[name] for name in ("text", "muted", "line"))
+    accent, hover = colors["accent"], colors["hover"]
+    accent_text = colors["accent-text"]
+    brand = accent
+    error, warning, selection, ok = (
+        colors[name] for name in ("danger", "warning", "tint", "success")
     )
-    text, muted, border = (
-        ("#e2e9ed", "#98aab7", "#33404b") if dark else ("#203047", "#5c6c80", "#d5dfe9")
-    )
-    accent, hover = ("#80bdb6", "#263e43") if dark else ("#087f76", "#e8f3f2")
-    accent_text = "#102a2b" if dark else "white"
-    brand = "#80bdb6" if dark else accent
-    error = "#ff9c9c" if dark else "#b42332"
-    warning = "#edbf73" if dark else "#8a5800"
-    selection = "#263e43" if dark else "#d8eeeb"
-    ok = "#4ad394" if dark else "#1f9d63"
     palette = QPalette()
     for role, color in {
         QPalette.ColorRole.Window: bg,
@@ -140,7 +154,7 @@ def _update_theme(app: QApplication, scheme: Qt.ColorScheme) -> None:
         QPalette.ColorRole.HighlightedText: text,
         QPalette.ColorRole.ToolTipBase: panel,
         QPalette.ColorRole.ToolTipText: text,
-        QPalette.ColorRole.Link: "#64c9c0" if dark else accent,
+        QPalette.ColorRole.Link: colors["link"],
         QPalette.ColorRole.PlaceholderText: muted,
         QPalette.ColorRole.Mid: border,
         QPalette.ColorRole.Light: border,
