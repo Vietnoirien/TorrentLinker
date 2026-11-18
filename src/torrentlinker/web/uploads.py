@@ -11,6 +11,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from torrentlinker.client_limits import client_name
+from torrentlinker.disk_rename import RenameApproval
 from torrentlinker.options import category_options, options_body
 from torrentlinker.paths import PathMapper
 from torrentlinker.scan import scan_item
@@ -73,6 +74,7 @@ class Uploads:
         self.setup = setup
         self.library = library
         self.prepared: dict[str, tuple[PreparedUpload, str]] = {}
+        self.approve_disk_renames: RenameApproval | None = None
 
     def prepare(
         self, path: str, form: UploadForm, stop: threading.Event, *, stored: bool = False

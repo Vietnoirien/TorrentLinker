@@ -759,10 +759,7 @@ async function navigate(view, section, detail) {
   if (view === "queue") await loadQueue();
   if (view === "feeds") await loadFeeds();
   if (view === "upload") {
-    showUploadView(section);
-    if (section === "remote") await loadRemoteUploads();
-    else if (section === "sources") await loadUploadSources();
-    else await loadUploadQueue();
+    uploadEnvironment(section);
   }
   if (view === "library") await libraryTab(section);
   if (view === "jobs") await loadJobs();
@@ -1560,7 +1557,7 @@ $("language").onchange = () => {
   if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
   if (state.view === "zen") { guard(loadZenSeeding); retranslatePlan(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
-  if (state.view === "upload") { renderUploadQueue(); uploadEditorState(); }
+  if (state.view === "upload") uploadEnvironment();
   labelTorrentBar();
   if (state.view === "torrents") guard(loadTorrents);
   if (state.view === "media") { mediaViews(); guard(loadMedia); mediaQueueRender(); }
@@ -1747,7 +1744,7 @@ $("guide-content").onclick = event => {
 
 $("target-client").onchange = () => guard(async () => {
   state.clientId = $("target-client").value;
-  resetUploadWorkspace();
+  uploadEnvironment();
   state.uploadDraft = null;
   state.uploadSavedOptions = null;
   state.addingClient = false;

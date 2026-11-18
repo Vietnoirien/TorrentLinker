@@ -86,7 +86,6 @@ from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.search_view import SearchTab
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
-    ANNOUNCE_URL,
     INDEXER_API_KEY,
     PROXY_PASSWORD,
     TMDB_API_KEY,
@@ -98,7 +97,7 @@ from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.gui.theme import set_theme
 from torrentlinker.gui.torrents_view import TorrentsTab
 from torrentlinker.gui.update_notice import UpdateNotice
-from torrentlinker.gui.upload_view import UploadTab
+from torrentlinker.gui.upload_eligibility import UploadEligibility
 from torrentlinker.gui.zen_view import CategoryCard, ZenBand, ZenTab
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import (
@@ -315,24 +314,13 @@ class MainWindow(QMainWindow):
         self.library_workspace = LibraryWorkspace(self, toolbar, match_toolbar)
         self.review.recovery_requested.connect(self.library_workspace.reseed.open_recovery)
         self.tabs.addTab(self.library_workspace, self.tr("Library"))
-        self.upload_tab = UploadTab(
-            store,
-            self.indexer,
-            self.qbit,
-            lambda: self.settings.matching.ignore,
-            lambda: get_secret(ANNOUNCE_URL),
-            store.torrent_dir.parent / "uploads",
-            approve_disk_renames=self.reseed_consent.approve,
-        )
+        self.upload_tab = UploadEligibility(self)
         self.review.candidates_checked.connect(self.upload_tab.remember)
         self.review.upload_blocker = self.upload_tab.why_not
         self.review.upload_requested.connect(self._open_upload)
-        self.upload_tab.upload_started.connect(self._reseed_started)
-        self.upload_tab.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         from torrentlinker.gui.upload_workspace import UploadBoard
 
         self.upload_workspace = UploadBoard(self)
-        self.upload_tab.hide()
         self.tabs.addTab(self.upload_workspace, self.tr("Upload"))
         self.search_tab = SearchTab(store, settings, self.indexer, self.qbit)
         self.tabs.addTab(self.search_tab, self.tr("Search"))

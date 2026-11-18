@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QMessageBox
 from torrentlinker.config import Settings
 from torrentlinker.gui import main_window
 from torrentlinker.gui.library_workspace import FolderEditor
-from torrentlinker.gui.upload_view import UploadTab
+from torrentlinker.gui.upload_eligibility import UploadEligibility as UploadTab
 from torrentlinker.gui.zen_view import SeedingView
 from torrentlinker.store import Store
 
@@ -235,7 +235,7 @@ def test_restoring_searches_checks_upload_eligibility_once_per_item(qtbot, tmp_p
         window.upload_tab, "why_not", lambda entry: checked.append(entry) or "Not ready"
     )
     window._searches_restored([(entry, []) for entry in entries])
-    assert len(checked) == len(entries)
+    assert not checked  # Restoring candidates no longer rebuilds a hidden Upload table.
     assert len(window.review.cache) == len(entries)
     assert len(window.upload_tab.searched) == len(entries)
 

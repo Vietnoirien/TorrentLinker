@@ -41,7 +41,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
 | 16 | Guided Upload | **BV** `UploadBoard` | `upload-workspace.js` iframe | **Done** | `upload-guided/` (WebView) | file picker vs server browser; Postimages window |
-| 17 | Upload preparation tools (advanced editor) | Native `UploadTab` (`upload_view.py`, 1,728 lines) in a modal | legacy DOM in `uploads.js`/`categories.js` behind the iframe | NU | `upload-redesign.md`, `upload-guided/implementation.md` | embeds 3D viewer, archive unpack, seeding hand-off |
+| 17 | Upload preparation tools (advanced editor) | **BV** `UploadBoard` modal | same bundled modal in Upload iframe | **Done #99** | `upload-guided/preparation-tools.md` | native/server pickers; live mesh bounded to 16 MB / 2,000 triangles; desktop disk-rename consent |
 | 18 | 3D view | Native QtQuick3D `ModelViewer` | server-rendered image with numeric camera | DO | none | live QtQuick3D can't move into a page |
 
 ### Search / Recherche
@@ -152,9 +152,9 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - Differs (Gap): Web keeps a fallback link folder in `localStorage`; desktop reads settings only.
 
 ### Upload
-- Differs (Gap): advanced editor is a native modal on desktop vs legacy DOM on Web, with separate layouts, strings and validation (`uploads.js` vs `upload_rules.py`).
-- Desktop-only: live 3D view (Web: numeric camera + "Inspect 3D pieces"); "Unpack…" with disk-space check (*unsure* about a Web equivalent outside Library); automatic verification and seeding after send (Web: seeding is a separate action).
-- Differs (Gap): source listing ("Start from your Library" + "Load more" vs "Show all" + orphans toggle); Postimages helper (native dialog vs new browser tab).
+- **Done #99:** one shared preparation modal replaces native `UploadTab` and legacy Web editor. Details, file/NFO editing, description preview, artwork, 3D controls, review and explicit seeding are available in both hosts.
+- Intentional limits: live mesh geometry is bounded to 16 MB inputs and 2,000 displayed triangles; larger supported pieces use the CPU renderer. Web pickers use server roots, desktop uses native pickers. Web cannot approve disk renames for seeding; desktop retains the existing consent dialog.
+- Postimages uses the existing isolated desktop popup or browser tab. Local render PNGs can be saved before selection in the host. See `upload-guided/preparation-tools.md` for extraction, cancellation and persisted-draft behavior.
 
 ### Search
 - Desktop-only (Gap): open results in movable tabs, "Queue all tabs", "Download all tabs", tab shortcuts; inline description images, "Download now" with folder picker, "Retry images"; per-search download folder and "Use category folders"; queue Pause / Start selected.

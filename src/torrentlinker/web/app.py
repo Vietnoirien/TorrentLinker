@@ -342,7 +342,7 @@ def create_app(
                 "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                 + (
                     "img-src data:; "
-                    if route == "/static/profile/view.html"
+                    if route in {"/static/profile/view.html", "/static/upload/view.html"}
                     else "img-src 'self'; "
                 )
                 + "frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
@@ -651,7 +651,14 @@ def create_app(
         from torrentlinker.upload_workspace import UploadWorkspace
 
         try:
-            return UploadWorkspace(for_client(client_id).uploads).request(action, body)
+            workspace = UploadWorkspace(for_client(client_id).uploads)
+            if action.startswith("tool-"):
+                from torrentlinker.upload_tool_jobs import tool_job
+
+                return tool_job(
+                    jobs, workspace, workspace.setup.settings.active_client_id, action, body
+                )
+            return workspace.request(action, body)
         except (ValueError, KeyError) as error:
             raise HTTPException(400, str(error)) from error
 

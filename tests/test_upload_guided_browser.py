@@ -23,12 +23,15 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
     root = tmp_path / "media"
     root.mkdir()
     model = root / "Sculpture.stl"
-    model.write_text("solid sculpture\nendsolid sculpture\n")
+    model.write_text(
+        "solid sculpture\nfacet normal 0 0 1\nouter loop\n"
+        "vertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid sculpture\n"
+    )
     config = tmp_path / "config"
     config.mkdir()
     setup = Setup(config, (root,), ServerSecrets(config), lambda *args: EmptyClient())
     from tests.test_upload_completeness import complete_description
-    from tests.test_upload_view import StubIndexer
+    from tests.upload_fixtures import StubIndexer
 
     class UploadIndexer(StubIndexer):
         def save_draft(self, body):
@@ -64,7 +67,10 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            page = browser.new_page(viewport={"width": 1560, "height": 1050}, color_scheme="dark")
+            page = browser.new_page(
+                viewport={"width": 1560, "height": 1050},
+                color_scheme="light" if host_fails else "dark",
+            )
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
             base = f"http://127.0.0.1:{port}"
@@ -74,6 +80,13 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
             page.locator("#language").select_option("fr")
             page.locator("[data-view=upload]").first.click()
             frame = page.frame_locator("#upload-frame")
+            page.evaluate("location.hash = '#/upload/remote'")
+            expect(frame.locator('[data-tab="tracking"]')).to_have_class("on")
+            frame.locator('[data-tab="sources"]').click()
+            expect(page).to_have_url(base + "/#/upload/sources")
+            page.go_back()
+            expect(frame.locator('[data-tab="tracking"]')).to_have_class("on")
+            frame.locator('[data-tab="sources"]').click()
 
             expect(frame.locator("body")).to_have_css("padding-right", "16px")
             assert page.locator("#upload-frame").evaluate(
@@ -139,13 +152,46 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
             assert result["drafts"][0]["form"]["image"] == "https://i.postimg.cc/abc/cover.png"
             frame.locator('[data-step="2"]').click()
             frame.get_by_role("button", name="Outils de préparation", exact=True).click()
-            expect(page.locator("#upload-title")).to_have_value("Sculpture.NOTAG.STL")
-            page.locator("#upload-source").fill("Création personnelle")
-            page.locator("#upload-save-local").click()
-            expect(page.locator("#upload-save-state")).to_contain_text(
-                "Enregistré localement · Version"
+            expect(frame.locator("#prep-title-field")).to_have_value("Sculpture.NOTAG.STL")
+            expect(frame.locator('[data-prep-field="subcategory"] option').first).not_to_have_text(
+                ""
             )
-            page.locator("#upload-guided-back").click()
+            frame.locator("#prep-source").fill("Création personnelle")
+            frame.locator('[data-prep="save"]').click()
+            expect(frame.locator("#prep-status")).to_contain_text("Enregistré")
+            expect(frame.locator('[data-prep="save"]')).to_be_enabled()
+            frame.locator('[data-prep-tab="models"]').click()
+            frame.locator('[data-prep="inspect"]').click()
+            expect(frame.locator("#prep-mesh polygon")).to_have_count(1)
+            frame.locator("#prep-yaw").fill("90")
+            frame.locator('[data-prep="render"]').click()
+            expect(frame.locator('[data-prep="export-artwork"]')).to_have_count(1)
+            expect(frame.locator(".prep-body img")).to_be_visible()
+            assert frame.locator(".prep-body img").evaluate(
+                "el => el.complete && el.naturalWidth > 0"
+            )
+            frame.locator('[data-prep="save"]').click()
+            expect(frame.locator('[data-prep="save"]')).to_be_enabled()
+            page.screenshot(path="/tmp/upload-preparation-model-web.png")
+            frame.locator('[data-prep-tab="details"]').click()
+            page.screenshot(path="/tmp/upload-preparation-web.png")
+            page.locator("#language").select_option("en")
+            expect(frame.locator('[data-prep-tab="files"]')).to_have_text("Files & NFO")
+            frame.locator('[data-prep-tab="files"]').click()
+            frame.locator('[data-prep="reset-nfo"]').click()
+            page.locator("#language").select_option("fr")
+            frame.locator("#prep-confirm").click()
+            expect(frame.locator("#dialog")).not_to_be_visible()
+            frame.locator('[data-prep="save"]').click()
+            expect(frame.locator("#prep-status")).to_contain_text("Enregistré")
+            page.set_viewport_size({"width": 390, "height": 844})
+            expect(frame.locator("#preparation")).to_be_visible()
+            assert frame.locator("#preparation").evaluate(
+                "el => el.scrollWidth <= el.clientWidth + 1"
+            )
+            page.screenshot(path=f"/tmp/upload-preparation-narrow-{host_fails}.png")
+            page.set_viewport_size({"width": 1560, "height": 1050})
+            frame.locator('[data-prep="close"]').first.click()
             frame.locator('[data-step="3"]').click()
             result = page.request.post(
                 base + "/api/upload/workspace/state", data={}, headers={"X-TorrentLinker": "1"}

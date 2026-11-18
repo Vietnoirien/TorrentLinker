@@ -145,6 +145,7 @@ class BundledView(QWidget):
                             "transport.js",
                             "inspector.js",
                             "recovery.js",
+                            "preparation.js",
                         )
                     }
                     | {

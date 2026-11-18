@@ -58,34 +58,6 @@ def test_search_shortcut_returns_to_shared_library(qtbot, tmp_path):
     assert window.navigation.currentRow() == 1
 
 
-def test_upload_sort_refresh_and_programmatic_selection_keep_the_right_item(qtbot, tmp_path):
-    from tests.test_upload_view import model, tab
-
-    view, _, _ = tab(qtbot, tmp_path)
-    large, small = model(tmp_path, "A large.3mf"), model(tmp_path, "Z small.3mf")
-    # Distinct byte sizes must sort numerically despite their formatted units.
-    large = LibraryEntry(large.folder, LocalItem(large.item.path, {"a": 1024**3}), large.state)
-    small = LibraryEntry(small.folder, LocalItem(small.item.path, {"b": 9 * 1024**2}), small.state)
-    view.set_entries([large, small])
-    view.show_all.setChecked(True)
-    view.items.sortItems(2, Qt.SortOrder.AscendingOrder)
-    view.items.selectRow(0)
-    assert view.entry is small
-    view._fill()
-    assert view.entry is small
-    assert view.items.item(0, 0).text() == small.item.path.name
-    view.select(large.item.path)
-    assert view.entry is large
-    assert view.items.currentRow() == 1
-    view._show_drafts([{"name": "Z last"}, {"name": "A first"}])
-    view.drafts.sortItems(0, Qt.SortOrder.AscendingOrder)
-    view._show_drafts(
-        [{"name": "Z last", "category": "Models"}, {"name": "A first", "category": "Books"}]
-    )
-    assert view.drafts.item(0, 0).text() == "A first"
-    assert view.drafts.item(0, 1).text() == "Books"
-
-
 def test_seeding_filter_and_numeric_order_survive_refresh(qtbot):
     from torrentlinker.domain import Torrent
     from torrentlinker.gui.zen_view import SeedingView

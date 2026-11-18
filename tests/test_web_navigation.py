@@ -53,10 +53,7 @@ async function loadGuides() { loaded.push('documentation'); }
 async function loadTorrents() { loaded.push('torrents'); }
 async function loadQueue() { loaded.push('queue'); }
 async function loadFeeds() { loaded.push('feeds'); }
-async function loadUploadQueue() { loaded.push('upload/local'); }
-async function loadRemoteUploads() { loaded.push('upload/remote'); }
-async function loadUploadSources() { loaded.push('upload/sources'); }
-function showUploadView(tab) { rememberTab('upload', tab); }
+function uploadEnvironment(tab) { loaded.push('upload/'+tab); }
 async function loadLibrary() { loaded.push('library/items'); }
 async function loadReseed() { loaded.push('library/'+reseedUI.tab); }
 async function loadJobs() { loaded.push('jobs'); }
