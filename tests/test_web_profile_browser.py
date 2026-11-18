@@ -49,6 +49,20 @@ def test_profile_first_pair_snapshot_disconnect_browser(tmp_path, monkeypatch):
                 page.frame_locator("#profile-frame").locator("#profile-sync .pf-cal i")
             ).to_have_count(182)
             panel = page.frame_locator("#profile-frame")
+            page.set_viewport_size({"width": 2100, "height": 1100})
+            assert (
+                panel.locator("#zen-profile-panel").evaluate(
+                    "e => document.documentElement.clientWidth - e.getBoundingClientRect().right"
+                )
+                < 40
+            )
+            assert (
+                panel.locator("#zen-profile-panel").evaluate(
+                    "e => { const r = e.getBoundingClientRect();"
+                    " return Math.abs(r.left - (innerWidth - r.right)); }"
+                )
+                <= 1
+            )
             panel.locator('[data-days="7"]').click()
             expect(panel.locator('[data-days="7"]')).to_have_attribute("aria-pressed", "true")
             assert page.evaluate("localStorage.getItem('profile-period')") == "7"
