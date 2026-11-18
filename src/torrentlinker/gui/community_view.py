@@ -89,6 +89,13 @@ class BundledView(QWidget):
         self.web: QWebEngineView | None = None
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
+        # The lazy web view composites through Qt Quick. Adding the first one to a
+        # shown raster window makes Qt destroy and recreate that native window,
+        # which Wayland and X11 show as the app reopening. This hidden Qt Quick
+        # widget makes the top level composite that way from its first show.
+        from PySide6.QtQuickWidgets import QQuickWidget
+
+        QQuickWidget(self).hide()
 
     def _load_view(self) -> None:
         # Load Chromium only when the Community tab is opened.

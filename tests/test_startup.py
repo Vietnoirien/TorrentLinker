@@ -238,3 +238,59 @@ def test_restoring_searches_checks_upload_eligibility_once_per_item(qtbot, tmp_p
     assert len(checked) == len(entries)
     assert len(window.review.cache) == len(entries)
     assert len(window.upload_tab.searched) == len(entries)
+
+
+def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypatch):
+    # Offscreen never recreates windows. Use the session's display in a child process.
+    import os
+    import subprocess
+    import sys
+
+    import pytest
+
+    if not os.getenv("TL_NATIVE_WINDOW_CHILD"):
+        platform = (
+            "wayland" if os.getenv("WAYLAND_DISPLAY") else "xcb" if os.getenv("DISPLAY") else ""
+        )
+        if not platform:
+            pytest.skip("needs a Wayland or X11 display")
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", f"{__file__}::{sys._getframe().f_code.co_name}"],
+            env={**os.environ, "TL_NATIVE_WINDOW_CHILD": "1", "QT_QPA_PLATFORM": platform},
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QStackedWidget, QTabWidget
+
+    window, _, _ = setup_window(qtbot, tmp_path, monkeypatch)
+    window.show()
+    qtbot.waitExposed(window)
+    native = window.windowHandle()
+    destroyed = []
+
+    class Spy(QObject):
+        def eventFilter(self, watched, event):
+            if event.type() == QEvent.Type.PlatformSurface:
+                destroyed.append(event.surfaceEventType())
+            return False
+
+    spy = Spy()
+    native.installEventFilter(spy)
+    for panel in (window.community_view, window.library_workspace.reseed, window.upload_workspace):
+        child = panel
+        while child is not window:
+            parent = child.parentWidget()
+            if isinstance(parent, QStackedWidget):
+                tabs = parent.parentWidget()
+                if isinstance(tabs, QTabWidget):
+                    tabs.setCurrentWidget(child)
+                else:
+                    parent.setCurrentWidget(child)
+            child = parent
+        qtbot.waitUntil(lambda panel=panel: panel.web is not None and panel.isVisible())
+        qtbot.wait(200)
+        assert window.windowHandle() is native and not destroyed, panel
