@@ -376,6 +376,7 @@ window.addEventListener("search-environment", (event) => {
   if (changed) {
     generation++;
     SS.loaded = false;
+    SS.loading = null;
     SS.searched = false;
     SS.rows = [];
     SS.listing = {};

@@ -1,7 +1,8 @@
 /* Search: category pills, filter row, sort chips, numbered pages and rich result rows.
-   The desktop Search tab has the same structure (gui/search_view.py). */
+   Both desktop and Web load this bundled panel. */
 const SS = {
   loaded: false,
+  loading: null,
   searched: false,
   native: false,
   category: "",
@@ -1013,7 +1014,20 @@ async function loadSearchPage() {
     SS.posters = searchStore("tl-search-posters") !== "0";
     setDensity(SS.density);
     searchRetranslate();
-    await loadSearchOptions();
+    if (!SS.loading) {
+      const loading = (async () => {
+        await loadSearchOptions();
+        await runSearch(1);
+      })();
+      SS.loading = loading;
+      try {
+        await loading;
+      } finally {
+        if (SS.loading === loading) SS.loading = null;
+      }
+    } else {
+      await SS.loading;
+    }
   } else {
     refreshQueueCount();
   }

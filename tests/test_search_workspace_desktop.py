@@ -67,6 +67,7 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
     tab.show()
     board = tab.board
     wait_js(qtbot, board, "document.querySelector('#search-pills').textContent.includes('Films')")
+    wait_js(qtbot, board, "document.querySelectorAll('.sr-row').length===2")
     js(
         qtbot,
         board,
@@ -74,7 +75,12 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
         "document.querySelector('#search-form .primary').click()",
     )
     try:
-        wait_js(qtbot, board, "document.querySelectorAll('.sr-row').length===2")
+        wait_js(
+            qtbot,
+            board,
+            "document.querySelectorAll('.sr-row').length===2 && "
+            "!document.querySelector('#search-status').textContent.includes('Searching')",
+        )
     except Exception:
         print(js(qtbot, board, "document.body.innerText"))
         print(tab.board.jobs.list())

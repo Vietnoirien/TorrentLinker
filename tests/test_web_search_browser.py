@@ -321,3 +321,30 @@ def test_search_zero_peer_bar_and_visible_torrent_note(tmp_path, monkeypatch, ch
             browser.close()
     finally:
         server.should_exit = True
+
+
+def test_entering_search_loads_latest_once_and_keeps_results_on_return(tmp_path, monkeypatch):
+    from playwright.sync_api import expect, sync_playwright
+
+    seen = []
+    fake_net(monkeypatch, seen)
+    server, base = serve(tmp_path)
+    try:
+        with sync_playwright() as playwright:
+            browser, page, errors = open_search(playwright, base)
+            panel = page.frame_locator("#search-frame")
+            expect(panel.locator(".sr-row")).to_have_count(2)
+            listings = lambda: [r for r in seen if r.url.path == "/api/torrents"]  # noqa: E731
+            assert len(listings()) == 1
+            panel.locator("#search-queue-link").click()
+            panel.locator("#back-results").click()
+            expect(panel.locator(".sr-row")).to_have_count(2)
+            page.locator("#app-sidebar [data-view=setup]").click()
+            page.locator("[data-view=search]").click()
+            expect(panel.locator(".sr-row")).to_have_count(2)
+            page.wait_for_timeout(500)
+            assert len(listings()) == 1
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
