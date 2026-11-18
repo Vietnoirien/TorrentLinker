@@ -102,3 +102,5 @@ new MutationObserver(uploadEnvironment).observe(document.documentElement, {
   attributes: true,
   attributeFilter: ["data-theme"],
 });
+
+document.addEventListener("tl-language-changed", uploadEnvironment);

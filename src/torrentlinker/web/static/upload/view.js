@@ -1,3 +1,4 @@
+const t = (...args) => window.TLPanel.t(...args);
 const $ = (id) => document.getElementById(id),
   esc = (x) =>
     String(x ?? "").replace(
@@ -11,13 +12,13 @@ const $ = (id) => document.getElementById(id),
           "'": "&#39;",
         })[c],
     );
-const stages = [
+const stages = () => [
   "Sources",
-  "Vérifier l’existant",
-  "Préparer",
-  "Présentation",
-  "Révision",
-  "Envoyer & suivre",
+  t("Vérifier l’existant"),
+  t("Préparer"),
+  t("Présentation"),
+  t("Révision"),
+  t("Envoyer & suivre"),
 ];
 let mode = "web",
   tab = "sources",
@@ -29,12 +30,12 @@ let mode = "web",
   animating = false,
   items = [],
   nextId = 10;
-const reasons = {
-  none: ["Aucun candidat trouvé", "ok"],
-  rejected: ["Candidats incompatibles", "blue"],
-  unchecked: ["Recherche incomplète", "warn"],
-  manual: ["Ajout manuel", ""],
-};
+const reasons = () => ({
+  none: [t("Aucun candidat trouvé"), "ok"],
+  rejected: [t("Candidats incompatibles"), "blue"],
+  unchecked: [t("Recherche incomplète"), "warn"],
+  manual: [t("Ajout manuel"), ""],
+});
 const current = () => items.find((i) => i.id === selected);
 function visible() {
   return items.filter(
@@ -53,10 +54,13 @@ function toast(s) {
   $("toast").hidden = false;
   setTimeout(() => ($("toast").hidden = true), 4200);
 }
-function dialog(html) {
+let dialogRenderer = null;
+function dialog(content) {
+  dialogRenderer = typeof content === "function" ? content : () => content;
+  const html = dialogRenderer();
   $("dialog-content").innerHTML =
     html +
-    `<div class="dialogactions"><button data-action="close">Fermer</button></div>`;
+    `<div class="dialogactions"><button data-action="close">${t("Fermer")}</button></div>`;
   if (!$("dialog").open) $("dialog").showModal();
 }
 function event(i, s) {
@@ -81,9 +85,14 @@ function render() {
   const i = current(),
     rows = visible();
   $("content").innerHTML =
-    `<div class="intro row between"><div><h2>${tab === "sources" ? "Un nouveau partage commence ici." : tab === "drafts" ? "Chaque brouillon avance à son rythme." : "Gardez le fil de vos partages."}</h2><p class="muted">${tab === "sources" ? "Les recherches de votre bibliothèque suggèrent des fichiers à examiner." : tab === "drafts" ? "Préparez, complétez et relisez. Vos autres brouillons continuent d’avancer." : "Retrouvez les envois, les corrections attendues et leur historique."}</p></div><div class="actions"><button data-action="file">+ Choisir un fichier</button><button class="primary" data-action="folder">+ Choisir un dossier</button></div></div>
-<div class="steps" aria-label="Parcours de l’élément sélectionné">${stages.map((name, n) => `<button class="step ${step === n ? "on" : ""} ${i && i.stage > n ? "done" : ""}" data-step="${n}"><b><span class="num">${i && i.stage > n ? "✓" : String(n + 1).padStart(2, "0")}</span>${name}</b><small>${["Bibliothèque ou ajout manuel", "Rechercher les équivalents", "Fichiers et informations", "Description, NFO et images", "Relire la version enregistrée", "Brouillon c411 et publication"][n]}</small></button>`).join("")}</div>
-<div class="running"><span><i class="dot ${animating ? "pulse" : ""}"></i>${animating ? "Préparation en cours" : "Vous gardez la main sur chaque envoi"}</span><span>${items.filter((i) => i.busy).length} opérations en cours · ${items.filter((i) => i.draft && !i.tracking).length} brouillons locaux</span><span>Envoi uniquement après votre confirmation</span></div>
+    `<div class="intro row between"><div><h2>${tab === "sources" ? t("Un nouveau partage commence ici.") : tab === "drafts" ? t("Chaque brouillon avance à son rythme.") : t("Gardez le fil de vos partages.")}</h2><p class="muted">${tab === "sources" ? t("Les recherches de votre bibliothèque suggèrent des fichiers à examiner.") : tab === "drafts" ? t("Préparez, complétez et relisez. Vos autres brouillons continuent d’avancer.") : t("Retrouvez les envois, les corrections attendues et leur historique.")}</p></div><div class="actions"><button data-action="file">${t("+ Choisir un fichier")}</button><button class="primary" data-action="folder">${t("+ Choisir un dossier")}</button></div></div>
+<div class="steps" aria-label="${t("Parcours de l’élément sélectionné")}">${stages()
+      .map(
+        (name, n) =>
+          `<button class="step ${step === n ? "on" : ""} ${i && i.stage > n ? "done" : ""}" data-step="${n}"><b><span class="num">${i && i.stage > n ? "✓" : String(n + 1).padStart(2, "0")}</span>${name}</b><small>${[t("Bibliothèque ou ajout manuel"), t("Rechercher les équivalents"), t("Fichiers et informations"), t("Description, NFO et images"), t("Relire la version enregistrée"), t("Brouillon c411 et publication")][n]}</small></button>`,
+      )
+      .join("")}</div>
+<div class="running"><span><i class="dot ${animating ? "pulse" : ""}"></i>${animating ? t("Préparation en cours") : t("Vous gardez la main sur chaque envoi")}</span><span>${items.filter((i) => i.busy).length}${t(" opérations en cours · ")}${items.filter((i) => i.draft && !i.tracking).length}${t(" brouillons locaux")}</span><span>${t("Envoi uniquement après votre confirmation")}</span></div>
 ${tab === "tracking" ? tracking() : `<div class="workspace">${tab === "drafts" && step > 0 ? editor(i) : list(rows)}${inspector(i)}</div>`}`;
   loadMoreObserver?.disconnect();
   const more = document.querySelector("[data-load-more]");
@@ -101,12 +110,12 @@ ${tab === "tracking" ? tracking() : `<div class="workspace">${tab === "drafts" &
   }
 }
 function list(rows) {
-  return `<section class="panel"><div class="tools"><label class="sr" for="search">Rechercher</label><input class="search" id="search" placeholder="Rechercher dans ${tab === "sources" ? "mes sources" : "mes brouillons"}…" value="${esc(query)}"><div class="chips">${[
-    ["all", "Tous"],
-    ["none", "Sans candidat"],
-    ["rejected", "Candidats écartés"],
-    ["manual", "Ajouts manuels"],
-    ["unchecked", "À vérifier"],
+  return `<section class="panel"><div class="tools"><label class="sr" for="search">${t("Rechercher")}</label><input class="search" id="search" placeholder="${t("Rechercher dans ")}${tab === "sources" ? t("mes sources") : t("mes brouillons")}…" value="${esc(query)}"><div class="chips">${[
+    ["all", t("Tous")],
+    ["none", t("Sans candidat")],
+    ["rejected", t("Candidats écartés")],
+    ["manual", t("Ajouts manuels")],
+    ["unchecked", t("À vérifier")],
   ]
     .map(
       ([k, label]) =>
@@ -114,42 +123,43 @@ function list(rows) {
     )
     .join(
       "",
-    )}</div></div><div class="listhead"><span>${tab === "sources" ? "Sources proposées" : "Brouillons locaux"}</span><span>${tab === "sources" ? "Origine de la suggestion" : "Étape actuelle"}</span></div>${
+    )}</div></div><div class="listhead"><span>${tab === "sources" ? t("Sources proposées") : t("Brouillons locaux")}</span><span>${tab === "sources" ? t("Origine de la suggestion") : t("Étape actuelle")}</span></div>${
     rows
       .slice(0, displayLimit)
       .map(
         (i) =>
-          `<div class="item ${i.id === selected ? "selected" : ""}" role="button" tabindex="0" data-item="${esc(i.id)}"><div class="cover">${{ Film: "VID", Livre: "EPUB", Audio: "FLAC", "Modèle 3D": "STL" }[i.kind] || "FILE"}</div><div><strong>${esc(i.name)}</strong><small>${esc(i.kind)} · ${i.size}</small><small>${esc(i.events[0])}</small>${i.busy ? `<div class="progress"><i style="width:${i.progress || 15}%"></i></div>` : ""}</div><div><span class="badge ${reasons[i.reason][1]}">${i.busy ? "Analyse en cours" : tab === "sources" ? reasons[i.reason][0] : i.status}</span></div></div>`,
+          `<div class="item ${i.id === selected ? "selected" : ""}" role="button" tabindex="0" data-item="${esc(i.id)}"><div class="cover">${{ Film: "VID", Livre: "EPUB", Audio: "FLAC", "Modèle 3D": "STL" }[i.kind] || "FILE"}</div><div><strong>${esc(i.name)}</strong><small>${esc(i.kind)} · ${i.size}</small><small>${esc(i.events[0])}</small>${i.busy ? `<div class="progress"><i style="width:${i.progress || 15}%"></i></div>` : ""}</div><div><span class="badge ${reasons()[i.reason][1]}">${i.busy ? t("Analyse en cours") : tab === "sources" ? reasons()[i.reason][0] : i.status}</span></div></div>`,
       )
-      .join("") || '<div class="empty">Aucun élément pour ce filtre.</div>'
-  }${rows.length > displayLimit ? '<div data-load-more aria-label="Chargement des sources"></div>' : ""}<div class="foot">${rows.length} élément(s) ·  Un candidat incompatible ne prouve pas l’absence du contenu sur c411.</div></section>`;
+      .join("") ||
+    `<div class="empty">${t("Aucun élément pour ce filtre.")}</div>`
+  }${rows.length > displayLimit ? `<div data-load-more aria-label="${t("Chargement des sources", "Loading sources")}"></div>` : ""}<div class="foot">${rows.length}${t(" élément(s) ·  Un candidat incompatible ne prouve pas l’absence du contenu sur c411.")}</div></section>`;
 }
 function inspector(i) {
   if (!i) return "";
-  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="mobileclose" data-action="drawer-close">Fermer l’inspecteur</button><div class="eyebrow">${i.draft ? "LE BROUILLON SÉLECTIONNÉ" : "LA SOURCE SÉLECTIONNÉE"}</div><div class="detailtitle"><span class="badge ${reasons[i.reason][1]}">${i.status}</span><h2>${esc(i.name)}</h2><small>${i.kind} · ${i.size}</small></div><div class="callout"><b>${i.reason === "rejected" ? "Pourquoi cette suggestion ?" : i.reason === "unchecked" ? "Recherche encore nécessaire" : "Avant de préparer l’upload"}</b><p class="muted">${i.reason === "rejected" ? "Les candidats examinés ne correspondent pas à vos fichiers. Vérifiez les autres éditions ou releases avant de créer le brouillon." : i.reason === "unchecked" ? "La recherche reste à effectuer ou à compléter. Cet élément n’est pas considéré comme absent du site." : "L’absence de résultat est une piste. Confirmez le contenu et vérifiez les éventuels doublons."}</p>${!i.draft ? '<button class="primary" data-action="prepare">Examiner cette source →</button>' : `<button data-action="edit">${i.sent ? "Voir le suivi" : "Ouvrir le brouillon →"}</button>`}</div><div class="section"><div class="eyebrow">FICHIERS D’ORIGINE</div><p style="overflow-wrap:anywhere;margin-top:8px;font-size:12px">${esc(i.path)}</p><small>Les fichiers restent à leur emplacement.</small></div><div class="section"><div class="row between"><b>Son parcours</b><small>${i.draft ? "Révision " + i.revision : "Pas encore de brouillon"}</small></div><div class="timeline">${i.events
+  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="mobileclose" data-action="drawer-close">${t("Fermer l’inspecteur")}</button><div class="eyebrow">${i.draft ? t("LE BROUILLON SÉLECTIONNÉ") : t("LA SOURCE SÉLECTIONNÉE")}</div><div class="detailtitle"><span class="badge ${reasons()[i.reason][1]}">${i.status}</span><h2>${esc(i.name)}</h2><small>${i.kind} · ${i.size}</small></div><div class="callout"><b>${i.reason === "rejected" ? t("Pourquoi cette suggestion ?") : i.reason === "unchecked" ? t("Recherche encore nécessaire") : t("Avant de préparer l’upload")}</b><p class="muted">${i.reason === "rejected" ? t("Les candidats examinés ne correspondent pas à vos fichiers. Vérifiez les autres éditions ou releases avant de créer le brouillon.") : i.reason === "unchecked" ? t("La recherche reste à effectuer ou à compléter. Cet élément n’est pas considéré comme absent du site.") : t("L’absence de résultat est une piste. Confirmez le contenu et vérifiez les éventuels doublons.")}</p>${!i.draft ? `<button class="primary" data-action="prepare">${t("Examiner cette source →")}</button>` : `<button data-action="edit">${i.sent ? t("Voir le suivi") : t("Ouvrir le brouillon →")}</button>`}</div><div class="section"><div class="eyebrow">${t("FICHIERS D’ORIGINE")}</div><p style="overflow-wrap:anywhere;margin-top:8px;font-size:12px">${esc(i.path)}</p><small>${t("Les fichiers restent à leur emplacement.")}</small></div><div class="section"><div class="row between"><b>${t("Son parcours")}</b><small>${i.draft ? t("Révision ") + i.revision : t("Pas encore de brouillon")}</small></div><div class="timeline">${i.events
     .slice(-5)
     .map((s, n) => `<p><small></small>${esc(s)}</p>`)
     .join("")}</div></div></aside>`;
 }
 function tracking() {
   const rows = items.filter((i) => i.tracking);
-  return `<section class="panel"><div class="tools row between"><div><h3>Envois et publication</h3><small>La préparation locale, le brouillon c411 et la publication sont des étapes distinctes.</small></div><button data-action="refresh-tracking">Actualiser</button></div>${rows.map((i) => `<div class="track"><div><strong>${esc(i.name)}</strong><small style="display:block">Révision ${i.revision} · ${i.kind} · ${i.size}</small></div><span class="badge ${i.status === "Correction demandée" ? "warn" : "ok"}">${i.status}</span><button data-history="${esc(i.id)}">Voir le détail →</button></div>`).join("") || '<div class="empty">Vos envois apparaîtront ici.</div>'}<div class="foot">Un problème d’envoi reste visible. Aucun nouvel envoi n’est tenté sans votre accord.</div></section>`;
+  return `<section class="panel"><div class="tools row between"><div><h3>${t("Envois et publication")}</h3><small>${t("La préparation locale, le brouillon c411 et la publication sont des étapes distinctes.")}</small></div><button data-action="refresh-tracking">${t("Actualiser")}</button></div>${rows.map((i) => `<div class="track"><div><strong>${esc(i.name)}</strong><small style="display:block">${t("Révision ")}${i.revision} · ${i.kind} · ${i.size}</small></div><span class="badge ${i.status === t("Correction demandée") ? "warn" : "ok"}">${i.status}</span><button data-history="${esc(i.id)}">${t("Voir le détail →")}</button></div>`).join("") || `<div class="empty">${t("Vos envois apparaîtront ici.")}</div>`}<div class="foot">${t("Un problème d’envoi reste visible. Aucun nouvel envoi n’est tenté sans votre accord.")}</div></section>`;
 }
 
 const statusLabel = (s) =>
   ({
-    queued: "À compléter",
-    sending: "Envoi lancé · vérifier sur c411",
-    sent: "Brouillon c411",
-    uncertain: "Envoi à vérifier",
+    queued: t("À compléter"),
+    sending: t("Envoi lancé · vérifier sur c411"),
+    sent: t("Brouillon c411"),
+    uncertain: t("Envoi à vérifier"),
   })[s] || s;
 let environment = { client: "", active: false },
   categories = [],
   generation = 0;
 const sizes = (n) =>
   n > 1073741824
-    ? (n / 1073741824).toFixed(1) + " Go"
-    : (n / 1048576).toFixed(1) + " Mo";
+    ? (n / 1073741824).toFixed(1) + t(" Go")
+    : (n / 1048576).toFixed(1) + t(" Mo");
 const pending = new Set();
 const api = async (action, body = {}) => {
   const client = environment.client,
@@ -158,7 +168,7 @@ const api = async (action, body = {}) => {
     await window.uploadTransport
   )(action, { ...body, _client: client });
   if (g !== generation || client !== environment.client)
-    throw Error("Le client cible a changé. Rouvrez Upload.");
+    throw Error(t("Le client cible a changé. Rouvrez Upload."));
   return result;
 };
 function recordItem(r) {
@@ -184,11 +194,11 @@ function recordItem(r) {
       ...(r.history || []).map(
         (e) =>
           new Date(e.at * 1000).toLocaleString() +
-          " · Révision " +
+          t(" · Révision ") +
           e.revision +
-          " enregistrée",
+          t(" enregistrée"),
       ),
-      `État : ${statusLabel(r.status)}`,
+      `${t("État : ")}${statusLabel(r.status)}`,
       r.result?.error || "",
     ].filter(Boolean),
   };
@@ -228,7 +238,7 @@ async function refresh(force = false) {
           size: sizes(r.size),
           stage: 0,
           draft: false,
-          status: "À examiner",
+          status: t("À examiner"),
           form: { category: r.category },
           description: "",
           events: [],
@@ -256,6 +266,8 @@ function adopt(r, previous) {
 }
 function capture(i) {
   if (!i || i !== current()) return;
+  if ($("confirm-existing")) i.existing = $("confirm-existing").checked;
+  if ($("reviewed")) i.reviewed = $("reviewed").checked;
   const f = { ...i.form };
   if ($("release-name")) {
     f.title = $("release-name").value;
@@ -304,15 +316,15 @@ async function saveItem() {
 }
 function editor(i) {
   if (!i)
-    return '<section class="panel empty">Choisissez un brouillon.</section>';
+    return `<section class="panel empty">${t("Choisissez un brouillon.")}</section>`;
   let body = "";
   const f = i.form || {},
     p = i.preview || {},
     findings = i.review?.refusals || [];
   if (step === 1)
-    body = `<div class="callout"><b>Vérifier ce qui existe déjà</b><p class="muted">Une recherche sans résultat ne prouve pas l’absence du contenu sur le site. Examinez les éditions et formats.</p><button data-action="search-site" ${pending.has(i.id) ? "disabled" : ""}>Rechercher sur c411</button></div>${i.found ? i.found.map((r) => `<div class="file"><strong>${esc(r.title)}</strong><small>${sizes(r.size)}</small></div>`).join("") || "<p>Aucun résultat pour cette recherche.</p>" : '<p class="muted">Recherche à effectuer.</p>'}<label><input type="checkbox" id="confirm-existing" ${i.existing ? "checked" : ""}> J’ai examiné les résultats et retenu cette source.</label>`;
+    body = `<div class="callout"><b>${t("Vérifier ce qui existe déjà")}</b><p class="muted">${t("Une recherche sans résultat ne prouve pas l’absence du contenu sur le site. Examinez les éditions et formats.")}</p><button data-action="search-site" ${pending.has(i.id) ? "disabled" : ""}>${t("Rechercher sur c411")}</button></div>${i.found ? i.found.map((r) => `<div class="file"><strong>${esc(r.title)}</strong><small>${sizes(r.size)}</small></div>`).join("") || `<p>${t("Aucun résultat pour cette recherche.")}</p>` : `<p class="muted">${t("Recherche à effectuer.")}</p>`}<label><input type="checkbox" id="confirm-existing" ${i.existing ? "checked" : ""}>${t(" J’ai examiné les résultats et retenu cette source.")}</label>`;
   if (step === 2)
-    body = `<label for="release-name">Nom de la release</label><input id="release-name" value="${esc(f.title || i.name)}"><div class="columns"><div><label for="category">Catégorie</label><select id="category">${categories.map((c) => `<option value="${c.id}" ${c.id === f.category ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div><div><label for="subcategory">Sous-catégorie</label><select id="subcategory">${(p.subcategories || [{ id: f.subcategory, name: String(f.subcategory || "Choisir") }]).map((c) => `<option value="${c.id || ""}" ${c.id === f.subcategory ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div></div><label for="release-source">Source</label><input id="release-source" value="${esc(f.source || "")}"><div class="options">${(p.options || []).map((o) => `<label>${esc(o.name)}<select data-option="${o.id}" ${o.multiple ? "multiple" : ""}><option value="">Choisir…</option>${o.values.map((v) => `<option value="${v.id}" ${(f.options?.[o.id] || []).includes(v.id) ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>`).join("")}</div><div class="section"><b>Contenu sélectionné</b>${(
+    body = `<label for="release-name">${t("Nom de la release")}</label><input id="release-name" value="${esc(f.title || i.name)}"><div class="columns"><div><label for="category">${t("Catégorie")}</label><select id="category">${categories.map((c) => `<option value="${c.id}" ${c.id === f.category ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div><div><label for="subcategory">${t("Sous-catégorie")}</label><select id="subcategory">${(p.subcategories || [{ id: f.subcategory, name: String(f.subcategory || t("Choisir")) }]).map((c) => `<option value="${c.id || ""}" ${c.id === f.subcategory ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div></div><label for="release-source">Source</label><input id="release-source" value="${esc(f.source || "")}"><div class="options">${(p.options || []).map((o) => `<label>${esc(o.name)}<select data-option="${o.id}" ${o.multiple ? "multiple" : ""}><option value="">${t("Choisir…")}</option>${o.values.map((v) => `<option value="${v.id}" ${(f.options?.[o.id] || []).includes(v.id) ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>`).join("")}</div><div class="section"><b>${t("Contenu sélectionné")}</b>${(
       i.record?.files || []
     )
       .slice(0, 100)
@@ -322,18 +334,19 @@ function editor(i) {
       )
       .join(
         "",
-      )}<button data-action="technical">Informations techniques</button><button data-action="advanced">Outils de préparation</button></div>`;
+      )}<button data-action="technical">${t("Informations techniques")}</button><button data-action="advanced">${t("Outils de préparation")}</button></div>`;
   if (step === 3)
-    body = `<label for="description">Description du partage · BBCode</label><textarea id="description">${esc(f.description || "")}</textarea><div class="row" style="margin-top:12px"><button data-action="template">Insérer un modèle</button></div><details class="section"><summary>NFO</summary><textarea id="nfo">${esc(f.nfo || "")}</textarea></details><div class="section"><div class="row between"><b>Illustrations et captures</b><button data-action="artwork">+ Ajouter une image</button></div><label for="image-url">Lien direct de l’image hébergée</label><input id="image-url" type="url" value="${esc(f.image || "")}"><p class="muted">Postimages · le lien est inclus dans la présentation à l’enregistrement.</p></div>`;
+    body = `<label for="description">${t("Description du partage · BBCode")}</label><textarea id="description">${esc(f.description || "")}</textarea><div class="row" style="margin-top:12px"><button data-action="template">${t("Insérer un modèle")}</button></div><details class="section"><summary>NFO</summary><textarea id="nfo">${esc(f.nfo || "")}</textarea></details><div class="section"><div class="row between"><b>${t("Illustrations et captures")}</b><button data-action="artwork">${t("+ Ajouter une image")}</button></div><label for="image-url">${t("Lien direct de l’image hébergée")}</label><input id="image-url" type="url" value="${esc(f.image || "")}"><p class="muted">${t("Postimages · le lien est inclus dans la présentation à l’enregistrement.")}</p></div>`;
   if (step === 4)
-    body = `<div class="callout"><b>Relire la révision ${i.revision}</b><p class="muted">Toute modification demande un nouvel enregistrement et une nouvelle relecture.</p></div>${findings.map((s) => `<p class="error">${esc(s)}</p>`).join("")}${(i.review?.warnings || []).map((s) => `<p class="notice">${esc(s)}</p>`).join("")}<div class="file"><span>Fichiers</span><b>${i.record?.files.length || 0}</b></div><details open><summary>Présentation enregistrée</summary><pre>${esc(f.description || "")}</pre></details><details><summary>NFO enregistré</summary><pre>${esc(f.nfo || "")}</pre></details><label><input id="reviewed" type="checkbox" ${i.reviewed ? "checked" : ""} ${findings.length ? "disabled" : ""}> J’ai relu cette version, les fichiers et les avertissements.</label>`;
+    body = `<div class="callout"><b>${t("Relire la révision ")}${i.revision}</b><p class="muted">${t("Toute modification demande un nouvel enregistrement et une nouvelle relecture.")}</p></div>${findings.map((s) => `<p class="error">${esc(s)}</p>`).join("")}${(i.review?.warnings || []).map((s) => `<p class="notice">${esc(s)}</p>`).join("")}<div class="file"><span>${t("Fichiers")}</span><b>${i.record?.files.length || 0}</b></div><details open><summary>${t("Présentation enregistrée")}</summary><pre>${esc(f.description || "")}</pre></details><details><summary>${t("NFO enregistré")}</summary><pre>${esc(f.nfo || "")}</pre></details><label><input id="reviewed" type="checkbox" ${i.reviewed ? "checked" : ""} ${findings.length ? "disabled" : ""}>${t(" J’ai relu cette version, les fichiers et les avertissements.")}</label>`;
   if (step === 5)
-    body = `<div class="callout"><b>${i.sent ? "Brouillon c411 créé" : "Prêt pour l’envoi du brouillon ?"}</b><p class="muted">La publication finale reste manuelle sur c411.</p></div><div class="file"><span>Source</span><b>${esc(i.name)}</b></div><div class="file"><span>Révision enregistrée</span><b>${i.revision}</b></div><div class="file"><span>Relecture</span><span class="badge">${i.reviewed ? "Confirmée" : "À effectuer"}</span></div><button class="primary" data-action="send" ${!i.reviewed || i.sent ? "disabled" : ""}>Créer le brouillon c411…</button>`;
-  return `<section class="panel editor"><div class="row between"><div><div class="eyebrow">${String(step + 1).padStart(2, "0")} · ${stages[step].toUpperCase()}</div><h2>${esc(i.name)}</h2></div><button data-action="draft-list">Voir la liste</button></div>${body}<div class="bottomactions"><button data-action="previous">← Précédente</button><div class="row"><button data-action="save">Enregistrer</button>${step < 5 ? '<button class="primary" data-action="next">Enregistrer et continuer →</button>' : ""}</div></div></section>`;
+    body = `<div class="callout"><b>${i.sent ? t("Brouillon c411 créé") : t("Prêt pour l’envoi du brouillon ?")}</b><p class="muted">${t("La publication finale reste manuelle sur c411.")}</p></div><div class="file"><span>Source</span><b>${esc(i.name)}</b></div><div class="file"><span>${t("Révision enregistrée")}</span><b>${i.revision}</b></div><div class="file"><span>${t("Relecture")}</span><span class="badge">${i.reviewed ? t("Confirmée") : t("À effectuer")}</span></div><button class="primary" data-action="send" ${!i.reviewed || i.sent ? "disabled" : ""}>${t("Créer le brouillon c411…")}</button>`;
+  return `<section class="panel editor"><div class="row between"><div><div class="eyebrow">${String(step + 1).padStart(2, "0")} · ${stages()[step].toUpperCase()}</div><h2>${esc(i.name)}</h2></div><button data-action="draft-list">${t("Voir la liste")}</button></div>${body}<div class="bottomactions"><button data-action="previous">${t("← Précédente")}</button><div class="row"><button data-action="save">${t("Enregistrer")}</button>${step < 5 ? `<button class="primary" data-action="next">${t("Enregistrer et continuer →")}</button>` : ""}</div></div></section>`;
 }
 function manual(type) {
   dialog(
-    `<div class="eyebrow">AJOUT MANUEL · ${mode === "desktop" ? "CET ORDINATEUR" : "SERVEUR TORRENTLINKER"}</div><h2>Choisir ${type === "file" ? "un fichier" : "un dossier"}</h2><p class="muted">${mode === "web" ? "Parcourez les fichiers accessibles au serveur." : "Sélectionnez vos fichiers sur cet ordinateur."}</p><form id="manual-form"><label for="manual-path">Chemin</label><div class="row"><input id="manual-path" required><button type="button" data-picker="${type}">Parcourir…</button></div><label for="manual-kind">Catégorie</label><select id="manual-kind">${categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><p class="notice">L’ajout prépare un brouillon local. Aucun envoi sur c411.</p><button class="primary">Ajouter aux sources</button></form>`,
+    () =>
+      `<div class="eyebrow">${t("AJOUT MANUEL · ")}${mode === "desktop" ? t("CET ORDINATEUR") : t("SERVEUR TORRENTLINKER")}</div><h2>${t("Choisir ")}${type === "file" ? t("un fichier") : t("un dossier")}</h2><p class="muted">${mode === "web" ? t("Parcourez les fichiers accessibles au serveur.") : t("Sélectionnez vos fichiers sur cet ordinateur.")}</p><form id="manual-form"><label for="manual-path">${t("Chemin")}</label><div class="row"><input id="manual-path" required><button type="button" data-picker="${type}">${t("Parcourir…")}</button></div><label for="manual-kind">${t("Catégorie")}</label><select id="manual-kind">${categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><p class="notice">${t("L’ajout prépare un brouillon local. Aucun envoi sur c411.")}</p><button class="primary">${t("Ajouter aux sources")}</button></form>`,
   );
 }
 async function browse(type, path = "") {
@@ -344,7 +357,8 @@ async function browse(type, path = "") {
   }
   const listing = await api("browse", { path });
   dialog(
-    `<h2>Parcourir le serveur</h2><p>${esc(listing.path || "Emplacements accessibles")}</p><button data-browse="${esc(listing.parent)}" data-type="${type}">↑ Remonter</button>${listing.path && type === "folder" ? `<button data-picked="${esc(listing.path)}" data-type="folder">Choisir ce dossier</button>` : ""}${listing.folders.map((p) => `<button class="choice" data-browse="${esc(p)}" data-type="${type}">▸ ${esc(p.split("/").pop())}</button>`).join("")}${type === "file" ? listing.files.map((p) => `<button class="choice" data-picked="${esc(p)}" data-type="file">${esc(p.split("/").pop())}</button>`).join("") : ""}`,
+    () =>
+      `<h2>${t("Parcourir le serveur")}</h2><p>${esc(listing.path || t("Emplacements accessibles"))}</p><button data-browse="${esc(listing.parent)}" data-type="${type}">${t("↑ Remonter")}</button>${listing.path && type === "folder" ? `<button data-picked="${esc(listing.path)}" data-type="folder">${t("Choisir ce dossier")}</button>` : ""}${listing.folders.map((p) => `<button class="choice" data-browse="${esc(p)}" data-type="${type}">▸ ${esc(p.split("/").pop())}</button>`).join("")}${type === "file" ? listing.files.map((p) => `<button class="choice" data-picked="${esc(p)}" data-type="file">${esc(p.split("/").pop())}</button>`).join("") : ""}`,
   );
 }
 async function act(action) {
@@ -390,30 +404,32 @@ async function act(action) {
     i = await saveItem();
     toast(
       i.dirty
-        ? "Version enregistrée. Les nouvelles modifications restent à enregistrer."
-        : "Brouillon enregistré localement.",
+        ? t(
+            "Version enregistrée. Les nouvelles modifications restent à enregistrer.",
+          )
+        : t("Brouillon enregistré localement."),
     );
   }
   if (action === "next") {
     if (step === 1) {
       i.existing = !!$("confirm-existing").checked;
       if (!i.existing)
-        throw Error("Examinez les résultats puis confirmez cette source.");
+        throw Error(t("Examinez les résultats puis confirmez cette source."));
     }
     if (step === 4) {
       if (i.dirty)
         throw Error(
-          "Enregistrez les modifications avant de relire cette révision.",
+          t("Enregistrez les modifications avant de relire cette révision."),
         );
       i.reviewed = !!$("reviewed").checked;
-      if (!i.reviewed) throw Error("Relisez et confirmez cette révision.");
+      if (!i.reviewed) throw Error(t("Relisez et confirmez cette révision."));
     } else {
       i.form.workflow_step = step + 1;
       if (step === 1) i.form.existing_reviewed = i.existing;
       i = await saveItem();
       if (i.dirty) {
         render();
-        toast("Enregistrez les nouvelles modifications avant de continuer.");
+        toast(t("Enregistrez les nouvelles modifications avant de continuer."));
         return;
       }
     }
@@ -441,7 +457,8 @@ async function act(action) {
   }
   if (action === "technical") {
     dialog(
-      `<h2>Informations techniques</h2><pre>${esc(JSON.stringify(i.review?.file_facts || i.preview?.file_facts || {}, null, 2))}</pre>`,
+      () =>
+        `<h2>${t("Informations techniques")}</h2><pre>${esc(JSON.stringify(i.review?.file_facts || i.preview?.file_facts || {}, null, 2))}</pre>`,
     );
     return;
   }
@@ -462,12 +479,14 @@ async function act(action) {
   }
   if (action === "send") {
     dialog(
-      `<h2>Créer ce brouillon sur c411 ?</h2><p>${esc(i.name)} · révision ${i.revision}</p><p>La publication finale restera manuelle sur c411.</p><button class="primary" data-action="confirm-send">Confirmer l’envoi</button>`,
+      () =>
+        `<h2>${t("Créer ce brouillon sur c411 ?")}</h2><p>${esc(i.name)}${t(" · révision ")}${i.revision}</p><p>${t("La publication finale restera manuelle sur c411.")}</p><button class="primary" data-action="confirm-send">${t("Confirmer l’envoi")}</button>`,
     );
     return;
   }
   if (action === "confirm-send") {
-    if (!i.reviewed || i.dirty) throw Error("Relisez la révision enregistrée.");
+    if (!i.reviewed || i.dirty)
+      throw Error(t("Relisez la révision enregistrée."));
     try {
       await api("send", {
         id: i.id,
@@ -495,7 +514,8 @@ async function act(action) {
   if (action === "refresh-tracking") {
     const r = await api("remote");
     dialog(
-      `<h2>Brouillons c411</h2>${r.map((d) => `<div class="file">${esc(d.title || d.name || d.id)}</div>`).join("") || "<p>Aucun brouillon distant.</p>"}`,
+      () =>
+        `<h2>${t("Brouillons c411")}</h2>${r.map((d) => `<div class="file">${esc(d.title || d.name || d.id)}</div>`).join("") || `<p>${t("Aucun brouillon distant.", "No remote drafts.")}</p>`}`,
     );
     return;
   }
@@ -538,13 +558,13 @@ document.addEventListener("click", async (e) => {
       capture(current());
       const n = +b.dataset.step;
       if (n && !current()?.draft)
-        throw Error("Choisissez une source puis examinez-la.");
+        throw Error(t("Choisissez une source puis examinez-la."));
       if (n >= 4 && current()?.dirty) {
         const saved = await saveItem();
         if (saved.dirty) {
           render();
           throw Error(
-            "Enregistrez les nouvelles modifications avant la relecture.",
+            t("Enregistrez les nouvelles modifications avant la relecture."),
           );
         }
       }
@@ -578,7 +598,8 @@ document.addEventListener("click", async (e) => {
       const i = items.find((i) => i.id === b.dataset.history);
       selected = i.id;
       dialog(
-        `<h2>${esc(i.name)}</h2><div class="timeline">${i.events.map((s) => `<p>${esc(s)}</p>`).join("")}</div><pre>${esc(JSON.stringify(i.record.result || {}, null, 2))}</pre>${["sending", "uncertain"].includes(i.record.status) ? `<p>Vérifiez les brouillons sur c411 avant de permettre un nouvel essai.</p><button data-action="reset-send" data-id="${esc(i.id)}">J’ai vérifié c411, autoriser un nouvel essai</button>` : ""}`,
+        () =>
+          `<h2>${esc(i.name)}</h2><div class="timeline">${i.events.map((s) => `<p>${esc(s)}</p>`).join("")}</div><pre>${esc(JSON.stringify(i.record.result || {}, null, 2))}</pre>${["sending", "uncertain"].includes(i.record.status) ? `<p>${t("Vérifiez les brouillons sur c411 avant de permettre un nouvel essai.")}</p><button data-action="reset-send" data-id="${esc(i.id)}">${t("J’ai vérifié c411, autoriser un nouvel essai")}</button>` : ""}`,
       );
       return;
     }
@@ -648,8 +669,35 @@ document.addEventListener("submit", async (e) => {
 });
 window.addEventListener("upload-environment", (e) => {
   const changed = environment.client !== e.detail.client;
+  const languageChanged = environment.language !== e.detail.language;
+  if (!changed) capture(current());
   environment = e.detail;
   mode = environment.mode;
+  window.TLPanel.setLanguage(environment.language);
+  document
+    .querySelector(".tabs")
+    .setAttribute("aria-label", t("Espaces Upload"));
+  for (const [key, label] of Object.entries({
+    sources: "Sources",
+    drafts: "Brouillons",
+    tracking: "Suivi",
+  }))
+    document.querySelector(`[data-tab="${key}"]`).firstChild.textContent =
+      t(label) + " ";
+  if (languageChanged && !changed) {
+    if ($("dialog").open && dialogRenderer)
+      window.TLPanel.refreshForm($("dialog"), () => dialog(dialogRenderer));
+    // Recompute derived labels without discarding unsaved forms or review state.
+    items.forEach((i) => {
+      if (i.record) {
+        const derived = recordItem(i.record);
+        i.status = derived.status;
+        i.size = derived.size;
+        i.events = derived.events;
+      } else i.status = t("À examiner");
+    });
+    render();
+  }
   if (changed) {
     generation++;
     items = [];
@@ -693,10 +741,12 @@ function openImageHost(item) {
     "popup,width=720,height=680",
   );
   if (!popup)
-    throw Error("Autorisez la fenêtre Postimages pour choisir votre image.");
+    throw Error(t("Autorisez la fenêtre Postimages pour choisir votre image."));
   imageUpload = { id, popup, item, client: environment.client };
   toast(
-    "Choisissez une image dans Postimages. Son lien sera ajouté à la présentation.",
+    t(
+      "Choisissez une image dans Postimages. Son lien sera ajouté à la présentation.",
+    ),
   );
 }
 window.addEventListener("message", (e) => {
@@ -712,7 +762,7 @@ window.addEventListener("message", (e) => {
   if (job.client !== environment.client) return;
   try {
     const code = decodeURIComponent(e.data.message);
-    if (code.length > 12000) throw Error("Réponse image trop longue.");
+    if (code.length > 12000) throw Error(t("Réponse image trop longue."));
     const images = [
       ...code.matchAll(/\[img\](https:\/\/[^\s\[\]]+)\[\/img\]/gi),
     ];
@@ -725,10 +775,10 @@ window.addEventListener("message", (e) => {
           ),
       )
     )
-      throw Error("Postimages n’a pas retourné de lien image valide.");
+      throw Error(t("Postimages n’a pas retourné de lien image valide."));
     const item = items.find((i) => i.id === job.item.id);
     if (!item)
-      throw Error("Le brouillon a changé. Rouvrez le sélecteur d’image.");
+      throw Error(t("Le brouillon a changé. Rouvrez le sélecteur d’image."));
     if (current() === item) capture(item);
     item.form.description = (item.form.description || "") + "\n" + code;
     item.form.image = images[0][1];
@@ -737,7 +787,9 @@ window.addEventListener("message", (e) => {
     item.dirty = true;
     if (current() === item) render();
     toast(
-      "Image hébergée et ajoutée à la présentation. Enregistrez le brouillon.",
+      t(
+        "Image hébergée et ajoutée à la présentation. Enregistrez le brouillon.",
+      ),
     );
   } catch (error) {
     toast(error.message);

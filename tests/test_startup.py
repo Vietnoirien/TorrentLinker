@@ -256,7 +256,13 @@ def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypa
             pytest.skip("needs a Wayland or X11 display")
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", f"{__file__}::{sys._getframe().f_code.co_name}"],
-            env={**os.environ, "TL_NATIVE_WINDOW_CHILD": "1", "QT_QPA_PLATFORM": platform},
+            env={
+                **os.environ,
+                "TL_NATIVE_WINDOW_CHILD": "1",
+                "QT_QPA_PLATFORM": platform,
+                "LC_ALL": "fr_FR.UTF-8",
+                "LANG": "fr_FR.UTF-8",
+            },
             capture_output=True,
             text=True,
             timeout=90,
@@ -292,5 +298,46 @@ def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypa
                     parent.setCurrentWidget(child)
             child = parent
         qtbot.waitUntil(lambda panel=panel: panel.web is not None and panel.isVisible())
-        qtbot.wait(200)
+        from tests.test_community_interfaces import js, wait_js
+
+        labels = {
+            "community": ("Every contribution counts.", "Chaque contribution compte."),
+            "reseed": ("Run all", "Tout enchaîner"),
+            "upload": ("A new share starts here.", "Un nouveau partage commence ici."),
+        }
+        for language, text in [
+            ("auto", labels[panel.channel_name][1]),
+            *zip(("en", "fr"), labels[panel.channel_name], strict=True),
+        ]:
+            panel.language = language
+            panel.refresh()
+            resolved_language = "fr" if language == "auto" else language
+            import json
+
+            if panel.channel_name == "community":
+                # This startup fixture has no tracker profile. The populated Community
+                # workflow is covered separately in test_community_interfaces.
+                wait_js(
+                    qtbot,
+                    panel,
+                    f"document.documentElement.lang === {json.dumps(resolved_language)}",
+                )
+            else:
+                wait_js(qtbot, panel, f"document.body.innerText.includes({json.dumps(text)})")
+            assert js(qtbot, panel, "document.documentElement.lang") == resolved_language
+        # A neighboring file must not become loadable when shared assets are allowed.
+        forbidden = tmp_path / "unbundled.js"
+        forbidden.write_text("document.title = 'unbundled script executed'")
+        js(
+            qtbot,
+            panel,
+            f"""(() => {{
+          const script = document.createElement('script');
+          script.src = {json.dumps(forbidden.as_uri())};
+          script.onerror = () => document.body.dataset.blocked = 'yes';
+          document.head.append(script);
+        }})()""",
+        )
+        wait_js(qtbot, panel, "document.body.dataset.blocked === 'yes'")
+        assert js(qtbot, panel, "document.title") != "unbundled script executed"
         assert window.windowHandle() is native and not destroyed, panel

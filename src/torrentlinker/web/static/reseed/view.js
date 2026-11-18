@@ -1,12 +1,25 @@
 "use strict";
+const t = (...args) => window.TLPanel.t(...args);
 // Shared owner workspace. All data and mutations come from the host bridge.
 const labels = {
-  find: "À retrouver",
-  candidates: "Comparer",
-  links: "Préparer les noms",
-  verify: "Vérifier",
-  incomplete: "Compléter",
-  seeding: "En partage",
+  get find() {
+    return t("À retrouver");
+  },
+  get candidates() {
+    return t("Comparer");
+  },
+  get links() {
+    return t("Préparer les noms");
+  },
+  get verify() {
+    return t("Vérifier");
+  },
+  get incomplete() {
+    return t("Compléter");
+  },
+  get seeding() {
+    return t("En partage");
+  },
 };
 let snapshot = {
     rows: [],
@@ -38,10 +51,10 @@ const esc = (s) =>
   );
 const bytes = (n) =>
   n >= 1073741824
-    ? (n / 1073741824).toFixed(1) + " Go"
+    ? (n / 1073741824).toFixed(1) + t(" Go")
     : n >= 1048576
-      ? (n / 1048576).toFixed(1) + " Mo"
-      : (n / 1024).toFixed(0) + " Ko";
+      ? (n / 1048576).toFixed(1) + t(" Mo")
+      : (n / 1024).toFixed(0) + t(" Ko");
 const api = async (action, body = {}) =>
   (await window.reseedTransport)(action, {
     ...body,
@@ -86,18 +99,18 @@ const visible = () =>
   );
 function stateFor(r) {
   const p = snapshot.progress?.active?.[r.path];
-  if (snapshot.progress?.paused_paths?.includes(r.path)) return "En pause";
-  if (r.error) return "À examiner";
+  if (snapshot.progress?.paused_paths?.includes(r.path)) return t("En pause");
+  if (r.error) return t("À examiner");
   if (p)
     return (
       (labels[r.stage] || p.phase) +
       (p.fraction != null
         ? " · " + Math.round(p.fraction * 100) + " %"
-        : " · en cours")
+        : t(" · en cours"))
     );
   return r.stage === "seeding"
-    ? "En partage"
-    : "En attente · " + labels[r.stage];
+    ? t("En partage")
+    : t("En attente · ") + labels[r.stage];
 }
 function render() {
   const focusSearch = document.activeElement?.id === "search";
@@ -117,18 +130,18 @@ function render() {
   let folders = snapshot.setup.folders || [];
   if (tab === "folders") {
     $("content").innerHTML =
-      `<div class="row between"><h2>Dossiers de bibliothèque</h2><button data-command="manage-folders">Modifier les dossiers</button><button data-command="add-folder">+ Ajouter un dossier</button></div><div class="panel folder-list" style="margin-top:20px">${folders.map((f) => `<div class="tools"><b>${esc(f.local)}</b><small>${esc(f.kind)} · ${f.depth == null ? "Automatique" : "Profondeur " + f.depth}</small></div>`).join("") || "<p>Aucun dossier configuré.</p>"}</div>`;
+      `<div class="row between"><h2>${t("Dossiers de bibliothèque")}</h2><button data-command="manage-folders">${t("Modifier les dossiers")}</button><button data-command="add-folder">${t("+ Ajouter un dossier")}</button></div><div class="panel folder-list" style="margin-top:20px">${folders.map((f) => `<div class="tools"><b>${esc(f.local)}</b><small>${esc(f.kind)} · ${f.depth == null ? t("Automatique") : t("Profondeur ") + f.depth}</small></div>`).join("") || `<p>${t("Aucun dossier configuré.")}</p>`}</div>`;
     return;
   }
   if (tab === "activity") {
     $("content").innerHTML =
-      '<h2>Activité du parcours</h2><div class="panel" style="margin-top:20px">' +
+      `<h2>${t("Activité du parcours")}</h2><div class="panel" style="margin-top:20px">` +
       snapshot.rows
         .flatMap((r) => (r.events || []).map((e) => ({ ...e, name: r.name })))
         .sort((a, b) => b.at - a.at)
         .map(
           (e) =>
-            `<div class="tools"><small>${new Date(e.at * 1000).toLocaleString()}</small><b>${esc(e.name)}</b><span>${esc({ prepared: "Liens prêts", verified: "Contenu vérifié", checking: "Vérification du client" }[e.phase] || labels[e.phase] || e.phase)}</span></div>`,
+            `<div class="tools"><small>${new Date(e.at * 1000).toLocaleString()}</small><b>${esc(e.name)}</b><span>${esc({ prepared: t("Liens prêts"), verified: t("Contenu vérifié"), checking: t("Vérification du client") }[e.phase] || labels[e.phase] || e.phase)}</span></div>`,
         )
         .join("") +
       "</div>";
@@ -139,25 +152,25 @@ function render() {
     running = snapshot.running,
     current = Object.values(progress.active || {});
   $("content").innerHTML =
-    `<div class="intro row between"><div><h2>Chaque fichier avance à son rythme.</h2><p class="muted">Retrouvez, vérifiez et partagez. Intervenez seulement quand c’est nécessaire.</p></div><button class="primary" data-command="run">${running ? (snapshot.paused ? "Reprendre le parcours" : "Suspendre le parcours") : "Tout enchaîner"}</button></div><div class="guided"><button data-command="settings"><strong>01</strong><span>Réglages<small>${esc(snapshot.setup.name || "Client à configurer")} · ${snapshot.setup.reseed_link_root ? "Dossier de liens configuré" : "Dossier de liens à choisir"}</small></span></button><button data-command="disk"><strong>02</strong><span>Disque<small>${folders.length} dossiers · ${snapshot.scanning ? "Analyse en cours…" : "parcourir et analyser"}</small></span></button><span class="hint">Les éléments avancent indépendamment. Les décisions attendues ne bloquent pas les autres.</span></div><div class="stages"><button class="stage ${filter ? "" : "on"}" data-filter=""><b>${snapshot.rows.length}</b>Tous les éléments<br><small>Vue d’ensemble</small></button>${Object.entries(
+    `<div class="intro row between"><div><h2>${t("Chaque fichier avance à son rythme.")}</h2><p class="muted">${t("Retrouvez, vérifiez et partagez. Intervenez seulement quand c’est nécessaire.")}</p></div><button class="primary" data-command="run">${running ? (snapshot.paused ? t("Reprendre le parcours") : t("Suspendre le parcours")) : t("Tout enchaîner")}</button></div><div class="guided"><button data-command="settings"><strong>01</strong><span>${t("Réglages")}<small>${esc(snapshot.setup.name || t("Client à configurer"))} · ${snapshot.setup.reseed_link_root ? t("Dossier de liens configuré") : t("Dossier de liens à choisir")}</small></span></button><button data-command="disk"><strong>02</strong><span>${t("Disque")}<small>${folders.length}${t(" dossiers · ")}${snapshot.scanning ? t("Analyse en cours…") : t("parcourir et analyser")}</small></span></button><span class="hint">${t("Les éléments avancent indépendamment. Les décisions attendues ne bloquent pas les autres.")}</span></div><div class="stages"><button class="stage ${filter ? "" : "on"}" data-filter=""><b>${snapshot.rows.length}</b>${t("Tous les éléments")}<br><small>${t("Vue d’ensemble")}</small></button>${Object.entries(
       labels,
     )
       .map(
         ([key, label]) =>
-          `<button class="stage ${filter === key ? "on" : ""}" data-filter="${key}"><b>${snapshot.rows.filter((r) => r.stage === key).length}</b>${label}<br><small>${snapshot.rows.filter((r) => r.stage === key && progress.active?.[r.path]).length} en cours</small></button>`,
+          `<button class="stage ${filter === key ? "on" : ""}" data-filter="${key}"><b>${snapshot.rows.filter((r) => r.stage === key).length}</b>${label}<br><small>${snapshot.rows.filter((r) => r.stage === key && progress.active?.[r.path]).length}${t(" en cours")}</small></button>`,
       )
       .join(
         "",
-      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? "Parcours suspendu" : "Parcours actif") : "Prêt à commencer"}</span><small>${current.length} opérations simultanées · ${snapshot.rows.filter((r) => r.error).length} décisions attendues</small><small style="margin-left:auto">Vérification : 1 à la fois · Recherche : 2 maximum</small>${running ? '<button data-command="stop">Arrêter</button>' : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="Rechercher dans mes fichiers…" aria-label="Rechercher" value="${esc(query)}"><button data-command="select">${checked.size ? checked.size + " sélectionnés" : "Sélectionner la liste"}</button><button data-command="batch" ${checked.size ? "" : "disabled"}>Enchaîner la sélection</button></div>${
+      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small><small style="margin-left:auto">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}"><button data-command="select">${checked.size ? checked.size + t(" sélectionnés") : t("Sélectionner la liste")}</button><button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
       rows
         .slice(0, limit)
         .map((r) => {
           const p = progress.active?.[r.path];
-          return `<div class="torrent ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="Sélectionner ${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${esc(r.name)}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
+          return `<div class="torrent ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${esc(r.name)}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
         })
         .join("") ||
-      '<div class="empty">Aucun élément ici. Ajoutez un dossier ou changez le filtre.</div>'
-    }<div id="more" class="foot">${Math.min(limit, rows.length)} / ${rows.length} éléments</div></section>${inspector()}</div>`;
+      `<div class="empty">${t("Aucun élément ici. Ajoutez un dossier ou changez le filtre.")}</div>`
+    }<div id="more" class="foot">${Math.min(limit, rows.length)} / ${rows.length}${t(" éléments")}</div></section>${inspector()}</div>`;
   if (focusSearch) {
     $("search").focus({ preventScroll: true });
     $("search").setSelectionRange(cursor, cursor);
@@ -188,50 +201,57 @@ function inspector() {
   const steps = Object.keys(labels),
     index = steps.indexOf(r.stage),
     paused = snapshot.progress?.paused_paths?.includes(r.path);
-  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">Fermer</button><div class="eyebrow">L’ÉLÉMENT SÉLECTIONNÉ</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span><div class="callout">${r.error ? `<p class="error">${esc(r.error)}</p>` : ""}<p class="muted">${r.stage === "verify" ? "Un seul hash à la fois protège le disque. Les recherches continuent." : "Les fichiers originaux conservent leurs noms."}</p><small>La pause prend effet à la fin de l’opération en cours.</small>${snapshot.running ? `<button data-command="pause-item">${paused ? "Reprendre cet élément" : "Suspendre cet élément"}</button>` : r.stage !== "seeding" ? '<button data-command="run-item">Continuer cet élément</button>' : ""}<button data-command="review">Examiner les fichiers et les réparations</button></div>${(
+  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span><div class="callout">${r.error ? `<p class="error">${esc(r.error)}</p>` : ""}<p class="muted">${r.stage === "verify" ? t("Un seul hash à la fois protège le disque. Les recherches continuent.") : t("Les fichiers originaux conservent leurs noms.")}</p><small>${t("La pause prend effet à la fin de l’opération en cours.")}</small>${snapshot.running ? `<button data-command="pause-item">${paused ? t("Reprendre cet élément") : t("Suspendre cet élément")}</button>` : r.stage !== "seeding" ? `<button data-command="run-item">${t("Continuer cet élément")}</button>` : ""}<button data-command="review">${t("Examiner les fichiers et les réparations")}</button></div>${(
     r.candidates || []
   )
     .slice(0, 20)
     .map(
       (c) =>
-        `<div class="candidate"><b>${esc(c.title)}</b><p class="muted">${esc(c.match)} · ${bytes(c.size || 0)}</p>${(c.files || []).map((f) => `<pre>${esc(f.local || "Manquant")}<br>↳ ${esc(f.torrent)}</pre>`).join("")}${c.match === "full" && !c.archive ? `<button ${snapshot.progress?.active?.[r.path] ? "disabled" : ""} data-candidate="${esc(c.key)}">Choisir ce candidat</button>` : ""}</div>`,
+        `<div class="candidate"><b>${esc(c.title)}</b><p class="muted">${esc(c.match)} · ${bytes(c.size || 0)}</p>${(c.files || []).map((f) => `<pre>${esc(f.local || t("Manquant"))}<br>↳ ${esc(f.torrent)}</pre>`).join("")}${c.match === "full" && !c.archive ? `<button ${snapshot.progress?.active?.[r.path] ? "disabled" : ""} data-candidate="${esc(c.key)}">${t("Choisir ce candidat")}</button>` : ""}</div>`,
     )
     .join(
       "",
-    )}<div class="section"><b>Son parcours</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>Dossier de liens à conserver</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>Historique de cet élément</b><div class="events">${
+    )}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
     (r.events || [])
       .slice()
       .reverse()
       .map(
         (e) =>
-          `<p><small>${new Date(e.at * 1000).toLocaleString()}</small><br>${esc({ prepared: "Liens prêts", verified: "Contenu vérifié", checking: "Vérification du client" }[e.phase] || labels[e.phase] || e.phase)}</p>`,
+          `<p><small>${new Date(e.at * 1000).toLocaleString()}</small><br>${esc({ prepared: t("Liens prêts"), verified: t("Contenu vérifié"), checking: t("Vérification du client") }[e.phase] || labels[e.phase] || e.phase)}</p>`,
       )
-      .join("") || "<p>Aucune opération enregistrée.</p>"
+      .join("") || `<p>${t("Aucune opération enregistrée.")}</p>`
   }</div></div></aside>`;
 }
-function dialog(html) {
+let dialogRenderer = null;
+function dialog(content) {
+  dialogRenderer = typeof content === "function" ? content : () => content;
+  const html = dialogRenderer();
   $("dialog-error").textContent = "";
   $("dialog-body").innerHTML = html;
   if (!$("dialog").open) $("dialog").showModal();
 }
 function settings() {
   dialog(
-    `<div class="eyebrow">01 · RÉGLAGES</div><h2>Réglages du parcours</h2><p>Client cible : ${esc(snapshot.setup.name)}</p><button data-command="add-client">+ Ajouter un client</button><button data-command="client-settings">Paramètres du client</button><form id="root-form"><label>Dossier de liens à conserver<div class="row"><input name="path" required value="${esc(snapshot.setup.reseed_link_root)}" style="min-width:0;width:100%"><button type="button" data-command="browse-root">Parcourir…</button></div></label><p class="muted">Hors bibliothèque, accessible au client. Les fichiers originaux gardent leurs noms.</p><button class="primary">Enregistrer</button></form><button data-command="disk">Continuer vers Disque →</button>`,
+    () =>
+      `<div class="eyebrow">${t("01 · RÉGLAGES")}</div><h2>${t("Réglages du parcours")}</h2><p>${t("Client cible : ")}${esc(snapshot.setup.name)}</p><button data-command="add-client">${t("+ Ajouter un client")}</button><button data-command="client-settings">${t("Paramètres du client")}</button><form id="root-form"><label>${t("Dossier de liens à conserver")}<div class="row"><input name="path" required value="${esc(snapshot.setup.reseed_link_root)}" style="min-width:0;width:100%"><button type="button" data-command="browse-root">${t("Parcourir…")}</button></div></label><p class="muted">${t("Hors bibliothèque, accessible au client. Les fichiers originaux gardent leurs noms.")}</p><button class="primary">${t("Enregistrer")}</button></form><button data-command="disk">${t("Continuer vers Disque →")}</button>`,
   );
 }
 function disk() {
   dialog(
-    `<div class="eyebrow">02 · DISQUE</div><h2>Parcourir mes dossiers</h2><p class="muted">${environment.mode === "desktop" ? "Dossiers sur cet ordinateur" : "Dossiers accessibles au serveur TorrentLinker"}</p>${(snapshot.setup.folders || []).map((f) => `<label><input type="checkbox" data-scan-folder="${esc(f.local)}" checked> ${esc(f.local)}</label>`).join("")}<button data-command="add-folder">+ Ajouter un dossier</button><p><button class="primary" data-command="scan" ${snapshot.scanning ? "disabled" : ""}>${snapshot.scanning ? "Analyse en cours…" : "Parcourir mon disque maintenant"}</button></p>`,
+    () =>
+      `<div class="eyebrow">${t("02 · DISQUE")}</div><h2>${t("Parcourir mes dossiers")}</h2><p class="muted">${environment.mode === "desktop" ? t("Dossiers sur cet ordinateur") : t("Dossiers accessibles au serveur TorrentLinker")}</p>${(snapshot.setup.folders || []).map((f) => `<label><input type="checkbox" data-scan-folder="${esc(f.local)}" checked> ${esc(f.local)}</label>`).join("")}<button data-command="add-folder">${t("+ Ajouter un dossier")}</button><p><button class="primary" data-command="scan" ${snapshot.scanning ? "disabled" : ""}>${snapshot.scanning ? t("Analyse en cours…") : t("Parcourir mon disque maintenant")}</button></p>`,
   );
 }
 function folderForm() {
   dialog(
-    `<h2>Ajouter à la bibliothèque</h2><form id="folder-form"><label>Chemin accessible à TorrentLinker<div class="row"><input name="local" required style="min-width:0;width:100%"><button type="button" data-command="browse-folder">Parcourir…</button></div></label><small>${environment.mode === "desktop" ? "Sur cet ordinateur" : "Sur le serveur TorrentLinker"}</small><label>Contenu<select name="kind"><option value="movie">Films</option><option value="series">Séries</option><option value="music">Audio</option><option value="ebook">Livres</option><option value="game">Jeux vidéo</option><option value="3d-model">Impression 3D</option><option value="other">Autre</option></select></label><label><input type="checkbox" name="scan" checked> Analyser après l’ajout</label><button class="primary">Ajouter le dossier</button></form>`,
+    () =>
+      `<h2>${t("Ajouter à la bibliothèque")}</h2><form id="folder-form"><label>${t("Chemin accessible à TorrentLinker")}<div class="row"><input name="local" required style="min-width:0;width:100%"><button type="button" data-command="browse-folder">${t("Parcourir…")}</button></div></label><small>${environment.mode === "desktop" ? t("Sur cet ordinateur") : t("Sur le serveur TorrentLinker")}</small><label>${t("Contenu")}<select name="kind"><option value="movie">${t("Films")}</option><option value="series">${t("Séries")}</option><option value="music">Audio</option><option value="ebook">${t("Livres")}</option><option value="game">${t("Jeux vidéo")}</option><option value="3d-model">${t("Impression 3D")}</option><option value="other">${t("Autre")}</option></select></label><label><input type="checkbox" name="scan" checked>${t(" Analyser après l’ajout")}</label><button class="primary">${t("Ajouter le dossier")}</button></form>`,
   );
 }
 function clientForm() {
   dialog(
-    `<h2>Connecter un client torrent</h2><form id="client-form"><label>Nom<input name="name" required></label><label>Type<select name="client"><option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="rtorrent">rTorrent</option><option value="deluge">Deluge</option><option value="utorrent">µTorrent</option><option value="bittorrent">BitTorrent</option></select></label><label>Adresse<input name="host" required placeholder="http://localhost:8080"></label><label>Utilisateur<input name="username" autocomplete="off"></label><label>Mot de passe<input name="password" type="password" autocomplete="new-password"></label><button class="primary">Tester et ajouter</button></form>`,
+    () =>
+      `<h2>${t("Connecter un client torrent")}</h2><form id="client-form"><label>${t("Nom")}<input name="name" required></label><label>Type<select name="client"><option value="qbittorrent">qBittorrent</option><option value="transmission">Transmission</option><option value="rtorrent">rTorrent</option><option value="deluge">Deluge</option><option value="utorrent">µTorrent</option><option value="bittorrent">BitTorrent</option></select></label><label>${t("Adresse")}<input name="host" required placeholder="http://localhost:8080"></label><label>${t("Utilisateur")}<input name="username" autocomplete="off"></label><label>${t("Mot de passe")}<input name="password" type="password" autocomplete="new-password"></label><button class="primary">${t("Tester et ajouter")}</button></form>`,
   );
 }
 async function browse(target, path = "") {
@@ -243,18 +263,19 @@ async function browse(target, path = "") {
   }
   if (!browseForm)
     browseForm = {
-      html: $("dialog-body").innerHTML,
+      renderer: dialogRenderer,
       values: [...$("dialog-body").querySelectorAll("input,select")].map(
         (n) => [n.name, n.value, n.checked],
       ),
     };
   dialog(
-    `<h2>Dossiers du serveur TorrentLinker</h2><p>${esc(result.path || "Racines montées")}</p>${result.parent ? `<button data-browse="${esc(result.parent)}">↑ Parent</button>` : ""}${(result.folders || result.children || []).map((f) => `<button data-browse="${esc(typeof f === "string" ? f : f.path)}">${esc(typeof f === "string" ? f : f.name)}</button>`).join("")}${result.path ? '<button id="choose-folder" class="primary">Choisir ce dossier</button>' : ""}`,
+    () =>
+      `<h2>${t("Dossiers du serveur TorrentLinker")}</h2><p>${esc(result.path || t("Racines montées"))}</p>${result.parent ? `<button data-browse="${esc(result.parent)}">↑ Parent</button>` : ""}${(result.folders || result.children || []).map((f) => `<button data-browse="${esc(typeof f === "string" ? f : f.path)}">${esc(typeof f === "string" ? f : f.name)}</button>`).join("")}${result.path ? `<button id="choose-folder" class="primary">${t("Choisir ce dossier")}</button>` : ""}`,
   );
   const choose = $("choose-folder");
   if (choose)
     choose.onclick = () => {
-      dialog(browseForm.html);
+      dialog(browseForm.renderer);
       for (const [name, value, checked] of browseForm.values) {
         const n = document.querySelector(`[name="${name}"]`);
         if (n) {
@@ -278,7 +299,7 @@ async function start(paths, key = "") {
   }
   if (
     !confirm(
-      `${paths.length} élément(s). Créer les liens, vérifier le contenu puis partager ? Les fichiers originaux restent inchangés.`,
+      `${paths.length}${t(" élément(s). Créer les liens, vérifier le contenu puis partager ? Les fichiers originaux restent inchangés.")}`,
     )
   )
     return;
@@ -365,7 +386,8 @@ async function handleClick(e) {
         const folders = [
           ...document.querySelectorAll("[data-scan-folder]:checked"),
         ].map((n) => n.dataset.scanFolder);
-        if (!folders.length) throw new Error("Choisissez au moins un dossier.");
+        if (!folders.length)
+          throw new Error(t("Choisissez au moins un dossier."));
         await perform("scan", { folders });
       }
       $("dialog").close();
@@ -434,6 +456,7 @@ async function submit(e) {
 }
 window.addEventListener("reseed-environment", (e) => {
   const value = e.detail;
+  const languageChanged = value.language !== environment.language;
   if (value.clear || value.client !== environment.client) {
     generation++;
     snapshot = { rows: [], setup: { folders: [] }, progress: {} };
@@ -442,6 +465,17 @@ window.addEventListener("reseed-environment", (e) => {
     $("dialog").close();
   }
   environment = value;
+  window.TLPanel.setLanguage(value.language);
+  if (languageChanged && $("dialog").open && dialogRenderer)
+    window.TLPanel.refreshForm($("dialog-body"), () => dialog(dialogRenderer));
+  document.title = t("Bibliothèque");
+  for (const [key, label] of Object.entries({
+    reseed: "Remise en seed",
+    folders: "Dossiers",
+    activity: "Activité",
+  }))
+    document.querySelector(`[data-tab="${key}"]`).textContent = t(label);
+  document.querySelector('[data-command="close"]').textContent = t("Fermer");
   active = !!value.active;
   render();
   if (active) refresh();

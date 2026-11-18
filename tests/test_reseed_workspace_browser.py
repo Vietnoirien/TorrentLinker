@@ -74,6 +74,14 @@ def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_pat
                 "el => el.getBoundingClientRect().bottom <= innerHeight - 16"
             )
 
+            page.locator("#language").select_option("en")
+            expect(frame.get_by_role("button", name="Run all", exact=True)).to_be_visible()
+            expect(frame.locator("html")).to_have_attribute("lang", "en")
+            frame.locator(".guided button").nth(1).click()
+            expect(frame.get_by_role("heading", name="Browse my folders")).to_be_visible()
+            frame.get_by_role("button", name="Close", exact=True).click()
+            page.locator("#language").select_option("fr")
+            expect(frame.get_by_role("button", name="Tout enchaîner", exact=True)).to_be_visible()
             frame.locator(".guided button").first.click()
             frame.get_by_role("button", name="Parcourir…").click()
             frame.get_by_role("button", name=str(links), exact=True).click()

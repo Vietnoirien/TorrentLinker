@@ -40,9 +40,19 @@ class UploadBridge(ViewBridge):
                 raise ValueError("The target client changed. Reopen Upload.")
             if action == "pick":
                 if body.get("type") == "file":
-                    path, _ = QFileDialog.getOpenFileName(self.board, "Choisir un fichier")
+                    path, _ = QFileDialog.getOpenFileName(
+                        self.board,
+                        "Choisir un fichier"
+                        if self.board.language.startswith("fr")
+                        else "Choose a file",
+                    )
                 else:
-                    path = QFileDialog.getExistingDirectory(self.board, "Choisir un dossier")
+                    path = QFileDialog.getExistingDirectory(
+                        self.board,
+                        "Choisir un dossier"
+                        if self.board.language.startswith("fr")
+                        else "Choose a folder",
+                    )
                 if path:
                     self.board.selected_paths.add(Path(path).resolve())
                 done({"selected": path})

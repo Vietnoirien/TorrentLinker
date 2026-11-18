@@ -1,13 +1,6 @@
 :root {
   color-scheme: dark;
-  --bg: #161d23;
-  --panel: #202932;
   --raised: #26323c;
-  --line: #33404b;
-  --text: #e2e9ed;
-  --muted: #98aab7;
-  --accent: #80bdb6;
-  --tint: #263e43;
   --amber: #dfbe79;
   --blue: #8baed1;
   font:

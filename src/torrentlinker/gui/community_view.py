@@ -16,6 +16,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QGuiApplication, QHideEvent, QShowEvent
 from PySide6.QtWidgets import QFileDialog, QVBoxLayout, QWidget
 
+from torrentlinker import i18n
 from torrentlinker.community import message_library
 from torrentlinker.profile_workspace import ProfileWorkspace
 
@@ -97,6 +98,14 @@ class BundledView(QWidget):
 
         QQuickWidget(self).hide()
 
+    @property
+    def language(self) -> str:
+        return i18n.pick_language(self._language)
+
+    @language.setter
+    def language(self, value: str) -> None:
+        self._language = value
+
     def _load_view(self) -> None:
         # Load Chromium only when the Community tab is opened.
         # Wayland's GBM/Vulkan texture import can leave a live page entirely black.
@@ -126,6 +135,10 @@ class BundledView(QWidget):
                     in {
                         assets / name
                         for name in ("view.html", "view.css", "view.js", "transport.js")
+                    }
+                    | {
+                        assets.parent / "panel" / name
+                        for name in ("base.css", "transport.js", "i18n.js")
                     }
                 )
                 info.block(not allowed)

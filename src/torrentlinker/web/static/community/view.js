@@ -38,7 +38,8 @@
     historyFrom = "",
     historyTo = "",
     historyMonth = new Date();
-  let generation = 0, libraryObserver = null;
+  let generation = 0,
+    libraryObserver = null;
   let drafts = {},
     chatDraft = {},
     editing = null,
@@ -46,7 +47,7 @@
     toastTimer;
   const kinds = ["comment", "vote", "chat"],
     editable = ["draft", "queued", "paused", "refused", "cancelled"];
-  const t = (fr, en) => (language.startsWith("fr") ? fr : en);
+  const t = (fr, en) => window.TLPanel.t(fr, en);
   const kindName = (k) =>
     ({
       comment: t("Commentaire", "Comment"),
@@ -965,7 +966,7 @@
     });
     libraryObserver?.disconnect();
     if ($("library-more") && !$("library-more").hidden) {
-      const observer = libraryObserver = new IntersectionObserver(
+      const observer = (libraryObserver = new IntersectionObserver(
         (entries) => {
           if (entries.some((entry) => entry.isIntersecting)) {
             observer.disconnect();
@@ -974,7 +975,7 @@
           }
         },
         { rootMargin: "200px" },
-      );
+      ));
       observer.observe($("library-more"));
     }
   }
@@ -1178,7 +1179,7 @@
     const env = event.detail;
     active = env.active !== false;
     language = env.language || language;
-    document.documentElement.lang = language;
+    window.TLPanel.setLanguage(language);
     document.documentElement.dataset.theme = env.theme || "dark";
     capture();
     if (env.clear) {
