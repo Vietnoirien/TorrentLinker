@@ -144,6 +144,8 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
     from torrentlinker.web.app import create_app
 
     app = create_app(tmp_path / "config", password="test-password-long")
+    from torrentlinker.downloads import IndexerCategory
+
     source = Source()
     source.rows = [
         release("a", title="Good.1080p", metadata={"quality": "1080p"}),
@@ -160,6 +162,10 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
         if server.started:
             break
         time.sleep(0.02)
+    app.state.agent_service.feed_control.service.setup.settings.indexer_categories = {
+        2030: IndexerCategory("Films"),
+        7020: IndexerCategory("Books"),
+    }
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
@@ -174,10 +180,19 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
                 "button", name="New subscription"
             ).click()
             editor = page.frame_locator("#feeds-frame").locator("#dialog-content")
+            page.wait_for_timeout(1500)  # Includes the source debounce interval.
+            expect(editor.locator(".feed-strip")).to_have_text("")
+            expect(editor.locator(".feed-chip").filter(has_text="720p")).not_to_be_visible()
+            editor.get_by_role("button", name="Books", exact=True).click()
+            expect(editor.locator(".feed-chip").filter(has_text="720p")).not_to_be_visible()
+            editor.get_by_role("button", name="Books", exact=True).click()
+            editor.get_by_role("button", name="Films", exact=True).click()
+            editor.get_by_role("button", name="Check again", exact=True).click()
             expect(editor.locator(".feed-strip")).to_contain_text("Would match now: 2 of 2")
             chip = editor.locator(".feed-chip").filter(has_text="720p")
             chip.click()
             expect(editor.locator(".feed-chip.prefer")).to_have_text("♡ 1. 720p")
+            expect(editor.locator(".feed-chip.prefer")).to_be_focused()
             editor.locator(".feed-chip.prefer").click()
             expect(editor.locator(".feed-chip.must")).to_have_text("✓ 720p")
             expect(editor.locator(".feed-strip")).to_contain_text("Would match now: 1 of 2")
@@ -298,6 +313,7 @@ def test_rss_category_legend_and_rich_editor_roundtrip(tmp_path):
             panel.locator(".feed-cats summary").click()
             panel.get_by_label("Books", exact=True).uncheck()
             panel.get_by_label("Music", exact=True).uncheck()
+            panel.locator("summary", has_text="Other criteria").click()
             format_row.locator("input").fill("FLAC")
             format_row.locator("input").press("Enter")
             expect(format_row.locator(".category-tags")).to_have_text("All categories")
@@ -345,7 +361,7 @@ def test_cancel_pending_preview_never_saves_and_repeated_save_is_locked(tmp_path
             page.locator("[data-view=feeds]").click()
             panel = page.frame_locator("#feeds-frame")
             panel.locator("#feeds-empty").get_by_role("button").click()
-            expect(panel.locator(".feed-strip")).to_contain_text("2 of 2")
+            expect(panel.locator(".feed-strip")).to_have_text("")
             pending = []
 
             def hold_preview(route):
@@ -369,7 +385,7 @@ def test_cancel_pending_preview_never_saves_and_repeated_save_is_locked(tmp_path
             assert app.state.agent_service.feed_control.feeds.subscriptions() == []
             page.unroute("**/api/feeds/workspace", hold_preview)
             panel.locator("#feeds-empty").get_by_role("button").click()
-            expect(panel.locator(".feed-strip")).to_contain_text("2 of 2")
+            expect(panel.locator(".feed-strip")).to_have_text("")
             panel.get_by_role("button", name="Save", exact=True).dblclick()
             expect(panel.locator("#dialog")).not_to_be_visible()
             assert len(app.state.agent_service.feed_control.feeds.subscriptions()) == 1

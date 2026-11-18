@@ -778,8 +778,8 @@ async function editFeed(existing = null, query = "") {
   const section = (title) => {
     root.append(element("h3", title));
   };
-  const field = (label, control) => {
-    const l = element("label", undefined, "feed-field");
+  const field = (label, control, group = false) => {
+    const l = element(group ? "div" : "label", undefined, "feed-field");
     l.append(element("span", label), control);
     root.append(l);
     return l;
@@ -827,7 +827,7 @@ async function editFeed(existing = null, query = "") {
     renderChips();
     sourceChanged();
   });
-  field(feedText("Categories", "Catégories"), categories.el);
+  field(feedText("Categories", "Catégories"), categories.el, true);
   // 2. What you accept
   section(feedText("What you accept", "Ce que vous acceptez"));
   root.append(
@@ -943,12 +943,14 @@ async function editFeed(existing = null, query = "") {
     }
   }
   function renderChips() {
+    const focused = document.activeElement?.dataset.criterion;
+    const scroll = $("dialog").scrollTop;
     const names = feedFieldNames();
     const relevant = [
       ...new Set(
         categories.get().length
           ? categories.get().flatMap(categoryFields)
-          : [...FEED_COMMON, ...FEED_MORE],
+          : [],
       ),
     ];
     for (const [host, fields] of [
@@ -1011,6 +1013,7 @@ async function editFeed(existing = null, query = "") {
               `feed-chip ${s}`,
             );
             chip.title = stateWords(s);
+            chip.dataset.criterion = JSON.stringify([f, v]);
             chip.setAttribute("aria-label", `${v}, ${stateWords(s)}`);
             chip.oncontextmenu = (e) => {
               e.preventDefault();
@@ -1066,6 +1069,12 @@ async function editFeed(existing = null, query = "") {
           return row;
         }),
       );
+    }
+    if (focused) {
+      [...root.querySelectorAll(".feed-chip")]
+        .find((chip) => chip.dataset.criterion === focused)
+        ?.focus({ preventScroll: true });
+      $("dialog").scrollTop = scroll;
     }
   }
   function renderPriorities() {
@@ -1514,7 +1523,6 @@ async function editFeed(existing = null, query = "") {
   );
   content.append(footer);
   $("dialog").showModal();
-  runPreview();
 }
 
 async function feedSavedSelections() {
