@@ -74,6 +74,17 @@ def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_pat
                 "el => el.getBoundingClientRect().bottom <= innerHeight - 16"
             )
 
+            frame.get_by_label("Folder", exact=True).select_option(str(original.parent))
+            frame.get_by_label("Seed state", exact=True).select_option("seeded")
+            expect(frame.locator(".torrent")).to_have_count(0)
+            frame.get_by_label("Seed state", exact=True).select_option("orphan")
+            expect(frame.locator(".torrent")).to_contain_text(original.name)
+            frame.get_by_role("button", name="Select the list", exact=True).click()
+            expect(
+                frame.get_by_role("button", name="Combine selection", exact=True)
+            ).to_be_disabled()
+            frame.get_by_role("button", name="Clear selection", exact=True).click()
+
             page.locator("#language").select_option("en")
             expect(frame.get_by_role("button", name="Run all", exact=True)).to_be_visible()
             expect(frame.locator("html")).to_have_attribute("lang", "en")
@@ -145,3 +156,92 @@ def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_pat
         client.release.set()
         server.should_exit = True
         thread.join(15)
+
+
+@pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+def test_shared_list_expands_packs_filters_children_and_combines_without_copying(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
+    from torrentlinker.library import LibraryEntry
+    from torrentlinker.scan import scan_item
+
+    app, board, _, original, _, _ = reseed_app(tmp_path)
+    root = original.parent
+    pack = root / "Show.S01"
+    pack.mkdir()
+    episodes = [pack / "Show.S01E01.mkv", pack / "Show.S01E02.mkv"]
+    for path in episodes:
+        path.write_bytes(b"episode" * 100)
+    folder = LibraryFolder(root, 1, ContentKind.SERIES)
+    board.setup.settings.library_folders = [folder]
+    board.library.entries[:] = [LibraryEntry(folder, scan_item(pack), ItemState.ORPHAN)] + [
+        LibraryEntry(folder, LocalItem(path, {path.name: 700}, within=pack), ItemState.ORPHAN)
+        for path in episodes
+    ]
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1600, "height": 1000}, locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/#/library/reseed")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            frame = page.frame_locator("#reseed-frame")
+            expect(frame.locator(".torrent")).to_have_count(1)
+            frame.get_by_role("button", name="Episodes in Show.S01", exact=True).click()
+            expect(frame.locator(".torrent")).to_have_count(3)
+            frame.get_by_label("Select Show.S01E01.mkv", exact=True).check()
+            frame.get_by_label("Select Show.S01E02.mkv", exact=True).check()
+            frame.get_by_role("button", name="Combine selection", exact=True).click()
+            frame.get_by_label("Group name").fill("My series")
+            frame.get_by_role("button", name="Create group", exact=True).click()
+            expect(frame.locator("#dialog")).not_to_be_visible(timeout=15000)
+            expect(frame.locator(".inspector h2")).to_have_text("My series")
+            page.reload()
+            expect(frame.locator(".torrent").filter(has_text="My series")).to_have_count(1)
+            frame.get_by_role("textbox", name="Search", exact=True).fill("S01E02")
+            expect(frame.locator(".torrent")).to_have_count(2)
+            expect(frame.get_by_label("Select Show.S01", exact=True)).to_be_disabled()
+            frame.get_by_role("button", name="Select the list", exact=True).click()
+            expect(frame.get_by_label("Select Show.S01E02.mkv", exact=True)).to_be_checked()
+            board.library.entries.extend(
+                LibraryEntry(
+                    folder,
+                    LocalItem(root / f"Book-{i:05}.epub", {f"Book-{i:05}.epub": 400}),
+                    ItemState.ORPHAN,
+                )
+                for i in range(5000)
+            )
+            frame.get_by_role("textbox", name="Search", exact=True).fill("")
+            expect(frame.locator(".stage").first).to_contain_text("5004", timeout=5000)
+            assert frame.locator(".torrent").count() < 300
+            frame.get_by_label("Folder", exact=True).select_option(str(root))
+            frame.get_by_label("Seed state", exact=True).select_option("orphan")
+            frame.get_by_role("textbox", name="Search", exact=True).fill(" Book-04999 ")
+            expect(frame.locator(".torrent")).to_have_count(1, timeout=5000)
+            expect(frame.locator(".torrent")).to_contain_text("Book-04999.epub")
+            frame.get_by_role("textbox", name="Search", exact=True).fill("S01E02")
+            page.set_viewport_size({"width": 390, "height": 844})
+            frame.locator(".episode").click()
+            expect(frame.locator(".inspector")).to_be_visible()
+            assert frame.locator("body").evaluate("el=>el.scrollWidth <= innerWidth")
+            assert all(path.read_bytes() == b"episode" * 100 for path in episodes)
+            assert sorted(p.name for p in pack.iterdir()) == [p.name for p in episodes]
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)

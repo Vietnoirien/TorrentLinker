@@ -610,3 +610,13 @@ input[type="checkbox"] {
 
 .folder-list{margin-top:22px;padding:22px}.folder-list>p{margin-top:20px}
 .folder-entry small{display:block}
+
+/* Approved Local Items controls; the workspace layout remains shared. */
+.tools select{max-width:220px;min-width:0}
+.pack-toggle{padding:2px 7px;margin-right:5px;border:0;background:transparent}
+.episode{padding-left:38px;background:color-mix(in srgb,var(--bg) 26%,var(--panel))}
+.episode .cover{height:36px;font-size:10px}
+.episode .title{font-weight:450}
+.title{overflow-wrap:anywhere}
+#combine-form input{width:100%}
+#combine-form li{padding:5px 0;overflow-wrap:anywhere}

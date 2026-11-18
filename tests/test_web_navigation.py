@@ -14,7 +14,7 @@ def test_fragment_navigation_and_subtabs():
     static = Path("src/torrentlinker/web/static")
     app = (static / "app.js").read_text()
     routing = app[app.index("async function settingsSection(") : app.index("async function job(")]
-    enter = app[app.index("async function enter()") : app.index('$("library-check-all")')]
+    enter = app[app.index("async function enter()") : app.index('$("login-form").onsubmit')]
     library = (static / "library.js").read_text()
     library = library[
         library.index("async function libraryTab(") : library.index(
@@ -37,6 +37,7 @@ const state = {view:'torrents', setup:{configured:true, indexer_configured:true}
 const media = {kind:'video', view:'recent'};
 const loaded = []; const reseedUI = {tab:'reseed'};
 function clearAgentToken() {}
+function resetLibraryReview() {}
 function step() {}
 async function refreshSetup() {}
 async function loadAgents() { loaded.push('agents'); }
@@ -120,7 +121,9 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
       const parts=[view,...(tab?[tab]:[])];
       location.hash=routeFragment(parts);await settle();
       await enter();await settle();
-      assert.equal(state.view,view);assert.equal(location.hash,routeFragment(parts));
+      assert.equal(state.view,view);
+      const canonical=view==='library' && tab==='items'?['library','reseed']:parts;
+      assert.equal(location.hash,routeFragment(canonical));
     }
   }
   for(const [kind,views] of Object.entries(mediaViewsByKind)){

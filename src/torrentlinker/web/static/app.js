@@ -670,7 +670,7 @@ document.querySelectorAll("[data-agent-tab]").forEach(el => {
 // Only workspace locations belong in the fragment. Form state and filters stay local.
 const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
-  feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "folders", "activity"],
+  feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
   setup: ["connections", "interface", "companion", "assistant", "agents"],
 };
@@ -1492,8 +1492,6 @@ async function enter() {
   if (state.setup.configured) await job({ kind: "refresh" }, loadTorrents);
   await pollJobs();
 }
-$("library-check-all").onclick = () => guard(checkAllCandidates);
-$("library-reseed-all").onclick = () => guard(reseedAllMatches);
 $("login-form").onsubmit = (e) => {
   e.preventDefault();
   guard(async () => {
@@ -1628,19 +1626,6 @@ $("retry-queue").onclick = () => guard(() => editQueue("retry", [...state.queueS
 $("clear-sent-queue").onclick = () => guard(() => editQueue("remove",
   state.queueRows.filter((r) => r.status === "sent").map((r) => r.key)));
 $("remove-queue").onclick = () => guard(() => editQueue("remove", [...state.queueSelected]));
-$("scan").onclick = () => guard(() => job({ kind: "scan" }, loadLibrary));
-$("library-query").oninput = () => {
-  state.libraryOffset = 0;
-  guard(loadLibrary);
-};
-$("library-prev").onclick = () => {
-  state.libraryOffset = Math.max(0, state.libraryOffset - 100);
-  guard(loadLibrary);
-};
-$("library-next").onclick = () => {
-  state.libraryOffset += 100;
-  guard(loadLibrary);
-};
 setInterval(() => {
   if (!$("workspace").hidden) guard(pollJobs);
 }, 2000);

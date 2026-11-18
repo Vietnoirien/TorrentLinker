@@ -51,6 +51,29 @@ class ReseedBridge(ViewBridge):
                 # Desktop paths are chosen by the local owner, not server roots.
                 setup._folder_candidate = Path(body["local"]).expanduser().resolve()
                 run_in_background(lambda: setup.preview_folder(FolderSetup(**body)), done, failed)
+            elif action == "combine":
+                board = self.board
+                if board.running or board.scanning or board.configuring:
+                    raise ValueError("Wait for the current Library operation to finish.")
+                service = board.service()
+                client = board.owner.settings.active_client_id
+                board.configuring = True
+
+                def combined(value):
+                    board.configuring = False
+                    if client == board.owner.settings.active_client_id:
+                        board.refresh_rows()
+                    done(value)
+
+                def combine_failed(error):
+                    board.configuring = False
+                    failed(error)
+
+                run_in_background(
+                    lambda: service.library.combine(body["paths"], JobStop(), body.get("name", "")),
+                    combined,
+                    combine_failed,
+                )
             elif action == "add-client":
                 self.board.add_client(body, done, failed)
             else:
@@ -63,6 +86,9 @@ class ReseedBoard(BundledView):
     def __init__(self, window):
         self.owner = window
         self.rows: list[dict] = []
+        self.selected_paths: list[str] = []
+        self.selection_client = window.settings.active_client_id
+        self.selections_by_client: dict[str, tuple[dict, dict]] = {}
         self.running = False
         self.stop = JobStop()
         self.link_root = window.settings.profile().reseed_link_root
@@ -74,6 +100,7 @@ class ReseedBoard(BundledView):
         self.scan_errors: list[str] = []
         self.requested_tab = "reseed"
         self.folder_dialog_request = 0
+        self.focus_request = 0
         self.scanning = False
         super().__init__(ReseedBridge(self), ASSETS, "reseed", window.settings.language)
         self.setMinimumHeight(620)
@@ -93,9 +120,16 @@ class ReseedBoard(BundledView):
             setup._folder_candidate = Path(self.link_root)
         library = Library(setup)
         library.entries = list(self.owner.library_model.entries)
+        library.selections, library.selection_rows = self.selections_by_client.setdefault(
+            self.owner.settings.active_client_id, ({}, {})
+        )
         return ReseedWorkspace(library)
 
     def refresh_rows(self):
+        client = self.owner.settings.active_client_id
+        if client != self.selection_client:
+            self.selected_paths = []
+            self.selection_client = client
         if self.running and self.current_service:
             self.current_service.library.entries = list(self.owner.library_model.entries)
             self.rows = self.current_service.rows()
@@ -114,11 +148,20 @@ class ReseedBoard(BundledView):
                 "client": self.owner.settings.active_client_id,
                 "tab": self.requested_tab,
                 "folder_dialog_request": self.folder_dialog_request,
+                "focus_request": self.focus_request,
             }
         )
         self.bridge.ready()
 
+    def focus_search(self):
+        self.focus_request += 1
+        self.refresh()
+
     def request(self, action, body):
+        if action == "selection":
+            self.selected_paths = body.get("paths", [])
+            return {}
+
         if action == "state":
             setup = self.service().setup.snapshot()
             return {

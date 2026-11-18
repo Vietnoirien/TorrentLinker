@@ -27,7 +27,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
 | 7 | Reseed landing | **BV** `ReseedBoard` | `reseed.js` iframe | **Done** | `reseed-guided/` (WebView) | folder picker vs server browser (deliberate) |
-| 8 | Local Items + candidate review | Native `TreeTable`, `ReviewPanel` (`review_panel.py:72`, 5 tabs), modal "Compare files and repair" (`library_workspace.py:305`) | `library.js`, `index.html:742-757` | NU | `library-evidence.md` (behaviour only) | thousands of rows, pack/episode grouping, batch runner |
+| 8 | Local Items + candidate review | **BV** Local Items list and inspector; native advanced `ReviewPanel` | Same bundled list and inspector; existing advanced Web review | **Local Items done** (#96); advanced review remains #97/#98 | `reseed-guided/local-items-preview.md` | shared folder/state filters, packs and Combine; advanced review batch actions retained |
 | 9 | Library Folders | **BV** `ReseedBoard` Folders page | Same bundled Folders page | **Done** (#95) | `reseed-guided/folders-activity-implementation.md` | Settings editor remains separate (#113) |
 | 10 | Add/Edit Library Folder | Shared dialog with live Local Item preview | Same dialog and read-only preview API | **Done** (#95) | Approved dialog archived at `e5d8f962` | native picker vs server browser (deliberate) |
 | 11 | Activity / Activité | Shared event list plus session status log | Same event list plus persisted Library jobs | **Done** (#95) | `reseed-guided/folders-activity-implementation.md` | Web job Cancel/Details remain in global Activity |

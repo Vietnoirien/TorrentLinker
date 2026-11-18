@@ -81,14 +81,14 @@ def test_folder_explorer_and_candidate_review(tmp_path):
             frame.locator("[name=scan]").uncheck()
             frame.locator("#folder-form .primary").click()
             expect(frame.locator(".folder-entry")).to_have_count(2)
-            page.evaluate("location.hash='#/library/items'")
-            page.locator("#scan").click()
-            expect(page.locator("#library-table")).to_contain_text(
+            frame.get_by_role("button", name="Reseed", exact=True).click()
+            frame.locator(".guided button").nth(1).click()
+            frame.get_by_role("button", name="Scan my disk now", exact=True).click()
+            expect(frame.locator(".torrent")).to_contain_text(
                 "The Time Machine.epub", timeout=15000
             )
-            page.locator("#library-table").get_by_role(
-                "button", name="The Time Machine.epub", exact=True
-            ).click()
+            frame.locator(".torrent").filter(has_text="The Time Machine.epub").click()
+            frame.get_by_role("button", name="Review files and repairs", exact=True).click()
             expect(page.locator("#candidate-table")).to_contain_text("Full Match", timeout=15000)
             page.locator("[data-candidate-tab=files]").click()
             expect(page.locator("#candidate-files")).to_contain_text("matched")
@@ -123,16 +123,13 @@ def test_folder_explorer_and_candidate_review(tmp_path):
                 )
                 page.locator("#language").select_option("en")
             page.locator("[data-candidate-tab=files]").click()
-            page.locator("#candidate-expand").click()
-            expect(page.locator("#library-results")).to_be_hidden()
             expect(page.locator("#candidate-files")).to_contain_text("The Time Machine.epub")
-            page.locator("#candidate-expand").click()
-            expect(page.locator("#library-results")).to_be_visible()
             page.locator("#candidate-actions").get_by_role(
                 "button", name="Reject Candidate", exact=True
             ).click()
             expect(page.locator("#candidate-table")).to_contain_text("No Candidates", timeout=15000)
-            page.locator("#library-manage-folders").click()
+            page.locator("#candidate-expand").click()
+            frame.get_by_role("button", name="Folders", exact=True).click()
             if destination:
                 page.screenshot(
                     path=str(Path(destination) / "library-web-folders.png"), full_page=True

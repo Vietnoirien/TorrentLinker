@@ -2,62 +2,35 @@
 const libraryUI = {folder:"", selected:new Set(), item:null, candidates:[], chosen:new Map(), candidate:null, client:null, generation:0, loadGeneration:0, detailGeneration:0, tab:"summary"};
 const libraryMatch = value => ({full:say("Full Match","Correspondance complète"),partial:say("Partial Match","Correspondance partielle"),none:say("No Match","Aucune correspondance"),unchecked:say("Not checked","Non vérifié")}[value] || value);
 
-async function loadLibrary() {
-  if (libraryUI.client !== state.clientId) {
-    libraryUI.client = state.clientId;
-    libraryUI.selected.clear(); libraryUI.chosen.clear(); libraryUI.item = null;
-    libraryUI.candidate = null; libraryUI.generation++; libraryUI.detailGeneration++;
-    $("candidates").hidden = true; $("library-results").hidden = false;
-    $("library-items").classList.remove("library-expanded");
-  }
-  const generation = ++libraryUI.loadGeneration;
-  const params = new URLSearchParams({q:$("library-query").value, offset:state.libraryOffset, folder:libraryUI.folder, state:$("library-state").value});
-  const response = await api(`library?${params}`);
-  if (generation !== libraryUI.loadGeneration) return;
-  table("library-table", response.rows, [
-    {label:say("Local Item","Élément local"), name:true, render:r=>button(r.within?`${r.within.split(/[\\/]/).pop()} › ${r.name}`:r.name,()=>reviewLibraryItem(r))},
-    {label:say("State","État"),render:r=>({orphan:say("Orphan","Orphelin"),seeded:say("Seeded","Seedé"),"partially-seeded":say("Partially seeded","Partiellement seedé"),unknown:say("Seeding status unknown","État du seed inconnu")}[r.state] || r.state)},
-    {label:say("Size","Taille"),render:r=>bytes(r.size)},
-    {label:say("Folder","Dossier"),render:r=>{const path=element("span",r.folder,"library-folder-path");path.title=r.folder;return path;}},
-    {label:"",render:r=>button(say("Find candidates","Chercher des candidats"),()=>check(r))},
-    {label:"Upload",render:r=>button(say("Prepare","Préparer"),()=>prepareUpload(r))},
-  ], libraryUI.selected, "path", updateLibrarySelection);
-  $("library-count").textContent = `${response.total} · ${Math.floor(state.libraryOffset/100)+1}`;
-  $("library-prev").disabled = !state.libraryOffset;
-  $("library-next").disabled = state.libraryOffset+100 >= response.total;
-  updateLibrarySelection();
-  libraryUI.folderCounts=response.folder_counts; libraryUI.folderErrors=response.folder_errors;
-  renderLibraryFolders();
+function resetLibraryReview() {
+  if (libraryUI.client === state.clientId) return;
+  libraryUI.client = state.clientId;
+  libraryUI.selected.clear(); libraryUI.chosen.clear(); libraryUI.item = null;
+  libraryUI.candidate = null; libraryUI.candidates = [];
+  libraryUI.generation++; libraryUI.detailGeneration++;
+  $("candidates").hidden = true;
+  $("library-empty-review").hidden = false;
 }
-function updateLibrarySelection() {
-  $("library-selection-count").textContent = say(`${libraryUI.selected.size} selected`,`${libraryUI.selected.size} sélectionné(s)`);
-  $("library-combine").disabled = libraryUI.selected.size < 2;
-  $("library-search-selected").disabled = !libraryUI.selected.size;
+async function searchLibrary(selected) {
+  const paths=selected?[...libraryUI.selected]:[];
+  const generation=libraryUI.generation;
+  await job({kind:"search-library",paths},result=>{
+    toast(say(`Searched ${result.results.length} items. ${result.errors.length} errors.`,`${result.results.length} éléments cherchés. ${result.errors.length} erreurs.`));
+    if(generation===libraryUI.generation && libraryUI.item) {
+      const found=result.results.find(r=>r.path===libraryUI.item.path);if(found) showLibraryCandidates(found.rows);
+    }
+  });
 }
-function renderLibraryFolders() {
-  const folders = state.setup?.folders || [];
-  if (libraryUI.folder && !folders.some(f=>f.local===libraryUI.folder)) libraryUI.folder="";
-  const rail = $("library-folders"); rail.replaceChildren();
-  for (const f of [{local:"",label:say("All folders","Tous les dossiers")},...folders]) {
-    const b = button(f.label || f.local.split(/[\\/]/).filter(Boolean).pop() || f.local, async()=>{
-      libraryUI.folder=f.local; state.libraryOffset=0; await loadLibrary();
-    });
-    const count=f.local?libraryUI.folderCounts?.[f.local]:Object.values(libraryUI.folderCounts || {}).reduce((a,b)=>a+b,0);
-    if(count !== undefined) b.textContent+=` · ${count}`;
-    if((libraryUI.folderErrors || []).some(path=>path===f.local || path.startsWith(f.local+"/"))) b.textContent+=say(" · Incomplete scan"," · Analyse incomplète");
-    b.title=f.local; b.setAttribute("aria-pressed",String(libraryUI.folder===f.local)); rail.append(b);
-  }
-}
-
+async function loadLibrary() { resetLibraryReview(); await loadReseed(); }
 async function libraryTab(tab) {
-  tab = tab || "reseed";
-  const shared = ["reseed", "folders", "activity"].includes(tab);
+  resetLibraryReview();
+  tab = tab === "review" ? tab : ["folders","activity"].includes(tab) ? tab : "reseed";
+  const shared = tab !== "review";
   document.querySelector(".library-nav").hidden = shared;
   rememberTab("library", tab);
   $("library-items").hidden = shared;
   $("library-reseed").hidden = !shared;
   if (shared) { reseedUI.tab = tab; await loadReseed(); }
-  else await loadLibrary();
 }
 
 async function browseLibraryFolder(path="",target="library-folder-path") {
@@ -169,28 +142,10 @@ function renderLibraryDetails(result) {
   $("candidate-description").querySelectorAll("a").forEach(a=>{a.target="_blank";a.rel="noopener noreferrer";});
   $("candidate-nfo").textContent=result.nfo || say("No NFO supplied.","Aucun NFO.");
 }
-async function searchLibrary(selected) {
-  const paths=selected?[...libraryUI.selected]:[];
-  const generation=libraryUI.generation;
-  await job({kind:"search-library",paths},result=>{
-    toast(say(`Searched ${result.results.length} items. ${result.errors.length} errors.`,`${result.results.length} éléments cherchés. ${result.errors.length} erreurs.`));
-    if(generation===libraryUI.generation && libraryUI.item) {
-      const found=result.results.find(r=>r.path===libraryUI.item.path);if(found) showLibraryCandidates(found.rows);
-    }
-  });
-}
 for(const b of document.querySelectorAll("[data-library-tab]")) b.onclick=()=>guard(()=>libraryTab(b.dataset.libraryTab));
 for(const b of document.querySelectorAll("[data-candidate-tab]")) b.onclick=()=>candidateTab(b.dataset.candidateTab);
-$("library-manage-folders").onclick=()=>guard(()=>libraryTab("folders"));
-$("library-state").onchange=()=>{state.libraryOffset=0;guard(loadLibrary);};
-$("library-search-selected").onclick=()=>guard(()=>searchLibrary(true));
-$("library-search-all").onclick=()=>guard(()=>searchLibrary(false));
 $("candidate-search").onclick=()=>guard(()=>libraryUI.item && check(libraryUI.item));
-$("candidate-expand").onclick=()=>{
-  const expanded=!$("library-results").hidden;
-  $("library-results").hidden=expanded;$("library-items").classList.toggle("library-expanded",expanded);
-  $("candidate-expand").textContent=expanded?say("Back to Local Items","Retour aux éléments"):say("Expand review","Agrandir");
-};
+$("candidate-expand").onclick=()=>guard(()=>libraryTab("reseed"));
 
 $("settings-library-folders").onclick=()=>guard(()=>navigate("library", "folders"));
 
@@ -228,16 +183,6 @@ $("library-download-form").onsubmit=e=>{e.preventDefault();guard(async()=>{
     await refreshSetup();$("library-download-feedback").textContent=say("Destination verified and saved.","Destination vérifiée et enregistrée.");
   });
 });};
-
-$("scan").onclick=()=>guard(()=>job({kind:"scan"},async result=>{
-  libraryUI.generation++; libraryUI.detailGeneration++;libraryUI.item=null;libraryUI.candidate=null;
-  $("candidates").hidden=true;$("library-empty-review").hidden=false;
-  $("library-results").hidden=false;$("library-items").classList.remove("library-expanded");
-  $("candidate-expand").textContent=say("Expand review","Agrandir");
-  await loadLibrary();
-  if(result.client_unavailable) toast(say("Files scanned. The Torrent Client is unavailable, so seeding status is unknown.","Fichiers analysés. Le client torrent est indisponible : état du seed inconnu."));
-}));
-
 
 async function previewArchive(candidate) {
   const body={path:libraryUI.item.path,candidate_key:candidate.key,client_id:state.clientId};
@@ -350,15 +295,12 @@ function renderRepair(host,row) {
   })));
 }
 
-$("library-combine").onclick=()=>guard(async()=>{
-  await job({kind:"combine-library",paths:Array.from(libraryUI.selected)},row=>{
-    libraryUI.item=row;libraryUI.generation++;$("candidates").hidden=false;
-    $("candidate-title").textContent=say("Selected Local Items · use Find compatible torrents","Éléments sélectionnés · utilisez Chercher des torrents compatibles");
-    showLibraryCandidates([]);
-  });
-});
-
 function evidenceLabel(value) {
   const labels={filename:["Filename","Nom du fichier"],"embedded-title":["Embedded title","Titre intégré"],"writing-application":["Writing application","Application d’écriture"],resolution:["Resolution","Résolution"],"video-codec":["Video codec","Codec vidéo"],"audio-codec":["Audio codec","Codec audio"],"audio-channels":["Audio channels","Canaux audio"],processing:["Processing clue","Indice de traitement"],measured:["Measured contradiction","Contradiction mesurée"],hint:["Clue only","Simple indice"],review:["Review needed","À examiner"],verified:["Hash verified","Hashes vérifiés"],unverified:["Unverified","Non vérifié"],ambiguous:["Ambiguous","Ambigu"],partial:["Partially verified","Partiellement vérifié"],stale:["File changed; verify again","Fichier modifié ; vérifier à nouveau"],"awaiting-confirmation":["Copy not prepared","Copie à préparer"],ineligible:["Outside repair limits","Hors des limites de réparation"],preparing:["Preparing copy","Préparation de la copie"],adding:["Addition pending; inspect client","Ajout en cours ; inspecter le client"],checking:["Client verification","Vérification par le client"],ready:["Ready for confirmation","Prêt pour confirmation"],"needs-review":["Inspect the client before retrying","Inspecter le client avant de réessayer"],starting:["Start uncertain; inspect client","Démarrage incertain ; inspecter le client"],downloading:["Downloading into copy","Téléchargement dans la copie"],completed:["Completed","Terminé"]};
   return labels[value]?say(...labels[value]):value;
 }
+
+$("library-search-selected").onclick=()=>guard(()=>searchLibrary(true));
+$("library-search-all").onclick=()=>guard(()=>searchLibrary(false));
+$("library-check-all").onclick=()=>guard(checkAllCandidates);
+$("library-reseed-all").onclick=()=>guard(reseedAllMatches);

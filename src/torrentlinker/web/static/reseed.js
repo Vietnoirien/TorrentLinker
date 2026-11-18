@@ -86,6 +86,18 @@ async function reseedRequest(action, body) {
         ),
     };
   }
+  if (action === "combine") {
+    const client = state.clientId;
+    const created = await api("jobs", {kind:"combine-library",paths:body.paths,selection_name:body.name,client_id:client});
+    for (;;) {
+      if (client !== state.clientId) throw new Error("The target client changed. Reopen the Library.");
+      const result = await api(`jobs/${created.id}`);
+      if (result.status === "completed") return result.result;
+      if (!["queued","running"].includes(result.status)) throw new Error(result.error || "Combine cancelled.");
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
+  }
+  if (action === "selection") { libraryUI.selected = new Set(body.paths); $("library-search-selected").disabled = !body.paths.length; return {}; }
   if (action === "tab") { reseedUI.tab = body.tab; return {}; }
   if (action === "preview-folder") return api("setup/preview-folder", body);
   if (action === "remove-folder") return api("setup/remove-folder", body);
@@ -133,7 +145,7 @@ async function reseedRequest(action, body) {
     return {};
   }
   if (action === "review") {
-    await libraryTab("items");
+    await libraryTab("review");
     await reviewLibraryItem(
       reseedUI.rows.find((row) => row.path === body.path),
     );

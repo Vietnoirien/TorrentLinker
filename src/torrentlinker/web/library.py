@@ -36,6 +36,7 @@ class Library:
         self.setup = setup
         self.entries: list[LibraryEntry] = []
         self.selections: dict[str, list[str]] = {}
+        self.selection_rows: dict[str, dict] = {}
         self.folder_errors: list[ScanError] = []
 
     def client(self) -> MappedQbit:
@@ -167,7 +168,7 @@ class Library:
         }
 
     def rows(self) -> list[dict[str, Any]]:
-        return [
+        rows = [
             {
                 "path": str(e.item.path),
                 "name": e.item.path.name,
@@ -179,28 +180,41 @@ class Library:
             }
             for e in self.entries
         ]
+        paths = {row["path"] for row in rows}
+        return rows + [row for row in self.selection_rows.values() if set(row["members"]) <= paths]
 
-    def combine(self, paths: list[str], stop: threading.Event) -> dict:
+    def combine(self, paths: list[str], stop: threading.Event, name: str = "") -> dict:
         from torrentlinker.compatible import combine_items
         from torrentlinker.domain import TorrentClient
 
         if self.setup.settings.client != TorrentClient.QBITTORRENT:
             raise ValueError("Combining folders currently requires qBittorrent.")
-        entries = [self.entry(p) for p in dict.fromkeys(paths)]
+        paths = list(dict.fromkeys(paths))
+        if not 2 <= len(paths) <= 100:
+            raise ValueError("Select between 2 and 100 Local Items.")
+        entries = [self.entry(p) for p in paths]
         if any(p in self.selections for p in paths):
             raise ValueError("Select real Local Items, not another combined selection.")
         if len({e.folder.kind for e in entries}) != 1:
             raise ValueError("Select items with the same Content Kind.")
+        if any(a.item.path in b.item.path.parents for a in entries for b in entries if a is not b):
+            raise ValueError("Select a pack or its episodes, not both.")
         items = [self.scan_entry(e, stop) for e in entries]
         item = combine_items(items, self.setup.settings.path_mappings)
         self.selections[str(item.path)] = list(dict.fromkeys(paths))
-        return {
+        row = {
             "path": str(item.path),
-            "name": "Selected Local Items",
+            "name": name.strip()[:200] or "Selected Local Items",
             "size": item.size,
-            "folder": str(item.save_path),
+            "folder": str(entries[0].folder.path),
+            "common_parent": str(item.save_path),
             "kind": entries[0].folder.kind,
+            "state": ItemState.ORPHAN,
+            "within": "",
+            "members": list(dict.fromkeys(paths)),
         }
+        self.selection_rows[str(item.path)] = row
+        return row
 
     def scan_entry(self, entry: LibraryEntry, stop: threading.Event):
         from torrentlinker.compatible import combine_items

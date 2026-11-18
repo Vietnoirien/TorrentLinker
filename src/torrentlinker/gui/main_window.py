@@ -12,19 +12,16 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QEvent, QFile, QItemSelection, QSignalBlocker, Qt, QTimer
+from PySide6.QtCore import QEvent, QFile, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeyEvent
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QInputDialog,
     QLabel,
-    QLineEdit,
     QListWidget,
     QMainWindow,
     QMenu,
@@ -81,7 +78,7 @@ from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.documentation import DocumentationTab
 from torrentlinker.gui.ebook_reader import ReadingRoom
 from torrentlinker.gui.errors import error_text
-from torrentlinker.gui.library_model import LibraryFilter, LibraryModel, human_size, state_label
+from torrentlinker.gui.library_model import LibraryModel, human_size
 from torrentlinker.gui.library_workspace import LibraryWorkspace
 from torrentlinker.gui.reseed_consent import ReseedConsent
 from torrentlinker.gui.reseed_dialog import ReseedDialog
@@ -97,7 +94,6 @@ from torrentlinker.gui.settings_dialog import (
     choose_directory,
     extra_indexer_keys,
 )
-from torrentlinker.gui.tables import EmptyState, TreeTable, style_tree
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.gui.theme import set_theme
 from torrentlinker.gui.torrents_view import TorrentsTab
@@ -202,6 +198,7 @@ class MainWindow(QMainWindow):
 
         toolbar = QToolBar(self.tr("Library"), self)
         toolbar.setMovable(False)
+        toolbar.hide()
         self.add_folder_action = QAction(self.tr("Add folder…"), self)
         self.add_folder_action.triggered.connect(self.add_library_folder)
         self.scan_action = QAction(self.tr("Scan"), self)
@@ -247,6 +244,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.cancel_action)
         match_toolbar = QToolBar(self.tr("Matches"), self)
         match_toolbar.setMovable(False)
+        match_toolbar.hide()
         match_toolbar.addAction(self.check_all_action)
         match_toolbar.addAction(self.reseed_all_action)
         manage_action = QAction(self.tr("Open in Torrents"), self)
@@ -277,50 +275,6 @@ class MainWindow(QMainWindow):
         self.countdown.timeout.connect(self._show_batch_progress)
 
         self.library_model = LibraryModel()
-        self.library_proxy = LibraryFilter()
-        self.library_proxy.setSourceModel(self.library_model)
-        self.library_view = TreeTable()
-        self.library_view.setModel(self.library_proxy)
-        style_tree(self.library_view)
-        self.library_view.setAccessibleName(self.tr("Library"))
-        self.library_empty = EmptyState(
-            self.library_view,
-            self.tr("No Local Items to show. Adjust the filters or scan your Library Folders."),
-        )
-        self.library_view.setSortingEnabled(True)
-        self.library_view.sortByColumn(0, Qt.SortOrder.AscendingOrder)
-        self.library_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.library_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        header = self.library_view.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
-        header.resizeSection(3, 160)
-        self.library_view.selectionModel().selectionChanged.connect(self._selection_changed)
-
-        self.library_search = QLineEdit()
-        self.library_search.setPlaceholderText(self.tr("Filter Local Items…"))
-        self.library_search.setAccessibleName(self.tr("Filter Local Items"))
-        self.library_search.setClearButtonEnabled(True)
-        self.library_search.textChanged.connect(self._apply_filters)
-        filters = QHBoxLayout()
-        self.state_filter = QComboBox()
-        self.state_filter.addItem(self.tr("All states"), None)
-        for state in ItemState:
-            self.state_filter.addItem(state_label(state), state)
-        self.folder_filter = QComboBox()
-        self.state_filter.currentIndexChanged.connect(self._apply_filters)
-        self.folder_filter.currentIndexChanged.connect(self._apply_filters)
-        filters.addWidget(self.library_search, 2)
-        filters.addWidget(self.state_filter)
-        filters.addWidget(self.folder_filter, 1)
-        library_pane = QWidget()
-        library_layout = QVBoxLayout(library_pane)
-        library_layout.setContentsMargins(0, 0, 0, 0)
-        library_layout.addLayout(filters)
-        library_layout.addWidget(self.library_view)
-        self._fill_folder_filter()
-
         self.reseed_consent = ReseedConsent(self, lambda: self.settings.client.display_name)
         self.review = ReviewPanel(
             store,
@@ -360,7 +314,7 @@ class MainWindow(QMainWindow):
 
         self.tabs = WorkspaceTabs()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
-        self.library_workspace = LibraryWorkspace(self, library_pane, toolbar, match_toolbar)
+        self.library_workspace = LibraryWorkspace(self, toolbar, match_toolbar)
         self.tabs.addTab(self.library_workspace, self.tr("Library"))
         self.upload_tab = UploadTab(
             store,
@@ -911,8 +865,7 @@ class MainWindow(QMainWindow):
             self.search_tab.focus_search()
             return
         self.tabs.setCurrentIndex(1)
-        self.library_search.setFocus()
-        self.library_search.selectAll()
+        self.library_workspace.reseed.focus_search()
 
     def apply_proxy(self) -> None:
         """Make every connection from now on go through the proxy set in Settings."""
@@ -2576,44 +2529,14 @@ class MainWindow(QMainWindow):
         )
 
     def _fill_folder_filter(self) -> None:
-        current = self.folder_filter.currentData()
-        self.folder_filter.blockSignals(True)
-        self.folder_filter.clear()
-        self.folder_filter.addItem(self.tr("All Library Folders"), None)
-        for f in self.settings.library_folders:
-            self.folder_filter.addItem(str(f.path), f.path)
-        index = self.folder_filter.findData(current)
-        self.folder_filter.setCurrentIndex(max(index, 0))
-        self.folder_filter.blockSignals(False)
-        self._apply_filters()
         if hasattr(self, "library_workspace"):
             self.library_workspace.refresh()
-            self.library_workspace.reseed.refresh()
-
-    def _apply_filters(self) -> None:
-        state = self.state_filter.currentData()  # Qt hands enum data back as plain str
-        self.library_proxy.set_filters(
-            ItemState(state) if state else None,
-            self.folder_filter.currentData(),
-            self.library_search.text(),
-        )
 
     def selected_entries(self) -> list[LibraryEntry]:
-        rows = self.library_view.selectionModel().selectedRows()
-        return [self.library_proxy.data(r, Qt.ItemDataRole.UserRole) for r in rows]
-
-    def _selection_changed(self, selected: QItemSelection, _deselected: QItemSelection) -> None:
-        current = self.library_view.currentIndex()
-        chosen = self.selected_entries()
-        entry = None
-        if current.isValid() and self.library_view.selectionModel().isRowSelected(
-            current.row(), current.parent()
-        ):
-            entry = self.library_proxy.data(current.siblingAtColumn(0), Qt.ItemDataRole.UserRole)
-        elif chosen:
-            entry = chosen[0]
-        if self.review.entry is not entry:
-            self.review.set_entry(entry)
+        board = self.library_workspace.reseed
+        library = board.service().library
+        paths = {row["path"] for row in library.rows()}
+        return [library.entry(path) for path in board.selected_paths if path in paths]
 
     # Batch search ----------------------------------------------------------
 
@@ -3031,16 +2954,11 @@ class MainWindow(QMainWindow):
     def _searches_restored(
         self, restored: list[tuple[LibraryEntry, list[CheckedCandidate]]]
     ) -> None:
-        # Sort once afterwards, not per status and Zen update.
-        self.library_proxy.setDynamicSortFilter(False)
-        try:
-            with self.upload_tab.defer_refresh():
-                for entry, checked in restored:
-                    if self.library_model.contains(entry):
-                        self.review.remember(entry, checked)
-                        self.library_model.set_status(entry.item.path, self._summary(checked))
-        finally:
-            self.library_proxy.setDynamicSortFilter(True)
+        with self.upload_tab.defer_refresh():
+            for entry, checked in restored:
+                if self.library_model.contains(entry):
+                    self.review.remember(entry, checked)
+                    self.library_model.set_status(entry.item.path, self._summary(checked))
 
     def _restore_failed(self, error: Exception) -> None:
         log.warning("could not restore previous searches: %s", error)

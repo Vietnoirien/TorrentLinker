@@ -134,7 +134,7 @@ def test_content_kind_chosen_in_settings_comes_back_as_a_content_kind(qtbot) -> 
     assert folder.kind is ContentKind.MODEL_3D
 
 
-def test_library_state_filter_keeps_only_the_chosen_state(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_library_exposes_seed_states_to_the_shared_view(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
     from torrentlinker.library import LibraryEntry
 
@@ -148,9 +148,8 @@ def test_library_state_filter_keeps_only_the_chosen_state(qtbot, tmp_path: Path)
         ]
     )
 
-    window.state_filter.setCurrentIndex(window.state_filter.findText("Orphan"))
-
-    assert window.library_proxy.rowCount() == 1
+    rows = window.library_workspace.reseed.request("state", {})["rows"]
+    assert [(r["name"], r["state"]) for r in rows] == [("a", "orphan"), ("b", "seeded")]
 
 
 def test_a_typed_folder_path_is_added_to_the_library_folders(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -313,10 +312,9 @@ def test_class_comparison_highlights_the_current_class_and_labels_reuploader_rou
     assert "4.30" in widget.labels[ZenClass.REUPLOADER].text()
 
 
-def test_library_shows_zen_per_day_for_orphans_with_a_match_and_sorts_it(
+def test_library_retains_zen_estimates_for_orphans_with_a_match(
     qtbot, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]
-    from PySide6.QtCore import Qt
 
     from torrentlinker.domain import ItemState, LibraryFolder, LocalItem
     from torrentlinker.gui.library_model import LibraryModel
@@ -343,9 +341,6 @@ def test_library_shows_zen_per_day_for_orphans_with_a_match_and_sorts_it(
     col = LibraryModel.ZEN_COLUMN
     texts = [window.library_model.index(r, col).data() for r in range(3)]
     assert texts[0].startswith("≈") and texts[1].startswith("≈") and texts[2] == ""
-    window.library_proxy.sort(col, Qt.SortOrder.DescendingOrder)
-    top = window.library_proxy.index(0, 0).data(Qt.ItemDataRole.UserRole)
-    assert top is entries[1]
 
 
 def test_band_shows_the_catalogue_age(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

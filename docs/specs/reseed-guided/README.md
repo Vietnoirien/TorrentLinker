@@ -2,6 +2,12 @@
 
 The approved `reseed-prototype.html` is the visual reference. Production uses the same bundled HTML, CSS and JavaScript in Qt WebEngine and the Web UI.
 
+The owner approved the Local Items additions on 2026-11-18. See
+`local-items-preview.md` and the archived preview at `167716a`: compact folder
+and seed-state filters, expandable pack episodes, and Combine in the selection
+toolbar. These extend the existing list and inspector without adding another
+Library landing page.
+
 ## User workflow
 
 - Remise en seed is the Library landing page, with compact item rows and a persistent inspector. On narrow screens the inspector opens as a drawer.

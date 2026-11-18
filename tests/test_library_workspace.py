@@ -2,7 +2,7 @@
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QPushButton, QTabWidget
+from PySide6.QtWidgets import QTabWidget
 
 from tests.test_library_folders import window_for
 
@@ -30,24 +30,14 @@ def library_theme(qapp, monkeypatch):
         qapp.setStyleSheet(stylesheet)
 
 
-def test_candidate_review_can_expand_without_losing_the_local_item(qtbot, tmp_path, monkeypatch):
+def test_library_uses_shared_list_and_review_has_no_duplicate_list(qtbot, tmp_path, monkeypatch):
     window, _ = window_for(qtbot, tmp_path, monkeypatch)
     window.tabs.setCurrentIndex(1)
-    window.library_workspace.sections.setCurrentWidget(window.library_workspace.explorer)
     window.show()
     tabs = window.findChild(QTabWidget, "librarySections")
-    assert tabs is not None
-    assert [tabs.tabText(i) for i in range(tabs.count())] == [
-        "Local Items",
-        "Reseed",
-    ]
-    expand = window.findChild(QPushButton, "expandCandidateReview")
-    assert expand is not None
-    qtbot.mouseClick(expand, Qt.MouseButton.LeftButton)
-    assert not window.library_view.isVisible()
-    assert window.review.isVisible()
-    qtbot.mouseClick(expand, Qt.MouseButton.LeftButton)
-    assert window.library_view.isVisible()
+    assert [tabs.tabText(i) for i in range(tabs.count())] == ["Reseed"]
+    assert not hasattr(window, "library_view")
+    assert window.review.expand_button.isHidden()
     assert [window.review.details_tabs.tabText(i) for i in range(4)] == [
         "Summary",
         "Files",
@@ -56,7 +46,7 @@ def test_candidate_review_can_expand_without_losing_the_local_item(qtbot, tmp_pa
     ]
 
 
-def test_short_review_dialog_scrolls_instead_of_crushing_the_review(qtbot, tmp_path, monkeypatch):
+def test_review_dialog_keeps_candidate_details_readable_when_resized(qtbot, tmp_path, monkeypatch):
     from PySide6.QtWidgets import QDialog, QScrollArea
 
     from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
@@ -82,15 +72,8 @@ def test_short_review_dialog_scrolls_instead_of_crushing_the_review(qtbot, tmp_p
         assert scroll is not None
         review = window.review.height()
         assert review >= window.review.minimumSizeHint().height()
-        for height in (400, 600, 900):
-            workspace.grip.resize_pane(height)
-            qtbot.waitUntil(lambda: workspace.items.geometry().bottom() < workspace.grip.y())
-            assert workspace.grip.geometry().bottom() < window.review.y()
-            assert window.review.height() >= review
-        assert window.library_view.height() > 800
-        assert scroll.verticalScrollBar().maximum() > 0
-        workspace.grip.resize_pane(0)
-        assert workspace.items.height() == workspace.items.minimumSizeHint().height()
+        assert window.review.entry is entry
+        assert not dialog.findChildren(QTabWidget, "librarySections")
         dialog.resize(1400, 1400)
         qtbot.waitUntil(lambda: window.review.height() > 600)
         dialog.close()
@@ -142,10 +125,10 @@ def test_desktop_review_preserves_candidate_selection_across_local_items(
     window.tabs.setCurrentIndex(1)
     window.resize(1600, 1000)
     window.show()
-    window.library_view.selectRow(0)
+    window.review.set_entry(entries[0])
     window.review.candidates.selectRow(1)
-    window.library_view.selectRow(1)
-    window.library_view.selectRow(0)
+    window.review.set_entry(entries[1])
+    window.review.set_entry(entries[0])
     assert window.review.selected().candidate.infohash == "b" * 40
     window.review.candidates.selectRow(0)
     window.review.details_tabs.setCurrentIndex(1)
@@ -234,7 +217,6 @@ def test_disconnected_folder_keeps_items_and_visible_health_warning(qtbot, tmp_p
     MainWindow.scan(window)
     qtbot.waitUntil(lambda: window.scan_action.isEnabled())
     assert window.library_model.rowCount() == 1
-    assert "Scan incomplete" in window.library_workspace.rail.item(1).text()
     assert str(folder) in window.library_workspace.reseed.request("state", {})["folder_errors"]
 
 
@@ -281,11 +263,6 @@ def test_desktop_evidence_inspects_claims_and_keeps_the_original(
     if destination := os.getenv("TL_UI_SCREENSHOTS"):
         Path(destination).mkdir(parents=True, exist_ok=True)
         window.grab().save(str(Path(destination) / "library-features-desktop.png"))
-        qtbot.mouseClick(window.review.expand_button, Qt.MouseButton.LeftButton)
-        qtbot.waitUntil(lambda: not window.library_view.isVisible())
-        assert not window.library_workspace.combine.isVisible()
-        qtbot.wait(100)  # allow queued Qt layout requests before grabbing the rendered panel
-        window.grab().save(str(Path(destination) / "library-evidence-desktop-expanded.png"))
 
 
 def test_desktop_repair_requires_experimental_opt_in(qtbot, tmp_path, library_theme):

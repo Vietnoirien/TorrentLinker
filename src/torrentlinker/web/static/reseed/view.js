@@ -30,6 +30,9 @@ let snapshot = {
   tab = "reseed",
   filter = "",
   query = "",
+  localFolder = "",
+  localState = "",
+  expanded = new Set(),
   selected = "",
   checked = new Set(),
   limit = 100,
@@ -68,6 +71,10 @@ async function refresh() {
     if (g !== generation) return;
     if (JSON.stringify(snapshot) === JSON.stringify(value)) return;
     snapshot = value;
+    const paths = new Set(snapshot.rows.map(r=>r.path));
+    const previousSize = checked.size;
+    checked = new Set([...checked].filter(path=>paths.has(path)));
+    if (checked.size !== previousSize) await api("selection", {paths:[...checked]});
     $("error").textContent = value.error || "";
     if (!snapshot.rows.some((r) => r.path === selected))
       selected = snapshot.rows[0]?.path || "";
@@ -91,12 +98,37 @@ async function perform(action, body = {}) {
     busy = false;
   }
 }
-const visible = () =>
-  snapshot.rows.filter(
-    (r) =>
-      (!filter || r.stage === filter) &&
-      r.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
-  );
+const seedStates = {unknown:"Non vérifié",orphan:"Orphelins",seeded:"En partage","partially-seeded":"Partiellement partagé"};
+function matches(r) {
+  return (!filter || r.stage === filter) && (!localFolder || r.folder === localFolder) &&
+    (!localState || r.state === localState) && r.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+}
+function visible() {
+  const paths = new Set(snapshot.rows.map(r=>r.path)), children = new Map();
+  for (const r of snapshot.rows) if (r.within && paths.has(r.within)) {
+    if (!children.has(r.within)) children.set(r.within, []);
+    children.get(r.within).push(r);
+  }
+  const result = [];
+  for (const r of snapshot.rows) {
+    if (r.within && paths.has(r.within)) continue;
+    const episodes = children.get(r.path) || [], found = episodes.filter(matches);
+    if (matches(r) || found.length) {
+      result.push({...r, episodes:episodes.length, context:!matches(r)});
+      if (expanded.has(r.path) || query || localState || filter) result.push(...found.map(e=>({...e, episode:true})));
+    }
+  }
+  return result;
+}
+function selectionTools() {
+  return `<select id="local-folder" aria-label="${t("Dossier de bibliothèque")}"><option value="">${t("Tous les dossiers")}</option>${(snapshot.setup.folders || []).map(f=>`<option value="${esc(f.local)}" ${localFolder===f.local?"selected":""}>${esc(f.local)}</option>`).join("")}</select><select id="local-state" aria-label="${t("État du partage")}"><option value="">${t("Tous les états")}</option>${Object.entries(seedStates).map(([key,label])=>`<option value="${key}" ${localState===key?"selected":""}>${t(label)}</option>`).join("")}</select></div><div class="tools selection-tools"><button data-command="select">${t("Sélectionner la liste")}</button><small>${checked.size} ${t("sélectionné(s)")}</small><button data-command="clear-selection" ${checked.size?"":"disabled"}>${t("Effacer")}</button><button data-command="combine" ${checked.size>=2?"":"disabled"}>${t("Combiner la sélection")}</button>`;
+}
+function combineForm() {
+  const rows = snapshot.rows.filter(r=>checked.has(r.path));
+  const overlap = rows.some(r=>r.within && checked.has(r.within));
+  const valid = rows.length>=2 && rows.length<=100 && !overlap && !rows.some(r=>r.members) && snapshot.setup.client === "qbittorrent";
+  dialog(()=>`<div class="eyebrow">${t("ÉLÉMENTS LOCAUX")}</div><h2>${t("Combiner la sélection")}</h2><p class="muted">${t("Un regroupement virtuel pour chercher un torrent commun. Aucun fichier ne sera déplacé ni copié.")}</p><form id="combine-form"><label>${t("Nom du regroupement")}<input name="name" required maxlength="200" value="${t("Éléments sélectionnés")}"></label><ul>${rows.map(r=>`<li>${esc(r.name)}</li>`).join("")}</ul><p class="callout">${overlap?t("Sélectionnez le pack ou ses épisodes, pas les deux."):t("qBittorrent uniquement · 2 à 100 éléments réels. Leur parent commun et le mapping du client seront vérifiés.")}</p><p class="muted">${t("Les fichiers du torrent devront être vérifiés avant toute remise en seed. Les contenus manquants ne seront pas téléchargés.")}</p><div class="folder-actions"><button type="button" data-command="close">${t("Annuler")}</button><button class="primary" ${valid?"":"disabled"}>${t("Créer le regroupement")}</button></div></form>`);
+}
 function stateFor(r) {
   const p = snapshot.progress?.active?.[r.path];
   if (snapshot.progress?.paused_paths?.includes(r.path)) return t("En pause");
@@ -153,12 +185,12 @@ function render() {
       )
       .join(
         "",
-      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small><small style="margin-left:auto">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}"><button data-command="select">${checked.size ? checked.size + t(" sélectionnés") : t("Sélectionner la liste")}</button><button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
+      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small><small style="margin-left:auto">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
       rows
         .slice(0, limit)
         .map((r) => {
           const p = progress.active?.[r.path];
-          return `<div class="torrent ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${esc(r.name)}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
+          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${expanded.has(r.path) || !!(query || localState || filter)}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${expanded.has(r.path)?"▾":"▸"}</button>` : ""}${esc(r.name)}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
         })
         .join("") ||
       `<div class="empty">${t("Aucun élément ici. Ajoutez un dossier ou changez le filtre.")}</div>`
@@ -352,9 +384,11 @@ async function handleClick(e) {
     e.target.checked
       ? checked.add(e.target.dataset.check)
       : checked.delete(e.target.dataset.check);
+    await api("selection", {paths:[...checked]});
     render();
     return;
   }
+  if (b?.dataset.pack) { expanded.has(b.dataset.pack) ? expanded.delete(b.dataset.pack) : expanded.add(b.dataset.pack); render(); return; }
   const row = e.target.closest("[data-item]");
   if (row) {
     selected = row.dataset.item;
@@ -431,7 +465,7 @@ async function handleClick(e) {
       else
         await start(
           visible()
-            .filter((r) => r.stage !== "seeding")
+            .filter((r) => !r.context && r.stage !== "seeding")
             .map((r) => r.path),
         );
       break;
@@ -441,8 +475,13 @@ async function handleClick(e) {
     case "batch":
       await start([...checked]);
       break;
+    case "clear-selection":
+      checked.clear(); await api("selection", {paths:[]}); render(); break;
+    case "combine":
+      combineForm(); break;
     case "select":
-      visible().forEach((r) => checked.add(r.path));
+      visible().filter(r=>!r.context).forEach((r) => checked.add(r.path));
+      await api("selection", {paths:[...checked]});
       render();
       break;
     case "pause-item":
@@ -460,6 +499,11 @@ async function handleClick(e) {
   }
   await refresh();
 }
+document.addEventListener("change", e=>{
+  if (!["local-folder","local-state"].includes(e.target.id)) return;
+  if (e.target.id === "local-folder") localFolder=e.target.value; else localState=e.target.value;
+  limit=100; render();
+});
 document.addEventListener("input", (e) => {
   if (e.target.closest("#folder-form")) schedulePreview();
   if (e.target.id === "search") {
@@ -468,7 +512,7 @@ document.addEventListener("input", (e) => {
     const pos = e.target.selectionStart;
     e.target.blur();
     render();
-    $("search").focus();
+    $("search").focus({preventScroll:true});
     $("search").setSelectionRange(pos, pos);
   }
 });
@@ -477,8 +521,14 @@ document.addEventListener("submit", (e) => {
   submit(e).catch(() => {});
 });
 async function submit(e) {
+  if (busy) return;
   const body = Object.fromEntries(new FormData(e.target));
-  if (e.target.id === "folder-form") {
+  if (e.target.id === "combine-form") {
+    const g=generation;
+    const result=await perform("combine", {paths:[...checked],name:body.name});
+    if (g !== generation) return;
+    selected=result.path; checked.clear(); await api("selection", {paths:[]}); localFolder=""; localState=""; filter=""; query=""; drawer=true;
+  } else if (e.target.id === "folder-form") {
     const scan = !!body.scan;
     delete body.scan;
     const saved = await perform("add-folder", { ...body, depth: body.depth === "auto" ? null : Number(body.depth) });
@@ -491,6 +541,7 @@ async function submit(e) {
 window.addEventListener("reseed-environment", (e) => {
   const value = e.detail;
   const languageChanged = value.language !== environment.language;
+  const focusRequested = value.focus_request && value.focus_request !== environment.focus_request;
   const openFolder = value.folder_dialog_request && value.folder_dialog_request !== environment.folder_dialog_request;
   if (value.clear || value.client !== environment.client) {
     generation++;
@@ -499,6 +550,7 @@ window.addEventListener("reseed-environment", (e) => {
     snapshot = { rows: [], setup: { folders: [] }, progress: {} };
     selected = "";
     checked.clear();
+    expanded.clear(); localFolder=""; localState="";
     $("dialog").close();
   }
   if (value.tab && value.tab !== environment.tab) tab = value.tab;
@@ -518,6 +570,7 @@ window.addEventListener("reseed-environment", (e) => {
   render();
   if (languageChanged && $("folder-form")) schedulePreview();
   if (openFolder) folderForm();
+  if (focusRequested) $("search")?.focus({preventScroll:true});
   if (active) refresh();
 });
 window.reseedTransport.then(() => window.reseedReady());

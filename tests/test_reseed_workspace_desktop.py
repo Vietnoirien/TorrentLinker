@@ -117,6 +117,25 @@ def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeyp
         == "Chaque fichier avance à son rythme."
     )
     assert js(qtbot, view, "document.querySelectorAll('.stage').length") == 7
+    js(
+        qtbot,
+        view,
+        "document.querySelector('#local-state').value='seeded'; "
+        "document.querySelector('#local-state').dispatchEvent(new Event('change',{bubbles:true}))",
+    )
+    wait_js(qtbot, view, "document.querySelectorAll('.torrent').length===0")
+    js(
+        qtbot,
+        view,
+        "document.querySelector('#local-state').value='orphan'; "
+        "document.querySelector('#local-state').dispatchEvent(new Event('change',{bubbles:true}))",
+    )
+    wait_js(qtbot, view, "document.querySelectorAll('.torrent').length===1")
+    js(qtbot, view, "document.querySelector('[data-command=select]').click()")
+    qtbot.waitUntil(lambda: len(view.selected_paths) == 1)
+    js(qtbot, view, "document.querySelector('[data-command=clear-selection]').click()")
+    qtbot.waitUntil(lambda: not view.selected_paths)
+
     folder = service.setup.roots[0] / "Films"
     folder.mkdir()
     (folder / "Example.mkv").write_bytes(b"example")
@@ -214,3 +233,43 @@ def test_guided_client_setup_saves_and_selects_tested_profile(qtbot, tmp_path, m
     assert profile.host == "http://fixture:8080"
     assert selected[0].active_client_id == profile.id
     assert "fixture-secret" not in window.settings_path.read_text()
+
+
+def test_shared_desktop_combines_without_moving_files_and_retains_group(
+    qtbot, tmp_path, monkeypatch
+):
+    import json
+
+    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
+    from torrentlinker.library import LibraryEntry
+
+    window, _ = window_for(qtbot, tmp_path, monkeypatch)
+    folder = LibraryFolder(tmp_path / "Series", 1, ContentKind.SERIES)
+    folder.path.mkdir()
+    paths = [folder.path / "Show.S01E01.mkv", folder.path / "Show.S01E02.mkv"]
+    for path in paths:
+        path.write_bytes(b"episode" * 100)
+    window.settings.library_folders = [folder]
+    window.library_model.set_entries(
+        [
+            LibraryEntry(folder, LocalItem(path, {path.name: 700}), ItemState.ORPHAN)
+            for path in paths
+        ]
+    )
+    board = window.library_workspace.reseed
+    with qtbot.waitSignal(board.bridge.response, timeout=5000) as reply:
+        board.bridge.requestAsync(
+            1, "combine", json.dumps({"paths": list(map(str, paths)), "name": "My episodes"})
+        )
+    result = json.loads(reply.args[1])
+    assert "error" not in result
+    group = result["data"]
+    board.refresh_rows()
+    row = next(r for r in board.request("state", {})["rows"] if r["path"] == group["path"])
+    assert row["name"] == "My episodes"
+    assert row["size"] == 1400
+    assert all(path.read_bytes() == b"episode" * 100 for path in paths)
+    other = window.settings.add_client("Other")
+    window.settings.select_client(other.id)
+    board.refresh_rows()
+    assert not any(r.get("members") for r in board.request("state", {})["rows"])

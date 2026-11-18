@@ -111,6 +111,7 @@ class JobRequest(BaseModel):
     feed_mark: Literal["read", "unread", "save", "unsave", "dismiss", "restore"] = "read"
     action: Literal["pause", "resume", "recheck", "remove", "delete"] = "pause"
     hashes: list[str] = Field(default_factory=list, max_length=1000)
+    selection_name: str = Field(default="", max_length=200)
     confirmation: str = ""
     experimental: bool = False
     upload: UploadForm = Field(default_factory=UploadForm)
@@ -722,7 +723,7 @@ class Operations:
         if request.kind == "start-repair":
             return self.library.start_repair(request.repair_id, request.confirmation)
         if request.kind == "combine-library":
-            return self.library.combine(request.paths, stop)
+            return self.library.combine(request.paths, stop, request.selection_name)
         if request.kind == "find-compatible":
             return self.library.compatible(request.path, stop, progress)
         if request.kind == "library-evidence":

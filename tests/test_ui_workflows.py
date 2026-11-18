@@ -42,7 +42,7 @@ def test_sorted_candidates_keep_their_identity_for_replacement_and_rejection(qtb
     assert panel.candidates.item(0, 0).text() == large.candidate.title
 
 
-def test_library_search_combines_with_state_and_folder_filters(qtbot, tmp_path):
+def test_search_shortcut_returns_to_shared_library(qtbot, tmp_path):
     window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
     qtbot.addWidget(window)
     folder = LibraryFolder(tmp_path)
@@ -52,12 +52,6 @@ def test_library_search_combines_with_state_and_folder_filters(qtbot, tmp_path):
         LibraryEntry(folder, LocalItem(tmp_path / "Other.mkv"), ItemState.ORPHAN),
     ]
     window.library_model.set_entries(entries)
-    window.state_filter.setCurrentIndex(window.state_filter.findData(ItemState.ORPHAN))
-    window.library_search.setText(" AMELIE ")
-    assert window.library_proxy.rowCount() == 1
-    assert window.library_proxy.index(0, 0).data() == "Amelie.mkv"
-    window.library_search.clear()
-    assert window.library_proxy.rowCount() == 2
     window.tabs.setCurrentIndex(2)
     assert window.navigation.currentRow() == 2
     window._focus_search()
