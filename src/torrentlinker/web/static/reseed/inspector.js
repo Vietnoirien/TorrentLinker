@@ -192,7 +192,7 @@ function candidateInspector(row) {
     )
     .join(
       "",
-    )}</div><div class="review-content" role="tabpanel">${reviewContent(s, c)}</div><div class="review-actions"><button data-review-action="check" ${!c || pending ? "disabled" : ""}>${t("Vérifier le candidat", "Check Candidate")}</button><button data-review-action="reject" ${!c || pending ? "disabled" : ""}>${t("Écarter", "Reject")}</button></div><div class="review-actions"><button class="primary" data-review-action="seed" ${!c || c.match !== "full" || pending || snapshot.progress?.active?.[row.path] ? "disabled" : ""}>${c?.archive ? t("Extraire et remettre en seed…", "Unpack and reseed…") : t("Vérifier et remettre en seed", "Verify and reseed")}</button></div><div class="review-actions"><button data-review-action="repair" ${!c || pending ? "disabled" : ""}>${t("Diagnostiquer une réparation…", "Diagnose repair…")}</button><button data-review-action="repair-history">${t("Historique des réparations…", "Repair history…")}</button></div><p class="review-message" role="status">${esc(s.message)}</p></div>`;
+    )}</div><div class="review-content" role="tabpanel">${reviewContent(s, c)}</div><div class="review-actions"><button data-review-action="check" ${!c || pending ? "disabled" : ""}>${t("Vérifier le candidat", "Check Candidate")}</button><button data-review-action="reject" ${!c || pending ? "disabled" : ""}>${t("Écarter", "Reject")}</button></div><div class="review-actions"><button class="primary" data-review-action="seed" ${!c || !(c.match === "full" || (c.archive && c.match === "partial")) || pending || snapshot.progress?.active?.[row.path] ? "disabled" : ""}>${c?.archive ? t("Extraire et remettre en seed…", "Unpack and reseed…") : t("Vérifier et remettre en seed", "Verify and reseed")}</button></div><div class="review-actions"><button data-review-action="repair" ${!c || pending ? "disabled" : ""}>${t("Diagnostiquer une réparation…", "Diagnose repair…")}</button><button data-review-action="repair-history">${t("Historique des réparations…", "Repair history…")}</button></div><p class="review-message" role="status">${esc(s.message)}</p></div>`;
 }
 async function loadReviewTab(s) {
   if (s.tab === "evidence" && s.provenance === null)
@@ -230,18 +230,18 @@ document.addEventListener(
       return;
     }
     if (action === "repair-history") {
-      perform("repair-history").catch(() => {});
+      openRecovery("history");
       return;
     }
     if (action === "repair") {
-      perform("repair", { path: s.path, key: s.key }).catch(() => {});
+      openRecovery("repair", { path: s.path, key: s.key });
       return;
     }
     if (action === "seed") {
       const c = s.rows.find((c) => c.key === s.key);
-      if (c && c.match === "full") {
+      if (c && (c.match === "full" || (c.archive && c.match === "partial"))) {
         if (c.archive)
-          perform("archive", { path: s.path, key: c.key }).catch(() => {});
+          openRecovery("archive", { path: s.path, key: c.key });
         else
           start([s.path], c.key)
             .then(refresh)

@@ -83,6 +83,7 @@ class JobRequest(BaseModel):
         "reseed",
         "reseed-workspace",
         "preview-unpack",
+        "refresh-unpack",
         "unpack-reseed",
         "check-all",
         "reseed-all",
@@ -716,6 +717,10 @@ class Operations:
         if request.kind == "scan":
             return self.library.scan(stop, progress, request.paths or None)
         if request.kind == "diagnose-repair":
+            from torrentlinker.domain import TorrentClient
+
+            if self.setup.settings.client != TorrentClient.QBITTORRENT:
+                raise ValueError("Experimental repair currently requires qBittorrent.")
             from torrentlinker.review import candidate_key, remembered_candidates
 
             indexer = self.setup.indexer()
@@ -776,6 +781,10 @@ class Operations:
             )
         if request.kind == "search-library":
             return self.library.search_items(request.paths, stop, progress)
+        if request.kind == "refresh-unpack":
+            if len(request.hashes) != 1:
+                raise ValueError("Select one archive torrent.")
+            return self.archives.status(request.hashes[0])
         if request.kind == "preview-unpack":
             return self.archives.preview(request.path, request.candidate_key, stop)
         if request.kind == "unpack-reseed":

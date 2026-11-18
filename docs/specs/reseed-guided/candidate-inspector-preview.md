@@ -18,8 +18,8 @@ existing sanitized renderer; external artwork is represented by placeholders.
 
 The duplicate Web candidate/evidence page and native review-dialog entry are
 removed. The native ReviewPanel controller remains private for existing batch and
-archive operations. Protected repair and archive dialogs retain their existing
-confirmation workflows pending #98; they do not reopen candidate inspection.
+archive operations. Protected repair and archive dialogs now use the approved shared #98 extension
+documented in `repair-archive-preview.md`; they do not reopen candidate inspection.
 
 Validation uses the pre-agreed public Library and desktop/Web interfaces. No live
 tracker actions or real library mutations are performed by automated tests.

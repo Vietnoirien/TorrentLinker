@@ -27,13 +27,13 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
 | 7 | Reseed landing | **BV** `ReseedBoard` | `reseed.js` iframe | **Done** | `reseed-guided/` (WebView) | folder picker vs server browser (deliberate) |
-| 8 | Local Items + candidate review | **BV** shared Local Items and candidate/evidence inspector | Same bundled list and candidate/evidence inspector | **Done** (#96/#97); protected repair remains #98 | `reseed-guided/local-items-preview.md`, `reseed-guided/candidate-inspector-preview.md` | shared filters, packs, Combine, decisions, details and offline provenance; existing archive/repair confirmations retained |
+| 8 | Local Items + candidate review | **BV** shared Local Items and candidate/evidence inspector | Same bundled list and candidate/evidence inspector | **Done** (#96/#97/#98) | `reseed-guided/local-items-preview.md`, `reseed-guided/candidate-inspector-preview.md` | shared filters, packs, Combine, decisions, details and offline provenance; shared approved archive/repair confirmations |
 | 9 | Library Folders | **BV** `ReseedBoard` Folders page | Same bundled Folders page | **Done** (#95) | `reseed-guided/folders-activity-implementation.md` | Settings editor remains separate (#113) |
 | 10 | Add/Edit Library Folder | Shared dialog with live Local Item preview | Same dialog and read-only preview API | **Done** (#95) | Approved dialog archived at `e5d8f962` | native picker vs server browser (deliberate) |
 | 11 | Activity / Activité | Shared event list plus session status log | Same event list plus persisted Library jobs | **Done** (#95) | `reseed-guided/folders-activity-implementation.md` | Web job Cancel/Details remain in global Activity |
 | 12 | Disk-rename consent | Native `ReseedConsent`, `RenameDialog` | none; Web refuses (`web/library.py:576`, `web/archives.py:70`) | DO | ADR-0013/0017 | — |
-| 13 | Unpack-and-reseed dialog | Native `ReseedDialog` | `library.js` jobs | NU | none | — |
-| 14 | Repair-copy dialog | Native `RepairDialog` | `library.js` | NU | `library-evidence.md` | — |
+| 13 | Unpack-and-reseed and Repair Copy | **BV** shared approved dialogs | Same bundled dialogs and job services | **Done** (#98) | `reseed-guided/repair-archive-preview.md` | native destination picker vs server browser |
+| 14 | Repair-copy dialog | **BV** shared repair/history/confirmation dialogs | Same bundled dialogs | **Done** (#98) | `reseed-guided/repair-archive-preview.md`, `library-evidence.md` | experimental qBittorrent-only independent copies |
 | 15 | Evidence panel | Native `LibraryEvidence` (ReviewPanel tab) | `#candidate-evidence` | NU | `library-evidence.md` | file chooser, MediaInfo |
 
 ### Upload

@@ -116,12 +116,15 @@ class ReseedBoard(BundledView):
         self.folder_dialog_request = 0
         self.focus_request = 0
         self.scanning = False
+        self.recovery_jobs = None
+        self.recovery_request = None
         super().__init__(ReseedBridge(self), ASSETS, "reseed", window.settings.language)
         self.setMinimumHeight(620)
         window.library_model.modelReset.connect(self.refresh_rows)
         app = QApplication.instance()
         if app:
             app.aboutToQuit.connect(self.stop_run)
+            app.aboutToQuit.connect(self.close_recovery)
         self.refresh_rows()
 
     def service(self):
@@ -163,6 +166,7 @@ class ReseedBoard(BundledView):
                 "tab": self.requested_tab,
                 "folder_dialog_request": self.folder_dialog_request,
                 "focus_request": self.focus_request,
+                "recovery_request": self.recovery_request,
             }
         )
         self.bridge.ready()
@@ -180,7 +184,22 @@ class ReseedBoard(BundledView):
             setup = self.service().setup.snapshot()
             return {
                 "rows": self.rows,
-                "activity": self.activity,
+                "activity": self.activity
+                + (
+                    [
+                        {
+                            "at": row["created"],
+                            "kind": row["kind"],
+                            "status": row["status"],
+                            "message": row["error"],
+                        }
+                        for row in self.recovery_jobs.jobs.list()
+                        if row["client_id"] == self.owner.settings.active_client_id
+                        and row["kind"] not in {"refresh-unpack", "refresh-repair"}
+                    ]
+                    if self.recovery_jobs
+                    else []
+                ),
                 "folder_errors": self.scan_errors,
                 "setup": setup,
                 "running": self.running,
@@ -238,51 +257,12 @@ class ReseedBoard(BundledView):
             if url.scheme() not in {"http", "https"} or not url.host() or url.userInfo():
                 raise ValueError("Invalid public link.")
             QDesktopServices.openUrl(url)
-        elif action == "repair-history":
-            from torrentlinker.gui.repair_dialog import RepairDialog
+        elif action in {"recovery-start", "recovery-job", "recovery-cancel"}:
+            from torrentlinker.gui.recovery_jobs import RecoveryJobs
 
-            library = self.service().library
-            RepairDialog(self, library.repairs(), library.repair_client()).exec()
-        elif action == "archive":
-            from torrentlinker.review import candidate_key, remembered_candidates, restore_checked
-
-            library = self.service().library
-            entry = library.entry(body["path"])
-            indexer = library.setup.indexer()
-            found = remembered_candidates(library.setup.store, indexer, entry.item.path) or []
-            candidates = restore_checked(
-                indexer, entry.item, found, library.setup.settings.matching.rules()
-            )
-            checked = next(
-                (c for c in candidates if candidate_key(c.candidate) == body["key"]), None
-            )
-            if checked is None or checked.unpack is None:
-                raise ValueError("Select a current archive Candidate first.")
-            self.owner.review.reseed_archive(entry, checked)
-        elif action == "repair":
-            from torrentlinker.gui.repair_dialog import RepairDialog
-            from torrentlinker.review import candidate_key, remembered_candidates
-
-            library = self.service().library
-            indexer = library.setup.indexer()
-            candidates = (
-                remembered_candidates(library.setup.store, indexer, Path(body["path"])) or []
-            )
-            candidate = next((c for c in candidates if candidate_key(c) == body["key"]), None)
-            if candidate is None:
-                raise ValueError("Select a current Candidate first.")
-            dialog = RepairDialog(
-                self,
-                library.repairs(),
-                library.repair_client(),
-                diagnose=lambda stop: library.diagnose(
-                    body["path"],
-                    candidate,
-                    indexer.fetch_torrent(candidate),
-                    stop,
-                ),
-            )
-            dialog.exec()
+            if self.recovery_jobs is None:
+                self.recovery_jobs = RecoveryJobs(self)
+            return self.recovery_jobs.request(action, body)
         elif action in {"settings", "add-folder", "remove-folder", "save-root"}:
             if self.running or self.scanning or self.configuring:
                 raise ValueError("Stop the current operation before changing settings.")
@@ -341,6 +321,19 @@ class ReseedBoard(BundledView):
         else:
             raise ValueError("Unknown reseed operation.")
         return {"ok": True}
+
+    def open_recovery(self, view, path, key):
+        import time
+
+        self.owner.tabs.setCurrentWidget(self.owner.library_workspace)
+        self.owner.library_workspace.sections.setCurrentWidget(self)
+        self.recovery_request = {"id": time.monotonic_ns(), "view": view, "path": path, "key": key}
+        self.refresh()
+
+    def close_recovery(self):
+        if self.recovery_jobs is not None:
+            self.recovery_jobs.close()
+            self.recovery_jobs = None
 
     def add_client(self, body, done, failed):
         if self.running or self.scanning or self.configuring:

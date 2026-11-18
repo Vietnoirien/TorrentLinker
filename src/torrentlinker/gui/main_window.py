@@ -69,7 +69,7 @@ from torrentlinker.catalogue_sync import (
 from torrentlinker.category_tags import sync_category_tags
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
-from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, TorrentClient
+from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.downloads import IndexerCategory
 from torrentlinker.ebooks import UNLOCK_COUNT, book_categories, book_roots, seeded_ebooks
 from torrentlinker.gui.batch_runner import BatchRunner
@@ -286,9 +286,7 @@ class MainWindow(QMainWindow):
             approve_disk_renames=self.reseed_consent.approve,
         )
         self.review.compatible_categories = lambda kind: self.settings.categories(kind)
-        self.review.repair_supported = lambda: self.settings.client is TorrentClient.QBITTORRENT
         self.review.reseed_started.connect(self._reseed_started)
-        self.review.unpacked.connect(lambda _folder: self.scan())  # show the new folder
         self.review.candidates_checked.connect(self._show_match_zen)
         self.zen_tab = ZenTab(self.seeding_loader, lambda: self.settings.zen, settings.uploads)
         from torrentlinker.gui.community_view import CommunityView
@@ -315,6 +313,7 @@ class MainWindow(QMainWindow):
         self.tabs = WorkspaceTabs()
         self.tabs.addTab(self.zen_tab, self.tr("Zen"))
         self.library_workspace = LibraryWorkspace(self, toolbar, match_toolbar)
+        self.review.recovery_requested.connect(self.library_workspace.reseed.open_recovery)
         self.tabs.addTab(self.library_workspace, self.tr("Library"))
         self.upload_tab = UploadTab(
             store,

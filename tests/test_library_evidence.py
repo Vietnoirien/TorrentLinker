@@ -203,6 +203,7 @@ def test_near_match_diagnostic_counts_valid_bytes_without_modifying_original(tmp
     )
     result = library.diagnose(str(video), candidate, data, threading.Event())
     assert result["verified_bytes"] == len(original) - meta.piece_length
+    assert result["size_difference"] == 0
     assert result["eligible"] is True
     assert result["status"] == "awaiting-confirmation"
     assert video.read_bytes() == b"X" * 128 + original[128:]
