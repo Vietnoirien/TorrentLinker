@@ -51,6 +51,16 @@ def test_profile_first_pair_snapshot_disconnect_browser(tmp_path, monkeypatch):
             panel = page.frame_locator("#profile-frame")
             page.set_viewport_size({"width": 2100, "height": 1100})
             assert (
+                panel.locator(".pf-grid2").evaluate(
+                    "e => getComputedStyle(e).gridTemplateColumns.split(' ').length"
+                )
+                == 3
+            )
+            assert panel.locator("#profile-transfers").evaluate(
+                "e => e.getBoundingClientRect().top === "
+                "document.querySelector('#profile-progression').getBoundingClientRect().top"
+            )
+            assert (
                 panel.locator("#zen-profile-panel").evaluate(
                     "e => document.documentElement.clientWidth - e.getBoundingClientRect().right"
                 )

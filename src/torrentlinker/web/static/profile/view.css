@@ -546,6 +546,14 @@ button:disabled {
 .pf-tablewrap {
   overflow-x: auto;
 }
+@media (min-width: 1600px) {
+  .pf-grid2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .pf-wide {
+    grid-column: auto;
+  }
+}
 @media (max-width: 1100px) {
   .pf-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));

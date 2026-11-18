@@ -309,6 +309,13 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
         ".gridTemplateColumns.split(' ').length"
     )
     assert js(qtbot, view, columns) == 6
+    view.resize(1800, 1000)
+    wait_js(
+        qtbot,
+        view,
+        "getComputedStyle(document.querySelector('.pf-grid2'))"
+        ".gridTemplateColumns.split(' ').length === 3",
+    )
     view.resize(900, 1200)
     wait_js(qtbot, view, columns + " === 3")
     view.resize(600, 1200)
