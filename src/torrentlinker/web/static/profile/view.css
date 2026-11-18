@@ -358,9 +358,6 @@ button:disabled {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
-.pf-wide {
-  grid-column: 1 / -1;
-}
 .pf-level {
   display: flex;
   gap: 16px;
@@ -549,9 +546,6 @@ button:disabled {
 @media (min-width: 1600px) {
   .pf-grid2 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .pf-wide {
-    grid-column: auto;
   }
 }
 @media (max-width: 1100px) {

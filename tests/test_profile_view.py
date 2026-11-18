@@ -321,7 +321,7 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
             view,
             "getComputedStyle(document.querySelector('#profile-sync')).gridColumnEnd",
         )
-        == "-1"
+        == "auto"
     )
     view.resize(1800, 1000)
     wait_js(
