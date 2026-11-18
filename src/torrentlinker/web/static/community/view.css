@@ -188,6 +188,13 @@ h3 {
   border-radius: 12px;
   padding: 22px;
 }
+.paused-notice {
+  padding: 14px 16px;
+  margin: 14px 0;
+}
+.paused-notice .help {
+  margin: 8px 0 10px;
+}
 .shell {
   display: grid;
   grid-template-columns: 188px minmax(0, 1fr);

@@ -322,6 +322,9 @@ class CommunityActions:
             and len(values["templates"]["comment"].strip()) < 3
         ):
             raise ValueError("Write a comment template before enabling automatic comments.")
+        if values["automation"]["enabled"] and not previous["automation"]["enabled"]:
+            # Planning slots the queue would never send looks like a broken schedule.
+            values["enabled"] = True
         with self._db() as db:
             self._account(db, account)
             db.execute(

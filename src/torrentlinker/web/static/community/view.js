@@ -208,7 +208,7 @@
       (i) => !["posted", "cancelled"].includes(i.state),
     ).length;
     $("community-app").innerHTML =
-      `<div class="community-controls"><span class="sync">${!data.paired ? t("Connectez le compagnon dans les paramètres pour publier.", "Connect the companion in Settings to publish.") : ""}</span>${btn(icon("zen") + " " + (data.settings.automation.enabled ? t("Auto · actif", "Auto · active") : t("Mode automatique", "Automatic mode")), "automation", "small")}${btn(icon("settings"), "settings", "ghost small", `aria-label="${t("Réglages de la communauté", "Community settings")}"`)}</div><section class="row between heading"><div><h2 class="content-heading">${t("Chaque contribution compte.", "Every contribution counts.")}</h2><p class="muted">${t("Retrouvez vos torrents, participez et gardez le fil.", "Find your torrents, take part and keep track.")}</p></div><div class="metrics">${kinds
+      `<div class="community-controls"><span class="sync">${!data.paired ? t("Connectez le compagnon dans les paramètres pour publier.", "Connect the companion in Settings to publish.") : ""}</span>${btn(icon("zen") + " " + (!data.settings.automation.enabled ? t("Mode automatique", "Automatic mode") : data.settings.enabled ? t("Auto · actif", "Auto · active") : t("Auto · en pause", "Auto · paused")), "automation", "small")}${btn(icon("settings"), "settings", "ghost small", `aria-label="${t("Réglages de la communauté", "Community settings")}"`)}</div><section class="row between heading"><div><h2 class="content-heading">${t("Chaque contribution compte.", "Every contribution counts.")}</h2><p class="muted">${t("Retrouvez vos torrents, participez et gardez le fil.", "Find your torrents, take part and keep track.")}</p></div><div class="metrics">${kinds
         .map((k) => {
           const q = data.quotas[k],
             used = q.site_used ?? q.local_used;
@@ -785,7 +785,7 @@
         ? `<p>${item.vote === "approve" ? t("Approuver", "Approve") : t("Désapprouver", "Disapprove")}</p>`
         : "";
     openDrawer(
-      `<div class="eyebrow">${t("Détail de l’opération", "Operation details")} · ${item.source === "automatic" ? t("Automatique", "Automatic") : t("Manuelle", "Manual")}</div><h2>${e(item.title)}</h2><div class="row">${badge(item.state)}<span class="tiny muted">${kindName(item.kind)}</span></div><div class="line"></div><h3>${fullDate(dateKey(date(at(item))))} · ${time(at(item))}</h3><p class="help">${t("Créneau estimé. Les limites du site et la disponibilité du navigateur peuvent retarder l’envoi.", "Estimated slot. Site limits and browser availability may delay sending.")}</p><div class="chat-preview" style="white-space:pre-wrap">${e(item.content)}${voteText}</div>${item.note ? `<p class="help">${e(item.note)}</p>` : ""}${
+      `<div class="eyebrow">${t("Détail de l’opération", "Operation details")} · ${item.source === "automatic" ? t("Automatique", "Automatic") : t("Manuelle", "Manual")}</div><h2>${e(item.title)}</h2><div class="row">${badge(item.state)}<span class="tiny muted">${kindName(item.kind)}</span></div><div class="line"></div><h3>${fullDate(dateKey(date(at(item))))} · ${time(at(item))}</h3><p class="help">${t("Créneau estimé. Les limites du site et la disponibilité du navigateur peuvent retarder l’envoi.", "Estimated slot. Site limits and browser availability may delay sending.")}</p>${!data.settings.enabled && ["queued", "paused"].includes(item.state) ? `<div class="panel paused-notice"><span class="pill amber">${icon("pause")} ${t("Envois en pause", "Sending paused")}</span><p class="help">${t("Rien n’est publié tant que les actions programmées sont en pause.", "Nothing is published while scheduled actions are paused.")}</p>${btn(icon("play") + t("Reprendre les envois", "Resume sending"), "pause", "small")}</div>` : ""}<div class="chat-preview" style="white-space:pre-wrap">${e(item.content)}${voteText}</div>${item.note ? `<p class="help">${e(item.note)}</p>` : ""}${
         editable.includes(item.state)
           ? `<div class="row wrap">${btn(t("Modifier / reprogrammer", "Edit / reschedule"), "edit", "primary", `data-id="${e(item.id)}"`)}${[
               ["queue", t("Mettre en file", "Queue")],
@@ -1105,12 +1105,13 @@
                 calendarAnchor.getDate() + step * 7,
               );
         render();
-      } else if (cmd === "pause")
+      } else if (cmd === "pause") {
         await change("settings", {
           ...data.settings,
           enabled: !data.settings.enabled,
         });
-      else if (cmd === "period") {
+        if (b.closest(".paused-notice")) closeDrawer();
+      } else if (cmd === "period") {
         historyPeriod = b.dataset.period;
         render();
       } else if (cmd === "history-day") {

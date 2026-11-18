@@ -347,3 +347,23 @@ def test_cooldown_crosses_midnight_even_when_daily_quota_resets(tmp_path):
     assert item["next_at"] == clock[0] + 50
     clock[0] += 50
     assert q.claim("42")["id"] == second
+
+
+def test_turning_on_automatic_mode_runs_scheduled_actions_until_paused(tmp_path):
+    now = datetime(2026, 11, 17, 10, tzinfo=UTC).timestamp()
+    q = CommunityActions(tmp_path, lambda: now)
+    q.observe("42", observation())
+    settings = deepcopy(DEFAULTS)
+    settings["templates"]["comment"] = "Merci pour le partage de {titre}"
+    settings["automation"]["enabled"] = True
+    settings["automation"]["kinds"]["comment"] = True
+    q.settings("42", settings)
+    # Automatic mode must not plan comments that the queue would never send.
+    assert q.state("42")["settings"]["enabled"]
+    assert q.claim("42")["kind"] == "comment"
+    settings = q.state("42")["settings"]
+    settings["enabled"] = False
+    q.settings("42", settings)
+    settings["automation"]["start"] = "08:00"
+    q.settings("42", settings)
+    assert not q.state("42")["settings"]["enabled"]
