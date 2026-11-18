@@ -99,6 +99,14 @@ def test_profile_first_pair_snapshot_disconnect_browser(tmp_path, monkeypatch):
             page.locator("#language").select_option("en")
             page.locator("#theme").select_option("dark")
             expect(panel.locator("html")).to_have_attribute("data-theme", "dark")
+            page.set_viewport_size({"width": 1500, "height": 700})
+            panel.locator("html").evaluate("() => window.scrollTo(0, 200)")
+            scroll = panel.locator("html").evaluate("() => window.scrollY")
+            assert scroll > 100
+            setup.profile_workspace().community.observe("42", observation(today=4))
+            expect(panel.locator("#profile-contribution")).to_contain_text("4 / 5", timeout=10000)
+            assert abs(panel.locator("html").evaluate("() => window.scrollY") - scroll) <= 1
+            page.set_viewport_size({"width": 1500, "height": 1100})
             # A profile invalidated by a settings change refreshes without a click.
             import httpx
 

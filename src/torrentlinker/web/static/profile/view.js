@@ -296,7 +296,11 @@ const chartResize = new ResizeObserver((entries) => {
       changed = true;
     }
   }
-  if (changed && chartOverview) showProfileCharts(chartOverview);
+  if (changed && chartOverview) {
+    const scroll = { left: window.scrollX, top: window.scrollY };
+    showProfileCharts(chartOverview);
+    window.scrollTo(scroll);
+  }
 });
 for (const id of ["profile-volumes", "profile-zen-chart"])
   chartResize.observe($(id));
@@ -1179,6 +1183,7 @@ function showZenProfile(data) {
 }
 
 window.addEventListener("profile-environment", ({ detail: env }) => {
+  const scroll = { left: window.scrollX, top: window.scrollY };
   TLPanel.setLanguage(env.language);
   document.documentElement.dataset.theme = env.theme;
   profileDays = env.days;
@@ -1196,6 +1201,7 @@ window.addEventListener("profile-environment", ({ detail: env }) => {
     say("Key figures", "Chiffres clés"),
   );
   if (env.notice) $("profile-notice").textContent = env.notice;
+  window.scrollTo(scroll);
 });
 TLPanel.connect("profile").then((request) => {
   const run = async (path, body) => {

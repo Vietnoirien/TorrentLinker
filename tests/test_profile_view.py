@@ -346,6 +346,17 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
     view.resize(600, 1200)
     wait_js(qtbot, view, columns + " === 2")
     wait_js(qtbot, view, text_size_is_stable)
+    for width in (1800, 1400, 600):
+        view.resize(width, 650)
+        qtbot.wait(100)
+        for offset in (200, 450, 700):
+            js(qtbot, view, f"window.scrollTo(0, {offset})")
+            position = js(qtbot, view, "window.scrollY")
+            assert position > 100
+            for _ in range(3):
+                view.show_state(workspace.state(), history)
+                qtbot.wait(100)
+                assert abs(js(qtbot, view, "window.scrollY") - position) <= 1
     with qtbot.waitSignal(view.refresh_requested):
         js(qtbot, view, "document.querySelector('#profile-refresh').click()")
     view.language = "fr"
