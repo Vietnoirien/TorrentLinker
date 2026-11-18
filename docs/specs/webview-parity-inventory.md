@@ -53,12 +53,10 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | 21 | Torrent details / tabs | Shared Search detail tabs; readonly RSS dialog | Same bundled detail tabs | **Done** (#101) | `search-redesign.md` addendum | inline images/retry, movable tabs, Download now with category routing; browser-reserved Ctrl shortcuts remain a platform limit |
 
 ### RSS
-
-| # | Surface | Desktop | Web | Status | Spec | Blockers |
-|---|---|---|---|---|---|---|
-| 22 | Inbox / subscriptions | Native `FeedsTab` | `feeds.js` | NU | `rss-redesign.md` (status line stale) | — |
-| 23 | Subscription editor | Native `FeedEditor`, `feed_criteria.py` | `feeds.js` | NU | `rss-redesign.md` | — |
-| 24 | Compare clients / saved selections | Native dialogs (`feeds.py:413-501`) | `feeds.js` | NU | none | — |
+- Shared under #102: inbox, subscription editor and category criteria, client comparison, saved selections, relative dates and queue explanation.
+- Both hosts load `static/feeds/view.html`; global legacy rules and unknown categories survive editing.
+- Deliberate host difference: desktop RSS details use the shared readonly modal; Web uses Search's movable detail tabs.
+- Torznab category collisions and missing structured facts remain source limitations. See `rss-guided/implementation.md`.
 
 ### Torrents
 

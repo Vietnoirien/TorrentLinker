@@ -669,6 +669,8 @@ def _parse_items(xml: str) -> list[Candidate]:
                         "subtitles",
                         "format",
                         "bitrate",
+                        "platform",
+                        "license",
                     }
                 },
             )

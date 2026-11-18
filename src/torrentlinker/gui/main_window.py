@@ -326,7 +326,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.search_tab, self.tr("Search"))
         from torrentlinker.gui.feeds import FeedsTab
 
-        self.feeds_tab = FeedsTab(lambda: self.assistant_service().agent.feed_control)
+        self.feeds_tab = FeedsTab(lambda: self.assistant_service().agent.feed_control, self)
         self.tabs.addTab(self.feeds_tab, self.tr("RSS"))
         self.search_tab.subscribe_requested.connect(lambda query: self.feeds_tab.edit(query=query))
         self.torrents_tab = TorrentsTab(self.qbit)

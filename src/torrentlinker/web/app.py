@@ -336,6 +336,7 @@ def create_app(
             "/static/upload/view.html",
             "/static/profile/view.html",
             "/static/search/view.html",
+            "/static/feeds/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
