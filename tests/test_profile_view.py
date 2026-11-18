@@ -249,16 +249,6 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
         )
         < 40
     )
-    assert (
-        js(
-            qtbot,
-            view,
-            "(() => { const r = document.querySelector('#zen-profile-panel')"
-            ".getBoundingClientRect();"
-            " return Math.abs(r.left - (innerWidth - r.right)); })()",
-        )
-        <= 1
-    )
     view.show_state(workspace.state(), history)
     wait_js(qtbot, view, "document.querySelectorAll('#profile-volumes svg').length === 1")
     assert "+30 B" in js(qtbot, view, "document.querySelector('#profile-tiles').textContent")

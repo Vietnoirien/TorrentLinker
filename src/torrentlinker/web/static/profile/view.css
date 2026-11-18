@@ -22,11 +22,11 @@
 }
 body {
   margin: 0;
-  padding: 16px;
+  padding: 16px 16px 16px 8px;
 }
 html {
   overflow-y: auto;
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: stable;
 }
 button {
   font: inherit;
