@@ -7355,6 +7355,14 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
 <context>
     <name>SearchTab</name>
     <message>
+        <source>Choose a folder</source>
+        <translation>Choisir un dossier</translation>
+    </message>
+    <message>
+        <source>The torrent will be queued using its configured category folder.</source>
+        <translation>Le torrent sera mis en file dans le dossier configuré pour sa catégorie.</translation>
+    </message>
+    <message>
         <location filename="../gui/search_view.py" line="200"/>
         <source>Subscribe to RSS</source>
         <translation>S&apos;abonner au RSS</translation>

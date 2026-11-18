@@ -335,6 +335,7 @@ def create_app(
             "/static/reseed/view.html",
             "/static/upload/view.html",
             "/static/profile/view.html",
+            "/static/search/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
@@ -342,7 +343,12 @@ def create_app(
                 "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                 + (
                     "img-src data:; "
-                    if route in {"/static/profile/view.html", "/static/upload/view.html"}
+                    if route
+                    in {
+                        "/static/profile/view.html",
+                        "/static/upload/view.html",
+                        "/static/search/view.html",
+                    }
                     else "img-src 'self'; "
                 )
                 + "frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
@@ -646,6 +652,15 @@ def create_app(
             service.secrets.update({"announce-url": body.value})
         return {"ok": True}
 
+    @app.post("/api/search/workspace/{action}")
+    def search_workspace(action: str, body: dict, client_id: str = ""):
+        from torrentlinker.search_workspace import SearchWorkspace
+
+        try:
+            return SearchWorkspace(for_client(client_id), jobs).request(action, body)
+        except (ValueError, KeyError) as error:
+            raise HTTPException(400, str(error)) from error
+
     @app.post("/api/upload/workspace/{action}")
     def upload_workspace(action: str, body: dict, client_id: str = "") -> dict | list:
         from torrentlinker.upload_workspace import UploadWorkspace
@@ -744,9 +759,9 @@ def create_app(
             raise ValueError("Unknown reseed operation.")
         return {"paused_paths": sorted(target.paused_paths())}
 
-    from torrentlinker.poster_cache import PosterCache, valid_poster_url
+    from torrentlinker.poster_cache import shared_poster_cache, valid_poster_url
 
-    posters = PosterCache(directory / "posters")
+    posters = shared_poster_cache(directory / "posters")
 
     @app.get("/api/poster")
     def poster(url: str = Query("", max_length=300)) -> Response:

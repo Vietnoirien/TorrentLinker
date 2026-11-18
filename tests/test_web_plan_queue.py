@@ -12,7 +12,7 @@ def test_plan_queue_batches_selected_hashes_and_waits_for_each_client_job():
     if not node:
         pytest.skip("Node.js is required for the web handler test")
     source = Path("src/torrentlinker/web/static/app.js").read_text()
-    handler = source.split('$("queue-plan").onclick = ', 1)[1].split('\n$("start-queue")', 1)[0]
+    handler = source.split('$("queue-plan").onclick = ', 1)[1].split("\nsetInterval(", 1)[0]
     waiter = "async function waitForJob" + source.split("async function waitForJob", 1)[1]
     # Run the actual handler and completion polling, with only transport/UI stubbed.
     script = r"""
@@ -58,17 +58,19 @@ def test_queue_actions_batch_the_entire_selection_and_refresh_after_failure():
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is required for the web handler test")
-    source = Path("src/torrentlinker/web/static/app.js").read_text()
+    source = Path("src/torrentlinker/web/static/search/queue.js").read_text()
     handler = (
-        "async function editQueue"
-        + source.split("async function editQueue", 1)[1].split('\n$("retry-queue")', 1)[0]
+        "async function queueAction"
+        + source.split("async function queueAction", 1)[1].split('\n$("start-queue")', 1)[0]
     )
     script = r"""
 const assert = require('node:assert/strict');
 const keys = Array.from({length: 2001}, (_, i) => String(i));
 const calls = [];
 let refreshed = 0, fail = false;
-const api = async (path, batch) => {
+let queueSnapshot = "old";
+const request = async (path, body) => {
+  const batch = body.keys;
   assert(batch.length <= 1000);
   calls.push([path, batch]);
   if (fail) throw Error('busy');
@@ -76,14 +78,14 @@ const api = async (path, batch) => {
 const loadQueue = async () => { refreshed++; };
 eval(process.argv[1]);
 (async () => {
-  await editQueue('remove', keys);
+  await queueAction('remove', {keys});
   assert.deepEqual(calls.map(c => c[1].length), [1000, 1000, 1]);
   assert.deepEqual(calls.flatMap(c => c[1]), keys);
-  assert(calls.every(c => c[0] === 'queue/remove'));
+  assert(calls.every(c => c[0] === 'remove'));
   assert.equal(refreshed, 1);
   fail = true;
-  await assert.rejects(editQueue('retry', keys), /busy/);
-  assert.equal(calls.at(-1)[0], 'queue/retry');
+  await assert.rejects(queueAction('retry', {keys}), /busy/);
+  assert.equal(calls.at(-1)[0], 'retry');
   assert.equal(refreshed, 2);
 })().catch(error => { console.error(error); process.exitCode=1; });
 """

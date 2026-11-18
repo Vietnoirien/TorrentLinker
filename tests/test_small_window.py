@@ -27,7 +27,7 @@ def test_small_window_keeps_every_workspace_action_reachable(
             window.zen_tab.seeding_view.refresh_button,
             window.review.reseed_button,
             window.upload_workspace,
-            window.search_tab.add_button,
+            window.search_tab.board,
         ]
         for index, control in enumerate(controls):
             window.tabs.setCurrentIndex(index)
@@ -40,7 +40,7 @@ def test_small_window_keeps_every_workspace_action_reachable(
             viewport = window.workspace_scroll.viewport()
             center = control.mapTo(viewport, control.rect().center())
             assert viewport.rect().contains(center), window.tabs.tabText(index)
-            if index == 2:
+            if index in {2, 3}:
                 assert control.isVisible()
                 assert window.workspace_scroll.verticalScrollBar().maximum() == 0
             assert window.navigation.visibleRegion().boundingRect() == window.navigation.rect()

@@ -498,6 +498,38 @@ class Store:
         with self._lock, self._db:
             self._db.executemany("DELETE FROM download_queue WHERE id=?", [(key,) for key in keys])
 
+    def reconcile_downloads(self, keys: list[str], action: str) -> int:
+        """Edit this client's local queue without racing a concurrent sender's claim."""
+        if action not in {"retry", "remove", "clear-sent"}:
+            raise ValueError("Unknown queue operation.")
+        selected = set(keys)
+        changed = 0
+        with self._lock, self._db:
+            self._db.execute("BEGIN IMMEDIATE")
+            for key, payload, status, retry_safe in self._db.execute(
+                "SELECT id,payload,status,retry_safe FROM download_queue"
+            ).fetchall():
+                if json.loads(payload).get("client_id", "default") != self.client_id:
+                    continue
+                if action == "clear-sent":
+                    eligible = status == "sent"
+                else:
+                    eligible = key in selected and status != "sending"
+                if not eligible:
+                    continue
+                if action == "retry":
+                    if status != "refused" and not (status == "failed" and retry_safe):
+                        continue
+                    self._db.execute(
+                        "UPDATE download_queue SET status='queued',reason='',retry_safe=0 "
+                        "WHERE id=?",
+                        (key,),
+                    )
+                else:
+                    self._db.execute("DELETE FROM download_queue WHERE id=?", (key,))
+                changed += 1
+        return changed
+
     def edit_downloads(self, expected: list[dict], action: str, priority: int = 0) -> None:
         """Atomically edit only unchanged, definitively unsent queue rows."""
         with self._lock, self._db:

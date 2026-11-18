@@ -83,7 +83,7 @@ from torrentlinker.gui.library_workspace import LibraryWorkspace
 from torrentlinker.gui.reseed_consent import ReseedConsent
 from torrentlinker.gui.reseed_dialog import ReseedDialog
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
-from torrentlinker.gui.search_view import SearchTab
+from torrentlinker.gui.search_workspace import SearchTab
 from torrentlinker.gui.send_runner import SendRunner
 from torrentlinker.gui.settings_dialog import (
     INDEXER_API_KEY,
@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
 
         self.upload_workspace = UploadBoard(self)
         self.tabs.addTab(self.upload_workspace, self.tr("Upload"))
-        self.search_tab = SearchTab(store, settings, self.indexer, self.qbit)
+        self.search_tab = SearchTab(self)
         self.tabs.addTab(self.search_tab, self.tr("Search"))
         from torrentlinker.gui.feeds import FeedsTab
 

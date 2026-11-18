@@ -588,7 +588,7 @@ async function editFeed(existing = null, query = "") {
   $("dialog").showModal();
   runPreview();
 }
-$("subscribe-search").onclick = () => guard(() => editFeed(null, $("search-query").value));
+
 async function feedSavedSelections() {
   const selections = await api("feed-selections");
   const content = $("dialog-content");
