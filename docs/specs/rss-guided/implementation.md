@@ -16,7 +16,9 @@ an explicit client and configured Download Folder.
 ## Category rules
 
 Size and seeders are shared limits. Category badges identify the scope of each
-metadata criterion. New criteria take the selected relevant Torznab categories,
+metadata criterion. Only criteria applicable to selected categories are rendered,
+including in ranking controls. Incompatible saved rules have a separate read-only
+summary and explicit removal action; no new unrelated rule can be added there. New criteria take the selected relevant Torznab categories,
 including known descendants. Existing criteria without a scope remain global;
 opening and saving them does not silently change their meaning. Changing the
 subscription's source categories preserves stored rules and their scopes.
@@ -25,7 +27,7 @@ Removing a criterion then configuring it without categories clears its old scope
 The source of truth is Torznab category IDs, not native c411 Search IDs. Some
 Applications, Games, Emulation, GPS and Nulled entries share Torznab IDs; RSS cannot
 distinguish native categories that the source has collapsed. Category names come
-from the configured indexer. Unknown categories expose every criterion. No
+from the configured indexer. Unknown categories expose no guessed metadata criteria. No
 platform, format or licence is inferred from a release name. Structured platform
 and licence attributes are retained when the RSS source supplies them; their
 presence on c411 is not guaranteed. Required or excluded metadata that is missing

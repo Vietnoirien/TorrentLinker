@@ -165,6 +165,9 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
     app.state.agent_service.feed_control.service.setup.settings.indexer_categories = {
         2030: IndexerCategory("Films"),
         7020: IndexerCategory("Books"),
+        1000: IndexerCategory("Games"),
+        3010: IndexerCategory("Music"),
+        4050: IndexerCategory("Applications"),
     }
     try:
         with sync_playwright() as playwright:
@@ -182,10 +185,21 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
             editor = page.frame_locator("#feeds-frame").locator("#dialog-content")
             page.wait_for_timeout(1500)  # Includes the source debounce interval.
             expect(editor.locator(".feed-strip")).to_have_text("")
-            expect(editor.locator(".feed-chip").filter(has_text="720p")).not_to_be_visible()
+            expect(editor.locator(".feed-chip").filter(has_text="720p")).to_have_count(0)
             editor.get_by_role("button", name="Books", exact=True).click()
-            expect(editor.locator(".feed-chip").filter(has_text="720p")).not_to_be_visible()
+            expect(editor.locator(".feed-chip").filter(has_text="720p")).to_have_count(0)
             editor.get_by_role("button", name="Books", exact=True).click()
+            for category, expected in (
+                ("Games", ["Platform"]),
+                ("Music", ["Format", "Bitrate"]),
+                ("Applications", ["Platform", "License"]),
+            ):
+                editor.get_by_role("button", name=category, exact=True).click()
+                labels = editor.locator(".feed-chip-label").all_text_contents()
+                assert len(labels) == len(expected)
+                assert all(any(label.startswith(name) for label in labels) for name in expected)
+                expect(editor.locator(".feed-chip").filter(has_text="720p")).to_have_count(0)
+                editor.get_by_role("button", name=category, exact=True).click()
             editor.get_by_role("button", name="Films", exact=True).click()
             editor.get_by_role("button", name="Check again", exact=True).click()
             expect(editor.locator(".feed-strip")).to_contain_text("Would match now: 2 of 2")
@@ -199,6 +213,15 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
             expect(editor.locator(".feed-strip-titles")).to_have_text("Other.720p")
             editor.locator("summary", has_text="Advanced").click()
             expect(editor.locator("pre")).to_contain_text('"required"')
+            editor.get_by_role("button", name="Films", exact=True).click()
+            editor.get_by_role("button", name="Books", exact=True).click()
+            expect(editor.locator(".feed-chip").filter(has_text="720p")).to_have_count(0)
+            editor.locator("summary", has_text="Saved rules outside").click()
+            expect(editor.locator(".feed-preserved-rule")).to_contain_text("720p")
+            expect(editor.locator(".feed-preserved-rule input")).to_have_count(0)
+            editor.get_by_role("button", name="Remove this rule", exact=True).click()
+            expect(editor.locator(".feed-preserved-rule")).to_have_count(0)
+            expect(editor.locator("pre")).not_to_contain_text('"quality": [')
             assert errors == []
             browser.close()
     finally:
@@ -313,13 +336,14 @@ def test_rss_category_legend_and_rich_editor_roundtrip(tmp_path):
             panel.locator(".feed-cats summary").click()
             panel.get_by_label("Books", exact=True).uncheck()
             panel.get_by_label("Music", exact=True).uncheck()
-            panel.locator("summary", has_text="Other criteria").click()
+            expect(format_row).to_have_count(0)
+            panel.get_by_label("Music", exact=True).check()
             format_row.locator("input").fill("FLAC")
             format_row.locator("input").press("Enter")
-            expect(format_row.locator(".category-tags")).to_have_text("All categories")
+            expect(format_row.locator(".category-tags")).to_have_text("Music")
             panel.get_by_role("button", name="Save", exact=True).click()
             expect(panel.locator("#dialog")).not_to_be_visible()
-            assert "format" not in control.feeds.get(rule["id"]).preferences.category_scopes
+            assert control.feeds.get(rule["id"]).preferences.category_scopes["format"] == [3010]
 
             browser.close()
     finally:

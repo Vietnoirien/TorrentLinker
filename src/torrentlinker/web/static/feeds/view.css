@@ -495,3 +495,13 @@ dialog:has(.feed-editor) {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.feed-preserved-rule {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+.feed-preserved-rule p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}

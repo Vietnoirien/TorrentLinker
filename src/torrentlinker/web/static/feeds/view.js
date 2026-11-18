@@ -825,6 +825,7 @@ async function editFeed(existing = null, query = "") {
   field(feedText("Title contains", "Le titre contient"), queryInput);
   const categories = feedCategoryField(existing?.categories || [], () => {
     renderChips();
+    renderPriorities();
     sourceChanged();
   });
   field(feedText("Categories", "Catégories"), categories.el, true);
@@ -909,7 +910,7 @@ async function editFeed(existing = null, query = "") {
     if (id >= 7000 && id < 9000) return ["format"];
     if (id >= 1000 && id < 2000) return ["platform"];
     if (id >= 4000 && id < 5000) return ["platform", "license"];
-    return [...FEED_COMMON, ...FEED_MORE];
+    return [];
   }
   function owners(f) {
     return categories.get().filter((id) => categoryFields(id).includes(f));
@@ -953,13 +954,31 @@ async function editFeed(existing = null, query = "") {
           : [],
       ),
     ];
-    for (const [host, fields] of [
-      [chipHost, relevant],
-      [
-        moreHost,
-        [...FEED_COMMON, ...FEED_MORE].filter((f) => !relevant.includes(f)),
-      ],
-    ]) {
+    const preserved = [...FEED_COMMON, ...FEED_MORE].filter(
+      (f) => !relevant.includes(f) &&
+        [prefs.required, prefs.preferred, prefs.excluded].some((g) => g[f]?.length),
+    );
+    preservedFold.hidden = !preserved.length;
+    moreHost.replaceChildren(...preserved.map((f) => {
+      const row = element("div", undefined, "feed-preserved-rule");
+      const values = ["required", "preferred", "excluded"]
+        .filter((kind) => prefs[kind][f]?.length)
+        .map((kind) => `${{required: feedText("Required", "Exigé"), preferred: feedText("Preferred", "Préféré"), excluded: feedText("Avoided", "Évité")}[kind]}: ${prefs[kind][f].join(", ")}`).join(" · ");
+      const ids = prefs.category_scopes[f] || [];
+      const scopeLabel = ids.length
+        ? ids.map((id) => state.setup.indexer_categories[id]?.name || `#${id}`).join(", ")
+        : feedText("Legacy rule without category scope", "Ancienne règle sans catégorie définie");
+      row.append(element("strong", names[f]), element("p", values),
+        element("p", scopeLabel, "muted"),
+        button(feedText("Remove this rule", "Supprimer cette règle"), () => {
+          for (const kind of ["required", "preferred", "excluded", "category_scopes"])
+            delete prefs[kind][f];
+          prefs.priorities = prefs.priorities.filter((k) => k !== f);
+          criteriaChanged();
+        }));
+      return row;
+    }));
+    for (const [host, fields] of [[chipHost, relevant]]) {
       host.replaceChildren(
         ...fields.map((f) => {
           const row = element("div", undefined, "feed-chip-row");
@@ -975,7 +994,7 @@ async function editFeed(existing = null, query = "") {
             tags.append(
               element(
                 "span",
-                feedText("All categories", "Toutes les catégories"),
+                feedText("Legacy rule without category scope", "Ancienne règle sans catégorie définie"),
                 "category-tag",
               ),
             );
@@ -1079,7 +1098,8 @@ async function editFeed(existing = null, query = "") {
   }
   function renderPriorities() {
     const names = feedFieldNames();
-    const rows = prefs.priorities.map((k, i) => {
+    const allowed = [...new Set(categories.get().flatMap(categoryFields)), "size"];
+    const rows = prefs.priorities.filter((k) => allowed.includes(k)).map((k, i) => {
       const row = element("div", undefined, "feed-priority");
       let label = `${i + 1}. ${names[k] || k}`;
       if (k === "size" && !prefs.prefer_small)
@@ -1107,7 +1127,7 @@ async function editFeed(existing = null, query = "") {
       return row;
     });
     const missing = Object.keys(names).filter(
-      (k) => !prefs.priorities.includes(k),
+      (k) => allowed.includes(k) && !prefs.priorities.includes(k),
     );
     const add = element("div", undefined, "feed-priority-add");
     if (missing.length) {
@@ -1143,11 +1163,11 @@ async function editFeed(existing = null, query = "") {
     priorityHost.replaceChildren(...rows, add, smallLabel);
   }
   root.append(chipHost);
-  fold(
-    feedText(
-      "Other criteria and preserved rules",
-      "Autres critères et règles conservées",
-    ),
+  const preservedFold = fold(
+    feedText("Saved rules outside selected categories", "Règles enregistrées hors des catégories sélectionnées"),
+    element("p", feedText(
+      "These rules remain saved. Remove them if they no longer apply; select their category to edit them.",
+      "Ces règles restent enregistrées. Supprimez-les si elles ne conviennent plus ; sélectionnez leur catégorie pour les modifier."), "muted"),
     moreHost,
   );
   fold(feedText("What matters most", "Ce qui compte le plus"), priorityHost);
