@@ -286,7 +286,12 @@ def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypa
 
     spy = Spy()
     native.installEventFilter(spy)
-    for panel in (window.community_view, window.library_workspace.reseed, window.upload_workspace):
+    for panel in (
+        window.zen_tab.profile_view,
+        window.community_view,
+        window.library_workspace.reseed,
+        window.upload_workspace,
+    ):
         child = panel
         while child is not window:
             parent = child.parentWidget()
@@ -301,6 +306,7 @@ def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypa
         from tests.test_community_interfaces import js, wait_js
 
         labels = {
+            "profile": ("Refresh", "Actualiser"),
             "community": ("Every contribution counts.", "Chaque contribution compte."),
             "reseed": ("Run all", "Tout enchaîner"),
             "upload": ("A new share starts here.", "Un nouveau partage commence ici."),

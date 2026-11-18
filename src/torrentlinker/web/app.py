@@ -334,12 +334,18 @@ def create_app(
             "/static/community/view.html",
             "/static/reseed/view.html",
             "/static/upload/view.html",
+            "/static/profile/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
             response.headers["Content-Security-Policy"] = (
                 "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                "img-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
+                + (
+                    "img-src data:; "
+                    if route == "/static/profile/view.html"
+                    else "img-src 'self'; "
+                )
+                + "frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
             )
         return response
 

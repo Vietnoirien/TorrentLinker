@@ -344,6 +344,7 @@ class MainWindow(QMainWindow):
             self.account_workspace, i18n.pick_language(self.settings.language)
         )
         self.zen_tab.pages.addTab(self.community_view, self.tr("Community"))
+        self.zen_tab.profile_view.language = self.settings.language
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_torrent_clients)
         self.companion_panel = None  # only while Settings is open
@@ -962,7 +963,7 @@ class MainWindow(QMainWindow):
             return
         self._profile_refreshing = True
         self.band.busy(True)
-        self.zen_tab.profile_view.refresh_button.setEnabled(False)
+        self.zen_tab.profile_view.set_busy(True)
         credentials = (self.settings.indexer.url, get_secret(INDEXER_API_KEY))
         run_in_background(
             lambda: self.account_workspace.refresh(*credentials),
@@ -986,8 +987,7 @@ class MainWindow(QMainWindow):
                 try:
                     self._start_companion_receiver()
                 except OSError:
-                    self.zen_tab.profile_view.notice.show()
-                    self.zen_tab.profile_view.notice.setText(
+                    self.zen_tab.profile_view.show_notice(
                         self.tr(
                             "Browser connection unavailable. "
                             "Close the other TorrentLinker instance; retrying automatically."
@@ -1127,7 +1127,7 @@ class MainWindow(QMainWindow):
         self._profile_refreshing = False
         if not isValid(self):
             return
-        self.zen_tab.profile_view.refresh_button.setEnabled(True)
+        self.zen_tab.profile_view.set_busy(False)
         self.show_account_profile()
         self.band.show_profile(profile)
         filled = profile.apply(self.settings.zen)
@@ -1141,7 +1141,7 @@ class MainWindow(QMainWindow):
         self._profile_refreshing = False
         if not isValid(self):
             return
-        self.zen_tab.profile_view.refresh_button.setEnabled(True)
+        self.zen_tab.profile_view.set_busy(False)
         self.show_account_profile()
         log.info("c411 profile not read: %s", error)
         self.band.show_profile_error(error)

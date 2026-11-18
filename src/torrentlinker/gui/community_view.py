@@ -124,12 +124,16 @@ class BundledView(QWidget):
         from PySide6.QtWebEngineWidgets import QWebEngineView
 
         assets = self.assets
+        self_view = self
 
         class LocalAssets(QWebEngineUrlRequestInterceptor):
             def interceptRequest(self, info: QWebEngineUrlRequestInfo) -> None:
                 url = info.requestUrl()
                 allowed = (
                     url.toString() == "qrc:///qtwebchannel/qwebchannel.js"
+                    or self_view.channel_name == "profile"
+                    and re.match(r"^data:image/(png|jpeg|gif|webp);base64,", url.toString())
+                    is not None
                     or url.isLocalFile()
                     and Path(url.toLocalFile()).resolve()
                     in {

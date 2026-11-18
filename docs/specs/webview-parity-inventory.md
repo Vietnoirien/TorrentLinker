@@ -15,7 +15,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
-| 1 | Profile / Profil | Native `ProfileView` (`gui/profile_view.py:137`), QPainter charts (`gui/profile_charts.py`) | `profile.js`, `index.html:527-555` | NU | `profile-redesign.md` + mockup (native + Web, predates WebView) | Charts must become HTML/SVG |
+| 1 | Profile / Profil | **BV** `ProfileView` (`gui/profile_view.py`) | `profile.js` iframe, shared `static/profile/` SVG renderer | **Done** (#91) | `profile-redesign.md` + mockup | None; period, history and charts shared |
 | 2 | Seeding / Seed | Native `SeedingView` (`zen_view.py:89`), `seeding_tree.py`, `ClassComparison` | `zen.js`, `index.html:563-587` | NU | none | Large sortable grouped tree, 30 s refresh |
 | 3 | Plan | Native `PlanView` (`zen_view.py:496`) + plan dialogs in `main_window.py` | `plan.js`, `index.html:588-647` | NU | none | Native folder pickers, speed test, send progress |
 | 4 | Catalogue | Native `CatalogueBox` (`zen_view.py:411`) + `CategoryTile`s | `index.html:557-562`, `plan.js:565-575` | NU | none | none |
@@ -139,7 +139,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - Web-only (Limit): login/sign-out, Activity page, theme and language selects in the sidebar.
 
 ### Zen
-- Profile — Differs (Gap): charts implemented twice; "Measured over {0} days" (desktop) vs "Measured over all history" (Web), *unsure* if behaviour differs.
+- Profile — Resolved by #91: both hosts load `static/profile/view.html` and its SVG charts. The measured-Zen label uses the selected period; “all history” applies only to All. The old implementations already used this same rule. Desktop persists the period in QSettings; Web uses localStorage. No deliberate platform limit.
 - Seeding — Desktop-only: expanded state persisted per user. Web-only: sort/order selector.
 - Plan — Web-only: "Queue selected downloads", sort/order, select whole plan / clear selection; Zen Profile fields live in Plan (desktop: Settings › Zen). Desktop-only: send summary with "Refresh first", "Stop fetching and plan now", "Stop sending", category → Download Folder prompt with native picker. Speed test measures desktop vs server (Limit).
 - Catalogue — Desktop-only (Gap): per-category tiles with "Fetch only {0}" / "Fetch all categories"; Web has global update + pause.

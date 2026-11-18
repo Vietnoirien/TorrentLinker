@@ -1112,11 +1112,7 @@ class ZenTab(QWidget):
 
         self.pages = WorkspaceTabs()
         self.profile_view = ProfileView()
-        profile_scroll = QScrollArea()
-        profile_scroll.setWidgetResizable(True)
-        profile_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        profile_scroll.setWidget(self.profile_view)
-        self.pages.addTab(profile_scroll, self.tr("Profile"))
+        self.pages.addTab(self.profile_view, self.tr("Profile"))
         seeding_page = QWidget()
         seeding_layout = QVBoxLayout(seeding_page)
         seeding_layout.setContentsMargins(0, 0, 0, 0)
