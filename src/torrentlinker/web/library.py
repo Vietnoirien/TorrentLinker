@@ -280,6 +280,46 @@ class Library:
     def start_repair(self, identifier: str, confirmation: str, *, client=None) -> dict:
         return self.repairs().start(identifier, confirmation, client or self.repair_client())
 
+    def inspector(
+        self,
+        path: str,
+        action: str,
+        stop: threading.Event,
+        *,
+        key: str = "",
+        torrent_data: str = "",
+        progress: Callable[[Any], None] = lambda _: None,
+    ) -> Any:
+        """Candidate inspection shared by the desktop bridge and Web jobs."""
+        if action in {"review", "check", "reject"}:
+            return self.review(path, stop, key=key, action="" if action == "review" else action)
+        if action == "search":
+            return self.compatible(path, stop, progress)
+        if action == "repairs":
+            return self.repairs().rows()
+        if action == "provenance":
+            return self.provenance(path)
+        if action == "evidence":
+            return {**self.evidence(path, stop), "provenance": self.provenance(path)}
+        if action == "import":
+            import base64
+
+            if len(torrent_data) > 12_000_000:
+                raise ValueError("Torrent upload is too large.")
+            self.import_provenance(path, base64.b64decode(torrent_data, validate=True), stop)
+            return self.provenance(path)
+        if action == "details":
+            from torrentlinker.torrent_details import parse_details, preview_html
+
+            rows = self.review(path, stop)
+            row = next((r for r in rows if r["key"] == key), None)
+            if not row or not row["hash"]:
+                raise ValueError("Select a current Candidate with an infohash.")
+            detail = parse_details(self.setup.indexer().torrent_json(row["hash"]))
+            markup, _ = preview_html(detail.description, detail.poster)
+            return {"description": markup, "nfo": detail.nfo}
+        raise ValueError("Unknown candidate inspection action.")
+
     def import_provenance(self, path: str, data: bytes, stop: threading.Event) -> dict:
         from torrentlinker.provenance import Provenance
 

@@ -7,14 +7,11 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -197,38 +194,6 @@ class LibraryWorkspace(QWidget):
             self.review_dialog.accept()
         self.reseed.requested_tab = "folders"
         self.reseed.refresh()
-
-    def open_review(self, path: str) -> None:
-        entry = self.reseed.service().library.entry(path)
-        dialog = QDialog(self)
-        self.review_dialog = dialog
-        dialog.setWindowTitle(self.tr("Compare files and repair"))
-        dialog.resize(1100, 760)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.matches)
-        self.toolbar.show()
-        self.matches.show()
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.owner.review)
-        layout.addWidget(scroll)
-        self.owner.review.show()
-        self.owner.review.set_entry(entry)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        try:
-            dialog.exec()
-        finally:
-            scroll.takeWidget()
-            for toolbar in (self.toolbar, self.matches):
-                toolbar.setParent(self)
-                toolbar.hide()
-            self.owner.review.setParent(self)
-            self.owner.review.hide()
-            self.review_dialog = None
-            dialog.deleteLater()
 
     def refresh(self):
         self.reseed.refresh_rows()

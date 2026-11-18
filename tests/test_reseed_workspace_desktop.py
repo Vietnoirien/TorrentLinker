@@ -27,6 +27,14 @@ def test_native_board_runs_the_shared_workflow(qtbot, tmp_path, monkeypatch):
     assert len(board.rows) == 1 and board.rows[0]["stage"] == "find"
     before = original.read_bytes(), original.stat().st_ino
     board.request("run", {"paths": [str(original)]})
+    import json
+
+    # Reading the inspector while a run is active must not replace its item list.
+    with qtbot.waitSignal(board.bridge.response, timeout=5000) as response:
+        board.bridge.requestAsync(
+            97, "inspect", json.dumps({"path": str(original), "action": "review"})
+        )
+    assert "error" not in json.loads(response.args[1])
     qtbot.waitUntil(lambda: not board.running, timeout=10000)
     assert board.rows[0]["stage"] == "seeding", board.error
     assert client.started == [meta.infohash]
@@ -103,6 +111,16 @@ def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeyp
     fixture = tmp_path / "fixture"
     fixture.mkdir()
     service, _, _, _, _ = workspace(fixture)
+    from torrentlinker.indexer import Indexer
+
+    monkeypatch.setattr(
+        Indexer,
+        "torrent_json",
+        lambda self, hash: {
+            "description": "<h2>Fixture synopsis</h2><script>window.evil=1</script>",
+            "metadata": {"hasNfo": True, "nfoContent": "Fixture NFO <plain>"},
+        },
+    )
     view = window.library_workspace.reseed
     view.language = "fr"
     monkeypatch.setattr(view, "service", lambda: service)
@@ -135,6 +153,50 @@ def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeyp
     qtbot.waitUntil(lambda: len(view.selected_paths) == 1)
     js(qtbot, view, "document.querySelector('[data-command=clear-selection]').click()")
     qtbot.waitUntil(lambda: not view.selected_paths)
+
+    wait_js(qtbot, view, "document.querySelector('#review-candidate') !== null")
+    js(qtbot, view, "document.querySelector('[data-review-tab=files]').click()")
+    wait_js(
+        qtbot, view, "document.querySelector('.review-content').textContent.includes('Release.mkv')"
+    )
+    js(qtbot, view, "document.querySelector('[data-review-tab=description]').click()")
+    wait_js(
+        qtbot,
+        view,
+        "document.querySelector('.review-description')?.textContent.includes('Fixture synopsis')",
+    )
+    js(qtbot, view, "document.querySelector('[data-review-tab=nfo]').click()")
+    wait_js(
+        qtbot,
+        view,
+        "document.querySelector('.review-content pre')?.textContent==='Fixture NFO <plain>'",
+    )
+    js(qtbot, view, "document.querySelector('[data-review-tab=evidence]').click()")
+    wait_js(
+        qtbot,
+        view,
+        "document.querySelector('.review-content').textContent"
+        ".includes('Aucune provenance importée')",
+    )
+    view.language = "en"
+    view.refresh()
+    wait_js(
+        qtbot, view, "document.querySelector('[data-review-tab=evidence]').textContent==='Evidence'"
+    )
+    view.language = "fr"
+    view.refresh()
+    if output := os.getenv("TL_WEB_SCREENSHOTS"):
+        from pathlib import Path
+
+        wait_js(
+            qtbot,
+            view,
+            "document.querySelector('[data-review-action=provenance]')?.disabled===false",
+        )
+        js(qtbot, view, "document.querySelector('.inspector').scrollIntoView({block:'start'})")
+        qtbot.wait(100)
+        Path(output).mkdir(parents=True, exist_ok=True)
+        view.grab().save(str(Path(output) / "candidate-inspector-desktop.png"))
 
     folder = service.setup.roots[0] / "Films"
     folder.mkdir()

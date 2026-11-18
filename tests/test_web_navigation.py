@@ -122,7 +122,8 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
       location.hash=routeFragment(parts);await settle();
       await enter();await settle();
       assert.equal(state.view,view);
-      const canonical=view==='library' && tab==='items'?['library','reseed']:parts;
+      const canonical=view==='library' && ['items','review'].includes(tab)
+        ?['library','reseed']:parts;
       assert.equal(location.hash,routeFragment(canonical));
     }
   }

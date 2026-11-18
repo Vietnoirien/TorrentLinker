@@ -51,6 +51,20 @@ class ReseedBridge(ViewBridge):
                 # Desktop paths are chosen by the local owner, not server roots.
                 setup._folder_candidate = Path(body["local"]).expanduser().resolve()
                 run_in_background(lambda: setup.preview_folder(FolderSetup(**body)), done, failed)
+            elif action == "inspect":
+                board = self.board
+                library = board.service().library
+                run_in_background(
+                    lambda: library.inspector(
+                        body["path"],
+                        body["action"],
+                        JobStop(),
+                        key=body.get("key", ""),
+                        torrent_data=body.get("torrent_data", ""),
+                    ),
+                    done,
+                    failed,
+                )
             elif action == "combine":
                 board = self.board
                 if board.running or board.scanning or board.configuring:
@@ -216,8 +230,59 @@ class ReseedBoard(BundledView):
             }
         elif action == "manage-folders":
             self.owner.library_workspace.open_folders()
-        elif action == "review":
-            self.owner.library_workspace.open_review(body["path"])
+        elif action == "open-link":
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            url = QUrl(body["url"])
+            if url.scheme() not in {"http", "https"} or not url.host() or url.userInfo():
+                raise ValueError("Invalid public link.")
+            QDesktopServices.openUrl(url)
+        elif action == "repair-history":
+            from torrentlinker.gui.repair_dialog import RepairDialog
+
+            library = self.service().library
+            RepairDialog(self, library.repairs(), library.repair_client()).exec()
+        elif action == "archive":
+            from torrentlinker.review import candidate_key, remembered_candidates, restore_checked
+
+            library = self.service().library
+            entry = library.entry(body["path"])
+            indexer = library.setup.indexer()
+            found = remembered_candidates(library.setup.store, indexer, entry.item.path) or []
+            candidates = restore_checked(
+                indexer, entry.item, found, library.setup.settings.matching.rules()
+            )
+            checked = next(
+                (c for c in candidates if candidate_key(c.candidate) == body["key"]), None
+            )
+            if checked is None or checked.unpack is None:
+                raise ValueError("Select a current archive Candidate first.")
+            self.owner.review.reseed_archive(entry, checked)
+        elif action == "repair":
+            from torrentlinker.gui.repair_dialog import RepairDialog
+            from torrentlinker.review import candidate_key, remembered_candidates
+
+            library = self.service().library
+            indexer = library.setup.indexer()
+            candidates = (
+                remembered_candidates(library.setup.store, indexer, Path(body["path"])) or []
+            )
+            candidate = next((c for c in candidates if candidate_key(c) == body["key"]), None)
+            if candidate is None:
+                raise ValueError("Select a current Candidate first.")
+            dialog = RepairDialog(
+                self,
+                library.repairs(),
+                library.repair_client(),
+                diagnose=lambda stop: library.diagnose(
+                    body["path"],
+                    candidate,
+                    indexer.fetch_torrent(candidate),
+                    stop,
+                ),
+            )
+            dialog.exec()
         elif action in {"settings", "add-folder", "remove-folder", "save-root"}:
             if self.running or self.scanning or self.configuring:
                 raise ValueError("Stop the current operation before changing settings.")

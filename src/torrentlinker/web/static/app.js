@@ -1468,7 +1468,7 @@ async function checkAllCandidates() {
       `Checked ${r.items} Local Items: ${r.full} full, ${r.partial} partial, ${r.none} without a Match, ${r.archive} in archives.`,
       `${r.items} éléments vérifiés : ${r.full} complètes, ${r.partial} partielles, ${r.none} sans correspondance, ${r.archive} dans des archives.`,
     ));
-    if (libraryUI.item) await reviewLibraryItem(libraryUI.item);
+    await loadLibrary();
   });
 }
 async function reseedAllMatches() {

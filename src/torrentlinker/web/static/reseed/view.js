@@ -148,6 +148,8 @@ function render() {
   const focusSearch = document.activeElement?.id === "search";
   const cursor = focusSearch ? document.activeElement.selectionStart : 0;
   const scroll = window.scrollY;
+  const inspectorScroll = document.querySelector(".inspector")?.scrollTop || 0;
+  const focused = document.activeElement?.id;
   const oldStages = new Map(
     [...document.querySelectorAll("[data-item]")].map((n) => [
       n.dataset.item,
@@ -200,6 +202,8 @@ function render() {
     $("search").setSelectionRange(cursor, cursor);
   }
   window.scrollTo(0, scroll);
+  if (document.querySelector(".inspector")) document.querySelector(".inspector").scrollTop=inspectorScroll;
+  if (focused && focused !== "search") $(focused)?.focus({preventScroll:true});
   for (const node of document.querySelectorAll("[data-item]")) {
     if (
       oldStages.has(node.dataset.item) &&
@@ -225,17 +229,7 @@ function inspector() {
   const steps = Object.keys(labels),
     index = steps.indexOf(r.stage),
     paused = snapshot.progress?.paused_paths?.includes(r.path);
-  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span><div class="callout">${r.error ? `<p class="error">${esc(r.error)}</p>` : ""}<p class="muted">${r.stage === "verify" ? t("Un seul hash à la fois protège le disque. Les recherches continuent.") : t("Les fichiers originaux conservent leurs noms.")}</p><small>${t("La pause prend effet à la fin de l’opération en cours.")}</small>${snapshot.running ? `<button data-command="pause-item">${paused ? t("Reprendre cet élément") : t("Suspendre cet élément")}</button>` : r.stage !== "seeding" ? `<button data-command="run-item">${t("Continuer cet élément")}</button>` : ""}<button data-command="review">${t("Examiner les fichiers et les réparations")}</button></div>${(
-    r.candidates || []
-  )
-    .slice(0, 20)
-    .map(
-      (c) =>
-        `<div class="candidate"><b>${esc(c.title)}</b><p class="muted">${esc(c.match)} · ${bytes(c.size || 0)}</p>${(c.files || []).map((f) => `<pre>${esc(f.local || t("Manquant"))}<br>↳ ${esc(f.torrent)}</pre>`).join("")}${c.match === "full" && !c.archive ? `<button ${snapshot.progress?.active?.[r.path] ? "disabled" : ""} data-candidate="${esc(c.key)}">${t("Choisir ce candidat")}</button>` : ""}</div>`,
-    )
-    .join(
-      "",
-    )}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
+  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span>${r.error?`<p class="error">${esc(r.error)}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
     (r.events || [])
       .slice()
       .reverse()

@@ -1,38 +1,18 @@
 "use strict";
-const libraryUI = {folder:"", selected:new Set(), item:null, candidates:[], chosen:new Map(), candidate:null, client:null, generation:0, loadGeneration:0, detailGeneration:0, tab:"summary"};
-const libraryMatch = value => ({full:say("Full Match","Correspondance complète"),partial:say("Partial Match","Correspondance partielle"),none:say("No Match","Aucune correspondance"),unchecked:say("Not checked","Non vérifié")}[value] || value);
-
-function resetLibraryReview() {
-  if (libraryUI.client === state.clientId) return;
-  libraryUI.client = state.clientId;
-  libraryUI.selected.clear(); libraryUI.chosen.clear(); libraryUI.item = null;
-  libraryUI.candidate = null; libraryUI.candidates = [];
-  libraryUI.generation++; libraryUI.detailGeneration++;
-  $("candidates").hidden = true;
-  $("library-empty-review").hidden = false;
+// Candidate inspection lives in the bundled Reseed panel. This host retains
+// server folder browsing, download settings and protected archive/repair dialogs.
+const libraryUI={item:null,candidate:null,generation:0,client:null};
+function resetLibraryReview(){
+  if(libraryUI.client===state.clientId)return;
+  libraryUI.client=state.clientId;libraryUI.item=null;libraryUI.candidate=null;libraryUI.generation++;
 }
-async function searchLibrary(selected) {
-  const paths=selected?[...libraryUI.selected]:[];
-  const generation=libraryUI.generation;
-  await job({kind:"search-library",paths},result=>{
-    toast(say(`Searched ${result.results.length} items. ${result.errors.length} errors.`,`${result.results.length} éléments cherchés. ${result.errors.length} erreurs.`));
-    if(generation===libraryUI.generation && libraryUI.item) {
-      const found=result.results.find(r=>r.path===libraryUI.item.path);if(found) showLibraryCandidates(found.rows);
-    }
-  });
-}
-async function loadLibrary() { resetLibraryReview(); await loadReseed(); }
-async function libraryTab(tab) {
+async function loadLibrary(){resetLibraryReview();await loadReseed();}
+async function libraryTab(tab){
   resetLibraryReview();
-  tab = tab === "review" ? tab : ["folders","activity"].includes(tab) ? tab : "reseed";
-  const shared = tab !== "review";
-  document.querySelector(".library-nav").hidden = shared;
-  rememberTab("library", tab);
-  $("library-items").hidden = shared;
-  $("library-reseed").hidden = !shared;
-  if (shared) { reseedUI.tab = tab; await loadReseed(); }
+  tab=["folders","activity"].includes(tab)?tab:"reseed";
+  rememberTab("library",tab);$("library-reseed").hidden=false;
+  reseedUI.tab=tab;await loadReseed();
 }
-
 async function browseLibraryFolder(path="",target="library-folder-path") {
   const result=await api(`folders?path=${encodeURIComponent(path)}`);
   const host=$("dialog-content");host.replaceChildren(element("h2",say("Folders on the TorrentLinker server","Dossiers du serveur TorrentLinker")),element("p",result.path || say("Mounted roots","Racines montées")));
@@ -44,109 +24,6 @@ async function browseLibraryFolder(path="",target="library-folder-path") {
   if(!result.path && !result.folders.length) host.append(element("p",say("No mounted roots. Set TL_STORAGE_ROOTS on the TorrentLinker server.","Aucune racine montée. Configurez TL_STORAGE_ROOTS sur le serveur.")));
   if(!$("dialog").open) $("dialog").showModal();
 }
-async function reviewLibraryItem(row, search=false) {
-  $("evidence-report").replaceChildren();
-  libraryUI.item=row; libraryUI.candidate=null; libraryUI.candidates=[];
-  const generation=++libraryUI.generation;
-  libraryUI.detailGeneration++;
-  $("candidates").hidden=false; $("library-empty-review").hidden=true;
-  $("candidate-title").textContent=`${row.name} · ${bytes(row.size)} · ${row.folder}`;
-  $("candidate-table").replaceChildren(element("p",say("Loading Candidates…","Chargement des candidats…")));
-  $("candidate-actions").replaceChildren();
-  $("candidate-summary").replaceChildren(); $("candidate-files").replaceChildren();
-  $("candidate-description").replaceChildren(); $("candidate-nfo").textContent="";
-  await job({kind:search?"check":"library-review",path:row.path}, rows=>{
-    if(generation!==libraryUI.generation) return;
-    showLibraryCandidates(rows);
-  });
-}
-async function check(row) { return reviewLibraryItem(row,true); }
-function showLibraryCandidates(rows) {
-  libraryUI.candidates=rows;
-  const wanted=libraryUI.chosen.get(libraryUI.item.path);
-  libraryUI.candidate=rows.find(c=>c.key===wanted) || rows[0] || null;
-  renderCandidateChoices();
-  showLibraryCandidate(libraryUI.candidate);
-}
-function renderCandidateChoices() {
-  const host=$("candidate-table");host.replaceChildren();
-  if(!libraryUI.candidates.length) host.append(element("p",say("No Candidates. Search this item to find matching torrents.","Aucun candidat. Lancez une recherche pour cet élément.")));
-  for(const c of libraryUI.candidates) {
-    const b=button(c.title,()=>{libraryUI.candidate=c;renderCandidateChoices();showLibraryCandidate(c);},"candidate-choice");
-    b.append(element("small",`${libraryMatch(c.match)} · ${bytes(c.size)} · ${c.seeders} seeders${c.archive?" · Archive":""}`));
-    b.setAttribute("aria-pressed",String(c===libraryUI.candidate));host.append(b);
-  }
-}
-function showLibraryCandidate(candidate) {
-  libraryUI.detailGeneration++;
-  $("candidate-actions").replaceChildren(); $("candidate-files").replaceChildren();
-  $("candidate-description").replaceChildren(); $("candidate-nfo").textContent="";
-  $("candidate-summary").replaceChildren();
-  if(!candidate) return;
-  libraryUI.chosen.set(libraryUI.item.path,candidate.key);
-  $("candidate-summary").append(element("h3",candidate.title),element("p",`${libraryMatch(candidate.match)} · ${bytes(candidate.size)} · ${candidate.seeders} seeders`),element("p",libraryUI.item.path),element("p",say("A Match compares file names and sizes. Your Torrent Client verifies the hashes before seeding.","La correspondance compare les noms et tailles. Le client torrent vérifie les hashes avant le seed."),"muted"));
-  table("candidate-files",candidate.files,[{label:say("Torrent file","Fichier du torrent"),render:f=>f.torrent},{label:say("Local file","Fichier local"),render:f=>f.local || "—"},{label:say("Result","Résultat"),render:f=>f.status}],null);
-  if(candidate.evidence?.discovery === "layout") $("candidate-summary").append(element("p",say("Found among the torrents already downloaded, by the sizes of your files, without spending a search.","Trouvé parmi les torrents déjà téléchargés, par la taille de vos fichiers, sans consommer de recherche.")));
-  if(candidate.evidence?.discovery === "compatible") $("candidate-summary").append(element("p",say("Discovery scope: ","Périmètre de recherche : ") + candidate.evidence.scope + (candidate.evidence.limited === "true" ? say(" · Search limit reached; results are incomplete."," · Limite atteinte ; résultats incomplets.") : "")));
-  const actions=$("candidate-actions");
-  const checkButton=button(say("Check Candidate","Vérifier le candidat"),()=>candidateAction("check-candidate"));
-  checkButton.disabled=candidate.match!=="unchecked";
-  actions.append(checkButton,button(say("Reject Candidate","Rejeter le candidat"),()=>candidateAction("library-reject")));
-  const reseed=button(candidate.archive?say("Unpack and reseed…","Extraire et seeder…"):say("Verify & reseed","Vérifier et seeder"),async()=>{
-    if(candidate.archive) {await previewArchive(candidate);return;}
-    const path=libraryUI.item.path, hash=candidate.hash;
-    if(!confirm(say(`Verify and reseed ${candidate.title}? Missing files will not be downloaded. Check the Files tab for renamed paths.`,`Vérifier et remettre en seed ${candidate.title} ? Les fichiers manquants ne seront pas téléchargés.`))) return;
-    await job({kind:"reseed",path,hashes:[hash]},()=>toast(say("Verification started.","Vérification lancée.")));
-  },"primary");
-  reseed.disabled=!(candidate.archive?candidate.key:candidate.hash) || !["full","partial"].includes(candidate.match);
-  actions.append(reseed);
-  actions.append(button(say("Diagnose repair…","Diagnostiquer une réparation…"),()=>guard(async()=>{
-    const item=libraryUI.item,generation=libraryUI.generation;
-    await job({kind:"diagnose-repair",path:item.path,candidate_key:candidate.key},r=>{
-      if(generation===libraryUI.generation){candidateTab("evidence");renderEvidence({repairs:[r]});}
-    });
-  })));
-  if(candidate.archive) $("candidate-summary").append(element("p",say("Review the extraction destination and available server space before unpacking and reseeding.","Examinez la destination et l’espace disponible sur le serveur avant d’extraire et de seeder.")));
-  if(candidate.website) {const link=element("a",say("Open on website","Ouvrir sur le site"));link.href=candidate.website;link.target="_blank";link.rel="noopener noreferrer";actions.append(link);}
-  candidateTab(libraryUI.tab);
-}
-async function candidateAction(kind) {
-  const item=libraryUI.item, candidate=libraryUI.candidate, generation=libraryUI.generation;
-  if(!item || !candidate) return;
-  await job({kind,path:item.path,candidate_key:candidate.key},rows=>{if(generation===libraryUI.generation) showLibraryCandidates(rows);});
-}
-function candidateTab(tab) {
-  libraryUI.tab=tab;
-  document.querySelectorAll("[data-candidate-tab]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.candidateTab===tab)));
-  for(const name of ["summary","files","description","nfo","evidence"]) $("candidate-"+name).hidden=name!==tab;
-  if(["description","nfo"].includes(tab)) guard(loadLibraryDetails);
-}
-async function loadLibraryDetails() {
-  const candidate=libraryUI.candidate, generation=libraryUI.detailGeneration;
-  if(!candidate) return;
-  if(!candidate.hash) {$("candidate-description").textContent=$("candidate-nfo").textContent=say("Open the Indexer website for these details.","Consultez ces détails sur le site de l’indexeur.");return;}
-  if(candidate.details) {renderLibraryDetails(candidate.details);return;}
-  if(candidate.loading) return;
-  candidate.loading=true;
-  $("candidate-description").textContent=$("candidate-nfo").textContent=say("Loading…","Chargement…");
-  try {
-    await job({kind:"details",hashes:[candidate.hash]},result=>{
-      candidate.loading=false;candidate.details=result;
-      if(generation===libraryUI.detailGeneration) renderLibraryDetails(result);
-    }, error=>{candidate.loading=false;if(generation===libraryUI.detailGeneration) $("candidate-description").textContent=$("candidate-nfo").textContent=error;});
-  } catch(error) {candidate.loading=false;throw error;}
-}
-function renderLibraryDetails(result) {
-  // Same server-sanitized preview_html renderer used by Search.
-  $("candidate-description").innerHTML=result.description || say("No description supplied.","Aucune description.");
-  $("candidate-description").querySelectorAll("a").forEach(a=>{a.target="_blank";a.rel="noopener noreferrer";});
-  $("candidate-nfo").textContent=result.nfo || say("No NFO supplied.","Aucun NFO.");
-}
-for(const b of document.querySelectorAll("[data-library-tab]")) b.onclick=()=>guard(()=>libraryTab(b.dataset.libraryTab));
-for(const b of document.querySelectorAll("[data-candidate-tab]")) b.onclick=()=>candidateTab(b.dataset.candidateTab);
-$("candidate-search").onclick=()=>guard(()=>libraryUI.item && check(libraryUI.item));
-$("candidate-expand").onclick=()=>guard(()=>libraryTab("reseed"));
-
 $("settings-library-folders").onclick=()=>guard(()=>navigate("library", "folders"));
 
 function renderLibraryDownloads() {
@@ -232,47 +109,6 @@ async function previewArchive(candidate) {
   });
 }
 
-function renderEvidence(result) {
-  const host=$("evidence-report");host.replaceChildren();
-  if(result.observations?.length) {
-    const grid=element("table"),head=element("tr");
-    for(const label of [say("File / source","Fichier / source"),say("Claim","Déclaration"),say("Observed","Observé"),say("Confidence","Confiance")])head.append(element("th",label));
-    grid.append(head);
-    for(const row of result.observations){const tr=element("tr");for(const cell of [`${row.file} · ${evidenceLabel(row.source)} · ${evidenceLabel(row.field)}`,row.claim,row.observed,evidenceLabel(row.confidence)])tr.append(element("td",cell));grid.append(tr);}
-    host.append(grid);
-  }
-  for(const file of result.unreadable || []) host.append(element("p",say("MediaInfo unavailable: ","MediaInfo indisponible : ")+file));
-  for(const row of result.provenance || []) {
-    host.append(element("h4",`${row.name} · ${evidenceLabel(row.status)}`),element("p",`${bytes(row.verified_bytes)} / ${bytes(row.target_bytes)}`));
-    for(const f of row.files) host.append(element("p",`${f.original} → ${f.local || f.candidates.join(", ")}`));
-  }
-  for(const repair of result.repairs || []) renderRepair(host,repair);
-  if(!host.childNodes.length) host.append(element("p",say("No inconsistencies reported. This does not certify the release origin.","Aucune incohérence signalée. Cela ne certifie pas l’origine de la release.")));
-}
-$("inspect-evidence").onclick=()=>guard(async()=>{
-  const item=libraryUI.item,generation=libraryUI.generation;if(!item)return;
-  await job({kind:"library-evidence",path:item.path},r=>{if(generation===libraryUI.generation)renderEvidence(r);});
-});
-$("import-provenance").onchange=()=>guard(async()=>{
-  const input=$("import-provenance"),item=libraryUI.item,generation=libraryUI.generation;
-  const files=Array.from(input.files);input.value="";if(!item)return;
-  if(files.length>100)throw Error(say("Import at most 100 torrents at a time.","Importez au maximum 100 torrents à la fois."));
-  const rows=[];
-  for(const file of files){
-    if(file.size>8*1024*1024)throw Error(say("Torrent exceeds 8 MiB.","Le torrent dépasse 8 Mio."));
-    const data=new Uint8Array(await file.arrayBuffer());let binary="";
-    for(let i=0;i<data.length;i+=32768)binary+=String.fromCharCode(...data.subarray(i,i+32768));
-    await job({kind:"import-provenance",path:item.path,torrent_data:btoa(binary)},r=>{
-      rows.push(r);if(generation===libraryUI.generation)renderEvidence({provenance:rows});
-    });
-  }
-});
-
-$("candidate-compatible").onclick=()=>guard(async()=>{
-  const item=libraryUI.item,generation=libraryUI.generation;if(!item)return;
-  await job({kind:"find-compatible",path:item.path},rows=>{if(generation===libraryUI.generation)showLibraryCandidates(rows);});
-});
-
 function renderRepair(host,row) {
   const card=element("section");host.append(card);
   card.append(element("h4",`${row.name} · ${evidenceLabel(row.status)}`),element("p",say("Original retained: ","Original conservé : ")+row.source),element("p",`${bytes(row.verified_bytes)} / ${bytes(row.target_bytes)} · ${say("Missing payload","Contenu manquant")} ${bytes(row.missing_bytes)}`),element("p",say("Experimental: single-file v1 torrents, 1% / 50 MiB size difference, at least 90% verified, at most 500 MiB missing and 2 advertised seeders. Source/team claims remain unverified.","Expérimental : torrents v1 d’un fichier, écart de 1 % / 50 Mio, au moins 90 % vérifiés, au plus 500 Mio manquants et 2 seeders annoncés. Les déclarations de source/team restent à vérifier.")));
@@ -299,8 +135,3 @@ function evidenceLabel(value) {
   const labels={filename:["Filename","Nom du fichier"],"embedded-title":["Embedded title","Titre intégré"],"writing-application":["Writing application","Application d’écriture"],resolution:["Resolution","Résolution"],"video-codec":["Video codec","Codec vidéo"],"audio-codec":["Audio codec","Codec audio"],"audio-channels":["Audio channels","Canaux audio"],processing:["Processing clue","Indice de traitement"],measured:["Measured contradiction","Contradiction mesurée"],hint:["Clue only","Simple indice"],review:["Review needed","À examiner"],verified:["Hash verified","Hashes vérifiés"],unverified:["Unverified","Non vérifié"],ambiguous:["Ambiguous","Ambigu"],partial:["Partially verified","Partiellement vérifié"],stale:["File changed; verify again","Fichier modifié ; vérifier à nouveau"],"awaiting-confirmation":["Copy not prepared","Copie à préparer"],ineligible:["Outside repair limits","Hors des limites de réparation"],preparing:["Preparing copy","Préparation de la copie"],adding:["Addition pending; inspect client","Ajout en cours ; inspecter le client"],checking:["Client verification","Vérification par le client"],ready:["Ready for confirmation","Prêt pour confirmation"],"needs-review":["Inspect the client before retrying","Inspecter le client avant de réessayer"],starting:["Start uncertain; inspect client","Démarrage incertain ; inspecter le client"],downloading:["Downloading into copy","Téléchargement dans la copie"],completed:["Completed","Terminé"]};
   return labels[value]?say(...labels[value]):value;
 }
-
-$("library-search-selected").onclick=()=>guard(()=>searchLibrary(true));
-$("library-search-all").onclick=()=>guard(()=>searchLibrary(false));
-$("library-check-all").onclick=()=>guard(checkAllCandidates);
-$("library-reseed-all").onclick=()=>guard(reseedAllMatches);

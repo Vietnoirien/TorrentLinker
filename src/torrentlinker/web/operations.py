@@ -67,6 +67,7 @@ class JobRequest(BaseModel):
         "send-queue",
         "scan",
         "check",
+        "candidate-inspector",
         "library-review",
         "library-evidence",
         "find-compatible",
@@ -142,6 +143,17 @@ class JobRequest(BaseModel):
     path: str = Field(default="", max_length=4096)
     repair_id: str = Field(default="", max_length=64)
     torrent_data: str = Field(default="", max_length=12_000_000)
+    inspector_action: Literal[
+        "review",
+        "check",
+        "reject",
+        "search",
+        "provenance",
+        "evidence",
+        "import",
+        "details",
+        "repairs",
+    ] = "review"
     candidate_key: str = Field(default="", max_length=4096)
     paths: list[str] = Field(default_factory=list, max_length=10000)
     reseed_action: Literal["all", "find", "compare", "prepare", "verify", "seed", "refresh"] = "all"
@@ -726,6 +738,15 @@ class Operations:
             return self.library.combine(request.paths, stop, request.selection_name)
         if request.kind == "find-compatible":
             return self.library.compatible(request.path, stop, progress)
+        if request.kind == "candidate-inspector":
+            return self.library.inspector(
+                request.path,
+                request.inspector_action,
+                stop,
+                key=request.candidate_key,
+                torrent_data=request.torrent_data,
+                progress=progress,
+            )
         if request.kind == "library-evidence":
             return {
                 **self.library.evidence(request.path, stop),

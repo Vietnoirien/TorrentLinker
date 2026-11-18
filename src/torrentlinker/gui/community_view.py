@@ -138,7 +138,13 @@ class BundledView(QWidget):
                     and Path(url.toLocalFile()).resolve()
                     in {
                         assets / name
-                        for name in ("view.html", "view.css", "view.js", "transport.js")
+                        for name in (
+                            "view.html",
+                            "view.css",
+                            "view.js",
+                            "transport.js",
+                            "inspector.js",
+                        )
                     }
                     | {
                         assets.parent / "panel" / name

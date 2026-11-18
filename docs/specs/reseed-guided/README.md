@@ -14,7 +14,7 @@ Library landing page.
 - Réglages exposes client setup and the persistent symlink destination. Adding a tested client selects it.
 - Disque lets the user select registered folders and start a scan. Folder creation includes a native picker on desktop and a server directory browser on the Web UI. Dossiers retains the existing folder editor.
 - Each item progresses independently through finding candidates, comparison, link preparation, verification and sharing. Ambiguous or incomplete items await review without stopping unrelated items.
-- The inspector retains access to the existing candidate, file, repair and missing-content approval tools. Originals are not renamed by this workflow.
+- The inspector follows the approved #97 extension in `candidate-inspector-preview.md`: candidate selection, file comparison, Description/NFO, measured evidence and offline provenance. Existing repair and archive approval dialogs remain available. Originals are not renamed by this workflow.
 - Run-wide and per-item pauses take effect at operation boundaries. Local hashing also observes the run-wide pause. Client hash checks may continue inside the client while paused.
 - Activity and each item's history use persisted reseed records. Completed steps survive application restart; interrupted work resumes only when requested.
 

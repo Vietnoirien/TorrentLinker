@@ -245,3 +245,103 @@ def test_shared_list_expands_packs_filters_children_and_combines_without_copying
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+
+
+@pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+def test_candidate_inspector_reviews_files_imports_and_rejects_in_place(tmp_path, monkeypatch):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.torrents import make_torrent
+
+    app, board, client, original, _, _ = reseed_app(tmp_path)
+    from torrentlinker.indexer import Indexer
+
+    monkeypatch.setattr(
+        Indexer,
+        "torrent_json",
+        lambda self, hash: {
+            "description": '<h2>Fixture synopsis</h2><a href="https://example.test/info">Reference</a><script>window.evil=1</script>',
+            "metadata": {"hasNfo": True, "nfoContent": "Fixture NFO <plain>"},
+        },
+    )
+    historical = tmp_path / "historical.torrent"
+    historical.write_bytes(make_torrent(original))
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1600, "height": 1000}, locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/#/library/reseed")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            frame = page.frame_locator("#reseed-frame")
+            expect(frame.get_by_label("Candidate", exact=True)).to_be_visible(timeout=15000)
+            frame.get_by_role("tab", name="Files", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text("Release.mkv")
+            expect(frame.locator(".review-content")).to_contain_text(original.name)
+            frame.get_by_role("tab", name="Description", exact=True).click()
+            expect(frame.locator(".review-description")).to_contain_text("Fixture synopsis")
+            expect(frame.locator(".review-description script")).to_have_count(0)
+            page.context.route(
+                "https://example.test/**", lambda route: route.fulfill(body="Reference")
+            )
+            with page.expect_popup() as opened:
+                frame.get_by_role("link", name="Reference").click()
+            opened.value.close()
+            expect(frame.locator(".review-description")).to_contain_text("Fixture synopsis")
+            frame.get_by_role("tab", name="NFO", exact=True).click()
+            expect(frame.locator(".review-content pre")).to_have_text("Fixture NFO <plain>")
+            frame.get_by_role("tab", name="Evidence", exact=True).click()
+            expect(frame.locator("#provenance-file")).to_be_enabled()
+            frame.locator("#provenance-file").set_input_files(historical)
+            expect(frame.locator(".review-content")).to_contain_text(
+                "Verified association", timeout=15000
+            )
+            page.reload()
+            frame.get_by_role("tab", name="Evidence", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text(
+                "Verified association", timeout=15000
+            )
+            original.write_bytes(b"changed")
+            frame.get_by_role("button", name="Refresh provenance", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text("Stale", timeout=15000)
+            page.locator("#language").select_option("fr")
+            expect(frame.get_by_role("tab", name="Preuves", exact=True)).to_be_visible()
+            page.set_viewport_size({"width": 390, "height": 844})
+            frame.locator(".torrent").click()
+            expect(frame.locator(".inspector.open")).to_be_visible()
+            assert frame.locator("body").evaluate("el=>el.scrollWidth <= innerWidth")
+            frame.locator(".inspector").evaluate("el=>el.scrollTop=350")
+            scroll = frame.locator(".inspector").evaluate("el=>el.scrollTop")
+            board.library.entries.append(board.library.entries[0])
+            expect(frame.locator(".stage").first).to_contain_text("2", timeout=5000)
+            assert frame.locator(".inspector").evaluate("el=>el.scrollTop") == scroll
+            board.library.entries.pop()
+            page.on("dialog", lambda dialog: dialog.accept())
+            frame.get_by_role("button", name="Écarter", exact=True).click()
+            expect(frame.locator(".review-header")).to_contain_text("Aucun candidat", timeout=15000)
+            page.reload()
+            expect(frame.locator(".review-header")).to_contain_text("Aucun candidat", timeout=15000)
+            frame.locator(".torrent").click()
+            frame.get_by_role("button", name="Historique des réparations…", exact=True).click()
+            expect(page.locator("#dialog-content")).to_contain_text(
+                "Aucune réparation enregistrée."
+            )
+            assert not client.calls
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(5)

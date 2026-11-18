@@ -46,44 +46,6 @@ def test_library_uses_shared_list_and_review_has_no_duplicate_list(qtbot, tmp_pa
     ]
 
 
-def test_review_dialog_keeps_candidate_details_readable_when_resized(qtbot, tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QDialog, QScrollArea
-
-    from torrentlinker.domain import ContentKind, ItemState, LibraryFolder, LocalItem
-    from torrentlinker.library import LibraryEntry
-
-    window, _ = window_for(qtbot, tmp_path, monkeypatch)
-    entry = LibraryEntry(
-        LibraryFolder(tmp_path, 1, ContentKind.EBOOK),
-        LocalItem(tmp_path / "Book.epub", {"Book.epub": 400}),
-        ItemState.ORPHAN,
-    )
-    window.library_model.set_entries([entry])
-    window.resize(1400, 700)
-    window.tabs.setCurrentIndex(1)
-    window.show()
-    workspace = window.library_workspace
-
-    def inspect_dialog(dialog):
-        dialog.resize(1100, 700)
-        dialog.show()
-        qtbot.waitExposed(dialog)
-        scroll = dialog.findChild(QScrollArea)
-        assert scroll is not None
-        review = window.review.height()
-        assert review >= window.review.minimumSizeHint().height()
-        assert window.review.entry is entry
-        assert not dialog.findChildren(QTabWidget, "librarySections")
-        dialog.resize(1400, 1400)
-        qtbot.waitUntil(lambda: window.review.height() > 600)
-        dialog.close()
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(QDialog, "exec", inspect_dialog)
-    workspace.open_review(str(entry.item.path))
-    assert workspace.sections.currentWidget() is workspace.reseed
-
-
 def test_desktop_review_preserves_candidate_selection_across_local_items(
     qtbot, tmp_path, monkeypatch, library_theme
 ):
