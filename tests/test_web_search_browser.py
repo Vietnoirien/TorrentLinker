@@ -280,3 +280,44 @@ def test_missing_category_folder_is_picked_once_and_reused(tmp_path, monkeypatch
             browser.close()
     finally:
         server.should_exit = True
+
+
+@pytest.mark.parametrize("check", ["empty-peer-bar", "visible-note"])
+def test_search_zero_peer_bar_and_visible_torrent_note(tmp_path, monkeypatch, check):
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests import test_web_search
+
+    listing = test_web_search.c411_listing
+
+    def zero_peers(request):
+        result = listing(request)
+        result["data"][0]["seeders"] = 0
+        result["data"][0]["leechers"] = 0
+        return result
+
+    monkeypatch.setattr(test_web_search, "c411_listing", zero_peers)
+    fake_net(monkeypatch, [])
+    server, base = serve(tmp_path)
+    try:
+        with sync_playwright() as playwright:
+            browser, page, errors = open_search(playwright, base)
+            panel = page.frame_locator("#search-frame")
+            panel.locator("#search-query").fill("film")
+            panel.locator("#search-form .primary").click()
+            row = panel.locator(".sr-row").first
+            expect(row).to_be_visible()
+            if folder := os.getenv("TL_SEARCH_SCREENSHOTS"):
+                from pathlib import Path
+
+                Path(folder).mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(Path(folder) / "search-zero-peers.png"))
+            if check == "empty-peer-bar":
+                bar = row.locator(".seedbar")
+                assert bar.bounding_box()["height"] <= 5
+            else:
+                expect(row.locator(".sr-zen")).to_contain_text("Note")
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True

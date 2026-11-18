@@ -531,7 +531,7 @@ function richRow(row) {
     "--seeds",
     total ? `${Math.round((100 * row.seeders) / total)}%` : "0%",
   );
-  bar.classList.toggle("empty", !total);
+  bar.classList.toggle("no-peers", !total);
   stats.append(
     element("strong", bytes(row.size), "sr-size"),
     element("span", undefined, "sr-peers"),
@@ -569,6 +569,9 @@ function richRow(row) {
         "Zen estimé par jour une fois en partage. Note : ",
       ) + num(row.note);
     zen.append(z);
+  }
+  if (row.note !== null && row.note !== undefined) {
+    zen.append(element("small", `≈ ${num(row.note)} Note`, "muted"));
   }
   el.append(
     check,

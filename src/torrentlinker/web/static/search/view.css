@@ -555,7 +555,7 @@ dialog h2 {
     #ef4444 var(--seeds, 0%)
   );
 }
-.seedbar.empty {
+.seedbar.no-peers {
   background: var(--line);
 }
 .sr-age {
@@ -571,6 +571,9 @@ dialog h2 {
   white-space: nowrap;
 }
 .sr-zen {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
   text-align: center;
 }
 .dl-button {
@@ -619,6 +622,7 @@ dialog h2 {
     justify-items: start;
   }
   .sr-zen {
+    justify-items: start;
     text-align: left;
   }
   .dl-button {
