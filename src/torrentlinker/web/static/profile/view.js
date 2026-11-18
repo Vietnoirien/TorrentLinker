@@ -277,7 +277,32 @@ const axisText = (x, y, text, anchor = "start") => {
   return t;
 };
 
+let chartOverview = null;
+function chartWidth(host) {
+  const style = getComputedStyle(host);
+  return Math.max(
+    200,
+    host.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight),
+  );
+}
+const chartWidths = new WeakMap();
+const chartResize = new ResizeObserver((entries) => {
+  let changed = false;
+  for (const entry of entries) {
+    if (chartWidths.get(entry.target) !== entry.contentRect.width) {
+      chartWidths.set(entry.target, entry.contentRect.width);
+      changed = true;
+    }
+  }
+  if (changed && chartOverview) showProfileCharts(chartOverview);
+});
+for (const id of ["profile-volumes", "profile-zen-chart"])
+  chartResize.observe($(id));
+
 function showProfileCharts(o) {
+  chartOverview = o;
   const p = o.period;
   const range = p ? `${p.first} → ${p.last}` : "";
   const volumes = $("profile-volumes"),
@@ -324,7 +349,7 @@ function showProfileCharts(o) {
   };
   // Volumes: uploaded, downloaded and dashed buffer, right axis in bytes.
   {
-    const W = 640,
+    const W = chartWidth(volumes),
       H = 220,
       L = 8,
       R = 64,
@@ -429,7 +454,7 @@ function showProfileCharts(o) {
   }
   // Zen balance (left axis) and ratio (right axis, dashed).
   {
-    const W = 420,
+    const W = chartWidth(zenChart),
       H = 220,
       L = 40,
       R = 40,
@@ -1069,6 +1094,7 @@ function showZenProfile(data) {
     showProfileSeeding(o);
     showProfileSync(o);
   } else {
+    chartOverview = null;
     for (const id of [
       "meta",
       "badges",

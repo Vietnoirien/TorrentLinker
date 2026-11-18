@@ -328,7 +328,7 @@ button:disabled {
 }
 .pf-chart {
   width: 100%;
-  height: auto;
+  height: 220px;
   display: block;
 }
 .pf-chart text {

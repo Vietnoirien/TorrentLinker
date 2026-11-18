@@ -251,6 +251,14 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
     )
     view.show_state(workspace.state(), history)
     wait_js(qtbot, view, "document.querySelectorAll('#profile-volumes svg').length === 1")
+    text_size_is_stable = (
+        "Array.from(document.querySelectorAll('.pf-chart text')).every(t => "
+        "Math.abs(parseFloat(getComputedStyle(t).fontSize) * t.getScreenCTM().a - 10) < 0.2)"
+    )
+    wait_js(qtbot, view, text_size_is_stable)
+    assert (
+        js(qtbot, view, "document.querySelector('.pf-chart').getBoundingClientRect().height") == 220
+    )
     assert "+30 B" in js(qtbot, view, "document.querySelector('#profile-tiles').textContent")
     js(qtbot, view, "document.querySelectorAll('#profile-period button')[0].click()")
     wait_js(
@@ -305,6 +313,7 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
     wait_js(qtbot, view, columns + " === 3")
     view.resize(600, 1200)
     wait_js(qtbot, view, columns + " === 2")
+    wait_js(qtbot, view, text_size_is_stable)
     with qtbot.waitSignal(view.refresh_requested):
         js(qtbot, view, "document.querySelector('#profile-refresh').click()")
     view.language = "fr"
