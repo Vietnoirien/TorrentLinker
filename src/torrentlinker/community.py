@@ -166,6 +166,36 @@ class CommunityActions:
             result["reward_due"] = result["posted"] + 86400
         return result
 
+    def daily_contribution(self, account: str) -> dict[str, Any]:
+        """Profile counters without loading the library, history or scheduling work."""
+        with self._db() as db:
+            return self._daily_contribution(db, account, self._account(db, account))
+
+    def _daily_contribution(
+        self, db: sqlite3.Connection, account: str, row: sqlite3.Row
+    ) -> dict[str, Any]:
+        today_start, _ = site_day(self.clock())
+        snapshot = json.loads(row["snapshot"])
+        if row["synced"] < today_start:
+            for rule in snapshot.get("rules", {}).values():
+                rule["today"] = 0
+        limits = self._settings(row)["limits"]
+        counts = dict(
+            db.execute(
+                "SELECT kind, COUNT(*) FROM actions WHERE account=? "
+                "AND state IN ('sending','uncertain','posted') AND started>=? GROUP BY kind",
+                (account, today_start),
+            ).fetchall()
+        )
+        return {
+            kind: {
+                "local_used": counts.get(kind, 0),
+                "site_used": snapshot.get("rules", {}).get(kind, {}).get("today"),
+                "limit": limits[kind],
+            }
+            for kind in KINDS
+        }
+
     def state(self, account: str) -> dict[str, Any]:
         with self._db() as db:
             row = self._account(db, account)
@@ -201,21 +231,7 @@ class CommunityActions:
                 for rule in snapshot.get("rules", {}).values():
                     rule["today"] = 0
             settings = self._settings(row)
-            quotas = {}
-            for kind in KINDS:
-                used = sum(
-                    1
-                    for i in items
-                    if i["kind"] == kind
-                    and i["state"] in ("sending", "uncertain", "posted")
-                    and (i["started"] or 0) >= today_start
-                )
-                rule = snapshot.get("rules", {}).get(kind, {})
-                quotas[kind] = {
-                    "local_used": used,
-                    "site_used": rule.get("today"),
-                    "limit": settings["limits"][kind],
-                }
+            quotas = self._daily_contribution(db, account, row)
             reservations = {
                 k: [
                     i["started"]

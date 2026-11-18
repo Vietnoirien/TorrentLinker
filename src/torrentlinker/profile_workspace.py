@@ -370,7 +370,12 @@ class ProfileWorkspace:
     def state(self) -> dict[str, Any]:
         with self.lock:
             companion = self.data.get("companion")
+            try:
+                contribution = self.community.daily_contribution(self.community_account())
+            except ValueError:
+                contribution = None
             return {
+                "community_contribution": contribution,
                 "api": self.data.get("api"),
                 "source": self.data.get("source"),
                 "api_updated_at": self.data.get("api_updated_at"),

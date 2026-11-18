@@ -237,3 +237,15 @@ def test_site_quota_reserves_sends_at_the_same_clock_tick_as_snapshot(queue):
     now[0] += 30
     # Three external actions plus the two reserved locally exhaust the quota.
     assert q.claim("42") is None
+
+
+def test_profile_daily_contribution_uses_site_counts_and_resets_at_midnight(queue):
+    q, now = queue
+    q.observe("42", observation(today=3))
+    assert q.daily_contribution("42")["comment"] == {
+        "site_used": 3,
+        "local_used": 0,
+        "limit": 5,
+    }
+    now[0] += 86400
+    assert q.daily_contribution("42")["comment"]["site_used"] == 0

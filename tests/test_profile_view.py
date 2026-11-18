@@ -249,7 +249,13 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
         )
         < 40
     )
+    from tests.test_community import observation
+
+    workspace.community.observe("42", observation(today=3))
     view.show_state(workspace.state(), history)
+    wait_js(
+        qtbot, view, "document.querySelector('#profile-contribution').textContent.includes('3 / 5')"
+    )
     wait_js(qtbot, view, "document.querySelectorAll('#profile-volumes svg').length === 1")
     text_size_is_stable = (
         "Array.from(document.querySelectorAll('.pf-chart text')).every(t => "
@@ -309,6 +315,14 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
         ".gridTemplateColumns.split(' ').length"
     )
     assert js(qtbot, view, columns) == 6
+    assert (
+        js(
+            qtbot,
+            view,
+            "getComputedStyle(document.querySelector('#profile-sync')).gridColumnEnd",
+        )
+        == "-1"
+    )
     view.resize(1800, 1000)
     wait_js(
         qtbot,
@@ -316,6 +330,17 @@ def test_profile_view_draws_history_period_clients_and_wraps_tiles(
         "getComputedStyle(document.querySelector('.pf-grid2'))"
         ".gridTemplateColumns.split(' ').length === 3",
     )
+    assert (
+        js(
+            qtbot,
+            view,
+            "Array.from(document.querySelector('.pf-grid2').children).slice(-2).map(e=>e.id).join(',')",
+        )
+        == "profile-contribution,profile-sync"
+    )
+    if output := os.getenv("TL_PROFILE_SCREENSHOTS"):
+        qtbot.wait(100)
+        assert view.grab().save(str(Path(output) / "desktop-contribution-wide.png"))
     view.resize(900, 1200)
     wait_js(qtbot, view, columns + " === 3")
     view.resize(600, 1200)

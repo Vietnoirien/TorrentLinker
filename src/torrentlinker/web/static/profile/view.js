@@ -1042,6 +1042,61 @@ function showProfileSync(o) {
   );
 }
 
+function showProfileContribution(quotas) {
+  const host = $("profile-contribution");
+  host.replaceChildren(
+    eyebrow(
+      say("Daily community contribution", "Contribution communautaire du jour"),
+    ),
+  );
+  if (!quotas) {
+    host.append(
+      element(
+        "p",
+        say("Connect the companion", "Connectez l’extension"),
+        "pf-empty",
+      ),
+    );
+    return;
+  }
+  const rows = element("div", undefined, "pf-voies");
+  for (const [kind, label] of [
+    ["comment", say("Comments", "Commentaires")],
+    ["vote", say("Votes", "Votes")],
+    ["chat", say("Chat messages", "Messages du chat")],
+  ]) {
+    const quota = quotas[kind];
+    if (!quota) continue;
+    const used = quota.site_used ?? quota.local_used;
+    const row = element("div", undefined, "pf-voie");
+    const bar = element("div", undefined, "pf-bar");
+    const fill = element("span");
+    fill.style.width = `${quota.limit ? Math.min(100, (used / quota.limit) * 100) : 0}%`;
+    bar.append(fill);
+    row.append(
+      element("span", label),
+      bar,
+      element("span", `${used} / ${quota.limit}`, "pf-num"),
+    );
+    row.title =
+      quota.site_used == null
+        ? say("Local attempts today", "Tentatives locales aujourd’hui")
+        : say("Reported by the site", "Comptabilisé par le site");
+    rows.append(row);
+  }
+  host.append(
+    rows,
+    element(
+      "p",
+      say(
+        "Resets at midnight, Paris time.",
+        "Remise à zéro à minuit, heure de Paris.",
+      ),
+      "pf-contribution-note pf-muted",
+    ),
+  );
+}
+
 function showZenProfile(data) {
   const errors = {
     "no-key": say(
@@ -1092,6 +1147,7 @@ function showZenProfile(data) {
     showProfileZen(o);
     showProfileTransfers(o);
     showProfileSeeding(o);
+    showProfileContribution(data.community_contribution);
     showProfileSync(o);
   } else {
     chartOverview = null;
@@ -1106,6 +1162,7 @@ function showZenProfile(data) {
       "transfers",
       "seeding",
       "sync",
+      "contribution",
     ])
       $("profile-" + id).replaceChildren();
     $("profile-username").textContent = say(
