@@ -252,6 +252,7 @@ def test_browser_reconciles_interrupted_upload_only_after_confirmation(tmp_path,
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator("#workspace")).to_be_visible()
+            page.locator("#language").select_option("fr")
             page.locator("[data-view=upload]").first.click()
             frame = page.frame_locator("#upload-frame")
             frame.locator("[data-tab=tracking]").click()
