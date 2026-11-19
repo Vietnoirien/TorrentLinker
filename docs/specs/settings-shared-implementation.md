@@ -46,13 +46,21 @@ providers. No live tracker or user torrent client is used. Shared Settings tests
 first-run setup, saved-secret handling, failed-save drafts, multiple clients, preference
 persistence, folder verification, context/sampling controls, agent tokens and Companion
 handoff. Native rendering has been checked on Wayland in English/dark and French/light.
-The full offline suite reported 2,142 passes and 217 skips. Its five failures were
-corrected: three viewport-resize waits, native French messages, and the navigation
-fixture's legacy code boundary. The subsequent acceptance batch passed all 29 checks,
-including browser workflows and the affected native tests. The final Wayland rendering
-check passed after these corrections. The related browser batch passed 13 checks for Profile, Community and Media. The
-Companion extension check then passed separately after correcting focus-blocked polling
-and waiting for saved download consent. CI remains the final integration check.
+The full local offline rerun passed 2,151 tests with 217 skips. The shared Settings
+acceptance batch passed all 29 checks, and the Companion extension workflow passed.
+Headless geometry checks run in isolated processes so the 3D viewer's global OpenGL
+backend cannot prevent Qt WebEngine from initializing its viewport.
+
+[CI for implementation commit 863fbe8](https://github.com/Vietnoirien/TorrentLinker/actions/runs/44610157992)
+passed all 11 jobs, including the full Linux suite, browser acceptance (83 passes,
+2 environment skips), Windows packaging and packaged-app smoke tests, and isolated
+torrent-client and seedbox integrations. Issues #112 and #113 are complete.
+
+The browser regressions also cover early token cleanup before section scripts load,
+section changes during a delayed host refresh, remembered routes when editing a client,
+and rejecting late Search polls after leaving Search. Plan controls remain disabled
+until their initial state arrives, preventing that response from replacing early edits.
+
 
 Review corrections have explicit regressions: stale client controls cannot act while a
 new snapshot loads, first-run checks use the submitted proxy, Automatic folder grouping

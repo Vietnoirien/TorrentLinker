@@ -90,17 +90,17 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 |---|---|---|---|---|---|---|
 | 36 | Documentation | **BV** `DocumentationTab` | same bundled `documentation/view.html` | Implemented (#114) | `interface-backlog/README.md` | Native external browser vs Web links; standalone citation URLs remain plain documents |
 | 37 | Reading room / Salon de lecture | Native `ReadingRoom` (`ebook_reader.py`) | none | DO | none | native EPUB/PDF rendering |
-| 38 | Settings › Connections | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | system keyring |
-| 39 | Settings › Library Folders | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | native picker |
-| 40 | Settings › Search & Matching | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
-| 41 | Settings › Download Folders | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | picker, import from client |
-| 42 | Settings › Client Paths | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | local disk |
-| 43 | Settings › Zen | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
-| 44 | Settings › General | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | interface-size scaling is Qt |
-| 45 | Settings › Assistant | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
-| 46 | Settings › Companion | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | local receiver port 8767 |
-| 47 | Settings › Agent access | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
-| 48 | Clients… dialog | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
+| 38 | Settings › Connections | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | system keyring |
+| 39 | Settings › Library Folders | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | native picker |
+| 40 | Settings › Search & Matching | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
+| 41 | Settings › Download Folders | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | picker, import from client |
+| 42 | Settings › Client Paths | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | local disk |
+| 43 | Settings › Zen | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
+| 44 | Settings › General | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | interface-size scaling is Qt |
+| 45 | Settings › Assistant | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
+| 46 | Settings › Companion | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | local receiver port 8767 |
+| 47 | Settings › Agent access | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
+| 48 | Clients… dialog | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
 | 49 | Update notice | Native `UpdateNotice` | none | DO | none | — |
 | 50 | Shell: sidebar, header, client selector, status bar | `main_window.py:441-535`, `WorkspaceTabs` | `index.html:52-92` | NU | none | native status bar, menus |
 | 51 | Login | none | `/api/login` | WO | `web-070.md`, ADR-0016 | — |
