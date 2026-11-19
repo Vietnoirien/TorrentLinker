@@ -64,9 +64,7 @@ def test_tree_groups_categories_and_numeric_rows(qtbot, tmp_path):
     js(
         qtbot,
         view,
-        "document.querySelector('#seeding-sort').value='size';document.que"
-        "rySelector('#seeding-order').value='asc';document.querySelector('"
-        "#seeding-sort').dispatchEvent(new Event('change'))",
+        "document.querySelector('[data-sort=\"size\"]').click()",
     )
     wait_js(
         qtbot,

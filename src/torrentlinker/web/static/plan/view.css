@@ -242,3 +242,59 @@ progress {
 .profile-card p {
   color: var(--muted);
 }
+
+.plan-limits {
+  margin: 16px 0;
+}
+.plan-limits > label > input {
+  width: 100%;
+}
+#plan-filters {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+#plan-filters input {
+  flex: 2;
+}
+#plan-filters select {
+  flex: 1;
+}
+
+.plan-client-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+.plan-client-card:has(input[type="checkbox"]:checked) {
+  border-color: var(--accent);
+}
+.plan-client-card .plan-client-heading {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+.plan-client-card input[type="checkbox"] {
+  width: 17px;
+  margin: 0;
+}
+.plan-client-card label {
+  margin: 0;
+}
+.plan-limits input[type="checkbox"] {
+  width: 17px;
+  margin: 0;
+}
+.plan-limits label > span:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

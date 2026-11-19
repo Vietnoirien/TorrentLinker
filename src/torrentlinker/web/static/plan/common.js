@@ -195,6 +195,8 @@ const frenchIssues = {
     "Votre plafond total de torrents est atteint. Augmentez-le dans Paramètres > Zen pour ajouter des torrents.",
   plan_cap:
     "La limite du Plan est de zéro torrent. Augmentez-la ou désactivez cette limite.",
+  minimum_torrents:
+    "Ce Plan contient moins que le minimum demandé de {count} torrents. Élargissez les filtres, augmentez l’espace disponible ou réduisez le nombre minimal.",
   filters:
     "{count} torrents ne respectent pas les filtres de taille ou de sources. Élargissez les filtres du Plan.",
   zen_class:

@@ -59,6 +59,8 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
                 "plan-goal",
                 "plan-budget",
                 "plan-count",
+                "plan-min-count",
+                "plan-min-seeders",
                 "plan-seeders",
                 "plan-min-size",
                 "plan-max-size",
@@ -69,6 +71,13 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             panel.locator("#plan-cached").check()
             panel.locator("#plan-category").select_option(["7000"])
             panel.locator("#plan-count").fill("2000")
+            panel.locator("#plan-min-count").fill("2")
+            panel.locator("#plan-min-seeders").fill("1")
+            panel.locator("#plan-max-size").fill("1")
+            panel.locator("[data-size-unit=max]").click()
+            expect(panel.locator("#plan-max-size")).to_have_value("1024")
+            expect(panel.locator("[data-size-unit=min]")).to_have_text("GiB")
+            panel.locator("#plan-max-size").fill("0")
             panel.locator("#plan-options > summary").click()
             expect(panel.locator("#plan-budget")).not_to_be_visible()
             panel.locator("#plan-options > summary").click()
@@ -109,8 +118,15 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             expect(panel.locator("#plan-summary")).to_contain_text("paid back", timeout=15000)
             expect(panel.locator("#plan-storage")).to_contain_text("Reserved")
             expect(panel.locator("#plan-result tbody tr")).to_have_count(3)
+            assert setup.settings.plan_options.min_torrents == 2
+            assert setup.settings.plan_options.min_seeders == 1
+            expect(panel.locator("#plan-sort")).to_have_count(0)
+            panel.locator("#plan-query").fill("Alpha")
+            expect(panel.locator("#plan-result tbody tr")).to_have_count(1)
+            panel.locator("#plan-query").fill("")
+            expect(panel.locator("#plan-result tbody tr")).to_have_count(3)
             expect(panel.locator("#plan-times")).to_contain_text("Sending")
-            panel.locator("#plan-sort").select_option("title")
+            panel.locator("[data-sort=title]").click()
             expect(panel.locator("#plan-result tbody tr").first).to_contain_text("Alpha")
             panel.locator("#plan-budget").fill("12")
             expect(panel.locator("#plan-send")).to_be_disabled()

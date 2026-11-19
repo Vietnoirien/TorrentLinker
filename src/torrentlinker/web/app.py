@@ -862,15 +862,27 @@ def create_app(
     def zen_seeding(
         client_id: str = "",
         q: str = "",
+        state: str = "",
+        tracker: str = "",
+        tag: str = "",
+        size_min: float | None = Query(None, ge=0, allow_inf_nan=False),
+        size_max: float | None = Query(None, ge=0, allow_inf_nan=False),
+        note_min: float | None = Query(None, ge=0, allow_inf_nan=False),
+        zen_min: float | None = Query(None, ge=0, allow_inf_nan=False),
+        weight_min: float | None = Query(None, ge=0, allow_inf_nan=False),
+        seed_max: float | None = Query(None, ge=0, allow_inf_nan=False),
+        days_min: float | None = Query(None, ge=0, allow_inf_nan=False),
         group: str = "",
         descendants: bool = False,
-        sort: Literal["name", "size", "seeders", "seed_days", "zen", "note"] = "zen",
+        sort: Literal[
+            "name", "size", "seeders", "seed_days", "zen", "note", "ratio", "weight"
+        ] = "zen",
         descending: bool = True,
         offset: int = Query(0, ge=0),
         limit: int = Query(100, ge=1, le=200),
     ) -> dict:
         from torrentlinker.seeding import combined_seeding
-        from torrentlinker.web.seeding import seeding_page
+        from torrentlinker.web.seeding import SeedingFilters, seeding_page
 
         targets = (
             [for_client(p.id) for p in service.settings.client_profiles if p.enabled]
@@ -894,6 +906,18 @@ def create_app(
             settings.zen,
             settings.uploads,
             query=q,
+            filters=SeedingFilters(
+                state=state,
+                tracker=tracker,
+                tag=tag,
+                size_min=size_min,
+                size_max=size_max,
+                note_min=note_min,
+                zen_min=zen_min,
+                weight_min=weight_min,
+                seed_max=seed_max,
+                days_min=days_min,
+            ),
             group=group,
             descendants=descendants,
             sort=sort,

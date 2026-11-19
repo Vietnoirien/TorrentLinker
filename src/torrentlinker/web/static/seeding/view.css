@@ -116,7 +116,7 @@ button {
 }
 .seeding-workspace {
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -208,4 +208,11 @@ button {
   .category-panel > .toolbar button {
     flex: 1;
   }
+}
+
+#seeding-category-totals {
+  margin: 14px 0;
+}
+.filters select {
+  flex: 1;
 }

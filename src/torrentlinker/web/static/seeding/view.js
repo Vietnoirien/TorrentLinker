@@ -7,12 +7,153 @@ const zenSeeding = {
   category: "all",
   offset: 0,
   total: 0,
+  sort: "zen",
+  descending: true,
+  query: "",
+  filters: { state: "", category: "", tracker: "", tag: "" },
+  metrics: {
+    sizeMin: "",
+    sizeMax: "",
+    noteMin: "",
+    zenMin: "",
+    weightMin: "",
+    seedMax: "",
+    daysMin: "",
+  },
+  units: { sizeMin: "GiB", sizeMax: "GiB" },
 };
 let loading = false,
   requestingRefresh = false,
   revision = -1,
   started = false;
 const pageSize = 100;
+
+let filterTimer;
+const metricFields = {
+  sizeMin: "size_min",
+  sizeMax: "size_max",
+  noteMin: "note_min",
+  zenMin: "zen_min",
+  weightMin: "weight_min",
+  seedMax: "seed_max",
+  daysMin: "days_min",
+};
+function filterParameters() {
+  const params = {
+    state: zenSeeding.filters.state,
+    tracker: zenSeeding.filters.tracker,
+    tag: zenSeeding.filters.tag,
+  };
+  for (const [field, key] of Object.entries(metricFields)) {
+    const value = zenSeeding.metrics[field];
+    if (value !== "")
+      params[key] =
+        Number(value) *
+        (zenSeeding.units[field]
+          ? zenSeeding.units[field] === "GiB"
+            ? 1024 ** 3
+            : 1024 ** 2
+          : 1);
+  }
+  return params;
+}
+function renderFilters(options = zenSeeding.filterOptions || {}) {
+  zenSeeding.filterOptions = options;
+  const active = document.activeElement,
+    top = scrollY,
+    queryFocused = active?.id === "seeding-query",
+    metric = active?.dataset?.metric,
+    filter = active?.dataset?.filter,
+    typed = active?.value,
+    expanded = document.querySelector(".metric-filters")?.open;
+  $("seeding-filters").innerHTML =
+    TLTorrentFilters.controls({
+      query: zenSeeding.query,
+      queryId: "seeding-query",
+      filters: zenSeeding.filters,
+      options: {
+        ...options,
+        category: (options.category || []).map((item) => ({
+          ...item,
+          label: item.label || say("Unknown category", "Catégorie inconnue"),
+        })),
+      },
+      language,
+    }) +
+    TLTorrentFilters.metrics({
+      metrics: zenSeeding.metrics,
+      sizeUnits: zenSeeding.units,
+      language,
+      scope: false,
+    });
+  if (expanded !== undefined)
+    document.querySelector(".metric-filters").open = expanded;
+  const reload = () => {
+    zenSeeding.offset = 0;
+    guard(loadZenSeeding);
+  };
+  $("seeding-query").oninput = (event) => {
+    zenSeeding.query = event.target.value;
+    zenSeeding.generation++;
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(reload, 200);
+  };
+  document.querySelectorAll("[data-filter]").forEach(
+    (node) =>
+      (node.onchange = () => {
+        zenSeeding.filters[node.dataset.filter] = node.value;
+        zenSeeding.category = zenSeeding.filters.category || "all";
+        reload();
+      }),
+  );
+  document.querySelectorAll("[data-metric]").forEach(
+    (node) =>
+      (node.onchange = () => {
+        if (!node.checkValidity()) return;
+        zenSeeding.metrics[node.dataset.metric] = node.value;
+        reload();
+      }),
+  );
+  document.querySelectorAll("[data-unit]").forEach(
+    (node) =>
+      (node.onclick = () => {
+        const field = node.dataset.unit,
+          input = document.querySelector(`[data-metric="${field}"]`),
+          toMiB = zenSeeding.units[field] === "GiB";
+        zenSeeding.units[field] = toMiB ? "MiB" : "GiB";
+        zenSeeding.metrics[field] =
+          input.value === ""
+            ? ""
+            : String(Number(input.value) * (toMiB ? 1024 : 1 / 1024));
+        renderFilters();
+        reload();
+      }),
+  );
+  $("clear-filters").onclick = () => {
+    clearTimeout(filterTimer);
+    zenSeeding.query = "";
+    zenSeeding.category = "all";
+    for (const key of Object.keys(zenSeeding.filters))
+      zenSeeding.filters[key] = "";
+    for (const key of Object.keys(zenSeeding.metrics))
+      zenSeeding.metrics[key] = "";
+    renderFilters();
+    reload();
+  };
+  const focus = queryFocused
+    ? $("seeding-query")
+    : metric
+      ? document.querySelector(`[data-metric="${metric}"]`)
+      : filter
+        ? document.querySelector(`[data-filter="${filter}"]`)
+        : null;
+  if (focus) {
+    if (metric) focus.value = typed;
+    focus.focus({ preventScroll: true });
+  }
+  scrollTo(0, top);
+}
+
 function controls() {
   const busy = loading || requestingRefresh || Boolean(environment.state?.busy);
   for (const id of [
@@ -37,6 +178,7 @@ function applyEnvironment(env) {
   translate();
   document.documentElement.dataset.theme = env.theme || "dark";
   if (changed) {
+    clearTimeout(filterTimer);
     zenSeeding.generation++;
     zenSeeding.groups = [];
     zenSeeding.total = 0;
@@ -47,7 +189,12 @@ function applyEnvironment(env) {
     zenSeeding.expanded = new Set(value.expanded || []);
     zenSeeding.category = "all";
     zenSeeding.offset = 0;
-    $("seeding-query").value = "";
+    zenSeeding.query = "";
+    for (const key of Object.keys(zenSeeding.filters))
+      zenSeeding.filters[key] = "";
+    for (const key of Object.keys(zenSeeding.metrics))
+      zenSeeding.metrics[key] = "";
+    renderFilters({});
     started = false;
   }
   controls();
@@ -80,6 +227,7 @@ function groupName(group) {
 }
 function chooseCategory(id) {
   zenSeeding.category = id;
+  zenSeeding.filters.category = id === "all" ? "" : id;
   zenSeeding.offset = 0;
   return loadZenSeeding();
 }
@@ -142,31 +290,26 @@ function renderRows(result) {
     ["seed_days", say("Seed time", "Durée de seed")],
     ["note", "≈ Note"],
     ["zen", say("≈ Zen / day", "≈ Zen / jour")],
+    ["ratio", "Ratio"],
   ];
   for (const [key, label] of columns) {
     const cell = element("th"),
-      active = $("seeding-sort").value === key;
+      active = zenSeeding.sort === key;
     cell.setAttribute(
       "aria-sort",
-      active
-        ? $("seeding-order").value === "asc"
-          ? "ascending"
-          : "descending"
-        : "none",
+      active ? (!zenSeeding.descending ? "ascending" : "descending") : "none",
     );
     const sort = button(
-      label +
-        (active ? ($("seeding-order").value === "asc" ? " ↑" : " ↓") : " ↕"),
+      label + (active ? (!zenSeeding.descending ? " ↑" : " ↓") : " ↕"),
       () => {
-        if (active)
-          $("seeding-order").value =
-            $("seeding-order").value === "asc" ? "desc" : "asc";
-        $("seeding-sort").value = key;
+        zenSeeding.descending = active ? !zenSeeding.descending : false;
+        zenSeeding.sort = key;
         zenSeeding.offset = 0;
         return loadZenSeeding();
       },
     );
     sort.className = "sort-head";
+    sort.dataset.sort = key;
     cell.append(sort);
     heading.append(cell);
   }
@@ -196,6 +339,7 @@ function renderRows(result) {
       num(row.seed_days) + " " + say("days", "jours"),
       num(row.note),
       row.zen == null ? "—" : "≈ " + num(row.zen),
+      num(row.ratio),
     ])
       line.append(element("td", value));
     body.append(line);
@@ -242,19 +386,15 @@ async function loadZenSeeding() {
   loading = true;
   controls();
   const generation = ++zenSeeding.generation;
-  $("seeding-query").placeholder = say(
-    "Find torrents or categories…",
-    "Rechercher des torrents ou catégories…",
-  );
-  $("seeding-query").setAttribute("aria-label", $("seeding-query").placeholder);
   $("seeding-status").textContent = say("Loading…", "Chargement…");
   try {
     const result = await seedingRequest("page", {
-      q: $("seeding-query").value,
+      q: zenSeeding.query,
+      ...filterParameters(),
       group: zenSeeding.category,
       descendants: true,
-      sort: $("seeding-sort").value,
-      descending: $("seeding-order").value === "desc",
+      sort: zenSeeding.sort,
+      descending: zenSeeding.descending,
       offset: zenSeeding.offset,
       limit: pageSize,
     });
@@ -265,6 +405,7 @@ async function loadZenSeeding() {
     }
     zenSeeding.total = result.total;
     zenSeeding.groups = result.groups;
+    renderFilters(result.filter_options);
     renderCategories(result);
     renderRows(result);
     renderSummary(result);
@@ -288,6 +429,7 @@ async function loadZenSeeding() {
   }
 }
 function init() {
+  renderFilters();
   $("seeding-expand").onclick = () => {
     for (const group of zenSeeding.groups) zenSeeding.expanded.add(group.id);
     $("seeding-groups")
@@ -319,17 +461,6 @@ function init() {
         controls();
       }
     });
-  let filterTimer;
-  $("seeding-query").oninput = () => {
-    clearTimeout(filterTimer);
-    zenSeeding.offset = 0;
-    filterTimer = setTimeout(() => guard(loadZenSeeding), 200);
-  };
-  for (const id of ["seeding-sort", "seeding-order"])
-    $(id).onchange = () => {
-      zenSeeding.offset = 0;
-      guard(loadZenSeeding);
-    };
   for (const [id, offset] of [
     ["seeding-first", () => 0],
     ["seeding-prev", () => Math.max(0, zenSeeding.offset - pageSize)],

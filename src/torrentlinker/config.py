@@ -423,6 +423,8 @@ def _plan_options_from_json(d: dict) -> PlanOptions:  # type: ignore[type-arg]
             max(1, int(d["max_torrents"])) if d.get("max_torrents") is not None else None
         ),
         max_seeders=max(1, int(d["max_seeders"])) if d.get("max_seeders") is not None else None,
+        min_torrents=max(0, int(d.get("min_torrents", 0))),
+        min_seeders=max(0, int(d.get("min_seeders", 0))),
         min_size=max(0, int(d.get("min_size", 0))),
         max_size=max(0, int(d.get("max_size", 0))),
     )

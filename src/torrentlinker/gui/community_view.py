@@ -159,7 +159,13 @@ class BundledView(QWidget):
                     }
                     | {
                         assets.parent / "panel" / name
-                        for name in ("base.css", "transport.js", "i18n.js", "torrent-list.css")
+                        for name in (
+                            "base.css",
+                            "transport.js",
+                            "i18n.js",
+                            "torrent-list.css",
+                            "torrent-filters.js",
+                        )
                     }
                     or self_view.channel_name == "media"
                     and url.isLocalFile()

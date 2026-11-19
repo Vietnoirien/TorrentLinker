@@ -77,17 +77,9 @@ function sortHeader(k, label) {
   return `<th aria-sort="${sortKey === k ? (sortDir === 1 ? "ascending" : "descending") : "none"}"><button class="sort-head" data-sort="${k}">${label} <span aria-hidden="true">${sortKey === k ? (sortDir === 1 ? "↑" : "↓") : "↕"}</span></button></th>`;
 }
 function metricControls() {
-  const fields = [
-    ["sizeMin", t("Taille min.", "Min. size")],
-    ["sizeMax", t("Taille max.", "Max. size")],
-    ["noteMin", t("Note c411 min.", "Min. c411 Note")],
-    ["zenMin", t("Zen/jour min.", "Min. Zen/day")],
-    ["weightMin", t("Poids min.", "Min. weight")],
-    ["seedMax", t("Sources max.", "Max. seeders")],
-    ["daysMin", t("Seed min. (jours)", "Min. seed (days)")],
-  ];
-  return `<details class="metric-filters" ${Object.values(metrics).some((v) => v !== "") ? "open" : ""}><summary>${t("Filtres de seed et c411", "Seed and c411 filters")} · ${Object.values(metrics).filter((v) => v !== "").length} ${t("actifs", "active")}</summary><div class="metric-grid"><label>${t("Réseau", "Network")}<select data-metric="scope"><option value="">${t("Tous", "All")}</option><option value="c411" ${metrics.scope === "c411" ? "selected" : ""}>c411</option><option value="other" ${metrics.scope === "other" ? "selected" : ""}>${t("Hors c411", "Non-c411")}</option></select></label>${fields.map(([k, l]) => `<label>${l}<span class="metric-value"><input type="number" min="0" step="any" data-metric="${k}" value="${escape(metrics[k])}" placeholder="${t("Sans limite", "No limit")}">${sizeUnits[k] ? `<button type="button" class="unit-toggle" data-unit="${k}" aria-label="${l} : ${t("changer l’unité", "switch unit")}, ${sizeUnits[k]}">${sizeUnits[k]}</button>` : ""}</span></label>`).join("")}</div><p class="muted">${t("Note, Zen et poids filtrent uniquement les torrents c411 renseignés. Les sources désignent les seeders disponibles.", "Note, Zen and weight only match c411 torrents with known values. Seeders means available sources.")}</p><button id="clear-filters">${t("Effacer les filtres", "Clear filters")}</button></details>`;
+  return TLTorrentFilters.metrics({ metrics, sizeUnits, language: lang });
 }
+
 function stateText(s) {
   return {
     seeding: t("En partage", "Seeding"),
@@ -101,9 +93,7 @@ function stateText(s) {
 function notify(s) {
   if ($("notice")) $("notice").textContent = s;
 }
-function choices(key, values, all) {
-  return `<select data-filter="${key}" aria-label="${all}"><option value="">${all}</option>${values.map((v) => `<option ${filters[key] === v ? "selected" : ""} value="${escape(v)}">${key === "state" ? stateText(v) : escape(v)}</option>`).join("")}</select>`;
-}
+
 function paint() {
   document.documentElement.dataset.theme = theme;
   const unused = `<div class="brand">TL · TorrentLinker</div>${["Zen", t("Bibliothèque", "Library"), "Upload", t("Recherche", "Search"), "RSS", "Torrents", t("Assistant", "Assistant"), t("Médias", "Media")].map((x) => `<button class="${x === "Torrents" ? "selected" : ""}" disabled>${x}</button>`).join("")}`;
@@ -133,7 +123,7 @@ function paint() {
             )
             .join("")}</div>`
         : ""
-    }<div class="toolbar"><button id="columns">${t("Colonnes", "Columns")}</button><button id="refresh">${t("Actualiser", "Refresh")}</button><button id="transfer-history">${t("Transferts", "Transfers")}</button><button id="trackers">${t("Vue par tracker", "Group by tracker")}</button><span class="muted">${t("Actualisation toutes les 5 s · sélection conservée", "Refresh every 5 s · selection preserved")}</span></div><div id="notice" role="status"></div><div class="workspace"><section class="panel"><div class="filters"><input id="query" value="${escape(query)}" placeholder="${t("Rechercher un torrent…", "Find a torrent…")}">${choices("state", ["seeding", "downloading", "paused", "checking", "error", "other"], t("Tous les états", "All states"))}${choices("category", snapshot.categories, t("Toutes les catégories", "All categories"))}${choices("tracker", snapshot.trackers, t("Tous les trackers", "All trackers"))}${choices("tag", snapshot.tags, t("Tous les tags", "All tags"))}</div>${metricControls()}<div class="status"><span>${selected.size} ${t("sélectionné(s)", "selected")}</span><div class="toolbar"><button data-action="resume" ${selected.size ? "" : "disabled"}>${t("Reprendre", "Resume")}</button><button data-action="pause" ${selected.size ? "" : "disabled"}>${t("Suspendre", "Pause")}</button><button id="transfer-selection" ${selected.size ? "" : "disabled"}>${t("Transférer…", "Transfer…")}</button><button id="more-actions" ${selected.size ? "" : "disabled"}>${t("Plus…", "More…")}</button><button data-action="remove" ${selected.size ? "" : "disabled"}>${t("Retirer…", "Remove…")}</button></div></div>${
+    }<div class="toolbar"><button id="columns">${t("Colonnes", "Columns")}</button><button id="refresh">${t("Actualiser", "Refresh")}</button><button id="transfer-history">${t("Transferts", "Transfers")}</button><button id="trackers">${t("Vue par tracker", "Group by tracker")}</button><span class="muted">${t("Actualisation toutes les 5 s · sélection conservée", "Refresh every 5 s · selection preserved")}</span></div><div id="notice" role="status"></div><div class="workspace"><section class="panel">${TLTorrentFilters.controls({ query, filters, language: lang, options: { state: ["seeding", "downloading", "paused", "checking", "error", "other"], category: snapshot.categories, tracker: snapshot.trackers, tag: snapshot.tags } })}${metricControls()}<div class="status"><span>${selected.size} ${t("sélectionné(s)", "selected")}</span><div class="toolbar"><button data-action="resume" ${selected.size ? "" : "disabled"}>${t("Reprendre", "Resume")}</button><button data-action="pause" ${selected.size ? "" : "disabled"}>${t("Suspendre", "Pause")}</button><button id="transfer-selection" ${selected.size ? "" : "disabled"}>${t("Transférer…", "Transfer…")}</button><button id="more-actions" ${selected.size ? "" : "disabled"}>${t("Plus…", "More…")}</button><button data-action="remove" ${selected.size ? "" : "disabled"}>${t("Retirer…", "Remove…")}</button></div></div>${
       scenario === "normal"
         ? `<div class="table-scroll"><table class="torrent-list"><thead><tr><th><input type="checkbox" id="select-page" aria-label="${t("Sélectionner la page", "Select page")}" ${slice.length && slice.every((r) => selected.has(r.id)) ? "checked" : ""}></th>${sortHeader("name", t("Torrent / état", "Torrent / state"))}${Object.entries(
             cols,

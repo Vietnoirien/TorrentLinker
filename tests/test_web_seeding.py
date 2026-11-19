@@ -176,3 +176,41 @@ def test_seeding_endpoint_scopes_clients_deduplicates_and_reports_offline(tmp_pa
         stale_single = browser.get("/api/zen/seeding?client_id=default").json()
         assert stale_single["client_errors"][0]["name"] == "Home"
         assert stale_single["summary"]["count"] == 1
+
+
+def test_seeding_combines_approved_filters_before_paging_and_keeps_options():
+    from torrentlinker.web.seeding import SeedingFilters
+
+    profile = ZenProfile(ZenClass.SWARM_KEEPER)
+    torrents = [
+        torrent(1, "Small", size=1024**2, tags=("archive",), swarm_seeders=2),
+        torrent(2, "Large", size=2 * 1024**3, tags=("archive",), swarm_seeders=3),
+        torrent(3, "Paused", size=3 * 1024**3, state="pausedUP", tags=("favourite",)),
+        torrent(4, "Unknown seeds", size=4 * 1024**3, swarm_seeders=-1),
+    ]
+    view = seeding(profile, torrents, "https://c411.org")
+    unfiltered = seeding_page(view, profile, 0, group="all")
+    filtered = seeding_page(
+        view,
+        profile,
+        0,
+        group="all",
+        filters=SeedingFilters(state="seeding", tag="archive", size_min=1024**3, seed_max=3),
+    )
+    assert [row["name"] for row in filtered["rows"]] == ["Large"]
+    assert filtered["summary"] == unfiltered["summary"]
+    assert filtered["filter_options"] == unfiltered["filter_options"]
+    assert "private" not in str(filtered)
+    assert (
+        seeding_page(view, profile, 0, group="all", filters=SeedingFilters(zen_min=0))["total"] == 3
+    )
+    assert (
+        seeding_page(view, profile, 0, group="all", filters=SeedingFilters(seed_max=99))["total"]
+        == 3
+    )
+    assert (
+        seeding_page(view, profile, 0, group="all", filters=SeedingFilters(days_min=11))["total"]
+        == 0
+    )
+    with pytest.raises(ValueError):
+        SeedingFilters(size_min=float("nan"))

@@ -213,3 +213,32 @@ def test_client_manager_cancel_keeps_existing_credentials(qtbot, tmp_path):
     assert get_secret("qbit-password") == "original"
     manager.reject()
     assert get_secret("qbit-password") == "original"
+
+
+def test_distributed_plan_can_trade_large_download_for_minimum_count(tmp_path):
+    from torrentlinker.downloads import DownloadFolders
+    from torrentlinker.multi_plan import distributed_plan
+    from torrentlinker.plan import PlanOptions
+    from torrentlinker.store import CatalogueRow
+
+    settings = Settings()
+    settings.plan_options = PlanOptions(min_torrents=2, min_seeders=3)
+    settings.download_folders = DownloadFolders(default=str(tmp_path))
+    settings.ensure_profiles()
+    store = Store(tmp_path / "state.db")
+    store.save_catalogue(
+        [
+            CatalogueRow("a" * 40, "Large", 10000, 3, 7000, "", "", 0),
+            CatalogueRow("b" * 40, "Small A", 2000, 10, 7000, "", "", 0),
+            CatalogueRow("c" * 40, "Small B", 2000, 10, 7000, "", "", 0),
+            CatalogueRow("d" * 40, "Below seed minimum", 100, 2, 7000, "", "", 0),
+        ]
+    )
+
+    class Client:
+        def torrents(self, **kwargs):
+            return []
+
+    plan = distributed_plan(settings, store, {"default": Client()}, {"default": 10000})
+    assert {item.candidate.title for item in plan.items} == {"Small A", "Small B"}
+    assert not plan.issues

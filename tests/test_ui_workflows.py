@@ -75,16 +75,19 @@ def test_seeding_filter_and_numeric_order_survive_refresh(qtbot):
     from tests.test_community_interfaces import js, wait_js
 
     view.show()
-    wait_js(qtbot, view, "document.querySelectorAll('.seeding-group').length===1")
+    wait_js(qtbot, view, "document.querySelectorAll('#seeding-result tbody tr').length===2")
     js(
         qtbot,
         view,
-        "document.querySelector('#seeding-sort').value='size';"
-        "document.querySelector('#seeding-order').value='asc';"
+        "document.querySelector('[data-sort=size]').click();"
         "document.querySelector('#seeding-query').value=' LARGE ';"
         "document.querySelector('#seeding-query').dispatchEvent(new Event('input',{bubbles:true}))",
     )
-    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===1")
+    wait_js(qtbot, view, "document.querySelectorAll('#seeding-result tbody tr').length===1")
     view.show_seeding(seeding)
-    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===1")
-    assert js(qtbot, view, "document.querySelector('tbody').textContent.includes('Large film')")
+    wait_js(qtbot, view, "document.querySelectorAll('#seeding-result tbody tr').length===1")
+    assert js(
+        qtbot,
+        view,
+        "document.querySelector('#seeding-result tbody').textContent.includes('Large film')",
+    )

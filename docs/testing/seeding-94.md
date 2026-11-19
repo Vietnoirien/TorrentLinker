@@ -4,7 +4,7 @@ Desktop and Web load `static/seeding/view.html`. The page owns the category tree
 
 ## Large-library correction
 
-The owner's subsequent review rejected the expanding torrent tables for libraries above 10,000 torrents and requested the current Torrents list rows for Plan. Seeding now displays one globally paged torrent list beside category filters. A parent category includes its descendants. Expanding categories changes only the small category navigator; it never inserts more torrent rows. Search and numeric sorting operate across all matching torrents before paging. First, previous, next, last and page-number navigation keep each rendered page at 100 rows.
+The owner's subsequent review rejected the expanding torrent tables for libraries above 10,000 torrents and requested the current Torrents list rows for Plan. Seeding now displays one globally paged torrent list below the approved Torrents filters. A parent category includes its descendants. Category totals remain in a collapsed section below the table. Expanding categories changes only that navigator; it never inserts more torrent rows. Search and numeric sorting operate across all matching torrents before paging. First, previous, next, last and page-number navigation keep each rendered page at 100 rows.
 
 Torrents, Plan and Seeding load the same `panel/torrent-list.css` row styles. Plan keeps its selection, review, queue and send behavior, with action metadata below the torrent name and aligned metrics. Full destination paths remain available on hover and in the send review. The owner also reported missing Plan controls in the prototype. The prototype omitted them, while the shared app started them collapsed. Plan limits, category selection, optimisation, destinations and cached-catalogue controls now start expanded and the card can be collapsed without losing values. Desktop and browser regressions check their visibility without opening any disclosure; the browser regression first failed before this correction. The prototype now includes these controls and preserves their values across selection and language changes.
 
@@ -36,3 +36,9 @@ The shared HTML table replaces native column-width dragging and native row highl
 ![Desktop French light](seeding-94/desktop-fr-light.png)
 ![Web French light](seeding-94/web-desktop-fr-light.png)
 ![Web narrow French light](seeding-94/web-mobile-fr-light.png)
+
+## Approved filter component correction
+
+Seeding and Torrents now share `panel/torrent-filters.js`, including search, state/category/tracker/tag selectors, expandable Seed and c411 metrics, clear filters and independent MiB/GiB toggles. Column headers control sorting; the separate sort dropdown is removed. Filters apply before global pagination. Unknown metrics do not match numeric constraints, and tracker options expose safe host names only.
+
+The combined Plan, Seeding, Torrents and controller regression group passed 132 checks. This includes desktop and browser workflows, the 10,001-row fixture at both `/` and `/tl`, and the older UI workflow whose obsolete category selector caused the previous CI failure. Ruff and mypy pass. The captures above were refreshed from the actual desktop display for this correction.

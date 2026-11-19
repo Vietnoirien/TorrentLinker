@@ -15,6 +15,8 @@ def configure_plan(view, **changes):
         "maximum_bytes": value.max_download_bytes,
         "limit_torrents": value.max_torrents is not None,
         "maximum_torrents": value.max_torrents or 100,
+        "minimum_torrents": value.min_torrents,
+        "min_seeders": value.min_seeders,
         "max_seeders": value.max_seeders,
         "min_size": value.min_size,
         "max_size": value.max_size,
@@ -48,8 +50,7 @@ def test_desktop_plan_selection_is_reviewed_before_sending(qtbot):
     js(
         qtbot,
         view,
-        "document.querySelector('#plan-sort').value='title';"
-        "document.querySelector('#plan-sort').dispatchEvent(new Event('change'))",
+        "document.querySelector('[data-sort=title]').click()",
     )
     assert js(
         qtbot, view, "document.querySelector('#plan-result tbody tr').textContent.includes('Alpha')"
@@ -249,3 +250,36 @@ def test_desktop_queue_preserves_each_selected_download_destination(qtbot, tmp_p
     assert queued[0].candidate.infohash == rows[1].infohash
     assert str(queued[0].folder) == profile.download_folders.default
     assert client.downloads == []
+
+
+def test_plan_minimum_controls_and_size_units_survive_collapse(qtbot):
+    view = PlanView()
+    qtbot.addWidget(view)
+    view.language = "en"
+    view.resize(1280, 1000)
+    view.show()
+    wait_js(qtbot, view, "typeof initialized!=='undefined' && initialized")
+    js(
+        qtbot,
+        view,
+        """
+      document.querySelector('#plan-min-count').value = '20';
+      document.querySelector('#plan-min-seeders').value = '3';
+      document.querySelector('#plan-min-size').value = '1';
+      document.querySelector('[data-size-unit=min]').click();
+      document.querySelector('#plan-min-count').dispatchEvent(new Event('input', {bubbles:true}));
+      document.querySelector('#plan-options > summary').click();
+    """,
+    )
+    qtbot.waitUntil(lambda: view.options.min_torrents == 20)
+    assert view.options.min_seeders == 3
+    assert view.options.min_size == 1024**3
+    assert js(qtbot, view, "document.querySelector('#plan-min-size').value") == "1024"
+    view.refresh()
+    assert not js(qtbot, view, "document.querySelector('#plan-options').open")
+    js(qtbot, view, "document.querySelector('#plan-options > summary').click()")
+    assert js(qtbot, view, "document.querySelector('#plan-min-count').value") == "20"
+    assert (
+        js(qtbot, view, "document.querySelector('[data-size-unit=max]').textContent.trim()")
+        == "GiB"
+    )

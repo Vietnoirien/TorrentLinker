@@ -7,6 +7,10 @@ const state = {
   planId: "",
   planDirty: false,
   planOffset: 0,
+  sortKey: "plan",
+  sortDirection: 1,
+  sizeUnits: { min: 1024 ** 3, max: 1024 ** 3 },
+  categories: [],
 };
 const planUI = {
   busy: false,
@@ -118,20 +122,38 @@ function showPlan(result) {
   ]);
   $("plan-times").textContent =
     `${say("Sending to clients", "Envoi aux clients")} ≈ ${planDuration(result.sending_seconds)} · ${say("Downloading, best case", "Téléchargement, au mieux")} ≈ ${planDuration(result.download_seconds)}`;
+  proposalFilters();
   renderPlan();
 }
 function renderPlan() {
-  const key = $("plan-sort").value,
-    direction = $("plan-sort-order").value === "asc" ? 1 : -1;
-  const ordered = [...state.planRows];
+  const key = state.sortKey,
+    direction = state.sortDirection;
+  const query = $("plan-query").value.trim().toLocaleLowerCase();
+  const category = $("plan-filter-category").value;
+  const action = $("plan-filter-action").value;
+  const ordered = state.planRows.filter(
+    (r) =>
+      (!query || r.title.toLocaleLowerCase().includes(query)) &&
+      (!category || String(r.category ?? "unknown") === category) &&
+      (!action || (action === "reseed") === r.reseed),
+  );
   if (key !== "plan")
-    ordered.sort(
-      (a, b) =>
-        direction *
-        (typeof a[key] === "string"
-          ? a[key].localeCompare(b[key])
-          : (a[key] || 0) - (b[key] || 0)),
+    ordered.sort((a, b) =>
+      a[key] == null
+        ? b[key] == null
+          ? 0
+          : 1
+        : b[key] == null
+          ? -1
+          : direction *
+            (typeof a[key] === "string"
+              ? a[key].localeCompare(b[key])
+              : (a[key] || 0) - (b[key] || 0)),
     );
+  state.planOffset = Math.min(
+    state.planOffset,
+    Math.max(0, Math.floor((ordered.length - 1) / 100) * 100),
+  );
   const offset = state.planOffset || 0,
     rows = ordered.slice(offset, offset + 100);
   table(
@@ -149,7 +171,10 @@ function renderPlan() {
             element("br"),
             element(
               "small",
-              r.reseed ? "Reseed" : say("Download", "Téléchargement"),
+              [
+                r.reseed ? "Reseed" : say("Download", "Téléchargement"),
+                categoryName(r.category),
+              ].join(" · "),
             ),
           );
           return content;
@@ -187,26 +212,85 @@ function renderPlan() {
     ],
     state.planSelected,
     "hash",
-    planActions,
+    renderPlan,
   );
   $("plan-result").classList.add("torrent-list-scroll");
   $("plan-result").querySelector("table")?.classList.add("torrent-list");
+  const keys = [
+    "title",
+    "download_size",
+    "seeders",
+    "note",
+    "zen",
+    "folder",
+    "client_id",
+  ];
+  $("plan-result")
+    .querySelectorAll("thead th")
+    .forEach((cell, i) => {
+      if (!i) return;
+      const sortKey = keys[i - 1],
+        active = sortKey === key;
+      cell.setAttribute(
+        "aria-sort",
+        active ? (direction === 1 ? "ascending" : "descending") : "none",
+      );
+      const control = button(
+        cell.textContent + (active ? (direction === 1 ? " ↑" : " ↓") : " ↕"),
+        () => {
+          state.sortDirection = active ? -direction : 1;
+          state.sortKey = sortKey;
+          state.planOffset = 0;
+          renderPlan();
+        },
+        "sort-head",
+      );
+      control.dataset.sort = sortKey;
+      cell.replaceChildren(control);
+    });
   $("plan-page").textContent =
-    `${state.planRows.length ? offset + 1 : 0}–${offset + rows.length} / ${state.planRows.length}`;
+    `${ordered.length ? offset + 1 : 0}–${offset + rows.length} / ${ordered.length}`;
   $("plan-prev").disabled = offset === 0;
-  $("plan-next").disabled = offset + 100 >= state.planRows.length;
+  $("plan-next").disabled = offset + 100 >= ordered.length;
   planActions();
+}
+function categoryName(id) {
+  return (
+    state.categories.find((c) => c[0] === id)?.[1] ||
+    String(id ?? say("Unknown", "Inconnue"))
+  );
+}
+function proposalFilters() {
+  const select = $("plan-filter-category"),
+    previous = select.value;
+  select.replaceChildren(
+    new Option(say("All categories", "Toutes les catégories"), ""),
+  );
+  for (const id of new Set(state.planRows.map((r) => r.category)))
+    select.add(new Option(categoryName(id), String(id ?? "unknown")));
+  select.value = [...select.options].some((o) => o.value === previous)
+    ? previous
+    : "";
+  $("plan-query").placeholder = say(
+    "Search proposal…",
+    "Rechercher dans le Plan…",
+  );
+  $("plan-query").setAttribute("aria-label", $("plan-query").placeholder);
+  select.setAttribute("aria-label", say("Category", "Catégorie"));
+  $("plan-filter-action").setAttribute("aria-label", "Action");
 }
 function fillOptions(options, categories) {
   const value = options || {};
   $("plan-goal").value = value.goal || "note";
   $("plan-budget").value = (value.max_download_bytes || 0) / 1e9;
+  $("plan-min-count").value = value.min_torrents || 0;
+  $("plan-min-seeders").value = value.min_seeders || 0;
   $("plan-count").value = value.max_torrents ?? 100;
   $("plan-limit-count").checked = value.max_torrents != null;
   $("plan-seeders").value = value.max_seeders ?? 10;
   $("plan-limit-seeders").checked = value.max_seeders != null;
-  $("plan-min-size").value = (value.min_size || 0) / 1e9;
-  $("plan-max-size").value = (value.max_size || 0) / 1e9;
+  $("plan-min-size").value = (value.min_size || 0) / state.sizeUnits.min;
+  $("plan-max-size").value = (value.max_size || 0) / state.sizeUnits.max;
   for (const option of $("plan-category").options)
     option.selected = categories?.length
       ? categories.includes(Number(option.value))
@@ -223,6 +307,7 @@ function fillPreferences(p = {}) {
   $("plan-exclusions").value = (p.plan_exclusions || []).join("\n");
 }
 function configureFields(value) {
+  state.categories = value.categories || [];
   const selected = [...$("plan-category").selectedOptions].map((o) => o.value);
   $("plan-category").replaceChildren(
     new Option(say("All categories", "Toutes les catégories"), ""),
@@ -251,7 +336,9 @@ function configureFields(value) {
     ...state.setup.clients
       .filter((c) => c.enabled !== false)
       .map((client) => {
-        const row = element("label"),
+        const row = element("section", undefined, "plan-client-card"),
+          heading = element("label", undefined, "plan-client-heading"),
+          budgetLabel = element("label"),
           check = element("input"),
           budget = element("input");
         check.type = "checkbox";
@@ -268,7 +355,12 @@ function configureFields(value) {
           "aria-label",
           say("Budget in GB for ", "Budget en Go pour ") + client.name,
         );
-        row.append(check, element("span", client.name), budget);
+        heading.append(check, element("strong", client.name));
+        budgetLabel.append(
+          element("span", say("Client budget, GB", "Budget du client, Go")),
+          budget,
+        );
+        row.append(heading, budgetLabel);
         return row;
       }),
   );
@@ -429,13 +521,19 @@ function optionsBody() {
   return {
     plan_goal: $("plan-goal").value,
     maximum_bytes: Math.round(Number($("plan-budget").value) * 1e9),
+    minimum_torrents: Number($("plan-min-count").value),
+    min_seeders: Number($("plan-min-seeders").value),
     maximum_torrents: Number($("plan-count").value),
     limit_torrents: $("plan-limit-count").checked,
     max_seeders: $("plan-limit-seeders").checked
       ? Number($("plan-seeders").value)
       : null,
-    min_size: Math.round(Number($("plan-min-size").value) * 1e9),
-    max_size: Math.round(Number($("plan-max-size").value) * 1e9),
+    min_size: Math.round(
+      Number($("plan-min-size").value) * state.sizeUnits.min,
+    ),
+    max_size: Math.round(
+      Number($("plan-max-size").value) * state.sizeUnits.max,
+    ),
     categories: [...$("plan-category").selectedOptions]
       .filter((o) => o.value)
       .map((o) => Number(o.value)),
@@ -721,15 +819,7 @@ function planInit() {
     guard(() => buildPlan());
   };
   for (const container of [$("plan-form"), $("plan-clients")]) {
-    container.addEventListener("input", (event) => {
-      const min = $("plan-min-size"),
-        max = $("plan-max-size");
-      if (Number(max.value) > 0 && Number(min.value) > Number(max.value)) {
-        if (event.target === min) max.value = min.value;
-        else if (event.target === max) min.value = max.value;
-      }
-      invalidatePlan();
-    });
+    container.addEventListener("input", invalidatePlan);
     container.addEventListener("change", invalidatePlan);
   }
   document.addEventListener(
@@ -739,10 +829,23 @@ function planInit() {
     },
     { passive: false },
   );
-  $("plan-sort").onchange = $("plan-sort-order").onchange = () => {
-    state.planOffset = 0;
-    renderPlan();
-  };
+  $("plan-query").oninput =
+    $("plan-filter-category").onchange =
+    $("plan-filter-action").onchange =
+      () => {
+        state.planOffset = 0;
+        renderPlan();
+      };
+  for (const toggle of document.querySelectorAll("[data-size-unit]"))
+    toggle.onclick = () => {
+      const bound = toggle.dataset.sizeUnit,
+        input = $(`plan-${bound}-size`);
+      const bytes = Number(input.value) * state.sizeUnits[bound];
+      state.sizeUnits[bound] =
+        state.sizeUnits[bound] === 1024 ** 3 ? 1024 ** 2 : 1024 ** 3;
+      input.value = bytes / state.sizeUnits[bound];
+      toggle.textContent = state.sizeUnits[bound] === 1024 ** 3 ? "GiB" : "MiB";
+    };
   $("plan-select-all").onclick = () => {
     state.planSelected = new Set(state.planRows.map((r) => r.hash));
     renderPlan();

@@ -14,7 +14,7 @@ from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.errors import error_text
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.seeding import Seeding
-from torrentlinker.web.seeding import seeding_page
+from torrentlinker.web.seeding import SeedingFilters, seeding_page
 from torrentlinker.zen import ZenDay, ZenProfile
 
 
@@ -47,11 +47,21 @@ class SeedingBridge(ViewBridge):
                 snapshot = view.seeding or Seeding([], ZenDay(), [])
                 profile, uploads = view.profile(), view.uploads
                 sort = body.get("sort", "zen")
-                if sort not in {"name", "size", "seeders", "seed_days", "zen", "note"}:
+                if sort not in {
+                    "name",
+                    "size",
+                    "seeders",
+                    "seed_days",
+                    "zen",
+                    "note",
+                    "ratio",
+                    "weight",
+                }:
                     raise ValueError("Unknown Seeding sort.")
                 offset, limit = int(body.get("offset", 0)), int(body.get("limit", 100))
                 if offset < 0 or not 1 <= limit <= 200:
                     raise ValueError("Invalid Seeding page.")
+                filters = SeedingFilters.model_validate(body)
                 query, group = str(body.get("q", "")), str(body.get("group", ""))
                 descending = str(body.get("descending", "true")).lower() == "true"
                 run_in_background(
@@ -60,6 +70,7 @@ class SeedingBridge(ViewBridge):
                         profile,
                         uploads,
                         query=query,
+                        filters=filters,
                         group=group,
                         descendants=str(body.get("descendants", "false")).lower() == "true",
                         sort=sort,

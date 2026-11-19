@@ -66,7 +66,7 @@
           </p>
           <div id="plan-clients" class="form-grid"></div>
         </details>
-        <div class="form-grid">
+        <div class="metric-grid plan-limits">
           <label
             ><span data-i18n="planCategory">Category / subcategory</span
             ><select id="plan-category" multiple size="5">
@@ -88,6 +88,29 @@
               value="10"
               min="0"
               step="any"
+              required
+          /></label>
+          <label
+            ><span
+              data-en="Minimum torrents"
+              data-fr="Nombre minimal de torrents"
+              >Minimum torrents</span
+            ><input
+              id="plan-min-count"
+              type="number"
+              min="0"
+              max="1000000"
+              value="0"
+              required
+          /></label>
+          <label
+            ><span data-en="Minimum seeders" data-fr="Sources minimum"
+              >Minimum seeders</span
+            ><input
+              id="plan-min-seeders"
+              type="number"
+              min="0"
+              value="0"
               required
           /></label>
           <label
@@ -119,25 +142,51 @@
               disabled
           /></label>
           <label
-            ><span data-i18n="minTorrentGB">Minimum torrent size, GB</span
-            ><input
-              id="plan-min-size"
-              type="number"
-              value="0"
-              min="0"
-              step="any"
-              required
-          /></label>
+            ><span
+              data-en="Minimum torrent size"
+              data-fr="Taille minimale du torrent"
+              >Minimum torrent size</span
+            ><span class="metric-value"
+              ><input
+                id="plan-min-size"
+                type="number"
+                value="0"
+                min="0"
+                step="any"
+                required
+              /><button
+                type="button"
+                class="unit-toggle"
+                data-size-unit="min"
+                aria-label="Minimum size unit"
+              >
+                GiB
+              </button></span
+            ></label
+          >
           <label
-            ><span data-i18n="maxTorrentGB">Maximum torrent size, GB</span
-            ><input
-              id="plan-max-size"
-              type="number"
-              value="0"
-              min="0"
-              step="any"
-              required
-          /></label>
+            ><span
+              data-en="Maximum torrent size"
+              data-fr="Taille maximale du torrent"
+              >Maximum torrent size</span
+            ><span class="metric-value"
+              ><input
+                id="plan-max-size"
+                type="number"
+                value="0"
+                min="0"
+                step="any"
+                required
+              /><button
+                type="button"
+                class="unit-toggle"
+                data-size-unit="max"
+                aria-label="Maximum size unit"
+              >
+                GiB
+              </button></span
+            ></label
+          >
         </div>
         <p class="muted" data-i18n="planNoteHelp">
           Note prioritizes each torrent's initial score, without a seed-age
@@ -147,6 +196,14 @@
         <p class="muted" data-i18n="planZeroHelp">
           A budget or maximum size of 0 means no additional limit. Available
           disk space still applies to the plan.
+        </p>
+        <p
+          class="muted"
+          data-en="The minimum count is checked against the built Plan. If it cannot be reached within the other limits, the Plan explains the shortfall."
+          data-fr="Le nombre minimal est vérifié sur le Plan créé. Si les autres limites empêchent de l’atteindre, le Plan signale le manque."
+        >
+          The minimum count is checked against the built Plan. If it cannot be
+          reached within the other limits, the Plan explains the shortfall.
         </p>
         <p class="muted" data-i18n="planReseedHelp">
           Checked Full Matches from the Library are included as Reseeds for a
@@ -169,25 +226,28 @@
     <progress id="plan-send-progress" max="1" hidden></progress>
     <p id="plan-summary"></p>
     <div id="plan-storage" class="table-wrap"></div>
+    <div class="filters" id="plan-filters">
+      <input
+        id="plan-query"
+        type="search"
+        aria-label="Search proposal"
+        placeholder="Search proposal…"
+      />
+      <select id="plan-filter-category" aria-label="Category">
+        <option value="">All categories</option>
+      </select>
+      <select id="plan-filter-action" aria-label="Action">
+        <option value="" data-en="All actions" data-fr="Toutes les actions">
+          All actions
+        </option>
+        <option value="download" data-en="Download" data-fr="Téléchargement">
+          Download
+        </option>
+        <option value="reseed">Reseed</option>
+      </select>
+    </div>
     <div class="toolbar">
-      <label
-        ><span data-i18n="planSort">Sort proposal by</span
-        ><select id="plan-sort">
-          <option value="plan" data-i18n="planOrder">Plan order</option>
-          <option value="title" data-i18n="torrentName">Torrent</option>
-          <option value="download_size" data-i18n="torrentSize">Size</option>
-          <option value="seeders">Seeders</option>
-          <option value="note">Note</option>
-          <option value="zen">Zen/day</option>
-          <option value="folder" data-i18n="downloadFolder">
-            Download Folder
-          </option>
-          <option value="client_id">Client</option>
-        </select></label
-      ><select id="plan-sort-order" aria-label="Plan sort order">
-        <option value="asc" data-i18n="ascending">Ascending</option>
-        <option value="desc" data-i18n="descending">Descending</option></select
-      ><button id="plan-select-all" data-i18n="selectWholePlan">
+      <button id="plan-select-all" data-i18n="selectWholePlan">
         Select whole Plan</button
       ><button id="plan-select-none" data-i18n="clearSelection">
         Clear selection

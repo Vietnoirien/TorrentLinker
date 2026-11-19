@@ -80,13 +80,12 @@ def test_shared_seeding_sort_filter_and_expansion_survive_reopening(qtbot, tmp_p
     js(
         qtbot,
         view,
-        "document.querySelector('#seeding-sort').value='name';document.que"
-        "rySelector('#seeding-sort').dispatchEvent(new Event('change'))",
+        "document.querySelector('[data-sort=\"name\"]').click()",
     )
     wait_js(
         qtbot,
         view,
-        "document.querySelector('#seeding-result tbody tr').textContent.includes('Small')",
+        "document.querySelector('#seeding-result tbody tr').textContent.includes('Broad')",
     )
     view.close()
     reopened = SeedingView(lambda: lambda: data, preferences=settings)

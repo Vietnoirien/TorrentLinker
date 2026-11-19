@@ -124,6 +124,8 @@ class JobRequest(BaseModel):
     revision: int = Field(default=0, ge=0)
     maximum_bytes: int = Field(default=0, ge=0)
     maximum_torrents: int = Field(default=20, ge=1, le=1_000_000)
+    minimum_torrents: int = Field(default=0, ge=0, le=1_000_000)
+    min_seeders: int = Field(default=0, ge=0)
     limit_torrents: bool = True
     plan_goal: PlanGoal = PlanGoal.NOTE
     max_seeders: int | None = Field(default=None, ge=0)
@@ -184,6 +186,11 @@ class JobRequest(BaseModel):
             raise ValueError("Select at most 1000 paths for this operation.")
         if self.kind == "plan" and self.max_size and self.min_size > self.max_size:
             raise ValueError("Minimum torrent size must not exceed maximum torrent size.")
+        if self.kind == "plan":
+            if self.limit_torrents and self.minimum_torrents > self.maximum_torrents:
+                raise ValueError("Minimum torrent count must not exceed maximum torrent count.")
+            if self.max_seeders is not None and self.min_seeders > self.max_seeders:
+                raise ValueError("Minimum seeders must not exceed maximum seeders.")
         return self
 
     def planning_options(self) -> PlanOptions:
@@ -192,6 +199,8 @@ class JobRequest(BaseModel):
             max_download_bytes=self.maximum_bytes,
             max_torrents=self.maximum_torrents if self.limit_torrents else None,
             max_seeders=self.max_seeders,
+            min_seeders=self.min_seeders,
+            min_torrents=self.minimum_torrents,
             min_size=self.min_size,
             max_size=self.max_size,
         )

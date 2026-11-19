@@ -30,6 +30,7 @@ def plan_data(
                     else ""
                 ),
                 "seeders": i.candidate.seeders,
+                "category": i.candidate.category,
                 "zen": i.zen,
                 "note": i.note,
                 "folder": str(i.candidate.folder) if i.candidate.folder else "",

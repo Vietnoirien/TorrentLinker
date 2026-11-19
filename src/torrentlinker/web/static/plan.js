@@ -238,6 +238,8 @@ async function startCachedPlan() {
     maximum_torrents: o.max_torrents || 100,
     limit_torrents: o.max_torrents != null,
     max_seeders: o.max_seeders,
+    min_seeders: o.min_seeders || 0,
+    minimum_torrents: o.min_torrents || 0,
     min_size: o.min_size || 0,
     max_size: o.max_size || 0,
     categories: p?.plan_categories,
