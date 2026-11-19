@@ -24,7 +24,7 @@ def test_small_window_keeps_every_workspace_action_reachable(
         qtbot.addWidget(window)
         window.show()
         controls = [
-            window.zen_tab.seeding_view.refresh_button,
+            window.zen_tab.profile_view,
             window.review.reseed_button,
             window.upload_workspace,
             window.search_tab.board,

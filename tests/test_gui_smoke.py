@@ -200,8 +200,9 @@ def test_main_window_opens_on_the_zen_tab_and_shows_the_seeding_view(qtbot, tmp_
 
     assert window.tabs.currentWidget() is window.zen_tab
     assert window.tabs.tabText(1) == "Library"
-    assert len(window.zen_tab.seeding_view.table.torrents) == 1
-    assert "≈" in window.zen_tab.seeding_view.table.torrents["h"].text(4)  # type: ignore[union-attr]
+    observed = window.zen_tab.seeding_view.seeding
+    assert observed is not None and len(observed.rows) == 1
+    assert observed.rows[0].zen is not None
 
 
 def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
@@ -233,7 +234,7 @@ def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
     view = window.zen_tab.seeding_view
     view.show_seeding(window.seeding_loader()())
     before = view.seeding.day.total
-    assert view.table.torrents[row.infohash].text(2) == "–"
+    assert view.seeding.rows[0].torrent.swarm_seeders == -1
     assert store.catalogue()[0].seeders == 100
 
     window.zen_tab.plan_view.show_plan(Plan())
@@ -241,7 +242,7 @@ def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
     with qtbot.waitSignal(view.updated, timeout=5000):
         window.seeding_timer.timeout.emit()
 
-    assert view.table.torrents[row.infohash].text(2) == "5"
+    assert view.seeding.rows[0].torrent.swarm_seeders == 5
     assert view.seeding.day.total > before
     cached = store.catalogue()[0]
     assert cached.seeders == 4  # the current user is already one of the five seeders
@@ -289,7 +290,7 @@ def test_profile_read_at_startup_fills_the_zen_profile(qtbot, tmp_path: Path) ->
     window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
     qtbot.addWidget(window)
     refreshed = []
-    window.zen_tab.seeding_view.refresh = lambda: refreshed.append(True)  # type: ignore[method-assign]
+    window.zen_tab.seeding_view.reload = lambda: refreshed.append(True)  # type: ignore[method-assign]
     window._profile_read(
         UserProfile("v", "swarm-keeper", ZenClass.SWARM_KEEPER, 0.04, 3, True, None)
     )
@@ -301,16 +302,30 @@ def test_profile_read_at_startup_fills_the_zen_profile(qtbot, tmp_path: Path) ->
 
 
 def test_class_comparison_highlights_the_current_class_and_labels_reuploader_rough(qtbot) -> None:  # type: ignore[no-untyped-def]
-    from torrentlinker.gui.zen_view import ClassComparison
-    from torrentlinker.zen import ZenClass, ZenProfile
+    from tests.test_community_interfaces import js, wait_js
+    from torrentlinker.gui.seeding_view import SeedingView
+    from torrentlinker.seeding import Seeding
+    from torrentlinker.zen import ZenClass, ZenDay, ZenProfile
 
-    widget = ClassComparison(lambda: ZenProfile(ZenClass.SWARM_KEEPER), uploads=10)
+    widget = SeedingView(
+        lambda: lambda: Seeding([], ZenDay(), []),
+        lambda: ZenProfile(ZenClass.SWARM_KEEPER),
+        uploads=10,
+    )
     qtbot.addWidget(widget)
-
-    assert "<b>" in widget.labels[ZenClass.SWARM_KEEPER].text()
-    assert "<b>" not in widget.labels[ZenClass.TANKER].text()
-    assert "rough" in widget.labels[ZenClass.REUPLOADER].text()
-    assert "4.30" in widget.labels[ZenClass.REUPLOADER].text()
+    widget.show()
+    wait_js(qtbot, widget, "document.querySelector('#seeding-classes strong')!==null")
+    assert js(
+        qtbot,
+        widget,
+        "document.querySelector('#seeding-classes strong').textContent.includes('Swarm Keeper')",
+    )
+    assert js(
+        qtbot, widget, "document.querySelector('#seeding-classes').textContent.includes('rough')"
+    )
+    assert js(
+        qtbot, widget, "document.querySelector('#seeding-classes').textContent.includes('4.3')"
+    )
 
 
 def test_library_retains_zen_estimates_for_orphans_with_a_match(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -606,7 +621,7 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
     qtbot.addWidget(window)
     window.qbit = lambda: qbit  # type: ignore[assignment,method-assign,return-value]
     window._indexer = stub  # type: ignore[assignment]
-    window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
+    window.zen_tab.seeding_view.reload = lambda: None  # type: ignore[method-assign]
     shown: list[str] = []
     monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box.text()))
     window.zen_tab.plan_view.show_plan(plan)
@@ -666,7 +681,7 @@ def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
     qtbot.addWidget(window)
     window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
     window._indexer = LimitedIndexer()  # type: ignore[assignment]
-    window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
+    window.zen_tab.seeding_view.reload = lambda: None  # type: ignore[method-assign]
     shown: list[str] = []
     monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box.text()))
     view = window.zen_tab.plan_view
@@ -718,7 +733,7 @@ def test_refreshing_a_long_seeding_list_again_is_quick(qtbot, tmp_path: Path) ->
     view.show_seeding(Seeding(rows, ZenDay([r.zen or 0 for r in rows]), []))
 
     assert time.monotonic() - started < 5  # replacing filled cells took over a minute
-    assert len(view.table.torrents) == 1300
+    assert len(view.seeding.rows) == 1300
 
 
 def test_plan_lists_reseeds_first_and_sends_them_through_verification(
@@ -1165,7 +1180,7 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
 
     window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
     window._indexer = StoppingIndexer()  # type: ignore[assignment]
-    window.zen_tab.seeding_view.refresh = lambda: None  # type: ignore[method-assign]
+    window.zen_tab.seeding_view.reload = lambda: None  # type: ignore[method-assign]
     shown: list[str] = []
     monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box.text()))
     window._plan_made(plan)
@@ -1508,27 +1523,29 @@ def test_seeding_views_wait_while_hidden_and_catch_up_when_shown(qtbot):
 
     tab = ZenTab(lambda: lambda: Seeding([], ZenDay(), []), lambda: ZenProfile(ZenClass.TANKER))
     qtbot.addWidget(tab)
-    hidden = [True]
-    tab.defer_while_hidden(lambda: hidden[0])
     rows = [SeedingRow(Torrent("a", "A film", Path("/data"), size=1024**2), 0.1)]
     view = Seeding(rows, ZenDay([0.1]), [])
     tab.seeding_view.show_seeding(view)
-    assert tab.seeding_view.table.torrents == {}  # not rebuilt while out of sight
-    assert "0 torrents" not in tab.seeding_view.total.text()  # the cheap summary still updates
+    assert tab.seeding_view.web is None  # no renderer until the page is shown
     assert tab.seeding_view.seeding is view
     tab.resize(900, 600)
-    hidden[0] = False
     tab.pages.setCurrentIndex(1)  # Profile is first; show Seeding to resume its deferred work.
     tab.show()
-    qtbot.waitUntil(lambda: "a" in tab.seeding_view.table.torrents, timeout=3000)
-    qtbot.waitUntil(lambda: "<b>" in tab.comparison.labels[ZenClass.TANKER].text(), timeout=3000)
+    from tests.test_community_interfaces import wait_js
+
+    wait_js(qtbot, tab.seeding_view, "document.querySelectorAll('.seeding-group').length===1")
+    wait_js(
+        qtbot,
+        tab.seeding_view,
+        "document.querySelector('#seeding-classes strong')?.textContent.includes('Tanker')",
+    )
 
 
 def test_seeding_and_catalogue_refreshes_wait_while_a_video_plays(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
     qtbot.addWidget(window)
     refreshed = []
-    window.zen_tab.seeding_view.refresh = lambda quiet=False: refreshed.append(quiet)  # type: ignore[method-assign]
+    window.zen_tab.seeding_view.reload = lambda quiet=False: refreshed.append(quiet)  # type: ignore[method-assign]
     window.media_tab.video_playing = True
     window._refresh_seeding_quietly()
     window._refresh_seeding_quietly()

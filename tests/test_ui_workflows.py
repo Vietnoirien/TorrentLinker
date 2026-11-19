@@ -72,11 +72,19 @@ def test_seeding_filter_and_numeric_order_survive_refresh(qtbot):
     ]
     seeding = Seeding(rows, ZenDay([0.1, 0.2]), [])
     view.show_seeding(seeding)
-    view.table.sortItems(1, Qt.SortOrder.AscendingOrder)
-    view.search.setText(" LARGE ")
+    from tests.test_community_interfaces import js, wait_js
+
+    view.show()
+    wait_js(qtbot, view, "document.querySelectorAll('.seeding-group').length===1")
+    js(
+        qtbot,
+        view,
+        "document.querySelector('#seeding-sort').value='size';"
+        "document.querySelector('#seeding-order').value='asc';"
+        "document.querySelector('#seeding-query').value=' LARGE ';"
+        "document.querySelector('#seeding-query').dispatchEvent(new Event('input',{bubbles:true}))",
+    )
+    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===1")
     view.show_seeding(seeding)
-    assert view.table.topLevelItem(0).child(0).text(0) == "Small film"
-    assert view.table.torrents["a"].isHidden()
-    assert not view.table.torrents["b"].isHidden()
-    view.search.clear()
-    assert not view.table.torrents["a"].isHidden()
+    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===1")
+    assert js(qtbot, view, "document.querySelector('tbody').textContent.includes('Large film')")

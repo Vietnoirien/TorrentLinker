@@ -385,13 +385,6 @@ window.addEventListener("message", async (event) => {
     );
   }
 });
-$("seeding-save-uploads").onclick = () =>
-  guard(async () => {
-    await api("zen/preferences", {
-      uploads: Number($("seeding-uploads").value),
-    });
-    await loadZenSeeding();
-  });
 window.addEventListener("resize", planEnvironment);
 document.addEventListener("tl-language-changed", planEnvironment);
 new MutationObserver(planEnvironment).observe(document.documentElement, {

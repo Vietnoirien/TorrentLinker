@@ -14,7 +14,9 @@ def test_plan_queue_batches_selected_hashes_and_waits_for_each_client_job():
     source = Path("src/torrentlinker/web/static/app.js").read_text()
     panel = Path("src/torrentlinker/web/static/plan.js").read_text()
     handler = panel[
-        panel.index('window.addEventListener("message",') : panel.index('$("seeding-save-uploads")')
+        panel.index('window.addEventListener("message",') : panel.index(
+            'window.addEventListener("resize"'
+        )
     ]
     waiter = "async function waitForJob" + source.split("async function waitForJob", 1)[1]
     # Run the actual handler and completion polling, with only transport/UI stubbed.

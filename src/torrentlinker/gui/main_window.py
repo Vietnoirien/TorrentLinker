@@ -301,10 +301,10 @@ class MainWindow(QMainWindow):
         self.profile_timer.timeout.connect(self._poll_account_profile)
         self.profile_timer.start()
         self.show_account_profile()
-        self.zen_tab.comparison.uploads_changed.connect(self._uploads_changed)
-        self.zen_tab.defer_while_hidden(
-            lambda: self.isVisible() and not self.zen_tab.seeding_view.table.isVisible()
-        )
+        self.zen_tab.seeding_view.uploads_changed.connect(self._uploads_changed)
+        self.zen_tab.seeding_view.language = self.settings.language
+        self.zen_tab.seeding_view.client = lambda: self.settings.active_client_id
+        self.zen_tab.seeding_view.scope = str(self.settings_path.resolve())
         from torrentlinker.gui.workspace_tabs import WorkspaceTabs
 
         self.tabs = WorkspaceTabs()
@@ -695,7 +695,7 @@ class MainWindow(QMainWindow):
         self.seeding_timer.start()
         self.catalogue_refresh_timer.start()
         QTimer.singleShot(0, self.check_verifications)
-        QTimer.singleShot(0, self.zen_tab.seeding_view.refresh)
+        QTimer.singleShot(0, self.zen_tab.seeding_view.reload)
         QTimer.singleShot(0, self.refresh_profile)
         QTimer.singleShot(0, self.upload_tab.refresh_drafts)
         QTimer.singleShot(0, lambda: self.refresh_categories(then=self.update_catalogue))
@@ -1054,7 +1054,7 @@ class MainWindow(QMainWindow):
             self.settings.zen = filled
             self.settings.save(self.settings_path)
             log.info("Zen Profile filled from c411: %s", filled)
-            self.zen_tab.seeding_view.refresh()
+            self.zen_tab.seeding_view.reload()
 
     def _profile_failed(self, error: Exception) -> None:
         self._profile_refreshing = False
@@ -1602,7 +1602,7 @@ class MainWindow(QMainWindow):
         if not self.show_saved_plan():
             self.zen_tab.plan_view.show_plan(Plan())
         self.zen_tab.plan_view.show_report(report)
-        self.zen_tab.seeding_view.refresh()
+        self.zen_tab.seeding_view.reload()
         if report.reseeded:
             self.check_verifications()  # shows them as Verifying… and keeps polling
 
@@ -1675,7 +1675,7 @@ class MainWindow(QMainWindow):
         if self.media_tab.video_playing:
             self._seeding_held = True
             return
-        self.zen_tab.seeding_view.refresh(quiet=True)
+        self.zen_tab.seeding_view.reload(quiet=True)
 
     def _video_playing_changed(self, playing: bool) -> None:
         if not playing and self._seeding_held:
@@ -2383,7 +2383,7 @@ class MainWindow(QMainWindow):
             if not self._startup_complete:
                 self._start_services()
             else:
-                self.zen_tab.seeding_view.refresh()
+                self.zen_tab.seeding_view.reload()
                 if self.settings.library_folders != folders:
                     self.scan()  # a new folder, depth or Content Kind changes every entry
         else:

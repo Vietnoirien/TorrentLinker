@@ -17,7 +17,7 @@ def test_existing_settings_without_key_do_not_start_network_work(qtbot, tmp_path
             main_window.MainWindow, method, lambda self, *args, **kw: calls.append("network")
         )
     monkeypatch.setattr(UploadTab, "refresh_drafts", lambda self: calls.append("drafts"))
-    monkeypatch.setattr(SeedingView, "refresh", lambda self, **kw: calls.append("seeding"))
+    monkeypatch.setattr(SeedingView, "reload", lambda self, **kw: calls.append("seeding"))
     settings = Settings()
     settings_path = tmp_path / "settings.json"
     settings.save(settings_path)
@@ -111,7 +111,7 @@ def setup_window(qtbot, tmp_path, monkeypatch, *, saved=True, key=""):
             lambda self, *args, _name=method, **kw: calls.append(_name),
         )
     monkeypatch.setattr(UploadTab, "refresh_drafts", lambda self: calls.append("drafts"))
-    monkeypatch.setattr(SeedingView, "refresh", lambda self, **kw: calls.append("seeding"))
+    monkeypatch.setattr(SeedingView, "reload", lambda self, **kw: calls.append("seeding"))
     settings = Settings(library_folders=[LibraryFolder(tmp_path)])
     path = tmp_path / "settings.json"
     if saved:

@@ -42,6 +42,7 @@ class PlanHost:
             self.view.set_speed(settings.download_speed, settings.download_speed_tested)
             if preferences.model_fields_set - {"uploads", "download_speed"}:
                 self.owner._plan_options_changed(settings.plan_options)
+            self.owner.zen_tab.seeding_view.reload()
             return snapshot(settings)
         if action == "destinations":
             clients = body.get("client_ids", [])
