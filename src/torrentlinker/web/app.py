@@ -646,13 +646,10 @@ def create_app(
         with jobs.lock:
             idle()
             setup = for_client(body.client_id).setup
-            from torrentlinker.reseed_layout import DISK_RENAME_CLIENTS
-
             profile = setup.settings.profile()
             layout = body.layout if body.layout is not None else profile.reseed_layout
             value = body.path.strip()
-            links = layout == "links" or profile.client in DISK_RENAME_CLIENTS
-            path = str(setup.path_under_root(value)) if value and links else value
+            path = str(setup.path_under_root(value)) if value else ""
             profile.reseed_link_root = path
             profile.reseed_layout = layout
             setup.save()
