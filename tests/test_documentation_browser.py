@@ -55,6 +55,21 @@ def test_guides_filter_history_language_images_and_retry(tmp_path, root_path):
             expect(panel.locator("#guide-content h1")).to_have_text("Install and configure")
             panel.get_by_role("button", name="Forward", exact=True).click()
             expect(panel.locator("#guide-content h1")).to_have_text("Manage torrents")
+            # A slow language index must not replace a later guide selection.
+            delayed = []
+            page.route("**/api/documentation?language=fr", lambda route: delayed.append(route))
+            panel.get_by_label("Guide language", exact=True).select_option("fr")
+            panel.locator('[data-guide-path="guide/en/media.md"]').click()
+            expect(panel.locator("#guide-content h1")).to_contain_text("Media")
+            assert len(delayed) == 1
+            response = page.request.get(delayed[0].request.url)
+            delayed[0].fulfill(response=response)
+            page.unroute("**/api/documentation?language=fr")
+            page.wait_for_timeout(200)  # Allow the released response to reach the iframe.
+            expect(panel.locator("#guide-language")).to_have_value("en")
+            expect(panel.locator("#guide-content h1")).to_contain_text("Media")
+            panel.locator('[data-guide-path="guide/en/torrents.md"]').click()
+            expect(panel.locator("#guide-content h1")).to_have_text("Manage torrents")
             panel.get_by_label("Guide language", exact=True).select_option("fr")
             expect(panel.locator("#guide-content h1")).to_have_text("Gérer les torrents")
             panel.get_by_label("Filter guides", exact=True).fill("assistant")

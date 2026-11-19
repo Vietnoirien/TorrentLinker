@@ -34,10 +34,10 @@ function renderIndex(){
   }));
   $("guide-language").value=guideLanguage;filterGuides();
 }
-async function loadIndex(language){
+async function loadIndex(language,navigationVersion=null){
   const version=++indexVersion;
   const rows=await documentationRequest("index",{language});
-  if(version!==indexVersion)return false;
+  if(version!==indexVersion||(navigationVersion!==null&&navigationVersion!==pageVersion))return false;
   guideLanguage=language;guides=rows;renderIndex();return true;
 }
 async function documentationApplyEnvironment(env){
@@ -72,7 +72,7 @@ async function openGuide(path,fragment="",targetIndex=null){
     if(version!==pageVersion)return;
     const language=path.split("/")[1];
     if(["en","fr"].includes(language)&&language!==guideLanguage){
-      await loadIndex(language);if(version!==pageVersion)return;
+      if(!await loadIndex(language,version)||version!==pageVersion)return;
     }
     if(targetIndex===null){
       if(current()?.path!==path||current()?.fragment!==fragment){entries.splice(entryIndex+1);entries.push({path,fragment,scroll:0});entryIndex=entries.length-1}
@@ -98,9 +98,9 @@ function documentationInit(){
   $("guide-forward").onclick=()=>{const index=entryIndex+1;if(entries[index])openGuide(entries[index].path,entries[index].fragment,index)};
   $("guide-language").onchange=async()=>{
     const language=$("guide-language").value,index=Math.max(0,guides.findIndex(g=>g.path===current()?.path));
-    ++pageVersion;
-    try{if(await loadIndex(language))await openGuide(guides[index]?.path||guides[0].path)}
-    catch(error){retry=()=>$("guide-language").onchange();status(error.message,true)}
+    const version=++pageVersion;
+    try{if(await loadIndex(language,version)&&version===pageVersion)await openGuide(guides[index]?.path||guides[0].path)}
+    catch(error){if(version===pageVersion){retry=()=>$("guide-language").onchange();status(error.message,true)}}
   };
   document.addEventListener("click",event=>{
     const link=event.target.closest("a");if(!link)return;
