@@ -22,7 +22,7 @@ def test_editing_plan_size_keeps_focus_and_scroll(qtbot):
         "document.querySelector('#plan-min-size').value='4';"
         "document.querySelector('#plan-min-size').dispatchEvent(new Event('input',{bubbles:true}))",
     )
-    qtbot.waitUntil(lambda: view.options.min_size == 4_000_000_000)
+    qtbot.waitUntil(lambda: view.options.min_size == 4 * 1024**3)
     assert js(qtbot, view, "document.activeElement.id==='plan-min-size'")
     assert js(qtbot, view, "window.scrollY") == before
     assert js(qtbot, view, "document.querySelector('#plan-min-size').value==='4'")
