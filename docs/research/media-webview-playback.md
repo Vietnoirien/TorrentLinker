@@ -107,4 +107,6 @@ Qt runtime and extend it to seeking, end-of-file, tracks, HDR and growing downlo
 
 ## Consequence for the interface backlog
 
+On 19 November 2026 the owner confirmed: "Keep native playback; move the remaining measurements to a follow-up." The remaining packaged Windows/macOS/Linux measurements are tracked in [#122](https://github.com/Vietnoirien/TorrentLinker/issues/122). #89 is closed on this decision, and #110 may proceed while retaining native decoding. The unmeasured results remain explicitly unverified.
+
 Proceed with shared browsing/details only if the host playback boundary preserves existing native behavior. Treat native decoding and the current Web codec/fixed-prefix limits as explicit platform differences. Do not remove the native player as part of #108. #110 must retain that decision unless an actual packaged-platform matrix demonstrates equivalent playback and acceptable Wayland performance.
