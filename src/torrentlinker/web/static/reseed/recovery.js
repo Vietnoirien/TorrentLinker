@@ -149,7 +149,7 @@ function drawRecovery() {
   modal.scrollTop = scroll;
   if (focus) document.getElementById(focus)?.focus({ preventScroll: true });
 }
-async function recoveryJob(s, kind, body = {}) {
+async function recoveryJob(s, kind, body = {}, existingId = null) {
   if (!recoveryCurrent(s) || s.busy) return;
   s.busy = true;
   s.error = "";
@@ -159,7 +159,7 @@ async function recoveryJob(s, kind, body = {}) {
   s.cancelling = false;
   drawRecovery();
   try {
-    const job = await api("recovery-start", { kind, ...body });
+    const job = existingId ? {id:existingId} : await api("recovery-start", { kind, ...body });
     if (!recoveryCurrent(s)) return;
     s.job = job.id;
     for (;;) {
@@ -272,12 +272,15 @@ async function openRecovery(view, body = {}) {
         drawRecovery();
       }
     }
-  } else
+  } else {
+    const pending = (snapshot.jobs || []).find(j => j.subject?.path === body.path && (view === "archive" ? /unpack/.test(j.kind) : /repair/.test(j.kind)) && ["queued", "running"].includes(j.status));
     await recoveryJob(
       s,
-      view === "archive" ? "preview-unpack" : "diagnose-repair",
+      pending?.kind || (view === "archive" ? "preview-unpack" : "diagnose-repair"),
       { path: body.path, candidate_key: body.key },
+      pending?.id,
     );
+  }
 }
 function drawRecoveryFolder(s) {
   const d = $("recovery-folder");
@@ -323,6 +326,8 @@ document.addEventListener(
       s.view = "repair";
       s.opt = false;
       drawRecovery();
+      const pending = (snapshot.jobs || []).find(j => j.subject?.repair_id === s.row.id && ["queued", "running"].includes(j.status));
+      if (pending) await recoveryJob(s, pending.kind, {}, pending.id);
       return;
     }
     if (button.hasAttribute("data-recovery-folder")) {

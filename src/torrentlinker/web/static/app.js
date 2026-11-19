@@ -460,6 +460,7 @@ async function navigate(view, section, detail) {
     uploadEnvironment(section);
   }
   if (view === "library") await libraryTab(section);
+  $("page-jobs").hidden = true;
   if (view === "jobs") await loadJobs();
   if (view === "zen") {
     zenTab(section);
@@ -484,9 +485,74 @@ function workStatus(en, fr) {
   status.dataset.fr = fr;
   status.textContent = say(en, fr);
 }
+const locallyTrackedJobs = new Set();
+let pollingJobs = false;
+let observedJobs = new Map();
+const pendingJob = row => ["queued", "running"].includes(row.status);
+function jobPage(kind) {
+  if (/^(scan|check|reseed|search-library|library-|candidate-inspector|unpack|preview-unpack|refresh-unpack|find-compatible|combine-library|.*repair)/.test(kind)) return "library";
+  if (/^(search-)?(enqueue|send-queue|queue-|configure-download)/.test(kind)) return "queue";
+  if (/^(plan|catalogue|enqueue-plan)/.test(kind)) return "zen";
+  if (/^upload/.test(kind)) return "upload";
+  if (/^feed/.test(kind)) return "feeds";
+  if (/^search/.test(kind)) return "search";
+  return "torrents";
+}
+function jobTitle(row) {
+  const names = {scan:["Folder scan","Analyse des dossiers"], check:["Find Candidates","Recherche de candidats"], "check-all":["Find all Candidates","Recherche de tous les candidats"], "candidate-inspector":["Candidate review","Examen du candidat"], "check-candidate":["Check Candidate","Vérification du candidat"], "library-review":["Candidate review","Examen du candidat"], reseed:["Reseed","Remise en seed"], "reseed-workspace":["Reseed workflow","Parcours de remise en seed"], "reseed-all":["Reseed all","Remise en seed de tous les éléments"], "send-queue":["Send downloads","Envoyer les téléchargements"], enqueue:["Queue downloads","Ajouter les téléchargements"], plan:["Build Plan","Créer le Plan"], catalogue:["Refresh Catalogue","Actualiser le Catalogue"], refresh:["Refresh client","Actualiser le client"], search:["Search","Recherche"], details:["Torrent details","Détails du torrent"]};
+  const kind = row.kind.replace(/^search-/, "");
+  return names[kind] ? say(...names[kind]) : kind.replaceAll("-", " ");
+}
+function jobStatus(row) {
+  const states = {queued:say("Queued", "En attente"),running:say("Running", "En cours"),completed:say("Done", "Terminé"),partial:say("Partial", "Partiel"),failed:say("Failed", "Échec"),cancelled:say("Cancelled", "Annulé"),interrupted:say("Interrupted", "Interrompu")};
+  let text = states[row.status] || row.status;
+  if (row.waiting_for) text += say(` · position ${row.queue_position} · waiting for ${jobTitle(row.waiting_for)}`, ` · position ${row.queue_position} · attend ${jobTitle(row.waiting_for)}`);
+  const p = row.progress || {};
+  if (p.done != null && p.total != null) text += ` · ${p.done}/${p.total}`;
+  else if (p.items != null) text += say(` · ${p.items} items`, ` · ${p.items} éléments`);
+  if (p.phase || p.stage) text += ` · ${p.phase || p.stage}`;
+  return text;
+}
+function jobSubject(row) {
+  const s = row.subject || {};
+  return s.path || s.draft_id || s.repair_id || s.plan_id || s.feed_id || (s.paths?.length ? s.paths.slice(0, 2).join(" · ") + (s.paths.length > 2 ? ` (+${s.paths.length - 2})` : "") : s.hashes?.slice(0, 2).join(" · ")) || "";
+}
+function renderPageJobs(rows) {
+  const host = $("page-jobs");
+  const relevant = rows.filter(r => [state.clientId, "all"].includes(r.client_id) && jobPage(r.kind) === state.view);
+  const shown = [...relevant.filter(pendingJob), ...relevant.filter(r => !pendingJob(r)).slice(0, 1)];
+  host.hidden = !shown.length || ["library", "search"].includes(state.view);
+  if (host.hidden) return;
+  host.replaceChildren(...shown.map(row => {
+    const item = element("div", undefined, "actions");
+    item.append(element("strong", jobTitle(row)), element("span", jobStatus(row)), element("small", jobSubject(row)));
+    if (pendingJob(row) && row.progress?.cancellable !== false) item.append(button(say("Cancel", "Annuler"), async () => {await api(`jobs/${row.id}/cancel`, {}); await pollJobs();}));
+    return item;
+  }));
+}
+async function refreshJobPage() {
+  if (state.view === "library" && !$("library-reseed").hidden) await loadReseed();
+  if (state.view === "torrents") await loadTorrents();
+  if (state.view === "queue") await loadQueue();
+  if (state.view === "feeds") await loadFeeds();
+  if (state.view === "search") await loadSearchPage();
+  if (state.view === "upload") uploadEnvironment();
+  if (state.view === "zen") await Promise.all([loadZenSeeding(), loadCatalogue(), loadZenPlan()]);
+}
+$("work-status").onclick = () => guard(() => navigate("jobs"));
+$("jobs-refresh").onclick = () => guard(loadJobs);
 async function pollJobs() {
+  if (pollingJobs) return;
+  pollingJobs = true;
+  try { await pollJobsOnce(); } finally { pollingJobs = false; }
+}
+async function pollJobsOnce() {
   if ($("workspace").hidden) return;
   const rows = await api("jobs");
+  const changed = observedJobs.size && rows.some(row => !pendingJob(row) && !locallyTrackedJobs.has(row.id) && !state.jobs.has(row.id) && observedJobs.get(row.id) !== row.status && [state.clientId, "all"].includes(row.client_id) && jobPage(row.kind) === state.view);
+  for (const row of rows) if (!pendingJob(row)) locallyTrackedJobs.delete(row.id);
+  observedJobs = new Map(rows.map(row => [row.id, row.status]));
+  renderPageJobs(rows);
   catalogueJobs(rows);
   planJobs(rows);
   let running = 0;
@@ -512,6 +578,7 @@ async function pollJobs() {
   else if (rows.find(row => row.kind === "scan" && row.client_id === state.clientId)?.status === "partial")
     workStatus("Scan incomplete · see jobs", "Analyse incomplète · voir les tâches");
   else workStatus("Up to date", "À jour");
+  if (changed) await refreshJobPage();
   if (state.view === "jobs") renderJobs(rows);
   if (state.view === "queue") await loadQueue();
   if (state.view === "library" && !$("library-reseed").hidden && reseedUI.job) await loadReseed();
@@ -526,8 +593,9 @@ function renderJobs(rows) {
       const card = element("div", undefined, "card job"),
         text = element("div");
       text.append(
-        element("strong", `${r.kind} · ${clientName(r.client_id)}`),
-        element("p", r.status),
+        element("strong", `${jobTitle(r)} · ${clientName(r.client_id)}`),
+        element("p", jobStatus(r)),
+        element("small", jobSubject(r)),
         element("small", r.error || (r.progress?.stage === "client-files"
           ? say(`Reading client files: ${r.progress.done}/${r.progress.total} · up to ${Number(r.progress.requests_per_second).toFixed(2)} requests/s`,
               `Lecture des fichiers du client : ${r.progress.done}/${r.progress.total} · jusqu’à ${Number(r.progress.requests_per_second).toFixed(2)} requêtes/s`)
@@ -648,7 +716,7 @@ $("login-form").onsubmit = (e) => {
 async function logout() {
   document.dispatchEvent(new Event("tl-logout"));
   await api("logout", {});
-  state.jobs.clear(); clearAgentToken();
+  state.jobs.clear(); observedJobs.clear(); locallyTrackedJobs.clear(); $("page-jobs").replaceChildren(); $("page-jobs").hidden = true; clearAgentToken();
   $("workspace").hidden = true; $("login-screen").hidden = false;
 }
 let themeChoice = localStorage.getItem("tl-theme") || "auto";

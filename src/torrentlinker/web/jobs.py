@@ -52,6 +52,8 @@ class Jobs:
                 )
             if "lane" not in {r[1] for r in self.db.execute("PRAGMA table_info(jobs)")}:
                 self.db.execute("ALTER TABLE jobs ADD COLUMN lane TEXT NOT NULL DEFAULT 'batch'")
+            if "subject" not in {r[1] for r in self.db.execute("PRAGMA table_info(jobs)")}:
+                self.db.execute("ALTER TABLE jobs ADD COLUMN subject TEXT NOT NULL DEFAULT '{}'")
             self.db.execute(
                 "UPDATE jobs SET status='interrupted', error='Server restarted. "
                 "Check the Torrent Client before retrying; no action was "
@@ -121,9 +123,16 @@ class Jobs:
             with self.db:
                 self.db.execute(
                     "INSERT INTO jobs "
-                    "(id,kind,status,created,progress,result,error,client_id,lane) "
-                    "VALUES (?,?,'queued',?,'null','null','',?,?)",
-                    (identifier, kind, time.time(), client_id, lane),
+                    "(id,kind,status,created,progress,result,error,client_id,lane,subject) "
+                    "VALUES (?,?,'queued',?,'null','null','',?,?,?)",
+                    (
+                        identifier,
+                        kind,
+                        time.time(),
+                        client_id,
+                        lane,
+                        json.dumps(job_subject(kind, parameters)),
+                    ),
                 )
             with self.db:
                 self.db.execute(
@@ -191,7 +200,7 @@ class Jobs:
         if row is None:
             raise KeyError(identifier)
         result = dict(row)
-        for key in ("progress", "result"):
+        for key in ("progress", "result", "subject"):
             result[key] = json.loads(result[key])
         return result
 
@@ -206,10 +215,28 @@ class Jobs:
     def list(self) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.db.execute(
-                "SELECT id,kind,status,created,progress,error,client_id,lane FROM jobs ORDER BY "
-                "created DESC LIMIT 100"
+                "SELECT id,kind,status,created,progress,error,client_id,lane,subject "
+                "FROM jobs WHERE status IN ('queued','running') OR id IN "
+                "(SELECT id FROM jobs WHERE status NOT IN ('queued','running') "
+                "ORDER BY created DESC LIMIT 100) ORDER BY created DESC"
             ).fetchall()
-        return [{**dict(r), "progress": json.loads(r["progress"])} for r in rows]
+        result = [
+            {**dict(r), "progress": json.loads(r["progress"]), "subject": json.loads(r["subject"])}
+            for r in rows
+        ]
+        lanes: dict[str, list[dict]] = {}
+        for row in reversed(result):
+            if row["status"] not in {"running", "queued"}:
+                continue
+            ahead = lanes.setdefault(row["lane"], [])
+            row["queue_position"] = len(ahead) if row["status"] == "queued" else 0
+            row["waiting_for"] = (
+                {key: ahead[-1][key] for key in ("id", "kind", "client_id")}
+                if ahead and row["status"] == "queued"
+                else None
+            )
+            ahead.append(row)
+        return result
 
     def cancel(self, identifier: str) -> None:
         with self.lock:
@@ -254,3 +281,22 @@ class Jobs:
 def _request_key(parameters: dict[str, Any] | None) -> str:
     encoded = json.dumps(parameters or {}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def job_subject(kind: str, parameters: dict[str, Any] | None) -> dict[str, Any]:
+    """Persist identifiers for UI matching, never arbitrary request bodies or tokens."""
+    parameters = parameters or {}
+    subject: dict[str, Any] = {"kind": kind}
+    for key in ("path", "draft_id", "repair_id", "plan_id", "feed_id"):
+        value = parameters.get(key)
+        if isinstance(value, str) and value:
+            subject[key] = value
+    for key in ("paths", "hashes"):
+        value = parameters.get(key)
+        if isinstance(value, list):
+            subject[key] = [item for item in value if isinstance(item, str)]
+    for key in ("inspector_action", "reseed_action", "queue_action", "feed_operation"):
+        value = parameters.get(key)
+        if isinstance(value, str) and value:
+            subject[key] = value
+    return subject

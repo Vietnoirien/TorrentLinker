@@ -79,6 +79,7 @@ window.addEventListener("message", async (e) => {
           encodeURIComponent(state.clientId),
         body,
       );
+    if (m.path === "job" && value.job) locallyTrackedJobs.add(value.job);
     searchFrame.contentWindow?.postMessage(
       { type: "search-response", id: m.id, value },
       location.origin,

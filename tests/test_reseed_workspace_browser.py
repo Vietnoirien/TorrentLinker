@@ -137,7 +137,7 @@ def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_pat
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             frame.get_by_role("button", name="Reprendre le parcours", exact=True).click()
-            expect(frame.locator(".torrent .badge")).to_have_text("En partage", timeout=20000)
+            expect(frame.locator(".torrent .badge")).to_contain_text("En partage", timeout=20000)
             assert client.started == [meta.infohash]
             frame.locator(".torrent").click()
             expect(frame.locator(".inspector")).to_contain_text("Release.mkv")
@@ -348,5 +348,85 @@ def test_candidate_inspector_reviews_files_imports_and_rejects_in_place(tmp_path
             assert not errors
             browser.close()
     finally:
+        server.should_exit = True
+        thread.join(5)
+
+
+@pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+def test_external_jobs_progress_queue_and_completion_survive_browser_reload(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    app, board, _, original, _, _ = reseed_app(tmp_path)
+    jobs = app.state.agent_service.jobs
+    release = threading.Event()
+    started = threading.Event()
+
+    def held(stop, report):
+        report({"done": 1, "total": 3})
+        started.set()
+        release.wait(15)
+        report({"done": 3, "total": 3})
+        return {}
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/#/library/reseed")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            frame = page.frame_locator("#reseed-frame")
+            expect(frame.locator(".torrent")).to_contain_text(original.name)
+            # A second tab/API caller checks the selected Candidate. The open
+            # inspector must reload its cached result without changing selection.
+            frame.locator(".torrent .title").click()
+            expect(frame.locator("#review-candidate")).to_be_visible()
+            key = frame.locator("#review-candidate").input_value()
+            response = page.request.post(
+                f"http://127.0.0.1:{port}/api/jobs",
+                headers={"X-TorrentLinker": "1"},
+                data={
+                    "kind": "candidate-inspector",
+                    "path": str(original),
+                    "inspector_action": "check",
+                    "candidate_key": key,
+                },
+            )
+            assert response.ok
+            expect(frame.locator(".inspector")).to_contain_text("Full Match", timeout=10000)
+            first = jobs.submit("scan", held)
+            assert started.wait(2)
+            jobs.submit("reseed", lambda *_: {}, parameters={"path": str(original)})
+            expect(frame.locator("#library-jobs")).to_contain_text("1/3")
+            expect(frame.locator(".torrent .badge")).to_contain_text("waiting for Folder scan")
+            page.screenshot(path="/tmp/tl65-library-jobs.png")
+            page.reload()
+            expect(frame.locator("#library-jobs")).to_contain_text("1/3")
+            frame.get_by_role("button", name="Activity", exact=True).click()
+            expect(frame.locator("#content")).to_contain_text("1/3")
+            release.set()
+            expect(frame.locator("#content")).to_contain_text("3/3")
+            expect(frame.locator("#library-jobs")).to_contain_text("Done")
+            page.locator("#work-status").click()
+            expect(page.locator("#view-jobs")).to_be_visible()
+            expect(page.locator("#job-list")).to_contain_text(str(original))
+            assert jobs.get(first)["status"] == "completed"
+            assert not errors
+            browser.close()
+    finally:
+        release.set()
         server.should_exit = True
         thread.join(5)

@@ -435,3 +435,5 @@ window.addEventListener("message", (event) => {
   )
     guard(() => searchEnqueue([event.data.hash]));
 });
+
+$("queue-refresh").onclick = () => guard(loadQueue);

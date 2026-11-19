@@ -63,8 +63,10 @@ const api = async (action, body = {}) =>
     ...body,
     _client: environment.client,
   });
+let refreshing = false;
 async function refresh() {
-  if (!active || busy) return;
+  if (!active || refreshing) return;
+  refreshing = true;
   const g = generation;
   try {
     const value = await api("state");
@@ -81,7 +83,7 @@ async function refresh() {
     render();
   } catch (e) {
     $("error").textContent = e.message;
-  }
+  } finally { refreshing = false; }
 }
 async function perform(action, body = {}) {
   busy = true;
@@ -129,7 +131,38 @@ function combineForm() {
   const valid = rows.length>=2 && rows.length<=100 && !overlap && !rows.some(r=>r.members) && snapshot.setup.client === "qbittorrent";
   dialog(()=>`<div class="eyebrow">${t("ÉLÉMENTS LOCAUX")}</div><h2>${t("Combiner la sélection")}</h2><p class="muted">${t("Un regroupement virtuel pour chercher un torrent commun. Aucun fichier ne sera déplacé ni copié.")}</p><form id="combine-form"><label>${t("Nom du regroupement")}<input name="name" required maxlength="200" value="${t("Éléments sélectionnés")}"></label><ul>${rows.map(r=>`<li>${esc(r.name)}</li>`).join("")}</ul><p class="callout">${overlap?t("Sélectionnez le pack ou ses épisodes, pas les deux."):t("qBittorrent uniquement · 2 à 100 éléments réels. Leur parent commun et le mapping du client seront vérifiés.")}</p><p class="muted">${t("Les fichiers du torrent devront être vérifiés avant toute remise en seed. Les contenus manquants ne seront pas téléchargés.")}</p><div class="folder-actions"><button type="button" data-command="close">${t("Annuler")}</button><button class="primary" ${valid?"":"disabled"}>${t("Créer le regroupement")}</button></div></form>`);
 }
+function itemJob(path) {
+  const matching = (snapshot.jobs || []).filter(j => j.subject?.path === path || j.subject?.paths?.includes(path));
+  return matching.find(j => ["queued", "running"].includes(j.status)) || matching[0];
+}
+function reviewJobAction(job) {
+  return (job.subject?.inspector_action === "import" ? "import-file" : job.subject?.inspector_action) || ({check:"search", "check-all":"search", "search-library":"search", "find-compatible":"search", "check-candidate":"check", "library-review":"review", "library-reject":"reject", "library-evidence":"evidence", "import-provenance":"import-file", reseed:"seed", "reseed-all":"seed", "reseed-workspace":"seed", "unpack-reseed":"seed", "diagnose-repair":"repair", "prepare-repair":"repair", "start-repair":"repair"}[job.kind]);
+}
+function jobControls() {
+  const jobs = snapshot.jobs || [];
+  const activeJobs = jobs.filter(j => ["queued", "running"].includes(j.status));
+  const shown = [...activeJobs, ...jobs.filter(j => !["queued", "running"].includes(j.status)).slice(0, 1)];
+  $("library-jobs").innerHTML = shown.map(j => `<div class="tools"><b>${esc(j.title || t(activityKinds[j.kind] || j.kind))}</b><span>${esc(j.display || j.status)}</span>${["queued", "running"].includes(j.status) && j.progress?.cancellable !== false ? `<button data-cancel-job="${esc(j.id)}">${t("Annuler", "Cancel")}</button>` : ""}</div>`).join("");
+  for (const node of document.querySelectorAll('[data-command="scan"],[data-review-action]')) {
+    const action = node.dataset.reviewAction;
+    const matches = jobs.filter(j => node.dataset.command === "scan" ? j.kind === "scan" : (j.subject?.path === selected || j.subject?.paths?.includes(selected) || ["check-all", "reseed-all"].includes(j.kind)) && reviewJobAction(j) === action);
+    const job = matches.find(j => ["queued", "running"].includes(j.status)) || matches[0];
+    const pending = job && ["queued", "running"].includes(job.status);
+    if (node.dataset.command === "scan") {
+      node.disabled = !!pending || !!snapshot.scanning;
+      node.textContent = job ? `${t("Analyse", "Scan")} · ${job.display || job.status}` : t("Parcourir mon disque maintenant");
+    }
+    if (job) {
+      node.setAttribute("aria-label", node.textContent);
+      node.setAttribute("aria-description", job.display || job.status);
+      if (pending) node.disabled = true;
+      if (node.dataset.command !== "scan") node.textContent += ` · ${job.display || job.status}`;
+      node.setAttribute("aria-busy", String(!!pending));
+    }
+  }
+}
 function stateFor(r) {
+  const job = itemJob(r.path);
   const p = snapshot.progress?.active?.[r.path];
   if (snapshot.progress?.paused_paths?.includes(r.path)) return t("En pause");
   if (r.error) return t("À examiner");
@@ -140,9 +173,8 @@ function stateFor(r) {
         ? " · " + Math.round(p.fraction * 100) + " %"
         : t(" · en cours"))
     );
-  return r.stage === "seeding"
-    ? t("En partage")
-    : t("En attente · ") + labels[r.stage];
+  const stage = r.stage === "seeding" ? t("En partage") : t("En attente · ") + labels[r.stage];
+  return job ? `${stage} · ${job.display || job.status}` : stage;
 }
 function render() {
   const focusSearch = document.activeElement?.id === "search";
@@ -164,12 +196,14 @@ function render() {
   let folders = snapshot.setup.folders || [];
   if (tab === "folders") {
     $("content").innerHTML = `<div class="row between"><h2>${t("Dossiers de bibliothèque")}</h2><button data-command="add-folder">${t("+ Ajouter un dossier")}</button></div><p class="muted">${t("Les emplacements analysés par le parcours.")}</p><div class="panel folder-list">${folders.map(f => `<div class="folder-entry"><div><b>${esc(f.local)}</b><small>${kindName(f.kind)} · ${f.depth == null ? t("Automatique") : t("Profondeur ")+f.depth}</small></div><span class="badge">${(snapshot.folder_errors || []).some(path=>path===f.local || path.startsWith(f.local+"/")) ? t("Analyse incomplète · éléments précédents conservés") : t("Analyser pour vérifier l’accès aux fichiers")}</span><button data-edit-folder="${esc(f.local)}">${t("Modifier")}</button><button data-remove-folder="${esc(f.local)}">${t("Retirer")}</button></div>`).join("") || `<p class="muted">${t("Aucun dossier configuré.")}</p>`}<p><button data-command="disk">${t("Analyser maintenant")}</button></p></div>`;
+    jobControls();
     window.scrollTo(0, scroll);
     return;
   }
   if (tab === "activity") {
     const events = [...snapshot.rows.flatMap(r => (r.events || []).map(e => ({...e, name:r.name}))), ...(snapshot.activity || [])].sort((a,b) => b.at-a.at);
     $("content").innerHTML = `<h2>${t("Activité du parcours")}</h2><p class="muted">${t("Chaque élément conserve ses propres étapes.")}</p><div class="panel" style="margin-top:20px">${events.map(e => `<div class="tools"><small>${new Date(e.at*1000).toLocaleString(environment.language)}</small><b>${esc(e.kind ? t(activityKinds[e.kind] || e.kind) : e.name)}</b><span>${esc(e.message || (e.status ? t(activityStates[e.status] || e.status) : "") || ({prepared:t("Organisation prête", "Layout ready"),verified:t("Contenu vérifié"),checking:t("Vérification du client")}[e.phase] || labels[e.phase] || e.phase))}</span></div>`).join("") || `<div class="empty">${t("Les prochaines transitions apparaîtront ici.")}</div>`}</div>`;
+    jobControls();
     window.scrollTo(0, scroll);
     return;
   }
@@ -197,6 +231,7 @@ function render() {
         .join("") ||
       `<div class="empty">${t("Aucun élément ici. Ajoutez un dossier ou changez le filtre.")}</div>`
     }<div id="more" class="foot">${Math.min(limit, rows.length)} / ${rows.length}${t(" éléments")}</div></section>${inspector()}</div>`;
+  jobControls();
   if (focusSearch) {
     $("search").focus({ preventScroll: true });
     $("search").setSelectionRange(cursor, cursor);
@@ -382,6 +417,8 @@ document.addEventListener("click", (e) => {
 });
 async function handleClick(e) {
   const b = e.target.closest("button");
+  if (b?.dataset.cancelJob) { await api("cancel-job", {id:b.dataset.cancelJob}); await refresh(); return; }
+  if (b?.dataset.command === "refresh") { if (candidateReview) candidateReview.signature = ""; await refresh(); render(); return; }
   if (b?.dataset.tab) {
     tab = b.dataset.tab;
     await api("tab", {tab});
@@ -575,6 +612,7 @@ window.addEventListener("reseed-environment", (e) => {
     window.TLPanel.refreshForm($("dialog-body"), () => dialog(dialogRenderer));
   syncLayoutForm();
   document.title = t("Bibliothèque");
+  document.querySelector('[data-command="refresh"]').textContent = t("Actualiser", "Refresh");
   for (const [key, label] of Object.entries({
     reseed: "Remise en seed",
     folders: "Dossiers",

@@ -933,3 +933,5 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
   #workspace main { margin-left:190px; }
   .navigation-collapsed #workspace main { margin-left:0; }
 }
+
+#page-jobs small { overflow-wrap: anywhere; min-width: 0; }

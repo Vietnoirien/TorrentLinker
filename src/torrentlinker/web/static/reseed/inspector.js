@@ -3,6 +3,12 @@
 let candidateReview = null;
 const candidateChoices = new Map();
 let candidateChoicesGeneration = -1;
+function candidateSignature(row) {
+  const completed = (snapshot.jobs || []).filter(j => !["queued", "running"].includes(j.status) &&
+    (j.subject?.path === row.path || j.subject?.paths?.includes(row.path) || ["check-all", "reseed-all"].includes(j.kind)) &&
+    ["search", "check", "reject", "import-file", "seed", "repair"].includes(reviewJobAction(j)));
+  return JSON.stringify([row.candidates || [], completed.map(j => j.id)]);
+}
 function reviewState(row) {
   if (candidateChoicesGeneration !== generation) {
     candidateChoices.clear();
@@ -25,19 +31,25 @@ function reviewState(row) {
       evidence: null,
       details: new Map(),
       pending: new Set(),
-      signature: JSON.stringify(row.candidates || []),
+      signature: candidateSignature(row),
     };
     const state = candidateReview;
     queueMicrotask(() => reviewRequest(state, "review"));
   }
-  const signature = JSON.stringify(row.candidates || []);
+  const signature = candidateSignature(row);
   if (
     candidateReview.signature !== signature &&
     !candidateReview.pending.size
   ) {
     candidateReview.signature = signature;
     const state = candidateReview;
-    queueMicrotask(() => reviewRequest(state, "review"));
+    state.provenance = null;
+    state.evidence = null;
+    state.details.clear();
+    queueMicrotask(async () => {
+      await reviewRequest(state, "review");
+      if (reviewCurrent(state)) await loadReviewTab(state);
+    });
   }
   return candidateReview;
 }

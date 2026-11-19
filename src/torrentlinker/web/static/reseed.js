@@ -82,6 +82,7 @@ async function reseedRequest(action, body) {
       .join("\n");
     return {
       error,
+      jobs: jobs.filter(j => j.client_id === client && jobPage(j.kind) === "library").map(j => ({...j, subject: {...j.subject, path: j.subject?.path || data.repair_sources?.[j.subject?.repair_id]}, display: jobStatus(j), title: jobTitle(j)})),
       activity: jobs
         .filter(
           (j) =>
@@ -94,7 +95,7 @@ async function reseedRequest(action, body) {
           at: j.created || 0,
           kind: j.kind,
           status: j.status,
-          message: j.error || "",
+          message: j.error || jobStatus(j),
         })),
       rows: data.rows,
       folder_errors: data.folder_errors,
@@ -111,6 +112,11 @@ async function reseedRequest(action, body) {
             ["running", "queued"].includes(j.status),
         ),
     };
+  }
+  if (action === "cancel-job") {
+    const row = await api(`jobs/${encodeURIComponent(body.id)}`);
+    if (row.client_id !== state.clientId) throw Error("The target client changed.");
+    return api(`jobs/${encodeURIComponent(body.id)}/cancel`, {});
   }
   if (action === "inspect")
     return waitReseedJob({
