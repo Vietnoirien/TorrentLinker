@@ -50,7 +50,9 @@ The full offline suite reported 2,142 passes and 217 skips. Its five failures we
 corrected: three viewport-resize waits, native French messages, and the navigation
 fixture's legacy code boundary. The subsequent acceptance batch passed all 29 checks,
 including browser workflows and the affected native tests. The final Wayland rendering
-check passed after these corrections. CI remains the final integration check.
+check passed after these corrections. The related browser batch passed 13 checks for Profile, Community and Media. The
+Companion extension check then passed separately after correcting focus-blocked polling
+and waiting for saved download consent. CI remains the final integration check.
 
 Review corrections have explicit regressions: stale client controls cannot act while a
 new snapshot loads, first-run checks use the submitted proxy, Automatic folder grouping

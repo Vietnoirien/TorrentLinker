@@ -12,6 +12,7 @@ from shiboken6 import isValid
 
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.i18n import pick_language
 from torrentlinker.settings_workspace import SettingsWorkspace
 
 
@@ -208,7 +209,7 @@ class SettingsView(BundledView):
         return {"queued": True}
 
     def refresh(self) -> None:
-        self.language = self.workspace.setup.settings.language
+        self.language = pick_language(self.workspace.setup.settings.language)
         theme = self.workspace.setup.settings.theme
         if theme == "auto":
             theme = "dark" if self.palette().window().color().lightness() < 128 else "light"

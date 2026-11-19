@@ -91,6 +91,7 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
+            page.locator("#language").select_option("en")
             page.locator("[data-view=setup]").first.click()
             settings = page.frame_locator("#settings-frame")
             settings.get_by_role("button", name="Companion", exact=True).click()
@@ -109,8 +110,10 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             yesterday = workspace.history_days()[0]
             balance = workspace.state()["companion"]["profile"]["balance"]
             assert yesterday.ledger and yesterday.values["balance"] == balance - 23
-            expect(settings.get_by_role("checkbox")).to_be_enabled()
+            page.bring_to_front()
+            expect(settings.get_by_role("checkbox")).to_be_enabled(timeout=10000)
             settings.get_by_role("checkbox").check()
+            expect(settings.get_by_role("checkbox")).to_be_enabled()
             expect(settings.get_by_role("checkbox")).to_be_checked()
             assert workspace.state()["downloads"]["enabled"]
             # Public owner API -> real extension -> fake tracker -> verified summary.

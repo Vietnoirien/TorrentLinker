@@ -84,6 +84,7 @@ async function loadSettingsCompanion(root) {
   toggle.disabled = !data.paired;
   toggle.onchange = () =>
     guard(async () => {
+      toggle.disabled = true;
       try {
         await request("companion", {
           action: "downloads",
@@ -117,7 +118,7 @@ async function loadSettingsCompanion(root) {
 }
 
 let companionPolling = false;
-setInterval(() => {
+function pollSettingsCompanion() {
   const root = document.querySelector(".settings-card");
   if (
     companionPolling ||
@@ -125,11 +126,14 @@ setInterval(() => {
     !environment.active ||
     section !== "companion" ||
     !root ||
-    root.contains(document.activeElement)
+    (root.contains(document.activeElement) &&
+      document.activeElement.matches("input, textarea, select"))
   )
     return;
   companionPolling = true;
   guard(() => loadSettingsCompanion(root)).finally(() => {
     companionPolling = false;
   });
-}, 5000);
+}
+setInterval(pollSettingsCompanion, 5000);
+document.addEventListener("visibilitychange", pollSettingsCompanion);
