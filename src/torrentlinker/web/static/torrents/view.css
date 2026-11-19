@@ -428,3 +428,195 @@ button:focus-visible {
   color: var(--accent);
   flex: 0 0 auto;
 }
+
+.transfer-dialog button:disabled,
+.transfer-dialog button.primary:disabled {
+  background: #394149 !important;
+  color: #aab2ba !important;
+  border-color: #59616a !important;
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.transfer-dialog .transfer-blocked {
+  border: 1px solid #d69d45;
+  border-left: 4px solid #eab45d;
+  background: linear-gradient(#eab45d0b, #eab45d0b), var(--panel);
+}
+.transfer-dialog .blocking-badge {
+  background: #eab45d24;
+  color: #ffd591;
+  font-weight: 600;
+}
+.transfer-dialog .missing-destination {
+  color: #ffd591;
+}
+.transfer-dialog .transfer-blocking-summary {
+  border: 1px solid #d69d45;
+  background: #eab45d14;
+  color: #ffd591;
+}
+[data-theme="light"] .transfer-dialog .blocking-badge,
+[data-theme="light"] .transfer-dialog .missing-destination,
+[data-theme="light"] .transfer-dialog .transfer-blocking-summary {
+  color: #784600;
+}
+.transfer-dialog {
+  width: min(1040px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: 24px;
+}
+.transfer-heading,
+.transfer-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.transfer-steps {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+.active-step {
+  background: var(--tint);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.transfer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.transfer-card {
+  padding: 18px;
+}
+.transfer-card label {
+  display: block;
+  margin: 14px 0;
+}
+.transfer-card input,
+.transfer-card select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+.transfer-path {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.transfer-path input {
+  min-width: 0;
+  flex: 1;
+}
+.transfer-footer {
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.transfer-footer select {
+  max-width: 240px;
+}
+.transfer-footer label {
+  font-size: 12px;
+}
+.transfer-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.transfer-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 1fr);
+  padding: 16px;
+  gap: 14px;
+}
+.transfer-item strong {
+  overflow-wrap: anywhere;
+}
+.transfer-item details {
+  grid-column: 1/-1;
+}
+.transfer-entry {
+  margin-bottom: 16px;
+}
+@media (max-width: 650px) {
+  .transfer-grid,
+  .transfer-item {
+    grid-template-columns: 1fr;
+  }
+  .transfer-dialog {
+    padding: 16px;
+  }
+  .transfer-footer > div {
+    width: 100%;
+  }
+  .transfer-footer button {
+    margin-bottom: 6px;
+  }
+}
+
+.transfer-folders {
+  display: grid;
+  gap: 8px;
+}
+
+.transfer-progress {
+  grid-column: 1/-1;
+}
+.transfer-progress > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.transfer-progress progress {
+  width: 100%;
+  height: 10px;
+  margin: 10px 0;
+  accent-color: var(--accent);
+  display: block;
+}
+.transfer-progress progress::-webkit-progress-bar {
+  background: var(--line);
+  border-radius: 5px;
+}
+.transfer-progress progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 5px;
+}
+.cleanup-toggles {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.transfer-card .cleanup-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.transfer-card .cleanup-toggles input {
+  width: 32px;
+  accent-color: var(--accent);
+}
+.transfer-category {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.transfer-category p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.transfer-dialog button:disabled,
+.transfer-dialog button.primary:disabled {
+  background: #394149 !important;
+  color: #aab2ba !important;
+  border-color: #59616a !important;
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}

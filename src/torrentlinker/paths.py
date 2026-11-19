@@ -132,6 +132,12 @@ class MappedQbit:
         t = self._inner.torrent(hash) if with_files else self._inner.torrent(hash, with_files=False)
         return self._local(t) if t else None
 
+    def export_torrent(self, hash: str) -> bytes:
+        export = getattr(self._inner, "export_torrent", None)
+        if export is None:
+            raise ValueError("This client cannot export torrent metadata")
+        return export(hash)
+
     def files(self, hash: str) -> dict[str, int]:
         return self._inner.files(hash)
 

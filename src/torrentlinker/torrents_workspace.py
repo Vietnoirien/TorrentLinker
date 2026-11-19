@@ -90,6 +90,23 @@ class TorrentWorkspace:
         self.updated: dict[str, float] = {}
         self.observed_at: dict[str, float] = {}
         self.pending: dict[str, tuple] = {}
+        from torrentlinker.transfers import Transfers
+
+        root = getattr(setup, "_root", None) or setup
+        with setup.lock:
+            existing = getattr(root, "_client_transfers", None)
+            if existing is not None:
+                self.transfers = existing
+                return
+            self.transfers = Transfers(
+                setup.path.parent / "client-transfers",
+                self.transfer_client,
+                self.transfer_metadata,
+                lambda: [p.id for p in self.setup.settings.client_profiles if p.enabled],
+                self.transfer_fingerprint,
+                self.transfer_accessible,
+            )
+            root._client_transfers = self.transfers
 
     def target(self, identifier):
         identifier = identifier or self.setup.settings.active_client_id
@@ -111,6 +128,8 @@ class TorrentWorkspace:
             else nullcontext()
         )
         with access, self.lock:
+            if action.startswith("transfer-"):
+                return self.transfer_request(action, body)
             if action == "list":
                 return self.list(TorrentQuery.model_validate(body))
             if action in {"review", "apply"}:
@@ -124,6 +143,149 @@ class TorrentWorkspace:
                     ]
                 }
             raise ValueError("Unknown torrent operation.")
+
+    def transfer_fingerprint(self, identifier):
+        import hashlib
+
+        return hashlib.sha256(str(self.target(identifier).setup.snapshot()).encode()).hexdigest()
+
+    def transfer_accessible(self, identifier, path):
+        from pathlib import Path
+        from urllib.parse import urlsplit
+
+        self.setup.path_under_root(str(path))
+        settings = self.target(identifier).setup.settings
+        host = urlsplit(settings.profile().host).hostname
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            return
+        if not any(
+            Path(path).is_relative_to(Path(mapping.local)) for mapping in settings.path_mappings
+        ):
+            raise ValueError("Remote storage needs a configured accessible path mapping")
+
+    def transfer_client(self, identifier):
+        from torrentlinker.paths import MappedQbit, PathMapper
+
+        target = self.target(identifier).setup
+        return MappedQbit(target.client(), PathMapper(target.settings.path_mappings))
+
+    def transfer_metadata(self, identifier, key):
+        target = self.target(identifier)
+        data = target.setup.store.cached_torrent(key)
+        if data is not None:
+            return data
+        export = getattr(target.setup.client(), "export_torrent", None)
+        if export is None:
+            raise ValueError(
+                "Original .torrent metadata is unavailable; "
+                "use a torrent already cached in TorrentLinker"
+            )
+        data = export(key)
+        target.setup.store.cache_torrent(key, data)
+        return data
+
+    def transfer_request(self, action, body):
+        if action == "transfer-options":
+            items = [TorrentInstance.model_validate(i) for i in body.get("items", [])]
+            sources, clients = [], []
+            for item in items:
+                torrent = self.transfer_client(item.client_id).torrent(item.hash)
+                if torrent is None:
+                    raise ValueError("Source torrent disappeared")
+                from torrentlinker.category_tags import category_tag
+
+                categories = self.setup.settings.indexer_categories
+                catalogue = self.setup.store.catalogue([item.hash])
+                category_id = catalogue[0].category if catalogue else None
+                if category_id is None:
+                    category_id = next(
+                        (
+                            cid
+                            for cid, cat in categories.items()
+                            if cat.name == torrent.category
+                            or category_tag(cid, categories) in torrent.tags
+                        ),
+                        None,
+                    )
+                category = (
+                    categories[category_id].name if category_id in categories else torrent.category
+                )
+                sources.append(
+                    {
+                        "client_id": item.client_id,
+                        "hash": item.hash,
+                        "name": torrent.name,
+                        "category": category,
+                        "category_id": category_id,
+                        "source": str(torrent.save_path),
+                        "total": torrent.total_size,
+                    }
+                )
+            for profile in self.setup.settings.client_profiles:
+                if not profile.enabled:
+                    continue
+                target = self.target(profile.id)
+                settings = target.setup.settings
+                from torrentlinker.downloads import DownloadFolders
+                from torrentlinker.paths import PathMapper
+
+                folders = {}
+                try:
+                    native = {
+                        f.name: PathMapper(settings.path_mappings).to_local(f.path)
+                        for f in target.setup.client().folder_settings()
+                        if f.kind == "category"
+                    }
+                except Exception:
+                    native = {}
+                for row in sources:
+                    category = row["category"]
+                    category_id = row["category_id"] or next(
+                        (
+                            cid
+                            for cid, cat in settings.indexer_categories.items()
+                            if cat.name == category
+                        ),
+                        0,
+                    )
+                    explicit = DownloadFolders(settings.download_folders.by_category).resolve(
+                        category_id, settings.indexer_categories
+                    )
+                    resolved = (
+                        explicit
+                        or native.get(category)
+                        or settings.download_folders.resolve(
+                            category_id, settings.indexer_categories
+                        )
+                    )
+                    folders[category] = str(resolved) if resolved else ""
+                clients.append({"id": profile.id, "name": profile.name, "folders": folders})
+            return {"sources": sources, "clients": clients}
+        if action == "transfer-prepare":
+            for item in body["items"]:
+                if item.get("folder"):
+                    self.setup.path_under_root(item["folder"])
+            return self.transfers.prepare(
+                body["items"],
+                body["destination"],
+                remove_torrent=body.get("remove_torrent", False),
+                remove_files=body.get("remove_files", False),
+            )
+        if action == "transfer-list":
+            return {"plans": self.transfers.list()}
+        if action == "transfer-get":
+            return self.transfers.get(body["id"])
+        if action == "transfer-start":
+            return self.transfers.start(body["id"])
+        if action == "transfer-stop":
+            return self.transfers.stop(body["id"])
+        if action == "transfer-review-cleanup":
+            return self.transfers.review_cleanup(body["id"], body["index"])
+        if action == "transfer-cleanup":
+            return self.transfers.cleanup(body["id"], body["index"], body["token"])
+        if action == "transfer-browse":
+            return self.setup.browse(body.get("path", ""))
+        raise ValueError("Unknown transfer operation")
 
     def list(self, query: TorrentQuery):
         profiles = [p for p in self.setup.settings.client_profiles if p.enabled]

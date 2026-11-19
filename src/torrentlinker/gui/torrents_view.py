@@ -25,6 +25,14 @@ class TorrentBridge(ViewBridge):
             body = json.loads(payload)
             if body.pop("_client", None) != self.board.owner.settings.active_client_id:
                 raise ValueError("The target client changed. Reopen Torrents.")
+            if action == "transfer-browse":
+                from PySide6.QtWidgets import QFileDialog
+
+                folder = QFileDialog.getExistingDirectory(
+                    self.board, "Destination", body.get("path", "")
+                )
+                self.response.emit(identifier, json.dumps({"data": {"selected": folder}}))
+                return
             if action == "preferences":
                 settings = QSettings()
                 for key in ("columns", "widths"):

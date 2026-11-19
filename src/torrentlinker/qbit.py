@@ -286,6 +286,9 @@ class QbitApi:
             ]
         return self._torrent(info, with_files)
 
+    def export_torrent(self, hash: str) -> bytes:
+        return self._client.torrents_export(torrent_hash=hash)
+
     def files(self, hash: str) -> dict[str, int]:
         return {f.name: int(f.size) for f in self._client.torrents_files(hash)}
 

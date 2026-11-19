@@ -110,4 +110,15 @@ def test_desktop_torrent_sort_filter_and_preferences(
 
         Path(folder).mkdir(parents=True, exist_ok=True)
         tab.grab().save(str(Path(folder) / "torrents-desktop.png"))
+    js(qtbot, tab, "document.querySelector('tbody input').click()")
+    js(qtbot, tab, "document.querySelector('#transfer-selection').click()")
+    wait_js(qtbot, tab, "document.querySelector('#transfer-destination') !== null")
+    assert js(qtbot, tab, "document.querySelector('#transfer-check').disabled")
+    assert js(qtbot, tab, "document.querySelector('#transfer-method') !== null")
+    assert "Transférer vers un autre client" in js(
+        qtbot, tab, "document.querySelector('dialog').textContent"
+    )
+    if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
+        tab.grab().save(str(Path(folder) / "transfer-desktop.png"))
+    js(qtbot, tab, "document.querySelector('#transfer-close').click()")
     tab.close()

@@ -142,6 +142,7 @@ class BundledView(QWidget):
                             "view.html",
                             "view.css",
                             "view.js",
+                            "transfers.js",
                             "transport.js",
                             "inspector.js",
                             "recovery.js",
