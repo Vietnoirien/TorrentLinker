@@ -16,12 +16,13 @@ def seeding_page(
     *,
     query: str = "",
     group: str = "",
+    descendants: bool = False,
     sort: str = "zen",
     descending: bool = True,
     offset: int = 0,
     limit: int = 100,
 ) -> dict[str, Any]:
-    """Return category aggregates and at most one page of a category's own torrents.
+    """Return category aggregates and one bounded, globally sorted torrent page.
 
     Parent totals include descendants. Unfiltered account totals and class estimates
     are independent of pagination and text filters. No private tracker URLs are exposed.
@@ -64,11 +65,13 @@ def seeding_page(
                 summary["note_count"] += 1
             parent = identity
         groups[parent]["direct_count"] += 1
-        if parent == group:
+        if group == "all" or parent == group or descendants and parent.startswith(group + "/"):
             rows.append(
                 {
                     "hash": torrent.hash,
                     "name": torrent.name,
+                    "category": " / ".join(names),
+                    "category_id": parent,
                     "size": torrent.total_size,
                     "seeders": torrent.swarm_seeders if torrent.swarm_seeders >= 0 else None,
                     "seed_days": torrent.seeding_time / 86400,

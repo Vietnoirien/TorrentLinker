@@ -37,7 +37,7 @@ def opened(qtbot, tmp_path, data=None):
     qtbot.addWidget(view)
     view.show_seeding(data or sample())
     view.show()
-    wait_js(qtbot, view, "document.querySelectorAll('.seeding-group').length===3")
+    wait_js(qtbot, view, "document.querySelectorAll('.seeding-category').length===3")
     return view
 
 
@@ -53,8 +53,14 @@ def test_tree_groups_categories_and_numeric_rows(qtbot, tmp_path):
     assert js(
         qtbot,
         view,
-        "document.querySelector('[data-group=\"unknown\"] tbody').textContent.includes('Unknown')",
+        "document.querySelector('#seeding-result tbody').textContent.includes('Unknown')",
     )
+    js(
+        qtbot,
+        view,
+        "document.querySelector('[data-category=\"7000/7010\"]').click()",
+    )
+    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===2")
     js(
         qtbot,
         view,
@@ -65,7 +71,7 @@ def test_tree_groups_categories_and_numeric_rows(qtbot, tmp_path):
     wait_js(
         qtbot,
         view,
-        "document.querySelector('[data-group=\"7000/7010\"] tbody tr')?.text"
+        "document.querySelector('#seeding-result tbody tr')?.text"
         "Content.includes('Small')",
     )
 
@@ -91,7 +97,7 @@ def test_owner_expansion_uses_category_identity_after_rename(qtbot, tmp_path):
 def test_filter_does_not_persist_automatic_expansion(qtbot, tmp_path):
     view = opened(qtbot, tmp_path)
     js(qtbot, view, "document.querySelector('[data-group=\"7000\"]').open=true")
-    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===1")
+    wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===4")
     js(
         qtbot,
         view,
@@ -115,7 +121,7 @@ def test_filter_does_not_persist_automatic_expansion(qtbot, tmp_path):
     )
     reopened.close()
     final = opened(qtbot, tmp_path)
-    assert js(qtbot, final, "document.querySelectorAll('.seeding-group[open]').length===0")
+    assert js(qtbot, final, "document.querySelectorAll('.seeding-category[open]').length===0")
 
 
 def test_note_aggregates_weight_torrents_and_unknowns_sort_last():
@@ -138,9 +144,9 @@ def test_previous_native_expansion_migrates_once(qtbot, tmp_path):
     preferences = QSettings(str(tmp_path / "owner.ini"), QSettings.Format.IniFormat)
     preferences.setValue("zen/expanded_categories", ["category:7000", "category:7000/7010"])
     view = opened(qtbot, tmp_path)
-    wait_js(qtbot, view, "document.querySelectorAll('.seeding-group[open]').length===2")
+    wait_js(qtbot, view, "document.querySelectorAll('.seeding-category[open]').length===2")
     js(qtbot, view, "document.querySelector('#seeding-collapse').click()")
     qtbot.waitUntil(lambda: not preferences.value(view.preference_key(), [], type=list))
     view.close()
     reopened = opened(qtbot, tmp_path)
-    assert js(qtbot, reopened, "document.querySelectorAll('.seeding-group[open]').length===0")
+    assert js(qtbot, reopened, "document.querySelectorAll('.seeding-category[open]').length===0")

@@ -1,0 +1,60 @@
+/* The approved Torrents list rows, shared with Plan and Seeding. */
+.torrent-list {
+  border-collapse: collapse;
+  width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+.torrent-list th,
+.torrent-list td {
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.torrent-list th {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.torrent-list td.name,
+.torrent-list td:has(.torrent-title) {
+  min-width: 235px;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.torrent-list tr.active {
+  background: var(--tint);
+}
+.torrent-list tbody tr:hover {
+  background: var(--hover);
+}
+.torrent-list td button.link,
+.torrent-list .torrent-title {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+}
+.torrent-list small {
+  color: var(--muted);
+}
+.torrent-list .torrent-path {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.torrent-list-scroll {
+  overflow: auto;
+  max-height: 62vh;
+  background: var(--panel);
+}

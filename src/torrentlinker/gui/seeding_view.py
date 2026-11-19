@@ -61,6 +61,7 @@ class SeedingBridge(ViewBridge):
                         uploads,
                         query=query,
                         group=group,
+                        descendants=str(body.get("descendants", "false")).lower() == "true",
                         sort=sort,
                         descending=descending,
                         offset=offset,

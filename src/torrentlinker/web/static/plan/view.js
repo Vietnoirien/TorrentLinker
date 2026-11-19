@@ -138,7 +138,23 @@ function renderPlan() {
     "plan-result",
     rows,
     [
-      { label: say("Torrent", "Torrent"), render: (r) => r.title },
+      {
+        label: say("Torrent / action", "Torrent / action"),
+        render: (r) => {
+          const content = element("div"),
+            title = element("span", r.title, "torrent-title");
+          title.title = r.title;
+          content.append(
+            title,
+            element("br"),
+            element(
+              "small",
+              r.reseed ? "Reseed" : say("Download", "Téléchargement"),
+            ),
+          );
+          return content;
+        },
+      },
       {
         label: say("Action / download", "Action / téléchargement"),
         render: (r) => (r.reseed ? "Reseed · 0 B" : bytes(r.size)),
@@ -151,7 +167,15 @@ function renderPlan() {
           "Download Folder / existing data",
           "Dossier de téléchargement / données existantes",
         ),
-        render: (r) => (r.reseed ? r.path : r.folder),
+        render: (r) => {
+          const path = element(
+            "span",
+            r.reseed ? r.path : r.folder,
+            "torrent-path",
+          );
+          path.title = path.textContent;
+          return path;
+        },
       },
       {
         label: "Client",
@@ -165,6 +189,8 @@ function renderPlan() {
     "hash",
     planActions,
   );
+  $("plan-result").classList.add("torrent-list-scroll");
+  $("plan-result").querySelector("table")?.classList.add("torrent-list");
   $("plan-page").textContent =
     `${state.planRows.length ? offset + 1 : 0}–${offset + rows.length} / ${state.planRows.length}`;
   $("plan-prev").disabled = offset === 0;

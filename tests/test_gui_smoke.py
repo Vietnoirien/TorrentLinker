@@ -1533,7 +1533,7 @@ def test_seeding_views_wait_while_hidden_and_catch_up_when_shown(qtbot):
     tab.show()
     from tests.test_community_interfaces import wait_js
 
-    wait_js(qtbot, tab.seeding_view, "document.querySelectorAll('.seeding-group').length===1")
+    wait_js(qtbot, tab.seeding_view, "document.querySelectorAll('.seeding-category').length===1")
     wait_js(
         qtbot,
         tab.seeding_view,

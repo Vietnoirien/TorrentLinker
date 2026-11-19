@@ -80,6 +80,39 @@ def test_large_category_is_paged_with_stable_numeric_sort_and_full_totals():
     assert first["classes"][-1]["current"] is True
 
 
+def test_ten_thousand_torrents_have_global_pages_and_search_across_category_descendants():
+    profile = ZenProfile(ZenClass.SWARM_KEEPER)
+    torrents = [torrent(i, f"Release {i:05d}", size=i + 1) for i in range(10001)]
+    cached = {
+        row.hash: CatalogueRow(row.hash, row.name, row.size, 12, 7010 if i % 2 else 7020, "", "", 0)
+        for i, row in enumerate(torrents)
+    }
+    view = seeding(
+        profile,
+        torrents,
+        "https://c411.org",
+        catalogue=cached,
+        categories={
+            7000: IndexerCategory("Books"),
+            7010: IndexerCategory("Comics", 7000),
+            7020: IndexerCategory("Fiction", 7000),
+        },
+    )
+    page = seeding_page(
+        view, profile, 0, group="all", sort="size", descending=False, offset=9900, limit=100
+    )
+    assert page["total"] == 10001
+    assert len(page["rows"]) == 100
+    assert page["rows"][0]["name"] == "Release 09900"
+    assert page["rows"][-1]["name"] == "Release 09999"
+    assert page["rows"][0]["category"] == "Books / Fiction"
+    parent = seeding_page(view, profile, 0, group="7000", descendants=True, query="10000")
+    assert parent["total"] == 1
+    assert parent["rows"][0]["name"] == "Release 10000"
+    assert parent["summary"] == page["summary"]
+    assert seeding_page(view, profile, 0, group="all", query="Comics")["total"] == 5000
+
+
 def test_seeding_endpoint_scopes_clients_deduplicates_and_reports_offline(tmp_path):
     class SeedClient(Client):
         def __init__(self, rows):

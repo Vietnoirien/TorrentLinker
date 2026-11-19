@@ -2,6 +2,20 @@
 
 Desktop and Web load `static/seeding/view.html`. The page owns the category tree, bounded torrent pages, filter, numeric sort, expand/collapse controls, estimates and class comparison. The old native tree, native comparison widgets and Web renderer are removed.
 
+## Large-library correction
+
+The owner's subsequent review rejected the expanding torrent tables for libraries above 10,000 torrents and requested the current Torrents list rows for Plan. Seeding now displays one globally paged torrent list beside category filters. A parent category includes its descendants. Expanding categories changes only the small category navigator; it never inserts more torrent rows. Search and numeric sorting operate across all matching torrents before paging. First, previous, next, last and page-number navigation keep each rendered page at 100 rows.
+
+Torrents, Plan and Seeding load the same `panel/torrent-list.css` row styles. Plan keeps its selection, review, queue and send behavior, with action metadata below the torrent name and aligned metrics. Full destination paths remain available on hover and in the send review. The owner also reported missing Plan controls in the prototype. The prototype omitted them, while the shared app started them collapsed. Plan limits, category selection, optimisation, destinations and cached-catalogue controls now start expanded and the card can be collapsed without losing values. Desktop and browser regressions check their visibility without opening any disclosure; the browser regression first failed before this correction. The prototype now includes these controls and preserves their values across selection and language changes.
+
+The 10,001-torrent service and desktop regressions first failed against the previous implementation, then passed. The browser checks cover global search, numeric sorting, the final page and fewer than 1,600 DOM elements at both `/` and `/tl`. Existing category expansion, refresh recovery and client-switch checks still apply to the category navigator.
+
+Real-display captures use a 10,001-torrent fixture for Seeding and the corrected Plan rows in English/dark and French/light. Plan was checked in a separate process after a combined-run capture was black despite correct DOM content. The separate-process capture rendered correctly.
+
+![Seeding with 10,001 torrents](seeding-94/desktop-10001-en-dark.png)
+![Visible Plan controls](seeding-94/plan-fr-light.png)
+![Plan using Torrents row styles](seeding-94/plan-rows-fr-light.png)
+
 Both hosts use `web.seeding.seeding_page`, which computes category aggregates, unknown values and account totals independently of the requested row page. Desktop page calculations run off the GUI thread; the hidden desktop tab keeps only its latest observation until opened. The existing desktop update signals still feed the Zen band, Library estimates and Reading Room. Refreshing observations remains separate from repainting the page.
 
 Expanded categories use stable category IDs. Desktop remembers them in the owner's QSettings, scoped by settings path and client, and imports the previous native tree preference once. Web remembers them in owner-browser storage scoped by server base path and client. Filtering opens matching ancestors without changing saved expansion. Sort, filter and typed upload counts survive environment updates.

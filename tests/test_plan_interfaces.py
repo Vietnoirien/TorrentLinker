@@ -99,7 +99,17 @@ def test_plan_input_keeps_focus_and_selection_across_environment_refresh(qtbot):
     view.resize(620, 600)
     view.show()
     wait_js(qtbot, view, "typeof initialized!=='undefined' && initialized")
-    js(qtbot, view, "document.querySelector('#plan-options').open=true")
+    for control in (
+        "plan-category",
+        "plan-goal",
+        "plan-budget",
+        "plan-count",
+        "plan-seeders",
+        "plan-min-size",
+        "plan-max-size",
+        "plan-cached",
+    ):
+        assert js(qtbot, view, f"document.getElementById('{control}').checkVisibility()")
     js(
         qtbot,
         view,

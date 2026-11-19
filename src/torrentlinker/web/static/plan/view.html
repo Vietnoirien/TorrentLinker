@@ -6,6 +6,7 @@
     <title>Plan</title>
     <link rel="stylesheet" href="../panel/base.css" />
     <link rel="stylesheet" href="view.css" />
+    <link rel="stylesheet" href="../panel/torrent-list.css" />
     <script defer src="../panel/i18n.js"></script>
     <script defer src="../panel/transport.js"></script>
     <script defer src="common.js"></script>
@@ -49,7 +50,7 @@
         Stop fetching and plan now
       </button>
     </div>
-    <details id="plan-options">
+    <details id="plan-options" open>
       <summary
         data-en="Plan limits, categories and destinations"
         data-fr="Limites, catégories et destinations du Plan"
@@ -57,7 +58,7 @@
         Plan limits, categories and destinations
       </summary>
       <form id="plan-form">
-        <details>
+        <details open>
           <summary data-i18n="planDestinations">Plan destinations</summary>
           <p data-i18n="planDestinationHelp">
             Choose one client or distribute across selected clients. Budget 0

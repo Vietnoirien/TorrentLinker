@@ -54,11 +54,25 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.locator("#zen-plan-tab").click()
             panel = page.frame_locator("#plan-frame")
             expect(panel.locator("#plan-send")).to_be_disabled()
-            panel.locator("#plan-options > summary").click()
+            for control in (
+                "plan-category",
+                "plan-goal",
+                "plan-budget",
+                "plan-count",
+                "plan-seeders",
+                "plan-min-size",
+                "plan-max-size",
+                "plan-cached",
+            ):
+                expect(panel.locator(f"#{control}")).to_be_visible()
             panel.locator("#plan-limit-count").check()
             panel.locator("#plan-cached").check()
             panel.locator("#plan-category").select_option(["7000"])
             panel.locator("#plan-count").fill("2000")
+            panel.locator("#plan-options > summary").click()
+            expect(panel.locator("#plan-budget")).not_to_be_visible()
+            panel.locator("#plan-options > summary").click()
+            expect(panel.locator("#plan-count")).to_have_value("2000")
             missing = []
 
             def missing_folder(route):
@@ -164,10 +178,20 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.locator("#zen-plan-tab").click()
             panel = page.frame_locator("#plan-frame")
             expect(panel.locator("#plan-result tbody tr")).to_have_count(2)
-            panel.locator("#plan-options > summary").click()
+            for control in (
+                "plan-category",
+                "plan-goal",
+                "plan-budget",
+                "plan-count",
+                "plan-seeders",
+                "plan-min-size",
+                "plan-max-size",
+                "plan-cached",
+            ):
+                expect(panel.locator(f"#{control}")).to_be_visible()
             expect(panel.locator("#plan-count")).to_have_value("2000")
             expect(panel.locator("#plan-budget")).to_have_value("12")
-            panel.locator("#plan-form details > summary").click()
+            expect(panel.locator("#plan-clients")).to_be_visible()
             panel.locator(f'input[data-budget-id="{profile.id}"]').fill("0.5")
             panel.locator("#plan-folders").click()
             expect(panel.locator("#dialog")).to_contain_text("TorrentLinker host")

@@ -12,6 +12,51 @@ from torrentlinker.seeding import Seeding, SeedingRow
 from torrentlinker.zen import ZenDay
 
 
+def test_ten_thousand_torrents_are_browsable_without_expanding_rows(qtbot, tmp_path):
+    data = Seeding(
+        [
+            SeedingRow(
+                Torrent(str(i), f"Release {i:05d}", Path("/data"), size=i + 1),
+                0.1,
+                7010 if i % 2 else 7020,
+            )
+            for i in range(10001)
+        ],
+        ZenDay([0.1] * 10001),
+        [],
+        {
+            7000: IndexerCategory("Books"),
+            7010: IndexerCategory("Comics", 7000),
+            7020: IndexerCategory("Fiction", 7000),
+        },
+    )
+    view = SeedingView(
+        lambda: lambda: data,
+        preferences=QSettings(str(tmp_path / "owner.ini"), QSettings.Format.IniFormat),
+    )
+    qtbot.addWidget(view)
+    view.language = "en"
+    view.resize(1280, 900)
+    view.show_seeding(data)
+    view.show()
+    wait_js(qtbot, view, "document.querySelectorAll('#seeding-result tbody tr').length===100")
+    assert js(qtbot, view, "document.querySelector('#seeding-page').textContent.includes('10001')")
+    js(qtbot, view, "document.querySelector('#seeding-last').click()")
+    wait_js(qtbot, view, "document.querySelectorAll('#seeding-result tbody tr').length===1")
+    js(
+        qtbot,
+        view,
+        "const input=document.querySelector('#seeding-query');input.value='Release 10000';"
+        "input.dispatchEvent(new Event('input'))",
+    )
+    wait_js(
+        qtbot,
+        view,
+        "document.querySelector('#seeding-result').textContent.includes('Release 10000')",
+    )
+    assert js(qtbot, view, "document.querySelectorAll('#seeding-result tbody tr').length") == 1
+
+
 def test_shared_seeding_sort_filter_and_expansion_survive_reopening(qtbot, tmp_path):
     data = Seeding(
         [
@@ -29,7 +74,7 @@ def test_shared_seeding_sort_filter_and_expansion_survive_reopening(qtbot, tmp_p
     view.show_seeding(data)
     view.resize(1200, 800)
     view.show()
-    wait_js(qtbot, view, "document.querySelectorAll('.seeding-group').length===2")
+    wait_js(qtbot, view, "document.querySelectorAll('.seeding-category').length===2")
     js(qtbot, view, "document.querySelector('#seeding-expand').click()")
     wait_js(qtbot, view, "document.querySelectorAll('tbody tr').length===3")
     js(
@@ -41,15 +86,14 @@ def test_shared_seeding_sort_filter_and_expansion_survive_reopening(qtbot, tmp_p
     wait_js(
         qtbot,
         view,
-        "document.querySelector('[data-group=\"7000/7010\"] tbody tr').textC"
-        "ontent.includes('Small')",
+        "document.querySelector('#seeding-result tbody tr').textContent.includes('Small')",
     )
     view.close()
     reopened = SeedingView(lambda: lambda: data, preferences=settings)
     qtbot.addWidget(reopened)
     reopened.show_seeding(data)
     reopened.show()
-    wait_js(qtbot, reopened, "document.querySelectorAll('.seeding-group[open]').length===2")
+    wait_js(qtbot, reopened, "document.querySelectorAll('.seeding-category[open]').length===2")
     js(
         qtbot,
         reopened,

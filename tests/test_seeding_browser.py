@@ -19,6 +19,78 @@ pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-
 
 
 @pytest.mark.parametrize("root_path", ["", "/tl"])
+def test_ten_thousand_torrents_have_bounded_rows_and_global_search(tmp_path, root_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    config, setup, client, _ = prepared(tmp_path)
+    client.by_hash = {
+        row.hash: row for row in (torrent(i, f"Release {i:05d}", size=i + 1) for i in range(10001))
+    }
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    if root_path:
+        mounted = FastAPI()
+        mounted.mount(root_path, app)
+        app = mounted
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}{root_path}/")
+                page.locator("#login-password").fill("test-password-long")
+                page.locator("#login-form button").click()
+                page.locator("#theme").select_option("dark")
+                page.locator("[data-view=zen]").first.click()
+                page.locator("#zen-seeding-tab").click()
+                panel = page.frame_locator("#seeding-frame")
+                expect(panel.locator("#seeding-result tbody tr")).to_have_count(100)
+                expect(panel.locator("#seeding-page")).to_contain_text("10001")
+                panel.locator("#seeding-sort").select_option("size")
+                panel.locator("#seeding-order").select_option("asc")
+                expect(panel.locator("tbody tr").first).to_contain_text("Release 00000")
+                panel.locator("#seeding-last").click()
+                expect(panel.locator("tbody tr")).to_have_count(1)
+                expect(panel.locator("tbody")).to_contain_text("Release 10000")
+                panel.locator("#seeding-query").fill("Release 09999")
+                expect(panel.locator("tbody tr")).to_have_count(1)
+                expect(panel.locator("tbody")).to_contain_text("Release 09999")
+                panel.locator("#seeding-query").fill("")
+                expect(panel.locator("tbody tr")).to_have_count(100)
+                assert (
+                    panel.locator("body").evaluate("node=>node.querySelectorAll('*').length") < 1600
+                )
+                if output := os.getenv("TL_SEEDING_SCREENSHOTS"):
+                    Path(output).mkdir(parents=True, exist_ok=True)
+                    page.screenshot(path=str(Path(output) / "web-10001-en-dark.png"))
+                page.locator("#language").select_option("fr")
+                page.locator("#theme").select_option("light")
+                page.set_viewport_size({"width": 390, "height": 844})
+                expect(panel.locator("html")).to_have_attribute("lang", "fr")
+                assert panel.locator("html").evaluate("node=>node.scrollWidth<=innerWidth")
+                if output:
+                    page.screenshot(path=str(Path(output) / "web-10001-mobile-fr-light.png"))
+                assert not errors, errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(10)
+
+
+@pytest.mark.parametrize("root_path", ["", "/tl"])
 def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
     tmp_path, root_path, monkeypatch
 ):
@@ -73,7 +145,7 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
                 page.locator("[data-view=zen]").first.click()
                 page.locator("#zen-seeding-tab").click()
                 panel = page.frame_locator("#seeding-frame")
-                expect(panel.locator(".seeding-group")).to_have_count(2)
+                expect(panel.locator(".seeding-category")).to_have_count(2)
                 panel.locator("#seeding-expand").click()
                 expect(panel.locator("tbody tr")).to_have_count(2)
                 panel.locator("#seeding-sort").select_option("size")
@@ -87,15 +159,15 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
                 page.reload()
                 page.locator("[data-view=zen]").first.click()
                 page.locator("#zen-seeding-tab").click()
-                expect(panel.locator(".seeding-group[open]")).to_have_count(2)
+                expect(panel.locator(".seeding-category[open]")).to_have_count(2)
                 page.locator("#target-client").select_option(profile.id)
-                expect(panel.locator(".seeding-group[open]")).to_have_count(0)
+                expect(panel.locator(".seeding-category[open]")).to_have_count(0)
                 panel.locator("#seeding-refresh").click()
                 expect(panel.locator("#seeding-refresh")).to_be_enabled(timeout=15000)
                 panel.locator("#seeding-expand").click()
                 expect(panel.locator("tbody")).to_contain_text("Remote book")
                 page.locator("#target-client").select_option("default")
-                expect(panel.locator(".seeding-group[open]")).to_have_count(2)
+                expect(panel.locator(".seeding-category[open]")).to_have_count(2)
                 expect(panel.locator("tbody tr")).to_have_count(2)
                 original = client.torrents
 
@@ -115,7 +187,7 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
                 release_refresh.set()
                 expect(panel.locator("#seeding-refresh")).to_be_enabled(timeout=15000)
                 panel.locator("#seeding-expand").click()
-                expect(panel.locator("#seeding-groups")).to_contain_text("Updated during refresh")
+                expect(panel.locator("#seeding-result")).to_contain_text("Updated during refresh")
                 panel.locator("#seeding-collapse").click()
                 panel.locator("#seeding-expand").click()
                 panel.locator("#seeding-uploads").fill("10")
@@ -133,7 +205,7 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
                 if output:
                     page.screenshot(path=str(Path(output) / "web-mobile-fr-light.png"))
                 panel.locator("#seeding-collapse").click()
-                expect(panel.locator(".seeding-group[open]")).to_have_count(0)
+                expect(panel.locator(".seeding-category[open]")).to_have_count(0)
                 assert not errors, errors
                 browser.close()
         finally:

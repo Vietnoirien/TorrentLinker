@@ -9,6 +9,9 @@ const french = {
   allCategories: "Toutes les catégories",
   optimizeFor: "Optimiser pour",
   zenPerDay: "≈ Zen/jour",
+  maxGB: "Budget de téléchargement, Go",
+  minTorrentGB: "Taille minimale du torrent, Go",
+  maxTorrentGB: "Taille maximale du torrent, Go",
   maxTorrents: "Nombre maximal de torrents",
   maxSeeders: "Sources maximum",
   planNoteHelp:
@@ -150,8 +153,13 @@ function table(
       cell.append(check);
       line.append(cell);
     }
-    for (const column of columns)
-      line.append(element("td", column.render(row)));
+    for (const column of columns) {
+      const cell = element("td"),
+        value = column.render(row);
+      if (value instanceof Node) cell.append(value);
+      else cell.textContent = value ?? "";
+      line.append(cell);
+    }
     body.append(line);
   }
   result.append(head, body);

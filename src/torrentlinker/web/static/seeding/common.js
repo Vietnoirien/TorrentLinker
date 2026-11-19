@@ -34,8 +34,8 @@ async function guard(work) {
   }
 }
 const labels = {
-  expandAll: ["Expand all", "Tout développer"],
-  collapseAll: ["Collapse all", "Tout réduire"],
+  expandAll: ["Expand categories", "Développer les catégories"],
+  collapseAll: ["Collapse categories", "Réduire les catégories"],
   refresh: ["Refresh", "Actualiser"],
   seedingSort: ["Sort torrents by", "Trier les torrents par"],
   zenPerDay: ["≈ Zen/day", "≈ Zen/jour"],
