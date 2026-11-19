@@ -390,7 +390,13 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
             expect(panel.locator(".selection-card")).to_have_count(1)
             expect(panel.locator(".selection-card")).to_contain_text("Another release")
             panel.get_by_role("tab", name="Discussion", exact=True).click()
-            panel.get_by_role("tab", name="History", exact=True).click()
+            if upload:
+                with page.expect_response(
+                    lambda response: "/assistant/presentations/demo?" in response.url
+                ):
+                    panel.get_by_role("tab", name="History", exact=True).click()
+            else:
+                panel.get_by_role("tab", name="History", exact=True).click()
             expect(panel.locator(".selection-card")).to_have_count(1)
             assert not remote
             assert len([c for c in calls if "/items/" not in c]) == (3 if upload else 2)

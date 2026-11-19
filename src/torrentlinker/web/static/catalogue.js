@@ -51,7 +51,7 @@ async function finishCatalogue(id,error){
   catalogueUI.job=null;catalogueUI.progress=null;catalogueUI.stopping=false;
   catalogueUI.error=typeof error==="string"?error:"";
   await refreshCatalogue();
-  if(catalogueUI.plan){const client=catalogueUI.plan;catalogueUI.plan=false;if(client===state.clientId){zenTab("plan");$("plan-cached").checked=true;$("plan").click()}}
+  if(catalogueUI.plan){const client=catalogueUI.plan;catalogueUI.plan=false;if(client===state.clientId){zenTab("plan");await startCachedPlan()}}
 }
 window.addEventListener("message",async event=>{
   if(event.source!==catalogueFrame.contentWindow||event.origin!==location.origin)return;

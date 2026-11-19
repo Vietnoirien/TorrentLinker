@@ -59,7 +59,9 @@ async function loadReseed() { loaded.push('library/'+reseedUI.tab); }
 async function loadJobs() { loaded.push('jobs'); }
 async function loadZenSeeding() {}
 async function loadZenPlan() {}
-function showCatalogue() {}
+async function refreshCatalogue() {}
+async function loadCatalogue() {}
+function planEnvironment() {}
 async function loadSearchPage() { loaded.push('search'); }
 async function api() { return {}; }
 async function job() {}

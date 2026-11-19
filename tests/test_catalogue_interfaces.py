@@ -164,5 +164,5 @@ def test_desktop_cards_fetch_pause_language_and_resize(qtbot):
     view.refresh()
     view.resize(390, 700)
     wait_js(qtbot, view, "document.documentElement.lang==='fr'")
-    assert js(qtbot, view, "document.documentElement.scrollWidth<=innerWidth")
+    wait_js(qtbot, view, "innerWidth<=390 && document.documentElement.scrollWidth<=innerWidth")
     assert js(qtbot, view, "document.body.textContent.includes('manquants')")

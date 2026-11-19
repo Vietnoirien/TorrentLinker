@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_plan_interfaces import choose_plan_category, configure_plan
 from torrentlinker.config import Settings
 from torrentlinker.gui.main_window import MainWindow
 from torrentlinker.store import Store
@@ -440,10 +441,10 @@ def test_plan_view_shows_zen_added_size_and_payback_and_the_band_follows(
     c = PlanCandidate("aa" * 20, "Film", 8 * GB, 4, 2000, tmp_path, 1)
     window._plan_made(Plan([PlanItem(c, 0.4)], 0.4))
 
-    summary = window.zen_tab.plan_view.summary.text()
-    assert "≈ +0.40 Zen/day" in summary and "8.0 Go" in summary and "20 days" in summary
+    result = window.zen_tab.plan_view.state()["result"]
+    assert result["zen"] == 0.4 and result["size"] == 8 * GB and result["payback_days"] == 20
     assert "+0.40" in window.band.plan.text()
-    assert window.zen_tab.plan_view.table.rowCount() == 1
+    assert len(window.zen_tab.plan_view.state()["result"]["rows"]) == 1
 
 
 def test_the_plan_estimates_sending_and_downloading_times_from_a_speed_test(
@@ -462,15 +463,15 @@ def test_the_plan_estimates_sending_and_downloading_times_from_a_speed_test(
     window._plan_made(Plan([PlanItem(c, 0.01)] * 1000, 10))
 
     # 1000 on one key: 280 in the first 20 minutes, then 280 every 20 minutes
-    assert "Sending to the torrent client: ≈ 1 h 05" in view.times.text()
-    assert "test your speed" in view.times.text()
+    assert 3900 <= view.state()["result"]["sending_seconds"] < 3960
+    assert view.state()["result"]["download_seconds"] is None
 
     monkeypatch.setattr(main_window, "measure_download_speed", lambda: 100_000_000.0)
-    view.speed_button.click()
+    view.speed_test_requested.emit()
     qtbot.waitUntil(lambda: window.settings.download_speed is not None, timeout=5000)
 
-    assert "Downloading the data: ≈ 1 h 00 at best" in view.times.text()  # 360 GB at 100 MB/s
-    assert "800 Mbit/s" in view.times.text()
+    assert view.state()["result"]["download_seconds"] == 3600  # 360 GB at 100 MB/s
+    assert view.state()["download_speed"] * 8 / 1e6 == 800
     assert Settings.load(tmp_path / "settings.json").download_speed == 100_000_000.0
 
 
@@ -550,8 +551,8 @@ def test_a_plan_leaves_out_books_already_in_the_library_and_says_so(qtbot, tmp_p
     [left_out] = plan.on_disk
     assert left_out.path == mine
     view = window.zen_tab.plan_view
-    assert "1 torrents left out: they seem to be on disk already" in view.summary.text()
-    assert "La.Confidente" in view.summary.toolTip()
+    assert view.state()["result"]["excluded"] == 1
+    assert "La.Confidente" in view.state()["result"]["on_disk"][0]["title"]
 
 
 def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -611,15 +612,15 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
     window.zen_tab.plan_view.show_plan(plan)
 
     window.send_plan(plan)
-    assert window.zen_tab.plan_view.send_progress.isVisibleTo(window)
-    assert window.zen_tab.plan_view.stop_send_button.isVisibleTo(window)
+    assert window.zen_tab.plan_view.state()["progress"] is not None
+    assert window.zen_tab.plan_view.state()["busy"]
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
     assert stub.fetched == ["https://c411.example/dl/1"], shown
     [t] = qbit.torrents()
     assert ZEN_TAG in t.tags and t.save_path == tmp_path / "dl"
     assert "1 torrents added" in shown[0]
-    assert not window.zen_tab.plan_view.send_progress.isVisibleTo(window)
+    assert window.zen_tab.plan_view.state()["progress"] is None
     assert window.send_runner is None
 
 
@@ -672,19 +673,22 @@ def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
     view.show_plan(plan)
 
     window.send_plan(plan)
-    qtbot.waitUntil(lambda: "limiting downloads" in view.summary.text(), timeout=5000)
-    assert "0 of 3" in view.summary.text()
-    assert "≈ +0.30 Zen/day" in view.summary.text()  # the Plan's Zen stays in view
-    assert "≈ +0.00 Zen/day sent" in view.summary.text()
+    qtbot.waitUntil(
+        lambda: bool(view.state()["progress"] and view.state()["progress"]["retry_at"]),
+        timeout=5000,
+    )
+    assert view.state()["progress"]["done"] == 0 and view.state()["progress"]["total"] == 3
+    assert view.state()["result"]["zen"] == pytest.approx(0.3)  # the Plan's Zen stays in view
+    assert view.state()["progress"]["zen_added"] == 0
     band = window.band.plan.text()
     assert "+0.30" in band and "0/3" in band and "waiting" in band
 
-    view.stop_send_button.click()
+    view.request("stop-send", {})
     qtbot.waitUntil(lambda: bool(shown), timeout=5000)
 
     assert "Stopped after 0 of 3" in shown[0]
     assert window.send_runner is None
-    assert view.make_button.isEnabled()
+    assert not view.state()["busy"]
 
 
 def test_refreshing_a_long_seeding_list_again_is_quick(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -751,7 +755,7 @@ def test_plan_lists_reseeds_first_and_sends_them_through_verification(
 
     [row] = plan.items
     assert row.candidate.reseed and plan.download_size == 0 and plan.zen_added > 0
-    assert window.zen_tab.plan_view.table.item(0, 1).text() == "Reseed (0 Go)"  # type: ignore[union-attr]
+    assert window.zen_tab.plan_view.state()["result"]["rows"][0]["reseed"]  # type: ignore[union-attr]
     window.plan_reseeder()(row.candidate)
     [t] = qbit.torrents()
     assert VERIFYING in t.tags and t.save_path == lib
@@ -777,11 +781,11 @@ def test_the_plan_offers_every_category_and_remembers_the_choice(
 
     assert [cid for cid, _name, _sub in view.category_options] == [2000, 2030, 7000]
     assert view.without_folder == {7000}
-    labels = [a.text() for a in view.categories_menu.actions()]
-    assert any("Ebook" in t and "no Download Folder" in t for t in labels)
+    labels = [name for _, name, _ in view.category_options]
+    assert "Ebook" in labels and 7000 in view.state()["without_folder"]
     window.prefetch_categories = lambda categories: None  # type: ignore[method-assign]
 
-    view._toggle(2030, True)
+    choose_plan_category(view, 2030)
 
     assert Settings.load(tmp_path / "settings.json").plan_categories == [2030]
 
@@ -839,10 +843,10 @@ def test_making_a_plan_fetches_its_categories_and_discloses_limits(
     assert store.catalogue_size() == min(count, paging_window or count)
     assert window.zen_tab.plan_view.plan.items
     if paging_window is not None:
-        assert "coverage is partial" in window.zen_tab.plan_view.catalogue_notice.text()
+        assert "coverage is partial" in window.zen_tab.plan_view.notice
         assert "Partial Catalogue coverage" in window.zen_tab.catalogue.status_text
     else:
-        assert "coverage is partial" not in window.zen_tab.plan_view.catalogue_notice.text()
+        assert "coverage is partial" not in window.zen_tab.plan_view.notice
 
 
 @pytest.mark.parametrize("stop_early", [False, True])
@@ -889,7 +893,7 @@ def test_a_plan_waits_for_an_active_refresh_then_refreshes_its_own_categories(
     try:
         window.make_plan()
         assert window.zen_tab.plan_view.plan is None
-        assert not window.zen_tab.plan_view.make_button.isEnabled()
+        assert window.zen_tab.plan_view.state()["busy"]
         assert not planned.wait(timeout=0.2), (
             "Plan was built while the Catalogue was still refreshing"
         )
@@ -941,8 +945,8 @@ def test_a_failed_plan_refresh_does_not_build_from_the_old_catalogue(
 
     assert not builds
     assert window.zen_tab.plan_view.plan is None
-    assert "Could not make a Plan" in window.zen_tab.plan_view.summary.text()
-    assert window.zen_tab.plan_view.make_button.isEnabled()
+    assert "Could not make a Plan" in window.zen_tab.plan_view.state()["message"]
+    assert not window.zen_tab.plan_view.state()["busy"]
 
 
 @pytest.mark.parametrize("pending", [False, True])
@@ -967,7 +971,7 @@ def test_plan_progress_identifies_ebook_audio_and_its_selected_scope(
 
     window._catalogue_progress(CrawlProgress(3000 if pending else 3030, 6, 0, 600, "c411-json"))
 
-    text = window.zen_tab.plan_view.summary.text()
+    text = window.zen_tab.plan_view.state()["message"]
     if pending:
         assert text.startswith("Waiting for the Catalogue refresh to finish")
         assert "Fetching the Catalogue for the Plan" not in text
@@ -995,56 +999,47 @@ def test_plan_controls_save_both_limits_and_change_the_actual_plan(qtbot, tmp_pa
     qtbot.addWidget(window)
     window.qbit = lambda: FakeQbit()  # type: ignore[assignment,method-assign,return-value]
     view = window.zen_tab.plan_view
-    view.goal.setCurrentIndex(view.goal.findData("note"))
-    view.download_limit.setValue(2)
-
-    assert not view.torrent_limit.isEnabled()
+    configure_plan(view, plan_goal="note", maximum_bytes=2 * GB, limit_torrents=False)
     assert settings.plan_options == PlanOptions(PlanGoal.NOTE, 2 * GB)
     assert len(window.plan_maker()().items) == 2
-
-    view.limit_torrents.setChecked(True)
-    view.torrent_limit.setValue(1)
-    assert view.torrent_limit.isEnabled()
+    configure_plan(view, limit_torrents=True, maximum_torrents=1)
     assert Settings.load(path).plan_options == PlanOptions(PlanGoal.NOTE, 2 * GB, 1)
     assert len(window.plan_maker()().items) == 1
 
-    # Changing an option invalidates a previous result instead of sending an old Plan.
     window._plan_made(window.plan_maker()())
-    assert view.send_button.isEnabled()
-    view.download_limit.setValue(3)
-    assert view.plan is None and not view.send_button.isEnabled()
-    assert not view.seeder_limit.isEnabled()
-    view.low_seeders.setChecked(True)
-    assert view.seeder_limit.isEnabled()
+    assert view.plan is not None and not view.state()["busy"]
+    old_id = view.plan_id
+    configure_plan(view, maximum_bytes=3 * GB)
+    assert view.plan is None
+    with pytest.raises(ValueError, match="Plan changed"):
+        view.request("review", {"plan_id": old_id, "hashes": ["0" * 40]})
+    configure_plan(view, max_seeders=10)
     assert settings.plan_options.max_seeders == 10
-    view.seeder_limit.setValue(4)
+    configure_plan(view, max_seeders=4)
     assert Settings.load(path).plan_options.max_seeders == 4
-    assert not window.plan_maker()().items  # every test torrent has five seeders
-    view.seeder_limit.setValue(5)
+    assert not window.plan_maker()().items
+    configure_plan(view, max_seeders=5)
     assert len(window.plan_maker()().items) == 1
     restored = type(view)()
     qtbot.addWidget(restored)
     restored.set_options(Settings.load(path).plan_options)
-    assert restored.low_seeders.isChecked() and restored.seeder_limit.value() == 5
-    view.low_seeders.setChecked(False)
-    assert not view.seeder_limit.isEnabled() and settings.plan_options.max_seeders is None
+    assert restored.options.max_seeders == 5
+    configure_plan(view, max_seeders=None)
+    assert settings.plan_options.max_seeders is None
     assert len(window.plan_maker()().items) == 1
-    view.max_size.setValue(0.5)  # every test torrent is 1 GB
+    configure_plan(view, max_size=GB // 2)
     assert Settings.load(path).plan_options.max_size == GB // 2
     assert not window.plan_maker()().items
-    view.min_size.setValue(2)  # above the maximum: the maximum follows
-    assert view.max_size.value() == 2
+    configure_plan(view, min_size=2 * GB, max_size=2 * GB)
     assert not window.plan_maker()().items
-    view.min_size.setValue(1)
+    configure_plan(view, min_size=GB)
     assert settings.plan_options.min_size == GB and settings.plan_options.max_size == 2 * GB
     assert len(window.plan_maker()().items) == 1
     restored.set_options(Settings.load(path).plan_options)
-    assert restored.min_size.value() == 1 and restored.max_size.value() == 2
+    assert restored.options.min_size == GB and restored.options.max_size == 2 * GB
     view.busy(True)
-    assert not view.goal.isEnabled() and not view.download_limit.isEnabled()
-    assert not view.limit_torrents.isEnabled() and not view.torrent_limit.isEnabled()
-    assert not view.low_seeders.isEnabled() and not view.seeder_limit.isEnabled()
-    assert not view.min_size.isEnabled() and not view.max_size.isEnabled()
+    with pytest.raises(ValueError, match="current Plan operation"):
+        configure_plan(view, maximum_bytes=4 * GB)
 
 
 def test_plan_view_shows_notes_and_unused_disk_space_including_the_reserve(qtbot) -> None:  # type: ignore[no-untyped-def]
@@ -1063,10 +1058,10 @@ def test_plan_view_shows_notes_and_unused_disk_space_including_the_reserve(qtbot
 
     view.show_plan(plan)
 
-    assert view.table.item(0, 3).text() == "1.35"
-    assert "average note 1.35" in view.summary.text()
-    assert view.space_table.rowCount() == 1
-    assert view.space_table.item(0, 4).data(256) == 6 * GB
+    result = view.state()["result"]
+    assert result["rows"][0]["note"] == 1.35 and result["average_note"] == 1.35
+    assert len(result["storage"]) == 1
+    assert result["storage"][0]["after_plan"] == 6 * GB
 
 
 def test_a_refused_key_tells_the_user_where_to_fix_it(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -1077,7 +1072,7 @@ def test_a_refused_key_tells_the_user_where_to_fix_it(qtbot, tmp_path: Path) -> 
 
     window.zen_tab.plan_view.failed(KeyRefused(401))
 
-    text = window.zen_tab.plan_view.summary.text()
+    text = window.zen_tab.plan_view.state()["message"]
     assert "refused your API key (HTTP 401)" in text
     assert "Settings → Connections" in text and "torznab:read" in text
 
@@ -1103,8 +1098,8 @@ def test_a_plan_interrupted_by_a_crash_comes_back_with_what_is_left(
 
     view = window.zen_tab.plan_view
     assert view.plan is not None and [i.candidate.title for i in view.plan.items] == ["Book b"]
-    assert "Sending was interrupted: 1 torrents" in view.summary.text()
-    assert view.send_button.isEnabled()
+    assert "Sending was interrupted: 1 torrents" in view.notice
+    assert view.plan is not None and not view.state()["busy"]
 
 
 def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
@@ -1450,7 +1445,7 @@ def test_choosing_a_category_without_a_folder_asks_for_one_and_fetches_it_meanwh
 ) -> None:
     window, fetched, asked = plan_window(qtbot, tmp_path, monkeypatch, str(tmp_path / "Ebooks"))
 
-    window.zen_tab.plan_view._toggle(7000, True)
+    choose_plan_category(window.zen_tab.plan_view, 7000)
 
     assert fetched == [[7000]]
     assert asked == ["Download Folder for Ebook"]
@@ -1463,7 +1458,7 @@ def test_choosing_a_category_without_a_folder_asks_for_one_and_fetches_it_meanwh
 def test_cancelling_the_folder_leaves_the_category_out(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     window, _fetched, asked = plan_window(qtbot, tmp_path, monkeypatch, "")
 
-    window.zen_tab.plan_view._toggle(7000, True)
+    choose_plan_category(window.zen_tab.plan_view, 7000)
 
     assert asked and Settings.load(tmp_path / "settings.json").plan_categories == [2030]
     assert window.zen_tab.plan_view.chosen_categories == {2030}
@@ -1486,7 +1481,7 @@ def test_a_category_whose_subcategories_have_folders_can_skip_its_own(
         lambda *a, **k: questions.append(a[2]) or QMessageBox.StandardButton.No,
     )
 
-    window.zen_tab.plan_view._toggle(2000, True)
+    choose_plan_category(window.zen_tab.plan_view, 2000)
 
     assert "Film, Série TV have theirs" in questions[0] and asked == []
     s = Settings.load(tmp_path / "settings.json")

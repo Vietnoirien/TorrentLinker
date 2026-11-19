@@ -503,18 +503,17 @@ class MainWindow(QMainWindow):
         self._plan_destinations = {settings.active_client_id: 0}
         self.zen_tab.plan_view.client_names = {p.id: p.name for p in settings.client_profiles}
         self.zen_tab.plan_view.client_names[""] = settings.profile().name
-        self.plan_targets_button = QPushButton(self.tr("Plan destinations…"))
-        self.plan_targets_button.clicked.connect(self._choose_plan_clients)
-        plan_layout = self.zen_tab.plan_view.layout()
-        assert isinstance(plan_layout, QVBoxLayout)
-        plan_layout.insertWidget(0, self.plan_targets_button)
+        from torrentlinker.gui.plan_host import PlanHost
+
+        self.plan_host = PlanHost(self)
+        self.zen_tab.plan_view.language = settings.language
         self.zen_tab.plan_view.make_requested.connect(self.make_plan)
         self.zen_tab.plan_view.categories_changed.connect(self._plan_categories_changed)
         self.zen_tab.plan_view.set_options(self.settings.plan_options)
         self.zen_tab.plan_view.options_changed.connect(self._plan_options_changed)
         self.zen_tab.plan_view.stop_fetch_requested.connect(self._stop_plan_fetch)
         self.offer_plan_categories()
-        self.zen_tab.plan_view.send_requested.connect(self.confirm_send)
+        self.zen_tab.plan_view.send_requested.connect(self.send_plan)
         self.zen_tab.plan_view.stop_send_requested.connect(self.stop_sending)
         self.zen_tab.plan_view.speed_test_requested.connect(self.test_speed)
         self.zen_tab.plan_view.set_speed(settings.download_speed, settings.download_speed_tested)
@@ -1248,6 +1247,7 @@ class MainWindow(QMainWindow):
         self.settings.plan_categories = sorted(chosen) if chosen is not None else None
         self.settings.save(self.settings_path)
         self.offer_plan_categories()
+        self._plan_options_changed(self.settings.plan_options)
 
     def ensure_download_folder(self, cid: int) -> bool:
         """Whether the Plan can draw from `cid`; asks for its Download Folder if needed."""
@@ -1307,16 +1307,6 @@ class MainWindow(QMainWindow):
         self.store.clear_plan()
         self.zen_tab.plan_view.invalidate()
         self.band.set_plan(None)
-
-    def _choose_plan_clients(self) -> None:
-        from torrentlinker.gui.plan_clients import PlanClientsDialog
-
-        dialog = PlanClientsDialog(self.settings, self._plan_destinations, self)
-        if dialog.exec() and dialog.selected():
-            self._plan_destinations = dialog.selected()
-            names = [self.settings.profile(i).name for i in self._plan_destinations]
-            self.plan_targets_button.setText(self.tr("Plan destinations: ") + ", ".join(names))
-            self.zen_tab.plan_view.invalidate()
 
     def plan_maker(self) -> Callable[[], Plan]:
         """Build on the GUI thread the work that makes a Plan (no Indexer request)."""
@@ -1435,54 +1425,18 @@ class MainWindow(QMainWindow):
                     "Cached torrents remain usable for this Plan."
                 )
             )
-        if notices:
-            self.zen_tab.plan_view.catalogue_notice.setText("\n".join(notices))
-            self.zen_tab.plan_view.catalogue_notice.show()
         if plan.items:
-            notice = self.zen_tab.plan_view.catalogue_notice
             notices.append(
                 self.tr(
                     "Provisional estimates from cached metadata. Seeder counts update from "
                     "your torrent client after tracker responses."
                 )
             )
-            notice.setText("\n".join(notices))
-            notice.show()
+        self.zen_tab.plan_view.set_notice("\n".join(notices))
         self.band.set_plan(plan.zen_added if plan.items else None)
 
     def confirm_send(self) -> None:
-        """Summary before sending, with the choice to refresh the Catalogue first."""
-        plan = self.zen_tab.plan_view.plan
-        if plan is None or not plan.items:
-            return
-        payback = plan.payback_days
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle(self.tr("Send the Plan to your torrent client"))
-        box.setText(
-            self.tr(
-                "{0} torrents · {1} Go to download · ≈ +{2} Zen/day · paid back in ≈ {3} "
-                "days.\nCatalogue: {4}.\n\nEach .torrent is downloaded directly from c411 "
-                "with your key and added to its Download Folder. A torrent whose files "
-                "already exist there is refused."
-            ).format(
-                len(plan.items),
-                f"{plan.download_size / 1e9:.1f}",
-                f"{plan.zen_added:.2f}",
-                f"{payback:.0f}" if payback is not None else "–",
-                self.catalogue_age(),
-            )
-            + "\n\n"
-            + self.zen_tab.plan_view.times.text()
-        )
-        send = box.addButton(self.tr("Send"), QMessageBox.ButtonRole.AcceptRole)
-        refresh = box.addButton(self.tr("Refresh first"), QMessageBox.ButtonRole.ActionRole)
-        box.addButton(QMessageBox.StandardButton.Cancel)
-        box.exec()
-        if box.clickedButton() is send:
-            self.send_plan(plan)
-        elif box.clickedButton() is refresh:
-            self.make_plan(then=self.confirm_send)  # fetches the Plan's categories first
+        self.zen_tab.plan_view.open_review()
 
     def test_speed(self) -> None:
         self.zen_tab.plan_view.speed_testing()
@@ -1510,6 +1464,7 @@ class MainWindow(QMainWindow):
         self.zen_tab.pages.setCurrentIndex(2)
         if self.send_runner is not None:
             return
+        self._sending_plan: Plan | None = plan
         qbit, indexer, reseeder = self.qbit(), self.indexer(), self.plan_reseeder()
 
         def fetch(c: PlanCandidate) -> bytes:
@@ -1572,7 +1527,7 @@ class MainWindow(QMainWindow):
 
     def _send_progress(self, progress: SendProgress) -> None:
         self.zen_tab.plan_view.sending(progress)
-        plan = self.zen_tab.plan_view.plan
+        plan = getattr(self, "_sending_plan", None) or self.zen_tab.plan_view.plan
         self.band.set_sending(progress, plan.zen_added if plan and plan.items else None)
 
     def _send_ended(self) -> None:
@@ -1583,6 +1538,7 @@ class MainWindow(QMainWindow):
 
     def _send_failed(self, error: Exception) -> None:
         self._send_ended()
+        self._sending_plan = None
         if not self.show_saved_plan():
             self.zen_tab.plan_view.show_plan(Plan())
         self.zen_tab.plan_view.failed(error)
@@ -1608,7 +1564,7 @@ class MainWindow(QMainWindow):
             if interrupted
             else self.tr("Saved Plan: {0} torrents left to send.")
         )
-        view.summary.setText(view.summary.text() + "\n" + left.format(len(plan.items)))
+        view.set_notice(left.format(len(plan.items)))
         self.band.set_plan(plan.zen_added)
         return True
 
@@ -1633,8 +1589,10 @@ class MainWindow(QMainWindow):
         return reseed
 
     def _plan_sent(self, report: SendReport) -> None:
+        sending = getattr(self, "_sending_plan", None) or self.zen_tab.plan_view.plan
+        total = len(sending.items) if sending else 0
+        self._sending_plan = None
         self._send_ended()
-        total = len(self.zen_tab.plan_view.plan.items) if self.zen_tab.plan_view.plan else 0
         log.info(
             "Plan sent: %d added, %d Reseeds, %d refused, %d failed%s",
             len(report.added),
@@ -2417,6 +2375,10 @@ class MainWindow(QMainWindow):
             if chat is not None and chat.service:
                 chat.refresh()
         if accepted:
+            self._plan_options_changed(self.settings.plan_options)
+            self.zen_tab.plan_view.set_speed(
+                self.settings.download_speed, self.settings.download_speed_tested
+            )
             self._lock_reading_room()
             self.torrents_tab.reset_connection()
             self.settings.capture_client()

@@ -21,10 +21,8 @@ const state = {
   searchSelected: new Set(),
   queueSelected: new Set(),
   queueRows: [],
-  planSelected: new Set(),
   jobs: new Map(),
   searchRows: [],
-  planRows: [],
   localItem: "",
 };
 const french = {
@@ -368,34 +366,9 @@ async function refreshSetup() {
   selector.replaceChildren(new Option(say("All clients · overview", "Tous les clients · aperçu"), "all"),
     ...state.setup.clients.map(p => new Option(p.name, p.id)));
   selector.value = state.clientId;
-  const oldCategories = new Set([...$("plan-category").selectedOptions].map(o => o.value));
-  $("plan-category").replaceChildren(new Option(say("All categories", "Toutes les catégories"), ""));
-  const categories = Object.entries(state.setup.indexer_categories || {});
-  const appendCategory = (id, category, depth = 0, visited = new Set()) => {
-    if (visited.has(id)) return;
-    visited.add(id);
-    const missing = !state.setup.download_folders?.effective?.[id];
-    $("plan-category").append(new Option("　".repeat(depth) + category.name + (missing ? say(" · no folder", " · sans dossier") : ""), id));
-    for (const [child, value] of categories.filter(([, v]) => String(v.parent) === id)) appendCategory(child, value, depth + 1, visited);
-  };
-  for (const [id, category] of categories.filter(([, c]) => !c.parent || !categories.some(([key]) => key === String(c.parent)))) appendCategory(id, category);
-  for (const option of $("plan-category").options) option.selected = oldCategories.has(option.value);
   $("client-name").value = state.setup.name;
   $("reseed-folder-settings").hidden = false;
   $("reseed-root").value = state.setup.reseed_link_root || localStorage.getItem(`reseed-root:${state.setup.client_id}`) || "";
-  const oldDestinations = $("plan-clients").dataset.owner === state.setup.client_id ? new Map(
-    [...$("plan-clients").querySelectorAll("input[data-client-id]")].map(e => [e.dataset.clientId, {
-      checked:e.checked, budget:$("plan-clients").querySelector(`input[data-budget-id="${CSS.escape(e.dataset.clientId)}"]`).value,
-    }])) : new Map();
-  $("plan-clients").dataset.owner = state.setup.client_id;
-  $("plan-clients").replaceChildren(...state.setup.clients.filter(p => p.enabled).map(p => {
-    const row = element("label");
-    const check = document.createElement("input"); check.type = "checkbox";
-    check.dataset.clientId = p.id; check.checked = oldDestinations.get(p.id)?.checked ?? (p.id === state.setup.client_id);
-    const budget = document.createElement("input"); budget.type = "number"; budget.min = "0"; budget.step = "any"; budget.value = oldDestinations.get(p.id)?.budget ?? "0";
-    budget.dataset.budgetId = p.id; budget.setAttribute("aria-label", p.name + " · GiB");
-    row.append(check, element("span", p.name + " · GiB"), budget); return row;
-  }));
   $("client-kind").value = state.setup.client;
   $("client-host").value = state.setup.host;
   $("client-username").value = state.setup.username;
@@ -794,6 +767,7 @@ async function pollJobs() {
   if ($("workspace").hidden) return;
   const rows = await api("jobs");
   catalogueJobs(rows);
+  planJobs(rows);
   let running = 0;
   for (const row of rows) {
     if (["running", "queued"].includes(row.status)) running++;
@@ -1002,7 +976,7 @@ $("language").onchange = () => {
   renderSecretHints();
   document.dispatchEvent(new Event("tl-language-changed"));
   if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
-  if (state.view === "zen") { guard(loadZenSeeding); retranslatePlan(); if (profileState) showZenProfile(profileState); }
+  if (state.view === "zen") { guard(loadZenSeeding); planEnvironment(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") uploadEnvironment();
   if (state.view === "torrents") guard(loadTorrents);
@@ -1012,25 +986,6 @@ $("language").onchange = () => {
     state.view;
 };
 translate();
-$("queue-plan").onclick = () => guard(async () => {
-  if (state.planDirty) throw Error(say("Rebuild the Plan after changing its settings.", "Recréez le Plan après modification des paramètres."));
-  const grouped = new Map();
-  for (const row of state.planRows.filter(r => !r.reseed && state.planSelected.has(r.hash))) {
-    const id = row.client_id || state.clientId;
-    if (!grouped.has(id)) grouped.set(id, []);
-    grouped.get(id).push(row.hash);
-  }
-  $("queue-plan").disabled = true;
-  try {
-    for (const [id, hashes] of grouped) {
-      for (let offset = 0; offset < hashes.length; offset += 1000) {
-        const identifier = await job({kind: "enqueue", hashes: hashes.slice(offset, offset + 1000), client_id: id}, loadQueue);
-        await waitForJob(identifier);
-      }
-    }
-    await navigate("queue");
-  } finally { $("queue-plan").disabled = false; }
-});
 setInterval(() => {
   if (!$("workspace").hidden) guard(pollJobs);
 }, 2000);
@@ -1061,14 +1016,6 @@ $("save-announce").onclick = () =>
     renderSecretHints();
     toast(say("Announce URL saved.", "URL d’annonce enregistrée."));
   });
-$("refresh-profile").onclick = () =>
-  guard(() =>
-    job({ kind: "profile" }, (r) => {
-      toast(`${r.balance} Zen · ${r.class || ""}`);
-      return job({ kind: "refresh" }, state.view === "zen" ? loadZenSeeding : loadTorrents);
-    }),
-  );
-
 $("save-proxy").onclick = () =>
   guard(async () => {
     const password = $("proxy-password").value;
@@ -1121,7 +1068,7 @@ $("target-client").onchange = () => guard(async () => {
   uploadEnvironment();
   state.addingClient = false;
   $("client-password").value = ""; $("client-key").value = "";
-  state.selected.clear(); state.queueSelected.clear(); state.planSelected.clear();
+  state.selected.clear(); state.queueSelected.clear();
   state.offset = 0; state.libraryOffset = 0; state.localItem = "";
   await refreshSetup();
   await navigate(state.clientId === "all" && state.view !== "zen" ? "torrents" : state.view);
@@ -1298,8 +1245,6 @@ if (matchMedia("(max-width: 1050px)").matches) {
   $("navigation-toggle").setAttribute("aria-expanded", "false");
 }
 
-$("plan-prev").onclick = () => { state.planOffset = Math.max(0, (state.planOffset || 0) - 100); renderPlan(); };
-$("plan-next").onclick = () => { state.planOffset = (state.planOffset || 0) + 100; renderPlan(); };
 
 $("navigation-close").onclick = () => {
   document.body.classList.add("navigation-collapsed");

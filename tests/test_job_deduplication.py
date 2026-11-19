@@ -189,6 +189,8 @@ const nodes = {'workspace':{hidden:false}, 'library-reseed':{hidden:!reseedVisib
 const $ = id => nodes[id] || status;
 let reseedRefreshes = 0;
 async function loadReseed() { reseedRefreshes++; }
+function catalogueJobs() {}
+function planJobs() {}
 const say = en => en;
 const toast = message => { throw new Error(message); };
 let phase = 'running', completions = 0, updates = 0;

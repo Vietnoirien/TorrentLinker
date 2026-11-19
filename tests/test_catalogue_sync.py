@@ -562,8 +562,8 @@ def test_gui_plan_uses_cached_categories_without_individual_metadata_checks(
     assert checked == []
     assert all(item.candidate.source.source == "indexer" for item in plan.items)
     assert all(item.candidate.category == 7020 for item in plan.items)
-    assert window.zen_tab.plan_view.make_button.isEnabled()
-    assert not window.zen_tab.plan_view.stop_fetch_button.isVisible()
+    assert not window.zen_tab.plan_view.state()["busy"]
+    assert not window.zen_tab.plan_view.state()["fetching"]
 
 
 def test_large_cached_plan_makes_no_per_torrent_metadata_requests(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -607,7 +607,7 @@ def test_large_cached_plan_makes_no_per_torrent_metadata_requests(qtbot, tmp_pat
 
     assert len(window.zen_tab.plan_view.plan.items) == 14_000
     assert requested == ["/api/torrents"]
-    assert "Provisional estimates" in window.zen_tab.plan_view.catalogue_notice.text()
+    assert "Provisional estimates" in window.zen_tab.plan_view.notice
 
 
 @pytest.mark.parametrize("paused_history", [False, True])
