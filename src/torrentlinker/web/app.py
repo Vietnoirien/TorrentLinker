@@ -1052,6 +1052,13 @@ def create_app(
             existing = jobs.check_capacity(body.kind, body.client_id, parameters=parameters)
             if existing is not None:
                 return {"id": existing}
+            if body.kind == "catalogue" and any(
+                row["kind"] == "catalogue" and row["status"] in {"queued", "running"}
+                for row in jobs.list()
+            ):
+                raise ValueError(
+                    "A Catalogue fetch is already running. Pause it or wait for it to finish."
+                )
             target.validate(body)
             if (
                 body.kind == "manage"

@@ -57,6 +57,7 @@ from torrentlinker.catalogue_sync import (
     fetch_root,
     refresh_catalogue,
     refresh_due,
+    root_categories,
     save_site_counts,
     site_counts,
     sync_catalogue,
@@ -1803,7 +1804,9 @@ class MainWindow(QMainWindow):
                     position=lambda done, total: position.__setitem__(slice(None), [done, total]),
                 ):
                     return
-            wanted = crawl_categories(categories)
+            wanted = (
+                sorted(root_categories(root)) if root is not None else crawl_categories(categories)
+            )
             if indexer.is_c411:  # XXX: only c411's Torznab search returns it
                 wanted = [c for c in wanted if c in TORZNAB_ONLY_CATEGORIES]
             for i, category in enumerate(wanted, 1):

@@ -15,3 +15,5 @@ A real-display xcb check rendered English/dark and French/light synthetic catego
 The outer shell and Plan renderer are separate backlog work. The installed editable package remains 1.0.0b43; these changes do not create a release.
 
 The focused regression run passed 106 tests and identified one remaining reference to the removed native button. After migrating that controller test to its public request signal, the test and browser capture workflow both passed. Ruff, formatting, mypy and whitespace checks pass. [Desktop rendering](catalogue-90-desktop.png) and [Web rendering](catalogue-90-web.png) captures were inspected.
+
+Review regressions: all 7 passed after fixing native-root progress for overlapping Torznab IDs, desktop non-c411 Fetch-only scope, delayed cancellation ownership/completion and competing Catalogue submissions. Identical pending requests reuse their job; a different request is rejected while the shared cache is fetching. Plan-now intent is recorded before cancellation, pinned to its client, and rolled back if cancellation fails.

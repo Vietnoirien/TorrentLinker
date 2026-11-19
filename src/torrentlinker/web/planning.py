@@ -96,11 +96,12 @@ def catalogue(
     indexer = setup.indexer()
     stopped = lambda: fetch_stopped(stop)  # noqa: E731
     position = {"done": 1, "total": 1}
+    listed_roots = full and indexer.is_c411 and root is None
 
     def report(p):
-        from torrentlinker.catalogue_sync import ROOTS
-
-        current = root or next((r for r, category in ROOTS.items() if category == p.category), None)
+        # Native roots share Torznab IDs (4/9 and 5/6), so a reverse lookup loses
+        # identity. The full c411 fetch already provides its native-root position.
+        current = root or (LISTED_ROOTS[position["done"] - 1] if listed_roots else None)
         progress(
             {
                 "phase": "fetching",
@@ -121,6 +122,7 @@ def catalogue(
         # Category by category, each to parity with the site; XXX only through Torznab.
         if not fetch_all(indexer, setup.store, stop=stopped, progress=report, position=moved):
             return catalogue_status(setup)
+        listed_roots = False
         wanted = [c for c in wanted if c in TORZNAB_ONLY_CATEGORIES]
     sync_catalogue(
         indexer,

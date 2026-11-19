@@ -1,12 +1,104 @@
 """Catalogue controls through the owner API and the desktop bundled view."""
 
+import threading
+
 import httpx
 from fastapi.testclient import TestClient
 
 from tests.test_catalogue_sync import native_indexer
 from tests.test_web_jobs import finished, login
-from tests.test_web_plan_execution import prepared
+from tests.test_web_plan_execution import prepared, second_client
 from torrentlinker.web.app import create_app
+
+
+def test_full_fetch_progress_keeps_native_roots_with_shared_torznab_ids(tmp_path):
+    from torrentlinker.catalogue_sync import LISTED_ROOTS
+    from torrentlinker.web.planning import catalogue
+
+    _, setup, _, _ = prepared(tmp_path)
+    setup._indexer = native_indexer(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "data": [],
+                "meta": {"page": 1, "perPage": 100, "total": 0, "totalPages": 1, "categories": []},
+            },
+        )
+    )
+    progress = []
+    catalogue(setup, threading.Event(), progress.append)
+    assert {p["catalogue_root"] for p in progress} == set(LISTED_ROOTS)
+    assert all(p["catalogue_root"] == LISTED_ROOTS[p["position"]["done"] - 1] for p in progress)
+
+
+def test_shared_catalogue_rejects_competing_fetches_from_other_sessions(tmp_path):
+    config, setup, client, _ = prepared(tmp_path)
+    other, _ = second_client(tmp_path, setup, client)
+    entered, release = threading.Event(), threading.Event()
+
+    def listing(request):
+        entered.set()
+        assert release.wait(10)
+        return httpx.Response(
+            200,
+            json={
+                "data": [],
+                "meta": {"page": 1, "perPage": 100, "total": 0, "totalPages": 1, "categories": []},
+            },
+        )
+
+    setup._indexer = native_indexer(listing)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with TestClient(app) as browser:
+        login(browser)
+        request = {"kind": "catalogue", "catalogue_root": 3}
+        first = browser.post("/api/jobs", json=request)
+        assert first.status_code == 202
+        try:
+            assert entered.wait(5)
+            assert browser.post("/api/jobs", json=request).json() == first.json()
+            for client_id in ("default", other.id):
+                competing = browser.post(
+                    "/api/jobs", json={**request, "catalogue_root": 2, "client_id": client_id}
+                )
+                assert competing.status_code == 400, competing.text
+        finally:
+            browser.post(f"/api/jobs/{first.json()['id']}/cancel")
+            release.set()
+
+
+def test_desktop_fetch_only_limits_non_c411_indexers(qtbot, tmp_path):
+    from tests.fake_torznab import FakeTorznab
+    from tests.test_indexer import FakeClock
+    from torrentlinker.catalogue_sync import root_categories
+    from torrentlinker.config import Settings
+    from torrentlinker.credentials import set_secret
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.gui.main_window import MainWindow
+    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.indexer import Indexer
+    from torrentlinker.store import Store
+
+    fake, clock = FakeTorznab(), FakeClock()
+    fake.add(2000, 1)
+    fake.add(7000, 1)
+    settings = Settings()
+    settings.indexer.url = "https://indexer.test/api"
+    settings.indexer_categories = {2000: IndexerCategory("Films"), 7000: IndexerCategory("Ebook")}
+    set_secret(INDEXER_API_KEY, "fixture-key")
+    store = Store(tmp_path / "store.sqlite")
+    window = MainWindow(settings, tmp_path / "settings.json", store)
+    qtbot.addWidget(window)
+    window._indexer = Indexer(
+        settings.indexer.url, "fixture-key", http=fake.client(), clock=clock.time, sleep=clock.sleep
+    )
+    window.zen_tab.catalogue.category_requested.emit(2)
+    qtbot.waitUntil(lambda: window.catalogue_runner is None, timeout=10000)
+    assert {r.category for r in store.catalogue()} == {7000}
+    asked = {int(c) for r in fake.requests for c in r.url.params.get("cat", "").split(",") if c}
+    assert asked <= set(root_categories(2))
 
 
 def test_category_fetch_only_updates_selected_root_and_exposes_cards(tmp_path):

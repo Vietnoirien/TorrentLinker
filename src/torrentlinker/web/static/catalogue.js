@@ -34,7 +34,8 @@ function trackCatalogue(id,client){
   if(!state.jobs.has(id))state.jobs.set(id,{body:{client_id:client,kind:"catalogue"},done:()=>finishCatalogue(id),failed:error=>finishCatalogue(id,error)});
 }
 function catalogueJobs(rows){
-  const current=rows.find(row=>row.kind==="catalogue"&&["queued","running"].includes(row.status)&&!catalogueFinished.has(row.id));
+  const candidates=rows.filter(row=>row.kind==="catalogue"&&!catalogueFinished.has(row.id));
+  const current=candidates.find(row=>row.status==="running")||candidates.find(row=>row.status==="queued");
   // An older idle poll may not contain a job that was just submitted. Only its
   // terminal response can clear it; completed jobs cannot be revived by old polls.
   if(current){catalogueUI.job=current.id;catalogueUI.progress=current.progress;trackCatalogue(current.id,current.client_id)}
@@ -70,8 +71,13 @@ window.addEventListener("message",async event=>{
       catalogueUI.job=id;trackCatalogue(id,request.client_id);
       await pollJobs();
     }else if(["pause","plan-now"].includes(message.path)&&catalogueUI.job){
-      await api(`jobs/${catalogueUI.job}/cancel`,{});
-      catalogueUI.stopping=true;catalogueUI.plan=message.path==="plan-now"?state.clientId:false;
+      const id=catalogueUI.job,client=state.clientId;
+      catalogueUI.stopping=true;catalogueUI.plan=message.path==="plan-now"?client:false;
+      catalogueEnvironment();
+      try{await api(`jobs/${id}/cancel`,{})}catch(error){
+        if(catalogueUI.job===id){catalogueUI.stopping=false;catalogueUI.plan=false;catalogueEnvironment()}
+        throw error;
+      }
     }else throw Error("Catalogue action is unavailable.");
     catalogueEnvironment();
     catalogueFrame.contentWindow?.postMessage({type:"catalogue-response",id:message.id,value:null},location.origin);

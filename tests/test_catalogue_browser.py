@@ -10,18 +10,20 @@ import httpx
 import pytest
 
 from tests.test_catalogue_sync import native_indexer
-from tests.test_web_plan_execution import prepared
+from tests.test_web_plan_execution import prepared, second_client
 from torrentlinker.catalogue_sync import LISTED_ROOTS
 from torrentlinker.web.app import create_app
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
-def test_category_fetch_pause_resume_all_language_and_failure(tmp_path):
+@pytest.mark.parametrize("switch_client", [False, True])
+def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_client):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
-    config, setup, _, _ = prepared(tmp_path)
+    config, setup, client, _ = prepared(tmp_path)
+    other, _ = second_client(tmp_path, setup, client)
     entered, release = threading.Event(), threading.Event()
     roots = []
 
@@ -119,6 +121,40 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path):
             panel.get_by_role("button", name="Retry", exact=True).click()
             expect(panel.locator("#catalogue-fetch")).to_be_enabled(timeout=15000)
             expect(panel.locator("#catalogue-error")).to_be_hidden()
+            # Plan now retains the client at the gesture while cancellation waits.
+            release.clear()
+            entered.clear()
+            panel.get_by_role("button", name="Fetch only Audio", exact=True).click()
+            expect(panel.locator("#catalogue-pause")).to_be_enabled()
+            assert entered.wait(5)
+            cancellations = []
+            page.route(
+                "**/cancel",
+                lambda route: cancellations.append(
+                    (route, None if switch_client else route.fetch())
+                ),
+            )
+            panel.locator("#catalogue-plan-now").click()
+            for _ in range(100):
+                if cancellations:
+                    break
+                page.wait_for_timeout(20)
+            assert len(cancellations) == 1
+            if switch_client:
+                page.locator("#target-client").select_option(other.id)
+                cancellations[0][0].continue_()
+            else:
+                release.set()
+                expect(panel.locator("#catalogue-progress")).to_be_hidden(timeout=15000)
+                cancellations[0][0].fulfill(response=cancellations[0][1])
+            page.unroute("**/cancel")
+            release.set()
+            expect(panel.locator("#catalogue-fetch")).to_be_enabled(timeout=15000)
+            page.wait_for_timeout(200)
+            jobs = page.request.get(page.url.split("#")[0] + "api/jobs").json()
+            assert any(job["kind"] == "plan" for job in jobs) is not switch_client
+            page.locator("#target-client").select_option("default")
+            page.locator("#zen-catalogue-tab").click()
             page.locator("#language").select_option("fr")
             page.locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
