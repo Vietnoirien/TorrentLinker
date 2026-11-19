@@ -712,11 +712,19 @@ class Store:
 
     def cached_torrent(self, key: str) -> bytes | None:
         f = self.torrent_dir / f"{key}.torrent"
-        return f.read_bytes() if f.exists() else None
+        try:
+            return f.read_bytes()
+        except FileNotFoundError:
+            return None
 
     def cache_torrent(self, key: str, data: bytes) -> None:
         self.torrent_dir.mkdir(parents=True, exist_ok=True)
-        (self.torrent_dir / f"{key}.torrent").write_bytes(data)
+        temporary = self.torrent_dir / f".{key}.{uuid.uuid4().hex}.tmp"
+        try:
+            temporary.write_bytes(data)
+            temporary.replace(self.torrent_dir / f"{key}.torrent")
+        finally:
+            temporary.unlink(missing_ok=True)
 
     # Layouts of cached .torrent files ----------------------------------------
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import threading
 import time
@@ -39,6 +40,15 @@ class Library:
         self.selections: dict[str, list[str]] = {}
         self.selection_rows: dict[str, dict] = {}
         self.folder_errors: list[ScanError] = []
+
+    def snapshot(self):
+        """Pin the published Library for a one-item read while a scan builds its replacement."""
+        result = copy.copy(self)
+        result.entries = list(self.entries)
+        result.selections = self.selections.copy()
+        result.selection_rows = self.selection_rows.copy()
+        result.folder_errors = list(self.folder_errors)
+        return result
 
     def client(self) -> MappedQbit:
         settings = self.setup.settings
@@ -79,6 +89,7 @@ class Library:
         stop: threading.Event,
         progress: Callable[[Any], None],
         folders: list[str] | None = None,
+        on_discovered: Callable[[list[LibraryEntry]], None] | None = None,
     ) -> dict:
         selected = self.setup.settings.library_folders
         if folders is not None:
@@ -124,32 +135,29 @@ class Library:
         result = LibraryResult()
         retained_paths = {f.path for f in self.setup.settings.library_folders} - selected_paths
         result.extend(e for e in previous if e.folder.path in retained_paths)
-        scanned_paths: set[Path] = set()
         for folder in selected:
             if stop.is_set():
                 return {"cancelled": True}
             if folder.path in unavailable:
                 result.errors.append(ScanError(folder.path, str(unavailable[folder.path])))
-                result.extend(entry for entry in self.entries if entry.folder == folder)
+                result.extend(entry for entry in previous if entry.folder == folder)
             else:
                 scanned = build_library(
                     [folder],
                     torrents,
                     self.setup.settings.matching.ignore,
                     self.setup.store,
-                    previous=self.entries,
+                    previous=previous,
                 )
                 result.extend(scanned)
                 result.errors.extend(scanned.errors)
-            scanned_paths.add(folder.path)
             published = (
                 [replace(e, state=ItemState.UNKNOWN) for e in result]
                 if client_unavailable
                 else list(result)
             )
-            self.entries = published + [
-                e for e in previous if e.folder.path in selected_paths - scanned_paths
-            ]
+            if on_discovered is not None:
+                on_discovered([e for e in published if e.folder == folder])
             progress(
                 {
                     "items": len(result),

@@ -213,7 +213,12 @@ class Setup:
                     if name == "qbit"
                     else "",
                 )
-            return self._client
+            from torrentlinker.client_access import SerializedClient
+
+            port = getattr(self, "_client_port", None)
+            if port is None or port.client is not self._client:
+                self._client_port = SerializedClient(self._client)
+            return self._client_port
 
     def indexer(self) -> Indexer:
         with self.lock:

@@ -1,4 +1,4 @@
-"""Persistent job history with one application-owned worker, independent of HTTP sessions."""
+"""Persistent job history with separate batch and read-only interactive workers."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+
+from torrentlinker.job_lanes import job_lane
 
 
 class JobStop(threading.Event):
@@ -29,7 +31,10 @@ class Jobs:
         self.lock = threading.RLock()
         self.db = sqlite3.connect(directory / "jobs.sqlite", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="torrentlinker")
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="torrentlinker-batch")
+        self.interactive_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="torrentlinker-interactive"
+        )
         self.stops: dict[str, JobStop] = {}
         # Pending work never survives restart. Keep only digests in memory, not
         # request bodies that may contain paths, confirmation tokens or credentials.
@@ -45,6 +50,8 @@ class Jobs:
                 self.db.execute(
                     "ALTER TABLE jobs ADD COLUMN client_id TEXT NOT NULL DEFAULT 'default'"
                 )
+            if "lane" not in {r[1] for r in self.db.execute("PRAGMA table_info(jobs)")}:
+                self.db.execute("ALTER TABLE jobs ADD COLUMN lane TEXT NOT NULL DEFAULT 'batch'")
             self.db.execute(
                 "UPDATE jobs SET status='interrupted', error='Server restarted. "
                 "Check the Torrent Client before retrying; no action was "
@@ -110,17 +117,21 @@ class Jobs:
             if deduplicate:
                 self._request_keys[identifier] = _request_key(parameters)
             stop = self.stops[identifier] = JobStop()
+            lane = job_lane(kind, parameters)
             with self.db:
                 self.db.execute(
-                    "INSERT INTO jobs VALUES (?,?,'queued',?,'null','null','',?)",
-                    (identifier, kind, time.time(), client_id),
+                    "INSERT INTO jobs "
+                    "(id,kind,status,created,progress,result,error,client_id,lane) "
+                    "VALUES (?,?,'queued',?,'null','null','',?,?)",
+                    (identifier, kind, time.time(), client_id, lane),
                 )
             with self.db:
                 self.db.execute(
                     "DELETE FROM jobs WHERE status NOT IN ('queued','running') AND id "
                     "NOT IN (SELECT id FROM jobs ORDER BY created DESC LIMIT 200)"
                 )
-            self.executor.submit(self._run, identifier, stop, work)
+            executor = self.interactive_executor if lane == "interactive" else self.executor
+            executor.submit(self._run, identifier, stop, work)
             return identifier
 
     def _run(self, identifier: str, stop: threading.Event, work: Callable) -> None:
@@ -146,8 +157,8 @@ class Jobs:
             # Never persist raw network exception text, which may include credentials.
             self._update(
                 identifier,
-                status="failed",
-                error=self.error_message(error),
+                status="cancelled" if stop.is_set() else "failed",
+                error="" if stop.is_set() else self.error_message(error),
             )
         else:
             status = (
@@ -195,7 +206,7 @@ class Jobs:
     def list(self) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.db.execute(
-                "SELECT id,kind,status,created,progress,error,client_id FROM jobs ORDER BY "
+                "SELECT id,kind,status,created,progress,error,client_id,lane FROM jobs ORDER BY "
                 "created DESC LIMIT 100"
             ).fetchall()
         return [{**dict(r), "progress": json.loads(r["progress"])} for r in rows]
@@ -236,6 +247,7 @@ class Jobs:
                 if (self.get(identifier)["progress"] or {}).get("cancellable") is not False:
                     stop.set()
         self.executor.shutdown(wait=True)
+        self.interactive_executor.shutdown(wait=True)
         self.db.close()
 
 

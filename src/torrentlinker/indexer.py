@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from torrentlinker import net
-from torrentlinker.ratelimit import BudgetQueue, Queue, WindowQueue
+from torrentlinker.ratelimit import BudgetQueue, Queue, WindowQueue, cancellable_sleep
 from torrentlinker.store import Store
 
 TORZNAB_NS = "{http://torznab.com/schemas/2015/feed}"
@@ -243,6 +243,7 @@ class Indexer:
         self._pool: ThreadPoolExecutor | None = None
         self._ahead: dict[str, Future[bytes]] = {}
         self._ahead_lock = threading.Lock()
+        self._fetch_locks: dict[str, tuple[threading.Lock, int]] = {}
         keys = [k for k in dict.fromkeys([api_key, *extra_keys]) if k][:MAX_KEYS] or [api_key]
         # Per key, two queues: c411 limits searches and .torrent downloads separately.
         self.slots = [
@@ -258,16 +259,24 @@ class Indexer:
         self._modes: dict[SearchMode, set[str]] | None = None
         self._thread = threading.local()  # .background: this thread's requests can wait
 
+    def background(self, stop: threading.Event | None = None):
+        """Let foreground requests pass first; job cancellation interrupts quota waits."""
+        return self._request_context(True, stop)
+
+    def foreground(self, stop: threading.Event | None = None):
+        return self._request_context(False, stop)
+
     @contextmanager
-    def background(self) -> Iterator[None]:
-        """Requests made in this block, on this thread, let the user's own go first and
-        wait out c411's refusals (a Plan being sent, Catalogue updates)."""
+    def _request_context(self, background: bool, stop: threading.Event | None) -> Iterator[None]:
         before = getattr(self._thread, "background", False)
-        self._thread.background = True
+        previous_stop = getattr(self._thread, "stop", None)
+        self._thread.background = background
+        self._thread.stop = stop if stop is not None else previous_stop
         try:
             yield
         finally:
             self._thread.background = before
+            self._thread.stop = previous_stop
 
     def caps(self) -> Caps:
         root = ET.fromstring(self._get({"t": "caps"}))
@@ -312,6 +321,40 @@ class Indexer:
 
         With `retry=False` a 429 raises RateLimited at once, so the caller can wait.
         """
+        if (data := self.cached_torrent(candidate)) is not None:
+            return data
+        key = self._torrent_key(candidate)
+        with self._ahead_lock:
+            lock, users = self._fetch_locks.get(key, (threading.Lock(), 0))
+            self._fetch_locks[key] = (lock, users + 1)
+        try:
+            while not lock.acquire(timeout=0.1):
+                stop = getattr(self._thread, "stop", None)
+                if stop is not None and stop.is_set():
+                    raise InterruptedError("Torrent check cancelled before fetching metadata.")
+                if not getattr(self._thread, "background", False):
+                    wait = min(
+                        max(
+                            slot.downloads.next_in(),
+                            slot.resting.get("downloads", 0) - self._clock(),
+                        )
+                        for slot in self.slots
+                    )
+                    if wait > FOREGROUND_PATIENCE:
+                        raise RateLimited(wait)
+            try:
+                return self._fetch_torrent(candidate, retry=retry)
+            finally:
+                lock.release()
+        finally:
+            with self._ahead_lock:
+                _, users = self._fetch_locks[key]
+                if users == 1:
+                    del self._fetch_locks[key]
+                else:
+                    self._fetch_locks[key] = (lock, users - 1)
+
+    def _fetch_torrent(self, candidate: Candidate, *, retry: bool) -> bytes:
         if (data := self.cached_torrent(candidate)) is not None:
             return data
         if self.session is not None and self.session.session_downloads:
@@ -553,9 +596,12 @@ class Indexer:
         foreground one, or one with `retry=False`, raises RateLimited unless the wait is
         short. `main_key_only` keeps to the main key, for what only it may do."""
         background = getattr(self._thread, "background", False)
+        stop = stop if stop is not None else getattr(self._thread, "stop", None)
         waits = 0
         last: httpx.Response | None = None  # keys only rest after a 429, so it is set
         while True:
+            if stop is not None and stop.is_set():
+                raise InterruptedError("Indexer request cancelled before sending.")
             slots = self.slots[:1] if main_key_only else self.slots
             slot = self._pick(queue, slots)
             if slot is None:
@@ -565,7 +611,7 @@ class Indexer:
                 if waits >= MAX_RETRIES and last is not None:
                     return self._checked(last)
                 waits += 1
-                self._sleep(max(wait, 0.0))
+                cancellable_sleep(max(wait, 0.0), stop, self._sleep)
                 continue
             lane = slot.queue(queue)
             url, params, headers = build(slot.key)

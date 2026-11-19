@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import threading
 import time
 from collections import deque
@@ -113,6 +114,7 @@ class ReseedWorkspace:
         lock = threading.RLock()
         active: dict[str, dict] = {}
         result: dict = {"done": 0, "total": len(pending), "errors": [], "seeded": 0}
+        discoveries = {}
         self._running = True
         if key and len(paths) == 1:
             self._choices[paths[0]] = key
@@ -130,10 +132,14 @@ class ReseedWorkspace:
                 }
             report(value)
 
+        def admit_discoveries(entries):
+            # The board can pipeline completed folders without exposing a partial
+            # Library to other jobs. Each item worker receives its own snapshot.
+            with self._control_lock:
+                discoveries.update((str(entry.item.path), entry) for entry in entries)
+                self._added_paths.extend(p for p in discoveries if p not in known)
+
         def emit_scan(progress):
-            if progress.get("discovered"):
-                with self._control_lock:
-                    self._added_paths.extend(p for p in progress["discovered"] if p not in known)
             emit({"path": "", "phase": "scan", "scan": progress, "rows": self.rows()})
 
         records = self.setup.store.reseed_records()
@@ -175,6 +181,7 @@ class ReseedWorkspace:
                                 stop,
                                 lambda p: emit_scan(p),
                                 self._scan_folders,
+                                admit_discoveries,
                             )
                             futures[future] = ("", "disk")
                     for _ in range(len(pending)):
@@ -211,8 +218,14 @@ class ReseedWorkspace:
                         used[resource] += 1
                         with self._control_lock:
                             self._active_paths.add(path)
+                            worker = copy.copy(self)
+                            worker.library = self.library.snapshot()
+                            if path in discoveries:
+                                worker.library.entries = [
+                                    e for e in worker.library.entries if str(e.item.path) != path
+                                ] + [discoveries[path]]
                         future = pool.submit(
-                            self._run_item, [path], step, root, stop, emit, choice, resources
+                            worker._run_item, [path], step, root, stop, emit, choice, resources
                         )
                         self._choices.pop(path, None)
                         futures[future] = (path, resource)
@@ -278,6 +291,13 @@ class ReseedWorkspace:
         return {**result, "rows": self.rows()}
 
     def _run_item(self, paths, action, root, stop, report, key, resources) -> dict:
+        if action == "refresh":
+            return self.refresh_client()
+        # Worker threads do not inherit the caller's Indexer request context.
+        with self.setup.indexer().background(stop):
+            return self._execute_item(paths, action, root, stop, report, key, resources)
+
+    def _execute_item(self, paths, action, root, stop, report, key, resources) -> dict:
         if action not in {"all", "find", "compare", "prepare", "verify", "seed", "refresh"}:
             raise ValueError("Unknown reseed action.")
         if action == "refresh":

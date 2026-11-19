@@ -33,6 +33,21 @@ SHORT_WINDOW = 600.0  # a refusal's window up to this is a pace to adopt, not th
 REFUSAL_MARGIN = 1.05  # adopted paces stay a little under the reported limit
 
 
+def cancellable_sleep(seconds: float, stop: threading.Event | None, sleep=time.sleep) -> None:
+    """Honor the configured clock's sleeper while checking cancellation during long waits."""
+    if stop is None:
+        sleep(seconds)
+        return
+    while seconds > 0:
+        if stop.is_set():
+            raise InterruptedError("Request cancelled while waiting for quota.")
+        interval = min(seconds, 0.1)
+        sleep(interval)
+        seconds -= interval
+    if stop.is_set():
+        raise InterruptedError("Request cancelled while waiting for quota.")
+
+
 class Queue:
     """One request at a time, at least `interval` seconds apart.
 
@@ -97,11 +112,7 @@ class Queue:
                         self._last = self._clock()
                         self._sent()
                         return
-                if stop is not None:
-                    if stop.wait(wait):
-                        raise InterruptedError("Request stopped before sending.")
-                else:
-                    self._sleep(wait)  # outside: others may still claim their turn
+                cancellable_sleep(wait, stop, self._sleep)  # outside the queue lock
         finally:
             if not background:
                 with self._state:

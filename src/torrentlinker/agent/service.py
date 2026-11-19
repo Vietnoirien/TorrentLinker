@@ -851,13 +851,23 @@ class AgentService:
                         )
                     raise
                 finally:
-                    target.setup.download_guard = None
+                    if (
+                        body.kind == "send-queue"
+                        and target.setup.download_guard is guarded_download
+                    ):
+                        target.setup.download_guard = None
                     with self.access.lock, self.access.db:
                         self.access.db.execute(
                             "UPDATE proposals SET status='finished' WHERE id=?", (identifier,)
                         )
 
-            job_id = self.jobs.submit(body.kind, work, client_id=body.client_id, deduplicate=False)
+            job_id = self.jobs.submit(
+                body.kind,
+                work,
+                client_id=body.client_id,
+                parameters=body.model_dump(),
+                deduplicate=False,
+            )
             with self.access.db:
                 self.access.db.execute(
                     "UPDATE proposals SET status='submitted',job_id=? WHERE id=?",

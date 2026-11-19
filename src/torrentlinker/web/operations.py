@@ -508,7 +508,30 @@ class Operations:
     def run(
         self, request: JobRequest, stop: threading.Event, progress: Callable[[Any], None]
     ) -> Any:
+        from contextlib import nullcontext
+
+        from torrentlinker.job_lanes import BACKGROUND, job_lane
+
         self.validate(request)
+        interactive = job_lane(request.kind, request.model_dump()) == "interactive"
+        access = (
+            self.setup.indexer().background(stop)
+            if request.kind in BACKGROUND
+            and not interactive
+            and not (request.kind == "plan" and request.cached_only)
+            else nullcontext()
+        )
+        if interactive and (
+            request.kind not in {"library-evidence", "candidate-inspector"}
+            or request.kind == "candidate-inspector"
+            and request.inspector_action in {"review", "check", "search", "details"}
+        ):
+            access = self.setup.indexer().foreground(stop)
+        with access:
+            return self._run(request, stop, progress, interactive=interactive)
+
+    def _run(self, request, stop, progress, *, interactive=False):
+        library = self.library.snapshot() if interactive else self.library
         if request.kind == "reseed-workspace":
             return self.reseed_workspace.run(
                 request.paths,
@@ -598,7 +621,7 @@ class Operations:
         if request.kind == "verify":
             from torrentlinker.reseed import check_verifications
 
-            outcomes = check_verifications(self.library.client(), self.setup.store)
+            outcomes = check_verifications(library.client(), self.setup.store)
             return [
                 {
                     "hash": o.hash,
@@ -683,7 +706,7 @@ class Operations:
                 }
             planned_result = plan(
                 self.setup,
-                self.library,
+                library,
                 request.maximum_bytes,
                 request.maximum_torrents,
                 stop,
@@ -727,7 +750,7 @@ class Operations:
         if request.kind == "search-options":
             return self.search_options(request.category)
         if request.kind == "scan":
-            return self.library.scan(stop, progress, request.paths or None)
+            return library.scan(stop, progress, request.paths or None)
         if request.kind == "diagnose-repair":
             from torrentlinker.domain import TorrentClient
 
@@ -740,23 +763,21 @@ class Operations:
             candidate = next((c for c in found if candidate_key(c) == request.candidate_key), None)
             if candidate is None:
                 raise ValueError("Select a current Candidate first.")
-            return self.library.diagnose(
-                request.path, candidate, indexer.fetch_torrent(candidate), stop
-            )
+            return library.diagnose(request.path, candidate, indexer.fetch_torrent(candidate), stop)
         if request.kind == "prepare-repair":
-            return self.library.prepare_repair(
+            return library.prepare_repair(
                 request.repair_id, request.client_path, stop, experimental=request.experimental
             )
         if request.kind == "refresh-repair":
-            return self.library.refresh_repair(request.repair_id)
+            return library.refresh_repair(request.repair_id)
         if request.kind == "start-repair":
-            return self.library.start_repair(request.repair_id, request.confirmation)
+            return library.start_repair(request.repair_id, request.confirmation)
         if request.kind == "combine-library":
-            return self.library.combine(request.paths, stop, request.selection_name)
+            return library.combine(request.paths, stop, request.selection_name)
         if request.kind == "find-compatible":
-            return self.library.compatible(request.path, stop, progress)
+            return library.compatible(request.path, stop, progress)
         if request.kind == "candidate-inspector":
-            return self.library.inspector(
+            return library.inspector(
                 request.path,
                 request.inspector_action,
                 stop,
@@ -766,9 +787,9 @@ class Operations:
             )
         if request.kind == "library-evidence":
             return {
-                **self.library.evidence(request.path, stop),
-                "provenance": self.library.provenance(request.path),
-                "repairs": self.library.repairs().rows(),
+                **library.evidence(request.path, stop),
+                "provenance": library.provenance(request.path),
+                "repairs": library.repairs().rows(),
             }
         if request.kind == "import-provenance":
             import base64
@@ -777,11 +798,11 @@ class Operations:
                 data = base64.b64decode(request.torrent_data, validate=True)
             except ValueError as error:
                 raise ValueError("Invalid torrent upload.") from error
-            return self.library.import_provenance(request.path, data, stop)
+            return library.import_provenance(request.path, data, stop)
         if request.kind == "check":
-            return self.library.check(request.path, stop, progress)
+            return library.check(request.path, stop, progress)
         if request.kind in {"library-review", "library-reject", "check-candidate"}:
-            return self.library.review(
+            return library.review(
                 request.path,
                 stop,
                 key=request.candidate_key,
@@ -792,7 +813,7 @@ class Operations:
                 }[request.kind],
             )
         if request.kind == "search-library":
-            return self.library.search_items(request.paths, stop, progress)
+            return library.search_items(request.paths, stop, progress)
         if request.kind == "refresh-unpack":
             if len(request.hashes) != 1:
                 raise ValueError("Select one archive torrent.")
@@ -804,11 +825,11 @@ class Operations:
                 request.path, request.candidate_key, request.confirmation, stop, progress
             )
         if request.kind == "reseed":
-            return self.library.reseed(request.path, request.hashes[0], stop)
+            return library.reseed(request.path, request.hashes[0], stop)
         if request.kind == "check-all":
-            return self.library.check_all(stop, progress)
+            return library.check_all(stop, progress)
         if request.kind == "reseed-all":
-            return self.library.reseed_all(stop, progress)
+            return library.reseed_all(stop, progress)
         if request.kind == "search":
             indexer = self.setup.indexer()
             seeded = set()
