@@ -8,7 +8,7 @@ from tests.test_library_folders import window_for
 
 
 def test_sidebar_displays_the_packaged_logo(qtbot, tmp_path, monkeypatch, request):
-    from tests.test_community_interfaces import js, wait_js
+    from tests.test_community_interfaces import wait_js
     from tests.webengine_support import isolated_webengine_render
 
     if isolated_webengine_render(request):
@@ -16,7 +16,7 @@ def test_sidebar_displays_the_packaged_logo(qtbot, tmp_path, monkeypatch, reques
     window, _ = window_for(qtbot, tmp_path, monkeypatch)
     window.show()
     wait_js(qtbot, window.navigation, "document.getElementById('brand-logo')?.naturalWidth > 0")
-    assert js(
+    wait_js(
         qtbot,
         window.navigation,
         "document.getElementById('brand-logo').getBoundingClientRect().width >= 24",
