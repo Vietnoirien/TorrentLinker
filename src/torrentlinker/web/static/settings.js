@@ -182,6 +182,7 @@ window.addEventListener("message", async (event) => {
       value = null;
     } else if (message.path === "section") {
       state.settingsSection = body.section;
+      rememberTab("setup", body.section);
       value = null;
     } else throw Error("Unknown Settings operation.");
     settingsFrame.contentWindow?.postMessage(

@@ -54,6 +54,31 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 panel = page.frame_locator("#settings-frame")
                 name = panel.get_by_label("Client name", exact=True)
                 expect(name).to_be_visible(timeout=5000)
+                # Navigate within Settings while the host refresh is still in flight.
+                pending_setup = []
+                page.evaluate("""() => {
+                    const refresh = refreshSetup;
+                    window.fixtureSetupDone = false;
+                    refreshSetup = async () => {
+                        await refresh(); window.fixtureSetupDone = true;
+                    };
+                }""")
+                page.route(
+                    "**/api/setup?*", lambda route: pending_setup.append((route, route.fetch()))
+                )
+                page.locator("[data-view=setup]").first.click()
+                for _ in range(100):
+                    if pending_setup:
+                        break
+                    page.wait_for_timeout(20)
+                assert pending_setup
+                panel.get_by_role("button", name="Clients", exact=True).click()
+                page.wait_for_function("() => state.settingsSection === 'clients'")
+                pending_setup[0][0].fulfill(response=pending_setup[0][1])
+                page.wait_for_function("() => window.fixtureSetupDone")
+                assert page.evaluate("state.settingsSection") == "clients"
+                page.unroute("**/api/setup?*")
+                panel.get_by_role("button", name="Connections", exact=True).click()
                 name.fill("Studio draft")
                 panel.get_by_role("button", name="Clients", exact=True).click()
                 panel.get_by_role("button", name="Connections", exact=True).click()

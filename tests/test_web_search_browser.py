@@ -218,6 +218,8 @@ def test_shared_search_panel_preserves_results_when_visiting_queue(
             page.locator("#app-sidebar [data-view=setup]").click()
             page.wait_for_timeout(250)
             before = len(polls)
+            # A hidden frame can deliver a poll queued before it became inactive.
+            panel.locator("body").evaluate("() => request('state').catch(() => null)")
             page.wait_for_timeout(2200)
             assert len(polls) == before
             assert not errors

@@ -441,9 +441,9 @@ async function navigate(view, section, detail) {
     document.querySelector(`[data-view="${view}"]`)?.textContent || view;
   if (view === "setup") {
     if (state.clientId === "all") state.clientId = state.setup.default_client_id;
+    await settingsSection(section, detail);
     await refreshSetup();
     if (activeRoute !== route) return;
-    await settingsSection(section, detail);
   }
   if (view === "assistant") await loadAssistant();
   if (view === "media") {

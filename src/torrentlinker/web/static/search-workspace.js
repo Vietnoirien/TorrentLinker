@@ -50,6 +50,8 @@ window.addEventListener("message", async (e) => {
   if (m?.type !== "search-request") return;
   try {
     if ($("workspace").hidden) throw Error("Sign in first.");
+    if (m.path === "state" && !["search", "queue"].includes(state.view))
+      throw Error(say("Search is inactive.", "La recherche est inactive."));
     const body = { ...m.body };
     if (body._client !== state.clientId)
       throw Error("The target client changed.");
