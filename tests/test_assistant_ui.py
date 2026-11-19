@@ -120,13 +120,15 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1000, "height": 740}, locale="en-US")
 
+            panel = page.frame_locator("#assistant-frame")
+
             def new_discussion():
-                expect(page.locator(".assistant-dialog")).to_have_count(0)
-                previous = page.locator("#assistant-prompt").element_handle()
-                page.get_by_role("button", name="New discussion", exact=True).click()
+                expect(panel.locator(".assistant-dialog")).to_have_count(0)
+                previous = panel.locator("#assistant-prompt").element_handle()
+                panel.get_by_role("button", name="New discussion", exact=True).click()
                 # The old controls remain visible until the asynchronous reload replaces them.
                 previous.wait_for_element_state("hidden")
-                expect(page.locator("#assistant-prompt")).to_be_visible()
+                expect(panel.locator("#assistant-prompt")).to_be_visible()
 
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
@@ -137,8 +139,8 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             page.locator('[data-view="assistant"]').click()
             page.locator("#navigation-close").click()
             # Without a model the composer is replaced by one way to connect one, in Settings.
-            expect(page.locator(".assistant-composer")).to_be_hidden()
-            page.get_by_role("button", name="Connect a model", exact=True).click()
+            expect(panel.locator(".assistant-composer")).to_be_hidden()
+            panel.get_by_role("button", name="Connect a model", exact=True).click()
             expect(page.locator("#assistant-connections")).to_be_visible()
             page.get_by_role("button", name="Add connection", exact=True).click()
             dialog = page.locator(".assistant-dialog")
@@ -177,34 +179,34 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             page.locator("#navigation-toggle").click()
             page.locator('[data-view="assistant"]').click()
             page.locator("#navigation-close").click()
-            page.get_by_role("tab", name="Discussion", exact=True).click()
-            page.get_by_role("button", name="Discussions", exact=True).click()
+            panel.get_by_role("tab", name="Discussion", exact=True).click()
+            panel.get_by_role("button", name="Discussions", exact=True).click()
             # An example prompt fills the composer without sending it.
-            page.locator(".assistant-example").first.click()
-            expect(page.locator("#assistant-prompt")).to_have_value(
+            panel.locator(".assistant-example").first.click()
+            expect(panel.locator("#assistant-prompt")).to_have_value(
                 "Find ten films I don't seed yet and show them before any action."
             )
             new_discussion()
-            expect(page.locator(".assistant-dialog")).to_have_count(0)
-            page.locator("#assistant-prompt").fill("Help me build a Plan.")
-            page.locator("#assistant-prompt").press("Enter")
-            expect(page.locator("#assistant-transcript")).to_contain_text(
+            expect(panel.locator(".assistant-dialog")).to_have_count(0)
+            panel.locator("#assistant-prompt").fill("Help me build a Plan.")
+            panel.locator("#assistant-prompt").press("Enter")
+            expect(panel.locator("#assistant-transcript")).to_contain_text(
                 "Ready to prepare", timeout=10000
             )
-            expect(page.locator(".assistant-message.user")).to_have_count(1)
-            activity = page.locator(".assistant-activity")
+            expect(panel.locator(".assistant-message.user")).to_have_count(1)
+            activity = panel.locator(".assistant-activity")
             expect(activity.locator("summary")).to_contain_text("No tools called · Reply only")
-            expect(page.locator(".assistant-execution-notice")).to_have_text(
+            expect(panel.locator(".assistant-execution-notice")).to_have_text(
                 "No application action was performed in this reply."
             )
             expect(activity).not_to_have_attribute("open", "")
             activity.locator("summary").first.click()
             expect(activity).to_have_attribute("open", "")
             expect(activity).to_contain_text("Model calls: 1 · Tool calls: 0")
-            page.locator("#assistant-prompt").fill("Keep this unfinished message")
-            page.locator("#assistant-more").click()
-            page.get_by_role("menuitem", name="Discussion settings", exact=True).click()
-            dialog = page.locator(".assistant-dialog")
+            panel.locator("#assistant-prompt").fill("Keep this unfinished message")
+            panel.locator("#assistant-more").click()
+            panel.get_by_role("menuitem", name="Discussion settings", exact=True).click()
+            dialog = panel.locator(".assistant-dialog")
             save_reload_dialog_visible = []
 
             def observe_save_reload(route):
@@ -219,43 +221,43 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             dialog.get_by_role("button", name="Save", exact=True).click()
             expect(dialog).to_have_count(0)
             assert save_reload_dialog_visible == [True]
-            expect(page.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
-            expect(page.locator("#assistant-transcript")).to_contain_text("Ready to prepare")
+            expect(panel.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
+            expect(panel.locator("#assistant-transcript")).to_contain_text("Ready to prepare")
             new_discussion()
-            expect(page.locator(".assistant-dialog")).to_have_count(0)
-            page.locator("#assistant-more").click()
-            page.get_by_role("menuitem", name="Discussion settings", exact=True).click()
-            dialog = page.locator(".assistant-dialog")
+            expect(panel.locator(".assistant-dialog")).to_have_count(0)
+            panel.locator("#assistant-more").click()
+            panel.get_by_role("menuitem", name="Discussion settings", exact=True).click()
+            dialog = panel.locator(".assistant-dialog")
             expect(dialog.get_by_label("Allow public Web research", exact=True)).not_to_be_checked()
             dialog.get_by_label("Allow public Web research", exact=True).check()
             dialog.get_by_role("button", name="Save", exact=True).click()
             new_discussion()
-            page.locator("#assistant-more").click()
-            page.get_by_role("menuitem", name="Discussion settings", exact=True).click()
-            dialog = page.locator(".assistant-dialog")
+            panel.locator("#assistant-more").click()
+            panel.get_by_role("menuitem", name="Discussion settings", exact=True).click()
+            dialog = panel.locator(".assistant-dialog")
             expect(dialog.get_by_label("Allow public Web research", exact=True)).to_be_checked()
             dialog.get_by_role("button", name="Cancel", exact=True).click()
-            page.get_by_role("button", name="My films", exact=True).click()
-            expect(page.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
+            panel.get_by_role("button", name="My films", exact=True).click()
+            expect(panel.locator("#assistant-prompt")).to_have_value("Keep this unfinished message")
             page.screenshot(path=str(tmp_path / "assistant-web.png"))
             page.once("dialog", lambda dialog: dialog.accept())
-            page.locator("#assistant-more").click()
-            page.get_by_role("menuitem", name="Delete discussion", exact=True).click()
-            expect(page.get_by_role("button", name="My films", exact=True)).to_have_count(0)
-            expect(page.locator(".assistant-message.user")).to_have_count(0)
+            panel.locator("#assistant-more").click()
+            panel.get_by_role("menuitem", name="Delete discussion", exact=True).click()
+            expect(panel.get_by_role("button", name="My films", exact=True)).to_have_count(0)
+            expect(panel.locator(".assistant-message.user")).to_have_count(0)
 
-            page.get_by_role("tab", name="Automations", exact=True).click()
-            page.get_by_role("button", name="Create task", exact=True).click()
-            dialog = page.locator(".assistant-dialog")
+            panel.get_by_role("tab", name="Automations", exact=True).click()
+            panel.get_by_role("button", name="Create task", exact=True).click()
+            dialog = panel.locator(".assistant-dialog")
             dialog.get_by_label("Name", exact=True).fill("Daily report")
             dialog.get_by_label("Instructions", exact=True).fill("Review my Plan.")
             dialog.get_by_role("button", name="Preview next run").click()
             dialog.get_by_role("button", name="Save", exact=True).click()
-            expect(page.get_by_role("heading", name="Daily report")).to_be_visible()
+            expect(panel.get_by_role("heading", name="Daily report")).to_be_visible()
             # A new task starts paused: its card offers Enable, then Run now.
-            page.get_by_role("button", name="Enable", exact=True).click()
-            page.get_by_role("button", name="Run now", exact=True).click()
-            expect(page.locator("#view-assistant")).to_contain_text("Runs and tool receipts")
+            panel.get_by_role("button", name="Enable", exact=True).click()
+            panel.get_by_role("button", name="Run now", exact=True).click()
+            expect(panel.locator("#view-assistant")).to_contain_text("Runs and tool receipts")
             assert not errors
             browser.close()
     finally:
@@ -567,9 +569,10 @@ def test_browser_inline_question_approval_and_safe_table(tmp_path):
             page.locator("#navigation-toggle").click()
             page.locator('[data-view="assistant"]').click()
             page.locator("#navigation-close").click()
-            page.locator("#assistant-prompt").fill("Help choose an action.")
-            page.locator("#assistant-prompt").press("Enter")
-            question = page.locator(".assistant-question")
+            panel = page.frame_locator("#assistant-frame")
+            panel.locator("#assistant-prompt").fill("Help choose an action.")
+            panel.locator("#assistant-prompt").press("Enter")
+            question = panel.locator(".assistant-question")
             expect(question).to_be_visible(timeout=10000)
             submit = question.get_by_role("button", name="Submit answer", exact=True)
             expect(submit).to_be_disabled()
@@ -578,27 +581,27 @@ def test_browser_inline_question_approval_and_safe_table(tmp_path):
             assert len(turns) == 1
             question.get_by_role("textbox").fill("Please pause this torrent")
             submit.click()
-            decision = page.locator(".assistant-decision")
+            decision = panel.locator(".assistant-decision")
             expect(decision).to_be_visible(timeout=10000)
             expect(decision).to_contain_text("pause")
             assert client.paused == []
             # While the run waits for approval, the composer button stops it instead of sending.
-            expect(page.locator("#assistant-send")).to_have_attribute("aria-label", "Stop")
-            assert page.locator(".assistant-dialog").count() == 0
+            expect(panel.locator("#assistant-send")).to_have_attribute("aria-label", "Stop")
+            assert panel.locator(".assistant-dialog").count() == 0
             decision.get_by_role("button", name="Approve once", exact=True).click()
             expect(
-                page.locator(".assistant-markdown table td").filter(has_text="Complete")
+                panel.locator(".assistant-markdown table td").filter(has_text="Complete")
             ).to_be_visible(timeout=10000)
             assert client.paused == ["a" * 40]
             assert (
-                page.locator(
+                panel.locator(
                     ".assistant-markdown script, .assistant-markdown a[href^='javascript:']"
                 ).count()
                 == 0
             )
             assert not remote
             assert (
-                page.locator(
+                panel.locator(
                     ".assistant-markdown a[href='https://resource.test/image.png']"
                 ).count()
                 == 1

@@ -5,19 +5,17 @@ let assistantRefreshBusy = false, assistantRenderKey = "", assistantLoadVersion 
 const assistantDrafts = new Map();
 const assistantCollapsedFolders = new Set();
 const at = (en, fr) => say(en, fr);
-const assistantRoot = () => $("view-assistant");
-let mediaAssistantHome = null;
+let mediaAssistantRoot = null;
+const assistantRoot = () => mediaAssistantRoot || $("view-assistant");
 async function mountMediaAssistant(container, conversationId) {
-  const root = assistantRoot();
-  if (!mediaAssistantHome) { mediaAssistantHome = document.createComment("assistant home"); root.before(mediaAssistantHome); }
-  container.append(root); root.hidden = false;
+  if (!mediaAssistantRoot) mediaAssistantRoot = element("section");
+  container.append(mediaAssistantRoot);
   assistantConversation = conversationId; assistantView = "chat"; assistantRun = "";
-  await loadAssistant();
+  await loadLegacyAssistant();
 }
 function restoreMediaAssistant() {
-  const root = assistantRoot();
-  if (mediaAssistantHome) { mediaAssistantHome.replaceWith(root); mediaAssistantHome = null; }
-  root.hidden = state.view !== "assistant";
+  mediaAssistantRoot?.remove();
+  mediaAssistantRoot = null;
 }
 const assistantVisible = () => state.view === "assistant" || (typeof media !== "undefined" && media.chat);
 function aFolderLabel(folder) {
@@ -134,17 +132,15 @@ async function aDelete(current) {
   assistantDrafts.delete(current.id); assistantConversation = ""; assistantRun = "";
   await loadAssistant();
 }
-// The first switch to Execute within limits asks for confirmation; this browser remembers it.
-function aConfirmExecute() {
-  let confirmed = false;
-  try { confirmed = localStorage.getItem("tl-execute-confirmed") === "1"; } catch { /* storage unavailable */ }
-  if (confirmed) return true;
+// The owner service stores the acknowledgement once for desktop and Web.
+async function aConfirmExecute() {
+  if ((await api("setup/assistant")).execute_acknowledged) return true;
   if (!confirm(at("In this mode the assistant runs the actions allowed in this discussion's settings without asking, within its limits on clients, size and downloads per day. Removing queue entries or torrents and deleting files still need your approval.\n\nSwitch to Execute within limits? You will not be asked again.", "Dans ce mode, l’assistant exécute sans demander les actions autorisées dans les paramètres de la discussion, dans ses limites de clients, de volume et de téléchargements par jour. Retirer des entrées de la file ou des torrents, ou supprimer des fichiers, demande toujours votre accord.\n\nPasser en mode Exécuter dans les limites ? Cette question ne sera plus posée."))) return false;
-  try { localStorage.setItem("tl-execute-confirmed", "1"); } catch { /* storage unavailable */ }
+  await api("setup/assistant/acknowledge-execute", {});
   return true;
 }
 const aModeLabel = mode => mode === "execute" ? at("Execute within limits", "Exécuter dans les limites") : at("Proposals only", "Propositions uniquement");
-async function loadAssistant() {
+async function loadLegacyAssistant() {
   const version = ++assistantLoadVersion;
   const setup = await api("setup/assistant");
   if (version !== assistantLoadVersion) return;
@@ -249,7 +245,7 @@ async function loadAssistant() {
   });
   const modeChip = button(aModeLabel(mode), async () => {
     const next = (current ? current.policy.mode : assistantPendingMode || defaults.policy.mode) === "execute" ? "propose" : "execute";
-    if (next === "execute" && !aConfirmExecute()) return;
+    if (next === "execute" && !(await aConfirmExecute())) return;
     if (current) {
       const {id, ...body} = current;
       await api(`assistant/conversations/${id}`, {...body, policy: {...body.policy, mode: next}}, "PUT");
@@ -693,6 +689,7 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
     ...(scheduled ? {instruction: instruction.value, kind: kind.value, frequency: frequency.value, interval_minutes: +interval.value, at: atTime.value, timezone: timezone.value, weekdays: [...days.querySelectorAll("input:checked")].map(e => +e.value), enabled: enabled.checked} : {})});
   if (scheduled) form.append(button(at("Preview next run", "Voir la prochaine exécution"), async () => { const preview = await api("assistant/schedules/preview", body()); form.append(element("p", new Date(preview.next_at * 1000).toLocaleString())); }));
   aActions(dialog, form, async () => {
+    if (mode.value === "execute" && !(await aConfirmExecute())) return false;
     if (scheduled) {
       await api("assistant/schedules" + (existing ? `/${existing.id}` : ""), body(), existing ? "PUT" : "POST");
     } else {

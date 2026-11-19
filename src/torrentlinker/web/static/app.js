@@ -1,6 +1,7 @@
 // The shell can finish authentication before deferred panel hosts have loaded.
 // The panel's ready event will load its data once its iframe is available.
 function loadTorrents() { window.torrentsEnvironment?.(); }
+function loadAssistant() { window.assistantEnvironment?.(); }
 
 "use strict";
 const $ = (id) => document.getElementById(id);

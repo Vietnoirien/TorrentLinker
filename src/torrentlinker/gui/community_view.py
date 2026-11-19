@@ -131,7 +131,7 @@ class BundledView(QWidget):
                 url = info.requestUrl()
                 allowed = (
                     url.toString() == "qrc:///qtwebchannel/qwebchannel.js"
-                    or self_view.channel_name in {"profile", "search"}
+                    or self_view.channel_name in {"profile", "search", "assistant"}
                     and re.match(r"^data:image/(png|jpeg|gif|webp);base64,", url.toString())
                     is not None
                     or url.isLocalFile()

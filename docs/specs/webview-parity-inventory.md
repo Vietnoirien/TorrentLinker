@@ -69,9 +69,9 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
-| 27 | Discussion | Native `AssistantTab` + transcript/composer widgets | `assistant.js`, `assistant_cards.js` | NU | `assistant-chat-redesign.md` (native + Web) | streaming transcript |
+| 27 | Discussion | **BV** `AssistantPanel` | `assistant_panel.js` iframe, shared `static/assistant/` | **Done** (#106) | `assistant-chat-redesign.md` | Live job polling; provider token streaming is not offered |
 | 28 | Automations | Native `automation_cards.py`, `AssistantEditor` | `assistant.js` | NU | same | — |
-| 29 | History | Native | `assistant.js` | NU | same | — |
+| 29 | History | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#106) | same | — |
 | 30 | Selection cards / detail | Native `selection_cards.py` | `assistant_cards.js` | NU | none | — |
 
 ### Media / Médias
@@ -128,7 +128,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
   Each BV panel duplicates its own token block; there is no shared stylesheet. `app.css:592-602` holds an older dark block overridden at `:1189`.
 - **Translations** (Gap): desktop uses Qt `.ts` (2,390 messages, complete); Web uses `data-en`/`data-fr`, `say()` and the `french` map in `app.js:23-162`. Separate sources. Web FR nav label "Media" vs desktop "Médias" (`index.html:59`).
 - **Dialogs and toasts** differ per host: `QMessageBox` + status bar vs one `<dialog>` + `toast()`; each BV panel has its own toast/dialog.
-- **Preferences** stored in QSettings on desktop vs `localStorage` on Web (Search state, Assistant "Run within limits" acknowledgement), so nothing carries between hosts.
+- **Preferences** stored in QSettings on desktop vs `localStorage` on Web (Search state, Assistant sidebar width), so nothing carries between hosts.
 
 ### Shell
 - Differs (Gap): desktop footer Zen band (balance, Zen/day, Plan, Catalogue) on every Zen page; Web shows a reduced header only.
@@ -170,7 +170,9 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - Web-only (Gap): state/tracker/category/tag filters (desktop hides them).
 
 ### Assistant
-- Differs (Gap): first-run "Run within limits" acknowledgement stored separately per host; desktop sidebar width persisted.
+- Resolved (#106): the first-run "Run within limits" acknowledgement lives in the owner Assistant service database and is shared by both hosts. Sidebar width persists per device, using QSettings on desktop and browser storage on Web.
+- Deliberate existing limit: transcripts update as persisted messages, tool activity and decisions arrive, using job polling. Providers return complete model messages; #106 does not introduce token-by-token provider streaming.
+- The main Assistant page now uses one bundled view. Native chat widgets and the legacy Web chat renderer remain only for Media compact chat until #111; Settings connection forms remain until #112. Existing Automations and selection-card flows remain available; their parity audit is #107.
 - Web-only: "Selection details" and "Presentation image" cards, *unsure* whether every field matches desktop `SelectionDetail`.
 
 ### Media

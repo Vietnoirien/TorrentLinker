@@ -567,7 +567,7 @@ class AssistantTab(QWidget):
         else:
             current = self.pending_mode or self.service.chat_defaults().policy.mode
         mode = "propose" if current == "execute" else "execute"
-        if mode == "execute" and not QSettings().value("assistant/execute_confirmed", False, bool):
+        if mode == "execute" and not self.service.setup()["execute_acknowledged"]:
             answer = QMessageBox.question(
                 self,
                 self.tr("Execute within limits"),
@@ -581,6 +581,7 @@ class AssistantTab(QWidget):
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
+            self.service.acknowledge_execute()
             QSettings().setValue("assistant/execute_confirmed", True)
         if self.conversation_id:
             body.policy.mode = mode

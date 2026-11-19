@@ -332,7 +332,7 @@ def test_saved_agent_startup_reuses_runtime_started_for_rss(qtbot, tmp_path, mon
     try:
         window.start_saved_agent_access()
         window.assistant_tab.activate()
-        assert "Address already in use" not in window.assistant_tab.notice.text()
+        assert "Address already in use" not in window.assistant_tab.startup_error
         assert window.assistant_tab.service is service
         assert window.agent_runtime is runtime
     finally:
@@ -354,14 +354,14 @@ def test_assistant_port_conflict_explains_recovery_and_can_retry(qtbot, tmp_path
         runtime = DesktopServer(window.settings, window.settings_path, window.store, port=port)
         window.agent_runtime = runtime
         window.assistant_tab.activate()
-        notice = window.assistant_tab.notice.text()
+        notice = window.assistant_tab.startup_error
         assert str(port) in notice and "reopen the Assistant tab to retry" in notice
         assert "Errno" not in notice
         assert window.assistant_tab.service is None
     try:
         window.assistant_tab.activate()
         assert window.assistant_tab.service is runtime.app.state.assistant
-        assert "already in use" not in window.assistant_tab.notice.text()
+        assert "already in use" not in window.assistant_tab.startup_error
     finally:
         runtime.close()
 

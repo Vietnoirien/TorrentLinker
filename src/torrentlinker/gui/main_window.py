@@ -329,9 +329,9 @@ class MainWindow(QMainWindow):
         self.search_tab.subscribe_requested.connect(lambda query: self.feeds_tab.edit(query=query))
         self.torrents_tab = TorrentsTab(self)
         self.tabs.addTab(self.torrents_tab, self.tr("Torrents"))
-        from torrentlinker.gui.assistant import AssistantTab
+        from torrentlinker.gui.assistant_view import AssistantPanel
 
-        self.assistant_tab = AssistantTab(self.assistant_service)
+        self.assistant_tab = AssistantPanel(self.assistant_service)
         self.assistant_tab.connectionsRequested.connect(self.open_assistant_connections)
         self.tabs.addTab(self.assistant_tab, self.tr("Assistant"))
         from torrentlinker.gui.media import MediaTab
@@ -822,7 +822,7 @@ class MainWindow(QMainWindow):
 
     def _focus_search(self) -> None:
         if self.tabs.currentWidget() is self.assistant_tab:
-            self.assistant_tab.prompt.setFocus()
+            self.assistant_tab.focus_composer()
             return
         if self.reading_room is not None and self.tabs.currentWidget() is self.reading_room:
             self.reading_room.filter.setFocus()

@@ -87,3 +87,16 @@ Same structure on both. Web styles go in `app.css` with the existing role classe
 3. Connections moved to Settings, mode chip with first-time confirmation.
 4. Automations cards and History restyle.
 5. Web parity, screenshots, docs (`docs/guide/*/assistant.md`) and release.
+
+## Shared panel port (#106, 2026-11-19)
+
+The main desktop and Web discussion/history now load `web/static/assistant/view.html`
+through the shared panel base. The approved layout and French/English labels are retained,
+with shared light/dark tokens. Connections still open Settings → Assistant.
+The owner service stores the mode acknowledgement once for both hosts. Sidebar width
+is a device preference. Refresh keeps the transcript scroll and unsent composer text.
+
+Existing Media compact chat remains in its current host pending #111. Automations and
+selection cards keep their existing flows; #107 owns their remaining parity audit.
+Live transcript updates follow persisted job messages and activity; the existing providers
+do not stream individual tokens. No tracker or model credentials enter the bundled page.

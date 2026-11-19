@@ -339,6 +339,7 @@ def create_app(
             "/static/search/view.html",
             "/static/feeds/view.html",
             "/static/torrents/view.html",
+            "/static/assistant/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
@@ -351,6 +352,7 @@ def create_app(
                         "/static/profile/view.html",
                         "/static/upload/view.html",
                         "/static/search/view.html",
+                        "/static/assistant/view.html",
                     }
                     else "img-src 'self'; "
                 )
