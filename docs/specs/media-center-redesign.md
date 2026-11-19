@@ -1,6 +1,6 @@
 # Media Center redesign: chat panel, controls and browsing
 
-Status: proposal, 2026-10-27. Planning only; nothing below is implemented.
+Status: approved design, implemented in stages. Updated 2026-11-19 for #108: video sections, layouts and details now use one bundled desktop/Web view. The native video hero, shelves and episode widgets are removed. Music, player controls and compact chat retain their existing hosts until #109, #110 and #111 respectively. Native decoding remains the #89 decision; this port does not change codec support.
 
 This plan covers the desktop Media Center first. Its button rules then extend to the rest of the app, as stage 3 of the [polish plan](../releases/polish-plan.md).
 

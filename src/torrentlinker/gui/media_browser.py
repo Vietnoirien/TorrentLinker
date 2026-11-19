@@ -1,0 +1,122 @@
+"""Shared video library host; playback remains with the native Media session."""
+
+import json
+from pathlib import Path
+
+from fastapi.encoders import jsonable_encoder
+from PySide6.QtCore import Signal, Slot
+
+from torrentlinker.gui.community_view import BundledView, ViewBridge
+from torrentlinker.gui.tasks import run_in_background
+from torrentlinker.media_browser import MediaBrowserService
+
+
+class MediaBrowserBridge(ViewBridge):
+    response = Signal(int, str)
+
+    def __init__(self, panel):
+        super().__init__()
+        self.panel = panel
+
+    @Slot(int, str, str)
+    def requestAsync(self, identifier, path, payload):
+        try:
+            body = json.loads(payload)
+            if path == "host":
+                action = body.get("action")
+                if action not in {
+                    "play",
+                    "preview",
+                    "music",
+                    "chat",
+                    "center",
+                    "settings",
+                    "selection",
+                    "context",
+                }:
+                    raise ValueError("Unknown Media action")
+                self.panel.hostRequested.emit(action, body.get("values", {}))
+                self.response.emit(identifier, '{"data":null}')
+                return
+            if path == "preferences":
+                if body.get("layout") in {"cinematic", "focus", "collection"}:
+                    self.panel.layout_value = body["layout"]
+                    self.panel.hostRequested.emit("layout", {"layout": body["layout"]})
+                self.response.emit(
+                    identifier,
+                    json.dumps({"data": {"layout": self.panel.layout_value}}),
+                )
+                return
+            service = self.panel.get_service()
+            # A panel operates on the host's selected client, never an arbitrary payload client.
+            from urllib.parse import parse_qsl, urlencode, urlsplit
+
+            parsed = urlsplit(path)
+            query = dict(parse_qsl(parsed.query))
+            query["client_id"] = self.panel.client_id()
+            path = parsed.path + "?" + urlencode(query)
+            values = body.get("body")
+            if values is not None:
+                values = {**values, "client_id": self.panel.client_id()}
+
+            def work():
+                try:
+                    return {
+                        "data": jsonable_encoder(
+                            MediaBrowserService(service).request(
+                                path, values, body.get("method", "GET")
+                            )
+                        )
+                    }
+                except Exception as error:
+                    return {"error": service.jobs.error_message(error)}
+
+            run_in_background(
+                work,
+                lambda result: self.response.emit(identifier, json.dumps(result)),
+                lambda error: self.response.emit(identifier, json.dumps({"error": str(error)})),
+                coordinate=False,
+            )
+        except Exception as error:
+            self.response.emit(identifier, json.dumps({"error": str(error)}))
+
+
+class MediaVideoPanel(BundledView):
+    hostRequested = Signal(str, dict)
+
+    def __init__(self, get_service, client_id, parent=None):
+        self.get_service, self.client_id = get_service, client_id
+        self.layout_value = "cinematic"
+        self.center_mode = False
+        self.chat_open = False
+        self.revision = 0
+        super().__init__(
+            MediaBrowserBridge(self), Path(__file__).parents[1] / "web/static/media", "media"
+        )
+        if parent:
+            self.setParent(parent)
+
+    def show_notice(self, text: str) -> None:
+        if self.web and text:
+            self.web.page().runJavaScript(
+                "if(typeof toast==='function')toast(" + json.dumps(text) + ")"
+            )
+
+    def activate(self):
+        service = self.get_service()
+        self.language = service.setup.settings.language
+        self.revision += 1
+        self.bridge.environment_value = json.dumps(
+            {
+                "mode": "desktop",
+                "center_mode": self.center_mode,
+                "chat_open": self.chat_open,
+                "active": self.isVisible(),
+                "revision": self.revision,
+                "client_id": self.client_id(),
+                "language": self.language,
+                "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
+                "adult_content": service.setup.settings.adult_content,
+            }
+        )
+        self.bridge.ready()

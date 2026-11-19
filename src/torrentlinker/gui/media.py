@@ -39,7 +39,6 @@ from PySide6.QtGui import (
     QIcon,
     QImage,
     QImageReader,
-    QLinearGradient,
     QPainter,
     QPainterPath,
     QPalette,
@@ -88,7 +87,7 @@ from shiboken6 import isValid
 
 from torrentlinker.gui.controls import icon_button, set_role
 from torrentlinker.gui.media_audio import create_audio_output
-from torrentlinker.gui.media_rows import MediaRow, SeriesEpisodes
+from torrentlinker.gui.media_browser import MediaVideoPanel
 from torrentlinker.gui.tasks import run_in_background
 
 # The Media Center chat panel and the media beside it never shrink below these.
@@ -205,150 +204,6 @@ class MediaTileButton(QPushButton):
 
     def minimumSizeHint(self):
         return self.layout().minimumSize() if self.layout() else super().minimumSizeHint()
-
-
-class MediaHero(QWidget):
-    """Artwork stays behind a readable, native title and action composition."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.picture = QImage()
-        self.mode = "cinematic"
-        self.height_cap = 10_000
-        self.setObjectName("mediaHero")
-        self.setMinimumHeight(440)
-        self.box = QHBoxLayout(self)
-        self.box.setContentsMargins(34, 34, 34, 34)
-        self.box.setSpacing(28)
-        # The poster sits left of the title and description, over the same artwork backdrop.
-        self.poster = QLabel()
-        self.poster.setObjectName("mediaHeroPoster")
-        self.poster.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.poster.hide()
-        self.box.addWidget(self.poster, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.copy = QWidget()
-        self.copy.setMaximumWidth(620)
-        text = QVBoxLayout(self.copy)
-        text.setContentsMargins(0, 0, 0, 0)
-        text.addStretch()
-        self.kicker = QLabel(self.tr("FROM YOUR LIBRARY FOLDERS"))
-        self.kicker.setStyleSheet("color: #85d8cb; font-size: 10px; letter-spacing: 2px;")
-        text.addWidget(self.kicker)
-        self.title = QLabel()
-        self.title.setTextFormat(Qt.TextFormat.PlainText)
-        self.title.setWordWrap(True)
-        self.title.setStyleSheet("font-size: 48px; font-weight: 750; color: #f3f4ef;")
-        text.addWidget(self.title)
-        self.metadata = QLabel()
-        self.metadata.setTextFormat(Qt.TextFormat.PlainText)
-        self.metadata.setWordWrap(True)
-        self.metadata.setStyleSheet("color: #c7d0d2; font-size: 12px;")
-        text.addWidget(self.metadata)
-        self.synopsis = QLabel()
-        self.synopsis.setTextFormat(Qt.TextFormat.PlainText)
-        self.synopsis.setWordWrap(True)
-        self.synopsis.setStyleSheet("color: #c7d0d2; font-size: 13px; line-height: 1.7;")
-        text.addSpacing(12)
-        text.addWidget(self.synopsis)
-        self.action_layout = QHBoxLayout()
-        self.action_layout.setSpacing(10)
-        text.addSpacing(16)
-        text.addLayout(self.action_layout)
-        text.addStretch()
-        self.box.addWidget(self.copy, 3, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.strip = QListWidget()
-        self.strip.setObjectName("mediaFocusStrip")
-        self.strip.setViewMode(QListView.ViewMode.IconMode)
-        self.strip.setFlow(QListView.Flow.LeftToRight)
-        self.strip.setWrapping(False)
-        self.strip.setMovement(QListView.Movement.Static)
-        self.strip.setResizeMode(QListView.ResizeMode.Adjust)
-        self.strip.setWordWrap(True)
-        self.strip.setGridSize(QSize(130, 196))
-        self.strip.setIconSize(QSize(112, 148))
-        self.strip.setFixedHeight(208)
-        self.strip.setMinimumWidth(200)
-        self.strip.setMaximumWidth(430)
-        self.box.addWidget(self.strip, 2, Qt.AlignmentFlag.AlignBottom)
-        self.strip.hide()
-
-    def set_picture(self, picture):
-        self.picture = picture
-        self._show_poster()
-        self.update()
-
-    def _show_poster(self):
-        narrow_focus = self.mode == "focus" and self.width() < 900
-        visible = not self.picture.isNull() and self.width() >= 700 and not narrow_focus
-        self.poster.setVisible(visible)
-        if not visible:
-            return
-        height = max(150, min(300, self.height() - 68))
-        size = QSize(height * 2 // 3, height)
-        scaled = self.picture.scaled(
-            size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
-        )
-        rounded = QPixmap(scaled.size())
-        rounded.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(rounded)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(rounded.rect()), 8, 8)
-        painter.setClipPath(path)
-        painter.drawImage(0, 0, scaled)
-        painter.end()
-        self.poster.setFixedSize(scaled.size())
-        self.poster.setPixmap(rounded)
-
-    def set_mode(self, mode):
-        self.mode = mode
-        self.strip.setVisible(mode == "focus")
-        self._arrange()
-
-    def _arrange(self):
-        narrow_focus = self.mode == "focus" and self.width() < 900
-        self.box.setDirection(
-            QBoxLayout.Direction.TopToBottom if narrow_focus else QBoxLayout.Direction.LeftToRight
-        )
-        wanted = 630 if narrow_focus else 490 if self.mode == "focus" else 440
-        self.setMinimumHeight(min(wanted, self.height_cap))
-        self.setMaximumHeight(max(wanted, self.height_cap))
-        self.title.setStyleSheet(
-            "font-size: "
-            + ("36" if self.width() < 700 else "48")
-            + "px; font-weight: 750; color: #f3f4ef;"
-        )
-        self._show_poster()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._arrange()
-
-    def paintEvent(self, _event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(self.rect(), QColor("#12212a"))
-        if not self.picture.isNull():
-            scale = max(self.width() / self.picture.width(), self.height() / self.picture.height())
-            width, height = self.width() / scale, self.height() / scale
-            source = QRectF(
-                (self.picture.width() - width) / 2,
-                (self.picture.height() - height) / 2,
-                width,
-                height,
-            )
-            painter.drawImage(QRectF(self.rect()), self.picture, source)
-        horizontal = QLinearGradient(0, 0, self.width(), 0)
-        horizontal.setColorAt(0, QColor(12, 18, 22, 245))
-        horizontal.setColorAt(0.55, QColor(12, 18, 22, 172))
-        horizontal.setColorAt(1, QColor(12, 18, 22, 28))
-        painter.fillRect(self.rect(), horizontal)
-        vertical = QLinearGradient(0, 0, 0, self.height())
-        vertical.setColorAt(0, QColor(16, 19, 21, 40))
-        vertical.setColorAt(0.65, QColor(16, 19, 21, 0))
-        vertical.setColorAt(1, QColor("#101315"))
-        painter.fillRect(self.rect(), vertical)
-        painter.end()
 
 
 # Frame layouts DisplayFrames can halve: bytes per sample, and whether chroma is interleaved.
@@ -615,6 +470,9 @@ class MediaTab(QWidget):
         self.embedded_caption = ""
         self._player_video_mode = False
 
+        self.video_browser: MediaVideoPanel | None = None
+        self.video_selection: list[str] = []
+        self.video_context: dict[str, Any] = {}
         self._build_presentation(add_folder)
 
     def _build_presentation(self, add_folder) -> None:
@@ -627,8 +485,6 @@ class MediaTab(QWidget):
         self._picture_cache_bytes = 0
         self.continue_rows: list[dict[str, Any]] = []
         # The video home shows rows (genres, series…); a card chosen in a row is the selection.
-        self.home_data: dict[str, Any] | None = None
-        self.home_row_widgets: list[MediaRow] = []
         self.row_choice = ""
         self.grid_mode = False  # a row's See all shows the grid until a browse tab is chosen
         # The app refreshes the library the first time Media opens after it starts.
@@ -688,6 +544,7 @@ class MediaTab(QWidget):
         left_box.setSpacing(0)
         self.splitter.addWidget(left)
         self.media_column = left
+        self.media_column_layout = left_box
         left.installEventFilter(self)
         self.content_scroll = QScrollArea()
         self.content_scroll.setWidgetResizable(True)
@@ -914,7 +771,7 @@ class MediaTab(QWidget):
         self.notice = QLabel()
         self.notice.setWordWrap(True)
         self.notice.hide()
-        self.body.addWidget(self.notice)
+        left_box.insertWidget(0, self.notice)
         self.empty = QLabel(
             self.tr(
                 "Add a Library Folder, then Refresh folders to find videos and music. "
@@ -924,7 +781,6 @@ class MediaTab(QWidget):
         self.empty.setWordWrap(True)
         self.empty.setStyleSheet("color: #a7b3b6; padding: 24px 0;")
         self.body.addWidget(self.empty)
-        self.hero = MediaHero()
         self.play_button = QPushButton(self.tr("Play selected"))
         set_role(self.play_button, "primary")
         self.play_button.clicked.connect(self.play_selected)
@@ -952,9 +808,7 @@ class MediaTab(QWidget):
         ):
             actions_box.addWidget(widget)
         actions_box.addStretch()
-        self.hero.action_layout.addWidget(self.action_bar)
         # The selected-title description stays fixed while the cards scroll beneath it.
-        left_box.insertWidget(left_box.indexOf(self.content_scroll), self.hero)
         self.collection_heading = QLabel(self.tr("Your collection"))
         self.collection_heading.setContentsMargins(24, 12, 24, 0)
         self.collection_heading.setStyleSheet("font-size: 34px; font-weight: 650; color: #f2f4f0;")
@@ -1013,10 +867,6 @@ class MediaTab(QWidget):
         self.collection_actions = QHBoxLayout()
         selection_copy.addLayout(self.collection_actions)
         self.body.addWidget(self.collection_selection)
-        self.series_panel = SeriesEpisodes()
-        self.series_panel.play.connect(self._play_episode)
-        self.series_panel.hide()
-        self.body.addWidget(self.series_panel)
         self.continue_heading = QLabel(self.tr("Continue watching"))
         self.continue_heading.setObjectName("mediaSection")
         self.continue_heading.setContentsMargins(24, 12, 24, 0)
@@ -1026,12 +876,6 @@ class MediaTab(QWidget):
         self.continue_box.setContentsMargins(24, 0, 24, 0)
         self.continue_box.setSpacing(16)
         self.body.addWidget(self.continue_panel)
-        self.home_rows_panel = QWidget()
-        self.home_rows_box = QVBoxLayout(self.home_rows_panel)
-        self.home_rows_box.setContentsMargins(0, 0, 0, 0)
-        self.home_rows_box.setSpacing(22)
-        self.home_rows_panel.hide()
-        self.body.addWidget(self.home_rows_panel)
         shelf_header = QHBoxLayout()
         shelf_header.setContentsMargins(24, 0, 24, 0)
         self.shelf_heading = QLabel(self.tr("Recently added"))
@@ -1047,7 +891,6 @@ class MediaTab(QWidget):
         self.results.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.results.itemSelectionChanged.connect(self.show_detail)
         self.results.itemDoubleClicked.connect(lambda _item: self.play_selected())
-        self.hero.strip.itemSelectionChanged.connect(self._focus_selection)
         self.body.addWidget(self.results)
         self.results.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1375,7 +1218,10 @@ class MediaTab(QWidget):
 
     def _set_notice(self, text: str) -> None:
         self.notice.setText(text)
-        self.notice.setVisible(bool(text))
+        browsing = self.video_browser is not None and self.video_browser.isVisible()
+        self.notice.setVisible(bool(text) and not browsing)
+        if browsing and self.video_browser is not None:
+            self.video_browser.show_notice(text)
 
     def _toggle_search(self, checked: bool) -> None:
         self.search.setVisible(checked)
@@ -1439,20 +1285,17 @@ class MediaTab(QWidget):
     def set_media_layout(self, value: str) -> None:
         value = value if value in {"cinematic", "focus", "collection"} else "cinematic"
         self.media_layout = value
+        if self.video_browser is not None:
+            self.video_browser.layout_value = value
+            self.video_browser.activate()
         for index, action in enumerate(self.layout_actions):
             action.setChecked(self.layout_combo.itemData(index) == value)
         with QSignalBlocker(self.layout_combo):
             self.layout_combo.setCurrentIndex(self.layout_combo.findData(value))
-        self.hero.set_mode(value)
-        collection = value == "collection" or self.kind.currentData() == "music"
-        if collection:
-            self.collection_actions.addWidget(self.action_bar)
-        else:
-            self.hero.action_layout.addWidget(self.action_bar)
+        self.collection_actions.addWidget(self.action_bar)
         self.library_disclosure.setChecked(False)
         self.filter_panel.setVisible(value == "collection" and self.kind.currentData() == "video")
         self._configure_browse_layout()
-        self._refresh_focus_strip()
         self._update_panes()
 
     def open_details(self) -> None:
@@ -1461,6 +1304,9 @@ class MediaTab(QWidget):
             self.details.raise_()
 
     def set_center_mode(self, enabled: bool) -> None:
+        if self.video_browser is not None:
+            self.video_browser.center_mode = enabled
+            self.video_browser.activate()
         self.center_button.setChecked(enabled)
         self.center_button.setText("↩" if enabled else "⤢")
         label = self.tr("Return to TorrentLinker") if enabled else self.tr("Media Center mode")
@@ -1620,9 +1466,10 @@ class MediaTab(QWidget):
         entering_video = active_video and not self._player_video_mode
         self._player_video_mode = active_video
         if active_video:
-            if not self.fullscreen_dialog.isVisible() and self.player_home_layout is not self.body:
-                self.body.insertWidget(0, self.player_panel)
-                self.player_home_layout = self.body
+            target = self.player_base_layout if self.video_browser is not None else self.body
+            if not self.fullscreen_dialog.isVisible() and self.player_home_layout is not target:
+                target.insertWidget(0, self.player_panel)
+                self.player_home_layout = target
             if self.video_overlay_box.indexOf(self.video_controls) < 0:
                 self.video_overlay_box.addWidget(self.video_controls)
             if self.player_heading_box.indexOf(self.now_playing) < 0:
@@ -1668,8 +1515,8 @@ class MediaTab(QWidget):
         if active_video and not self.fullscreen_dialog.isVisible():
             self.video.setFixedHeight(
                 min(
-                    max(300, self.content_scroll.viewport().height() - 90),
-                    max(300, self.content_scroll.viewport().width() * 9 // 16),
+                    max(300, self.media_column.height() - 90),
+                    max(300, self.media_column.width() * 9 // 16),
                 )
             )
         self._show_video_controls()
@@ -1724,40 +1571,6 @@ class MediaTab(QWidget):
         self.player_panel.show()
         self.fullscreen_button.setFocus()
 
-    def _focus_selection(self) -> None:
-        items = self.hero.strip.selectedItems()
-        if not items:
-            return
-        identifier = items[0].data(Qt.ItemDataRole.UserRole)
-        for index in range(self.results.count()):
-            item = self.results.item(index)
-            if item.data(Qt.ItemDataRole.UserRole) == identifier:
-                with QSignalBlocker(self.results):
-                    self.results.clearSelection()
-                    item.setSelected(True)
-                self.show_detail()
-                break
-
-    def _refresh_focus_strip(self) -> None:
-        with QSignalBlocker(self.hero.strip):
-            self.hero.strip.clear()
-            rows = list(self.rows)
-            featured = next((row for row in rows if row["id"] == self.featured_id), None)
-            if featured:
-                rows = [featured, *[row for row in rows if row["id"] != self.featured_id]]
-            for row in rows:
-                item = QListWidgetItem(self._card_title(row))
-                item.setData(Qt.ItemDataRole.UserRole, row["id"])
-                picture = self.picture_cache.get(row["id"])
-                item.setIcon(
-                    self._cover_icon(picture, QSize(112, 148))
-                    if picture is not None
-                    else self._placeholder_icon(row["kind"])
-                )
-                item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter)
-                self.hero.strip.addItem(item)
-                item.setSelected(row["id"] == self.featured_id)
-
     @staticmethod
     def _time_label(seconds: float) -> str:
         seconds = max(0, int(seconds))
@@ -1769,7 +1582,6 @@ class MediaTab(QWidget):
 
     def _show_feature(self, row: dict[str, Any]) -> None:
         self.featured_id = row["id"]
-        self.hero.title.setText(row["title"])
         self.collection_title.setText(row["title"])
         if row["kind"] == "music":
             view = self.view.currentData()
@@ -1796,27 +1608,9 @@ class MediaTab(QWidget):
                 else self._placeholder_icon("music")
             )
             self.music_cover.setPixmap(icon.pixmap(160, 160))
-        facts = [
-            str(row[key])
-            for key in ("year", "artist", "album", "genre", "language")
-            if row.get(key)
-        ]
-        if row.get("identity_source") == "filename":
-            facts.insert(0, self.tr("Filename metadata"))
-        if row.get("rating"):
-            facts.append("★ " + str(row["rating"]))
-        if row.get("duration"):
-            facts.append(self._time_label(float(row["duration"])))
-        if row.get("position"):
-            facts.append(self.tr("Resume at {0}").format(self._time_label(float(row["position"]))))
-        self.hero.metadata.setText(" · ".join(facts))
-        synopsis = str(row.get("description") or "")
-        self.hero.synopsis.setText(synopsis[:360] + ("…" if len(synopsis) > 360 else ""))
-        self.hero.set_picture(self.picture_cache.get(row["id"], QImage()))
         self.play_button.setText(
             self.tr("Resume") if row.get("position") else self.tr("Play selected")
         )
-        self._refresh_focus_strip()
 
     def _render_continue(self) -> None:
         while self.continue_box.count():
@@ -2047,6 +1841,8 @@ class MediaTab(QWidget):
             self.fullscreen_dialog.reject()
         self._invalidate_preview_request()
         if self.player is not None:
+            if self.preview_device is not None:
+                self.preview_device.abort()
             self.player.pause()
             self.report()
             self._clear_track_source()
@@ -2135,14 +1931,6 @@ class MediaTab(QWidget):
         return cards
 
     def eventFilter(self, watched, event):
-        if (
-            watched is getattr(self, "media_column", None)
-            and hasattr(self, "hero")
-            and event.type() == QEvent.Type.Resize
-        ):
-            # Leave at least half of short windows to the scrolling cards.
-            self.hero.height_cap = max(220, watched.height() // 2)
-            self.hero._arrange()
         if watched is self.content_scroll.viewport() and event.type() == QEvent.Type.Resize:
             self._arrange_toolbar()
             QTimer.singleShot(0, self._resize_media_grid)
@@ -2285,6 +2073,14 @@ class MediaTab(QWidget):
         return title + ("\n" + subtitle[:30] if subtitle else "")
 
     def _context(self) -> dict[str, Any]:
+        if self.video_browser is not None and self.kind.currentData() == "video":
+            return {
+                **self.video_context,
+                "kind": "video",
+                "selected_ids": self.video_selection,
+                "preview_id": self.preview_id,
+                "playlist": self.current_playlist,
+            }
         return {
             "kind": self.kind.currentData(),
             "view": self.view.currentData(),
@@ -2319,6 +2115,12 @@ class MediaTab(QWidget):
     def refresh(self, *_args: Any, keep_page: bool = False) -> None:
         if self.library is None:
             return
+        if self.kind.currentData() == "video":
+            browser = self._ensure_video_browser()
+            self._update_panes()
+            browser.activate()
+            return
+        self._update_panes()
         context = self._context()
         context.pop("selected_ids")
         context.pop("preview_id")
@@ -2329,16 +2131,6 @@ class MediaTab(QWidget):
         self.browse_generation += 1
         generation = self.browse_generation
         library, client, offset = self.library, self.session_client, self.offset
-        home = self._home_active() and not keep_page
-        scope = {"films": "films", "series": "series", "anime": "anime", "adult": "adult"}.get(
-            self.view.currentData(), "home"
-        )
-        if context["view"] == "adult":  # the XXX panel: its folders only, newest first
-            context.update(view="recent", adult=True)
-        elif context["view"] == "anime":  # the Anime panel, or one of its rows' See all
-            context.update(view="recent", anime=True, **self.anime_filters)
-        elif context["view"] in {"films", "series"}:
-            context.update(anime=False)  # anime has its own panel
         self.results.setEnabled(False)
         self._set_notice(self.tr("Loading saved media…"))
 
@@ -2348,15 +2140,11 @@ class MediaTab(QWidget):
                 library.listing(client, offset=offset, **context),
                 library.playlists(client),
                 library.listing(client, limit=4, **continuation)["rows"],
-                library.home_rows(client, kind="video", scope=scope) if home else None,
             )
 
         def done(payload):
             if not isValid(self) or generation != self.browse_generation:
                 return
-            if not keep_page:
-                self.home_data = payload[3]
-                self._render_home_rows()
             self._show_listing(*payload[:3], append=keep_page)
             self.results.setEnabled(True)
 
@@ -2433,12 +2221,8 @@ class MediaTab(QWidget):
             else:
                 self.detail_row = {}
                 self.featured_id = ""
-                self.hero.title.setText(self.tr("Your library"))
-                self.hero.synopsis.clear()
-                self.hero.metadata.clear()
-                self.hero.set_picture(QImage())
             self._render_continue()
-            self._load_artwork([*self.rows, *continuation, *self._home_row_items()])
+            self._load_artwork([*self.rows, *continuation])
             for name, combo in self.filters.items():
                 current = combo.currentData()
                 values = result.get("filters", {}).get(name, [])
@@ -2508,27 +2292,17 @@ class MediaTab(QWidget):
         collection = self.media_layout == "collection" or not video
         focus = self.media_layout == "focus" and video
         active_video = active and self.current_row.get("kind") == "video"
-        self.hero.setVisible(not collection and bool(self.rows) and chosen and not active_video)
         self.collection_heading.setVisible(collection)
         self.collection_heading.setText(self.tr("Your collection") if video else self.tr("Music"))
         self.collection_selection.setVisible(collection and chosen)
-        rows_home = bool(self.home_row_widgets) and self._home_active() and not active_video
-        self.series_panel.setVisible(
-            video
-            and not active_video
-            and bool(self.detail_row.get("series"))
-            and bool(self.detail_row.get("episodes"))
-            and bool(self.rows)
-        )
-        self.home_rows_panel.setVisible(rows_home)
-        self.results.setVisible(not focus and bool(self.rows) and not rows_home)
-        self.shelf_heading.setVisible(not focus and bool(self.rows) and not rows_home)
+        self.results.setVisible(not focus and bool(self.rows))
+        self.shelf_heading.setVisible(not focus and bool(self.rows))
         self.shelf_heading.setText(
             self.tr("Recently added")
             if self.view.currentData() == "all"
             else self.view.currentText()
         )
-        self.page_count.setVisible(bool(self.rows) and not rows_home)
+        self.page_count.setVisible(bool(self.rows))
         continuation = bool(self.continue_rows) and not collection
         self.continue_heading.setVisible(continuation)
         self.continue_panel.setVisible(continuation)
@@ -2545,9 +2319,7 @@ class MediaTab(QWidget):
             and self.detail_row.get("kind") == "video"
             and self.detail_row.get("availability") == "unfinished"
         )
-        self.refresh_preview.setVisible(
-            chosen and self.preview_item == self.detail_row.get("id") and bool(self.preview_id)
-        )
+        self.refresh_preview.setVisible(bool(self.preview_id))
         playing = (
             self.player is not None
             and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
@@ -2571,101 +2343,52 @@ class MediaTab(QWidget):
         for widget in self.queue_widgets:
             widget.setVisible(bool(self.state["queue"]) or self.kind.currentData() == "music")
 
+        if self.video_browser is not None:
+            self.video_browser.setVisible(video and not active_video)
+            self.media_toolbar.setVisible(not video)
+            self.content_scroll.setVisible(not video)
+
+    def _ensure_video_browser(self) -> MediaVideoPanel:
+        if self.video_browser is not None:
+            return self.video_browser
+
+        self.video_browser = MediaVideoPanel(
+            lambda: self.get_service().agent, lambda: self.client_id(), self
+        )
+        self.video_browser.layout_value = self.media_layout
+        self.video_browser.hostRequested.connect(self._video_browser_action)
+        self.media_column_layout.insertWidget(1, self.video_browser, 1)
+        return self.video_browser
+
+    def _video_browser_action(self, action: str, values: dict) -> None:
+        if action == "play":
+            self.command("play", media_ids=values["media_ids"], index=values.get("index", 0))
+        elif action == "preview":
+            self.video_selection = [values["media_id"]]
+            self.start_preview()
+        elif action == "layout":
+            self.set_media_layout(values["layout"])
+            self.layout_changed.emit(values["layout"])
+        elif action == "context":
+            self.video_context = {
+                key: str(values.get(key, ""))[:1000]
+                for key in ("view", "q", "genre", "year", "language", "availability")
+            }
+        elif action == "selection":
+            self.video_selection = values.get("selected_ids", [])
+        elif action == "music":
+            self.kind.setCurrentIndex(self.kind.findData("music"))
+        elif action == "chat":
+            self.toggle_chat(not self.chat.isChecked())
+        elif action == "center":
+            self.center_mode_requested.emit(not self.center_button.isChecked())
+        elif action == "settings":
+            self.folder_button.click()
+
     def selected_ids(self) -> list[str]:
-        if self.row_choice and self.home_rows_panel.isVisibleTo(self):
-            return [self.row_choice]
+        if self.video_browser is not None and self.kind.currentData() == "video":
+            return self.video_selection
         return [item.data(Qt.ItemDataRole.UserRole) for item in self.results.selectedItems()]
-
-    def _home_active(self) -> bool:
-        return (
-            self.kind.currentData() == "video"
-            and self.view.currentData() in {"all", "films", "series", "anime", "adult"}
-            and not self.grid_mode
-            and self.media_layout == "cinematic"
-            and not self.search.text().strip()
-            and not any(combo.currentData() for combo in self.filters.values())
-        )
-
-    def _home_row_items(self) -> list[dict[str, Any]]:
-        if not self.home_data:
-            return []
-        return [item for row in self.home_data["rows"] for item in row["rows"]]
-
-    def _render_home_rows(self) -> None:
-        for row_widget in self.home_row_widgets:
-            row_widget.deleteLater()
-        self.home_row_widgets = []
-        titles = {
-            "recent": self.tr("Recently added"),
-            "series": self.tr("Series"),
-            "oav": self.tr("OAV"),
-            "films": self.tr("Films"),
-            "rated": self.tr("Highly rated"),
-            "unwatched": self.tr("Not watched yet"),
-        }
-        placeholder = self._placeholder_icon("video")
-        known = {item["id"] for item in self._home_row_items()}
-        if self.row_choice not in known:
-            self.row_choice = ""
-        for row in (self.home_data or {}).get("rows", []):
-            if row["key"] == "continue":
-                continue  # Continue watching already has its own band
-            title = row["title"] if row["key"] == "genre" else titles.get(row["key"], "")
-            row_widget = MediaRow(title, row["total"])
-            row_widget.set_rows(
-                row["rows"],
-                self._card_title,
-                lambda item: (
-                    self._cover_icon(self.picture_cache[item["id"]])
-                    if item["id"] in self.picture_cache
-                    else placeholder
-                ),
-            )
-            row_widget.chosen.connect(self._choose_row_card)
-            row_widget.activated.connect(self._play_row_card)
-            row_widget.seeAll.connect(lambda filters=row["filters"]: self._see_all(filters))
-            self.home_rows_box.addWidget(row_widget)
-            self.home_row_widgets.append(row_widget)
-        self._update_panes()
-
-    def _choose_row_card(self, identifier: str) -> None:
-        self.row_choice = identifier
-        chooser = self.sender()
-        for row_widget in self.home_row_widgets:
-            if row_widget is not chooser:
-                row_widget.clear_choice()
-        self.show_detail()
-
-    def _play_row_card(self, identifier: str) -> None:
-        self._choose_row_card(identifier)
-        self.play_selected()
-
-    def _see_all(self, filters: dict[str, str]) -> None:
-        """Open the full grid for a row, with that row's filters."""
-        self.row_choice = ""
-        self.grid_mode = True
-        genre = self.filters.get("genre")
-        if genre is not None and filters.get("genre"):
-            with QSignalBlocker(genre):
-                if genre.findData(filters["genre"]) < 0:
-                    genre.addItem(filters["genre"], filters["genre"])
-                genre.setCurrentIndex(genre.findData(filters["genre"]))
-        self.anime_filters = (
-            {key: filters[key] for key in ("view", "oav") if key in filters}
-            if filters.get("anime")
-            else {}
-        )
-        view = (
-            "adult"
-            if filters.get("adult")
-            else "anime"
-            if filters.get("anime")
-            else filters.get("view", "all")
-        )
-        index = max(0, self.view.findData(view))
-        if index == self.view.currentIndex():
-            self.refresh()
-        self.view.setCurrentIndex(index)
 
     def _browse(self, view: str) -> None:
         """A browse tab returns to its rows, so it clears the filters a row's See all set."""
@@ -2677,11 +2400,6 @@ class MediaTab(QWidget):
         if self.view.currentData() == view:
             self.refresh()
         self.view.setCurrentIndex(self.view.findData(view))
-
-    def _play_episode(self, identifier: str) -> None:
-        """Play from this episode on, in series order."""
-        ids = [episode["id"] for episode in self.series_panel.episodes]
-        self.command("play", media_ids=ids, index=ids.index(identifier) if identifier in ids else 0)
 
     def show_detail(self) -> None:
         ids = self.selected_ids()
@@ -2722,17 +2440,6 @@ class MediaTab(QWidget):
                 info.append(self.tr("Embedded subtitle tracks are discovered during playback."))
             self.description.setText("\n".join(info))
             self.watched.setChecked(bool(row.get("watched")))
-            if row["kind"] == "video" and row.get("series") and row.get("episodes"):
-                self.series_panel.title.setText(row["series"])
-                picture = self.picture_cache.get(row["id"])
-                still = (
-                    self._cover_icon(picture, QSize(216, 122))
-                    if picture is not None
-                    else self._placeholder_icon("video")
-                )
-                self.series_panel.set_episodes(
-                    row["episodes"], self._time_label, row.get("season"), lambda _episode: still
-                )
             for combo, name in ((self.releases, "releases"), (self.episodes, "episodes")):
                 combo.clear()
                 combo.addItem(
@@ -2846,7 +2553,6 @@ class MediaTab(QWidget):
             for identifier, picture in images:
                 cached = self._cache_picture(identifier, picture)
                 if identifier == self.featured_id:
-                    self.hero.set_picture(cached)
                     if self.kind.currentData() == "music":
                         self.music_cover.setPixmap(
                             self._cover_icon(cached, QSize(160, 160)).pixmap(160, 160)
@@ -2867,9 +2573,6 @@ class MediaTab(QWidget):
                         if item.data(Qt.ItemDataRole.UserRole) == identifier:
                             item.setIcon(self._cover_icon(picture))
                             break
-                    for row_widget in self.home_row_widgets:
-                        row_widget.set_icon(identifier, self._cover_icon(picture))
-            self._refresh_focus_strip()
             self._render_continue()
 
         run_in_background(work, done, lambda _error: None)
@@ -3005,6 +2708,8 @@ class MediaTab(QWidget):
         run_in_background(lambda: library.preview_map(client, preview_id), done, failed)
 
     def _chosen_ids(self) -> list[str]:
+        if self.video_browser is not None and self.kind.currentData() == "video":
+            return self.video_selection
         for combo in (self.episodes, self.releases):
             if combo.currentData():
                 return [combo.currentData()]
@@ -3739,6 +3444,9 @@ class MediaTab(QWidget):
                 self.assistant.show()
                 self._restore_chat_width()
             self.chat.setChecked(True)
+            if self.video_browser is not None:
+                self.video_browser.chat_open = True
+                self.video_browser.activate()
             self.assistant.activate()
             self.assistant.select_conversation(self.conversation_id)
             self.assistant.prompt.setFocus()
@@ -3751,6 +3459,10 @@ class MediaTab(QWidget):
             self._remember_chat_width()
             self.assistant.hide()
         self.chat.setChecked(False)
+
+        if self.video_browser is not None:
+            self.video_browser.chat_open = False
+            self.video_browser.activate()
 
     def _restore_chat_width(self) -> None:
         total = sum(self.splitter.sizes()) or self.splitter.width()
@@ -3778,6 +3490,8 @@ class MediaTab(QWidget):
             return
         if self.scan_stop:
             self.scan_stop.set()
+        if self.preview_device is not None:
+            self.preview_device.abort()
         self.player.pause()
         self._clear_track_source()
         self.report()

@@ -131,7 +131,7 @@ class BundledView(QWidget):
                 url = info.requestUrl()
                 allowed = (
                     url.toString() == "qrc:///qtwebchannel/qwebchannel.js"
-                    or self_view.channel_name in {"profile", "search", "assistant"}
+                    or self_view.channel_name in {"profile", "search", "assistant", "media"}
                     and re.match(r"^data:image/(png|jpeg|gif|webp);base64,", url.toString())
                     is not None
                     or url.isLocalFile()
@@ -152,12 +152,16 @@ class BundledView(QWidget):
                             "details.js",
                             "details.css",
                             "queue.js",
+                            "browser.js",
                         )
                     }
                     | {
                         assets.parent / "panel" / name
                         for name in ("base.css", "transport.js", "i18n.js")
                     }
+                    or self_view.channel_name == "media"
+                    and url.isLocalFile()
+                    and Path(url.toLocalFile()).resolve() == assets.parent / "media.css"
                 )
                 info.block(not allowed)
 

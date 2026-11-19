@@ -76,8 +76,7 @@ def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monk
     assert window.isFullScreen()
     assert not window.navigation.isVisible()
     assert not window.page_title.isVisible()
-    assert window.media_tab.kind_tabs["video"].isVisible()
-    assert window.media_tab.chat.isVisible()
+    assert window.media_tab.video_browser.isVisible()
     assert window.media_tab.player is player
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     assert not window.isFullScreen()

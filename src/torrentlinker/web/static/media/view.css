@@ -1,0 +1,150 @@
+* {
+  box-sizing:border-box}
+html,body {
+  margin:0;
+  min-width:0;
+  background:var(--bg);
+  color:var(--text);
+  font:14px system-ui,sans-serif}
+button,input,select {
+  font:inherit;
+  padding:8px 12px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  color:var(--text);
+  background:var(--panel)}
+button {
+  cursor:pointer}
+button:disabled {
+  opacity:.5;
+  cursor:default}
+[hidden] {
+  display:none!important}
+button:focus-visible,input:focus-visible,select:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:2px}
+#view-media {
+  background:var(--bg);
+  color:var(--text);
+  --media-muted:var(--muted);
+  min-height:100vh}
+#view-media button,#view-media input,#view-media select,#media-details button {
+  color:var(--text);
+  background:var(--panel);
+  border-color:var(--line)}
+#view-media .media-primary,#media-details .media-primary {
+  background:var(--accent);
+  color:var(--accent-text);
+  border-color:var(--accent)}
+#view-media .media-card,#view-media .media-options-panel {
+  background:var(--panel);
+  color:var(--text);
+  border-color:var(--line)}
+#view-media h2,#view-media h3,#view-media strong {
+  color:var(--text)}
+#media-details {
+  background:var(--panel);
+  color:var(--text);
+  border:1px solid var(--line);
+  border-radius:10px;
+  max-height:90vh;
+  overflow:auto;
+  width:min(760px,94vw)}
+#media-details::backdrop {
+  background:#0009}
+#media-details .muted,.muted {
+  color:var(--muted)}
+#toast {
+  position:fixed;
+  bottom:16px;
+  left:16px;
+  right:16px;
+  z-index:100;
+  background:var(--panel);
+  padding:12px;
+  border:1px solid var(--warning);
+  border-radius:8px}
+#view-media .media-feature {
+  background:var(--raised)}
+#view-media .media-art-title {
+  color:#eef3f1}
+#view-media .media-row-card,#view-media .media-focus-choice {
+  background:transparent;
+  border:0;
+  padding:0}
+#view-media .media-row-card[aria-pressed=true] .media-art {
+  outline:2px solid var(--accent)}
+/* Override legacy Media colors at the same specificity in both themes. */
+html[data-theme] #view-media  {
+   background:var(--bg);
+  color:var(--text);
+   }
+html[data-theme] #view-media button,
+html[data-theme] #view-media input,
+html[data-theme] #view-media select  {
+   color:var(--text);
+  background:var(--panel);
+  border-color:var(--line);
+   }
+html[data-theme] #view-media .media-tabs button,
+html[data-theme] #view-media .media-browse-nav button  {
+   color:var(--muted)!important;
+   }
+html[data-theme] #view-media .media-tabs [aria-selected=true],
+html[data-theme] #view-media .media-browse-nav button.active  {
+   color:var(--accent)!important;
+  border-color:var(--accent)!important;
+   }
+html[data-theme] #view-media .media-feature  {
+   color:var(--text);
+   }
+html[data-theme] #view-media .media-feature::before  {
+   background:linear-gradient(90deg,var(--bg),color-mix(in srgb,var(--bg) 85%,transparent) 35%,transparent),linear-gradient(0deg,var(--bg),transparent 80%);
+   }
+html[data-theme] #view-media .media-feature-art  {
+   background:linear-gradient(135deg,var(--tint),var(--bg))!important;
+   }
+html[data-theme] #view-media .media-feature-copy  {
+   background:transparent;
+   }
+html[data-theme] #view-media .media-feature .media-primary  {
+   background:var(--accent);
+  color:var(--accent-text);
+  border-color:var(--accent);
+   }
+html[data-theme] #view-media .media-feature .media-secondary  {
+   background:var(--panel);
+  color:var(--text);
+  border-color:var(--line);
+   }
+html[data-theme] #view-media .media-row-card,
+html[data-theme] #view-media .media-focus-choice  {
+   background:transparent;
+  border:0;
+  color:var(--text)!important;
+   }
+html[data-theme] #view-media .media-metadata-source,
+html[data-theme] #view-media .media-card-meta,
+html[data-theme] #view-media .media-inventory-status  {
+   color:var(--muted);
+   }
+html[data-theme] #view-media .media-eyebrow  {
+   color:var(--accent);
+   }
+html[data-theme] #view-media .media-episodes-header button[aria-pressed=true]  {
+   border-color:var(--accent);
+   }
+html[data-theme] #media-details  {
+   background:var(--panel);
+  color:var(--text);
+  border-color:var(--line);
+   }
+html[data-theme] #media-details > button:first-of-type  {
+   color:var(--text);
+  background:var(--panel)!important;
+   }
+html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .media-feature-description  {
+   color:var(--muted);
+   }
+
+#view-media .media-shelves { padding-bottom:calc(100px + var(--media-player-clearance,0px)); }

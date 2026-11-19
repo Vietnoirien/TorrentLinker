@@ -1074,14 +1074,14 @@ setInterval(() => {
   )
     guard(() => job({ kind: "refresh" }, loadTorrents));
 }, 15000);
-guard(async () => {
+document.addEventListener("DOMContentLoaded", () => guard(async () => {
   try {
     await api("setup");
     await enter();
   } catch (error) {
     if (!error.message.includes("Sign in")) toast(error.message);
   }
-});
+}));
 
 $("save-announce").onclick = () =>
   guard(async () => {

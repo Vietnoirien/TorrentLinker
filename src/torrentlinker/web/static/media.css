@@ -1,5 +1,4 @@
 /* Media keeps the app navigation and native player, with its own cinema composition. */
-body.media-view { --bg: #101416; --panel: #171d20; --ink: #f2f3ef; --muted: #9da9ad; --line: #ffffff19; --accent: #80d6c5; --tint: #80d6c515; background: var(--bg); }
 .media-view main { padding: 0; min-width: 0; }
 .media-view main > header { margin: 0; min-height: 78px; padding: 12px 36px; gap: 22px; border-bottom: 1px solid var(--line); }
 .media-view main > header h1 { margin: 0; font-size: 18px; letter-spacing: -.5px; }
@@ -7,10 +6,6 @@ body.media-view { --bg: #101416; --panel: #171d20; --ink: #f2f3ef; --muted: #9da
 .media-view main > header label { margin: 0 0 0 auto; font-size: 10px; }
 .media-view main > header select { padding: 6px 10px; max-width: 200px; font-size: 12px; }
 .media-view main > header #navigation-toggle { padding: 7px 10px; font-size: 11px; }
-.media-view .sidebar { background: #111719; border-color: var(--line); }
-.media-view .sidebar nav button, .media-view .sidebar-bottom button { color: #aeb9bc; }
-.media-view .sidebar nav button.active { color: var(--accent); background: var(--tint); }
-.media-view .sidebar .brand { color: var(--ink); }
 #view-media { --media-muted: #9da9ad; color: #f2f3ef; background: #101416; min-height: calc(100dvh - 78px); }
 #view-media button, #view-media input, #view-media select, #media-details button { color: inherit; background: #ffffff08; border-color: #ffffff23; }
 /* The media view recolors the shared roles for its dark surface; it keeps their shapes. */
@@ -153,9 +148,6 @@ body.media-view { --bg: #101416; --panel: #171d20; --ink: #f2f3ef; --muted: #9da
 @media (max-width: 600px) { .media-view main > header #work-status, .media-view main > header .eyebrow { display: none; } .media-view main > header label { margin-left: auto; } .media-browse-nav { gap: 14px; overflow-x: auto; } #media-search { max-width: none; flex: 1 1 120px; width: 120px; } .media-layout-control { width: 115px; } .media-grid, #view-media[data-layout="collection"][data-kind="video"] .media-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; } .media-feature h2 { font-size: 43px; letter-spacing: -1.8px; } .media-card h3 { font-size: 10px; } .media-art.missing-art .media-art-title { left: 8px; right: 8px; font-size: clamp(10px,10cqw,18px); } .media-section-heading span { display: none; } .media-view #media-player-shell { width: 290px; max-height: 55dvh; } .media-view #media-video { max-height: 125px; } .media-detail-dialog > *:not(.media-detail-art) { margin-left: 20px; margin-right: 20px; } }
 @media (prefers-reduced-motion: reduce) { #view-media * { scroll-behavior: auto; } }
 /* A light app preference keeps navigation, collection and dialogs light; artwork retains its readable cinema overlay. */
-html[data-theme="light"] body.media-view { --bg: #f2f5f2; --panel: #ffffff; --ink: #152c31; --muted: #5c7077; --line: #cfdbd7; --accent: #17685c; --tint: #e4f0ea; }
-html[data-theme="light"] .media-view .sidebar { background: #f8faf7; }
-html[data-theme="light"] .media-view .sidebar nav button, html[data-theme="light"] .media-view .sidebar-bottom button { color: #3e595f; }
 html[data-theme="light"] #view-media { color: #172e32; background: #f2f5f2; }
 html[data-theme="light"] #view-media button, html[data-theme="light"] #view-media input, html[data-theme="light"] #view-media select { color: #234b4b; background: #ffffff70; border-color: #bfcfc8; }
 html[data-theme="light"] #view-media .media-tabs button, html[data-theme="light"] #view-media .media-browse-nav button { color: #516968 !important; }
