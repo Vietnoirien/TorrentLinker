@@ -72,17 +72,17 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | 27 | Discussion | **BV** `AssistantPanel` | `assistant_panel.js` iframe, shared `static/assistant/` | **Done** (#106) | `assistant-chat-redesign.md` | Live job polling; provider token streaming is not offered |
 | 28 | Automations | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#107) | same | Deletion remains unsupported by the service |
 | 29 | History | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#106) | same | — |
-| 30 | Selection cards / detail | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#107) | Existing selection and Upload review cards | Media compact chat retains its current cards until #111 |
+| 30 | Selection cards / detail | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#107) | Existing selection and Upload review cards | Shared by full Assistant and Media compact chat (#111) |
 
 ### Media / Médias
 
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
-| 31 | Video library | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | #108 local implementation | `media-center-redesign.md` | Host dispatch retains native decoding |
-| 32 | Music | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | #109 local implementation | same | Playback and the queue stay with the host player until #110. The desktop player also lists saved playlists next to its queue |
+| 31 | Video library | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | **Done** (#108) | `media-center-redesign.md` | Host dispatch retains native decoding |
+| 32 | Music | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | **Done** (#109) | same | Playback and the queue stay with the host player until #110. The desktop player also lists saved playlists next to its queue |
 | 33 | Player / Media Center mode | `QMediaPlayer`, partial-download device, fullscreen window | `<video>/<audio>` + stream API | NU | same | Decision #89: retain native desktop decoding/verified-piece preview; shared browsing can dispatch to host |
-| 34 | Media details | **BV** `MediaBrowserPanel` | same bundled dialog | #108 local implementation | same | Original-file downloads remain Web-only; desktop uses its native player/external-player controls |
-| 35 | Media chat side panel | embedded compact `AssistantTab` | `#media-chat-panel` | NU | same | — |
+| 34 | Media details | **BV** `MediaBrowserPanel` | same bundled dialog | **Done** (#108) | same | Original-file downloads remain Web-only; desktop uses its native player/external-player controls |
+| 35 | Media chat side panel | **BV** compact `AssistantPanel` | same bundled `assistant/view.html` | **Done** (#111) | same | Native splitter vs Web resize handle; width stored per device |
 
 ### Shell and standalone
 
@@ -172,7 +172,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 ### Assistant
 - Resolved (#106): the first-run "Run within limits" acknowledgement lives in the owner Assistant service database and is shared by both hosts. Sidebar width persists per device, using QSettings on desktop and browser storage on Web.
 - Deliberate existing limit: transcripts update as persisted messages, tool activity and decisions arrive, using job polling. Providers return complete model messages; #106 does not introduce token-by-token provider streaming.
-- The main Assistant page now uses one bundled view. Native chat widgets and the legacy Web chat renderer remain only for Media compact chat until #111; Settings connection forms remain until #112. Automations and selection cards use that bundle too (#107). The obsolete automation widgets and Web renderer are removed; compact Media chat retains selection cards until #111.
+- The main Assistant page and compact Media chat use the same bundled view (#106/#111), including Automations and selection cards (#107). The compact native mode and legacy Web chat renderer are removed. Settings connection forms remain until #112; the old full native Assistant class remains for its existing standalone tests.
 - Web-only: "Selection details" and "Presentation image" cards, *unsure* whether every field matches desktop `SelectionDetail`.
 
 ### Media

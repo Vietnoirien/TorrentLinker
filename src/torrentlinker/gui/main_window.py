@@ -348,6 +348,7 @@ class MainWindow(QMainWindow):
         self.media_tab.center_mode_requested.connect(self.set_media_center)
         self.media_tab.video_playing_changed.connect(self._video_playing_changed)
         self.media_tab.connections_requested.connect(self.open_assistant_connections)
+        self.media_tab.discussion_requested.connect(self.open_media_discussion)
         self.tabs.addTab(self.media_tab, self.tr("Media"))
         self.search_tab.manage_requested.connect(self.open_torrents)
         self.band = ZenBand()
@@ -2350,10 +2351,16 @@ class MainWindow(QMainWindow):
             self.media_tab.layout_changed.disconnect(self._save_media_layout)
             self.media_tab.center_mode_requested.disconnect(self.set_media_center)
             self.media_tab.video_playing_changed.disconnect(self._video_playing_changed)
+            self.media_tab.connections_requested.disconnect(self.open_assistant_connections)
+            self.media_tab.discussion_requested.disconnect(self.open_media_discussion)
             replacement.media_tab = self.media_tab
             replacement.media_tab.layout_changed.connect(replacement._save_media_layout)
             replacement.media_tab.center_mode_requested.connect(replacement.set_media_center)
             replacement.media_tab.video_playing_changed.connect(replacement._video_playing_changed)
+            replacement.media_tab.connections_requested.connect(
+                replacement.open_assistant_connections
+            )
+            replacement.media_tab.discussion_requested.connect(replacement.open_media_discussion)
             replacement.media_tab.set_center_mode(False)
             replacement.media_tab.set_media_layout(settings.media_layout)
             replacement.media_tab.set_adult(settings.adult_content)
@@ -2404,6 +2411,11 @@ class MainWindow(QMainWindow):
 
         if ClientProfilesDialog(self.settings, self.store, self).exec():
             self._replace_workspace(self.settings)
+
+    def open_media_discussion(self, identifier: str) -> None:
+        self.media_tab.close_chat()
+        self.tabs.setCurrentWidget(self.assistant_tab)
+        self.assistant_tab.select_conversation(identifier)
 
     def open_assistant_connections(self) -> None:
         self.open_settings(assistant=True)

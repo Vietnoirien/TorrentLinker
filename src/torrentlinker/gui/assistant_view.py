@@ -1,10 +1,11 @@
-"""Desktop host for the approved shared Assistant discussion and history."""
+"""Desktop host for the shared Assistant page and the Media side panel."""
 
 import json
 from pathlib import Path
 
 from fastapi.encoders import jsonable_encoder
 from PySide6.QtCore import QSettings, Signal, Slot
+from shiboken6 import isValid
 
 from torrentlinker.assistant.panel import AssistantPanelService
 from torrentlinker.gui.community_view import BundledView, ViewBridge
@@ -50,6 +51,21 @@ class AssistantBridge(ViewBridge):
                     raise ValueError("Unsupported link")
                 self.response.emit(identifier, '{"data":null}')
                 return
+            if path in {"media-chat", "media-chat-close", "media-heartbeat", "open-assistant"}:
+                if not self.panel.compact:
+                    raise ValueError("Unknown Assistant panel operation")
+                if path == "media-chat":
+                    self.panel.conversationRequested.emit(
+                        str(body.get("conversation_id", "")), bool(body.get("new"))
+                    )
+                elif path == "media-chat-close":
+                    self.panel.closeRequested.emit()
+                elif path == "open-assistant":
+                    self.panel.discussionRequested.emit(self.panel.conversation_id)
+                else:
+                    self.panel.heartbeatRequested.emit()
+                self.response.emit(identifier, '{"data":null}')
+                return
             if path == "connections":
                 self.panel.connectionsRequested.emit()
                 self.response.emit(identifier, '{"data":null}')
@@ -88,19 +104,31 @@ class AssistantBridge(ViewBridge):
 
             run_in_background(
                 work,
-                lambda result: self.response.emit(identifier, json.dumps(result)),
-                lambda error: self.response.emit(identifier, json.dumps({"error": str(error)})),
+                lambda result: self._complete(identifier, result),
+                lambda error: self._complete(identifier, {"error": str(error)}),
                 coordinate=False,
             )
         except Exception as error:
             self.response.emit(identifier, json.dumps({"error": str(error)}))
 
+    def _complete(self, identifier, result):
+        if isValid(self):
+            self.response.emit(identifier, json.dumps(result))
+
 
 class AssistantPanel(BundledView):
     connectionsRequested = Signal()
+    # The compact Media side panel asks its host to switch, close or report first.
+    conversationRequested = Signal(str, bool)
+    closeRequested = Signal()
+    heartbeatRequested = Signal()
+    discussionRequested = Signal(str)
 
-    def __init__(self, get_service, parent=None):
+    def __init__(self, get_service, parent=None, *, compact=False):
         self.get_service = get_service
+        self.compact = compact
+        self.conversation_id = ""
+        self.selection_revision = 0
         self.service = None
         self.revision = 0
         self.startup_error = ""
@@ -125,6 +153,9 @@ class AssistantPanel(BundledView):
         self.bridge.environment_value = json.dumps(
             {
                 "mode": "desktop",
+                "compact": self.compact,
+                "conversation_id": self.conversation_id,
+                "selection_revision": self.selection_revision,
                 "error": self.startup_error,
                 "revision": self.revision,
                 "language": self.language,
@@ -133,6 +164,11 @@ class AssistantPanel(BundledView):
             }
         )
         self.bridge.ready()
+
+    def select_conversation(self, identifier):
+        self.conversation_id = identifier
+        self.selection_revision += 1
+        self.activate()
 
     def focus_composer(self):
         if self.web:

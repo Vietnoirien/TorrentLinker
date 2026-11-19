@@ -136,6 +136,49 @@ async function aConfirmExecute() {
   return true;
 }
 const aModeLabel = mode => mode === "execute" ? at("Execute within limits", "Exécuter dans les limites") : at("Proposals only", "Propositions uniquement");
+// In Media, the side panel header switches discussions through the host's Media session.
+const aMediaChat = (conversationId = "", fresh = false) => panelRequest("media-chat", {conversation_id: conversationId, new: fresh});
+function aMediaChatMenu(anchor, items) {
+  const menu = $("media-chat-menu");
+  if (!menu.hidden && menu.dataset.anchor === anchor.id) { menu.hidden = true; menu.replaceChildren(); return; }
+  menu.replaceChildren(...items.map(([label, action, checked]) => {
+    const item = button(label, () => { menu.hidden = true; menu.replaceChildren(); return action(); });
+    item.setAttribute("role", checked === undefined ? "menuitem" : "menuitemradio");
+    if (checked !== undefined) item.setAttribute("aria-checked", String(checked));
+    return item;
+  }));
+  menu.dataset.anchor = anchor.id; menu.hidden = false;
+  menu.querySelector("button")?.focus();
+}
+function aMediaChatHeader() {
+  const wrap = element("div"), header = element("header", undefined, "media-chat-header"), menu = element("div", undefined, "media-chat-menu");
+  menu.id = "media-chat-menu"; menu.setAttribute("role", "menu"); menu.hidden = true;
+  const title = element("h2", at("Media discussion", "Discussion Médias")); title.id = "media-chat-title";
+  const history = aIconButton("☰", at("Discussions", "Discussions"), async () => {
+    const conversations = (await api("assistant/conversations")).filter(c => c.folder === "Media").slice(0, 20);
+    aMediaChatMenu(history, [
+      [at("New discussion", "Nouvelle discussion"), () => aMediaChat("", true)],
+      ...conversations.map(c => [c.name, () => aMediaChat(c.id), c.id === assistantConversation]),
+    ]);
+  });
+  history.id = "media-chat-history"; history.setAttribute("aria-haspopup", "menu");
+  const more = aIconButton("⋯", at("More", "Plus"), () => aMediaChatMenu(more, [
+    [at("Discussion settings", "Paramètres de la discussion"), () => $("assistant-chat-settings")?.click()],
+    [at("Open in Assistant", "Ouvrir dans l’Assistant"), () => panelRequest("open-assistant", {})],
+    [at("Delete discussion", "Supprimer la discussion"), async () => {
+      if (!assistantConversation || !confirm(at("Delete this discussion and its history? Pending proposals will be rejected. Torrents and files will not be removed.", "Supprimer cette discussion et son historique ? Les propositions en attente seront refusées. Les torrents et fichiers ne seront pas supprimés."))) return;
+      await api(`assistant/conversations/${assistantConversation}`, undefined, "DELETE");
+      await aMediaChat("", true);
+    }],
+  ]));
+  more.id = "media-chat-more"; more.setAttribute("aria-haspopup", "menu");
+  const close = aIconButton("✕", at("Close chat", "Fermer la discussion"), () => panelRequest("media-chat-close", {}));
+  close.id = "media-chat-close";
+  header.append(title, history, more, close);
+  wrap.append(header, menu);
+  wrap.addEventListener("keydown", event => { if (event.key === "Escape" && !menu.hidden) { event.stopPropagation(); menu.hidden = true; menu.replaceChildren(); } });
+  return wrap;
+}
 async function loadAssistant() {
   const version = ++assistantLoadVersion;
   const setup = await api("setup/assistant");
@@ -143,9 +186,10 @@ async function loadAssistant() {
   assistantSnapshot = setup;
   const root = assistantRoot(); root.replaceChildren(); assistantRenderKey = "";
   // In the Media Center side panel: one discussion, no tabs; folders and automations stay on the Assistant page.
-  const compact = !!root.closest("#media-chat-content");
+  const compact = !!state.compact;
   if (compact) assistantView = "chat";
   root.classList.toggle("assistant-compact", compact);
+  if (compact) root.append(aMediaChatHeader());
   const nav = element("div", undefined, "assistant-tabs"); nav.setAttribute("role", "tablist");
   for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["tasks", at("Automations", "Automatisations")], ["history", at("History", "Historique")]]) {
     const tab = button(label, async () => { assistantView = id; await loadAssistant(); }, assistantView === id ? "active" : "");
@@ -221,8 +265,9 @@ async function loadAssistant() {
   // The composer: one rounded field with Send/Stop inside, the model and mode chips under it.
   const form = element("form", undefined, "assistant-composer"), field = element("div", undefined, "assistant-field"), prompt = element("textarea");
   prompt.id = "assistant-prompt"; prompt.maxLength = 16000; prompt.rows = 2;
-  prompt.value = assistantDrafts.get(assistantConversation) || "";
-  prompt.oninput = () => assistantDrafts.set(assistantConversation, prompt.value);
+  const renderedConversation=assistantConversation;
+  prompt.value = assistantDrafts.get(renderedConversation) || "";
+  prompt.oninput = () => assistantDrafts.set(renderedConversation, prompt.value);
   prompt.placeholder = at("Give a task or ask a question…", "Donnez une tâche ou posez une question…"); prompt.setAttribute("aria-label", at("Message", "Message"));
   const send = element("button", "➤", "assistant-send"); send.type = "submit"; send.id = "assistant-send";
   field.append(prompt, send);
@@ -277,9 +322,9 @@ async function loadAssistant() {
   prompt.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!send.disabled) form.requestSubmit(); } };
   form.onsubmit = e => { e.preventDefault(); guard(async () => {
     if (send.dataset.running === "true") { if (assistantRun) await api(`assistant/jobs/${assistantRun}/cancel`, {}); return; }
-    if (!prompt.value.trim() || send.disabled) return;
+    if (!prompt.value.trim() || send.disabled || root.inert || renderedConversation!==assistantConversation) return;
     send.disabled = true;
-    const origin = assistantConversation, message = prompt.value;
+    const origin = renderedConversation, message = prompt.value;
     let identifier = origin;
     try {
       if (!identifier) {
@@ -289,7 +334,8 @@ async function loadAssistant() {
         identifier = chat.id; assistantPendingMode = "";
         assistantDrafts.set(identifier, message); assistantDrafts.delete("");
       }
-      if (typeof media !== "undefined" && media.chat) await mediaHeartbeat();
+      // The Media host reports its player and selection before the run reads them.
+      if (state.compact) await panelRequest("media-heartbeat", {});
       const run = await api("assistant/jobs", {conversation_id: identifier, message});
       assistantDrafts.delete(identifier);
       if (assistantConversation === origin) {
@@ -847,3 +893,15 @@ function aReviewTabs(host, sections) {
   });
   select(0);
 }
+
+// Escape closes a menu first, a dialog next, and an empty Media composer last.
+document.addEventListener("keydown", event => {
+  if(event.key!=="Escape" || !state.compact || document.querySelector("dialog[open]"))return;
+  const menu=$("media-chat-menu");
+  if(menu&&!menu.hidden){event.preventDefault();menu.hidden=true;document.getElementById(menu.dataset.anchor)?.focus();return}
+  if(!$("assistant-prompt")?.value.trim()){event.preventDefault();guard(()=>panelRequest("media-chat-close",{}))}
+});
+document.addEventListener("click",event=>{
+  const menu=$("media-chat-menu");
+  if(menu&&!menu.hidden&&!event.target.closest(".media-chat-header,.media-chat-menu"))menu.hidden=true;
+});

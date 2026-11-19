@@ -60,6 +60,20 @@ def test_sort_filters_columns_and_refresh_preserve_selection(tmp_path):
             page = browser.new_page(viewport={"width": 1500, "height": 950})
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
+
+            # A host can publish before the deferred view script has initialized.
+            def early_environment(route):
+                response = route.fetch()
+                route.fulfill(
+                    response=response,
+                    body=(
+                        "window.dispatchEvent(new CustomEvent('torrents-environment',"
+                        "{detail:{client:'default',language:'en',active:false}}));\n"
+                        + response.text()
+                    ),
+                )
+
+            page.route("**/torrents/view.js", early_environment)
             page.goto(f"http://127.0.0.1:{port}")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()

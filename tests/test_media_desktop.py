@@ -128,7 +128,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     assert video_js(qtbot, tab, "!document.querySelector('#media-playlists').hidden")
     video_js(qtbot, tab, "document.querySelector('[data-media-music-view=tracks]').click()")
     video_wait(qtbot, tab, "document.querySelectorAll('.media-track-row').length===3")
-    first = video_js(qtbot, tab, "document.querySelector('.media-track-row').innerText")
+    first = video_js(qtbot, tab, "document.querySelector('.media-track-row').textContent")
     assert "Fixture Artist" in first and "Fixture Album" in first and "0:12" in first
     for view, card in (("albums", ".media-music-card"), ("artists", ".media-artist-card")):
         video_js(qtbot, tab, f"document.querySelector('[data-media-music-view={view}]').click()")
@@ -223,9 +223,15 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     first_conversation = tab.conversation_id
     # The side panel is one discussion: no folders, tabs or full-width buttons.
     assert tab.chat.isChecked() and tab.assistant.isVisible()
-    assert tab.assistant.folder_column.isHidden()
-    assert tab.assistant.pages.tabBar().isHidden()
-    assert not tab.assistant.move_chat.isVisible() and not tab.assistant.send.isHidden()
+    from tests.test_community_interfaces import js, wait_js
+
+    wait_js(qtbot, tab.assistant, "!!document.querySelector('#media-chat-close')")
+    assert js(qtbot, tab.assistant, "document.querySelectorAll('.assistant-tabs').length===0")
+    assert js(
+        qtbot,
+        tab.assistant,
+        "getComputedStyle(document.querySelector('.assistant-conversations')).display==='none'",
+    )
     # Both sides fit a 1280-wide window with room to drag the divider.
     media_side = tab.splitter.widget(0).minimumSizeHint().width()
     chat_side = tab.assistant.minimumSizeHint().width()
@@ -242,10 +248,10 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     assert tab.splitter.sizes()[1] == width
     assert tab.conversation_id == first_conversation
     # The ☰ menu starts a new media discussion and switches back, both bound to this player.
-    tab.assistant.conversationRequested.emit("")
+    tab.assistant.conversationRequested.emit("", True)
     assert tab.conversation_id != first_conversation
     assert tab.assistant.conversation_id == tab.conversation_id
-    tab.assistant.conversationRequested.emit(first_conversation)
+    tab.assistant.conversationRequested.emit(first_conversation, False)
     assert tab.conversation_id == first_conversation
     assert tab.assistant.isVisible()
     tab.assistant.closeRequested.emit()
@@ -696,6 +702,12 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_pa
     assert tab.heartbeat.isActive()
     assert tab.shuffle.isChecked()
     assert tab.repeat.currentData() == "all"
+    replacement.assistant_tab.get_service = lambda: app.state.assistant
+    opened = []
+    replacement.assistant_tab.select_conversation = opened.append
+    tab.discussion_requested.emit("media-discussion")
+    assert replacement.tabs.currentWidget() is replacement.assistant_tab
+    assert opened == ["media-discussion"]
     cleanup()
 
 

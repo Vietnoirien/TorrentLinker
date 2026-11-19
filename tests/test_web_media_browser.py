@@ -435,7 +435,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 player_action(page, "#media-chat")
             discussion = attached.value.json()["conversation_id"]
             actor = app.state.assistant.conversation(discussion)[1]
-            page.locator("#media-chat-close").click()
+            page.frame_locator("#media-assistant-frame").locator("#media-chat-close").click()
 
             def model_tool(name, **arguments):
                 return model.submit(invoke, app, actor, name, **arguments).result(timeout=10)
@@ -489,7 +489,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("#media-frame")).to_be_visible()
             player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
-            page.locator("#media-chat-close").click()
+            page.frame_locator("#media-assistant-frame").locator("#media-chat-close").click()
             assert video.get_attribute("src") == source
             media_locator(page, "#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === null")
@@ -591,19 +591,30 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
             # No model is connected here: the panel offers to connect one instead of a composer.
-            expect(page.locator("#media-chat-content .assistant-connect")).to_be_visible(
-                timeout=15000
-            )
+            expect(
+                page.frame_locator("#media-assistant-frame").locator(".assistant-connect")
+            ).to_be_visible(timeout=15000)
             assert video.get_attribute("src") == source
             screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv("TL_WEB_SCREENSHOTS")
             if screenshots:
                 Path(screenshots).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(screenshots) / "media-contextual-chat.png"))
             # The side panel is one discussion: header icons, no Assistant tabs or folders.
-            expect(page.locator("#media-chat-history")).to_be_visible()
-            expect(page.locator("#media-chat-content .assistant-conversations")).to_be_hidden()
-            assert page.locator("#media-chat-content #view-assistant > .toolbar").count() == 0
-            expect(page.locator("#assistant-chat-settings")).to_be_hidden()
+            expect(
+                page.frame_locator("#media-assistant-frame").locator("#media-chat-history")
+            ).to_be_visible()
+            expect(
+                page.frame_locator("#media-assistant-frame").locator(".assistant-conversations")
+            ).to_be_hidden()
+            assert (
+                page.frame_locator("#media-assistant-frame")
+                .locator("#view-assistant > .toolbar")
+                .count()
+                == 0
+            )
+            expect(
+                page.frame_locator("#media-assistant-frame").locator("#assistant-chat-settings")
+            ).to_be_hidden()
             # Dragging the edge resizes the chat; the width is remembered for the next opening.
             panel = page.locator("#media-chat-panel")
             before = panel.bounding_box()["width"]
@@ -631,7 +642,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(toolbar_chat).to_have_attribute("aria-pressed", "false")
             toolbar_chat.click()
             expect(panel).to_be_visible()
-            page.locator("#media-chat-close").click()
+            page.frame_locator("#media-assistant-frame").locator("#media-chat-close").click()
             page.locator('[data-view="library"]').click()
             expect(video).to_be_visible()
             assert video.get_attribute("src") == source

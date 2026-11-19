@@ -215,15 +215,11 @@ class AssistantTab(QWidget):
             "finished": self.tr("Finished"),
         }.get(value, value)
 
-    # Compact mode: ask the host to open a discussion ("" for a new one), or to close.
-    conversationRequested = Signal(str)
-    closeRequested = Signal()
     # Model connections live in Settings → Assistant; the host opens them.
     connectionsRequested = Signal()
 
-    def __init__(self, get_service, parent=None, *, compact=False):
+    def __init__(self, get_service, parent=None):
         super().__init__(parent)
-        self.compact = compact
         self.get_service = get_service
         self.service: Any = None
         self.conversation_id = ""
@@ -346,50 +342,6 @@ class AssistantTab(QWidget):
         self.timer.setInterval(1500)
         self.timer.timeout.connect(self.refresh_run)
         self.timer.start()
-        if compact:
-            self._make_compact()
-
-    def _make_compact(self):
-        """One discussion in a side panel: small header menus and one send/stop button.
-
-        Folders, automations, history and connections stay on the Assistant page.
-        """
-        self.setObjectName("chatPanel")
-        # Hidden tabs would still widen the panel's minimum; keep only the discussion.
-        while self.pages.count() > 1:
-            self.pages.removeTab(1)
-        self.pages.tabBar().hide()
-        self.folder_column.hide()
-        # Media discussions stay in their folder; moving them belongs to the Assistant page.
-        self.move_chat.setVisible(False)
-        self.transcript.example_columns = 1
-        self.history_menu = QMenu(self)
-        self.history_menu.aboutToShow.connect(self._fill_history_menu)
-        history = icon_button("☰", self.tr("Discussions"))
-        history.setMenu(self.history_menu)
-        history.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.header.insertWidget(1, history)
-        close = icon_button("✕", self.tr("Close chat"))
-        close.clicked.connect(self.closeRequested.emit)
-        self.header.addWidget(close)
-
-    def _fill_history_menu(self):
-        self.history_menu.clear()
-        self.history_menu.addAction(
-            self.tr("New discussion"), lambda: self.conversationRequested.emit("")
-        )
-        self.history_menu.addSeparator()
-        rows = [c for c in getattr(self, "conversation_data", []) if c.get("folder") == "Media"]
-        rows = rows[:20]
-        for row in rows:
-            action = self.history_menu.addAction(
-                row["name"],
-                lambda _checked=False, identifier=row["id"]: self.conversationRequested.emit(
-                    identifier
-                ),
-            )
-            action.setCheckable(True)
-            action.setChecked(row["id"] == self.conversation_id)
 
     def _sync_header(self):
         current = next(

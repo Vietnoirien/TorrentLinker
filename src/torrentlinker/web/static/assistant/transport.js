@@ -16,34 +16,42 @@ function bytes(value) {
   while(value>=1024 && unit<units.length-1) { value/=1024;unit++; }
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
-let lastEnvironment = "", lastRevision=-1;
+let lastEnvironment="", pendingEnvironment="", lastSelection=-1, environmentVersion=0;
 window.addEventListener("assistant-environment", async event => {
   const env=event.detail;
-  state.mode=env.mode;
-  state.view=env.active ? "assistant" : "";
-  const changed=lastEnvironment !== `${env.language}/${env.theme}`;
-  state.language=env.language || "en";
+  state.mode=env.mode;state.view=env.active?"assistant":"";state.compact=!!env.compact;
+  state.language=env.language||"en";
   document.documentElement.lang=state.language;
-  document.documentElement.dataset.theme=env.theme || "dark";
+  document.documentElement.dataset.theme=env.theme||"dark";
   if(!panelRequest || !env.active)return;
-  if(env.error) {
-    const notice=element("p",env.error,"error"); notice.setAttribute("role","alert");
-    $("view-assistant").replaceChildren(notice);
-    lastEnvironment="";
-    return;
+  const root=$("view-assistant");
+  if(env.error){
+    const notice=element("p",env.error,"error");notice.setAttribute("role","alert");
+    root.replaceChildren(notice);root.inert=false;lastEnvironment="";return;
   }
+  const key=JSON.stringify([env.compact,env.language,env.theme,env.revision,env.conversation_id,env.selection_revision]);
+  if(key===lastEnvironment || key===pendingEnvironment)return;
+  const version=++environmentVersion;pendingEnvironment=key;root.inert=true;
   await guard(async()=>{
-    if(changed || env.revision !== lastRevision || !assistantSnapshot) {
-      state.setup=await api("setup");
-      const prefs=await panelRequest("preferences",{});
-      document.documentElement.style.setProperty("--assistant-width",`${prefs.sidebar_width || 240}px`);
-      lastEnvironment=`${env.language}/${env.theme}`;
-      lastRevision=env.revision;
+    try {
+      const setup=await api("setup"), prefs=await panelRequest("preferences",{});
+      if(version!==environmentVersion)return;
+      state.setup=setup;
+      document.documentElement.style.setProperty("--assistant-width",`${prefs.sidebar_width||240}px`);
+      if(state.compact || env.selection_revision!==lastSelection && env.conversation_id){
+        assistantView="chat";assistantConversation=env.conversation_id||"";assistantRun="";
+      }
+      lastSelection=env.selection_revision;
       await loadAssistant();
+      if(version===environmentVersion){lastEnvironment=key;root.inert=false;if(state.compact && assistantVisible())$("assistant-prompt")?.focus()}
+    }finally{
+      if(version===environmentVersion){pendingEnvironment="";root.inert=false}
     }
   });
 });
-TLPanel.connect("assistant",{asynchronous:true}).then(request=>{panelRequest=request;window.assistantReady();});
+window.addEventListener("DOMContentLoaded",()=>{
+  TLPanel.connect("assistant",{asynchronous:true}).then(request=>{panelRequest=request;window.assistantReady();});
+});
 
 async function loadPanelImage(image, source) {
   image.removeAttribute("src");

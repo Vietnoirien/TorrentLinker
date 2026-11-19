@@ -394,6 +394,7 @@ class MediaTab(QWidget):
     layout_changed = Signal(str)
     center_mode_requested = Signal(bool)
     connections_requested = Signal()
+    discussion_requested = Signal(str)
 
     def __init__(
         self,
@@ -2168,29 +2169,30 @@ class MediaTab(QWidget):
                 self.credentials.sync()
             opening = self.assistant is None or self.assistant.isHidden()
             if self.assistant is None:
-                from torrentlinker.gui.assistant import AssistantTab
+                from torrentlinker.gui.assistant_view import AssistantPanel
 
-                self.assistant = AssistantTab(self.get_service, compact=True)
+                self.assistant = AssistantPanel(self.get_service, compact=True)
                 self.assistant.setMinimumWidth(CHAT_MIN_WIDTH)
                 self.assistant.closeRequested.connect(self.close_chat)
                 self.assistant.connectionsRequested.connect(self.connections_requested.emit)
                 self.assistant.conversationRequested.connect(
-                    lambda identifier: self.open_chat(identifier, new=not identifier)
+                    lambda identifier, fresh: self.open_chat(identifier, new=fresh)
                 )
+                self.assistant.heartbeatRequested.connect(self.report)
+                self.assistant.discussionRequested.connect(self.discussion_requested.emit)
                 self.splitter.addWidget(self.assistant)
                 self.splitter.setChildrenCollapsible(False)
                 self.splitter.splitterMoved.connect(self._remember_chat_width)
             if opening:
                 # Also on the first opening after a restart, when the panel is new.
                 self.assistant.show()
+                self._arrange_chat()
                 self._restore_chat_width()
             self.chat.setChecked(True)
             if self.browser is not None:
                 self.browser.chat_open = True
                 self.browser.publish()
-            self.assistant.activate()
             self.assistant.select_conversation(self.conversation_id)
-            self.assistant.prompt.setFocus()
         except Exception as error:
             self.chat.setChecked(False)
             self._set_notice(str(error))
@@ -2199,13 +2201,17 @@ class MediaTab(QWidget):
         if self.assistant is not None and self.assistant.isVisible():
             self._remember_chat_width()
             self.assistant.hide()
+            self.assistant.refresh()
         self.chat.setChecked(False)
+        self.media_column.show()
 
         if self.browser is not None:
             self.browser.chat_open = False
             self.browser.publish()
 
     def _restore_chat_width(self) -> None:
+        if self.media_column.isHidden():
+            return
         total = sum(self.splitter.sizes()) or self.splitter.width()
         saved = self.credentials.value("chat_width", 0) if self.credentials else 0
         try:
@@ -2218,10 +2224,30 @@ class MediaTab(QWidget):
         self.splitter.setSizes([max(0, total - width), width])
 
     def _remember_chat_width(self, *_args: Any) -> None:
-        if self.assistant is None or not self.assistant.isVisible() or not self.credentials:
+        if (
+            self.assistant is None
+            or not self.assistant.isVisible()
+            or self.media_column.isHidden()
+            or self.width() < 900
+            or not self.credentials
+        ):
             return
         self.credentials.setValue("chat_width", self.splitter.sizes()[-1])
         self.credentials.sync()
+
+    def _arrange_chat(self) -> None:
+        if self.assistant is None or self.assistant.isHidden():
+            return
+        narrow = self.width() < 900
+        changed = self.media_column.isHidden() != narrow
+        self.media_column.setVisible(not narrow)
+        if changed and not narrow:
+            self._restore_chat_width()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "media_column"):
+            self._arrange_chat()
 
     def stop(self) -> None:
         if self.fullscreen_dialog.isVisible():

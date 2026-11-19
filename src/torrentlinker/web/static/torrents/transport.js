@@ -167,50 +167,50 @@ async function load() {
     }
   }
 }
-window.addEventListener("torrents-environment", (e) =>
-  guard(async () => {
-    const next = e.detail,
-      changed = environment.client !== next.client,
-      languageChanged = lang !== next.language,
-      newCommand = next.command && commandId !== next.command.id;
-    environment = next;
-    lang = next.language || "en";
-    mode = next.mode || "web";
-    theme = next.theme || "dark";
-    TLPanel.setLanguage(lang);
-    document.documentElement.dataset.theme = theme;
-    if (changed) {
-      generation++;
-      client = next.client || "all";
-      selected.clear();
-      rowCache.clear();
-      data = [];
-      focus = "";
-      page = 0;
-      $("dialog").close();
-      const preferences = await request("preferences");
-      if (preferences.columns)
-        for (const k of Object.keys(cols))
-          if (typeof preferences.columns[k] === "boolean")
-            cols[k] = preferences.columns[k];
-      widths = preferences.widths || {};
-    }
-    if (newCommand) {
-      commandId = next.command.id;
-      query = next.command.hash || "";
-      focus = "";
-      page = 0;
-    }
-    if (
-      next.active &&
-      (changed || languageChanged || !data.length || newCommand)
-    )
-      await load();
-    else if (languageChanged) render();
-  }),
-);
 window.addEventListener("DOMContentLoaded", () => {
   render();
+  window.addEventListener("torrents-environment", (e) =>
+    guard(async () => {
+      const next = e.detail,
+        changed = environment.client !== next.client,
+        languageChanged = lang !== next.language,
+        newCommand = next.command && commandId !== next.command.id;
+      environment = next;
+      lang = next.language || "en";
+      mode = next.mode || "web";
+      theme = next.theme || "dark";
+      TLPanel.setLanguage(lang);
+      document.documentElement.dataset.theme = theme;
+      if (changed) {
+        generation++;
+        client = next.client || "all";
+        selected.clear();
+        rowCache.clear();
+        data = [];
+        focus = "";
+        page = 0;
+        $("dialog").close();
+        const preferences = await request("preferences");
+        if (preferences.columns)
+          for (const k of Object.keys(cols))
+            if (typeof preferences.columns[k] === "boolean")
+              cols[k] = preferences.columns[k];
+        widths = preferences.widths || {};
+      }
+      if (newCommand) {
+        commandId = next.command.id;
+        query = next.command.hash || "";
+        focus = "";
+        page = 0;
+      }
+      if (
+        next.active &&
+        (changed || languageChanged || !data.length || newCommand)
+      )
+        await load();
+      else if (languageChanged) render();
+    }),
+  );
   connection.then(() => window.torrentsReady());
   setInterval(() => {
     if (environment.active && !document.hidden && !$("dialog").open)
