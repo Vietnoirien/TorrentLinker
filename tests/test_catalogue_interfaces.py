@@ -139,6 +139,28 @@ def test_category_fetch_only_updates_selected_root_and_exposes_cards(tmp_path):
 
 
 def test_desktop_cards_fetch_pause_language_and_resize(qtbot):
+    # Other GUI tests select a process-wide Qt Quick renderer. Isolate Chromium's
+    # resize check so its compositor can initialize normally.
+    import os
+    import subprocess
+    import sys
+
+    if not os.getenv("TL_PLAN_CATALOGUE_RESIZE_CHILD"):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                f"{__file__}::test_desktop_cards_fetch_pause_language_and_resize",
+            ],
+            env={**os.environ, "TL_PLAN_CATALOGUE_RESIZE_CHILD": "1"},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return
     from tests.test_community_interfaces import js, wait_js
     from torrentlinker.gui.zen_view import CatalogueBox, CategoryCard
 

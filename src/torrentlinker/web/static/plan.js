@@ -16,8 +16,13 @@ const planHost = {
   finished: new Set(),
   sentResult: null,
   pending: null,
-  operation: 0,
+  operations: new Map(),
 };
+function planOperation(client, advance = false) {
+  const value = (planHost.operations.get(client) || 0) + (advance ? 1 : 0);
+  if (advance) planHost.operations.set(client, value);
+  return value;
+}
 function planEnvironment(force = false) {
   const active =
     state.view === "zen" &&
@@ -96,7 +101,8 @@ function trackPlanJob(id, client, kind) {
     body: { client_id: client, kind },
     done: (result) =>
       finishPlanJob(client, null, id, kind === "send-plan" ? result : null),
-    failed: (error) => finishPlanJob(client, error, id),
+    failed: (error, result) =>
+      finishPlanJob(client, error, id, kind === "send-plan" ? result : null),
     progress: (p) => {
       if (planHost.client === client) planJobState({ id, kind, progress: p });
     },
@@ -105,7 +111,7 @@ function trackPlanJob(id, client, kind) {
 async function loadZenPlan() {
   const client = state.clientId,
     generation = ++planHost.generation,
-    operation = planHost.operation;
+    operation = planOperation(client);
   if (client === "all") {
     planHost.client = client;
     planHost.value = {
@@ -128,7 +134,7 @@ async function loadZenPlan() {
   if (
     generation !== planHost.generation ||
     client !== state.clientId ||
-    operation !== planHost.operation
+    operation !== planOperation(client)
   )
     return;
   const categories = [],
@@ -169,7 +175,7 @@ async function loadZenPlan() {
   planEnvironment();
 }
 async function finishPlanJob(client, error, id, report) {
-  planHost.operation++;
+  planOperation(client, true);
   planHost.finished.add(id);
   if (client !== state.clientId) return;
   await loadZenPlan();
@@ -190,20 +196,27 @@ async function submitPlanJob(body) {
     throw Error(
       say("Choose a target client first.", "Choisissez un client cible."),
     );
-  const operation = ++planHost.operation;
+  const operation = planOperation(client, true);
   planHost.pending = { client, kind: body.kind, operation };
   if (client === planHost.client) planJobState({ id: null, kind: body.kind });
   try {
     const result = await api("jobs", { ...body, client_id: client });
-    planHost.operation++;
-    if (planHost.pending?.operation === operation) planHost.pending = null;
+    planOperation(client, true);
+    if (
+      planHost.pending?.client === client &&
+      planHost.pending.operation === operation
+    )
+      planHost.pending = null;
     trackPlanJob(result.id, client, body.kind);
     if (client === state.clientId && client === planHost.client)
       planJobState({ id: result.id, kind: body.kind, progress: null });
     await pollJobs();
     return result.id;
   } catch (error) {
-    if (planHost.pending?.operation === operation) {
+    if (
+      planHost.pending?.client === client &&
+      planHost.pending.operation === operation
+    ) {
       planHost.pending = null;
       if (client === planHost.client) planJobState(null);
     }

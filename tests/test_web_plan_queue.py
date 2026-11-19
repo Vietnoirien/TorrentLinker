@@ -12,7 +12,10 @@ def test_plan_queue_batches_selected_hashes_and_waits_for_each_client_job():
     if not node:
         pytest.skip("Node.js is required for the web handler test")
     source = Path("src/torrentlinker/web/static/app.js").read_text()
-    handler = source.split('$("queue-plan").onclick = ', 1)[1].split("\nsetInterval(", 1)[0]
+    panel = Path("src/torrentlinker/web/static/plan.js").read_text()
+    handler = panel[
+        panel.index('window.addEventListener("message",') : panel.index('$("seeding-save-uploads")')
+    ]
     waiter = "async function waitForJob" + source.split("async function waitForJob", 1)[1]
     # Run the actual handler and completion polling, with only transport/UI stubbed.
     script = r"""
@@ -20,10 +23,13 @@ const assert = require('node:assert/strict');
 const rows = Array.from({length: 21105}, (_, i) => ({
   hash: i.toString(16).padStart(40, '0'), client_id: i < 21001 ? 'home' : 'remote'
 }));
-const state = {planRows: [...rows, {hash:'unselected', client_id:'home'}],
-  planSelected:new Set(rows.map(r=>r.hash)), clientId:'other'};
+const state = {clientId:'other'};
+const location={origin:'https://fixture.test'};
+let response,handler;
+const planFrame={contentWindow:{postMessage:value=>{response=value;}}};
+const window={addEventListener:(event,callback)=>{handler=callback;}};
 const calls = [], guard = f => f(), loadQueue = () => {};
-const control = {disabled:false}, $ = () => control, say = en => en;
+const control = {hidden:false}, $ = () => control, say = en => en;
 let active = false, read = 0;
 const job = async body => {
   assert.equal(active, false, 'previous batch must finish before another is submitted');
@@ -31,6 +37,8 @@ const job = async body => {
   return String(calls.length);
 };
 const api = async path => {
+  if(path.startsWith('zen/plan?'))return {plan_id:'reviewed',
+    rows:[...rows,{hash:'unselected',client_id:'home'}]};
   assert.equal(path, 'jobs/' + calls.length);
   if (++read === 1) return {status:'running'};
   active = false; return {status:'completed'};
@@ -41,9 +49,12 @@ const navigate = async view => {
 };
 eval(process.argv[2]);
 (async () => {
-  const handler = eval('(' + process.argv[1].replace(/;\s*$/, '') + ')');
-  await handler();
-  assert.equal(control.disabled, false);
+  eval(process.argv[1]);
+  await handler({source:planFrame.contentWindow,origin:location.origin,
+    data:{type:'plan-request',id:1,path:'queue',
+      body:{_client:'other',plan_id:'reviewed',hashes:rows.map(r=>r.hash)}}});
+  assert.equal(response.error,undefined);
+  assert.equal(response.value.queued,21105);
   assert.deepEqual(calls.slice(-2).map(c=>[c.client_id,c.hashes.length]),
     [['home',1],['remote',104]]);
   assert.deepEqual(calls.flatMap(c=>c.hashes), rows.map(r=>r.hash));

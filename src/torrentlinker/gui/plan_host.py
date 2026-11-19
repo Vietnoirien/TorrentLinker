@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication
+
 from torrentlinker.catalogue import candidate
 from torrentlinker.download_queue import enqueue
 from torrentlinker.gui.settings_dialog import choose_directory
@@ -58,7 +60,11 @@ class PlanHost:
                 self.owner._plan_options_changed(settings.plan_options)
             return None
         if action == "pick":
-            return {"selected": choose_directory(self.owner, self.owner.tr("Download Folder"))}
+            return {
+                "selected": choose_directory(
+                    self.owner, QCoreApplication.translate("MainWindow", "Download Folder")
+                )
+            }
         client = body.get("client_id", settings.active_client_id)
         current = settings.for_client(client)
         category = body.get("category")

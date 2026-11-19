@@ -70,6 +70,28 @@ def test_desktop_plan_selection_is_reviewed_before_sending(qtbot):
 
 
 def test_plan_input_keeps_focus_and_selection_across_environment_refresh(qtbot):
+    # Other GUI tests select a process-wide Qt Quick renderer. Isolate Chromium's
+    # resize check so its compositor can initialize normally.
+    import os
+    import subprocess
+    import sys
+
+    if not os.getenv("TL_PLAN_CATALOGUE_RESIZE_CHILD"):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                f"{__file__}::test_plan_input_keeps_focus_and_selection_across_environment_refresh",
+            ],
+            env={**os.environ, "TL_PLAN_CATALOGUE_RESIZE_CHILD": "1"},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return
     view = PlanView()
     qtbot.addWidget(view)
     view.language = "en"
