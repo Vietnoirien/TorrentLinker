@@ -176,7 +176,7 @@ window.addEventListener("message", async (event) => {
       )
         throw Error("Choose an enabled client.");
       state.clientId = body.client_id;
-      state.settingsSection = "connections";
+      await settingsSection("connections");
       await refreshSetup();
       settingsEnvironment();
       value = null;
