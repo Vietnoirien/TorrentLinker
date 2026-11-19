@@ -70,9 +70,9 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
 | 27 | Discussion | **BV** `AssistantPanel` | `assistant_panel.js` iframe, shared `static/assistant/` | **Done** (#106) | `assistant-chat-redesign.md` | Live job polling; provider token streaming is not offered |
-| 28 | Automations | Native `automation_cards.py`, `AssistantEditor` | `assistant.js` | NU | same | — |
+| 28 | Automations | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#107) | same | Deletion remains unsupported by the service |
 | 29 | History | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#106) | same | — |
-| 30 | Selection cards / detail | Native `selection_cards.py` | `assistant_cards.js` | NU | none | — |
+| 30 | Selection cards / detail | **BV** `AssistantPanel` | same bundled Assistant view | **Done** (#107) | Existing selection and Upload review cards | Media compact chat retains its current cards until #111 |
 
 ### Media / Médias
 
@@ -172,7 +172,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 ### Assistant
 - Resolved (#106): the first-run "Run within limits" acknowledgement lives in the owner Assistant service database and is shared by both hosts. Sidebar width persists per device, using QSettings on desktop and browser storage on Web.
 - Deliberate existing limit: transcripts update as persisted messages, tool activity and decisions arrive, using job polling. Providers return complete model messages; #106 does not introduce token-by-token provider streaming.
-- The main Assistant page now uses one bundled view. Native chat widgets and the legacy Web chat renderer remain only for Media compact chat until #111; Settings connection forms remain until #112. Existing Automations and selection-card flows remain available; their parity audit is #107.
+- The main Assistant page now uses one bundled view. Native chat widgets and the legacy Web chat renderer remain only for Media compact chat until #111; Settings connection forms remain until #112. Automations and selection cards use that bundle too (#107). The obsolete automation widgets and Web renderer are removed; compact Media chat retains selection cards until #111.
 - Web-only: "Selection details" and "Presentation image" cards, *unsure* whether every field matches desktop `SelectionDetail`.
 
 ### Media

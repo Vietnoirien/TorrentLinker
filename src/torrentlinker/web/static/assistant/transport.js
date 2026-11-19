@@ -9,7 +9,13 @@ function toast(text) { $("toast").textContent=text;$("toast").hidden=false;clear
 async function guard(fn) { try { return await fn(); } catch(error) { toast(error.message); } }
 const api = (path, body, method) => panelRequest(path,{body, method:method || (body === undefined ? "GET" : "POST")});
 const navigate = () => panelRequest("connections",{});
-const fmt = bytes => new Intl.NumberFormat(state.language,{maximumFractionDigits:1}).format(bytes/1024**3)+" GiB";
+function bytes(value) {
+  if(value == null)return "—";
+  const units=["B","KiB","MiB","GiB","TiB","PiB"];
+  let unit=0;
+  while(value>=1024 && unit<units.length-1) { value/=1024;unit++; }
+  return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+}
 let lastEnvironment = "", lastRevision=-1;
 window.addEventListener("assistant-environment", async event => {
   const env=event.detail;

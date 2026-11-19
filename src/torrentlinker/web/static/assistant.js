@@ -151,13 +151,12 @@ async function loadLegacyAssistant() {
   if (compact) assistantView = "chat";
   root.classList.toggle("assistant-compact", compact);
   const nav = element("div", undefined, "assistant-tabs"); nav.setAttribute("role", "tablist");
-  for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["tasks", at("Automations", "Automatisations")], ["history", at("History", "Historique")]]) {
+  for (const [id, label] of [["chat", at("Discussion", "Discussion")], ["history", at("History", "Historique")]]) {
     const tab = button(label, async () => { assistantView = id; await loadAssistant(); }, assistantView === id ? "active" : "");
     tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", String(assistantView === id));
     nav.append(tab);
   }
   if (!compact) root.append(nav);
-  if (assistantView === "tasks") return aTasks(root);
   if (assistantView === "history") {
     const [history, conversations] = await Promise.all([api("assistant/jobs"), api("assistant/conversations")]);
     const names = new Map(conversations.map(c => [c.id, c.name]));
@@ -202,7 +201,7 @@ async function loadLegacyAssistant() {
   });
   toggle.setAttribute("aria-controls", side.id); toggle.setAttribute("aria-expanded", String(assistantSidebarOpen));
   const title = element("h2", current ? current.name : at("New discussion", "Nouvelle discussion"), "assistant-title");
-  const settings = button(at("Discussion settings", "Paramètres de la discussion"), () => aTaskEditor(false, {...config, provider_id: model.value}, !current), "assistant-hidden-action");
+  const settings = button(at("Discussion settings", "Paramètres de la discussion"), () => aDiscussionEditor({...config, provider_id: model.value}, !current), "assistant-hidden-action");
   settings.id = "assistant-chat-settings"; settings.hidden = true;
   const more = aIconButton("⋯", at("More", "Plus"), () => aMenu(more, [
     [at("Discussion settings", "Paramètres de la discussion"), () => settings.click(), settings.disabled],
@@ -532,7 +531,7 @@ async function loadAssistantConnections() {
 async function aConnections(root) {
   root.append(element("p", at("Credentials stay in TorrentLinker. Hosted providers receive your messages and tool results. Local connections never fall back to a hosted provider.", "Les clés restent dans TorrentLinker. Les fournisseurs distants reçoivent vos messages et les résultats des outils. Aucune bascule automatique du local vers une API distante."), "muted"));
   const actions = element("div", undefined, "toolbar");
-  actions.append(button(at("Add connection", "Ajouter une connexion"), () => aProvider(), "primary"), button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aTaskEditor(false, await api("setup/assistant/chat"), true), "quiet"));
+  actions.append(button(at("Add connection", "Ajouter une connexion"), () => aProvider(), "primary"), button(at("Chat defaults", "Paramètres des nouvelles discussions"), async () => aDiscussionEditor(await api("setup/assistant/chat"), true), "quiet"));
   root.append(actions);
   for (const p of assistantSnapshot.providers) {
     const card = element("div", undefined, "card"); card.append(element("h3", p.name), element("p", `${p.kind} · ${p.model} · ${p.url}`));
@@ -612,49 +611,8 @@ function aProvider(existing = null) {
     }
   });
 }
-function aScheduleText(t) {
-  if (t.frequency === "interval") return at(`Every ${t.interval_minutes} min`, `Toutes les ${t.interval_minutes} min`);
-  if (t.frequency === "weekly") {
-    const names = [at("Mon", "lun."), at("Tue", "mar."), at("Wed", "mer."), at("Thu", "jeu."), at("Fri", "ven."), at("Sat", "sam."), at("Sun", "dim.")];
-    const days = [...(t.weekdays || [])].sort().map(d => names[d]).join(", ");
-    return at(`Weekly, ${days} at ${t.at}`, `Chaque semaine, ${days} à ${t.at}`);
-  }
-  return at(`Daily at ${t.at}`, `Chaque jour à ${t.at}`);
-}
-function aTaskState(t) {
-  if (!t.enabled) return at("Paused", "En pause");
-  if (t.blocked) return at("Waiting for its actions or your review", "En attente de ses actions ou de votre validation");
-  const when = new Date(t.next_at * 1000).toLocaleString(state.language === "fr" ? "fr-FR" : undefined, {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"});
-  return at(`Next run ${when}`, `Prochaine exécution ${when}`);
-}
-async function aTasks(root) {
-  const top = element("div", undefined, "assistant-tasks-top");
-  top.append(element("p", at("Tasks run while TorrentLinker is running. On desktop, keep the app open; on Docker, closing this browser is fine. Missed intervals are combined into one run. Failed/interrupted runs wait for review and Run now.", "Les tâches s’exécutent lorsque TorrentLinker fonctionne. Sur PC, gardez l’application ouverte ; sur Docker, vous pouvez fermer le navigateur. Les échéances manquées sont regroupées en une exécution. Les exécutions échouées ou interrompues attendent votre vérification et Exécuter maintenant."), "muted"), button(at("Create task", "Créer une tâche"), () => aTaskEditor(true), "primary"));
-  root.append(top);
-  const tasks = await api("assistant/schedules");
-  if (!tasks.length) root.append(element("p", at("No automations yet. Create one to run a task on a schedule.", "Aucune automatisation. Créez-en une pour exécuter une tâche à heure fixe."), "muted"));
-  const toggle = async t => {
-    const {id, next_at, last_error, blocked, ...body} = t; await api(`assistant/schedules/${id}`, {...body, enabled: !t.enabled}, "PUT"); await loadAssistant();
-  };
-  for (const t of tasks) {
-    const card = element("article", undefined, "assistant-task"), text = element("div", undefined, "assistant-task-text");
-    text.append(element("h3", t.name), element("p", `${aScheduleText(t)} · ${aTaskState(t)}`, "muted"));
-    if (t.last_error) text.append(element("p", t.last_error, "error"));
-    const main = t.enabled
-      ? button(at("Run now", "Exécuter maintenant"), async () => { await api(`assistant/schedules/${t.id}/run`, {}); assistantView = "history"; await loadAssistant(); })
-      : button(at("Enable", "Activer"), () => toggle(t));
-    main.disabled = t.enabled && t.blocked;
-    const more = aIconButton("⋯", at("More", "Plus"), () => aMenu(more, [
-      [at("Edit", "Modifier"), () => aTaskEditor(true, t)],
-      [t.enabled ? at("Pause", "Mettre en pause") : at("Enable", "Activer"), () => toggle(t)],
-    ]));
-    more.setAttribute("aria-haspopup", "menu");
-    const wrap = element("div", undefined, "assistant-menu-wrap"); wrap.append(more);
-    card.append(text, main, wrap); root.append(card);
-  }
-}
-function aTaskEditor(scheduled, existing = null, defaults = false) {
-  const {dialog, form} = aDialog(scheduled ? at("Scheduled task", "Tâche programmée") : defaults ? at("Chat defaults", "Paramètres des nouvelles discussions") : at("Discussion settings", "Paramètres de la discussion"));
+function aDiscussionEditor(existing = null, defaults = false) {
+  const {dialog, form} = aDialog(defaults ? at("Chat defaults", "Paramètres des nouvelles discussions") : at("Discussion settings", "Paramètres de la discussion"));
   const name = aField(form, at("Name", "Nom"), existing?.name || "");
   if (defaults) name.parentElement.hidden = true;
   const provider = aField(form, at("Model connection", "Connexion au modèle"), existing?.provider_id || assistantSnapshot.providers[0]?.id || "", "", assistantSnapshot.providers.map(p => [p.id, `${p.name} · ${p.model}`]));
@@ -667,34 +625,14 @@ function aTaskEditor(scheduled, existing = null, defaults = false) {
   const bytes = aField(details, at("Downloads per day, GiB", "Téléchargements par jour, Gio"), (existing?.policy.daily_bytes ?? 10 * 1024 ** 3) / 1024 ** 3, "number");
   const torrents = aField(details, at("Torrents per day", "Torrents par jour"), existing?.policy.daily_torrents ?? 20, "number");
   const reserve = aField(details, at("Keep free, GiB (0 = off)", "Conserver libres, Gio (0 = désactivé)"), (existing?.policy.reserve_bytes ?? 0) / 1024 ** 3, "number");
-  const calls = aField(details, at("Maximum model calls per run", "Appels au modèle par exécution"), existing?.max_calls ?? (scheduled ? 12 : 0), "number");
-  const seconds = aField(details, at("Maximum duration, seconds", "Durée maximale, secondes"), existing?.max_seconds ?? (scheduled ? 300 : 0), "number");
-  if (!scheduled) details.append(element("p", at("Set calls or duration to 0 for no per-run limit. Stop remains available.", "Indiquez 0 pour ne pas limiter les appels ou la durée. Le bouton Arrêter reste disponible.")));
+  const calls = aField(details, at("Maximum model calls per run", "Appels au modèle par exécution"), existing?.max_calls ?? 0, "number");
+  const seconds = aField(details, at("Maximum duration, seconds", "Durée maximale, secondes"), existing?.max_seconds ?? 0, "number");
+  details.append(element("p", at("Set calls or duration to 0 for no per-run limit. Stop remains available.", "Indiquez 0 pour ne pas limiter les appels ou la durée. Le bouton Arrêter reste disponible.")));
   const web = aField(form, at("Allow public Web research", "Autoriser la recherche sur le Web public"), existing?.web || false, "checkbox");
-  let instruction, kind, frequency, interval, atTime, timezone, days, enabled;
-  if (scheduled) {
-    instruction = aField(form, at("Instructions", "Instructions"), existing?.instruction || "", "textarea");
-    kind = aField(form, at("Task type", "Type de tâche"), existing?.kind || "model", "", [["model", at("Model task", "Tâche avec modèle")], ["refresh", at("Refresh torrents (no model)", "Actualiser les torrents (sans modèle)")], ["catalogue", at("Refresh Catalogue (no model)", "Actualiser le Catalogue (sans modèle)")]]);
-    frequency = aField(form, at("Frequency", "Fréquence"), existing?.frequency || "daily", "", [["interval", at("Every X minutes", "Toutes les X minutes")], ["daily", at("Daily", "Quotidienne")], ["weekly", at("Weekly", "Hebdomadaire")]]);
-    interval = aField(form, at("Interval, minutes", "Intervalle, minutes"), existing?.interval_minutes || 60, "number"); interval.min = 5;
-    atTime = aField(form, at("Time", "Heure"), existing?.at || "09:00", "time");
-    timezone = aField(form, at("Timezone", "Fuseau horaire"), existing?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
-    days = element("fieldset"); days.append(element("legend", at("Days", "Jours"))); form.append(days);
-    [at("Mon", "Lun"), at("Tue", "Mar"), at("Wed", "Mer"), at("Thu", "Jeu"), at("Fri", "Ven"), at("Sat", "Sam"), at("Sun", "Dim")].forEach((label, i) => { const check = aField(days, label, (existing?.weekdays || [0]).includes(i), "checkbox"); check.value = i; });
-    enabled = aField(form, at("Enable schedule", "Activer la programmation"), existing?.enabled || false, "checkbox");
-    frequency.onchange = () => { interval.parentElement.hidden = frequency.value !== "interval"; atTime.parentElement.hidden = frequency.value === "interval"; days.hidden = frequency.value !== "weekly"; timezone.parentElement.hidden = frequency.value === "interval"; }; frequency.onchange();
-    kind.onchange = () => { provider.disabled = kind.value !== "model"; }; kind.onchange();
-  }
-  const body = () => ({name: name.value, provider_id: provider.value, policy: {name: name.value, clients: clientInputs.filter(([, e]) => e.checked).map(([id]) => id), mode: mode.value, permissions: permissions.filter(([, e]) => e.checked && !e.disabled).map(([id]) => id), daily_bytes: Math.round(+bytes.value * 1024 ** 3), daily_torrents: +torrents.value, reserve_bytes: Math.round(+reserve.value * 1024 ** 3)}, web: web.checked, max_output_tokens: existing?.max_output_tokens ?? 2048, max_calls: +calls.value, max_seconds: +seconds.value,
-    ...(scheduled ? {instruction: instruction.value, kind: kind.value, frequency: frequency.value, interval_minutes: +interval.value, at: atTime.value, timezone: timezone.value, weekdays: [...days.querySelectorAll("input:checked")].map(e => +e.value), enabled: enabled.checked} : {})});
-  if (scheduled) form.append(button(at("Preview next run", "Voir la prochaine exécution"), async () => { const preview = await api("assistant/schedules/preview", body()); form.append(element("p", new Date(preview.next_at * 1000).toLocaleString())); }));
+  const body = () => ({name: name.value, provider_id: provider.value, policy: {name: name.value, clients: clientInputs.filter(([, e]) => e.checked).map(([id]) => id), mode: mode.value, permissions: permissions.filter(([, e]) => e.checked && !e.disabled).map(([id]) => id), daily_bytes: Math.round(+bytes.value * 1024 ** 3), daily_torrents: +torrents.value, reserve_bytes: Math.round(+reserve.value * 1024 ** 3)}, web: web.checked, max_output_tokens: existing?.max_output_tokens ?? 2048, max_calls: +calls.value, max_seconds: +seconds.value});
   aActions(dialog, form, async () => {
     if (mode.value === "execute" && !(await aConfirmExecute())) return false;
-    if (scheduled) {
-      await api("assistant/schedules" + (existing ? `/${existing.id}` : ""), body(), existing ? "PUT" : "POST");
-    } else {
-      await api(defaults ? "setup/assistant/chat" : `assistant/conversations/${existing.id}`, body(), "PUT");
-    }
+    await api(defaults ? "setup/assistant/chat" : `assistant/conversations/${existing.id}`, body(), "PUT");
   });
 }
 setInterval(() => { if (assistantVisible() && assistantView === "chat") guard(aRefreshChat); }, 1500);

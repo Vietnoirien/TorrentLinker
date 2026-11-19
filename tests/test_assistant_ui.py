@@ -251,9 +251,63 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             dialog = panel.locator(".assistant-dialog")
             dialog.get_by_label("Name", exact=True).fill("Daily report")
             dialog.get_by_label("Instructions", exact=True).fill("Review my Plan.")
+            dialog.locator("summary", has_text="Permissions and limits").click()
+            model_calls = dialog.get_by_label("Maximum model calls per run", exact=True)
+            model_calls.fill("41")
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            expect(dialog).to_be_visible()
+            assert not model_calls.evaluate("input => input.checkValidity()")
+            assert app.state.assistant.schedules() == []
+            model_calls.fill("4")
+            dialog.get_by_label("Maximum duration, seconds", exact=True).fill("30")
+            dialog.get_by_label("Downloads per day, GiB", exact=True).fill(
+                str(1_500_000_000 / 1024**3)
+            )
+            dialog.get_by_label("Torrents per day", exact=True).fill("3")
+            dialog.get_by_label("Keep free, GiB (0 = off)", exact=True).fill("1")
+            dialog.get_by_label("Frequency", exact=True).select_option("weekly")
+            dialog.get_by_label("Mon", exact=True).uncheck()
+            dialog.get_by_label("Sat", exact=True).check()
+            dialog.get_by_label("Time", exact=True).fill("10:15")
+            dialog.get_by_label("Timezone", exact=True).fill("Europe/Paris")
             dialog.get_by_role("button", name="Preview next run").click()
             dialog.get_by_role("button", name="Save", exact=True).click()
             expect(panel.get_by_role("heading", name="Daily report")).to_be_visible()
+            saved = app.state.assistant.schedules()[0]
+            assert saved["max_calls"] == 4 and saved["max_seconds"] == 30
+            assert saved["policy"]["daily_bytes"] == 1_500_000_000
+            assert saved["policy"]["daily_torrents"] == 3
+            assert saved["policy"]["reserve_bytes"] == 1024**3
+            assert saved["weekdays"] == [5] and saved["at"] == "10:15"
+            assert saved["timezone"] == "Europe/Paris"
+            panel.locator(".assistant-task").get_by_role("button", name="More").click()
+            panel.get_by_role("menuitem", name="Edit", exact=True).click()
+            dialog.get_by_label("Name", exact=True).fill("Weekly report")
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            expect(panel.get_by_role("heading", name="Weekly report")).to_be_visible()
+            assert app.state.assistant.schedules()[0]["policy"]["daily_bytes"] == 1_500_000_000
+            output = os.getenv("TL_AUTOMATION_WEB_SCREENSHOTS")
+            page.set_viewport_size({"width": 1280, "height": 720})
+            for lang in ("fr", "en"):
+                page.locator("#language").select_option(lang, force=True)
+                for theme in ("light", "dark"):
+                    page.locator("#theme").select_option(theme, force=True)
+                    expect(panel.locator("html")).to_have_attribute("lang", lang)
+                    expect(panel.locator("html")).to_have_attribute("data-theme", theme)
+                    expect(
+                        panel.get_by_role(
+                            "button",
+                            name="Créer une tâche" if lang == "fr" else "Create task",
+                            exact=True,
+                        )
+                    ).to_be_visible()
+                    expect(panel.locator(".assistant-task")).to_be_visible()
+                    expect(panel.locator(".assistant-task")).to_have_count(1)
+                    if output:
+                        from pathlib import Path
+
+                        Path(output).mkdir(parents=True, exist_ok=True)
+                        page.screenshot(path=str(Path(output) / f"{lang}-{theme}.png"))
             # A new task starts paused: its card offers Enable, then Run now.
             panel.get_by_role("button", name="Enable", exact=True).click()
             panel.get_by_role("button", name="Run now", exact=True).click()
@@ -447,7 +501,7 @@ def test_desktop_question_approval_and_markdown_table(qtbot, tmp_path):
             ),
             timeout=5000,
         )
-        widget.pages.setCurrentIndex(2)
+        widget.pages.setCurrentWidget(widget.history)
         widget.refresh_run()
         assert any(b.text() == "Submit answer" for b in widget.history.findChildren(QPushButton))
         widget.pages.setCurrentIndex(0)
@@ -699,35 +753,3 @@ def test_model_connections_open_in_settings(qtbot, tmp_path):
     dialog = SettingsDialog(Settings(), host)
     dialog.show_assistant_connections()
     assert dialog.tabs.currentWidget().isAncestorOf(dialog.findChild(AssistantConnections))
-
-
-def test_automation_cards_show_the_schedule_and_one_main_action(qtbot):
-    from PySide6.QtWidgets import QLabel, QPushButton
-
-    from torrentlinker.gui.automation_cards import AutomationCards
-
-    cards = AutomationCards()
-    qtbot.addWidget(cards)
-    active = {
-        "id": "a",
-        "name": "Daily review",
-        "enabled": True,
-        "frequency": "daily",
-        "at": "08:30",
-        "next_at": 0,
-        "last_error": "",
-        "blocked": False,
-    }
-    paused = {**active, "id": "b", "name": "Weekend Plan", "enabled": False}
-    paused.update(frequency="weekly", weekdays=[5], at="10:00")
-    ran, toggled = [], []
-    cards.runRequested.connect(ran.append)
-    cards.toggleRequested.connect(toggled.append)
-    cards.set_rows([active, paused])
-    texts = [label.text() for label in cards.findChildren(QLabel)]
-    assert any(text.startswith("Daily at 08:30 · Next run") for text in texts)
-    assert "Weekly, Sat at 10:00 · Paused" in texts
-    buttons = {b.text(): b for b in cards.findChildren(QPushButton)}
-    buttons["Run now"].click()
-    buttons["Enable"].click()
-    assert [t["id"] for t in ran] == ["a"] and [t["id"] for t in toggled] == ["b"]

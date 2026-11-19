@@ -96,7 +96,22 @@ with shared light/dark tokens. Connections still open Settings → Assistant.
 The owner service stores the mode acknowledgement once for both hosts. Sidebar width
 is a device preference. Refresh keeps the transcript scroll and unsent composer text.
 
-Existing Media compact chat remains in its current host pending #111. Automations and
-selection cards keep their existing flows; #107 owns their remaining parity audit.
+Existing Media compact chat remains in its current host pending #111.
 Live transcript updates follow persisted job messages and activity; the existing providers
 do not stream individual tokens. No tracker or model credentials enter the bundled page.
+
+## Automations and selection cards (#107, 2026-11-19)
+
+The main Assistant uses the same bundled automation cards, editor and saved selection
+review in both hosts. The approved layout is unchanged. Numeric controls reject invalid
+limits before saving or previewing a schedule, while preserving existing fractional GiB
+budgets. The shared view formats file sizes without depending on the Web shell.
+
+Browser checks cover scheduling, editing, limit persistence, pagination, saved review tabs,
+images and reverse-proxy paths. The desktop check runs a simulated scheduled model task
+and opens its saved Upload card, including private image assets, files, NFO and review.
+English/French and light/dark rendering use shared panel tokens.
+
+The superseded native automation cards/editor branch and Web automation renderer are
+removed. The remaining legacy discussion editor belongs to compact Media chat and Settings
+until #111/#112. Automation deletion remains deferred because the service does not support it.
