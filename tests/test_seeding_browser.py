@@ -19,7 +19,9 @@ pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-
 
 
 @pytest.mark.parametrize("root_path", ["", "/tl"])
-def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(tmp_path, root_path):
+def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
+    tmp_path, root_path, monkeypatch
+):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
@@ -40,6 +42,7 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(tmp_path, 
         ]
     )
     setup.save()
+    refresh_started, release_refresh = threading.Event(), threading.Event()
     app = create_app(
         config, password="test-password-long", service_override=setup, monitor_verifications=False
     )
@@ -94,6 +97,27 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(tmp_path, 
                 page.locator("#target-client").select_option("default")
                 expect(panel.locator(".seeding-group[open]")).to_have_count(2)
                 expect(panel.locator("tbody tr")).to_have_count(2)
+                original = client.torrents
+
+                def held_refresh(*args, **kwargs):
+                    refresh_started.set()
+                    assert release_refresh.wait(20)
+                    return original(*args, **kwargs)
+
+                monkeypatch.setattr(client, "torrents", held_refresh)
+                panel.locator("#seeding-refresh").click()
+                assert refresh_started.wait(5)
+                page.reload()
+                page.locator("[data-view=zen]").first.click()
+                page.locator("#zen-seeding-tab").click()
+                expect(panel.locator("#seeding-refresh")).to_be_disabled()
+                client.by_hash[torrent(1).hash] = torrent(1, "Updated during refresh", size=1000)
+                release_refresh.set()
+                expect(panel.locator("#seeding-refresh")).to_be_enabled(timeout=15000)
+                panel.locator("#seeding-expand").click()
+                expect(panel.locator("#seeding-groups")).to_contain_text("Updated during refresh")
+                panel.locator("#seeding-collapse").click()
+                panel.locator("#seeding-expand").click()
                 panel.locator("#seeding-uploads").fill("10")
                 panel.locator("#seeding-save-uploads").click()
                 expect(panel.locator("#seeding-classes")).to_contain_text("4.3")
@@ -113,5 +137,6 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(tmp_path, 
                 assert not errors, errors
                 browser.close()
         finally:
+            release_refresh.set()
             server.should_exit = True
             worker.join(10)

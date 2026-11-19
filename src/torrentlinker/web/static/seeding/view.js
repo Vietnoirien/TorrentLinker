@@ -6,10 +6,10 @@ const zenSeeding = {
   client: null,
   groups: [],
 };
-let loading = false;
+let loading = false, requestingRefresh = false;
 function controls() {
-  for (const id of ["seeding-expand", "seeding-collapse"])
-    $(id).disabled = loading || Boolean(environment.state?.busy);
+  for (const id of ["seeding-expand", "seeding-collapse", "seeding-refresh"])
+    $(id).disabled = loading || requestingRefresh || Boolean(environment.state?.busy);
 }
 let revision = -1,
   started = false;
@@ -27,7 +27,6 @@ function applyEnvironment(env) {
     $("seeding-query").value = "";
     started = false;
   }
-  $("seeding-refresh").disabled = Boolean(value.busy);
   controls();
   $("seeding-error").textContent = value.error || "";
   const tags = value.tags;
@@ -305,7 +304,12 @@ function init() {
       });
     guard(() => seedingRequest("expanded", { groups: [] }));
   };
-  $("seeding-refresh").onclick = () => guard(() => seedingRequest("refresh"));
+  $("seeding-refresh").onclick = () => guard(async () => {
+    requestingRefresh = true;
+    controls();
+    try { await seedingRequest("refresh"); }
+    finally { requestingRefresh = false; controls(); }
+  });
   let seedingFilterTimer;
   $("seeding-query").oninput = () => {
     clearTimeout(seedingFilterTimer);

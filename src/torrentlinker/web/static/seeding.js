@@ -56,14 +56,19 @@ async function loadZenSeeding() {
     ]);
     if (client !== state.clientId || generation !== seedingHost.generation)
       return;
-    if (
-      jobs.some(
-        (row) =>
-          row.kind === "refresh" &&
-          row.client_id === client &&
-          ["queued", "running"].includes(row.status),
-      )
-    )
+    const running = jobs.filter(
+      (row) => row.kind === "refresh" && row.client_id === client &&
+        ["queued", "running"].includes(row.status),
+    );
+    for (const row of running) {
+      if (!state.jobs.has(row.id))
+        state.jobs.set(row.id, {
+          body: { kind: "refresh", client_id: client },
+          done: () => finishSeeding(client),
+          failed: (error) => finishSeeding(client, error),
+        });
+    }
+    if (running.length)
       seedingHost.busy.add(client);
     else seedingHost.busy.delete(client);
     $("zen-daily").textContent = num(result.summary.daily);
@@ -75,6 +80,15 @@ async function loadZenSeeding() {
   }
   seedingHost.revision++;
   seedingEnvironment();
+}
+async function finishSeeding(client, error = "") {
+  seedingHost.busy.delete(client);
+  if (client !== state.clientId) return;
+  await loadZenSeeding();
+  if (client === state.clientId && error) {
+    seedingHost.error = error;
+    seedingEnvironment();
+  }
 }
 window.addEventListener("message", async (event) => {
   if (
@@ -113,22 +127,11 @@ window.addEventListener("message", async (event) => {
       seedingHost.generation++;
       seedingHost.busy.add(client);
       seedingEnvironment();
-      const done = async () => {
-        seedingHost.busy.delete(client);
-        if (client !== state.clientId) return;
-        await loadZenSeeding();
-      };
       try {
         await job(
           { kind: "refresh", client_id: client },
-          done,
-          async (error) => {
-            await done();
-            if (client === state.clientId) {
-              seedingHost.error = error;
-              seedingEnvironment();
-            }
-          },
+          () => finishSeeding(client),
+          (error) => finishSeeding(client, error),
         );
         if (client === state.clientId) seedingHost.generation++;
       } catch (error) {

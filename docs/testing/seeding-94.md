@@ -12,6 +12,8 @@ The first desktop interface regression failed against the native renderer, then 
 
 An actual desktop display check on DP-4 rendered English/dark and French/light. The French view and the narrow Web view were inspected. Tests use temporary settings, databases and simulated clients. Ruff and mypy pass.
 
+The full local suite passed with 2,130 tests and 213 skips. Acceptance review found that a browser reload during a refresh could leave controls disabled after completion. The added browser regression reproduced it against the first commit. Recovered refresh jobs now resume completion/error handling, and refresh controls disable immediately while submitting a request.
+
 ## Retained platform differences
 
 The shared HTML table replaces native column-width dragging and native row highlighting. It supports text selection and horizontal scrolling for the torrent columns. Category expansion is saved by the desktop owner or Web browser, so it does not transfer between browsers or hosts. Desktop category-tag reconciliation results remain visible; Web continues to show client observation failures from its existing API.
