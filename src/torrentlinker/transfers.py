@@ -9,47 +9,34 @@ from __future__ import annotations
 import json
 import os
 import secrets
-import shutil
-import stat
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
-from torrentlinker.disk_rename import DiskRenameError, verify_local_data
-from torrentlinker.domain import LocalItem
-from torrentlinker.matching import Match
 from torrentlinker.torrent_management import safe_error
 from torrentlinker.torrent_meta import read_torrent
+from torrentlinker.transfer_storage import (
+    RemotePath,
+    compare_content,
+    file_path,
+    free_space,
+    identity,
+    same_file,
+    verify,
+    writable,
+)
 
 
-def file_path(root, relative):
-    parts = PurePosixPath(relative).parts
-    if not parts or any(p in {"..", "/"} or "\\" in p or ":" in p for p in parts):
-        raise ValueError("Unsafe torrent file path")
-    path = Path(root).joinpath(*parts)
-    for parent in [path, *path.parents]:
-        if parent.is_symlink():
-            raise ValueError("Symlink storage requires its protected Reseed workflow")
-    return path
-
-
-def identity(path):
-    info = path.stat()
-    if not stat.S_ISREG(info.st_mode):
-        raise ValueError("Not a regular file")
-    return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
-
-
-def reconcile_copy(row, name):
-    target = file_path(row["folder"], name)
+def reconcile_copy(row, name, source_root, target_root):
+    target = file_path(target_root, name)
     before = row["owned"].get(name)
     current = identity(target)
     if before is None or current[:2] != before[:2] or current[2] > row["files"][name]:
         raise ValueError("Destination file changed; it will not be overwritten")
-    if current != before:
+    if current != before or isinstance(target, RemotePath):
         # A crash may occur after flushing a chunk but before saving the journal.
-        with target.open("rb") as copied, file_path(row["source"], name).open("rb") as source:
+        with target.open("rb") as copied, file_path(source_root, name).open("rb") as source:
             while chunk := copied.read(1024 * 1024):
                 if source.read(len(chunk)) != chunk:
                     raise ValueError("Destination copy changed outside this transfer")
@@ -58,8 +45,16 @@ def reconcile_copy(row, name):
 
 class Transfers:
     def __init__(
-        self, directory, client, metadata=None, client_ids=None, fingerprint=None, accessible=None
+        self,
+        directory,
+        client,
+        metadata=None,
+        client_ids=None,
+        fingerprint=None,
+        accessible=None,
+        storage=None,
     ):
+        self.storage = storage or (lambda cid, path: Path(path))
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.client = client
@@ -155,27 +150,42 @@ class Transfers:
                 if self.client(destination).torrent(item["hash"]) is not None:
                     raise ValueError("Torrent already exists at destination")
                 folder = str(item.get("folder", "")).strip()
-                if not folder or not Path(folder).is_absolute() or not Path(folder).is_dir():
+                target_root = self.storage(destination, folder)
+                source_root = self.storage(item["client_id"], torrent.save_path)
+                folder_path = (
+                    PurePosixPath(folder) if isinstance(target_root, RemotePath) else Path(folder)
+                )
+                if not folder or not folder_path.is_absolute() or not target_root.is_dir():
                     raise ValueError("Choose an existing accessible destination folder")
                 self.accessible(item["client_id"], torrent.save_path)
                 self.accessible(destination, folder)
                 row.update(
                     name=torrent.name,
-                    source=str(torrent.save_path),
+                    source=(
+                        torrent.save_path.as_posix()
+                        if isinstance(source_root, RemotePath)
+                        else str(torrent.save_path)
+                    ),
                     folder=folder,
                     files=meta.files,
                     total=sum(meta.files.values()),
                     identities={},
                 )
-                row["method"] = "shared" if Path(folder).samefile(torrent.save_path) else "copy"
+                row["method"] = (
+                    "shared"
+                    if not isinstance(target_root, RemotePath)
+                    and not isinstance(source_root, RemotePath)
+                    and same_file(target_root, source_root)
+                    else "copy"
+                )
                 if row["method"] == "shared" and remove_files:
                     raise ValueError("Shared source files cannot be deleted")
                 for name, size in meta.files.items():
-                    origin = file_path(row["source"], name)
+                    origin = file_path(self.storage(row["client_id"], row["source"]), name)
                     row["identities"][name] = identity(origin)
                     if origin.stat().st_size != size:
                         raise ValueError("Source file size changed")
-                    target = file_path(folder, name)
+                    target = file_path(target_root, name)
                     key = str(target.resolve())
                     if key in occupied:
                         raise ValueError("Selected torrents have overlapping destination files")
@@ -184,7 +194,7 @@ class Transfers:
                         raise ValueError(
                             "Destination file already exists; it will not be overwritten"
                         )
-                if row["method"] == "copy" and shutil.disk_usage(folder).free < row["total"]:
+                if row["method"] == "copy" and free_space(target_root) < row["total"]:
                     raise ValueError("Insufficient destination space")
                 sidecar = self.directory / f"{plan['id']}-{index}.torrent"
                 sidecar.write_bytes(data)
@@ -195,19 +205,22 @@ class Transfers:
         for row in plan["rows"]:
             if row["status"] != "ready" or row["method"] == "shared":
                 continue
-            folder = Path(row["folder"])
-            device = folder.stat().st_dev
-            required[device] = required.get(device, 0) + row["total"]
-            if not os.access(folder, os.W_OK | os.X_OK):
-                row.update(status="blocked", error="Destination folder is not writable")
+            try:
+                folder = self.storage(plan["destination"], row["folder"])
+                device = folder.stat().st_dev
+                required[device] = required.get(device, 0) + row["total"]
+                if not writable(folder):
+                    raise ValueError("Destination folder is not writable")
+            except Exception as error:
+                row.update(status="blocked", error=safe_error(error))
         for row in plan["rows"]:
             if row["status"] == "ready" and row["method"] == "copy":
-                folder = Path(row["folder"])
-                if shutil.disk_usage(folder).free < required[folder.stat().st_dev]:
-                    row.update(
-                        status="blocked",
-                        error="Insufficient destination space for the entire batch",
-                    )
+                try:
+                    folder = self.storage(plan["destination"], row["folder"])
+                    if free_space(folder) < required[folder.stat().st_dev]:
+                        raise ValueError("Insufficient destination space for the entire batch")
+                except Exception as error:
+                    row.update(status="blocked", error=safe_error(error))
         plan["can_start"] = all(r["status"] == "ready" for r in plan["rows"])
         self._save(plan)
         return plan
@@ -288,18 +301,26 @@ class Transfers:
             ):
                 raise ValueError("Destination torrent belongs to another operation")
             for name, before in row["identities"].items():
-                if identity(file_path(row["source"], name)) != before:
+                if (
+                    identity(file_path(self.storage(row["client_id"], row["source"]), name))
+                    != before
+                ):
                     raise ValueError("Source files changed; prepare a new plan")
-                target = file_path(row["folder"], name)
+                target = file_path(self.storage(plan["destination"], row["folder"]), name)
                 if row["method"] == "copy" and target.exists():
-                    reconcile_copy(row, name)
+                    reconcile_copy(
+                        row,
+                        name,
+                        self.storage(row["client_id"], row["source"]),
+                        self.storage(plan["destination"], row["folder"]),
+                    )
             if row["method"] == "copy":
-                folder = Path(row["folder"])
+                folder = self.storage(plan["destination"], row["folder"])
                 device = folder.stat().st_dev
                 previous = needed.get(device, (folder, 0))[1]
                 remaining = row["total"] - sum(i[2] for i in row["owned"].values())
                 needed[device] = (folder, previous + remaining)
-        if any(shutil.disk_usage(folder).free < size for folder, size in needed.values()):
+        if any(free_space(folder) < size for folder, size in needed.values()):
             raise ValueError("Insufficient destination space for the entire batch")
         stop = self.stops.setdefault(identifier, threading.Event())
         plan["status"] = "running"
@@ -322,7 +343,10 @@ class Transfers:
             try:
                 checkpoint()
                 for name, before in row["identities"].items():
-                    if identity(file_path(row["source"], name)) != before:
+                    if (
+                        identity(file_path(self.storage(row["client_id"], row["source"]), name))
+                        != before
+                    ):
                         raise ValueError("Source files changed; prepare a new plan")
                 source = self.client(row["client_id"])
                 if source.torrent(row["hash"]) is None:
@@ -351,12 +375,17 @@ class Transfers:
                     for name in row["files"]:
                         checkpoint()
                         origin, target = (
-                            file_path(row["source"], name),
-                            file_path(row["folder"], name),
+                            file_path(self.storage(row["client_id"], row["source"]), name),
+                            file_path(self.storage(plan["destination"], row["folder"]), name),
                         )
                         target.parent.mkdir(parents=True, exist_ok=True)
                         if name in row["owned"]:
-                            reconcile_copy(row, name)
+                            reconcile_copy(
+                                row,
+                                name,
+                                self.storage(row["client_id"], row["source"]),
+                                self.storage(plan["destination"], row["folder"]),
+                            )
                         offset = row["owned"].get(name, [0, 0, 0])[2]
                         with (
                             origin.open("rb") as src,
@@ -385,10 +414,9 @@ class Transfers:
                     (self.directory / f"{identifier}-{row['index']}.torrent").read_bytes()
                 )
                 update("verifying", fraction=0, speed=0)
-                verify_local_data(
-                    LocalItem(Path(row["folder"]) / "unused"),
+                verify(
+                    self.storage(plan["destination"], row["folder"]),
                     meta,
-                    Match({n: n for n in meta.files}),
                     checkpoint=checkpoint,
                     progress=lambda done, total, update=update: update(
                         "verifying", fraction=done / max(1, total)
@@ -431,7 +459,7 @@ class Transfers:
             except InterruptedError as error:
                 update("interrupted", error=str(error))
             except Exception as error:
-                update("failed", error=safe_error(error))
+                update("interrupted" if stop.is_set() else "failed", error=safe_error(error))
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(process_row, plan["rows"]))
@@ -462,12 +490,11 @@ class Transfers:
             raise ValueError("Shared files must remain")
         meta = read_torrent((self.directory / f"{identifier}-{index}.torrent").read_bytes())
         try:
-            verify_local_data(
-                LocalItem(Path(row["folder"]) / "unused"),
+            verify(
+                self.storage(plan["destination"], row["folder"]),
                 meta,
-                Match({name: name for name in meta.files}),
             )
-        except DiskRenameError as error:
+        except ValueError as error:
             raise ValueError("Destination content verification failed; source retained") from error
         source = self.client(row["client_id"])
         torrent = source.torrent(row["hash"])
@@ -487,7 +514,7 @@ class Transfers:
         ):
             raise ValueError("Protected Reseed files cannot be transferred")
         for name, before in row["identities"].items():
-            path = file_path(row["source"], name)
+            path = file_path(self.storage(row["client_id"], row["source"]), name)
             if name in row.get("delete_started", []):
                 if not path.exists():
                     continue
@@ -496,8 +523,9 @@ class Transfers:
             if identity(path) != before:
                 raise ValueError("Source file changed; cleanup refused")
             if plan["remove_files"]:
-                target = file_path(row["folder"], name)
-                if path.samefile(target):
+                target = file_path(self.storage(plan["destination"], row["folder"]), name)
+                compare_content(path, target)
+                if same_file(path, target):
                     raise ValueError("Destination still uses source files")
                 identifiers = (
                     self.client_ids()
@@ -509,8 +537,10 @@ class Transfers:
                         if client_id == row["client_id"] and torrent.hash == row["hash"]:
                             continue
                         for other_name in torrent.files:
-                            other = file_path(torrent.save_path, other_name)
-                            if other.exists() and other.samefile(path):
+                            other = file_path(
+                                self.storage(client_id, torrent.save_path), other_name
+                            )
+                            if other.exists() and same_file(other, path):
                                 raise ValueError("Another torrent uses these source files")
         token = secrets.token_urlsafe(32)
         self.tokens[token] = (time.monotonic() + 300, identifier, index, plan)
@@ -552,11 +582,14 @@ class Transfers:
             raise ValueError("Source pause was not confirmed; no files removed")
         if plan["remove_files"]:
             for name in row["files"]:
-                path = file_path(row["source"], name)
+                path = file_path(self.storage(row["client_id"], row["source"]), name)
                 if name in row.get("delete_started", []) and not path.exists():
                     continue
                 if identity(path) != row["identities"][name]:
                     raise ValueError("Source file changed during cleanup")
+                compare_content(
+                    path, file_path(self.storage(plan["destination"], row["folder"]), name)
+                )
                 if name not in row.setdefault("delete_started", []):
                     row["delete_started"].append(name)
                 self._save(plan)

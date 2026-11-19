@@ -10,7 +10,8 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
   background: var(--panel);
@@ -500,7 +501,8 @@ button:focus-visible {
   margin: 14px 0;
 }
 .transfer-card input,
-.transfer-card select {
+.transfer-card select,
+.transfer-card textarea {
   display: block;
   width: 100%;
   margin-top: 6px;
@@ -620,3 +622,14 @@ button:focus-visible {
   cursor: not-allowed;
   box-shadow: none;
 }
+.remote-access { padding: 16px; margin: 14px 0; }
+.remote-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px; border-radius: 8px; margin-top: 8px; }
+.needs-access { border-left: 3px solid #d69d45; }
+.remote-row p, .remote-route p { margin: 8px 0; }
+.remote-route { margin-bottom: 14px; }
+.remote-fields { display: grid; grid-template-columns: 90px 1fr; gap: 12px; }
+.fingerprint { display: block; overflow-wrap: anywhere; font-size: 12px; padding: 10px; background: var(--bg); }
+.transfer-card .trust-key { display: flex; align-items: center; gap: 10px; }
+.transfer-card .trust-key input { width: auto; margin: 0; }
+
+.transfer-card textarea { min-height: 90px; resize: vertical; }

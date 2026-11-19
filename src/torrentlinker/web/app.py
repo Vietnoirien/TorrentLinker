@@ -250,6 +250,7 @@ def create_app(
             assistant.close()
             jobs.close()
             agent_service.media.close()
+            agent_service.torrents_workspace.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 

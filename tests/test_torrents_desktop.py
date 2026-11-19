@@ -120,5 +120,15 @@ def test_desktop_torrent_sort_filter_and_preferences(
     )
     if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
         tab.grab().save(str(Path(folder) / "transfer-desktop.png"))
+    js(qtbot, tab, "document.querySelector('[data-remote-edit]').click()")
+    wait_js(qtbot, tab, "document.querySelector('#remote-host') !== null")
+    assert "Correspondance des dossiers" in js(
+        qtbot, tab, "document.querySelector('dialog').textContent"
+    )
+    assert js(qtbot, tab, "document.querySelector('#remote-browse').disabled")
+    if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
+        tab.grab().save(str(Path(folder) / "seedbox-desktop.png"))
+    js(qtbot, tab, "document.querySelector('#remote-done').click()")
+    wait_js(qtbot, tab, "document.querySelector('#transfer-close') !== null")
     js(qtbot, tab, "document.querySelector('#transfer-close').click()")
     tab.close()

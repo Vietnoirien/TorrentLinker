@@ -15,7 +15,7 @@ Transfers are tested with generated files and disposable clients on an internal 
 
 ## Supported storage and metadata
 
-File copies run through storage mounted and accessible to TorrentLinker. Remote clients require explicit Path Mappings, including identity mappings when both sides use the same path. Unmounted remote paths remain blocked under #118.
+File copies run through storage mounted and accessible to TorrentLinker. Remote clients require explicit Path Mappings, including identity mappings when both sides use the same path. Unmounted remote paths require the explicit SFTP access approved for #118; see [the seedbox workflow](seedbox-workflow.md).
 
 Original metainfo comes from TorrentLinker's cache or qBittorrent's export API. Other source clients need cached original metainfo; a missing original produces a blocker rather than reconstructing a torrent with different hashes or tracker settings. Renamed layouts and protected Reseed files are also blocked.
 

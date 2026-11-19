@@ -90,6 +90,7 @@ class TorrentWorkspace:
         self.updated: dict[str, float] = {}
         self.observed_at: dict[str, float] = {}
         self.pending: dict[str, tuple] = {}
+        from torrentlinker.remote_access import RemoteAccess
         from torrentlinker.transfers import Transfers
 
         root = getattr(setup, "_root", None) or setup
@@ -97,7 +98,10 @@ class TorrentWorkspace:
             existing = getattr(root, "_client_transfers", None)
             if existing is not None:
                 self.transfers = existing
+                self.remote = root._transfer_remote
                 return
+            self.remote = RemoteAccess(setup.path.parent / "transfer-access", setup.secrets)
+            root._transfer_remote = self.remote
             self.transfers = Transfers(
                 setup.path.parent / "client-transfers",
                 self.transfer_client,
@@ -105,8 +109,17 @@ class TorrentWorkspace:
                 lambda: [p.id for p in self.setup.settings.client_profiles if p.enabled],
                 self.transfer_fingerprint,
                 self.transfer_accessible,
+                self.remote.path_for,
             )
             root._client_transfers = self.transfers
+
+    def close(self):
+        for identifier in list(self.transfers.running):
+            self.transfers.stop(identifier)
+        deadline = time.monotonic() + 5
+        while self.transfers.running and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.remote.close()
 
     def target(self, identifier):
         identifier = identifier or self.setup.settings.active_client_id
@@ -147,12 +160,21 @@ class TorrentWorkspace:
     def transfer_fingerprint(self, identifier):
         import hashlib
 
-        return hashlib.sha256(str(self.target(identifier).setup.snapshot()).encode()).hexdigest()
+        return hashlib.sha256(
+            (
+                str(self.target(identifier).setup.snapshot()) + self.remote.fingerprint(identifier)
+            ).encode()
+        ).hexdigest()
 
     def transfer_accessible(self, identifier, path):
         from pathlib import Path
         from urllib.parse import urlsplit
 
+        if identifier in self.remote.profiles:
+            if not self.remote.snapshot(identifier)["checked"]:
+                raise ValueError("Check SFTP access before preparing the transfer")
+            self.remote.mapped(identifier, path)
+            return
         self.setup.path_under_root(str(path))
         settings = self.target(identifier).setup.settings
         host = urlsplit(settings.profile().host).hostname
@@ -167,6 +189,8 @@ class TorrentWorkspace:
         from torrentlinker.paths import MappedQbit, PathMapper
 
         target = self.target(identifier).setup
+        if identifier in self.remote.profiles:
+            return target.client()
         return MappedQbit(target.client(), PathMapper(target.settings.path_mappings))
 
     def transfer_metadata(self, identifier, key):
@@ -185,6 +209,27 @@ class TorrentWorkspace:
         return data
 
     def transfer_request(self, action, body):
+        if action.startswith("transfer-access-") or action == "transfer-remote-browse":
+            identifier = body["client_id"]
+            self.target(identifier)  # Reject unknown or disabled clients.
+            try:
+                if action == "transfer-access-discover":
+                    return self.remote.discover(body["config"])
+                if action == "transfer-access-save":
+                    if self.transfers.running:
+                        raise ValueError("Interrupt active transfers before changing file access")
+                    return self.remote.save(
+                        identifier,
+                        body["config"],
+                        body.get("credential", ""),
+                        body.get("host_key", ""),
+                    )
+                if action == "transfer-access-check":
+                    return self.remote.check(identifier)
+                if action == "transfer-remote-browse":
+                    return self.remote.browse(identifier, body.get("path", ""))
+            except Exception as error:
+                raise ValueError(self.setup.secrets.redact(str(error))) from None
         if action == "transfer-options":
             items = [TorrentInstance.model_validate(i) for i in body.get("items", [])]
             sources, clients = [], []
@@ -232,7 +277,9 @@ class TorrentWorkspace:
                 folders = {}
                 try:
                     native = {
-                        f.name: PathMapper(settings.path_mappings).to_local(f.path)
+                        f.name: f.path
+                        if profile.id in self.remote.profiles
+                        else PathMapper(settings.path_mappings).to_local(f.path)
                         for f in target.setup.client().folder_settings()
                         if f.kind == "category"
                     }
@@ -258,12 +305,25 @@ class TorrentWorkspace:
                             category_id, settings.indexer_categories
                         )
                     )
+                    if (
+                        resolved
+                        and profile.id in self.remote.profiles
+                        and (explicit or category not in native)
+                    ):
+                        resolved = PathMapper(settings.path_mappings).to_qbit(str(resolved))
                     folders[category] = str(resolved) if resolved else ""
-                clients.append({"id": profile.id, "name": profile.name, "folders": folders})
+                clients.append(
+                    {
+                        "id": profile.id,
+                        "name": profile.name,
+                        "folders": folders,
+                        "access": self.remote.snapshot(profile.id),
+                    }
+                )
             return {"sources": sources, "clients": clients}
         if action == "transfer-prepare":
             for item in body["items"]:
-                if item.get("folder"):
+                if item.get("folder") and body["destination"] not in self.remote.profiles:
                     self.setup.path_under_root(item["folder"])
             return self.transfers.prepare(
                 body["items"],
