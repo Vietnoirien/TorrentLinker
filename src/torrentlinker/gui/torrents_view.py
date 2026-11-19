@@ -41,6 +41,21 @@ class TorrentBridge(ViewBridge):
                     current.torrents_tab.focus_tracker(str(body.get("tracker", "")))
                 self.response.emit(identifier, json.dumps({"data": None}))
                 return
+            if action == "audit-save-export":
+                from pathlib import Path
+
+                from PySide6.QtWidgets import QFileDialog
+
+                result = self.board.service().audit.export(
+                    body.get("id", ""), body.get("format", "json")
+                )
+                path, _ = QFileDialog.getSaveFileName(
+                    self.board, "Export c411 audit", result["filename"]
+                )
+                if path:
+                    Path(path).write_text(result["content"], encoding="utf-8")
+                self.response.emit(identifier, json.dumps({"data": {"saved": bool(path)}}))
+                return
             if action == "transfer-browse":
                 from PySide6.QtWidgets import QFileDialog
 

@@ -95,6 +95,13 @@ class TorrentWorkspace:
 
         root = getattr(setup, "_root", None) or setup
         with setup.lock:
+            from torrentlinker.torrent_audit import TorrentAudit
+
+            if not hasattr(root, "_torrent_audit"):
+                root._torrent_audit = TorrentAudit(
+                    setup.path.parent / "torrent-audits", self.audit_collect, setup.indexer
+                )
+            self.audit = root._torrent_audit
             existing = getattr(root, "_client_transfers", None)
             if existing is not None:
                 self.transfers = existing
@@ -114,6 +121,7 @@ class TorrentWorkspace:
             root._client_transfers = self.transfers
 
     def close(self):
+        self.audit.close()
         for identifier in list(self.transfers.running):
             self.transfers.stop(identifier)
         deadline = time.monotonic() + 5
@@ -141,6 +149,8 @@ class TorrentWorkspace:
             else nullcontext()
         )
         with access, self.lock:
+            if action.startswith("audit-"):
+                return self.audit_request(action, body)
             if action.startswith("transfer-"):
                 # Client removal and access persistence share the setup lock,
                 # including validation that the owning client still exists.
@@ -160,6 +170,53 @@ class TorrentWorkspace:
                     ]
                 }
             raise ValueError("Unknown torrent operation.")
+
+    def audit_collect(self, identifier):
+        from torrentlinker.agent.coordination import coordinator
+        from torrentlinker.agent.desktop import DesktopSetup
+
+        access = (
+            coordinator.agent(threading.Event())
+            if isinstance(self.setup, DesktopSetup)
+            else nullcontext()
+        )
+        with access:
+            target = self.target(identifier).setup
+            return target.settings.profile().name, target.client().torrents(with_files=False)
+
+    def audit_request(self, action, body):
+        if action == "audit-start":
+            selected = body.get("client_ids") or [
+                body.get("client_id") or self.setup.settings.active_client_id
+            ]
+            if selected == ["all"]:
+                selected = [p.id for p in self.setup.settings.client_profiles if p.enabled]
+            if (
+                not isinstance(selected, list)
+                or not selected
+                or len(selected) > 100
+                or any(not isinstance(value, str) for value in selected)
+            ):
+                raise ValueError("Choose one or more Torrent Clients.")
+            selected = list(dict.fromkeys(selected))
+            for identifier in selected:
+                self.target(identifier)
+            tag = body.get("tag", "")
+            if not isinstance(tag, str) or len(tag) > 200:
+                raise ValueError("Invalid tag filter.")
+            return self.audit.start(selected, tag)
+        if action == "audit-list":
+            return {"reports": self.audit.history()}
+        identifier = body.get("id", "")
+        if action == "audit-stop":
+            return self.audit.stop(identifier)
+        if action == "audit-report":
+            return self.audit.read(
+                identifier, int(body.get("offset", 0)), int(body.get("limit", 100))
+            )
+        if action == "audit-export":
+            return self.audit.export(identifier, body.get("format", "json"))
+        raise ValueError("Unknown audit operation.")
 
     def transfer_fingerprint(self, identifier):
         import hashlib

@@ -46,6 +46,12 @@ def test_sort_filters_columns_and_refresh_preserve_selection(tmp_path):
     app = create_app(
         tmp_path / "config", password="test-password-long", connector=lambda *args: fake
     )
+    from tests.test_torrent_audit import Indexer, torrent
+
+    audit = app.state.agent_service.torrents_workspace.audit
+    audit.collect = lambda _: ("Studio", [torrent(1), torrent(2)])
+    audit.indexer = lambda: Indexer({f"{1:040x}": [200], f"{2:040x}": [404, 404]})
+    audit.confirm_after = 0
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -161,6 +167,14 @@ window.dispatchEvent(new MessageEvent('message', {
             if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
                 Path(folder).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(folder) / "torrents-dark.png"))
+            panel.locator("#audit-history").click()
+            panel.locator("#audit-start").click()
+            expect(panel.locator("#dialog")).to_contain_text("Deleted (confirmed): 1")
+            expect(panel.locator("#dialog")).not_to_contain_text("private-passkey")
+            with page.expect_download() as download:
+                panel.locator('[data-export="json"]').click()
+            assert "deleted" in Path(download.value.path()).read_text()
+            panel.locator("#audit-close").click()
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(panel.locator("#columns")).to_have_text("Colonnes")
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
@@ -172,6 +186,41 @@ window.dispatchEvent(new MessageEvent('message', {
                 page.screenshot(path=str(Path(folder) / "torrents-mobile.png"))
                 page.set_viewport_size({"width": 1500, "height": 950})
                 page.screenshot(path=str(Path(folder) / "torrents-web.png"))
+            panel.locator("#audit-history").click()
+            panel.locator("[data-audit]").first.click()
+            expect(panel.locator("#dialog")).to_contain_text("Supprimé (confirmé): 1")
+            if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
+                page.set_viewport_size({"width": 390, "height": 844})
+                page.wait_for_timeout(250)  # let Chromium paint after the viewport resize
+                page.screenshot(path=str(Path(folder) / "audit-mobile.png"))
+            pending_reports = []
+
+            def delay_audit_report(route):
+                if route.request.post_data_json.get("action") == "audit-report":
+                    pending_reports.append((route, route.fetch()))
+                else:
+                    route.continue_()
+
+            page.route("**/api/torrents/workspace", delay_audit_report)
+            panel.locator("body").evaluate("""() => {
+              const original = showAudit;
+              window.showAudit = async (...args) => {
+                await original(...args); window.auditRequestFinished = true;
+              };
+            }""")
+            panel.locator("#audit-refresh").click()
+            for _ in range(100):
+                if pending_reports:
+                    break
+                page.wait_for_timeout(20)
+            assert len(pending_reports) == 1
+            page.keyboard.press("Escape")
+            pending_reports[0][0].fulfill(response=pending_reports[0][1])
+            page.wait_for_function(
+                "document.querySelector('#torrents-frame').contentWindow.auditRequestFinished"
+            )
+            expect(panel.locator("#dialog")).not_to_be_visible()
+            page.unroute("**/api/torrents/workspace", delay_audit_report)
             expect(page.locator("#toast")).not_to_contain_text("is not defined")
             assert not errors, errors
             browser.close()

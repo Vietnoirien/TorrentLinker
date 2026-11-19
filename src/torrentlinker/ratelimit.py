@@ -63,9 +63,9 @@ class Queue:
         return max(0.0, self._last + self._interval() - self._clock())
 
     @contextmanager
-    def turn(self, background: bool = False) -> Iterator[None]:
+    def turn(self, background: bool = False, stop: threading.Event | None = None) -> Iterator[None]:
         """Wait for this request's turn, then hold the queue while it is sent."""
-        self._claim(background)
+        self._claim(background, stop)
         try:
             yield
         finally:
@@ -78,7 +78,7 @@ class Queue:
         with self.turn(background):
             pass
 
-    def _claim(self, background: bool) -> None:
+    def _claim(self, background: bool, stop: threading.Event | None = None) -> None:
         with self._state:
             if not background:
                 self._foreground += 1
@@ -86,14 +86,22 @@ class Queue:
             while True:
                 with self._state:
                     while self._busy or (background and self._foreground > 0):
-                        self._state.wait()
+                        if stop is not None and stop.is_set():
+                            raise InterruptedError("Request stopped before sending.")
+                        self._state.wait(0.1 if stop is not None else None)
+                    if stop is not None and stop.is_set():
+                        raise InterruptedError("Request stopped before sending.")
                     wait = self.next_in()
                     if wait <= 0:
                         self._busy = True
                         self._last = self._clock()
                         self._sent()
                         return
-                self._sleep(wait)  # outside: others may still claim their turn
+                if stop is not None:
+                    if stop.wait(wait):
+                        raise InterruptedError("Request stopped before sending.")
+                else:
+                    self._sleep(wait)  # outside: others may still claim their turn
         finally:
             if not background:
                 with self._state:

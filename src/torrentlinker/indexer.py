@@ -427,7 +427,9 @@ class Indexer:
             )
         ).json()
 
-    def torrent_json(self, infohash: str) -> dict[str, Any]:
+    def torrent_json(
+        self, infohash: str, *, retry: bool = True, stop: threading.Event | None = None
+    ) -> dict[str, Any]:
         """Read live metadata only; this does not grab a .torrent."""
         if (
             not self.is_c411
@@ -440,7 +442,9 @@ class Indexer:
                 f"https://c411.org/api/torrents/{infohash}",
                 None,
                 {"Authorization": f"Bearer {key}"},
-            )
+            ),
+            retry=retry,
+            stop=stop,
         ).json()
 
     def category_options(self, subcategory: int) -> dict[str, Any]:
@@ -541,6 +545,7 @@ class Indexer:
         json: Any = None,
         main_key_only: bool = False,
         scope: str = "torznab:read",
+        stop: threading.Event | None = None,
     ) -> httpx.Response:
         """Send with the key whose queue is free soonest; `build(key)` gives the URL,
         parameters and headers. A key refused with 429 rests as long as c411 asks while
@@ -564,7 +569,7 @@ class Indexer:
                 continue
             lane = slot.queue(queue)
             url, params, headers = build(slot.key)
-            with lane.turn(background):
+            with lane.turn(background, stop):
                 last = self._http.request(method, url, params=params, headers=headers, json=json)
                 lane.observe(last.headers)
             if last.status_code == 429:

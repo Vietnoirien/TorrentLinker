@@ -604,3 +604,10 @@ button:focus-visible {
   min-height: 90px;
   resize: vertical;
 }
+
+/* Reports keep long hashes inside the dialog on narrow screens. */
+dialog .torrent-list .name {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
