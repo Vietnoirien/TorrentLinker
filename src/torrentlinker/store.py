@@ -12,6 +12,10 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS reseed_link_layout (
+    client_id TEXT NOT NULL, hash TEXT NOT NULL, payload TEXT NOT NULL,
+    PRIMARY KEY (client_id, hash)
+);
 CREATE TABLE IF NOT EXISTS reseed_workspace (
     client_id TEXT NOT NULL, item_path TEXT NOT NULL, payload TEXT NOT NULL,
     PRIMARY KEY (client_id, item_path)
@@ -336,6 +340,22 @@ class Store:
             self._db.execute(
                 "INSERT OR REPLACE INTO reseed_workspace VALUES (?,?,?)",
                 (self.client_id, path, json.dumps(record)),
+            )
+
+    def reseed_link_layout(self, hash: str) -> dict:
+        """An automatic Reseed's layout, independent of board progress."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT payload FROM reseed_link_layout WHERE client_id=? AND hash=?",
+                (self.client_id, hash),
+            ).fetchone()
+        return json.loads(row[0]) if row else {}
+
+    def save_reseed_link_layout(self, hash: str, record: dict) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO reseed_link_layout VALUES (?,?,?)",
+                (self.client_id, hash, json.dumps(record)),
             )
 
     def local_drafts(self) -> list[dict]:

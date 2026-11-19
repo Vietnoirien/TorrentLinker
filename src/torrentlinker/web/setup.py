@@ -243,6 +243,8 @@ class Setup:
         )
 
     def snapshot(self) -> dict[str, Any]:
+        from torrentlinker.reseed_layout import effective_layout
+
         with self.lock:
             name = CLIENT_SETTINGS[self.settings.client]
             config = getattr(self.settings, name)
@@ -250,6 +252,8 @@ class Setup:
                 "client_id": self.settings.active_client_id,
                 "name": self.settings.profile().name,
                 "reseed_link_root": self.settings.profile().reseed_link_root,
+                "reseed_layout": self.settings.profile().reseed_layout,
+                "reseed_effective_layout": effective_layout(self.settings.profile()),
                 "default_client_id": (self._root or self).settings.default_client_id,
                 "clients": [
                     {"id": p.id, "name": p.name, "client": p.client, "enabled": p.enabled}

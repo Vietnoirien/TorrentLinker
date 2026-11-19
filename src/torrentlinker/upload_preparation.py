@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from torrentlinker.reseed_layout import needs_disk_rename_review
 from torrentlinker.web.uploads import UploadForm
 
 
@@ -44,7 +45,7 @@ def prepare_tool(uploads, action, body, stop, report):
             raise ValueError("The saved torrent changed. Review the upload before seeding.")
         prepared = PreparedUpload(saved, meta, request.files)
         client = uploads.library.client()
-        if client.requires_disk_renames and uploads.approve_disk_renames is None:
+        if needs_disk_rename_review(client) and uploads.approve_disk_renames is None:
             raise ValueError(
                 "This client requires disk renaming. Use the desktop application "
                 "to review the file changes before seeding."

@@ -667,3 +667,60 @@ def test_settings_file_access_editor_and_transfer_reuse_in_browser(seedbox, tmp_
         finally:
             server.should_exit = True
             thread.join(15)
+
+
+@pytest.mark.parametrize("layout", ["auto", "links"])
+@pytest.mark.parametrize("workflow", ["board", "local"])
+def test_reseed_layout_choice_on_disposable_client(cluster, tmp_path, layout, workflow):
+    from pathlib import Path
+
+    from tests.test_reseed_workspace import run, workspace
+    from torrentlinker.domain import PathMapping
+
+    shared = cluster.folder("qbit-a")
+    root = shared / ("reseed-layout-" + layout + "-" + workflow)
+    root.mkdir()
+    client = cluster.clients["qbit-a"]._inner
+    board, _, original, links, meta = workspace(root, client)
+    board.setup.settings.path_mappings = [PathMapping(str(shared), "/data")]
+    board.setup.settings.profile().reseed_layout = layout
+    before = original.read_bytes(), original.stat().st_ino, original.name
+    try:
+        if workflow == "board":
+            result = run(board, original, links if layout == "links" else "")
+            assert not result["errors"], result
+            destination = result["rows"][0]["destination"]
+        else:
+            from tests.test_multi_client_docker import until
+            from torrentlinker.reseed import check_verifications
+            from torrentlinker.web.jobs import JobStop
+
+            board.setup.settings.profile().reseed_link_root = str(links)
+            board.library.reseed(str(original), meta.infohash, JobStop())
+            outcomes = []
+
+            def verified():
+                outcomes.extend(check_verifications(board.library.client(), board.setup.store))
+                return bool(outcomes)
+
+            until(verified)
+            assert outcomes[0].started, outcomes
+            destination = (
+                board.setup.store.reseed_link_layout(meta.infohash)["destination"]
+                if layout == "links"
+                else str(original.parent)
+            )
+        torrent = client.torrent(meta.infohash)
+        assert torrent.progress == 1
+        assert torrent.files == {
+            "Release.mkv" if layout == "links" else original.name: original.stat().st_size
+        }
+        assert torrent.save_path == Path("/data") / Path(destination).relative_to(shared)
+        if layout == "auto":
+            assert not list(links.iterdir())
+        assert (original.read_bytes(), original.stat().st_ino, original.name) == before
+    finally:
+        client.remove(meta.infohash)
+        from tests.test_multi_client_docker import until
+
+        until(lambda: client.torrent(meta.infohash) is None)

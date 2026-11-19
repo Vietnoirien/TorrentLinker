@@ -169,7 +169,7 @@ function render() {
   }
   if (tab === "activity") {
     const events = [...snapshot.rows.flatMap(r => (r.events || []).map(e => ({...e, name:r.name}))), ...(snapshot.activity || [])].sort((a,b) => b.at-a.at);
-    $("content").innerHTML = `<h2>${t("Activité du parcours")}</h2><p class="muted">${t("Chaque élément conserve ses propres étapes.")}</p><div class="panel" style="margin-top:20px">${events.map(e => `<div class="tools"><small>${new Date(e.at*1000).toLocaleString(environment.language)}</small><b>${esc(e.kind ? t(activityKinds[e.kind] || e.kind) : e.name)}</b><span>${esc(e.message || (e.status ? t(activityStates[e.status] || e.status) : "") || ({prepared:t("Liens prêts"),verified:t("Contenu vérifié"),checking:t("Vérification du client")}[e.phase] || labels[e.phase] || e.phase))}</span></div>`).join("") || `<div class="empty">${t("Les prochaines transitions apparaîtront ici.")}</div>`}</div>`;
+    $("content").innerHTML = `<h2>${t("Activité du parcours")}</h2><p class="muted">${t("Chaque élément conserve ses propres étapes.")}</p><div class="panel" style="margin-top:20px">${events.map(e => `<div class="tools"><small>${new Date(e.at*1000).toLocaleString(environment.language)}</small><b>${esc(e.kind ? t(activityKinds[e.kind] || e.kind) : e.name)}</b><span>${esc(e.message || (e.status ? t(activityStates[e.status] || e.status) : "") || ({prepared:t("Organisation prête", "Layout ready"),verified:t("Contenu vérifié"),checking:t("Vérification du client")}[e.phase] || labels[e.phase] || e.phase))}</span></div>`).join("") || `<div class="empty">${t("Les prochaines transitions apparaîtront ici.")}</div>`}</div>`;
     window.scrollTo(0, scroll);
     return;
   }
@@ -178,7 +178,7 @@ function render() {
     running = snapshot.running,
     current = Object.values(progress.active || {});
   $("content").innerHTML =
-    `<div class="intro row between"><div><h2>${t("Chaque fichier avance à son rythme.")}</h2><p class="muted">${t("Retrouvez, vérifiez et partagez. Intervenez seulement quand c’est nécessaire.")}</p></div><button class="primary" data-command="run">${running ? (snapshot.paused ? t("Reprendre le parcours") : t("Suspendre le parcours")) : t("Tout enchaîner")}</button></div><div class="guided"><button data-command="settings"><strong>01</strong><span>${t("Réglages")}<small>${esc(snapshot.setup.name || t("Client à configurer"))} · ${snapshot.setup.reseed_link_root ? t("Dossier de liens configuré") : t("Dossier de liens à choisir")}</small></span></button><button data-command="disk"><strong>02</strong><span>${t("Disque")}<small>${folders.length}${t(" dossiers · ")}${snapshot.scanning ? t("Analyse en cours…") : t("parcourir et analyser")}</small></span></button><span class="hint">${t("Les éléments avancent indépendamment. Les décisions attendues ne bloquent pas les autres.")}</span></div><div class="stages"><button class="stage ${filter ? "" : "on"}" data-filter=""><b>${snapshot.rows.length}</b>${t("Tous les éléments")}<br><small>${t("Vue d’ensemble")}</small></button>${Object.entries(
+    `<div class="intro row between"><div><h2>${t("Chaque fichier avance à son rythme.")}</h2><p class="muted">${t("Retrouvez, vérifiez et partagez. Intervenez seulement quand c’est nécessaire.")}</p></div><button class="primary" data-command="run">${running ? (snapshot.paused ? t("Reprendre le parcours") : t("Suspendre le parcours")) : t("Tout enchaîner")}</button></div><div class="guided"><button data-command="settings"><strong>01</strong><span>${t("Réglages")}<small>${esc(snapshot.setup.name || t("Client à configurer"))} · ${snapshot.setup.reseed_effective_layout === "client" ? t("Renommage dans le client · sans dossier de liens", "Client renames · no Link Folder") : snapshot.setup.reseed_link_root ? t("Dossier de liens configuré") : t("Dossier de liens à choisir")}</small></span></button><button data-command="disk"><strong>02</strong><span>${t("Disque")}<small>${folders.length}${t(" dossiers · ")}${snapshot.scanning ? t("Analyse en cours…") : t("parcourir et analyser")}</small></span></button><span class="hint">${t("Les éléments avancent indépendamment. Les décisions attendues ne bloquent pas les autres.")}</span></div><div class="stages"><button class="stage ${filter ? "" : "on"}" data-filter=""><b>${snapshot.rows.length}</b>${t("Tous les éléments")}<br><small>${t("Vue d’ensemble")}</small></button>${Object.entries(
       labels,
     )
       .map(
@@ -235,7 +235,7 @@ function inspector() {
       .reverse()
       .map(
         (e) =>
-          `<p><small>${new Date(e.at * 1000).toLocaleString()}</small><br>${esc({ prepared: t("Liens prêts"), verified: t("Contenu vérifié"), checking: t("Vérification du client") }[e.phase] || labels[e.phase] || e.phase)}</p>`,
+          `<p><small>${new Date(e.at * 1000).toLocaleString()}</small><br>${esc({ prepared: t("Organisation prête", "Layout ready"), verified: t("Contenu vérifié"), checking: t("Vérification du client") }[e.phase] || labels[e.phase] || e.phase)}</p>`,
       )
       .join("") || `<p>${t("Aucune opération enregistrée.")}</p>`
   }</div></div></aside>`;
@@ -250,12 +250,32 @@ function dialog(content) {
   $("dialog").querySelector(":scope > [data-command=close]").hidden = !!$("folder-form");
   if (!$("dialog").open) $("dialog").showModal();
 }
-function settings() {
-  dialog(
-    () =>
-      `<div class="eyebrow">${t("01 · RÉGLAGES")}</div><h2>${t("Réglages du parcours")}</h2><p>${t("Client cible : ")}${esc(snapshot.setup.name)}</p><button data-command="add-client">${t("+ Ajouter un client")}</button><button data-command="client-settings">${t("Paramètres du client")}</button><form id="root-form"><label>${t("Dossier de liens à conserver")}<div class="row"><input name="path" required value="${esc(snapshot.setup.reseed_link_root)}" style="min-width:0;width:100%"><button type="button" data-command="browse-root">${t("Parcourir…")}</button></div></label><p class="muted">${t("Hors bibliothèque, accessible au client. Les fichiers originaux gardent leurs noms.")}</p><button class="primary">${t("Enregistrer")}</button></form><button data-command="disk">${t("Continuer vers Disque →")}</button>`,
-  );
+function requiresLinks() {
+  return ["utorrent", "bittorrent", "rtorrent"].includes(snapshot.setup.client);
 }
+function syncLayoutForm() {
+  const form = $("root-form");
+  if (!form) return;
+  const links = requiresLinks() || form.elements.layout.value === "links";
+  $("link-folder-fields").hidden = !links;
+  form.elements.path.required = links;
+}
+function settings() {
+  dialog(() => {
+    const forced = requiresLinks();
+    const current = forced ? "links" : snapshot.setup.reseed_layout || "auto";
+    const options = forced ? [["links", t("Liens requis pour ce client", "Links required for this client")]] : [
+      ["auto", t("Par défaut : renommer dans le client", "Default: rename inside the client")],
+      ["client", t("Renommer dans le client", "Rename inside the client")],
+      ["links", t("Liens : conserver les chemins du torrent", "Links: keep original torrent paths")]];
+    return `<div class="eyebrow">${t("01 · RÉGLAGES")}</div><h2>${t("Réglages du parcours")}</h2><p>${t("Client cible : ")}${esc(snapshot.setup.name)}</p><button data-command="add-client">${t("+ Ajouter un client")}</button><button data-command="client-settings">${t("Paramètres du client")}</button>
+      <form id="root-form"><label>${t("Organisation de la remise en seed", "Reseed layout")}<select name="layout">${options.map(([value,label]) => `<option value="${value}" ${value === current ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+      <p class="muted">${forced ? t("Ce client renommerait les originaux sur disque. Les liens préservent leurs noms.", "This client would rename originals on disk. Links preserve their names.") : t("Le renommage dans le client laisse les originaux en place. Les liens conservent les chemins du torrent, par exemple pour cross-seed.", "Client renames leave originals in place. Links preserve the torrent’s paths, for example for cross-seed.")}</p>
+      <div id="link-folder-fields" ${current === "links" ? "" : "hidden"}><label>${t("Dossier de liens à conserver")}<div class="row"><input name="path" ${current === "links" ? "required" : ""} value="${esc(snapshot.setup.reseed_link_root || "")}" style="min-width:0;width:100%"><button type="button" data-command="browse-root">${t("Parcourir…")}</button></div></label><p class="muted">${t("Hors bibliothèque, accessible au client. Conservez les liens tant que les torrents partagent.", "Outside the Library and accessible to the client. Keep links for as long as their torrents seed.")}</p></div>
+      <p class="muted">${t("Ce choix s’applique aussi aux éléments locaux. Les organisations déjà préparées sont conservées.", "This choice also applies to Local Items. Already prepared layouts are kept.")}</p><button class="primary">${t("Enregistrer")}</button></form><button data-command="disk">${t("Continuer vers Disque →")}</button>`;
+  });
+}
+
 function disk() {
   dialog(
     () =>
@@ -344,13 +364,13 @@ async function start(paths, key = "") {
     await perform("enqueue", { paths, key });
     return;
   }
-  if (!snapshot.setup.reseed_link_root) {
+  if (snapshot.setup.reseed_effective_layout !== "client" && !snapshot.setup.reseed_link_root) {
     settings();
     return;
   }
   if (
     !confirm(
-      `${paths.length}${t(" élément(s). Créer les liens, vérifier le contenu puis partager ? Les fichiers originaux restent inchangés.")}`,
+      `${paths.length}${snapshot.setup.reseed_effective_layout === "client" ? t(" élément(s). Préparer les noms dans le client, vérifier puis partager ? Les fichiers originaux restent inchangés.", " item(s). Prepare client paths, verify and share? Original files stay unchanged.") : t(" élément(s). Créer les liens, vérifier le contenu puis partager ? Les fichiers originaux restent inchangés.")}`,
     )
   )
     return;
@@ -494,6 +514,7 @@ async function handleClick(e) {
   await refresh();
 }
 document.addEventListener("change", e=>{
+  if (e.target.closest("#root-form") && e.target.name === "layout") { syncLayoutForm(); return; }
   if (!["local-folder","local-state"].includes(e.target.id)) return;
   if (e.target.id === "local-folder") localFolder=e.target.value; else localState=e.target.value;
   limit=100; render();
@@ -552,6 +573,7 @@ window.addEventListener("reseed-environment", (e) => {
   window.TLPanel.setLanguage(value.language);
   if (languageChanged && $("dialog").open && dialogRenderer)
     window.TLPanel.refreshForm($("dialog-body"), () => dialog(dialogRenderer));
+  syncLayoutForm();
   document.title = t("Bibliothèque");
   for (const [key, label] of Object.entries({
     reseed: "Remise en seed",

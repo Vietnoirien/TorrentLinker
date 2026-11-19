@@ -17,6 +17,7 @@ from torrentlinker.indexer import Candidate, RateLimited
 from torrentlinker.library import LibraryEntry, LibraryResult, build_library, indexer_contents
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.reseed import start_reseed
+from torrentlinker.reseed_layout import ReseedLayout, needs_disk_rename_review
 from torrentlinker.review import (
     CheckedCandidate,
     candidate_key,
@@ -45,6 +46,10 @@ class Library:
             self.setup.client(),
             PathMapper(settings.path_mappings),
             sequential_video=settings.sequential_video,
+            reseed_policy=ReseedLayout.for_settings(
+                settings,
+                None if hasattr(self.setup, "_folder_candidate") else self.setup.path_under_root,
+            ),
         )
 
     def check_tree(self, path: Path, stop: threading.Event) -> None:
@@ -577,7 +582,9 @@ class Library:
                     checked = check_candidate(indexer, item, candidate, rules)
                     if not checked.meta or not checked.match or not checked.match.is_full:
                         continue
-                    if checked.unpack or (client.requires_disk_renames and checked.match.renames):
+                    if checked.unpack or (
+                        needs_disk_rename_review(client) and checked.match.renames
+                    ):
                         skipped += 1
                         continue
                     infohash = checked.meta.infohash.lower()
@@ -627,7 +634,11 @@ class Library:
         client = self.client()
         if refusal := (None if checked.match.is_full else partial_refusal(client)):
             raise ValueError(refusal)
-        if client.requires_disk_renames and checked.match.renames and approve_disk_renames is None:
+        if (
+            needs_disk_rename_review(client)
+            and checked.match.renames
+            and approve_disk_renames is None
+        ):
             raise ValueError(disk_renames_elsewhere(client))
         hash = start_reseed(
             client,

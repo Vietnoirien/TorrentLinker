@@ -37,6 +37,7 @@ from torrentlinker.library import LibraryEntry
 from torrentlinker.matching import MatchRules
 from torrentlinker.qbit import AlreadyInClient, Qbit
 from torrentlinker.reseed import start_reseed
+from torrentlinker.reseed_layout import uses_links
 from torrentlinker.review import (
     CheckedCandidate,
     candidate_key,
@@ -632,6 +633,7 @@ class ReviewPanel(QWidget):
         renames = {k: n for v in chosen if v.match for k, n in v.match.renames.items()}
         if (
             renames
+            and not uses_links(qbit)
             and not getattr(qbit, "requires_disk_renames", False)
             and not self._confirm_renames(renames)
         ):

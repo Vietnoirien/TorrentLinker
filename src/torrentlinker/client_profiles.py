@@ -9,6 +9,7 @@ from torrentlinker.clients import connect
 from torrentlinker.config import CLIENT_FIELDS, Settings
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.qbit import ClientApi
+from torrentlinker.reseed_layout import ReseedLayout
 
 
 class Connections:
@@ -37,7 +38,10 @@ class Connections:
                 s.client, config.host, getattr(config, "username", ""), password, api_key
             )
         return MappedQbit(
-            self._clients[key], PathMapper(s.path_mappings), sequential_video=s.sequential_video
+            self._clients[key],
+            PathMapper(s.path_mappings),
+            sequential_video=s.sequential_video,
+            reseed_policy=ReseedLayout.for_settings(s),
         )
 
 

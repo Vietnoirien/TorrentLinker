@@ -309,12 +309,19 @@ class ReseedBoard(BundledView):
                         "The folder could not be saved. Wait for the current operation."
                     )
             else:
-                path = Path(body["path"]).expanduser().resolve()
-                if not path.is_dir():
+                value = body.get("path", "").strip()
+                path = Path(value).expanduser().resolve() if value else None
+                from torrentlinker.reseed_layout import DISK_RENAME_CLIENTS
+
+                profile = self.owner.settings.profile()
+                choice = body.get("layout", profile.reseed_layout)
+                links = choice == "links" or profile.client in DISK_RENAME_CLIENTS
+                if links and path is not None and not path.is_dir():
                     raise ValueError("Folder is unavailable.")
-                if not self.owner.save_reseed_folder(str(path)):
+                root = str(path) if path is not None else ""
+                if not self.owner.save_reseed_folder(root, body.get("layout")):
                     raise ValueError("Wait for the current settings operation to finish.")
-                self.link_root = str(path)
+                self.link_root = root
             self.refresh_rows()
             if action == "add-folder":
                 return {"ok": True, "local": str(path)}

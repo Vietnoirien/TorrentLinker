@@ -125,6 +125,11 @@ class ClientProfile:
     download_folders: DownloadFolders = field(default_factory=DownloadFolders)
     enabled: bool = True
     reseed_link_root: str = ""
+    reseed_layout: str = "auto"  # auto | client | links; disk-rename clients always use links
+
+    def __post_init__(self):
+        if self.reseed_layout not in {"auto", "client", "links"}:
+            raise ValueError("Unknown Reseed layout.")
 
     def secret_name(self, name: str) -> str:
         # The original profile keeps its existing OS keyring/deployment secrets.

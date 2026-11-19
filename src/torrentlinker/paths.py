@@ -93,8 +93,11 @@ def is_video(data: bytes) -> bool:
 class MappedQbit:
     """The Qbit port seen through Path Mappings: callers only ever handle local paths."""
 
-    def __init__(self, inner: Qbit, mapper: PathMapper, *, sequential_video: bool = False) -> None:
+    def __init__(
+        self, inner: Qbit, mapper: PathMapper, *, sequential_video: bool = False, reseed_policy=None
+    ) -> None:
         self._inner = inner
+        self.reseed_policy = reseed_policy
         self._mapper = mapper
         self.sequential_video = sequential_video  # films and episodes download in order
 

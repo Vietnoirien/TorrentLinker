@@ -53,6 +53,7 @@ class Connections(BaseModel):
     tmdb_api_key: str | None = Field(default=None, max_length=4096)
     announce_url: str | None = Field(default=None, max_length=4096)
     reseed_link_root: str = Field(default="", max_length=4096)
+    reseed_layout: Literal["auto", "client", "links"] = "auto"
 
 
 class SettingsWorkspace:
@@ -294,6 +295,7 @@ class SettingsWorkspace:
                     "indexer": {"url": settings.indexer.url},
                     "proxy": asdict(settings.proxy),
                     "reseed_link_root": profile.reseed_link_root,
+                    "reseed_layout": profile.reseed_layout,
                     "secrets": {
                         "password": bool(
                             setup.secrets.get(
@@ -399,7 +401,11 @@ class SettingsWorkspace:
             draft.client = value.client.client
             profile.name = value.client.name.strip()
             profile.reseed_link_root = value.reseed_link_root.strip()
-            if profile.reseed_link_root and not hasattr(setup, "_folder_candidate"):
+            profile.reseed_layout = value.reseed_layout
+            from torrentlinker.reseed_layout import DISK_RENAME_CLIENTS
+
+            links = value.reseed_layout == "links" or value.client.client in DISK_RENAME_CLIENTS
+            if links and profile.reseed_link_root and not hasattr(setup, "_folder_candidate"):
                 profile.reseed_link_root = str(setup.path_under_root(profile.reseed_link_root))
             if changed:
                 draft.path_mappings.clear()

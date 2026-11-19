@@ -32,7 +32,8 @@ def reseed_app(root, client=None):
 
 
 @pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
-def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_path):
+@pytest.mark.parametrize("layout", ["auto", "links"])
+def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_path, layout):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
@@ -106,15 +107,19 @@ def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_pat
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(frame.get_by_role("button", name="Tout enchaîner", exact=True)).to_be_visible()
             frame.locator(".guided button").first.click()
-            frame.get_by_role("button", name="Parcourir…").click()
-            frame.get_by_role("button", name=str(links), exact=True).click()
-            frame.get_by_role("button", name="Choisir ce dossier", exact=True).click()
-            expect(frame.locator("#root-form [name=path]")).to_have_value(str(links))
+            frame.locator("#root-form [name=layout]").select_option(layout)
+            if layout == "links":
+                frame.get_by_role("button", name="Parcourir…").click()
+                frame.get_by_role("button", name=str(links), exact=True).click()
+                frame.get_by_role("button", name="Choisir ce dossier", exact=True).click()
+                expect(frame.locator("#root-form [name=path]")).to_have_value(str(links))
+            else:
+                expect(frame.locator("#root-form [name=path]")).not_to_be_visible()
             frame.get_by_role("button", name="Enregistrer", exact=True).click()
             expect(frame.locator("#dialog")).not_to_be_visible()
             page.reload()
             expect(frame.locator(".guided button").first).to_contain_text(
-                "Dossier de liens configuré"
+                "Dossier de liens configuré" if layout == "links" else "sans dossier de liens"
             )
             page.on("dialog", lambda dialog: dialog.accept())
             frame.get_by_role("button", name="Tout enchaîner", exact=True).click()

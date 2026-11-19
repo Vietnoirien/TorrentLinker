@@ -223,12 +223,74 @@ function connections(form) {
       "api_key",
       saved.api_key,
     );
-  field(
+  const requiresLinks = ["utorrent", "bittorrent", "rtorrent"].includes(
+    data.client.client,
+  );
+  const layout = field(
+    client,
+    say("Reseed layout", "Organisation de la remise en seed"),
+    data,
+    "reseed_layout",
+    "text",
+    requiresLinks
+      ? [
+          [
+            "auto",
+            say(
+              "Links required for this client",
+              "Liens requis pour ce client",
+            ),
+          ],
+          ["links", say("Links", "Liens")],
+        ]
+      : [
+          [
+            "auto",
+            say(
+              "Default: rename inside the client",
+              "Par défaut : renommer dans le client",
+            ),
+          ],
+          [
+            "client",
+            say("Rename inside the client", "Renommer dans le client"),
+          ],
+          [
+            "links",
+            say(
+              "Links: keep original torrent paths",
+              "Liens : conserver les chemins du torrent",
+            ),
+          ],
+        ],
+  );
+  if (requiresLinks) {
+    layout.disabled = true;
+    layout.value = data.reseed_layout === "links" ? "links" : "auto";
+  }
+  const linkFolder = field(
     client,
     say("Reseed link folder", "Dossier des liens de remise en seed"),
     data,
     "reseed_link_root",
   );
+  const layoutNote = element("p", undefined, "file-access-note");
+  client.append(layoutNote);
+  const showLayout = () => {
+    const links = requiresLinks || data.reseed_layout === "links";
+    linkFolder.closest("label").hidden = !links;
+    layoutNote.textContent = links
+      ? say(
+          "Links preserve original files and the torrent’s paths. Keep the Link Folder outside the Library for as long as its torrents seed. This client choice also applies to Local Items.",
+          "Les liens préservent les fichiers originaux et les chemins du torrent. Conservez le dossier de liens hors bibliothèque tant que ses torrents partagent. Ce choix s’applique aussi aux éléments locaux.",
+        )
+      : say(
+          "Paths are renamed inside the Torrent Client. Original files stay in place; no Link Folder is needed. Existing link layouts are kept.",
+          "Les chemins sont renommés dans le client torrent. Les fichiers originaux restent en place ; aucun dossier de liens n’est nécessaire. Les liens existants sont conservés.",
+        );
+  };
+  layout.addEventListener("input", showLayout);
+  showLayout();
   if (data.client.client === "transmission")
     field(
       client,

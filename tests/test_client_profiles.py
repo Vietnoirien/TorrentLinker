@@ -237,3 +237,20 @@ def test_distributed_plan_can_trade_large_download_for_minimum_count(tmp_path):
     plan = distributed_plan(settings, store, {"default": Client()}, {"default": 10000})
     assert {item.candidate.title for item in plan.items} == {"Small A", "Small B"}
     assert not plan.issues
+
+
+def test_native_connection_carries_the_current_client_reseed_choice(monkeypatch):
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.client_profiles import Connections
+    from torrentlinker.config import Settings
+
+    monkeypatch.setattr("torrentlinker.client_profiles.connect", lambda *args: FakeQbit())
+    settings = Settings()
+    settings.ensure_profiles()
+    connections = Connections(lambda _: "")
+    assert connections.client(settings).reseed_policy.mode == "client"
+    settings.profile().reseed_layout = "links"
+    settings.profile().reseed_link_root = "/chosen/links"
+    client = connections.client(settings)
+    assert client.reseed_policy.mode == "links"
+    assert client.reseed_policy.root == "/chosen/links"

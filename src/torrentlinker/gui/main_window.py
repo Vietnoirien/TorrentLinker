@@ -1971,8 +1971,12 @@ class MainWindow(QMainWindow):
         return True
 
     @agent_settings_change
-    def save_reseed_folder(self, path: str) -> bool:
+    def save_reseed_folder(self, path: str, layout: str | None = None) -> bool:
+        if layout is not None and layout not in {"auto", "client", "links"}:
+            raise ValueError("Unknown Reseed layout.")
         self.settings.profile().reseed_link_root = path
+        if layout is not None:
+            self.settings.profile().reseed_layout = layout
         self.settings.save(self.settings_path)
         if self.agent_runtime:
             self.agent_runtime.reset(self.settings)

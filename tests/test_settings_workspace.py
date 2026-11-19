@@ -253,3 +253,27 @@ def test_first_run_validates_through_draft_proxy_and_restores_it_on_failure(
         workspace.save("connections", body)
         assert setup.configured
         assert net.current() == (proxy, proxy)
+
+
+def test_reseed_layout_is_saved_per_client_and_forced_for_disk_rename_clients(tmp_path):
+    from torrentlinker.config import Settings
+    from torrentlinker.reseed_layout import effective_layout
+
+    _, setup, _, _ = prepared(tmp_path)
+    workspace = SettingsWorkspace(setup)
+    added = workspace.clients("add", {"name": "Second"})
+    second = next(client["id"] for client in added["clients"] if client["name"] == "Second")
+    body = workspace.snapshot()["connections"]
+    body.pop("secrets")
+    body.pop("managed_secrets")
+    body["reseed_layout"] = "links"
+    body["reseed_link_root"] = str(setup.roots[0])
+    workspace.save("connections", body)
+    restored = Settings.load(setup.path)
+    assert restored.profile().reseed_layout == "links"
+    assert restored.profile(second).reseed_layout == "auto"
+    body["reseed_layout"] = "client"
+    body["client"]["client"] = "rtorrent"
+    body["client"]["host"] = "http://127.0.0.1:8080/RPC2"
+    workspace.save("connections", body)
+    assert effective_layout(setup.settings.profile()) == "links"
