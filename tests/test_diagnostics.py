@@ -160,19 +160,16 @@ def test_desktop_export_respects_file_choice(qtbot, tmp_path, monkeypatch, actio
         assert not chosen.exists()
 
 
-def test_settings_export_button_is_translated_and_emits_request(qtbot, qapp):
-    from PySide6.QtCore import Qt
+def test_settings_export_button_is_translated_and_emits_request(qtbot, tmp_path):
+    from tests.settings_support import settings_dialog
+    from tests.test_community_interfaces import js
 
-    from torrentlinker import i18n
-    from torrentlinker.gui.settings_dialog import SettingsDialog
-
-    translators = i18n.install(qapp, "fr")
-    try:
-        dialog = SettingsDialog(Settings())
-        qtbot.addWidget(dialog)
-        assert dialog.diagnostics_button.text() == "Exporter le rapport de diagnostic…"
-        with qtbot.waitSignal(dialog.diagnostics_requested):
-            qtbot.mouseClick(dialog.diagnostics_button, Qt.MouseButton.LeftButton)
-    finally:
-        for translator in translators:
-            qapp.removeTranslator(translator)
+    dialog = settings_dialog(qtbot, tmp_path, Settings(language="fr"), section="general")
+    with qtbot.waitSignal(dialog.view.diagnostics_requested):
+        js(
+            qtbot,
+            dialog.view,
+            "[...document.querySelectorAll('button')].find(b=>b.textCon"
+            "tent==='Exporter le diagnostic…').click()",
+        )
+    assert dialog.parent().exports == [dialog]

@@ -1,0 +1,461 @@
+"""Validated owner Settings groups shared by desktop and Web hosts."""
+
+from __future__ import annotations
+
+import copy
+from dataclasses import asdict
+from pathlib import Path
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from torrentlinker.client_profiles import pending_work
+from torrentlinker.config import CLIENT_FIELDS, MatchingSettings, ProxySettings
+from torrentlinker.domain import ContentKind, PathMapping
+from torrentlinker.web.setup import (
+    Connection,
+    FolderRemoval,
+    FolderSetup,
+    IndexerConnection,
+    ProxySetup,
+    Setup,
+)
+from torrentlinker.web.zen_preferences import ZenPreferences
+
+
+class General(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    language: Literal["auto", "en", "fr"] = "auto"
+    theme: Literal["auto", "dark", "light"] = "auto"
+    media_layout: Literal["cinematic", "focus", "collection"] = "cinematic"
+    ui_scale: float = Field(default=1, ge=0.75, le=2)
+    adult_content: bool = False
+    sequential_video: bool = True
+
+
+class Matching(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    kind_categories: dict[ContentKind, list[Annotated[int, Field(ge=0)]]] = Field(
+        default_factory=dict
+    )
+    size_tolerance: float = Field(ge=0, le=0.2)
+    min_partial_coverage: float = Field(ge=0.01, le=1)
+    ignore_patterns: list[str] = Field(max_length=10000)
+    plan_exclusions: list[str] = Field(max_length=1000)
+
+
+class Connections(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client: Connection
+    indexer: IndexerConnection
+    proxy: ProxySetup
+    tmdb_api_key: str | None = Field(default=None, max_length=4096)
+    announce_url: str | None = Field(default=None, max_length=4096)
+    reseed_link_root: str = Field(default="", max_length=4096)
+
+
+class SettingsWorkspace:
+    def __init__(self, setup: Setup):
+        self.setup = setup
+
+    def test_connection(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if group == "client":
+                return self.setup.test_client(Connection.model_validate(body))
+            if group == "indexer":
+                return self.setup.test_indexer(IndexerConnection.model_validate(body))
+            if group == "proxy":
+                from torrentlinker import net
+
+                value = ProxySetup.model_validate(body)
+                password = value.password
+                if password is None:
+                    password = self.setup.secrets.get("proxy-password")
+                proxy = net.proxy_url(value.address, value.username, password)
+                try:
+                    return {"address": net.redacted(proxy), "ip": net.address_seen(proxy)}
+                except Exception:
+                    raise ValueError(
+                        "Proxy test failed. Check its address and credentials."
+                    ) from None
+            raise ValueError("Unknown connection test.")
+        except ValidationError as error:
+            fields = [".".join(str(part) for part in row["loc"]) for row in error.errors()]
+            raise ValueError("Check Settings fields: " + ", ".join(fields)) from None
+
+    def storage(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Use the existing storage proofs and owner guards for either renderer."""
+        with self.setup.lock:
+            if action not in {
+                "save",
+                "mapping",
+                "download",
+                "remove",
+                "remove-mapping",
+                "categories",
+            }:
+                return self._storage(action, body)
+            root = self.setup._root or self.setup
+            previous = copy.deepcopy(root.settings)
+            selected = copy.deepcopy(self.setup.settings)
+            try:
+                return self._storage(action, body)
+            except Exception:
+                root.settings = previous
+                if self.setup is not root:
+                    self.setup.settings = selected
+                raise
+
+    def _storage(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
+        setup = self.setup
+        with setup.lock:
+            if action == "browse":
+                return setup.browse(str(body.get("path", "")))
+            if action == "preview":
+                return setup.preview_folder(FolderSetup.model_validate(body))
+            if action == "client-folders":
+                from torrentlinker.paths import PathMapper
+
+                mapper = PathMapper(setup.settings.path_mappings)
+                return {
+                    "folders": [
+                        {**asdict(folder), "local": mapper.to_local(folder.path)}
+                        for folder in setup.client().folder_settings()
+                    ]
+                }
+            if action == "categories":
+                setup.test_indexer(IndexerConnection(url=setup.settings.indexer.url), save=True)
+                return self.snapshot()
+            if action == "test":
+                from torrentlinker.paths import check_mappings, unreachable_download_folders
+
+                value = FolderSetup.model_validate({**body, "original_local": ""})
+                result = setup.folder(value, probe=True)
+                mapping = PathMapping(str(setup.path_under_root(value.local)), value.client_path)
+
+                def accessible(path: Path) -> bool:
+                    try:
+                        return setup.path_under_root(str(path)).is_dir()
+                    except (ValueError, OSError):
+                        return False
+
+                result["checks"] = [
+                    asdict(check)
+                    for check in check_mappings(
+                        setup.client().torrents(with_files=False), [mapping], is_dir=accessible
+                    )
+                ]
+                downloads = setup.settings.download_folders
+                result["unreachable"] = [
+                    str(path)
+                    for path in unreachable_download_folders(
+                        [
+                            Path(p)
+                            for p in [downloads.default, *downloads.by_category.values()]
+                            if p
+                        ],
+                        [mapping],
+                        setup.client().default_save_path(),
+                    )
+                ]
+                return result
+            if action == "save":
+                setup.folder(FolderSetup.model_validate(body), save=True)
+            elif action == "mapping":
+                value = FolderSetup.model_validate({**body, "original_local": ""})
+                if pending_work(setup.settings, setup.store, setup.settings.active_client_id):
+                    raise ValueError("Finish pending work before changing Path Mappings.")
+                checked = setup.folder(value, probe=True)
+                if not checked.get("verification"):
+                    raise ValueError("Verify this Path Mapping before saving it.")
+                local = str(setup.path_under_root(value.local))
+                setup.settings.path_mappings = [
+                    m
+                    for m in setup.settings.path_mappings
+                    if m.local != local
+                    and m.qbit != value.client_path
+                    and (m.local, m.qbit)
+                    != (body.get("original_local"), body.get("original_client_path"))
+                ] + [PathMapping(local, value.client_path)]
+                setup.save()
+            elif action == "download":
+                value = FolderSetup.model_validate(body)
+                setup.configure_download_folder(
+                    value.local, value.category, value.client_path, save=True
+                )
+            elif action == "remove":
+                if body.get("confirmed") is not True:
+                    raise ValueError("Confirm folder removal first.")
+                if setup.store.verification_hashes():
+                    raise ValueError("Finish pending Reseed Verifications before removing folders.")
+                setup.remove_folder(FolderRemoval.model_validate(body))
+            elif action == "remove-mapping":
+                if body.get("confirmed") is not True:
+                    raise ValueError("Confirm Path Mapping removal first.")
+                if pending_work(setup.settings, setup.store, setup.settings.active_client_id):
+                    raise ValueError("Finish pending work before changing Path Mappings.")
+                setup.settings.path_mappings = [
+                    mapping
+                    for mapping in setup.settings.path_mappings
+                    if (mapping.local, mapping.qbit) != (body.get("local"), body.get("client_path"))
+                ]
+                setup.save()
+            elif action == "suggest":
+                return setup.suggest_mappings()
+            else:
+                raise ValueError("Unknown storage operation.")
+            return self.snapshot()
+
+    def clients(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
+        with self.setup.lock:
+            root = self.setup._root or self.setup
+            original = root.settings
+            draft = copy.deepcopy(original)
+            draft.capture_client()
+            if action == "add":
+                draft.add_client(body.get("name", ""))
+            elif action in {"default", "remove"}:
+                profile = draft.profile(body.get("client_id", ""))
+                if action == "default":
+                    if not profile.enabled:
+                        raise ValueError("Choose an enabled client.")
+                    draft.default_client_id = profile.id
+                else:
+                    if body.get("confirmed") is not True:
+                        raise ValueError("Confirm client removal first.")
+                    if len(draft.client_profiles) == 1:
+                        raise ValueError("Keep at least one client.")
+                    if pending_work(draft, root.store, profile.id):
+                        raise ValueError("Finish or remove this client's pending work first.")
+                    remaining = [p for p in draft.client_profiles if p.id != profile.id]
+                    if draft.active_client_id == profile.id:
+                        draft.select_client(remaining[0].id)
+                    draft.client_profiles = remaining
+                    if draft.default_client_id == profile.id:
+                        draft.default_client_id = remaining[0].id
+            else:
+                raise ValueError("Unknown client operation.")
+            selected = self.setup.settings.active_client_id
+            if selected not in {p.id for p in draft.client_profiles}:
+                selected = draft.active_client_id
+            root.settings = draft
+            try:
+                root.save()
+            except Exception:
+                root.settings = original
+                raise
+            root.store = root.store.for_client(draft.active_client_id)
+            root._client = None
+            if self.setup is not root:
+                self.setup.settings = draft.for_client(selected)
+                self.setup.store = root.store.for_client(selected)
+                self.setup._client = None
+            return self.snapshot()
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.setup.lock:
+            setup = self.setup
+            settings = setup.settings
+            profile = settings.profile()
+            storage = setup.snapshot()
+            config = getattr(settings, CLIENT_FIELDS[settings.client])
+            return {
+                "client_id": profile.id,
+                "clients": setup.snapshot()["clients"],
+                "default_client_id": (setup._root or setup).settings.default_client_id,
+                "storage": {
+                    key: storage[key]
+                    for key in (
+                        "folders",
+                        "download_folders",
+                        "mappings",
+                        "storage_roots",
+                        "indexer_categories",
+                    )
+                },
+                "general": {key: getattr(settings, key) for key in General.model_fields},
+                "matching": {
+                    **asdict(settings.matching),
+                    "kind_categories": settings.kind_categories,
+                    "plan_exclusions": settings.plan_exclusions,
+                },
+                "zen": {**asdict(settings.zen), "free_space_margin": settings.free_space_margin},
+                "connections": {
+                    "client": {
+                        "client": settings.client,
+                        "name": profile.name,
+                        "host": config.host,
+                        "username": getattr(config, "username", ""),
+                    },
+                    "indexer": {"url": settings.indexer.url},
+                    "proxy": asdict(settings.proxy),
+                    "reseed_link_root": profile.reseed_link_root,
+                    "secrets": {
+                        "password": bool(
+                            setup.secrets.get(
+                                settings.secret_name(CLIENT_FIELDS[settings.client] + "-password")
+                            )
+                        ),
+                        "api_key": bool(setup.secrets.get(settings.secret_name("qbit-api-key"))),
+                        "indexer_api_key": bool(setup.secrets.get("indexer-api-key")),
+                        "extra_keys": len(setup.extra_indexer_keys()),
+                        "tmdb_api_key": bool(setup.secrets.get("tmdb-api-key")),
+                        "announce_url": bool(setup.secrets.get("announce-url")),
+                        "proxy_password": bool(setup.secrets.get("proxy-password")),
+                    },
+                    "managed_secrets": list(setup.secrets.files),
+                },
+            }
+
+    def save(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if group in {"general", "matching", "zen"}:
+                return self._save_preferences(group, body)
+            return self._save_connections(group, body)
+        except ValidationError as error:
+            # Validation errors can otherwise echo newly entered secrets.
+            fields = [".".join(str(part) for part in row["loc"]) for row in error.errors()]
+            raise ValueError("Check Settings fields: " + ", ".join(fields)) from None
+
+    def _save_preferences(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
+        models: dict[str, type[BaseModel]] = {
+            "general": General,
+            "matching": Matching,
+            "zen": ZenPreferences,
+        }
+        value = models[group].model_validate(body)
+        with self.setup.lock:
+            root = self.setup._root or self.setup
+            original = root.settings
+            draft = copy.deepcopy(original)
+            if isinstance(value, General):
+                for key, item in value.model_dump().items():
+                    setattr(draft, key, item)
+            elif isinstance(value, Matching):
+                draft.kind_categories = value.kind_categories
+                draft.matching = MatchingSettings(
+                    value.size_tolerance,
+                    value.min_partial_coverage,
+                    [line.strip() for line in value.ignore_patterns if line.strip()],
+                )
+                draft.plan_exclusions = [
+                    line.strip() for line in value.plan_exclusions if line.strip()
+                ]
+            elif isinstance(value, ZenPreferences):
+                value.apply(draft)
+            root.settings = draft
+            try:
+                root.save()
+            except Exception:
+                root.settings = original
+                raise
+            if self.setup is not root:
+                self.setup.settings = draft.for_client(self.setup.settings.active_client_id)
+            if group != "general" or original.adult_content != draft.adult_content:
+                for profile in draft.client_profiles:
+                    root.store.for_client(profile.id).clear_plan()
+            return self.snapshot()
+
+    def _save_connections(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
+        if group != "connections":
+            raise ValueError("Unknown Settings group.")
+        # Parse every field before any mutation, including secret writes.
+        value = Connections.model_validate(body)
+        with self.setup.lock:
+            setup = self.setup
+            root = setup._root or setup
+            original = root.settings
+            draft = original.for_client(setup.settings.active_client_id)
+            profile = draft.profile()
+            if not value.client.name.strip():
+                raise ValueError("Enter a client name of 1 to 100 characters.")
+            old_config = getattr(draft, CLIENT_FIELDS[draft.client])
+            changed = (
+                draft.client != value.client.client
+                or old_config.host != value.client.host
+                or getattr(old_config, "username", "") != value.client.username
+            )
+            if changed and pending_work(original, root.store, profile.id):
+                raise ValueError(
+                    "Finish or remove this client's pending work before changing its connection."
+                )
+            if (
+                value.indexer.url != draft.indexer.url
+                and setup.secrets.get("indexer-api-key")
+                and setup.store.catalogue_size()
+            ):
+                raise ValueError(
+                    "Use a separate configuration directory for a different Indexer "
+                    "with an existing catalogue."
+                )
+            config = getattr(draft, CLIENT_FIELDS[value.client.client])
+            config.host = value.client.host
+            if hasattr(config, "username"):
+                config.username = value.client.username
+            draft.client = value.client.client
+            profile.name = value.client.name.strip()
+            profile.reseed_link_root = value.reseed_link_root.strip()
+            if profile.reseed_link_root and not hasattr(setup, "_folder_candidate"):
+                profile.reseed_link_root = str(setup.path_under_root(profile.reseed_link_root))
+            if changed:
+                draft.path_mappings.clear()
+                draft.download_folders.default = ""
+                draft.download_folders.by_category.clear()
+            draft.indexer.url = value.indexer.url
+            draft.proxy = ProxySettings(
+                value.proxy.address, value.proxy.username, value.proxy.torrent_client
+            )
+            values = {
+                draft.secret_name(CLIENT_FIELDS[draft.client] + "-password"): value.client.password,
+                "indexer-api-key": value.indexer.api_key,
+                "tmdb-api-key": value.tmdb_api_key,
+                "announce-url": value.announce_url,
+                "proxy-password": value.proxy.password,
+            }
+            if CLIENT_FIELDS[draft.client] == "qbit":
+                values[draft.secret_name("qbit-api-key")] = value.client.api_key
+            if value.indexer.extra_keys is not None:
+                values.update(
+                    {
+                        f"indexer-extra-key-{i + 1}": value.indexer.extra_keys[i]
+                        if i < len(value.indexer.extra_keys)
+                        else ""
+                        for i in range(4)
+                    }
+                )
+            if not root.configured:
+                setup.test_client(value.client)
+            credentials = {key: item for key, item in values.items() if item is not None}
+            previous_credentials = {key: setup.secrets.get(key) for key in credentials}
+            draft.capture_client()
+            draft.select_client(original.active_client_id)
+            try:
+                setup.secrets.update(credentials)
+                root.settings = draft
+                root.save()
+            except Exception:
+                root.settings = original
+                # A failed configuration write must not leave replacement keys
+                # paired with the old connection settings.
+                if credentials and not any(key in setup.secrets.files for key in credentials):
+                    setup.secrets.update(previous_credentials)
+                raise
+            if not root.configured:
+                root.marker.write_text("connected", encoding="utf-8")
+                root.configured = True
+                setup.configured = True
+            from torrentlinker import net
+
+            net.configure(
+                net.proxy_url(
+                    draft.proxy.address, draft.proxy.username, setup.secrets.get("proxy-password")
+                ),
+                draft.proxy.torrent_client,
+            )
+            root._folder_proofs.clear()
+            root._client = root._indexer = None
+            if setup is not root:
+                setup.settings = draft.for_client(profile.id)
+                setup._client = setup._indexer = None
+            return self.snapshot()

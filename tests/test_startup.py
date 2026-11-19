@@ -1,9 +1,11 @@
+from copy import deepcopy
+from types import SimpleNamespace
+
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QMessageBox
 
 from torrentlinker.config import Settings
 from torrentlinker.gui import main_window
-from torrentlinker.gui.library_workspace import FolderEditor
 from torrentlinker.gui.upload_eligibility import UploadEligibility as UploadTab
 from torrentlinker.gui.zen_view import SeedingView
 from torrentlinker.store import Store
@@ -151,14 +153,16 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
         diagnostics_requested = Signal()
         agent_approvals = ()
 
-        def __init__(self, settings, parent):
+        def __init__(self, parent, *, section):
             super().__init__(parent)
             opened.append(True)
-            self.folder_editor = FolderEditor(settings.library_folders, parent)
+            self.setup = SimpleNamespace(settings=deepcopy(parent.settings))
+            self.saved = False
 
         def exec(self):
             if save[0]:
                 secret["key"] = "test-key"
+                self.saved = True
                 return True
             return False
 
@@ -188,9 +192,10 @@ def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, mon
         diagnostics_requested = Signal()
         agent_approvals = ()
 
-        def __init__(self, settings, parent):
+        def __init__(self, parent, *, section):
             super().__init__(parent)
-            self.folder_editor = FolderEditor(settings.library_folders, parent)
+            self.setup = SimpleNamespace(settings=deepcopy(parent.settings))
+            self.saved = True
 
         def exec(self):
             return True

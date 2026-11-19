@@ -344,313 +344,34 @@ function table(target, rows, columns, selection, key = "hash", onChange, onRow) 
   t.append(body);
   host.append(t);
 }
-function step(name) {
-  document
-    .querySelectorAll(".setup-step")
-    .forEach((el) => (el.hidden = el.id !== `step-${name}`));
-  document
-    .querySelectorAll(".steps button")
-    .forEach((b) => b.classList.toggle("active", b.dataset.step === name));
-  if (name === "ready") renderCapabilities();
-}
 async function refreshSetup() {
   state.setup = await api("setup");
-  // The form below represents this saved profile, even after leaving Add client.
-  state.addingClient = false;
-  $("client-password").value = "";
-  $("client-key").value = "";
-  // XXX choices and the Media XXX panel only once adult content is enabled.
   for (const node of document.querySelectorAll("[data-adult]")) node.hidden = !state.setup.adult_content;
   if (!state.clientId) state.clientId = state.setup.client_id;
   const selector = $("target-client");
   selector.replaceChildren(new Option(say("All clients · overview", "Tous les clients · aperçu"), "all"),
     ...state.setup.clients.map(p => new Option(p.name, p.id)));
   selector.value = state.clientId;
-  $("client-name").value = state.setup.name;
-  $("reseed-folder-settings").hidden = false;
-  $("reseed-root").value = state.setup.reseed_link_root || localStorage.getItem(`reseed-root:${state.setup.client_id}`) || "";
-  $("client-kind").value = state.setup.client;
-  $("client-host").value = state.setup.host;
-  $("client-username").value = state.setup.username;
-  $("indexer-url").value = state.setup.indexer_url;
-  $("indexer-key-count").textContent = `${state.setup.indexer_key_count || 0} ${say("API key(s) saved · up to 5 per account", "clé(s) API enregistrée(s) · jusqu’à 5 par compte")}`;
   $("connection-status").textContent = state.setup.configured
     ? `${state.setup.name} · ${state.setup.client.toUpperCase()} · ${new URL(state.setup.host).host}`
     : "TORRENTLINKER WEB";
-  $("saved-folders").replaceChildren(
-    ...state.setup.folders.map((f) =>
-      savedFolder(f.local, "library", `${f.local} · ${f.kind} · ${f.depth ?? say("Automatic", "Automatique")}`),
-    ),
-  );
-  if (state.setup.download_folder)
-    $("saved-folders").append(
-      savedFolder(
-        state.setup.download_folder,
-        "download",
-        `${say("Downloads", "Téléchargements")} · ${state.setup.download_folder}`,
-      ),
-    );
-  $("proxy-address").value = state.setup.proxy.address;
-  $("proxy-username").value = state.setup.proxy.username;
-  $("proxy-client").checked = state.setup.proxy.torrent_client;
-  clientKind();
-  renderCapabilities();
-  if (typeof renderLibraryDownloads === "function") renderLibraryDownloads();
+  if (typeof settingsEnvironment === "function") settingsEnvironment();
 }
-function savedFolder(local, purpose, label) {
-  const row = element("div", undefined, "toolbar");
-  row.append(
-    element("span", label),
-    button(say("Remove folder", "Retirer ce dossier"), async () => {
-      await api("setup/remove-folder", { local, purpose });
-      await refreshSetup();
-    }),
-  );
-  return row;
-}
-function renderCapabilities() {
-  if (!state.setup) return;
-  const features = [
-    [
-      say("Torrent management", "Gestion des torrents"),
-      state.setup.capabilities.manage,
-    ],
-    [
-      say("Search and Zen profile", "Recherche et profil Zen"),
-      state.setup.indexer_configured,
-    ],
-    [
-      say("Library scanning and reseeding", "Analyse et reseed"),
-      state.setup.capabilities.scan,
-    ],
-    [
-      say("Downloads and planning", "Téléchargements et planification"),
-      state.setup.capabilities.download,
-    ],
-  ];
-  $("capabilities").replaceChildren(
-    ...features.map(([label, ready]) => {
-      const row = element("div", undefined, "capability");
-      row.append(
-        element("span", ready ? "✓" : "○"),
-        element("span", label),
-        element(
-          "small",
-          ready
-            ? say("Ready", "Prêt")
-            : say("Needs configuration", "À configurer"),
-        ),
-      );
-      return row;
-    }),
-  );
-}
-function renderSecretHints() {
-  const setup = state.setup || {};
-  const editingSavedClient = !state.addingClient && $("client-kind").value === setup.client;
-  const fields = [
-    ["client-password", editingSavedClient && setup.has_password],
-    ["client-key", editingSavedClient && setup.has_api_key],
-    ["proxy-password", setup.has_proxy_password],
-    ["announce-url", setup.has_announce_url],
-  ];
-  for (const [id, saved] of fields) {
-    $(id).placeholder = saved
-      ? say("Saved · leave blank to keep", "Enregistré · laisser vide pour conserver")
-      : say("Not saved", "Non enregistré");
-  }
-}
-function clientKind() {
-  renderSecretHints();
-  $("username-label").hidden = $("client-kind").value === "deluge";
-  $("client-key").parentElement.hidden =
-    $("client-kind").value !== "qbittorrent";
-}
-function connection() {
-  return {
-    ...(state.addingClient ? {password: $("client-password").value, api_key: $("client-key").value} : {}),
-    name: $("client-name").value.trim(),
-    client: $("client-kind").value,
-    host: $("client-host").value,
-    username: $("client-username").value,
-    ...($("client-password").value
-      ? { password: $("client-password").value }
-      : {}),
-    ...($("client-key").value ? { api_key: $("client-key").value } : {}),
-  };
-}
-function folder() {
-  return {
-    local: $("folder-local").value,
-    client_path: $("folder-client").value,
-    purpose: $("folder-purpose").value,
-    kind: $("folder-kind").value,
-    depth: $("folder-depth").value === "auto" ? null : Number($("folder-depth").value),
-  };
-}
-function indexer() {
-  return {
-    url: $("indexer-url").value,
-    ...($("indexer-key").value ? { api_key: $("indexer-key").value } : {}),
-    ...($("indexer-replace-keys").checked ? {extra_keys: [1,2,3,4].map(i => $(`indexer-extra-${i}`).value).filter(Boolean)} : {}),
-  };
-}
-function showFolders(rows) {
-  $("import-folders").replaceChildren(
-    ...rows
-      .filter((f) => f.path)
-      .map((f) =>
-        button(
-          `${f.name || say("Default folder", "Dossier par défaut")} · ${f.path}`,
-          () => {
-            $("folder-client").value = f.path;
-            if (state.setup.storage_roots.includes(f.path))
-              $("folder-local").value = f.path;
-          },
-        ),
-      ),
-  );
-}
-async function testClient(save = false, turnOffPartialNames = false) {
-  $("client-result").textContent = say("Connecting…", "Connexion…");
-  $("client-partial-names").hidden = true;
-  try {
-    const result = await api(
-      save && state.addingClient ? "clients" : `setup/${save ? "client" : "test-client"}`,
-      {...connection(), turn_off_partial_names: turnOffPartialNames},
-    );
-    $("client-result").textContent = `✓ ${result.version}\n${result.warning}`;
-    showFolders(result.folders);
-    if (save) {
-      if (result.client_id) state.clientId = result.client_id;
-      state.addingClient = false;
-      $("client-password").value = "";
-      $("client-key").value = "";
-      await refreshSetup();
-      step("storage");
-    }
-  } catch (e) {
-    $("client-result").textContent = e.message;
-    if (e.action === "turn_off_partial_names") {
-      // Transmission is reachable; it would rename files to .part. Offer the desktop's fix.
-      const fix = $("client-partial-names");
-      fix.hidden = false;
-      fix.onclick = () => guard(() => testClient(save, true));
-      return;
-    }
-    throw e;
-  }
-}
-async function testFolder(save = false) {
-  $("folder-result").textContent = say("Checking access with the Torrent Client…", "Vérification de l’accès avec le client torrent…");
-  const r = await api(`setup/${save ? "folder" : "test-folder"}`, folder());
-  $("folder-result").textContent = r.sample
-    ? `${r.sample.local}\n→ ${r.sample.client}\n✓ ${say("Matching file and size", "Même fichier, même taille")}`
-    : r.verification === "temporary-file"
-      ? say("✓ Temporary file verified by the Torrent Client. Test file and torrent removed.", "✓ Fichier temporaire vérifié par le client torrent. Fichier et torrent de test supprimés.")
-      : r.warning;
-  if (save) await refreshSetup();
-}
-async function testIndexer(save = false) {
-  $("indexer-result").textContent = say(
-    "Checking key…",
-    "Vérification de la clé…",
-  );
-  const r = await api(`setup/${save ? "indexer" : "test-indexer"}`, indexer());
-  $("indexer-result").textContent =
-    `✓ ${r.categories} ${say("categories", "catégories")}`;
-  if (save) {
-    $("indexer-key").value = "";
-    for (const i of [1,2,3,4]) $(`indexer-extra-${i}`).value = "";
-    $("indexer-replace-keys").checked = false;
-    await refreshSetup();
-    step("ready");
-  }
-}
-async function browse(path = "") {
-  const r = await api(`folders?${new URLSearchParams({ path })}`),
-    content = $("dialog-content");
-  content.replaceChildren(
-    element("h2", say("Folders on this server", "Dossiers de ce serveur")),
-    element(
-      "p",
-      r.path || say("Configured storage roots", "Stockages configurés"),
-    ),
-  );
-  if (r.path)
-    content.append(
-      button(
-        say("Use this folder", "Utiliser ce dossier"),
-        () => {
-          $("folder-local").value = r.path;
-          $("dialog").close();
-        },
-        "primary",
-      ),
-    );
-  if (r.path) content.append(button("↑", () => browse(r.parent)));
-  for (const path of r.folders)
-    content.append(button(path, () => browse(path), "directory-button"));
-  if (!r.folders.length && !r.path)
-    content.append(
-      element(
-        "p",
-        say(
-          "No storage roots configured. Mount your media and set TL_STORAGE_ROOTS on the server. Remote torrent management is still available.",
-          "Aucun stockage configuré. Montez vos médias et définissez TL_STORAGE_ROOTS sur le serveur. La gestion distante des torrents reste disponible.",
-        ),
-      ),
-    );
-  if (!$("dialog").open) $("dialog").showModal();
-}
-let agentTokenGeneration = 0;
 function clearAgentToken() {
-  agentTokenGeneration += 1;
-  $("agent-token").value = "";
-  $("agent-token-box").hidden = true;
+  document.dispatchEvent(new Event("tl-settings-clear-secrets"));
 }
 async function settingsSection(section, detail) {
-  rememberTab("setup", section, detail);
-  state.settingsSection = section;
-  document.querySelectorAll("[data-settings-panel]").forEach(el => {
-    el.hidden = el.dataset.settingsPanel !== section;
-  });
-  document.querySelectorAll("[data-settings-section]").forEach(el => {
-    if (el.dataset.settingsSection === section) el.setAttribute("aria-current", "page");
-    else el.removeAttribute("aria-current");
-  });
-  if (section !== "agents") clearAgentToken();
-  if (section === "agents") {
-    agentTab(detail || "connections");
-    await loadAgents();
-  }
-  if (section === "assistant") await loadAssistantConnections();
-  if (section === "companion") await loadZenProfile();
+  state.settingsSection = section === "interface" ? "general" : section;
+  rememberTab("setup", state.settingsSection, detail);
+  settingsEnvironment();
 }
-document.querySelectorAll("[data-settings-section]").forEach(el => {
-  el.onclick = () => guard(() => settingsSection(el.dataset.settingsSection));
-});
-function agentTab(name) {
-  rememberTab("setup", "agents", name === "connections" ? undefined : name);
-  document.querySelectorAll("[data-agent-panel]").forEach(panel => {
-    panel.hidden = panel.dataset.agentPanel !== name;
-  });
-  document.querySelectorAll("[data-agent-tab]").forEach(tab => {
-    if (tab.dataset.agentTab === name) tab.setAttribute("aria-current", "page");
-    else tab.removeAttribute("aria-current");
-  });
-  if (name !== "new") clearAgentToken();
-}
-document.querySelectorAll("[data-agent-tab]").forEach(el => {
-  el.onclick = () => agentTab(el.dataset.agentTab);
-});
 
 // Only workspace locations belong in the fragment. Form state and filters stay local.
 const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
-  setup: ["connections", "interface", "companion", "assistant", "agents"],
+  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "zen", "interface", "companion", "assistant", "agents"],
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {
@@ -719,9 +440,9 @@ async function navigate(view, section, detail) {
   $("page-title").textContent =
     document.querySelector(`[data-view="${view}"]`)?.textContent || view;
   if (view === "setup") {
+    if (state.clientId === "all") state.clientId = state.setup.default_client_id;
     await refreshSetup();
     if (activeRoute !== route) return;
-    step("client");
     await settingsSection(section, detail);
   }
   if (view === "assistant") await loadAssistant();
@@ -923,34 +644,9 @@ $("login-form").onsubmit = (e) => {
     await enter();
   });
 };
-$("client-form").onsubmit = (e) => {
-  e.preventDefault();
-  guard(() => testClient(true));
-};
-$("test-client").onclick = () => guard(() => testClient());
-$("client-kind").onchange = clientKind;
-$("folder-form").onsubmit = (e) => {
-  e.preventDefault();
-  guard(() => testFolder(true));
-};
-$("test-folder").onclick = () => guard(() => testFolder());
-$("browse").onclick = () => guard(() => browse());
-$("indexer-form").onsubmit = (e) => {
-  e.preventDefault();
-  guard(() => testIndexer(true));
-};
-$("test-indexer").onclick = () => guard(() => testIndexer());
-$("finish-setup").onclick = () =>
-  guard(async () => {
-    await navigate("torrents");
-    if (state.setup.configured) await job({ kind: "refresh" }, loadTorrents);
-  });
 document
   .querySelectorAll("[data-view]")
   .forEach((b) => (b.onclick = () => guard(() => navigate(b.dataset.view))));
-document
-  .querySelectorAll("[data-step]")
-  .forEach((b) => (b.onclick = () => step(b.dataset.step)));
 $("logout").onclick = () =>
   guard(async () => {
     await api("logout", {});
@@ -974,9 +670,7 @@ $("language").onchange = () => {
   language = $("language").value;
   localStorage.setItem("tl-language", language);
   translate();
-  renderSecretHints();
   document.dispatchEvent(new Event("tl-language-changed"));
-  if (state.view === "setup" && state.settingsSection === "agents") guard(loadAgents);
   if (state.view === "zen") { guard(loadZenSeeding); planEnvironment(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") uploadEnvironment();
@@ -1008,234 +702,15 @@ document.addEventListener("DOMContentLoaded", () => guard(async () => {
   }
 }));
 
-$("save-announce").onclick = () =>
-  guard(async () => {
-    const value = $("announce-url").value;
-    await api("setup/announce", { value });
-    if ($("announce-url").value === value) $("announce-url").value = "";
-    state.setup.has_announce_url = true;
-    renderSecretHints();
-    toast(say("Announce URL saved.", "URL d’annonce enregistrée."));
-  });
-$("save-proxy").onclick = () =>
-  guard(async () => {
-    const password = $("proxy-password").value;
-    await api("setup/proxy", {
-      address: $("proxy-address").value,
-      username: $("proxy-username").value,
-      torrent_client: $("proxy-client").checked,
-      ...(password ? { password } : {}),
-    });
-    if (password) state.setup.has_proxy_password = true;
-    if ($("proxy-password").value === password) $("proxy-password").value = "";
-    renderSecretHints();
-    toast(
-      say(
-        "Proxy settings saved. Test the connection again.",
-        "Proxy enregistré. Testez à nouveau la connexion.",
-      ),
-    );
-  });
-$("suggest-mappings").onclick = () =>
-  guard(async () => {
-    const result = await api("setup/suggest-mappings", {});
-    $("mapping-suggestions").replaceChildren(
-      ...result.suggestions.map((s) =>
-        button(`${s.mapping.local} → ${s.mapping.qbit}`, () => {
-          $("folder-local").value = s.mapping.local;
-          $("folder-client").value = s.mapping.qbit;
-        }),
-      ),
-    );
-    if (!result.suggestions.length)
-      $("mapping-suggestions").append(
-        element(
-          "p",
-          result.same_paths
-            ? say(
-                "Some torrents already use the same path. Select that folder below.",
-                "Certains torrents utilisent déjà le même chemin. Sélectionnez ce dossier ci-dessous.",
-              )
-            : say(
-                "No matching file found. Check your mount, then enter both folder paths below.",
-                "Aucun fichier correspondant. Vérifiez le montage puis indiquez les deux chemins ci-dessous.",
-              ),
-        ),
-      );
-  });
-
 $("target-client").onchange = () => guard(async () => {
   state.clientId = $("target-client").value;
   uploadEnvironment();
-  state.addingClient = false;
-  $("client-password").value = ""; $("client-key").value = "";
   state.selected.clear(); state.queueSelected.clear();
   state.offset = 0; state.libraryOffset = 0; state.localItem = "";
   await refreshSetup();
   await navigate(state.clientId === "all" && state.view !== "zen" ? "torrents" : state.view);
   if (state.setup.configured && state.view !== "media") await job({kind: "refresh"}, state.view === "zen" ? loadZenSeeding : loadTorrents);
 });
-$("add-client").onclick = () => {
-  state.addingClient = true;
-  $("reseed-folder-settings").hidden = true;
-  $("client-name").value = ""; $("client-host").value = "";
-  $("client-username").value = ""; $("client-password").value = ""; $("client-key").value = "";
-  renderSecretHints();
-  $("client-name").focus();
-};
-$("default-client").onclick = () => guard(async () => {
-  await api("clients/default", {client_id: state.setup.client_id}); await refreshSetup();
-});
-$("remove-client").onclick = () => guard(async () => {
-  if (!confirm(say("Remove this client profile? Torrents and files will be kept.", "Retirer ce profil ? Les torrents et fichiers seront conservés."))) return;
-  await api("clients/remove", {client_id: state.setup.client_id}); state.clientId = ""; await refreshSetup();
-});
-
-
-function agentReviewInUse() {
-  return !document.querySelector('[data-agent-panel="new"]').hidden ||
-    $("view-agents").querySelector("details[open]") ||
-    ["agent-connections", "agent-proposals", "agent-goals", "agent-activity"]
-      .some(id => $(id).contains(document.activeElement));
-}
-let agentRequest = 0;
-async function loadAgents(background = false) {
-  const request = ++agentRequest;
-  const data = await api("agents");
-  if (request !== agentRequest || (background && agentReviewInUse())) return;
-  const snapshot = JSON.stringify([data, state.setup.clients, language]);
-  if (state.agentSnapshot === snapshot) return;
-  state.agentSnapshot = snapshot;
-  $("agents-enabled").checked = data.enabled;
-  $("agents-endpoint").textContent = new URL("mcp/", location.href).href;
-  const choices = $("agent-clients");
-  const previous = new Set([...choices.querySelectorAll("input:checked")].map(e => e.value));
-  const firstLoad = !choices.children.length;
-  choices.replaceChildren(...state.setup.clients.filter(p => p.enabled).map(p => {
-    const label = element("label"), input = document.createElement("input");
-    input.type = "checkbox"; input.value = p.id;
-    input.checked = firstLoad ? p.id === state.setup.client_id : previous.has(p.id);
-    label.append(input, document.createTextNode(p.name)); return label;
-  }));
-  $("agent-permissions").disabled = $("agent-mode").value === "propose";
-  const connections = data.connections.filter(g => !g.id.startsWith("assistant-"));
-  const permissions = Object.fromEntries([...$("agent-permissions").querySelectorAll("label")]
-    .map(label => [label.querySelector("input").value, label.textContent.trim()]));
-  const clientNames = new Map(state.setup.clients.map(p => [p.id, p.name]));
-  $("agent-connections").replaceChildren(...connections.map(g => {
-    const row = element("div", undefined, "card");
-    const heading = element("div", undefined, "toolbar");
-    heading.append(element("h3", g.name), element("span", g.revoked ? say("Revoked", "Révoquée") : say("Active", "Active"), "badge"));
-    const details = element("dl", undefined, "agent-connection-details");
-    const fields = [
-      [say("Torrent Clients", "Clients torrent"), g.clients.map(id => clientNames.get(id) || id).join(", ")],
-      [say("Mode", "Mode"), g.mode === "execute" ? say("Execute permitted actions", "Exécuter les actions autorisées") : say("Proposals only", "Propositions uniquement")],
-      [say("Automatic actions", "Actions automatiques"), g.mode === "execute" && g.permissions.length ? g.permissions.map(p => permissions[p] || p).join(", ") : say("None", "Aucune")],
-      [say("Daily download budget", "Budget quotidien"), bytes(g.daily_bytes)],
-      [say("Torrents per day", "Torrents par jour"), String(g.daily_torrents)],
-      [say("Keep free", "Espace à conserver"), bytes(g.reserve_bytes)],
-    ];
-    fields.forEach(([label, value]) => details.append(element("dt", label), element("dd", value)));
-    row.append(heading, details);
-    if (!g.revoked) row.append(button(say("Revoke connection", "Révoquer la connexion"), async () => {
-      await api(`agents/${g.id}/revoke`, {}); await loadAgents();
-    }));
-    return row;
-  }));
-  if (!connections.length) $("agent-connections").append(element("p", say(
-    "No connections yet. Choose New connection to create one.",
-    "Aucune connexion. Choisissez Nouvelle connexion pour en créer une."
-  ), "empty"));
-  $("agent-proposals").replaceChildren(...data.proposals.map(p => {
-    const row = element("details", undefined, "card");
-    const name = data.connections.find(g => g.id === p.grant_id)?.name || p.grant_id;
-    row.append(element("summary", `${name} · ${p.body.kind} · ${p.body.client_id} · ${p.status}`));
-    const details = element("pre", JSON.stringify(p.body, null, 2)); row.append(details);
-    if (p.status === "pending") {
-      row.append(button(say("Approve", "Approuver"), async () => {
-        if (["upload-send", "upload-reset", "upload-remove"].includes(p.body.kind) ||
-          (p.body.kind === "edit-queue-selection" && p.body.queue_action === "remove")) {
-          await aReview(p.id, loadAgents); return;
-        }
-        const destructive = p.body.kind === "manage" && ["remove", "delete"].includes(p.body.action);
-        if (destructive) {
-          const preview = await api(`agents/proposals/${p.id}/review`);
-          if (!confirm(preview.client + "\n" + preview.warning + "\n\n" +
-            preview.torrents.map(t => t.name + "\n" + t.folder).join("\n"))) return;
-        }
-        await api(`agents/proposals/${p.id}/approve`, {}); await loadAgents();
-      }), button(say("Reject", "Refuser"), async () => {
-        await api(`agents/proposals/${p.id}/reject`, {}); await loadAgents();
-      }));
-    }
-    if (p.job_id) row.append(button(say("View job", "Voir la tâche"), async () => {
-      const job = await api(`jobs/${p.job_id}`);
-      details.textContent = JSON.stringify(job, null, 2);
-    }), button(say("Cancel job", "Annuler la tâche"), async () => {
-      await api(`jobs/${p.job_id}/cancel`, {}); await loadAgents();
-    }));
-    if (p.body.kind === "send-queue") row.append(button(
-      say("Release uncertain storage reservation", "Libérer la réserve disque incertaine"), async () => {
-        if (!confirm(say(
-          "Check the Torrent Client first. Confirm that this send has finished or did not start. Daily spending stays counted.",
-          "Vérifiez d'abord le client torrent. Confirmez que cet envoi est terminé ou n'a pas démarré. Le budget quotidien reste débité."
-        ))) return;
-        await api(`agents/proposals/${p.id}/release-storage`, {}); await loadAgents();
-      }
-    ));
-    return row;
-  }));
-  $("agent-goals").replaceChildren(...data.goals.map(g => element("pre", JSON.stringify(g.body, null, 2))));
-  $("agent-activity").replaceChildren(...data.activity.map(e =>
-    element("p", `${new Date(e.created * 1000).toLocaleString()} · ${e.action} · ${e.detail}`)));
-}
-$("agents-refresh").onclick = () => guard(loadAgents);
-let agentPolling = false;
-setInterval(() => {
-  if (agentPolling || document.hidden || $("workspace").hidden || state.view !== "setup" || state.settingsSection !== "agents") return;
-  // Do not replace a form or review the owner is currently using. Refresh is always available.
-  if (agentReviewInUse()) return;
-  agentPolling = true;
-  guard(() => loadAgents(true)).finally(() => { agentPolling = false; });
-}, 3000);
-$("agents-enabled").onchange = () => guard(async () => {
-  await api("agents", {enabled: $("agents-enabled").checked}, "PUT"); await loadAgents();
-});
-$("agent-mode").onchange = () => { $("agent-permissions").disabled = $("agent-mode").value === "propose"; };
-$("agent-token-hide").onclick = clearAgentToken;
-$("agent-token-save").onclick = () => {
-  const token = $("agent-token").value;
-  if (!token) return;
-  const url = URL.createObjectURL(new Blob([token + "\n"], {type: "text/plain;charset=utf-8"}));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "torrentlinker-token.txt";
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
-$("agent-form").onsubmit = event => {
-  event.preventDefault();
-  guard(async () => {
-    const generation = agentTokenGeneration;
-    const grant = await api("agents", {
-      name: $("agent-name").value,
-      clients: [...$("agent-clients").querySelectorAll("input:checked")].map(e => e.value),
-      mode: $("agent-mode").value,
-      permissions: $("agent-mode").value === "propose" ? [] : [...$("agent-permissions").querySelectorAll("input:checked")].map(e => e.value),
-      daily_bytes: Number($("agent-bytes").value) * 1024 ** 3,
-      daily_torrents: Number($("agent-count").value),
-      reserve_bytes: Number($("agent-reserve").value) * 1024 ** 3,
-    });
-    if (generation === agentTokenGeneration) {
-      $("agent-token").value = grant.token; $("agent-token-box").hidden = false;
-    } else {
-      toast(say("Connection created. Its token was dismissed when you left New connection. Revoke it and create another if needed.",
-        "Connexion créée. Son jeton a été masqué lorsque vous avez quitté Nouvelle connexion. Révoquez-la et recréez-en une si nécessaire."));
-    }
-    await loadAgents();
-  });
-};
-
 $("navigation-toggle").onclick = () => {
   const collapsed = document.body.classList.toggle("navigation-collapsed");
   $("navigation-toggle").setAttribute("aria-expanded", String(!collapsed));

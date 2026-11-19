@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 
 from torrentlinker.domain import ContentKind, LibraryFolder
 from torrentlinker.gui.library_folder_dialog import grouping, grouping_box
-from torrentlinker.gui.settings_dialog import choose_directory, kind_label, offered_kinds
+from torrentlinker.gui.settings_common import choose_directory, kind_label, offered_kinds
 from torrentlinker.gui.workspace_tabs import WorkspaceTabs
 from torrentlinker.scan import ScanError
 

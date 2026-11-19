@@ -48,29 +48,27 @@ def test_native_board_runs_the_shared_workflow(qtbot, tmp_path, monkeypatch):
         window.grab().save(str(Path(output) / "reseed-desktop.png"))
 
 
-def test_link_folder_is_edited_in_client_settings_without_leaking_between_clients(
-    qtbot, monkeypatch
-):
+def test_link_folder_is_edited_in_client_settings_without_leaking_between_clients(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
     from torrentlinker.config import Settings
-    from torrentlinker.gui.settings_dialog import SettingsDialog
 
-    settings = Settings()
+    settings = Settings(language="en")
     original = settings.active_client_id
     other = settings.add_client("NAS")
     settings.select_client(other.id)
-    monkeypatch.setattr(SettingsDialog, "_save_secrets", lambda self: None)
-    dialog = SettingsDialog(settings, secret_values={})
-    qtbot.addWidget(dialog)
-    dialog.reseed_link_root.setText("/media/nas-links")
-    dialog._save()
-    assert settings.profile().reseed_link_root == "/media/nas-links"
-    settings.select_client(original)
-    assert settings.profile().reseed_link_root == ""
-    cancelled = SettingsDialog(settings, secret_values={})
-    qtbot.addWidget(cancelled)
-    cancelled.reseed_link_root.setText("/do-not-save")
+    dialog = settings_dialog(qtbot, tmp_path, settings)
+    edit_field(qtbot, dialog.view, "Reseed link folder", "/media/nas-links")
+    save_group(qtbot, dialog)
+    saved = Settings.load(dialog.setup.path)
+    assert saved.profile().reseed_link_root == "/media/nas-links"
+    dialog.close()
+    saved.select_client(original)
+    assert saved.profile().reseed_link_root == ""
+    cancelled = settings_dialog(qtbot, tmp_path, saved)
+    edit_field(qtbot, cancelled.view, "Reseed link folder", "/do-not-save")
     cancelled.reject()
-    assert settings.profile().reseed_link_root == ""
+    assert saved.profile().reseed_link_root == ""
+    assert Settings.load(dialog.setup.path).profile().reseed_link_root == "/media/nas-links"
 
 
 def test_shared_native_view_renders_and_browses_folders(qtbot, tmp_path, monkeypatch):

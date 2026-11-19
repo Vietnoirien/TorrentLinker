@@ -77,7 +77,7 @@ def test_desktop_fetch_only_limits_non_c411_indexers(qtbot, tmp_path):
     from torrentlinker.credentials import set_secret
     from torrentlinker.downloads import IndexerCategory
     from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.indexer import Indexer
     from torrentlinker.store import Store
 

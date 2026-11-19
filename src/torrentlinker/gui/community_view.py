@@ -155,6 +155,9 @@ class BundledView(QWidget):
                             "queue.js",
                             "browser.js",
                             "common.js",
+                            "assistant.js",
+                            "companion.js",
+                            "agents.js",
                         )
                     }
                     | {

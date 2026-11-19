@@ -90,17 +90,17 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 |---|---|---|---|---|---|---|
 | 36 | Documentation | **BV** `DocumentationTab` | same bundled `documentation/view.html` | Implemented (#114) | `interface-backlog/README.md` | Native external browser vs Web links; standalone citation URLs remain plain documents |
 | 37 | Reading room / Salon de lecture | Native `ReadingRoom` (`ebook_reader.py`) | none | DO | none | native EPUB/PDF rendering |
-| 38 | Settings › Connections | `settings_dialog.py` client/indexer/TMDb/proxy boxes | setup steps 1-4 | NU | `web-070.md`, `multi-client-080.md` | system keyring |
-| 39 | Settings › Library Folders | `_folders_box` | step "Folders" | NU | none | native picker |
-| 40 | Settings › Search & Matching | `_search_box`, `_matching_box` | none | DO | none | — |
-| 41 | Settings › Download Folders | `_downloads_box` | `library-download-form` | NU | none | picker, import from client |
-| 42 | Settings › Client Paths | `_paths_box` | Path Mappings | NU | `CONTEXT.md` | local disk |
-| 43 | Settings › Zen | `_zen_box` | fields inside Zen › Plan | NU | none | — |
-| 44 | Settings › General | `_general_box` | sidebar selects + Interface page | NU | none | interface-size scaling is Qt |
-| 45 | Settings › Assistant | `assistant_connections.py` | `assistant.js:558+` | NU | assistant spec | — |
-| 46 | Settings › Companion | `companion_panel.py` | `index.html:402-416` | NU | none | local receiver port 8767 |
-| 47 | Settings › Agent access | `agent_access.py` | `index.html:418-466` | NU | `mcp-090.md` | — |
-| 48 | Clients… dialog | `ClientProfilesDialog` | Settings › Connections | NU | `multi-client-080.md` | — |
+| 38 | Settings › Connections | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | system keyring |
+| 39 | Settings › Library Folders | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | native picker |
+| 40 | Settings › Search & Matching | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
+| 41 | Settings › Download Folders | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | picker, import from client |
+| 42 | Settings › Client Paths | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | local disk |
+| 43 | Settings › Zen | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
+| 44 | Settings › General | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | interface-size scaling is Qt |
+| 45 | Settings › Assistant | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
+| 46 | Settings › Companion | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | local receiver port 8767 |
+| 47 | Settings › Agent access | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
+| 48 | Clients… dialog | **BV** `SettingsView` | Same bundled Settings view | Implemented (#112/#113), validation in progress | `settings-shared-implementation.md` | — |
 | 49 | Update notice | Native `UpdateNotice` | none | DO | none | — |
 | 50 | Shell: sidebar, header, client selector, status bar | `main_window.py:441-535`, `WorkspaceTabs` | `index.html:52-92` | NU | none | native status bar, menus |
 | 51 | Login | none | `/api/login` | WO | `web-070.md`, ADR-0016 | — |
@@ -172,7 +172,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 ### Assistant
 - Resolved (#106): the first-run "Run within limits" acknowledgement lives in the owner Assistant service database and is shared by both hosts. Sidebar width persists per device, using QSettings on desktop and browser storage on Web.
 - Deliberate existing limit: transcripts update as persisted messages, tool activity and decisions arrive, using job polling. Providers return complete model messages; #106 does not introduce token-by-token provider streaming.
-- The main Assistant page and compact Media chat use the same bundled view (#106/#111), including Automations and selection cards (#107). The compact native mode and legacy Web chat renderer are removed. Settings connection forms remain until #112; the old full native Assistant class remains for its existing standalone tests.
+- The main Assistant page and compact Media chat use the same bundled view (#106/#111), including Automations and selection cards (#107). The compact native mode and legacy Web chat renderer are removed. Settings connection forms now use the shared Settings view (#112); the old full native Assistant class remains for its existing standalone tests.
 - Web-only: "Selection details" and "Presentation image" cards, *unsure* whether every field matches desktop `SelectionDetail`.
 
 ### Media
@@ -181,10 +181,9 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - Web-only: Mark watched/unwatched, Edit playlist, Replace with queue, Compact/Expand player.
 
 ### Settings
-- Desktop-only (Gap): Search & Matching (size tolerance, minimum coverage, Ignored Files); TMDb API key field.
-- Desktop-only (Limit): keyring notice, interface size, import folders from client.
-- Web-only (Gap): partial client names, "Replace additional API keys".
-- Differs (Gap): Web Interface page has only media layout + support report.
+- Both hosts use `static/settings/view.html` for Connections, Clients, Companion, Agent access, Assistant, Library Folders, Download Folders, Client Paths, Search & Matching, Zen and General. TMDb and additional API keys, matching rules, client-folder import, diagnostics and media layout are available in both.
+- Deliberate platform limits: desktop secrets use the system keyring, Web secrets use server storage or managed files. Desktop folder browsing opens a local picker; Web browsing stays within configured server roots. Interface size applies to the desktop after restart; browser zoom remains browser-controlled. Companion pairing and token/report downloads use their host's native handoff.
+- Implementation and validation: `settings-shared-implementation.md`.
 
 ### Documentation
 - Desktop-only (Gap): guide filter, Forward, separate guide-language selector. Web: guide select, Back, GitHub link.
@@ -199,5 +198,5 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - U3/U4: `rss-redesign.md` and `media-center-redesign.md` status lines say nothing is built, but the code implements them.
 - U5 (#89 decision): retain native desktop playback. The Linux Wayland WebEngine probe rejects H.264/HEVC/AAC; VP9 plays with `--disable-gpu`. Windows/macOS artifact codec matrices remain unverified. See [playback investigation](../research/media-webview-playback.md).
 - U6: whether the Web build omits the update check on purpose.
-- U7: how the Web server receives the TMDb key.
+- U7 resolved by #112: the shared Connections editor stores the TMDb key through the owner Settings service.
 - U9-U12: parity was compared from string sets and targeted reads, not by running both UIs; layout, ordering and enabled states may differ where strings match.

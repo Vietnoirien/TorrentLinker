@@ -141,9 +141,10 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             # Without a model the composer is replaced by one way to connect one, in Settings.
             expect(panel.locator(".assistant-composer")).to_be_hidden()
             panel.get_by_role("button", name="Connect a model", exact=True).click()
-            expect(page.locator("#assistant-connections")).to_be_visible()
-            page.get_by_role("button", name="Add connection", exact=True).click()
-            dialog = page.locator(".assistant-dialog")
+            settings = page.frame_locator("#settings-frame")
+            expect(settings.locator("#assistant-connections-body")).to_be_visible()
+            settings.get_by_role("button", name="Add connection", exact=True).click()
+            dialog = settings.locator(".assistant-dialog")
             dialog.get_by_label("Name", exact=True).fill("Local test")
             dialog.get_by_label("Model ID", exact=True).fill("test")
             expect(dialog.get_by_label("Use server sampling defaults", exact=True)).to_be_checked()
@@ -157,12 +158,12 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             dialog.get_by_role("button", name="Check context", exact=True).click()
             expect(dialog).to_contain_text("Manual context: 65,536 tokens")
             dialog.get_by_role("button", name="Save", exact=True).click()
-            expect(page.get_by_role("heading", name="Local test")).to_be_visible()
+            expect(settings.get_by_role("heading", name="Local test")).to_be_visible()
             assert app.state.assistant.setup()["providers"][0]["temperature"] == 0
-            page.locator("#assistant-connections-body").get_by_role(
+            settings.locator("#assistant-connections-body").get_by_role(
                 "button", name="Edit", exact=True
             ).click()
-            dialog = page.locator(".assistant-dialog")
+            dialog = settings.locator(".assistant-dialog")
             expect(
                 dialog.get_by_label("Use server sampling defaults", exact=True)
             ).not_to_be_checked()
@@ -321,18 +322,8 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
 
 
 def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
-    from PySide6.QtCore import QTimer
-    from PySide6.QtWidgets import (
-        QApplication,
-        QCheckBox,
-        QDialogButtonBox,
-        QDoubleSpinBox,
-        QLabel,
-        QPushButton,
-        QSpinBox,
-    )
-
-    from torrentlinker.gui.assistant_connections import AssistantConnections
+    from tests.settings_support import edit_field, service_view
+    from tests.test_community_interfaces import js, wait_js
 
     app = create_app(
         tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
@@ -343,66 +334,76 @@ def test_desktop_context_detection_and_manual_override(qtbot, tmp_path):
             "/api/setup/assistant/providers",
             json={"name": "Local test", "kind": "ollama", "model": "test"},
         ).json()
-        widget = AssistantConnections(lambda: app.state.assistant)
-        qtbot.addWidget(widget)
-        widget.show()
-
-        def configure():
-            dialog = QApplication.activeModalWidget()
-            automatic = dialog.findChild(QCheckBox)
-            assert automatic.isChecked()
-            check = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Check context")
-            check.click()
-            qtbot.waitUntil(
-                lambda: any(
-                    "262144 tokens" in label.text() for label in dialog.findChildren(QLabel)
-                ),
-                timeout=5000,
-            )
-            dialog.grab().save(str(tmp_path / "context-editor.png"))
-            automatic.setChecked(False)
-            dialog.findChild(QSpinBox).setValue(65536)
-            sampling = next(
-                box
-                for box in dialog.findChildren(QCheckBox)
-                if box.text() == "Use server sampling defaults"
-            )
-            assert sampling.isChecked()
-            sampling.setChecked(False)
-            dialog.findChild(QDoubleSpinBox).setValue(0)
-            dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
-
-        QTimer.singleShot(0, configure)
-        widget.provider_editor(saved)
+        view = service_view(
+            qtbot, app.state.agent_service.setup, assistant=app.state.assistant, section="assistant"
+        )
+        wait_js(
+            qtbot, view, "[...document.querySelectorAll('button')].some(b=>b.textContent==='Edit')"
+        )
+        js(
+            qtbot,
+            view,
+            "[...document.querySelectorAll('button')].find(b=>b.textContent==='Edit').click()",
+        )
+        assert js(
+            qtbot,
+            view,
+            "document.querySelector('[aria-label=\"Detect context automatically\"]').checked",
+        )
+        js(
+            qtbot,
+            view,
+            "[...document.querySelectorAll('dialog button')].find(b=>b."
+            "textContent==='Check context').click()",
+        )
+        wait_js(
+            qtbot,
+            view,
+            "document.querySelector('dialog').textContent.replaceAll(',"
+            "','').includes('262144 tokens')",
+        )
+        js(
+            qtbot,
+            view,
+            "document.querySelector('[aria-label=\"Detect context automa"
+            "tically\"]').click();document.querySelector('[aria-label=\"U"
+            "se server sampling defaults\"]').click()",
+        )
+        edit_field(qtbot, view, "Context window (tokens)", 65536)
+        edit_field(qtbot, view, "Temperature (0 = least variation)", 0)
+        js(qtbot, view, "document.querySelector('dialog .primary').click()")
+        wait_js(qtbot, view, "!document.querySelector('dialog')")
         result = browser.get(f"/api/setup/assistant/providers/{saved['id']}/context").json()
-        assert result["context_window"] == 65536
-        assert result["source"] == "manual"
-        updated = app.state.assistant.setup()["providers"][0]
-        assert updated["temperature"] == 0
-        from torrentlinker.gui import tasks
-
-        qtbot.waitUntil(lambda: not tasks._alive, timeout=5000)
-
-        def restore_defaults():
-            dialog = QApplication.activeModalWidget()
-            sampling = next(
-                box
-                for box in dialog.findChildren(QCheckBox)
-                if box.text() == "Use server sampling defaults"
+        assert result["context_window"] == 65536 and result["source"] == "manual"
+        assert app.state.assistant.setup()["providers"][0]["temperature"] == 0
+        js(
+            qtbot,
+            view,
+            "[...document.querySelectorAll('button')].find(b=>b.textContent==='Edit').click()",
+        )
+        assert (
+            js(
+                qtbot,
+                view,
+                "document.querySelector('[aria-label=\"Use server sampling defaults\"]').checked",
             )
-            assert not sampling.isChecked()
-            assert dialog.findChild(QDoubleSpinBox).value() == 0
-            sampling.setChecked(True)
-            assert not dialog.findChild(QDoubleSpinBox).isEnabled()
-            dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
-
-        QTimer.singleShot(0, restore_defaults)
-        widget.provider_editor(updated)
+            is False
+        )
+        js(
+            qtbot,
+            view,
+            "document.querySelector('[aria-label=\"Use server sampling defaults\"]').click()",
+        )
+        assert js(
+            qtbot,
+            view,
+            "document.querySelector('[aria-label=\"Temperature (0 = least variation)\"]').disabled",
+        )
+        js(qtbot, view, "document.querySelector('dialog .primary').click()")
+        wait_js(qtbot, view, "!document.querySelector('dialog')")
         assert app.state.assistant.setup()["providers"][0]["temperature"] is None
-        # Saving changed sampling starts an assessment in the Qt pool. Keep the
-        # service and its widgets alive until that test-owned work has completed.
-        qtbot.waitUntil(lambda: not tasks._alive, timeout=5000)
-        widget.close()
+        qtbot.waitUntil(lambda: view.pending == 0)
+        view.close()
 
 
 def test_chat_follows_messages_after_layout_settles(qtbot, tmp_path):
@@ -738,18 +739,23 @@ def test_mode_chip_switches_and_confirms_only_the_first_time(qtbot, tmp_path, mo
 
 
 def test_model_connections_open_in_settings(qtbot, tmp_path):
-    from PySide6.QtWidgets import QWidget
+    from tests.settings_support import service_view
+    from tests.test_community_interfaces import js, wait_js
 
-    from torrentlinker.config import Settings
-    from torrentlinker.gui.assistant_connections import AssistantConnections
-    from torrentlinker.gui.settings_dialog import SettingsDialog
-
-    class Host(QWidget):
-        def assistant_service(self):
-            raise RuntimeError("not needed")
-
-    host = Host()
-    qtbot.addWidget(host)
-    dialog = SettingsDialog(Settings(), host)
-    dialog.show_assistant_connections()
-    assert dialog.tabs.currentWidget().isAncestorOf(dialog.findChild(AssistantConnections))
+    app = create_app(
+        tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
+    )
+    with TestClient(app):
+        view = service_view(
+            qtbot, app.state.agent_service.setup, assistant=app.state.assistant, section="assistant"
+        )
+        wait_js(
+            qtbot, view, "Boolean(document.querySelector('#assistant-connections-body button'))"
+        )
+        assert (
+            js(qtbot, view, "document.querySelector('.settings-form h2').textContent")
+            == "Assistant"
+        )
+        assert js(qtbot, view, "document.querySelector('#settings-error').textContent") == ""
+        qtbot.waitUntil(lambda: view.pending == 0)
+        view.close()

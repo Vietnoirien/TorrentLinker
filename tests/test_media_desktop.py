@@ -650,11 +650,15 @@ def test_native_explicit_preview_decodes_h264_without_reading_missing_pieces(qtb
         tab.stop()
 
 
-def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_path, request):
-    from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
-    from PySide6.QtWidgets import QApplication, QDialogButtonBox
+def test_media_profile_editor_keeps_the_player_and_media_workspace(
+    qtbot, tmp_path, request, monkeypatch
+):
+    from PySide6.QtCore import QCoreApplication, QEvent
     from shiboken6 import isValid
 
+    from tests.settings_support import edit_field, save_group
+    from tests.test_community_interfaces import js, wait_js
+    from torrentlinker.gui.settings_view import SettingsDialog
     from torrentlinker.web.app import create_app
 
     config = tmp_path / "config"
@@ -685,19 +689,28 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_pa
     qtbot.waitUntil(window.isFullScreen)
     assert window.media_center_active
 
-    def save_editor():
-        dialog = QApplication.activeModalWidget()
-        buttons = dialog.findChild(QDialogButtonBox)
-        qtbot.mouseClick(buttons.button(QDialogButtonBox.Save), Qt.LeftButton)
+    def save_editor(dialog):
+        dialog.show()
+        wait_js(qtbot, dialog.view, "Boolean(document.querySelector('.settings-form h2'))")
+        js(
+            qtbot,
+            dialog.view,
+            "[...document.querySelectorAll('#settings-navigation button"
+            "')].find(b=>b.textContent==='Connections').click()",
+        )
+        edit_field(qtbot, dialog.view, "Client name", "Media client")
+        save_group(qtbot, dialog)
+        dialog.reject()
+        return 0
 
-    QTimer.singleShot(0, save_editor)
+    monkeypatch.setattr(SettingsDialog, "exec", save_editor)
     window.open_client_profiles()
-    replacement = QApplication.instance().torrentlinker_window
-    windows.append(replacement)
+    replacement = window
+    assert replacement.settings.profile().name == "Media client"
     assert replacement.tabs.currentWidget() is tab
-    assert not replacement.isFullScreen()
-    assert not replacement.media_center_active
-    assert not tab.center_button.isChecked()
+    assert replacement.isFullScreen()
+    assert replacement.media_center_active
+    assert tab.center_button.isChecked()
     assert replacement.media_tab.player is player
     assert tab.heartbeat.isActive()
     assert tab.shuffle.isChecked()

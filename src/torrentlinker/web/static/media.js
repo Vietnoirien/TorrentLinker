@@ -24,7 +24,7 @@ function mediaStatus(text) { if (text) toast(text); }
 function mediaSetLayout(value) {
   media.layout = mediaLayouts.includes(value) ? value : "cinematic";
   try { localStorage.setItem("tl-media-layout", media.layout); } catch {}
-  $("view-media").dataset.layout = media.layout; $("settings-media-layout").value = media.layout;
+  $("view-media").dataset.layout = media.layout;
   if (typeof mediaRefreshView === "function") mediaRefreshView();
 }
 try { media.layout = localStorage.getItem("tl-media-layout"); } catch {}
@@ -455,7 +455,6 @@ const mediaToggleCenter = () => guard(async () => {
     mediaCenterAppearance(true);
   }
 });
-$("settings-media-layout").onchange = event => mediaSetLayout(event.target.value);
 $("media-player-expand").onclick = () => { const expanded = $("media-player-shell").classList.toggle("media-player-expanded"); $("media-player-expand").textContent = expanded ? say("Compact player", "Réduire le lecteur") : say("Expand player", "Agrandir le lecteur"); };
 $("media-fullscreen").hidden = !document.fullscreenEnabled;
 $("media-fullscreen").onclick = () => guard(async () => {

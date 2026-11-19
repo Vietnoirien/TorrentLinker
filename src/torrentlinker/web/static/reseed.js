@@ -239,32 +239,6 @@ for (const node of [
     attributes: true,
     attributeFilter: ["hidden", "data-theme"],
   });
-$("reseed-browse").onclick = () =>
-  guard(() => browseLibraryFolder("", "reseed-root"));
-
 async function openReseedSettings() {
   await navigate("setup", "connections");
-  $("reseed-folder-settings").open = true;
-  $("reseed-root").focus();
 }
-
-$("reseed-folder-form").onsubmit = (event) => {
-  event.preventDefault();
-  guard(async () => {
-    const client = state.clientId;
-    const result = await api("setup/reseed-folder", {
-      path: $("reseed-root").value.trim(),
-    });
-    localStorage.removeItem(`reseed-root:${client}`);
-    if (client !== state.clientId) return;
-    state.setup.reseed_link_root = result.reseed_link_root;
-    reseedUI.root = result.reseed_link_root;
-    $("reseed-root").value = result.reseed_link_root;
-    toast(
-      say(
-        "Link folder saved for this client.",
-        "Dossier de liens enregistré pour ce client.",
-      ),
-    );
-  });
-};

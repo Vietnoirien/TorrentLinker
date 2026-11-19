@@ -87,13 +87,16 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator("#view-setup")).to_be_visible()
-            for selector in ("#client-password", "#client-key", "#proxy-password", "#announce-url"):
-                expect(page.locator(selector)).to_have_attribute("placeholder", "Not saved")
-            page.locator("#client-host").fill("https://seedbox.example/qbittorrent/")
-            page.locator("#client-username").fill("reader")
-            page.locator("#client-password").fill("client-password")
-            page.locator("#test-client").click()
-            expect(page.locator("#client-result")).to_contain_text("qBittorrent test")
+            settings = page.frame_locator("#settings-frame")
+            for label in ("Password", "Client API key", "Proxy password", "Announce URL"):
+                expect(settings.get_by_label(label, exact=True)).to_have_value("")
+            settings.get_by_label("Address", exact=True).fill(
+                "https://seedbox.example/qbittorrent/"
+            )
+            settings.get_by_label("Username", exact=True).fill("reader")
+            settings.get_by_label("Password", exact=True).fill("client-password")
+            settings.get_by_role("button", name="Test connection", exact=True).click()
+            expect(settings.locator("#settings-status")).to_contain_text("qBittorrent test")
             screenshot = os.getenv("TL_WEB_SCREENSHOTS")
             if screenshot:
                 Path(screenshot).mkdir(parents=True, exist_ok=True)
@@ -101,17 +104,12 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.locator("#language").select_option("fr")
                 page.screenshot(path=str(Path(screenshot) / "setup-fr.png"))
                 page.locator("#language").select_option("en")
-            page.locator("#client-form button.primary").click()
-            expect(page.locator("#step-storage")).to_be_visible()
-            expect(page.locator("#import-folders")).to_contain_text("/downloads")
-            if screenshot:
-                for lang in ("fr", "en"):
-                    page.locator("#language").select_option(lang)
-                    page.screenshot(path=str(Path(screenshot) / f"storage-{lang}.png"))
-            page.locator("#step-storage [data-i18n=skipStorage]").click()
-            page.locator("#step-indexer [data-i18n=skip]").click()
-            expect(page.locator("#capabilities")).to_contain_text("Torrent management")
-            page.locator("#finish-setup").click()
+            settings.get_by_role("button", name="Save", exact=True).click()
+            expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
+            settings.get_by_role("button", name="Download Folders", exact=True).click()
+            settings.get_by_role("button", name="Read folders from client", exact=True).click()
+            expect(settings.locator(".settings-form")).to_contain_text("/downloads")
+            page.locator("[data-view=torrents]").click()
             torrents = page.frame_locator("#torrents-frame")
             expect(torrents.locator("tbody")).to_contain_text("Example book.epub")
             expect(torrents.locator("#inspector")).to_contain_text("3 (42) / 2 (13)")
@@ -259,88 +257,66 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshot) / "torrents-small.png"))
             page.locator("[data-view=setup][data-i18n=settings]").click()
-            page.locator("[data-step=client]").click()
-            expect(page.locator("#client-password")).to_have_attribute(
-                "placeholder", "Saved · leave blank to keep"
-            )
-            expect(page.locator("#client-password")).to_have_value("")
-            # Global secrets update their hints immediately after saving.
-            page.locator("#client-form details summary").click()
+            settings.get_by_role("button", name="Connections", exact=True).click()
+            password = settings.get_by_label("Password", exact=True)
+            expect(password).to_have_attribute("placeholder", "Saved; leave blank to keep")
+            expect(password).to_have_value("")
             pending_proxy = []
 
             def delay_proxy_save(route):
                 pending_proxy.append((route, route.fetch()))
 
-            page.route("**/api/setup/proxy*", delay_proxy_save)
-            page.locator("#save-proxy").click()
+            page.route("**/api/settings/connections", delay_proxy_save)
+            settings.get_by_role("button", name="Save", exact=True).click()
             for _ in range(50):
                 if pending_proxy:
                     break
                 page.wait_for_timeout(20)
             assert pending_proxy
-            page.locator("#proxy-password").fill("test-proxy-secret")
+            proxy = settings.get_by_label("Proxy password", exact=True)
+            proxy.fill("test-proxy-secret")
             pending_proxy[0][0].fulfill(response=pending_proxy[0][1])
-            expect(page.locator("#toast")).to_contain_text("Proxy settings saved")
-            expect(page.locator("#proxy-password")).to_have_value("test-proxy-secret")
-            expect(page.locator("#proxy-password")).to_have_attribute("placeholder", "Not saved")
-            page.unroute("**/api/setup/proxy*", delay_proxy_save)
-            page.locator("#save-proxy").click()
-            expect(page.locator("#proxy-password")).to_have_value("")
-            expect(page.locator("#proxy-password")).to_have_attribute(
-                "placeholder", "Saved · leave blank to keep"
-            )
-            page.locator("[data-step=indexer][data-i18n=stepIndexer]").click()
-            page.locator("#indexer-form details summary").click()
-            page.locator("#announce-url").fill("https://tracker.example/announce/test-secret")
-            page.locator("#save-announce").click()
-            expect(page.locator("#announce-url")).to_have_value("")
-            expect(page.locator("#announce-url")).to_have_attribute(
-                "placeholder", "Saved · leave blank to keep"
-            )
-            page.locator("[data-step=client]").click()
+            expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
+            expect(proxy).to_have_value("test-proxy-secret")
+            page.unroute("**/api/settings/connections", delay_proxy_save)
+            settings.get_by_role("button", name="Save", exact=True).click()
+            expect(proxy).to_have_value("")
+            expect(proxy).to_have_attribute("placeholder", "Saved; leave blank to keep")
+            announce = settings.get_by_label("Announce URL", exact=True)
+            announce.fill("https://tracker.example/announce/test-secret")
+            settings.get_by_role("button", name="Save", exact=True).click()
+            expect(announce).to_have_value("")
+            expect(announce).to_have_attribute("placeholder", "Saved; leave blank to keep")
             page.locator("#language").select_option("fr")
-            expect(page.locator("#client-password")).to_have_attribute(
-                "placeholder", "Enregistré · laisser vide pour conserver"
+            expect(settings.get_by_label("Mot de passe", exact=True)).to_have_attribute(
+                "placeholder", "Enregistrée ; laisser vide pour conserver"
             )
-            expect(page.locator("#proxy-password")).to_have_attribute(
-                "placeholder", "Enregistré · laisser vide pour conserver"
-            )
-            if screenshot:
-                page.locator("#client-form").screenshot(
-                    path=str(Path(screenshot) / "saved-secrets-fr.png")
-                )
             page.locator("#language").select_option("en")
-            # Leaving Add client must restore editing, not silently create a duplicate (#70).
-            page.locator("[data-view=setup][data-i18n=settings]").click()
-            page.locator("[data-step=client]").click()
-            page.locator("#add-client").click()
-            expect(page.locator("#client-password")).to_have_attribute("placeholder", "Not saved")
-            expect(page.locator("#client-key")).to_have_attribute("placeholder", "Not saved")
+            settings.get_by_role("button", name="Clients", exact=True).click()
+            settings.get_by_label("New client name", exact=True).fill("Unsubmitted client")
             page.locator("[data-view=torrents]").click()
             page.locator("[data-view=setup][data-i18n=settings]").click()
-            page.locator("[data-step=client]").click()
-            page.locator("#client-name").fill("Seedbox renamed")
-            page.locator("#client-form button.primary").click()
-            expect(page.locator("#step-storage")).to_be_visible()
+            settings.get_by_role("button", name="Connections", exact=True).click()
+            settings.get_by_label("Client name", exact=True).fill("Seedbox renamed")
+            settings.get_by_role("button", name="Save", exact=True).click()
             expect(page.locator("#target-client option")).to_have_count(2)
             expect(page.locator("#target-client option:checked")).to_have_text("Seedbox renamed")
-            # The second profile is independent of the existing form and default.
-            page.locator("[data-view=setup][data-i18n=settings]").click()
-            page.locator("[data-step=client]").click()
-            page.locator("#add-client").click()
-            expect(page.locator("#client-password")).to_have_attribute("placeholder", "Not saved")
-            expect(page.locator("#client-key")).to_have_attribute("placeholder", "Not saved")
-            page.locator("#client-name").fill("Remote Deluge")
-            page.locator("#client-kind").select_option("deluge")
-            page.locator("#client-host").fill("https://other-seedbox.example")
-            page.locator("#client-password").fill("second-password")
-            page.locator("#client-form button.primary").click()
-            expect(page.locator("#step-storage")).to_be_visible()
+            settings.get_by_role("button", name="Clients", exact=True).click()
+            settings.get_by_label("New client name", exact=True).fill("Remote Deluge")
+            settings.get_by_role("button", name="Add client", exact=True).click()
+            settings.locator(".client-card").filter(has_text="Remote Deluge").get_by_role(
+                "button", name="Edit settings", exact=True
+            ).click()
+            expect(settings.get_by_label("Password", exact=True)).to_have_value("")
+            settings.get_by_label("Client type", exact=True).select_option("deluge")
+            settings.get_by_label("Address", exact=True).fill("https://other-seedbox.example")
+            settings.get_by_label("Password", exact=True).fill("second-password")
+            settings.get_by_role("button", name="Save", exact=True).click()
+            expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
             expect(page.locator("#target-client option:checked")).to_have_text("Remote Deluge")
             page.locator("#target-client").select_option("default")
-            page.locator("[data-step=client]").click()
-            expect(page.locator("#client-kind")).to_have_value("qbittorrent")
-            expect(page.locator("#client-host")).to_have_value(
+            expect(settings.get_by_label("Client type", exact=True)).to_have_value("qbittorrent")
+            expect(settings.get_by_label("Address", exact=True)).to_have_value(
                 "https://seedbox.example/qbittorrent"
             )
             page.locator("#target-client").select_option("all")
@@ -368,64 +344,76 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
             page.locator("[data-view=setup][data-i18n=settings]").click()
             page.locator("#language").select_option("en")
-            page.locator("[data-settings-section=agents]").click()
-            expect(page.locator("#view-agents")).to_be_visible()
-            expect(page.locator("#agents-enabled")).not_to_be_checked()
-            page.locator("#agents-enabled").check()
+            settings.get_by_role("button", name="Agent access", exact=True).click()
+            expect(settings.locator("#view-agents")).to_be_visible()
+            expect(settings.locator("#agents-enabled")).not_to_be_checked()
+            settings.locator("#agents-enabled").check()
             expect(page.locator("#view-setup")).to_be_visible()
             expect(page.locator("#page-title")).to_have_text("Settings")
-            expect(page.locator("#agent-connections")).to_contain_text("No connections yet")
-            page.locator("[data-agent-tab=new]").click()
-            page.locator("#agent-name").fill("My assistant")
-            expect(page.locator("#agent-mode")).to_have_value("propose")
-            page.locator("#agent-form button.primary").click()
-            expect(page.locator("#agent-token-box")).to_be_visible()
-            token = page.locator("#agent-token").input_value()
+            expect(settings.locator("#agent-connections")).to_contain_text("No connections yet")
+            settings.locator("[data-agent-tab=new]").click()
+            settings.locator("#agent-name").fill("My assistant")
+            expect(settings.locator("#agent-mode")).to_have_value("propose")
+            settings.locator("#agent-form button.primary").click()
+            expect(settings.locator("#agent-token-box")).to_be_visible()
+            token = settings.locator("#agent-token").input_value()
             with page.expect_download() as download:
-                page.locator("#agent-token-save").click()
+                settings.locator("#agent-token-save").click()
             assert download.value.suggested_filename == "torrentlinker-token.txt"
             assert Path(download.value.path()).read_text() == token + "\n"
-            page.locator("[data-agent-tab=connections]").click()
-            expect(page.locator("#agent-token")).to_have_value("")
-            expect(page.locator("#agent-token-box")).to_be_hidden()
-            expect(page.locator("#agent-connections")).to_contain_text("My assistant")
-            expect(page.locator("#agent-connections")).to_contain_text("Proposals only")
-            expect(page.locator("#agent-connections")).to_contain_text("Seedbox renamed")
-            expect(page.locator("#agent-connections")).to_contain_text("10.0 GiB")
-            expect(page.locator("#agent-connections")).to_contain_text("None")
+            settings.locator("[data-agent-tab=connections]").click()
+            expect(settings.locator("#agent-token")).to_have_value("")
+            expect(settings.locator("#agent-token-box")).to_be_hidden()
+            expect(settings.locator("#agent-connections")).to_contain_text("My assistant")
+            expect(settings.locator("#agent-connections")).to_contain_text("Proposals only")
+            expect(settings.locator("#agent-connections")).to_contain_text("Seedbox renamed")
+            expect(settings.locator("#agent-connections")).to_contain_text("10.0 GiB")
+            expect(settings.locator("#agent-connections")).to_contain_text("None")
             page.locator("#language").select_option("fr")
-            expect(page.locator("#agent-connections")).to_contain_text("Propositions uniquement")
-            page.locator("#language").select_option("en")
-            page.locator("[data-agent-tab=new]").click()
-            expect(page.locator("#agent-token")).to_have_value("")
-            page.locator("#agent-name").fill("Upload helper")
-            page.locator("#agent-mode").select_option("execute")
-            page.locator("#agent-permissions input[value=uploads]").check()
-            page.locator("#agent-form button.primary").click()
-            expect(page.locator("#agent-token-box")).to_be_visible()
-            page.locator("[data-settings-section=interface]").click()
-            expect(page.locator("#settings-media-layout")).to_be_visible()
-            expect(page.locator("#export-diagnostics")).to_have_text("Export support report…")
-            page.locator("#language").select_option("fr")
-            expect(page.locator("#export-diagnostics")).to_have_text(
-                "Exporter le rapport de diagnostic…"
+            expect(settings.locator("#agent-connections")).to_contain_text(
+                "Propositions uniquement"
             )
+            page.locator("#language").select_option("en")
+            settings.locator("[data-agent-tab=new]").click()
+            expect(settings.locator("#agent-token")).to_have_value("")
+            settings.locator("#agent-name").fill("Upload helper")
+            settings.locator("#agent-mode").select_option("execute")
+            settings.locator("#agent-permissions input[value=uploads]").check()
+            settings.locator("#agent-form button.primary").click()
+            expect(settings.locator("#agent-token-box")).to_be_visible()
+            settings.get_by_role("button", name="General", exact=True).click()
+            expect(settings.get_by_label("Media interface", exact=True)).to_be_visible()
+            expect(
+                settings.get_by_role(
+                    "button", name=re.compile("Export.*report|Exporter.*diagnostic")
+                )
+            ).to_have_text("Export support report…")
+            page.locator("#language").select_option("fr")
+            expect(
+                settings.get_by_role(
+                    "button", name=re.compile("Export.*report|Exporter.*diagnostic")
+                )
+            ).to_have_text("Exporter le rapport de diagnostic…")
             with page.expect_download() as diagnostic_download:
-                page.locator("#export-diagnostics").click()
+                settings.get_by_role(
+                    "button", name=re.compile("Export.*report|Exporter.*diagnostic")
+                ).click()
             assert diagnostic_download.value.suggested_filename == "torrentlinker-diagnostics.json"
             support = json.loads(Path(diagnostic_download.value.path()).read_text())
             assert support["schema_version"] == 1
             assert token not in json.dumps(support)
             page.locator("#language").select_option("en")
-            expect(page.locator("#agent-token")).to_have_value("")
-            page.locator("[data-settings-section=agents]").click()
-            page.locator("[data-agent-tab=connections]").click()
-            expect(page.locator("#agent-connections")).to_contain_text("Upload drafts and seeding")
-            page.locator("#agent-connections .card").filter(has_text="My assistant").get_by_role(
-                "button"
-            ).click()
-            expect(page.locator("#agent-connections")).to_contain_text("Revoked")
-            expect(page.locator("#agent-connections").get_by_role("button")).to_have_count(1)
+            settings.get_by_role("button", name="Agent access", exact=True).click()
+            expect(settings.locator("#agent-token")).to_have_value("")
+            settings.locator("[data-agent-tab=connections]").click()
+            expect(settings.locator("#agent-connections")).to_contain_text(
+                "Upload drafts and seeding"
+            )
+            settings.locator("#agent-connections .card").filter(
+                has_text="My assistant"
+            ).get_by_role("button").click()
+            expect(settings.locator("#agent-connections")).to_contain_text("Revoked")
+            expect(settings.locator("#agent-connections").get_by_role("button")).to_have_count(1)
             for width in (600, 390):
                 page.set_viewport_size({"width": width, "height": 850})
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -436,7 +424,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.set_viewport_size({"width": 1440, "height": 1000})
                 for language in ("en", "fr"):
                     page.locator("#language").select_option(language)
-                    expect(page.locator("#agent-connections")).to_contain_text(
+                    expect(settings.locator("#agent-connections")).to_contain_text(
                         "Revoked" if language == "en" else "Révoquée"
                     )
                     page.evaluate("window.scrollTo(0, 0)")
@@ -448,17 +436,17 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.screenshot(
                     path=str(Path(screenshot) / "agent-settings-light.png"), full_page=True
                 )
-                page.locator("[data-agent-tab=new]").click()
+                settings.locator("[data-agent-tab=new]").click()
                 page.screenshot(
                     path=str(Path(screenshot) / "agent-settings-new.png"), full_page=True
                 )
-                page.locator("[data-agent-tab=activity]").click()
+                settings.locator("[data-agent-tab=activity]").click()
                 page.screenshot(
                     path=str(Path(screenshot) / "agent-settings-activity.png"), full_page=True
                 )
             # A late create response must not restore a token after leaving its panel.
-            page.locator("[data-agent-tab=new]").click()
-            page.locator("#agent-name").fill("Delayed connection")
+            settings.locator("[data-agent-tab=new]").click()
+            settings.locator("#agent-name").fill("Delayed connection")
             pending = []
 
             def delay_creation(route):
@@ -468,28 +456,28 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     route.continue_()
 
             page.route("**/api/agents", delay_creation)
-            page.locator("#agent-form button.primary").click()
+            settings.locator("#agent-form button.primary").click()
             for _ in range(50):
                 if pending:
                     break
                 page.wait_for_timeout(20)
             assert pending
-            page.locator("[data-agent-tab=connections]").click()
+            settings.locator("[data-agent-tab=connections]").click()
             pending[0][0].fulfill(response=pending[0][1])
-            expect(page.locator("#toast")).to_contain_text("token was dismissed")
-            page.locator("[data-agent-tab=new]").click()
-            expect(page.locator("#agent-token")).to_have_value("")
-            expect(page.locator("#agent-token-box")).to_be_hidden()
+            expect(settings.locator("#settings-status")).to_contain_text("token was dismissed")
+            settings.locator("[data-agent-tab=new]").click()
+            expect(settings.locator("#agent-token")).to_have_value("")
+            expect(settings.locator("#agent-token-box")).to_be_hidden()
             page.unroute("**/api/agents", delay_creation)
             # A persistent tab button may keep focus without blocking background refresh.
-            page.locator("[data-agent-tab=connections]").click()
+            settings.locator("[data-agent-tab=connections]").click()
             created_elsewhere = page.request.post(
                 f"http://127.0.0.1:{port}/api/agents",
                 headers={"X-TorrentLinker": "1"},
                 data={"name": "Another window", "clients": ["default"]},
             )
             assert created_elsewhere.ok
-            expect(page.locator("#agent-connections")).to_contain_text(
+            expect(settings.locator("#agent-connections")).to_contain_text(
                 "Another window", timeout=7000
             )
             assert not errors, errors

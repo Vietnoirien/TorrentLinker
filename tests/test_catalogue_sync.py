@@ -513,7 +513,7 @@ def test_gui_plan_uses_cached_categories_without_individual_metadata_checks(
     from torrentlinker.config import Settings
     from torrentlinker.credentials import set_secret
     from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.paths import MappedQbit, PathMapper
 
     http = httpx.Client(
@@ -571,7 +571,7 @@ def test_large_cached_plan_makes_no_per_torrent_metadata_requests(qtbot, tmp_pat
     from torrentlinker.config import Settings
     from torrentlinker.credentials import set_secret
     from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.paths import MappedQbit, PathMapper
 
     store = Store(tmp_path / "s.db")
@@ -618,7 +618,7 @@ def test_gui_plan_does_not_start_or_resume_historical_scans(
     from torrentlinker.config import Settings
     from torrentlinker.credentials import set_secret
     from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.paths import MappedQbit, PathMapper
     from torrentlinker.plan import PlanOptions
 

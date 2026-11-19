@@ -391,30 +391,25 @@ def test_removing_verification_label_preserves_personal_label():
 
 
 def test_settings_roundtrip_and_app_factory(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
     from torrentlinker.config import Settings
     from torrentlinker.credentials import get_secret
     from torrentlinker.domain import TorrentClient
     from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import UTORRENT_PASSWORD, SettingsDialog
+    from torrentlinker.gui.settings_common import UTORRENT_PASSWORD
     from torrentlinker.store import Store
 
-    settings = Settings()
-    dialog = SettingsDialog(settings)
-    qtbot.addWidget(dialog)
-    dialog.client.setCurrentIndex(dialog.client.findData("utorrent"))
-    assert dialog.client_forms.currentWidget().isAncestorOf(dialog.utorrent_host)
-    dialog.utorrent_host.setText("http://client:18089/gui/")
-    dialog.utorrent_user.setText("tester")
-    dialog.utorrent_password.setText("secret")
-    assert isinstance(dialog._form_qbit(), UtorrentApi)
-    dialog._save()
-    settings.save(tmp_path / "settings.json")
+    dialog = settings_dialog(qtbot, tmp_path)
+    edit_field(qtbot, dialog.view, "Client type", "utorrent")
+    edit_field(qtbot, dialog.view, "Address", "http://client:18089/gui/")
+    edit_field(qtbot, dialog.view, "Username", "tester")
+    edit_field(qtbot, dialog.view, "Password", "secret")
+    save_group(qtbot, dialog)
     saved = Settings.load(tmp_path / "settings.json")
     assert saved.client is TorrentClient.UTORRENT
-    assert saved.utorrent.host == "http://client:18089/gui/" and saved.utorrent.username == "tester"
+    assert saved.utorrent.host == "http://client:18089/gui" and saved.utorrent.username == "tester"
     assert get_secret(UTORRENT_PASSWORD) == "secret"
-    assert "secret" not in (tmp_path / "settings.json").read_text()
-    w = MainWindow(saved, tmp_path / "settings.json", Store(tmp_path / "s.db"))
-    qtbot.addWidget(w)
-    w.qbit()
-    assert isinstance(w.qbit()._inner, UtorrentApi)
+    assert '"secret"' not in (tmp_path / "settings.json").read_text()
+    window = MainWindow(saved, tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    assert isinstance(window.qbit()._inner, UtorrentApi)

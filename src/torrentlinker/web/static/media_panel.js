@@ -44,7 +44,7 @@ window.addEventListener("message",async event=>{
     }else if(message.path==="preferences"){
       if(mediaLayouts.includes(message.body.layout)){
         media.layout=message.body.layout;try{localStorage.setItem("tl-media-layout",media.layout)}catch{}
-        $("view-media").dataset.layout=media.layout;$("settings-media-layout").value=media.layout;
+        $("view-media").dataset.layout=media.layout;
       }
       value={layout:mediaLayouts.includes(media.layout)?media.layout:"cinematic"};
     }else{

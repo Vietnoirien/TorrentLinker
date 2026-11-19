@@ -345,6 +345,7 @@ def create_app(
             "/static/catalogue/view.html",
             "/static/plan/view.html",
             "/static/seeding/view.html",
+            "/static/settings/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
@@ -444,6 +445,58 @@ def create_app(
     def setup(client_id: str = "") -> dict:
         snapshot = for_client(client_id).setup.snapshot()
         return {**snapshot, "web_auth": "password" if sessions is not None else "proxy"}
+
+    @app.get("/api/settings")
+    def settings_snapshot(client_id: str = "") -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        return SettingsWorkspace(for_client(client_id).setup).snapshot()
+
+    @app.post("/api/settings/{group}")
+    def settings_save(group: str, body: dict) -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        with jobs.lock:
+            idle()
+            target = for_client(body.get("client_id", "")).setup
+            result = SettingsWorkspace(target).save(group, body.get("value", {}))
+            reset_clients()
+            return result
+
+    @app.post("/api/settings/test/{group}")
+    def settings_test(group: str, body: dict) -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        return SettingsWorkspace(for_client(body.get("client_id", "")).setup).test_connection(
+            group, body.get("value", {})
+        )
+
+    @app.post("/api/settings/storage/{action}")
+    def settings_storage(action: str, body: dict) -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        with jobs.lock:
+            idle()
+            target = for_client(body.get("client_id", "")).setup
+            result = SettingsWorkspace(target).storage(action, body.get("value", {}))
+            if action in {"save", "download", "remove"}:
+                valid = {f.path for f in service.settings.library_folders}
+                for operation in [operations, *client_operations.values()]:
+                    operation.library.entries[:] = [
+                        e for e in operation.library.entries if e.folder.path in valid
+                    ]
+            return result
+
+    @app.post("/api/settings/clients/{action}")
+    def settings_clients(action: str, body: dict) -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        with jobs.lock:
+            idle()
+            target = for_client(body.get("owner_client_id", "")).setup
+            result = SettingsWorkspace(target).clients(action, body)
+            reset_clients()
+            return result
 
     @app.get("/api/diagnostics")
     def diagnostics() -> Response:

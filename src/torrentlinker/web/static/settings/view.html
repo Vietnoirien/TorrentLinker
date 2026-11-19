@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Settings</title>
+    <link rel="stylesheet" href="../panel/base.css" />
+    <link rel="stylesheet" href="view.css" />
+    <script defer src="../panel/i18n.js"></script>
+    <script defer src="../panel/transport.js"></script>
+    <script defer src="view.js"></script>
+    <script defer src="assistant.js"></script>
+    <script defer src="companion.js"></script>
+    <script defer src="agents.js"></script>
+  </head>
+  <body>
+    <h1 id="settings-title">Settings</h1>
+    <div class="settings-layout">
+      <nav id="settings-navigation" aria-label="Settings sections"></nav>
+      <main>
+        <p id="settings-error" role="alert"></p>
+        <p id="settings-status" role="status"></p>
+        <div id="settings-body"></div>
+      </main>
+    </div>
+  </body>
+</html>

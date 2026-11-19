@@ -82,14 +82,14 @@ from torrentlinker.gui.reseed_dialog import ReseedDialog
 from torrentlinker.gui.review_panel import ReviewPanel, Searcher
 from torrentlinker.gui.search_workspace import SearchTab
 from torrentlinker.gui.send_runner import SendRunner
-from torrentlinker.gui.settings_dialog import (
+from torrentlinker.gui.settings_common import (
     INDEXER_API_KEY,
     PROXY_PASSWORD,
     TMDB_API_KEY,
-    SettingsDialog,
     choose_directory,
     extra_indexer_keys,
 )
+from torrentlinker.gui.settings_view import SettingsDialog
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
 from torrentlinker.gui.theme import set_theme
 from torrentlinker.gui.torrents_view import TorrentsTab
@@ -295,7 +295,6 @@ class MainWindow(QMainWindow):
         self.zen_tab.catalogue.language = self.settings.language
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_torrent_clients)
-        self.companion_panel = None  # only while Settings is open
         self.profile_timer = QTimer(self)
         self.profile_timer.setInterval(3000)
         self.profile_timer.timeout.connect(self._poll_account_profile)
@@ -580,53 +579,6 @@ class MainWindow(QMainWindow):
     def open_agent_access(self) -> None:
         self.open_settings(agents=True)
 
-    def agent_access_widget(self, parent=None):
-        try:
-            from PySide6.QtWidgets import QApplication
-
-            from torrentlinker.agent.desktop import DesktopServer
-            from torrentlinker.gui.agent_access import AgentAccess
-
-            if self.agent_runtime is None:
-                self.agent_runtime = DesktopServer(
-                    self.settings, self.settings_path, self.store, workspace=self.account_workspace
-                )
-                app = QApplication.instance()
-                if app is not None:
-                    app.aboutToQuit.connect(self.agent_runtime.close)
-            self.agent_runtime.start()
-            stack = getattr(self, "_settings_stack", None)
-            if stack is not None and not self.agent_runtime.settings_edit_depth:
-                stack.enter_context(self.agent_runtime.editing_settings())
-            return AgentAccess(self.agent_runtime.service, self.agent_runtime.url, parent)
-        except Exception as error:
-            from torrentlinker.torrent_management import safe_error
-
-            port = self.agent_runtime.port if self.agent_runtime else 8790
-            detail = (
-                self.agent_runtime.setup.secrets.redact(str(error))
-                if self.agent_runtime
-                else safe_error(error)
-            ) or type(error).__name__
-            log.error("Agent access startup failed (%s): %s", type(error).__name__, detail)
-            if self.agent_runtime is not None and self.agent_runtime.app is None:
-                self.agent_runtime.close()
-                self.agent_runtime = None
-            if isinstance(error, OSError) and (
-                error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) == 10048
-            ):
-                message = self.tr(
-                    "Cannot start the local MCP server on port {0}. Check whether another "
-                    "TorrentLinker instance or another application is using it."
-                ).format(port)
-            else:
-                message = self.tr("Cannot open Agent access. See torrentlinker.log for details.")
-            QMessageBox.warning(
-                self,
-                self.tr("Agent access"),
-                message + "\n" + detail,
-            )
-
     def start_saved_agent_access(self) -> None:
         if not (self.settings_path.parent / "agents.sqlite").exists():
             return
@@ -898,8 +850,6 @@ class MainWindow(QMainWindow):
             self._avatar_token = state.get("avatar")
             image = self.account_workspace.avatar()
             self.zen_tab.profile_view.show_avatar(image[0] if image else None)
-        if self.companion_panel is not None:
-            self.companion_panel.show_state(state)
         if state["paired"] and self.companion_receiver is None:
             if time.monotonic() >= self._receiver_retry_at:
                 self._receiver_retry_at = time.monotonic() + 30
@@ -989,36 +939,18 @@ class MainWindow(QMainWindow):
             self.account_workspace.remember_receiver(self.companion_receiver.server.server_port)
             address = self.companion_receiver.address
             account_id = self.account_workspace.state()["api"]["account_id"]
-            if self.companion_panel is not None:
-                self.companion_panel.show_pairing()
             QDesktopServices.openUrl(QUrl(connection_url(address, pairing["code"], account_id)))
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, self.tr("Browser companion"), str(error))
-
-    def companion_panel_widget(self, parent=None):
-        from torrentlinker.gui.companion_panel import CompanionPanel
-
-        panel = self.companion_panel = CompanionPanel(parent)
-        panel.pair_requested.connect(self.pair_companion)
-        panel.disconnect_requested.connect(self.disconnect_companion)
-        panel.extension_requested.connect(self.save_companion_extension)
-        panel.session_downloads_toggled.connect(self.set_session_downloads)
-        panel.destroyed.connect(lambda: setattr(self, "companion_panel", None))
-        panel.show_state(self.account_workspace.state())
-        return panel
 
     def set_session_downloads(self, enabled: bool) -> None:
         try:
             self.account_workspace.set_session_downloads(enabled)
         except ValueError as error:
             QMessageBox.warning(self, self.tr("Browser companion"), str(error))
-        if self.companion_panel is not None:
-            self.companion_panel.show_state(self.account_workspace.state())
 
     def disconnect_companion(self) -> None:
         self.account_workspace.disconnect()
-        if self.companion_panel is not None:
-            self.companion_panel.pairing_box.hide()
         if self.companion_receiver is not None:
             self.companion_receiver.stop()
             self.companion_receiver = None
@@ -2296,10 +2228,7 @@ class MainWindow(QMainWindow):
                 self.tr("Wait for the current operation before changing client."), 5000
             )
             return
-        from torrentlinker.gui.client_profiles import ClientProfilesDialog
-
-        if ClientProfilesDialog(self.settings, self.store, self).exec():
-            self._replace_workspace(self.settings)
+        self.open_settings(section="clients")
 
     def open_media_discussion(self, identifier: str) -> None:
         self.media_tab.close_chat()
@@ -2310,11 +2239,13 @@ class MainWindow(QMainWindow):
         self.open_settings(assistant=True)
 
     @agent_settings_change
-    def open_settings(self, *, assistant: bool = False, agents: bool = False) -> None:
+    def open_settings(
+        self, *, assistant: bool = False, agents: bool = False, section: str = "connections"
+    ) -> None:
         with ExitStack() as stack:
             self._settings_stack: ExitStack | None = stack
             try:
-                self._edit_settings(assistant=assistant, agents=agents)
+                self._edit_settings(assistant=assistant, agents=agents, section=section)
             finally:
                 self._settings_stack = None
 
@@ -2325,21 +2256,45 @@ class MainWindow(QMainWindow):
         jobs = self.agent_runtime.service.jobs if self.agent_runtime else None
         export_report(parent, lambda: build_report(self.settings, self.store, jobs))
 
-    def _edit_settings(self, *, assistant: bool, agents: bool) -> None:
+    def _edit_settings(
+        self, *, assistant: bool, agents: bool, section: str = "connections"
+    ) -> None:
+        from PySide6.QtCore import QThreadPool
+
+        if self._startup_complete and QThreadPool.globalInstance().activeThreadCount():
+            self.statusBar().showMessage(
+                self.tr("Wait for the current operation before changing settings."), 5000
+            )
+            return
         if self.agent_runtime and self.agent_runtime.busy():
             self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
             return
         folders = list(self.settings.library_folders)
-        dialog = SettingsDialog(self.settings, self)
-        dialog.diagnostics_requested.connect(lambda: self._export_diagnostics(dialog))
-        dialog.folder_editor.set_scan_errors(
-            self.library_workspace.scan_errors, self.library_workspace.scanned
+        dialog = SettingsDialog(
+            self, section="assistant" if assistant else "agents" if agents else section
         )
-        if assistant:
-            dialog.show_assistant_connections()
-        if agents:
-            dialog.show_agent_access()
-        accepted = dialog.exec()
+        # Settings saves each group immediately. Keep periodic desktop workers
+        # from writing an older Settings snapshot while this editor is open.
+        timers = [
+            timer
+            for timer in self.findChildren(QTimer)
+            if timer.parent() is self and timer.isActive()
+        ]
+        for timer in timers:
+            timer.stop()
+        try:
+            dialog.exec()
+        finally:
+            for timer in timers:
+                timer.start()
+        dialog.deleteLater()
+        accepted = dialog.saved
+        if accepted and dialog.setup.settings.active_client_id != self.settings.active_client_id:
+            self._replace_workspace(dialog.setup.settings)
+            return
+        if accepted:
+            # Keep the Settings object used by existing workspaces authoritative.
+            self.settings.__dict__.update(dialog.setup.settings.__dict__)
         for identifier in dialog.agent_approvals:
             # Run only after the settings transaction has released its suspension.
             # execute() still checks the reviewed proposal's settings fingerprint.
@@ -2358,9 +2313,14 @@ class MainWindow(QMainWindow):
             self._lock_reading_room()
             self.torrents_tab.reset_connection()
             self.settings.capture_client()
-            self.client_selector.setItemText(
-                self.client_selector.currentIndex(), self.settings.profile().name
-            )
+            with QSignalBlocker(self.client_selector):
+                self.client_selector.clear()
+                for profile in self.settings.client_profiles:
+                    if profile.enabled:
+                        self.client_selector.addItem(profile.name, profile.id)
+                self.client_selector.setCurrentIndex(
+                    self.client_selector.findData(self.settings.active_client_id)
+                )
             self.settings.save(self.settings_path)
             if self.agent_runtime:
                 self.agent_runtime.reset(self.settings)

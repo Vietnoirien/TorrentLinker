@@ -28,8 +28,17 @@ class KeyringSecrets(ServerSecrets):
         self.files: dict[str, Path] = {}
         self.seen: set[str] = set()
 
+    @staticmethod
+    def _key(name: str) -> str:
+        # Desktop credentials predate the Web deployment secret names.
+        if name.startswith("indexer-extra-key-"):
+            suffix = name.removeprefix("indexer-extra-key-")
+            if suffix in {"1", "2", "3", "4"}:
+                return f"indexer-api-key-{int(suffix) + 1}"
+        return name
+
     def get(self, name: str) -> str:
-        value = get_secret(name)
+        value = get_secret(self._key(name))
         if value:
             with self.lock:
                 self.seen.add(value)
@@ -37,7 +46,7 @@ class KeyringSecrets(ServerSecrets):
 
     def update(self, values: dict[str, str]) -> None:
         for key, value in values.items():
-            set_secret(key, value)
+            set_secret(self._key(key), value)
             if value:
                 with self.lock:
                     self.seen.add(value)
@@ -75,7 +84,7 @@ class DesktopSetup(Setup):
         self.download_folder_changes: list[tuple[str, int | None, str, str]] = []
         self._folder_candidate: Path | None = None
 
-    def path_under_root(self, value: str, *, directory: bool = True) -> Path:
+    def _refresh_roots(self) -> None:
         roots = [f.path for f in self.settings.library_folders]
         for profile in self.settings.client_profiles:
             folders = profile.download_folders
@@ -84,6 +93,33 @@ class DesktopSetup(Setup):
         if candidate := getattr(self, "_folder_candidate", None):
             roots.append(candidate)
         self.roots = tuple(p.resolve() for p in roots)
+
+    def snapshot(self) -> dict[str, Any]:
+        self._refresh_roots()
+        return super().snapshot()
+
+    def suggest_mappings(self) -> dict[str, Any]:
+        from dataclasses import asdict
+
+        from torrentlinker.paths import detect_mappings
+
+        self._refresh_roots()
+        client = self.client()
+        found = detect_mappings(
+            client.torrents(with_files=False),
+            self.roots,
+            files=lambda torrent: client.files(torrent.hash),
+        )
+        # Desktop owners may choose local folders outside existing storage roots.
+        # This only proposes paths; saving still verifies the selected mapping.
+        return {
+            "suggestions": [asdict(suggestion) for suggestion in found.suggestions],
+            "same_paths": found.same_paths,
+            "not_found": found.not_found,
+        }
+
+    def path_under_root(self, value: str, *, directory: bool = True) -> Path:
+        self._refresh_roots()
         return super().path_under_root(value, directory=directory)
 
     def local_client(self) -> bool:

@@ -6,7 +6,7 @@ from PySide6.QtCore import QCoreApplication
 
 from torrentlinker.catalogue import candidate
 from torrentlinker.download_queue import enqueue
-from torrentlinker.gui.settings_dialog import choose_directory
+from torrentlinker.gui.settings_common import choose_directory
 from torrentlinker.store import CatalogueRow
 from torrentlinker.web.zen_preferences import ZenPreferences, snapshot
 

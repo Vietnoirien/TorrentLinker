@@ -578,8 +578,11 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                         "data-empty", "false"
                     )
             page.locator('[data-view="setup"][data-i18n="settings"]').click()
-            page.locator("[data-settings-section=interface]").click()
-            page.locator("#settings-media-layout").select_option("collection")
+            settings = page.frame_locator("#settings-frame")
+            settings.get_by_role("button", name="General", exact=True).click()
+            settings.get_by_label("Media interface", exact=True).select_option("collection")
+            settings.get_by_role("button", name="Save", exact=True).click()
+            expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
             page.reload()
             page.locator('[data-view="media"]').click()
             expect(media_locator(page, "#view-media")).to_have_attribute(

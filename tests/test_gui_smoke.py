@@ -15,83 +15,68 @@ def test_main_window_opens(qtbot, tmp_path: Path) -> None:  # type: ignore[no-un
     assert window.isVisible()
 
 
-def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot) -> None:  # type: ignore[no-untyped-def]
-    from PySide6.QtWidgets import QLineEdit
+def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot, tmp_path):
+    from tests.settings_support import settings_dialog
+    from tests.test_community_interfaces import js
 
-    from torrentlinker.gui.settings_dialog import SettingsDialog
+    dialog = settings_dialog(qtbot, tmp_path)
+    assert (
+        js(qtbot, dialog.view, "document.querySelector('.settings-form h2').textContent")
+        == "Connections"
+    )
+    assert js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('input[type=password]')].every(input=>input.value==='')",
+    )
+    assert js(qtbot, dialog.view, "document.querySelectorAll('input[type=password]').length") >= 4
 
-    dialog = SettingsDialog(Settings())
-    qtbot.addWidget(dialog)
 
-    assert dialog.tabs.currentIndex() == 0
-    assert dialog.indexer_key.echoMode() == QLineEdit.EchoMode.Password
-    assert dialog.tmdb_key.echoMode() == QLineEdit.EchoMode.Password
-
-
-def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(  # type: ignore[no-untyped-def]
-    qtbot, tmp_path: Path
-) -> None:
+def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
     from torrentlinker.credentials import get_secret
     from torrentlinker.deluge import DelugeApi
     from torrentlinker.domain import TorrentClient
-    from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import DELUGE_PASSWORD, SettingsDialog
     from torrentlinker.qbit import QbitApi
-    from torrentlinker.store import Store
 
-    settings = Settings()
-    dialog = SettingsDialog(settings)
-    qtbot.addWidget(dialog)
-    assert dialog.client_forms.currentIndex() == 0  # qBittorrent, as before
-    assert isinstance(dialog._form_qbit(), QbitApi)
-
-    dialog.client.setCurrentIndex(dialog.client.findData(TorrentClient.DELUGE.value))
-    assert dialog.client_forms.currentWidget().isAncestorOf(dialog.deluge_host)
-    dialog.deluge_host.setText("http://nas:8112")
-    dialog.deluge_password.setText("secret")
-    assert isinstance(dialog._form_qbit(), DelugeApi)
-    dialog._save()
-
+    dialog = settings_dialog(qtbot, tmp_path)
+    edit_field(qtbot, dialog.view, "Client type", "deluge")
+    edit_field(qtbot, dialog.view, "Address", "http://nas:8112")
+    edit_field(qtbot, dialog.view, "Password", "secret")
+    save_group(qtbot, dialog)
+    settings = Settings.load(tmp_path / "settings.json")
     assert settings.client is TorrentClient.DELUGE
     assert settings.deluge.host == "http://nas:8112"
-    assert get_secret(DELUGE_PASSWORD) == "secret"
+    assert get_secret("deluge-password") == "secret"
     window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
     qtbot.addWidget(window)
-    window.qbit()
     assert isinstance(window.qbit()._inner, DelugeApi)
     settings.client = TorrentClient.QBITTORRENT
-    window.qbit()
-    assert isinstance(window.qbit()._inner, QbitApi)  # a new choice takes effect at once
+    assert isinstance(window.qbit()._inner, QbitApi)
 
 
-def test_choosing_transmission_saves_it_and_the_app_connects_through_it(  # type: ignore[no-untyped-def]
-    qtbot, tmp_path: Path
-) -> None:
+def test_choosing_transmission_saves_it_and_the_app_connects_through_it(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
     from torrentlinker.credentials import get_secret
     from torrentlinker.domain import TorrentClient
-    from torrentlinker.gui.main_window import MainWindow
-    from torrentlinker.gui.settings_dialog import TRANSMISSION_PASSWORD, SettingsDialog
-    from torrentlinker.store import Store
+    from torrentlinker.qbit import QbitApi
     from torrentlinker.transmission import TransmissionApi
 
-    settings = Settings()
-    dialog = SettingsDialog(settings)
-    qtbot.addWidget(dialog)
-    dialog.client.setCurrentIndex(dialog.client.findData(TorrentClient.TRANSMISSION.value))
-    assert dialog.client_forms.currentWidget().isAncestorOf(dialog.transmission_host)
-    dialog.transmission_host.setText("http://nas:9091")
-    dialog.transmission_user.setText("me")
-    dialog.transmission_password.setText("secret")
-    assert isinstance(dialog._form_qbit(), TransmissionApi)
-    dialog._save()
-
+    dialog = settings_dialog(qtbot, tmp_path)
+    edit_field(qtbot, dialog.view, "Client type", "transmission")
+    edit_field(qtbot, dialog.view, "Address", "http://nas:9091")
+    edit_field(qtbot, dialog.view, "Username", "me")
+    edit_field(qtbot, dialog.view, "Password", "secret")
+    save_group(qtbot, dialog)
+    settings = Settings.load(tmp_path / "settings.json")
     assert settings.client is TorrentClient.TRANSMISSION
-    assert (settings.transmission.host, settings.transmission.username) == ("http://nas:9091", "me")
-    assert get_secret(TRANSMISSION_PASSWORD) == "secret"
+    assert settings.transmission.host == "http://nas:9091"
+    assert get_secret("transmission-password") == "secret"
     window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "s.db"))
     qtbot.addWidget(window)
-    window.qbit()
     assert isinstance(window.qbit()._inner, TransmissionApi)
+    settings.client = TorrentClient.QBITTORRENT
+    assert isinstance(window.qbit()._inner, QbitApi)
 
 
 @pytest.mark.parametrize("accept", [True, False])
@@ -121,18 +106,30 @@ def test_part_names_are_turned_off_only_if_the_user_agrees_then_the_action_runs_
         assert done == []
 
 
-def test_content_kind_chosen_in_settings_comes_back_as_a_content_kind(qtbot) -> None:  # type: ignore[no-untyped-def]
+def test_content_kind_chosen_in_settings_comes_back_as_a_content_kind(qtbot, tmp_path):
+    from tests.settings_support import settings_dialog
+    from tests.test_community_interfaces import js, wait_js
     from torrentlinker.domain import ContentKind, LibraryFolder
-    from torrentlinker.gui.settings_dialog import SettingsDialog
 
-    s = Settings()
-    s.library_folders = [LibraryFolder(Path("/windocs/STL"), 1, ContentKind.MODEL_3D)]
-    dialog = SettingsDialog(s)
-    qtbot.addWidget(dialog)
-
-    [folder] = dialog._read_folders()
-
-    assert folder.kind is ContentKind.MODEL_3D
+    settings = Settings(library_folders=[LibraryFolder(tmp_path, 1, ContentKind.MODEL_3D)])
+    dialog = settings_dialog(qtbot, tmp_path, settings, section="library")
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Edit').click()",
+    )
+    assert (
+        js(qtbot, dialog.view, "document.querySelector('[aria-label=\"Content kind\"]').value")
+        == "3d-model"
+    )
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Save folder').click()",
+    )
+    qtbot.waitUntil(lambda: dialog.setup.path.exists())
+    assert Settings.load(dialog.setup.path).library_folders[0].kind is ContentKind.MODEL_3D
+    wait_js(qtbot, dialog.view, "!document.querySelector('#settings-error').textContent")
 
 
 def test_library_exposes_seed_states_to_the_shared_view(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -153,29 +150,43 @@ def test_library_exposes_seed_states_to_the_shared_view(qtbot, tmp_path: Path) -
     assert [(r["name"], r["state"]) for r in rows] == [("a", "orphan"), ("b", "seeded")]
 
 
-def test_a_typed_folder_path_is_added_to_the_library_folders(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    from torrentlinker.gui.settings_dialog import SettingsDialog
+def test_a_typed_folder_path_is_added_to_the_library_folders(qtbot, tmp_path):
+    from tests.settings_support import edit_field, settings_dialog
+    from tests.test_community_interfaces import js
 
-    dialog = SettingsDialog(Settings())
-    qtbot.addWidget(dialog)
-    dialog.typed_folder.setText(str(tmp_path))
-    dialog._add_typed_folder()
+    folder = tmp_path / "library"
+    folder.mkdir()
+    dialog = settings_dialog(qtbot, tmp_path, section="library")
+    edit_field(qtbot, dialog.view, "Folder on the TorrentLinker host", str(folder))
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Save folder').click()",
+    )
+    qtbot.waitUntil(lambda: bool(dialog.setup.settings.library_folders))
+    assert [f.path for f in dialog.setup.settings.library_folders] == [folder]
 
-    assert [f.path for f in dialog._read_folders()] == [tmp_path]
 
-
-def test_zen_profile_entered_in_settings_comes_back(qtbot) -> None:  # type: ignore[no-untyped-def]
-    from torrentlinker.gui.settings_dialog import SettingsDialog
+def test_zen_profile_entered_in_settings_comes_back(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.test_community_interfaces import js
     from torrentlinker.zen import ZenClass, ZenProfile
 
-    s = Settings()
-    s.zen = ZenProfile(ZenClass.SWARM_KEEPER, 0.02, 20, 300)
-    dialog = SettingsDialog(s)
-    qtbot.addWidget(dialog)
-
-    assert dialog._read_zen() == s.zen
-    dialog.zen_class.setCurrentIndex(2)
-    assert dialog._read_zen().zen_class is ZenClass.REUPLOADER
+    settings = Settings(zen=ZenProfile(ZenClass.SWARM_KEEPER, 0.02, 20, 300))
+    dialog = settings_dialog(qtbot, tmp_path, settings, section="zen")
+    assert (
+        js(
+            qtbot,
+            dialog.view,
+            "document.querySelector('[aria-label=\"Seed hours per day\"]').value",
+        )
+        == "20"
+    )
+    edit_field(qtbot, dialog.view, "Class", "reuploader")
+    save_group(qtbot, dialog)
+    saved = Settings.load(dialog.setup.path)
+    assert saved.zen.zen_class is ZenClass.REUPLOADER
+    assert saved.zen.seed_hours == 20 and saved.zen.torrent_cap == 300
 
 
 def test_main_window_opens_on_the_zen_tab_and_shows_the_seeding_view(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -250,20 +261,23 @@ def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
     assert window.seeding_timer.interval() == 30_000
 
 
-def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot) -> None:  # type: ignore[no-untyped-def]
-    from torrentlinker.downloads import DownloadFolders
-    from torrentlinker.gui.settings_dialog import COL_FOLDER, COL_RESOLVED, SettingsDialog
-    from torrentlinker.indexer import Caps
+def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot, tmp_path):
+    from tests.settings_support import settings_dialog
+    from tests.test_community_interfaces import js
+    from torrentlinker.downloads import DownloadFolders, IndexerCategory
 
-    dialog = SettingsDialog(Settings())
-    qtbot.addWidget(dialog)
-    dialog._set_categories(Caps({2000: "Films", 2030: "VO", 7000: "Ebook"}, {}, {2030: 2000}))
-    dialog.download_table.item(0, COL_FOLDER).setText("/dl/films")  # type: ignore[union-attr]
-
-    assert dialog._read_download_folders() == DownloadFolders({2000: "/dl/films"})
-    used = [dialog.download_table.item(r, COL_RESOLVED).text() for r in range(3)]  # type: ignore[union-attr]
-    assert used[:2] == ["/dl/films", "/dl/films"]
-    assert "excluded" in used[2]
+    settings = Settings(language="en")
+    settings.indexer_categories = {
+        2000: IndexerCategory("Films"),
+        2030: IndexerCategory("VO", 2000),
+        7000: IndexerCategory("Ebook"),
+    }
+    settings.download_folders = DownloadFolders({2000: "/dl/films"})
+    dialog = settings_dialog(qtbot, tmp_path, settings, section="downloads")
+    text = js(qtbot, dialog.view, "document.querySelector('.settings-form').textContent")
+    assert "Films › VO" in text
+    assert text.count("/dl/films") >= 2
+    assert "EbookExcluded: no download folder" in text
 
 
 def test_zen_band_shows_the_balance_and_explains_a_key_without_profile_scope(qtbot) -> None:  # type: ignore[no-untyped-def]
@@ -410,7 +424,7 @@ def test_whole_catalogue_fetch_can_be_paused_and_offers_to_resume(qtbot, tmp_pat
     from tests.test_indexer import FakeClock
     from torrentlinker.credentials import set_secret
     from torrentlinker.downloads import IndexerCategory
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.indexer import Indexer
 
     fake, clock = FakeTorznab(), FakeClock()
@@ -832,7 +846,7 @@ def test_making_a_plan_fetches_its_categories_and_discloses_limits(
     from tests.fake_torznab import FakeTorznab
     from torrentlinker.credentials import set_secret
     from torrentlinker.downloads import DownloadFolders, IndexerCategory
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.indexer import Indexer
     from torrentlinker.paths import MappedQbit, PathMapper
 
@@ -873,7 +887,7 @@ def test_a_plan_waits_for_an_active_refresh_then_refreshes_its_own_categories(
 
     from torrentlinker.credentials import set_secret
     from torrentlinker.downloads import DownloadFolders, IndexerCategory
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.plan import Plan
 
     settings = Settings()
@@ -935,7 +949,7 @@ def test_a_failed_plan_refresh_does_not_build_from_the_old_catalogue(
 ) -> None:  # type: ignore[no-untyped-def]
     from torrentlinker.credentials import set_secret
     from torrentlinker.downloads import DownloadFolders, IndexerCategory
-    from torrentlinker.gui.settings_dialog import INDEXER_API_KEY
+    from torrentlinker.gui.settings_common import INDEXER_API_KEY
     from torrentlinker.plan import Plan
 
     settings = Settings()
@@ -1202,38 +1216,64 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
     assert view.plan is not None and not view.plan.items
 
 
-def test_detect_adds_the_docker_path_and_check_counts_its_torrents(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_detect_adds_the_docker_path_and_check_counts_its_torrents(qtbot, tmp_path):
     from tests.fake_qbit import FakeQbit
+    from tests.settings_support import settings_dialog
+    from tests.test_community_interfaces import js, wait_js
     from torrentlinker.domain import LibraryFolder, PathMapping, Torrent
     from torrentlinker.downloads import DownloadFolders
-    from torrentlinker.gui.settings_dialog import COL_CHECK, COL_LOCAL, COL_QBIT, SettingsDialog
 
     nas = tmp_path / "nas"
     (nas / "ebooks").mkdir(parents=True)
     (nas / "ebooks" / "Zweig.epub").write_bytes(b"x" * 300)
-    qbit = FakeQbit(default_path="/downloads")
-    qbit.by_hash["a" * 40] = Torrent("a" * 40, "Zweig", Path("/data/ebooks"), {"Zweig.epub": 300})
-    s = Settings()
-    s.library_folders = [LibraryFolder(nas / "ebooks")]
-    s.download_folders = DownloadFolders({}, str(tmp_path / "elsewhere"))
-    dialog = SettingsDialog(s)
-    qtbot.addWidget(dialog)
-    dialog._form_qbit = lambda: qbit  # type: ignore[assignment,method-assign,return-value]
-
-    dialog.detect_button.click()
-    qtbot.waitUntil(
-        lambda: (c := dialog.mappings.item(0, COL_CHECK)) is not None and "of" in c.text(),
-        timeout=5000,
+    client = FakeQbit(default_path="/downloads")
+    client.by_hash["a" * 40] = Torrent("a" * 40, "Zweig", Path("/data/ebooks"), {"Zweig.epub": 300})
+    settings = Settings(language="en")
+    settings.library_folders = [LibraryFolder(nas / "ebooks")]
+    settings.download_folders = DownloadFolders({}, str(tmp_path / "elsewhere"))
+    dialog = settings_dialog(qtbot, tmp_path, settings, section="paths")
+    dialog.setup.connector = lambda *args, **kwargs: client
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent"
+        "==='Detect mappings').click()",
     )
-
-    assert dialog.mappings.item(0, COL_LOCAL).text() == str(nas)  # type: ignore[union-attr]
-    assert dialog.mappings.item(0, COL_QBIT).text() == "/data"  # type: ignore[union-attr]
-    assert dialog.mappings.item(0, COL_CHECK).text() == "✓ 1 of 1"  # type: ignore[union-attr]
-    status = dialog.paths_status.text()
-    assert "1 torrents found" in status
-    assert "cannot save into them" in status and str(tmp_path / "elsewhere") in status
-    dialog._save()
-    assert s.path_mappings == [PathMapping(str(nas), "/data")]
+    qtbot.waitUntil(lambda: dialog.view.pending == 0)
+    qtbot.wait(100)
+    assert js(qtbot, dialog.view, "document.querySelector('#settings-error').textContent") == ""
+    wait_js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].some(b=>b.textContent.endsWith('→ /data'))",
+    )
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent"
+        ".endsWith('→ /data')).click()",
+    )
+    assert js(
+        qtbot,
+        dialog.view,
+        "document.querySelector('[aria-label=\"Folder on the TorrentLinker host\"]').value",
+    ) == str(nas)
+    assert not dialog.setup.settings.path_mappings
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Test mapping').click()",
+    )
+    wait_js(qtbot, dialog.view, "document.body.textContent.includes('1 of 1 torrents found')")
+    assert "cannot save into" in js(qtbot, dialog.view, "document.body.textContent")
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Save folder').click()",
+    )
+    qtbot.waitUntil(lambda: bool(dialog.setup.settings.path_mappings))
+    qtbot.waitUntil(lambda: dialog.view.pending == 0)
+    assert dialog.setup.settings.path_mappings == [PathMapping(str(nas), "/data")]
 
 
 def test_a_book_left_in_a_download_folder_is_left_out_of_the_plan(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -1390,41 +1430,49 @@ def test_after_a_verified_unpack_the_archive_can_go_to_the_trash(
     assert store.take_unpacked(folder) is None  # never offered twice
 
 
-def test_shop_badges_go_past_the_tree_bonus_limit(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    from torrentlinker.gui.settings_dialog import SettingsDialog
+def test_shop_badges_go_past_the_tree_bonus_limit(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.test_community_interfaces import js
 
-    dialog = SettingsDialog(Settings())
-    qtbot.addWidget(dialog)
+    dialog = settings_dialog(qtbot, tmp_path, section="zen")
+    assert (
+        js(
+            qtbot,
+            dialog.view,
+            "document.querySelector('[aria-label=\"Tree bonus unlocked (%)\"]').max",
+        )
+        == "5"
+    )
+    edit_field(qtbot, dialog.view, "Tree bonus unlocked (%)", 5)
+    edit_field(qtbot, dialog.view, "Shop badges bonus (%)", 12.5)
+    save_group(qtbot, dialog)
+    zen = Settings.load(dialog.setup.path).zen
+    assert zen.tree_bonus == pytest.approx(0.05)
+    assert zen.badge_bonus == pytest.approx(0.125)
 
-    dialog.tree_bonus.setValue(12.5)  # c411's tree stops at +5 %
-    dialog.badge_bonus.setValue(12.5)  # badges add on top of every maximum
 
-    zen = dialog._read_zen()
-    assert zen.tree_bonus == pytest.approx(0.05) and zen.badge_bonus == pytest.approx(0.125)
-    s = Settings()
-    s.zen = zen
-    s.save(tmp_path / "settings.json")
-    assert Settings.load(tmp_path / "settings.json").zen.badge_bonus == pytest.approx(0.125)
-
-
-def test_extra_api_keys_are_saved_and_each_gets_its_own_queues(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_extra_api_keys_are_saved_and_each_gets_its_own_queues(qtbot, tmp_path):
+    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.test_community_interfaces import js
     from torrentlinker.credentials import get_secret
-    from torrentlinker.gui.settings_dialog import SettingsDialog
 
-    dialog = SettingsDialog(Settings())
-    qtbot.addWidget(dialog)
-    dialog.indexer_key.setText("main")
-    dialog.extra_keys[0].setText("second")
-    dialog.extra_keys[2].setText("fourth")  # gaps are fine
-
-    dialog._save_secrets()
-
+    dialog = settings_dialog(qtbot, tmp_path)
+    edit_field(qtbot, dialog.view, "Indexer API key", "main")
+    js(
+        qtbot,
+        dialog.view,
+        "document.querySelector('label.settings-check input[type=checkbox]').click()",
+    )
+    edit_field(qtbot, dialog.view, "Additional API keys, one per line", "second\n\nfourth")
+    save_group(qtbot, dialog)
     assert get_secret("indexer-api-key-2") == "second"
-    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    window = MainWindow(
+        Settings.load(dialog.setup.path), tmp_path / "settings.json", Store(tmp_path / "s.db")
+    )
     qtbot.addWidget(window)
     indexer = window.indexer()
     assert [slot.key for slot in indexer.slots] == ["main", "second", "fourth"]
-    assert window.indexer() is indexer  # kept while the keys stay the same
+    assert window.indexer() is indexer
 
 
 def plan_window(qtbot, tmp_path: Path, monkeypatch, picked: str):  # type: ignore[no-untyped-def]
