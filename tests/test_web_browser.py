@@ -354,10 +354,15 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#zen-seeding-tab").click()
             expect(page.locator("#zen-seeding-panel")).to_be_visible()
             page.locator("#zen-plan-tab").click()
-            expect(page.locator("#plan-clients")).to_contain_text("Remote Deluge")
+            expect(page.frame_locator("#plan-frame").locator("#plan-clients")).to_contain_text(
+                "Remote Deluge"
+            )
             if screenshot:
                 page.set_viewport_size({"width": 1100, "height": 850})
-                page.locator("#plan-clients").locator("..").locator("summary").click()
+                page.frame_locator("#plan-frame").locator("#plan-options > summary").click()
+                page.frame_locator("#plan-frame").locator("#plan-clients").locator("..").locator(
+                    "summary"
+                ).click()
                 for language in ("en", "fr"):
                     page.locator("#language").select_option(language)
                     page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
