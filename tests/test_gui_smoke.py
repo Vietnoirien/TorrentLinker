@@ -1560,6 +1560,10 @@ def test_packaging_smoke_accepts_stable_and_prerelease_versions(monkeypatch, ver
 
     monkeypatch.setattr(app, "installed_version", lambda: version)
     monkeypatch.setattr(app, "agent_smoke_checks", lambda: None)
+    # The real shared page is rendered in test_bundled_assets; this checks versions.
+    from torrentlinker import webview_smoke
+
+    monkeypatch.setattr(webview_smoke, "webview_smoke_checks", lambda: None)
     app.smoke_checks()
 
 

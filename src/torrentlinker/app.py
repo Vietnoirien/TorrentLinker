@@ -49,7 +49,9 @@ def smoke_checks() -> None:
     assert documentation.document_path("guide/images/zen.png").is_file()
     assert documentation.document_path("guide/images/en/zen.png").is_file()
     from torrentlinker.library_smoke import library_smoke_checks
+    from torrentlinker.webview_smoke import webview_smoke_checks
 
+    webview_smoke_checks()
     media_smoke_checks()
     library_smoke_checks()
     agent_smoke_checks()
