@@ -14,6 +14,7 @@ const planUI = {
   phase: "",
   job: null,
   sending: false,
+  pending: false,
 };
 let initialized = false,
   configureTimer,
@@ -40,7 +41,8 @@ function planActions() {
     $("plan-count").disabled = !$("plan-limit-count").checked;
     $("plan-seeders").disabled = !$("plan-limit-seeders").checked;
   }
-  $("plan-now").disabled = false;
+  $("plan-now").disabled = planUI.pending;
+  $("plan-stop").disabled = planUI.pending;
   for (const input of document.querySelectorAll(
     "#plan-result input,#plan-select-all,#plan-select-none",
   ))
@@ -258,6 +260,7 @@ function planApplyEnvironment(env) {
     state.planId = "";
     initialized = false;
     preferencesDirty = false;
+    planUI.pending = false;
     $("dialog").close();
     reviewAfter = false;
     clearTimeout(configureTimer);
@@ -301,7 +304,7 @@ function planApplyEnvironment(env) {
         $("plan-speed").value = speed;
     }
   }
-  planUI.busy = Boolean(value.busy);
+  planUI.busy = Boolean(value.busy) || planUI.pending;
   planUI.sending = Boolean(value.progress);
   planUI.phase = value.fetching ? "fetching" : "planning";
   const incoming = value.result || { rows: [], issues: [] };
@@ -332,6 +335,31 @@ function planApplyEnvironment(env) {
       );
       renderPlan();
     }
+  }
+  const report = value.report;
+  $("plan-outcome").replaceChildren();
+  if (report) {
+    $("plan-outcome").append(
+      element(
+        "p",
+        `${report.added?.length || 0} ${say("added", "ajoutés")} · ${report.reseeded?.length || 0} Reseeds · ${report.refused?.length || 0} ${say("refused", "refusés")} · ${report.failed?.length || 0} ${say("failed", "échecs")}`,
+      ),
+    );
+    if (report.stopped)
+      $("plan-outcome").append(
+        element(
+          "p",
+          say(
+            "Stopped. The remaining Plan is saved.",
+            "Arrêté. Le reste du Plan est enregistré.",
+          ),
+        ),
+      );
+    for (const [title, reason] of [
+      ...(report.refused || []),
+      ...(report.failed || []),
+    ])
+      $("plan-outcome").append(element("p", `${title}: ${reason}`));
   }
   $("plan-progress").textContent = value.message || "";
   $("plan-send-progress").hidden = !value.progress;
@@ -425,6 +453,10 @@ async function buildPlan(refreshFirst = false) {
     reviewAfter = false;
     planUI.busy = false;
     planActions();
+    if (error.action?.kind === "plan-folder") {
+      await folderDialog(error.action.client_id, error.action.category);
+      return;
+    }
     throw error;
   }
 }
@@ -494,7 +526,18 @@ async function reviewPlan() {
       () =>
         guard(async () => {
           $("dialog").close();
-          await planRequest("send", { ...body, confirmation: review.token });
+          const sendingClient = state.clientId;
+          planUI.pending = planUI.busy = true;
+          planActions();
+          try {
+            await planRequest("send", { ...body, confirmation: review.token });
+          } finally {
+            if (sendingClient === state.clientId) {
+              planUI.pending = false;
+              planUI.busy = Boolean(planEnvironment.state.busy);
+            }
+            planActions();
+          }
         }),
       "primary",
     ),
@@ -505,7 +548,7 @@ async function reviewPlan() {
   );
   $("dialog").showModal();
 }
-async function folderDialog() {
+async function folderDialog(clientId = state.clientId, category = null) {
   const content = $("dialog-content"),
     clients = element("select"),
     categories = element("select"),
@@ -520,23 +563,89 @@ async function folderDialog() {
   );
   for (const client of state.setup.clients)
     clients.add(new Option(client.name, client.id));
-  clients.value = state.clientId;
+  clients.value = clientId;
   categories.add(new Option(say("Default", "Par défaut"), ""));
   for (const option of $("plan-category").options)
     if (option.value)
       categories.add(new Option(option.textContent, option.value));
+  categories.value = category === null ? "" : String(category);
+  let generation = 0,
+    loading = false;
+  const save = button(
+    say("Save folder", "Enregistrer le dossier"),
+    () => guard(saveFolder),
+    "primary",
+  );
+  const browseButton = button(
+    say("Browse folders", "Parcourir les dossiers"),
+    () => guard(() => browse()),
+  );
+  function setLoading(value) {
+    loading = value;
+    save.disabled = value;
+    browseButton.disabled = value;
+    path.disabled = value;
+  }
   async function load() {
-    const result = await planRequest("folders", {
+    const request = ++generation,
+      client = clients.value,
+      category = categories.value;
+    setLoading(true);
+    path.value = "";
+    folders.replaceChildren();
+    feedback.textContent = "";
+    try {
+      const result = await planRequest("folders", {
+        client_id: client,
+        category: category ? Number(category) : null,
+      });
+      if (request !== generation || !content.contains(path)) return;
+      path.value = result.path || "";
+      setLoading(false);
+    } catch (error) {
+      if (request !== generation || !content.contains(path)) return;
+      feedback.textContent = error.message;
+      // Keep Save disabled until a current destination has loaded.
+    }
+  }
+  async function saveFolder() {
+    if (loading) return;
+    const request = generation;
+    const destination = {
       client_id: clients.value,
       category: categories.value ? Number(categories.value) : null,
-    });
-    path.value = result.path || "";
+      path: path.value,
+    };
+    setLoading(true);
+    clients.disabled = categories.disabled = true;
+    try {
+      await planRequest("save-folder", destination);
+      if (request !== generation || !content.contains(path)) return;
+      feedback.textContent =
+        planEnvironment.mode === "web"
+          ? say(
+              "Folder verified and saved. Build the Plan again.",
+              "Dossier vérifié et enregistré. Recréez le Plan.",
+            )
+          : say(
+              "Folder saved. Build the Plan again.",
+              "Dossier enregistré. Recréez le Plan.",
+            );
+      invalidatePlan();
+    } finally {
+      if (request === generation && content.contains(path)) {
+        setLoading(false);
+        clients.disabled = categories.disabled = false;
+      }
+    }
   }
   async function browse(current = "") {
+    const request = ++generation;
     const result = await planRequest(
       planEnvironment.mode === "desktop" ? "pick" : "folders",
       { browse: true, path: current },
     );
+    if (request !== generation || !content.contains(path)) return;
     if (result.selected !== undefined) {
       if (result.selected) path.value = result.selected;
       return;
@@ -567,34 +676,10 @@ async function folderDialog() {
     clients,
     categories,
     path,
-    button(say("Browse folders", "Parcourir les dossiers"), () =>
-      guard(() => browse()),
-    ),
+    browseButton,
     folders,
     feedback,
-    button(
-      say("Save folder", "Enregistrer le dossier"),
-      () =>
-        guard(async () => {
-          await planRequest("save-folder", {
-            client_id: clients.value,
-            category: categories.value ? Number(categories.value) : null,
-            path: path.value,
-          });
-          feedback.textContent =
-            planEnvironment.mode === "web"
-              ? say(
-                  "Folder verified and saved. Build the Plan again.",
-                  "Dossier vérifié et enregistré. Recréez le Plan.",
-                )
-              : say(
-                  "Folder saved. Build the Plan again.",
-                  "Dossier enregistré. Recréez le Plan.",
-                );
-          invalidatePlan();
-        }),
-      "primary",
-    ),
+    save,
   );
   clients.onchange = categories.onchange = () => guard(load);
   $("dialog").setAttribute(
@@ -664,7 +749,7 @@ function planInit() {
         "Téléchargements sélectionnés ajoutés à la file.",
       );
     });
-  $("plan-folders").onclick = () => guard(folderDialog);
+  $("plan-folders").onclick = () => guard(() => folderDialog());
   $("plan-profile-edit").onclick = () => {
     $("plan-preferences").open = true;
     $("plan-preferences").scrollIntoView({ block: "nearest" });

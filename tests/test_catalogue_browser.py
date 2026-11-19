@@ -17,7 +17,7 @@ from torrentlinker.web.app import create_app
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
-@pytest.mark.parametrize("switch_client", [False, True])
+@pytest.mark.parametrize("switch_client", [False, True, "load"])
 def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_client):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
@@ -131,16 +131,21 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
             page.route(
                 "**/cancel",
                 lambda route: cancellations.append(
-                    (route, None if switch_client else route.fetch())
+                    (route, None if switch_client is True else route.fetch())
                 ),
             )
+            delayed_plan = []
+            if switch_client == "load":
+                page.route(
+                    "**/api/zen/plan?*", lambda route: delayed_plan.append((route, route.fetch()))
+                )
             panel.locator("#catalogue-plan-now").click()
             for _ in range(100):
                 if cancellations:
                     break
                 page.wait_for_timeout(20)
             assert len(cancellations) == 1
-            if switch_client:
+            if switch_client is True:
                 page.locator("#target-client").select_option(other.id)
                 cancellations[0][0].continue_()
             else:
@@ -148,11 +153,22 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
                 expect(panel.locator("#catalogue-progress")).to_be_hidden(timeout=15000)
                 cancellations[0][0].fulfill(response=cancellations[0][1])
             page.unroute("**/cancel")
+            if switch_client == "load":
+                for _ in range(100):
+                    if delayed_plan:
+                        break
+                    page.wait_for_timeout(20)
+                assert delayed_plan
+                page.locator("#target-client").select_option(other.id)
+                # Release only the old client's pending snapshot after ownership changed.
+                for route, response in list(delayed_plan):
+                    route.fulfill(response=response)
+                page.unroute("**/api/zen/plan?*")
             release.set()
             expect(panel.locator("#catalogue-fetch")).to_be_enabled(timeout=15000)
             page.wait_for_timeout(200)
             jobs = page.request.get(page.url.split("#")[0] + "api/jobs").json()
-            assert any(job["kind"] == "plan" for job in jobs) is not switch_client
+            assert any(job["kind"] == "plan" for job in jobs) is not bool(switch_client)
             page.locator("#target-client").select_option("default")
             page.locator("#zen-catalogue-tab").click()
             page.locator("#language").select_option("fr")

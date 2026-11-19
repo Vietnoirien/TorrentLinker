@@ -1589,8 +1589,6 @@ class MainWindow(QMainWindow):
         return reseed
 
     def _plan_sent(self, report: SendReport) -> None:
-        sending = getattr(self, "_sending_plan", None) or self.zen_tab.plan_view.plan
-        total = len(sending.items) if sending else 0
         self._sending_plan = None
         self._send_ended()
         log.info(
@@ -1603,29 +1601,7 @@ class MainWindow(QMainWindow):
         )
         if not self.show_saved_plan():
             self.zen_tab.plan_view.show_plan(Plan())
-        lines = [self.tr("{0} torrents added to your torrent client.").format(len(report.added))]
-        if report.reseeded:
-            lines.append(self.tr("{0} Reseeds started.").format(len(report.reseeded)))
-        if report.stopped:
-            lines.append(
-                self.tr(
-                    "Stopped after {0} of {1} torrents. The rest of the Plan is saved: "
-                    "send it again to continue, even after restarting the app."
-                ).format(report.handled, total)
-            )
-        problems = [self.tr("Refused: {0} ({1})").format(t, why) for t, why in report.refused]
-        problems += [self.tr("Failed: {0} ({1})").format(t, why) for t, why in report.failed]
-        box = QMessageBox(
-            QMessageBox.Icon.Information, self.tr("Plan sent"), "\n".join(lines), parent=self
-        )
-        if problems:
-            box.setInformativeText(
-                self.tr("{0} refused, {1} failed: see the details.").format(
-                    len(report.refused), len(report.failed)
-                )
-            )
-            box.setDetailedText("\n".join(problems))
-        box.exec()
+        self.zen_tab.plan_view.show_report(report)
         self.zen_tab.seeding_view.refresh()
         if report.reseeded:
             self.check_verifications()  # shows them as Verifying… and keeps polling

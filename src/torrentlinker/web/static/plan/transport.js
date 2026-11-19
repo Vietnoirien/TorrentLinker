@@ -14,7 +14,14 @@ window.addEventListener("plan-environment", (event) => {
 window.addEventListener("DOMContentLoaded", async () => {
   planInit();
   const request = await TLPanel.connect("plan");
-  planRequest = (action, body = {}) =>
-    request(action, { ...body, _client: planEnvironment.state?.client_id });
+  planRequest = async (action, body = {}) => {
+    const result = await request(action, {
+      ...body,
+      _client: planEnvironment.state?.client_id,
+    });
+    if (result?.action)
+      throw Object.assign(Error(result.message), { action: result.action });
+    return result;
+  };
   window.planReady();
 });

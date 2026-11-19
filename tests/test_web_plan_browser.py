@@ -51,6 +51,38 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             panel.locator("#plan-cached").check()
             panel.locator("#plan-category").select_option(["7000"])
             panel.locator("#plan-count").fill("2000")
+            missing = []
+
+            def missing_folder(route):
+                if (
+                    route.request.method == "POST"
+                    and route.request.post_data_json.get("kind") == "plan"
+                ):
+                    missing.append(True)
+                    route.fulfill(
+                        status=400,
+                        json={
+                            "detail": "Choose an Ebook folder",
+                            "action": {
+                                "kind": "plan-folder",
+                                "client_id": "default",
+                                "category": 7000,
+                            },
+                        },
+                    )
+                else:
+                    route.continue_()
+
+            page.route("**/api/jobs", missing_folder)
+            panel.locator("#plan").click()
+            expect(panel.locator("#dialog")).to_be_visible()
+            expect(panel.locator('#dialog select[aria-label="Category"]')).to_have_value("7000")
+            expect(
+                panel.locator('#dialog input[aria-label="Folder on the TorrentLinker host"]')
+            ).to_have_value(setup.settings.download_folders.default)
+            assert missing == [True]
+            page.keyboard.press("Escape")
+            page.unroute("**/api/jobs", missing_folder)
             panel.locator("#plan").click()
             expect(panel.locator("#plan-summary")).to_contain_text("paid back", timeout=15000)
             expect(panel.locator("#plan-storage")).to_contain_text("Reserved")
@@ -62,13 +94,42 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             expect(panel.locator("#plan-send")).to_be_disabled()
             panel.locator("#plan").click()
             expect(panel.locator("#plan-send")).to_be_enabled(timeout=15000)
+            stale_load = []
+            page.route("**/api/zen/plan?*", lambda route: stale_load.append((route, route.fetch())))
+            page.locator("[data-view=torrents]").first.click()
+            page.locator("[data-view=zen]").first.click()
+            page.locator("#zen-plan-tab").click()
             panel.locator("#plan-result thead input").uncheck()
             panel.locator("#plan-result tbody input").first.check()
             panel.locator("#plan-send").click()
             expect(panel.locator("#dialog")).to_contain_text("1 download")
             assert client.downloads == []
+            pending_send = []
+
+            def hold_send(route):
+                if (
+                    route.request.method == "POST"
+                    and route.request.post_data_json.get("kind") == "send-plan"
+                ):
+                    pending_send.append(route)
+                else:
+                    route.continue_()
+
+            page.route("**/api/jobs", hold_send)
             panel.locator("#dialog").get_by_role("button", name="Send selected", exact=True).click()
+            expect(panel.locator("#plan")).to_be_disabled()
+            expect(panel.locator("#queue-plan")).to_be_disabled()
+            assert len(pending_send) == 1
+            assert stale_load
+            for route, response in stale_load:
+                route.fulfill(response=response)
+            page.unroute("**/api/zen/plan?*")
+            expect(panel.locator("#plan")).to_be_disabled()
+            expect(panel.locator("#plan-stop")).to_be_visible()
+            pending_send[0].continue_()
+            page.unroute("**/api/jobs", hold_send)
             expect(panel.locator("#plan-result tbody tr")).to_have_count(2, timeout=15000)
+            expect(panel.locator("#plan-outcome")).to_contain_text("1 added")
             assert len(client.downloads) == 1
             page.reload()
             page.locator("[data-view=zen]").first.click()
@@ -82,6 +143,23 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             panel.locator(f'input[data-budget-id="{profile.id}"]').fill("0.5")
             panel.locator("#plan-folders").click()
             expect(panel.locator("#dialog")).to_contain_text("TorrentLinker host")
+            held_folder = []
+            second_url = f"**/api/setup?client_id={profile.id}"
+            page.route(second_url, lambda route: held_folder.append((route, route.fetch())))
+            panel.locator('#dialog select[aria-label="Torrent Client"]').select_option(profile.id)
+            expect(
+                panel.locator("#dialog").get_by_role("button", name="Save folder", exact=True)
+            ).to_be_disabled()
+            assert len(held_folder) == 1
+            panel.locator('#dialog select[aria-label="Torrent Client"]').select_option("default")
+            expect(
+                panel.locator('#dialog input[aria-label="Folder on the TorrentLinker host"]')
+            ).to_have_value(setup.settings.download_folders.default)
+            held_folder[0][0].fulfill(response=held_folder[0][1])
+            page.unroute(second_url)
+            expect(
+                panel.locator('#dialog input[aria-label="Folder on the TorrentLinker host"]')
+            ).to_have_value(setup.settings.download_folders.default)
             panel.locator('#dialog select[aria-label="Torrent Client"]').select_option(profile.id)
             expect(
                 panel.locator('#dialog input[aria-label="Folder on the TorrentLinker host"]')

@@ -614,12 +614,12 @@ def test_sending_the_plan_adds_its_torrents_and_reports(qtbot, tmp_path: Path, m
     window.send_plan(plan)
     assert window.zen_tab.plan_view.state()["progress"] is not None
     assert window.zen_tab.plan_view.state()["busy"]
-    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.report is not None, timeout=5000)
 
     assert stub.fetched == ["https://c411.example/dl/1"], shown
     [t] = qbit.torrents()
     assert ZEN_TAG in t.tags and t.save_path == tmp_path / "dl"
-    assert "1 torrents added" in shown[0]
+    assert window.zen_tab.plan_view.state()["report"]["added"] == ["Film"]
     assert window.zen_tab.plan_view.state()["progress"] is None
     assert window.send_runner is None
 
@@ -684,9 +684,10 @@ def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
     assert "+0.30" in band and "0/3" in band and "waiting" in band
 
     view.request("stop-send", {})
-    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.report is not None, timeout=5000)
 
-    assert "Stopped after 0 of 3" in shown[0]
+    assert view.state()["report"]["stopped"]
+    assert view.state()["report"]["added"] == []
     assert window.send_runner is None
     assert not view.state()["busy"]
 
@@ -1170,9 +1171,9 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
     window._plan_made(plan)
 
     window.send_plan(plan)
-    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.report is not None, timeout=5000)
 
-    assert "The rest of the Plan is saved" in shown[0]
+    assert window.zen_tab.plan_view.state()["report"]["stopped"]
     view = window.zen_tab.plan_view
     assert [i.candidate.title for i in view.plan.items] == ["B"]  # type: ignore[union-attr]
     saved = store.saved_plan()
@@ -1180,7 +1181,7 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
 
     shown.clear()
     window.send_plan(view.plan)  # type: ignore[arg-type]
-    qtbot.waitUntil(lambda: bool(shown), timeout=5000)
+    qtbot.waitUntil(lambda: window.zen_tab.plan_view.report is not None, timeout=5000)
 
     assert store.saved_plan() is None
     assert view.plan is not None and not view.plan.items

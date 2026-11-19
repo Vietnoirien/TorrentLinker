@@ -15,6 +15,8 @@ const planHost = {
   options: null,
   finished: new Set(),
   sentResult: null,
+  pending: null,
+  operation: 0,
 };
 function planEnvironment(force = false) {
   const active =
@@ -92,7 +94,8 @@ function planJobs(rows) {
 function trackPlanJob(id, client, kind) {
   state.jobs.set(id, {
     body: { client_id: client, kind },
-    done: () => finishPlanJob(client, null, id),
+    done: (result) =>
+      finishPlanJob(client, null, id, kind === "send-plan" ? result : null),
     failed: (error) => finishPlanJob(client, error, id),
     progress: (p) => {
       if (planHost.client === client) planJobState({ id, kind, progress: p });
@@ -101,7 +104,8 @@ function trackPlanJob(id, client, kind) {
 }
 async function loadZenPlan() {
   const client = state.clientId,
-    generation = ++planHost.generation;
+    generation = ++planHost.generation,
+    operation = planHost.operation;
   if (client === "all") {
     planHost.client = client;
     planHost.value = {
@@ -121,7 +125,12 @@ async function loadZenPlan() {
     api(`setup?client_id=${encodeURIComponent(client)}`),
     api("jobs"),
   ]);
-  if (generation !== planHost.generation || client !== state.clientId) return;
+  if (
+    generation !== planHost.generation ||
+    client !== state.clientId ||
+    operation !== planHost.operation
+  )
+    return;
   const categories = [],
     seen = new Set();
   function append(id, entry, depth = 0) {
@@ -155,12 +164,20 @@ async function loadZenPlan() {
   };
   planJobState(null);
   planJobs(jobs);
+  if (planHost.pending?.client === client)
+    planJobState({ id: null, kind: planHost.pending.kind });
   planEnvironment();
 }
-async function finishPlanJob(client, error, id) {
+async function finishPlanJob(client, error, id, report) {
+  planHost.operation++;
   planHost.finished.add(id);
   if (client !== state.clientId) return;
   await loadZenPlan();
+  if (client !== state.clientId || planHost.client !== client) return;
+  if (report && planHost.value) {
+    planHost.value.report = report;
+    planEnvironment();
+  }
   if (error && planHost.value) {
     planHost.value.message = error;
     planEnvironment();
@@ -173,20 +190,36 @@ async function submitPlanJob(body) {
     throw Error(
       say("Choose a target client first.", "Choisissez un client cible."),
     );
-  const result = await api("jobs", { ...body, client_id: client });
-  trackPlanJob(result.id, client, body.kind);
-  if (client === state.clientId && client === planHost.client)
-    planJobState({ id: result.id, kind: body.kind, progress: null });
-  await pollJobs();
-  return result.id;
+  const operation = ++planHost.operation;
+  planHost.pending = { client, kind: body.kind, operation };
+  if (client === planHost.client) planJobState({ id: null, kind: body.kind });
+  try {
+    const result = await api("jobs", { ...body, client_id: client });
+    planHost.operation++;
+    if (planHost.pending?.operation === operation) planHost.pending = null;
+    trackPlanJob(result.id, client, body.kind);
+    if (client === state.clientId && client === planHost.client)
+      planJobState({ id: result.id, kind: body.kind, progress: null });
+    await pollJobs();
+    return result.id;
+  } catch (error) {
+    if (planHost.pending?.operation === operation) {
+      planHost.pending = null;
+      if (client === planHost.client) planJobState(null);
+    }
+    throw error;
+  }
 }
 async function startCachedPlan() {
+  const client = state.clientId;
   await loadZenPlan();
+  if (client !== state.clientId || planHost.client !== client) return;
   const p = planHost.value?.preferences,
     o = p?.plan_options || {};
   await submitPlanJob({
     kind: "plan",
     cached_only: true,
+    client_id: client,
     plan_goal: o.goal || "note",
     maximum_bytes: o.max_download_bytes || 0,
     maximum_torrents: o.max_torrents || 100,
@@ -328,7 +361,13 @@ window.addEventListener("message", async (event) => {
     );
   } catch (error) {
     planFrame.contentWindow?.postMessage(
-      { type: "plan-response", id: message.id, error: error.message },
+      {
+        type: "plan-response",
+        id: message.id,
+        ...(error.action
+          ? { value: { action: error.action, message: error.message } }
+          : { error: error.message }),
+      },
       location.origin,
     );
   }

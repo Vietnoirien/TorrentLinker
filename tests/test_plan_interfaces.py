@@ -116,6 +116,29 @@ def test_plan_progress_keeps_selection_and_stop_is_available(qtbot):
     with qtbot.waitSignal(view.stop_send_requested):
         js(qtbot, view, "document.querySelector('#plan-stop').click()")
     view.sending(None)
+    from torrentlinker.send import SendReport
+
+    view.show_report(
+        SendReport(
+            added=["Alpha"],
+            refused=[("Beta", "Existing files")],
+            failed=[("Gamma", "Client refused")],
+            stopped=True,
+        )
+    )
+    wait_js(
+        qtbot, view, "document.querySelector('#plan-outcome').textContent.includes('1 refused')"
+    )
+    assert js(
+        qtbot,
+        view,
+        "document.querySelector('#plan-outcome').textContent.includes('Beta: Existing files')",
+    )
+    assert js(
+        qtbot,
+        view,
+        "document.querySelector('#plan-outcome').textContent.includes('Gamma: Client refused')",
+    )
     view.set_speed(12500000, "2026-11-19")
     view.configuration = lambda: {
         "client_id": "default",

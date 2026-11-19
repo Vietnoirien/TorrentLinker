@@ -14,7 +14,7 @@ from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.errors import error_text
 from torrentlinker.plan import Plan, PlanOptions
 from torrentlinker.plan_workspace import plan_data
-from torrentlinker.send import SendProgress
+from torrentlinker.send import SendProgress, SendReport
 from torrentlinker.web.operations import JobRequest
 
 
@@ -56,6 +56,7 @@ class PlanView(BundledView):
         self.options = PlanOptions()
         self._busy = self._fetching = self._testing = False
         self.progress: SendProgress | None = None
+        self.report: SendReport | None = None
         self.message = self.notice = ""
         self.speed: float | None = None
         self.speed_tested: str | None = None
@@ -181,6 +182,7 @@ class PlanView(BundledView):
             "testing": self._testing,
             "progress": asdict(self.progress) if self.progress else None,
             "message": self.message,
+            "report": asdict(self.report) if self.report else None,
             "review_revision": self.review_revision,
             "download_speed": self.speed,
             "download_speed_tested": self.speed_tested,
@@ -226,7 +228,12 @@ class PlanView(BundledView):
         self.message = self.tr("Plan options changed. Make a new Plan to apply them.")
         self.refresh()
 
+    def show_report(self, report: SendReport) -> None:
+        self.report = report
+        self.refresh()
+
     def begin(self) -> None:
+        self.report = None
         self.plan, self.plan_id, self.approval = None, "", None
         self.notice = ""
         self.busy(True)
@@ -258,6 +265,8 @@ class PlanView(BundledView):
         self.refresh()
 
     def sending(self, progress: SendProgress | None) -> None:
+        if progress is not None and self.progress is None:
+            self.report = None
         self.progress = progress
         self._busy = progress is not None
         self.refresh()
