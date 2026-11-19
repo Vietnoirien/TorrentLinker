@@ -770,7 +770,7 @@ async function navigate(view, section, detail) {
   if (view === "zen") {
     zenTab(section);
     await refreshSetup();
-    await Promise.all([loadZenProfile(true), loadZenSeeding(), api("zen/catalogue").then(showCatalogue), loadZenPlan()]);
+    await Promise.all([loadZenProfile(true), loadZenSeeding(), loadCatalogue(), loadZenPlan()]);
   }
   if (view === "search" && state.setup.indexer_configured) await loadSearchPage();
 }
@@ -793,6 +793,7 @@ function workStatus(en, fr) {
 async function pollJobs() {
   if ($("workspace").hidden) return;
   const rows = await api("jobs");
+  catalogueJobs(rows);
   let running = 0;
   for (const row of rows) {
     if (["running", "queued"].includes(row.status)) running++;
@@ -903,36 +904,6 @@ async function enqueue(hashes) {
     );
     await navigate("queue");
   });
-}
-function showCatalogue(r) {
-  const parts = [
-    `${r.count} torrents`,
-    say(
-      "Coverage is not guaranteed complete.",
-      "La couverture complète n’est pas garantie.",
-    ),
-  ];
-  if (r.updated_at)
-    parts.push(`${say("Updated", "Actualisé")} · ${age(r.updated_at)}`);
-  if (r.limited_categories.length)
-    parts.push(
-      say(
-        "Indexer paging limit reached.",
-        "Limite de pagination de l’indexeur atteinte.",
-      ),
-    );
-  if (r.paused)
-    parts.push(
-      say("Historical fetch paused.", "Récupération de l’historique en pause."),
-    );
-  if (r.snapshot_imported_at)
-    parts.push(
-      say(
-        "Includes Zen Lab baseline metadata; direct c411 data takes priority.",
-        "Inclut les métadonnées de base Zen Lab ; les données c411 sont prioritaires.",
-      ),
-    );
-  $("catalogue-status").textContent = parts.join(" · ");
 }
 async function details(row) {
   await navigate("search");

@@ -164,6 +164,7 @@ class JobRequest(BaseModel):
     query: str = Field(default="", max_length=500)
     page: int = Field(default=1, ge=1, le=10000)
     category: int | None = None
+    catalogue_root: Literal[1, 2, 3, 4, 5, 6, 7, 9, 10] | None = None
     categories: list[int] | None = Field(default=None, max_length=1000)
     filters: dict[str, str] = Field(default_factory=dict, max_length=30)
     indexer_search: bool = False
@@ -601,7 +602,7 @@ class Operations:
         if request.kind == "catalogue":
             from torrentlinker.web.planning import catalogue as update_catalogue
 
-            return update_catalogue(self.setup, stop, progress)
+            return update_catalogue(self.setup, stop, progress, root=request.catalogue_root)
         if request.kind == "plan":
             root = self.setup._root or self.setup
             for settings in (root.settings, self.setup.settings):

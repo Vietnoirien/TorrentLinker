@@ -124,16 +124,17 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             )
             page.set_viewport_size({"width": 1600, "height": 1100})
             page.locator("#zen-catalogue-tab").click()
-            page.locator("#catalogue").click()
+            catalogue = page.frame_locator("#catalogue-frame")
+            catalogue.locator("#catalogue-fetch").click()
             try:
                 assert entered.wait(5)
                 page.locator("#target-client").select_option(profile.id)
-                expect(page.locator("#catalogue")).to_be_disabled()
-                page.locator("#catalogue-pause").click()
+                expect(catalogue.locator("#catalogue-fetch")).to_be_disabled()
+                catalogue.locator("#catalogue-pause").click()
             finally:
                 release.set()
-            expect(page.locator("#catalogue")).to_be_enabled(timeout=15000)
-            expect(page.locator("#catalogue-pause")).to_be_hidden()
+            expect(catalogue.locator("#catalogue-fetch")).to_be_enabled(timeout=15000)
+            expect(catalogue.locator("#catalogue-pause")).to_be_hidden()
             assert not errors
             browser.close()
     finally:

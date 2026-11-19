@@ -11,9 +11,12 @@ import httpx
 
 from torrentlinker.catalogue import crawl_categories, plan_categories
 from torrentlinker.catalogue_sync import (
+    LISTED_ROOTS,
     SNAPSHOT_NAME,
     TORZNAB_ONLY_CATEGORIES,
     fetch_all,
+    fetch_root,
+    root_categories,
     sync_catalogue,
 )
 from torrentlinker.domain import LibraryFolder
@@ -40,7 +43,10 @@ from torrentlinker.web.setup import Setup
 def catalogue_status(setup: Setup) -> dict:
     store = setup.store
     snapshot = store.feed_state(SNAPSHOT_NAME)
+    from torrentlinker.catalogue_workspace import catalogue_cards
+
     return {
+        "cards": [asdict(c) for c in catalogue_cards(store, adult=setup.settings.adult_content)],
         "count": store.catalogue_size(),
         "updated_at": store.catalogue_updated_at(),
         "limited_categories": sorted(store.limited_categories()),
@@ -74,9 +80,14 @@ def catalogue(
     *,
     full: bool = True,
     chosen: list[int] | None = None,
+    root: int | None = None,
 ) -> dict:
+    if root is not None and root not in LISTED_ROOTS:
+        raise ValueError("Unknown or cache-only category.")
     wanted = (
-        crawl_categories(setup.settings.indexer_categories)
+        root_categories(root)
+        if root is not None
+        else crawl_categories(setup.settings.indexer_categories)
         if full
         else plan_categories(
             chosen, setup.settings.download_folders, setup.settings.indexer_categories
@@ -84,10 +95,31 @@ def catalogue(
     )
     indexer = setup.indexer()
     stopped = lambda: fetch_stopped(stop)  # noqa: E731
-    report = lambda p: progress({"phase": "fetching", **asdict(p)})  # noqa: E731
+    position = {"done": 1, "total": 1}
+
+    def report(p):
+        from torrentlinker.catalogue_sync import ROOTS
+
+        current = root or next((r for r, category in ROOTS.items() if category == p.category), None)
+        progress(
+            {
+                "phase": "fetching",
+                **asdict(p),
+                "catalogue_root": current,
+                "single_root": root,
+                "position": dict(position),
+            }
+        )
+
+    def moved(done, total):
+        position.update(done=done, total=total)
+
+    if root is not None and indexer.is_c411:
+        fetch_root(indexer, setup.store, root, stop=stopped, progress=report)
+        return catalogue_status(setup)
     if full and indexer.is_c411:
         # Category by category, each to parity with the site; XXX only through Torznab.
-        if not fetch_all(indexer, setup.store, stop=stopped, progress=report):
+        if not fetch_all(indexer, setup.store, stop=stopped, progress=report, position=moved):
             return catalogue_status(setup)
         wanted = [c for c in wanted if c in TORZNAB_ONLY_CATEGORIES]
     sync_catalogue(

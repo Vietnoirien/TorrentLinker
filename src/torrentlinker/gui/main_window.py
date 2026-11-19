@@ -50,20 +50,18 @@ from torrentlinker.catalogue import (
 )
 from torrentlinker.catalogue_sync import (
     LISTED_ROOTS,
-    ROOT_FEED,
     ROOT_NAMES,
     SNAPSHOT_NAME,
     TORZNAB_ONLY_CATEGORIES,
-    TORZNAB_ONLY_ROOTS,
     fetch_all,
     fetch_root,
     refresh_catalogue,
     refresh_due,
-    root_categories,
     save_site_counts,
     site_counts,
     sync_catalogue,
 )
+from torrentlinker.catalogue_workspace import catalogue_cards
 from torrentlinker.category_tags import sync_category_tags
 from torrentlinker.config import Settings
 from torrentlinker.credentials import get_secret
@@ -96,7 +94,7 @@ from torrentlinker.gui.theme import set_theme
 from torrentlinker.gui.torrents_view import TorrentsTab
 from torrentlinker.gui.update_notice import UpdateNotice
 from torrentlinker.gui.upload_eligibility import UploadEligibility
-from torrentlinker.gui.zen_view import CategoryCard, ZenBand, ZenTab
+from torrentlinker.gui.zen_view import ZenBand, ZenTab
 from torrentlinker.indexer import Candidate, Indexer
 from torrentlinker.library import (
     LibraryEntry,
@@ -293,6 +291,7 @@ class MainWindow(QMainWindow):
         )
         self.zen_tab.pages.addTab(self.community_view, self.tr("Community"))
         self.zen_tab.profile_view.language = self.settings.language
+        self.zen_tab.catalogue.language = self.settings.language
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.profile_view.refresh_requested.connect(self.refresh_torrent_clients)
         self.companion_panel = None  # only while Settings is open
@@ -536,6 +535,7 @@ class MainWindow(QMainWindow):
         self.zen_tab.catalogue.start_requested.connect(lambda: self.crawl_catalogue())
         self.zen_tab.catalogue.category_requested.connect(self.crawl_catalogue)
         self.zen_tab.catalogue.pause_requested.connect(self.pause_catalogue)
+        self.zen_tab.catalogue.plan_requested.connect(self._catalogue_plan_now)
         self._show_catalogue_age()
         self.verify_timer = QTimer(self)
         self.verify_timer.setInterval(3000)
@@ -1828,6 +1828,12 @@ class MainWindow(QMainWindow):
         self._run_catalogue(work)
         self._show_catalogue_cards()
 
+    def _catalogue_plan_now(self) -> None:
+        self.zen_tab.pages.setCurrentIndex(2)
+        self.make_plan()
+        if self._pending_plan is not None:
+            self._stop_plan_fetch()
+
     def pause_catalogue(self) -> None:
         if self.catalogue_runner is not None:
             self.catalogue_runner.stop()
@@ -1981,70 +1987,16 @@ class MainWindow(QMainWindow):
     def _show_catalogue_cards(self) -> None:
         """One card per c411 category: the Catalogue's count against the site's."""
         self._cards_drawn = time.monotonic()
-        known, unknown = self.store.catalogue_root_counts()
-        owner: dict[int, int] = {}
-        for root in ROOT_NAMES:
-            for category in root_categories(root):
-                owner.setdefault(category, root)  # shared ids: the first category
-        ours = dict(known)
-        for category, count in unknown.items():
-            if (holder := owner.get(category)) is not None:
-                ours[holder] = ours.get(holder, 0) + count
         current = self._fetching_root()
-        roots = [*LISTED_ROOTS, *TORZNAB_ONLY_ROOTS]
-        order = {root: i for i, root in enumerate(LISTED_ROOTS)}
-        cards = []
-        for root in roots:
-            if root in TORZNAB_ONLY_ROOTS and not self.settings.adult_content:
-                continue
-            feed = self.store.feed_state(f"{ROOT_FEED}{root}")
-            count = ours.get(root, 0)
-            site = None if root in TORZNAB_ONLY_ROOTS else (feed.count or None)
-            if site is None and root in TORZNAB_ONLY_ROOTS:
-                state, note = "cache", self.tr("From searches and the first import")
-            elif root == current:
-                state = self._card_phase
-                note = {
-                    "year": self.tr("Reading year by year"),
-                    "prune": self.tr("Checking torrents c411 no longer lists"),
-                }.get(state, self.tr("Reading every page"))
-            else:
-                waiting = (
-                    current is not None
-                    and self._single_root is None
-                    and order.get(root, -1) > order.get(current, -1)
-                )
-                state = (
-                    "waiting"
-                    if waiting
-                    else "paused"
-                    if feed.started_at is not None
-                    else "done"
-                    if feed.updated_at is not None
-                    else "never"
-                )
-                gap = count - site if site else 0
-                note = (
-                    self.tr("Not compared with c411 yet")
-                    if not site
-                    else self.tr("At parity with c411")
-                    if gap == 0
-                    else self.tr("{0} more than c411: fetch it to remove deleted ones").format(gap)
-                    if gap > 0
-                    else self.tr("{0} missing from the Catalogue").format(-gap)
-                )
-            cards.append(
-                CategoryCard(
-                    root,
-                    ROOT_NAMES.get(root, str(root)),
-                    count,
-                    site,
-                    state,
-                    note,
-                    fetchable=root not in TORZNAB_ONLY_ROOTS,
-                )
+        self.zen_tab.catalogue.set_cards(
+            catalogue_cards(
+                self.store,
+                adult=self.settings.adult_content,
+                current=current,
+                phase=self._card_phase,
+                single_root=self._single_root,
             )
-        self.zen_tab.catalogue.set_cards(cards)
+        )
         if current is not None:
             done, total = self._crawl_position
             self.zen_tab.catalogue.set_phase(
@@ -2062,8 +2014,8 @@ class MainWindow(QMainWindow):
             )
 
     def _sync_workspace_scrolling(self) -> None:
-        community = self.zen_tab.pages.currentWidget() is self.community_view
-        self.zen_tab.setProperty("ownsScrolling", community)
+        page = self.zen_tab.pages.currentWidget()
+        self.zen_tab.setProperty("ownsScrolling", bool(page.property("ownsScrolling")))
         owns_scroll = bool(self.tabs.currentWidget().property("ownsScrolling"))
         policy = QSizePolicy.Policy.Ignored if owns_scroll else QSizePolicy.Policy.Preferred
         self.tabs.setSizePolicy(policy, policy)

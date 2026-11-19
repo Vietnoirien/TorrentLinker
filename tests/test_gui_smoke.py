@@ -422,11 +422,11 @@ def test_whole_catalogue_fetch_can_be_paused_and_offers_to_resume(qtbot, tmp_pat
     with qtbot.waitSignal(
         window.band.catalogue_changed, timeout=5000, check_params_cb=lambda t: "old" in t
     ):
-        box.fetch_button.click()
+        box.start_requested.emit()
 
     assert 0 < store.catalogue_size() < 1000
     assert store.crawl_paused()
-    assert "Resume" in box.fetch_button.text()
+    assert box.paused and not box.running
 
 
 def test_plan_view_shows_zen_added_size_and_payback_and_the_band_follows(
@@ -798,7 +798,7 @@ def test_a_catalogue_update_shows_its_progress_and_its_result(qtbot, tmp_path: P
 
     window._catalogue_progress(CrawlProgress(2030, pages=3, added=250, offset=300))
     assert "Film" in window.statusBar().currentMessage()
-    assert "Film" in window.zen_tab.catalogue.status.text()
+    assert "Film" in window.zen_tab.catalogue.status_text
 
     window._catalogue_finished(stopped=False)
     assert "+250" in window.statusBar().currentMessage()
@@ -840,7 +840,7 @@ def test_making_a_plan_fetches_its_categories_and_discloses_limits(
     assert window.zen_tab.plan_view.plan.items
     if paging_window is not None:
         assert "coverage is partial" in window.zen_tab.plan_view.catalogue_notice.text()
-        assert "Partial Catalogue coverage" in window.zen_tab.catalogue.status.text()
+        assert "Partial Catalogue coverage" in window.zen_tab.catalogue.status_text
     else:
         assert "coverage is partial" not in window.zen_tab.plan_view.catalogue_notice.text()
 

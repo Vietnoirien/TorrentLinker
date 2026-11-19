@@ -4,7 +4,6 @@
 const planUI = {
   generation: 0,
   job: null,
-  catalogueJob: null,
   busy: false,
   result: null,
 };
@@ -85,7 +84,6 @@ function planDuration(seconds) {
 function showPlan(result) {
   if (result.cancelled) return;
   planUI.result = result;
-  showCatalogue(result.catalogue);
   state.planId = result.plan_id;
   state.planRows = result.rows || [];
   state.planSelected = new Set(state.planRows.map((r) => r.hash));
@@ -289,18 +287,6 @@ async function loadZenPlan() {
     });
     if (active.progress) planProgress(active.progress);
   }
-  const catalogue = jobs.find(
-    (j) => j.kind === "catalogue" && ["queued", "running"].includes(j.status),
-  );
-  planUI.catalogueJob = catalogue?.id || null;
-  $("catalogue-pause").hidden = !catalogue;
-  $("catalogue").disabled = Boolean(catalogue);
-  if (catalogue && !state.jobs.has(catalogue.id))
-    state.jobs.set(catalogue.id, {
-      body: { client_id: catalogue.client_id, kind: "catalogue" },
-      done: finishCatalogue,
-      failed: finishCatalogue,
-    });
   planActions();
 }
 function planProgress(p) {
@@ -324,6 +310,7 @@ function planProgress(p) {
   if (p.phase === "planning") $("plan-now").hidden = true;
 }
 async function finishPlanJob(result) {
+  guard(refreshCatalogue);
   planUI.busy = false;
   planUI.job = null;
   if (result?.rows) showPlan(result);
@@ -561,43 +548,6 @@ $("plan-speed-test").onclick = () =>
       $("plan-speed-test").disabled = false;
       throw e;
     }
-  });
-async function finishCatalogue() {
-  planUI.catalogueJob = null;
-  $("catalogue-pause").hidden = true;
-  $("catalogue").disabled = false;
-  const value = await api("zen/catalogue");
-  showCatalogue(value);
-  $("catalogue").textContent = value.paused
-    ? say("Resume catalogue", "Reprendre le catalogue")
-    : say("Update catalogue", "Actualiser le catalogue");
-}
-$("catalogue").onclick = () =>
-  guard(async () => {
-    $("catalogue").disabled = true;
-    try {
-      const id = await job(
-        { kind: "catalogue" },
-        finishCatalogue,
-        finishCatalogue,
-      );
-      if (state.jobs.has(id)) {
-        planUI.catalogueJob = id;
-        $("catalogue-pause").hidden = false;
-      }
-    } catch (e) {
-      $("catalogue").disabled = false;
-      throw e;
-    }
-  });
-$("catalogue-pause").onclick = () =>
-  guard(async () => {
-    if (planUI.catalogueJob)
-      await api(`jobs/${planUI.catalogueJob}/cancel`, {});
-    $("catalogue-status").textContent = say(
-      "Pausing after the current page…",
-      "Suspension après la page en cours…",
-    );
   });
 async function planFolderDialog(clientId = state.clientId, category = null) {
   const content = $("dialog-content");

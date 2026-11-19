@@ -18,7 +18,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | 1 | Profile / Profil | **BV** `ProfileView` (`gui/profile_view.py`) | `profile.js` iframe, shared `static/profile/` SVG renderer | **Done** (#91) | `profile-redesign.md` + mockup | None; period, history and charts shared |
 | 2 | Seeding / Seed | Native `SeedingView` (`zen_view.py:89`), `seeding_tree.py`, `ClassComparison` | `zen.js`, `index.html:563-587` | NU | none | Large sortable grouped tree, 30 s refresh |
 | 3 | Plan | Native `PlanView` (`zen_view.py:496`) + plan dialogs in `main_window.py` | `plan.js`, `index.html:588-647` | NU | none | Native folder pickers, speed test, send progress |
-| 4 | Catalogue | Native `CatalogueBox` (`zen_view.py:411`) + `CategoryTile`s | `index.html:557-562`, `plan.js:565-575` | NU | none | none |
+| 4 | Catalogue | **BV** `CatalogueBox` (`gui/catalogue_view.py`) | `catalogue.js` iframe, same `static/catalogue/` view | **Implemented #90** | Approved `interface-backlog/` prototype | Shared coverage, per-category/all fetch, pause/resume and progress |
 | 5 | Community / Communauté | **BV** `CommunityView` | `community.js` iframe | **Done** | `community-redesign/` (WebView) | reference implementation |
 | 6 | Zen band (footer) | Native `ZenBand` (`zen_view.py:1144`) in status bar | Zen page header cards only | NU | none | lives in native status bar |
 
@@ -140,7 +140,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - Profile — Resolved by #91: both hosts load `static/profile/view.html` and its SVG charts. The measured-Zen label uses the selected period; “all history” applies only to All. The old implementations already used this same rule. Desktop persists the period in QSettings; Web uses localStorage. No deliberate platform limit.
 - Seeding — Desktop-only: expanded state persisted per user. Web-only: sort/order selector.
 - Plan — Web-only: "Queue selected downloads", sort/order, select whole plan / clear selection; Zen Profile fields live in Plan (desktop: Settings › Zen). Desktop-only: send summary with "Refresh first", "Stop fetching and plan now", "Stop sending", category → Download Folder prompt with native picker. Speed test measures desktop vs server (Limit).
-- Catalogue — Desktop-only (Gap): per-category tiles with "Fetch only {0}" / "Fetch all categories"; Web has global update + pause.
+- Catalogue — Parity (#90): shared per-category tiles, Fetch only, Fetch all, progress and pause/resume. Web jobs survive navigation and reload; desktop retains its existing worker and persisted checkpoints.
 
 ### Library
 - Differs (Gap): desktop Library opens only Reseed; Local Items and Folders are modals. On Web they are pages.
@@ -191,7 +191,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 
 ### Endpoints
 - Web endpoints with no desktop use: `/api/login`, `/api/logout`, `/api/jobs*`, `/api/folders`, `/api/zen/profile/download-tests*` (no caller found anywhere, *unsure*).
-- Desktop capabilities with no Web endpoint: reading room, update check, TMDb key, matching settings and Ignored Files, interface size, import folders from client, per-category catalogue fetch, Search "Download now". Torrent want/skip files is available in both shared inspectors since #103.
+- Desktop capabilities with no Web endpoint: reading room, update check, TMDb key, matching settings and Ignored Files, interface size, import folders from client, Search "Download now". Torrent want/skip files is available in both shared inspectors since #103.
 
 ## 3. Open questions
 
