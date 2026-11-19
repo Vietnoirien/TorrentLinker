@@ -81,7 +81,12 @@ def test_native_settings_service_sections_use_shared_controls(qtbot, tmp_path):
     )
 
 
-def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path):
+def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path, request):
+    from tests.settings_support import isolated_settings_render
+
+    if isolated_settings_render(request):
+        return
+
     import os
     from pathlib import Path
 

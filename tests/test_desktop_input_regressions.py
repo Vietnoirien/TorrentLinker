@@ -43,7 +43,12 @@ def test_scrolling_over_focused_plan_size_does_not_change_value(qtbot):
     )
 
 
-def test_settings_save_fits_available_screen(qtbot, tmp_path):
+def test_settings_save_fits_available_screen(qtbot, tmp_path, request):
+    from tests.settings_support import isolated_settings_render
+
+    if isolated_settings_render(request):
+        return
+
     from tests.settings_support import settings_dialog
 
     dialog = settings_dialog(qtbot, tmp_path)
@@ -59,7 +64,12 @@ def test_settings_save_fits_available_screen(qtbot, tmp_path):
     )
 
 
-def test_settings_uses_short_work_area_above_taskbar(qtbot, tmp_path, monkeypatch):
+def test_settings_uses_short_work_area_above_taskbar(qtbot, tmp_path, monkeypatch, request):
+    from tests.settings_support import isolated_settings_render
+
+    if isolated_settings_render(request):
+        return
+
     from types import SimpleNamespace
 
     from PySide6.QtCore import QRect
