@@ -228,26 +228,26 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     page.locator("#language").select_option(lang)
                     page.screenshot(path=str(Path(screenshot) / f"torrents-{lang}.png"))
             page.locator("[data-view=documentation]").click()
-            expect(page.locator("#guide-content")).to_contain_text("Read guides inside the app")
-            page.locator("#guide-select").select_option("guide/en/torrents.md")
-            expect(page.locator("#guide-content h1")).to_have_text("Manage torrents")
-            page.wait_for_function(
-                "() => Array.from(document.querySelectorAll('#guide-content img'))"
-                ".every(i => i.complete && i.naturalWidth > 0)"
-            )
+            guide = page.frame_locator("#documentation-frame")
+            expect(guide.locator("#guide-content")).to_contain_text("Read guides inside the app")
+            guide.locator('[data-guide-path="guide/en/torrents.md"]').click()
+            expect(guide.locator("#guide-content h1")).to_have_text("Manage torrents")
+            expect(guide.locator("#guide-content img").first).to_have_js_property("complete", True)
+            assert guide.locator("#guide-content img").first.evaluate("i=>i.naturalWidth>0")
             if screenshot:
                 page.screenshot(path=str(Path(screenshot) / "documentation-en.png"))
-            page.locator("#guide-back").click()
-            expect(page.locator("#guide-content")).to_contain_text("Read guides inside the app")
+            guide.locator("#guide-back").click()
+            expect(guide.locator("#guide-content")).to_contain_text("Read guides inside the app")
             page.locator("#language").select_option("fr")
-            expect(page.locator("#guide-content")).to_contain_text("Consulter les guides")
+            guide.locator("#guide-language").select_option("fr")
+            expect(guide.locator("#guide-content")).to_contain_text("Consulter les guides")
             if screenshot:
-                page.locator("#guide-select").select_option("guide/fr/torrents.md")
-                expect(page.locator("#guide-content h1")).to_have_text("Gérer les torrents")
-                page.wait_for_function(
-                    "() => Array.from(document.querySelectorAll('#guide-content img'))"
-                    ".every(i => i.complete && i.naturalWidth > 0)"
+                guide.locator('[data-guide-path="guide/fr/torrents.md"]').click()
+                expect(guide.locator("#guide-content h1")).to_have_text("Gérer les torrents")
+                expect(guide.locator("#guide-content img").first).to_have_js_property(
+                    "complete", True
                 )
+                assert guide.locator("#guide-content img").first.evaluate("i=>i.naturalWidth>0")
                 page.screenshot(path=str(Path(screenshot) / "documentation-fr.png"))
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

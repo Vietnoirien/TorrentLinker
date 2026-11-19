@@ -88,7 +88,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
-| 36 | Documentation | Native `DocumentationTab` (QTextBrowser) | `index.html:793-800`, `app.js:1728-1760` | NU | none | — |
+| 36 | Documentation | **BV** `DocumentationTab` | same bundled `documentation/view.html` | Implemented (#114) | `interface-backlog/README.md` | Native external browser vs Web links; standalone citation URLs remain plain documents |
 | 37 | Reading room / Salon de lecture | Native `ReadingRoom` (`ebook_reader.py`) | none | DO | none | native EPUB/PDF rendering |
 | 38 | Settings › Connections | `settings_dialog.py` client/indexer/TMDb/proxy boxes | setup steps 1-4 | NU | `web-070.md`, `multi-client-080.md` | system keyring |
 | 39 | Settings › Library Folders | `_folders_box` | step "Folders" | NU | none | native picker |
