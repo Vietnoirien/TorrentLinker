@@ -71,8 +71,7 @@ def test_tree_groups_categories_and_numeric_rows(qtbot, tmp_path):
     wait_js(
         qtbot,
         view,
-        "document.querySelector('#seeding-result tbody tr')?.text"
-        "Content.includes('Small')",
+        "document.querySelector('#seeding-result tbody tr')?.textContent.includes('Small')",
     )
 
 
