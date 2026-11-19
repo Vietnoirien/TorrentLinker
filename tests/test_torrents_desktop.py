@@ -1,0 +1,84 @@
+"""Real Qt WebEngine rendering of the same bundled Torrents panel."""
+
+import os
+import subprocess
+import sys
+from types import SimpleNamespace
+
+pytest_plugins = ["tests.test_enqueue_destinations"]
+
+
+def test_desktop_torrent_sort_filter_and_preferences(
+    qtbot, operations, tmp_path, monkeypatch, request
+):
+    if not os.getenv("TL_TORRENTS_NATIVE_CHILD"):
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", request.node.nodeid],
+            env={
+                **os.environ,
+                "TL_TORRENTS_NATIVE_CHILD": "1",
+                "QTWEBENGINE_CHROMIUM_FLAGS": "--disable-gpu",
+                "QT_QUICK_BACKEND": "software",
+            },
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return
+    from PySide6.QtCore import QSettings
+
+    from tests.test_community_interfaces import js, wait_js
+    from tests.test_torrents_workspace import workspace
+    from torrentlinker.gui.torrents_view import TorrentsTab
+
+    prefs = QSettings(str(tmp_path / "prefs.ini"), QSettings.Format.IniFormat)
+    monkeypatch.setattr("torrentlinker.gui.torrents_view.QSettings", lambda: prefs)
+    from torrentlinker.agent.desktop import DesktopOperations
+
+    operations = DesktopOperations(operations.setup)
+    service = workspace(operations)
+    operations.setup.settings.language = "en"
+    tab = TorrentsTab(SimpleNamespace(settings=operations.setup.settings), lambda: service)
+    qtbot.addWidget(tab)
+    tab.resize(1400, 900)
+    tab.show()
+    wait_js(qtbot, tab, "document.querySelectorAll('tbody tr').length===3")
+    js(qtbot, tab, "document.querySelector('[data-sort=size]').click()")
+    wait_js(qtbot, tab, "document.querySelector('tbody tr').textContent.includes('Small')")
+    js(qtbot, tab, "document.querySelector('[data-sort=size]').click()")
+    wait_js(qtbot, tab, "document.querySelector('tbody tr').textContent.includes('Large')")
+    js(
+        qtbot,
+        tab,
+        "document.querySelector('#columns').click();document.querySelector('[data-col=weight]').click();document.querySelector('#done').click()",
+    )
+    wait_js(qtbot, tab, "document.querySelector('[data-sort=weight]')!==null")
+    qtbot.waitUntil(lambda: '"weight": true' in prefs.value("torrents/shared-columns", ""))
+    operations.setup.settings.language = "fr"
+    tab.refresh()
+    wait_js(qtbot, tab, "document.querySelector('#columns').textContent==='Colonnes'")
+    tab.focus_torrent("c" * 40)
+    wait_js(
+        qtbot,
+        tab,
+        "document.querySelectorAll('tbody tr').length===1 && "
+        "document.querySelector('#inspector').textContent.includes('Small')",
+    )
+    tab.focus_torrent("d" * 40)
+    wait_js(
+        qtbot,
+        tab,
+        "document.querySelectorAll('tbody tr').length===1 && "
+        "document.querySelector('#inspector').textContent.includes('Large')",
+    )
+    js(qtbot, tab, "document.querySelector('.metric-filters').open=true")
+    js(qtbot, tab, "document.querySelector('[data-unit=sizeMin]').click()")
+    wait_js(qtbot, tab, "document.querySelector('[data-unit=sizeMin]').textContent==='MiB'")
+    assert js(qtbot, tab, "document.querySelector('[data-unit=sizeMax]').textContent") == "GiB"
+    if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
+        from pathlib import Path
+
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        tab.grab().save(str(Path(folder) / "torrents-desktop.png"))
+    tab.close()

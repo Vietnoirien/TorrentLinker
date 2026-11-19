@@ -1,0 +1,147 @@
+"""Shared torrent panel acceptance with simulated clients only."""
+
+import os
+import socket
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
+
+
+def test_sort_filters_columns_and_refresh_preserve_selection(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import Torrent
+    from torrentlinker.web.app import create_app
+
+    class Client(FakeQbit):
+        def check(self):
+            return "fake"
+
+        def folder_settings(self):
+            return []
+
+    fake = Client(
+        by_hash={
+            f"{i:040x}": Torrent(
+                f"{i:040x}",
+                f"Book {i:04}",
+                Path("/data"),
+                size=(i + 1) * 1024**3,
+                state="uploading",
+                tracker="https://c411.org/private",
+                swarm_seeders=i % 50,
+                seeding_time=i * 86400,
+            )
+            for i in range(1200)
+        }
+    )
+    app = create_app(
+        tmp_path / "config", password="test-password-long", connector=lambda *args: fake
+    )
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1500, "height": 950})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(f"http://127.0.0.1:{port}")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            expect(page.locator("#workspace")).to_be_visible()
+            saved = page.request.post(
+                f"http://127.0.0.1:{port}/api/setup/client",
+                data={"client": "qbittorrent", "host": "http://fake"},
+                headers={"X-TorrentLinker": "1"},
+            )
+            assert saved.ok, saved.text()
+            page.reload()
+            page.locator("#language").select_option("en")
+            page.locator("#theme").select_option("dark")
+            page.locator("[data-view=torrents]").click()
+            panel = page.frame_locator("#torrents-frame")
+            try:
+                expect(panel.locator("tbody tr")).to_have_count(100)
+            except AssertionError:
+                print("ERRORS", errors)
+                print(panel.locator("body").inner_text())
+                raise
+            panel.locator("[data-sort=size]").click()
+            panel.locator("[data-sort=size]").click()
+            expect(panel.locator("tbody tr").first).to_contain_text("Book 1199")
+            panel.locator("tbody input").first.check()
+            panel.locator(".table-scroll").evaluate("(e)=>e.scrollTop=450")
+            page.wait_for_timeout(5500)
+            expect(panel.locator("tbody input").first).to_be_checked()
+            assert panel.locator(".table-scroll").evaluate("(e)=>e.scrollTop") >= 440
+            panel.locator(".metric-filters summary").click()
+            panel.locator("[data-metric=daysMin]").fill("1199")
+            page.wait_for_timeout(5500)
+            expect(panel.locator("[data-metric=daysMin]")).to_have_value("1199")
+            expect(panel.locator("[data-metric=daysMin]")).to_be_focused()
+            panel.locator("[data-metric=daysMin]").press("Tab")
+            expect(panel.locator("tbody tr")).to_have_count(1)
+            expect(panel.locator("tbody")).to_contain_text("Book 1199")
+            panel.locator("#columns").click()
+            panel.locator("[data-col=weight]").check()
+            panel.get_by_role("button", name="Done", exact=True).click()
+            page.reload()
+            panel = page.frame_locator("#torrents-frame")
+            expect(panel.locator("[data-sort=weight]")).to_be_visible()
+            panel.locator("#query").fill("Book 0007")
+            expect(panel.locator("tbody tr")).to_have_count(1)
+            expect(panel.locator("tbody")).to_contain_text("Book 0007")
+            panel.locator("#query").fill("No such torrent")
+            expect(panel.locator(".empty")).to_contain_text("No torrents match")
+            panel.locator(".metric-filters summary").click()
+            panel.locator("#clear-filters").click()
+            expect(panel.locator("tbody tr")).to_have_count(100)
+            panel.locator("[data-metric=sizeMin]").fill("1")
+            panel.locator("[data-metric=sizeMin]").press("Tab")
+            panel.locator("[data-unit=sizeMax]").click()
+            expect(panel.locator("[data-unit=sizeMin]")).to_have_text("GiB")
+            expect(panel.locator("[data-unit=sizeMax]")).to_have_text("MiB")
+            panel.locator("[data-metric=sizeMax]").fill("2048")
+            panel.locator("[data-metric=sizeMax]").press("Tab")
+            expect(panel.locator("tbody tr")).to_have_count(2)
+            panel.locator("[data-unit=sizeMax]").click()
+            expect(panel.locator("[data-metric=sizeMax]")).to_have_value("2")
+            expect(panel.locator("tbody tr")).to_have_count(2)
+            panel.locator("[data-unit=sizeMin]").click()
+            expect(panel.locator("[data-metric=sizeMin]")).to_have_value("1024")
+            expect(panel.locator("[data-unit=sizeMax]")).to_have_text("GiB")
+            if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
+                Path(folder).mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(Path(folder) / "torrents-dark.png"))
+            page.locator("#language").select_option("fr")
+            expect(panel.locator("#columns")).to_have_text("Colonnes")
+            page.locator("#theme").select_option("light")
+            expect(panel.locator("html")).to_have_attribute("data-theme", "light")
+            page.set_viewport_size({"width": 390, "height": 844})
+            expect(panel.locator("#columns")).to_be_visible()
+            if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
+                Path(folder).mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(Path(folder) / "torrents-mobile.png"))
+                page.set_viewport_size({"width": 1500, "height": 950})
+                page.screenshot(path=str(Path(folder) / "torrents-web.png"))
+            expect(page.locator("#toast")).not_to_contain_text("is not defined")
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(10)

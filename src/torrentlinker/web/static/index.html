@@ -19,6 +19,7 @@
     <script src="static/community.js" defer></script>
     <script src="static/plan.js" defer></script>
     <script src="static/feeds.js" defer></script>
+    <script src="static/torrents.js" defer></script>
     <script src="static/search-workspace.js" defer></script>
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
@@ -465,46 +466,7 @@
           </section>
           </div>
         </section>
-        <section id="view-torrents" class="view">
-          <div class="torrent-bar">
-            <span class="torrent-actions" role="toolbar" aria-label="Actions">
-              <button class="icon-button" data-action="resume" data-title="start" type="button">▶</button
-              ><button class="icon-button" data-action="pause" data-title="pause" type="button">⏸</button
-              ><button class="icon-button" data-action="recheck" data-title="recheck" type="button">⟳</button
-              ><button class="icon-button" data-action="remove" data-title="remove" type="button">✕</button
-              ><button class="icon-button danger" data-action="delete" data-title="deleteFiles" type="button">🗑</button
-              ><button id="refresh" class="icon-button" data-title="refresh" type="button">↻</button>
-            </span>
-            <span class="spacer"></span>
-            <input
-              id="torrent-query"
-              placeholder="Find a torrent…"
-              aria-label="Find a torrent"
-            /><select id="torrent-state" hidden aria-label="State">
-              <option value="" data-i18n="allStates">All states</option>
-              <option value="seeding" data-i18n="seedingState">seeding</option>
-              <option value="downloading" data-i18n="downloadingState">downloading</option>
-              <option value="paused" data-i18n="pausedState">paused</option>
-              <option value="checking" data-i18n="checkingState">checking</option>
-              <option value="error" data-i18n="errorState">error</option></select
-            ><select id="torrent-tracker" hidden aria-label="Tracker">
-              <option value="">All trackers</option></select
-            ><select id="torrent-category" hidden aria-label="Category">
-              <option value="">All categories</option></select
-            ><select id="torrent-tag" hidden aria-label="Tag"><option value="">All tags</option></select>
-          </div>
-          <div class="torrent-layout">
-            <aside id="torrent-side" aria-label="Filters"></aside>
-            <div class="torrent-main">
-              <div id="torrent-table" class="table-wrap dense"></div>
-              <div class="pager">
-                <button id="torrent-prev">←</button><span id="torrent-count"></span
-                ><button id="torrent-next">→</button>
-              </div>
-              <div id="torrent-details" class="card" hidden></div>
-            </div>
-          </div>
-        </section>
+        <section id="view-torrents" class="view"></section>
         <section id="view-zen" class="view" hidden>
           <div class="stats" id="zen-overview">
             <div class="card">

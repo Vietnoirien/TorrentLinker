@@ -169,6 +169,34 @@ class QbitApi:
     timed out or were dropped. Listings wait for each other instead.
     """
 
+    management_controls = ("reannounce", "limits", "category", "location")
+
+    def manage_control(self, hash: str, action: str, values: dict) -> None:
+        """Explicit owner controls. Paths are already in the client's namespace."""
+        if action == "reannounce":
+            self._client.torrents_reannounce(torrent_hashes=hash)
+        elif action == "limits":
+            self._client.torrents_set_download_limit(
+                torrent_hashes=hash, limit=values["download_limit"]
+            )
+            self._client.torrents_set_upload_limit(
+                torrent_hashes=hash, limit=values["upload_limit"]
+            )
+        elif action == "category":
+            if values["category"].startswith("torrentlinker") or any(
+                t.startswith("torrentlinker") for t in values["tags"]
+            ):
+                raise ValueError("TorrentLinker control tags are reserved.")
+            self._client.torrents_set_category(torrent_hashes=hash, category=values["category"])
+            if values["tags"]:
+                self.add_tags(hash, values["tags"])
+        elif action == "location":
+            if not values["path"].strip():
+                raise ValueError("Choose a destination folder.")
+            self._client.torrents_set_location(torrent_hashes=hash, location=values["path"])
+        else:
+            raise ValueError("Unsupported torrent control.")
+
     supports_category_tags = True
 
     def __init__(self, host: str, username: str, password: str, api_key: str = "") -> None:

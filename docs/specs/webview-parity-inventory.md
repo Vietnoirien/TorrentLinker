@@ -59,11 +59,11 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 - Torznab category collisions and missing structured facts remain source limitations. See `rss-guided/implementation.md`.
 
 ### Torrents
-
-| # | Surface | Desktop | Web | Status | Spec | Blockers |
-|---|---|---|---|---|---|---|
-| 25 | Torrents | Native `TorrentsTab`, 5 s polling | `app.js:947-1130`, 100 rows/page | NU | none | live table of thousands of rows |
-| 26 | All clients overview | Native `ClientOverview` with cross-client actions | selector option, actions refused | NU | `multi-client-080.md` | — |
+- #103 replaces both renderers with the same bundled table/inspector. Both hosts have column selection and saved widths, tracker/client hierarchy, Files Download/Skip, 100-row pages, all-client actions, and separate delete-with-files confirmation.
+- Both hosts expose state/tracker/category/tag filters, numeric column sorting and seed/c411 metric ranges. Sorting/filtering precede pagination. Refresh retains selection, scroll and draft filter text.
+- Deliberate interaction limit: shared selection toolbar and inspector actions replace the native context menu; every action remains reachable on both hosts.
+- Preferences are saved on the device: QSettings on desktop and browser local storage on Web. They do not sync across devices.
+- Advanced controls are adapter-dependent in both hosts. qBittorrent supports reannounce, limits, category/tag additions and location; unsupported controls are disabled with an explanation. Client transfers are tracked separately in #105.
 
 ### Assistant
 
@@ -189,7 +189,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 
 ### Endpoints
 - Web endpoints with no desktop use: `/api/login`, `/api/logout`, `/api/jobs*`, `/api/folders`, `/api/zen/profile/download-tests*` (no caller found anywhere, *unsure*).
-- Desktop capabilities with no Web endpoint: reading room, update check, TMDb key, matching settings and Ignored Files, interface size, import folders from client, per-category catalogue fetch, Search "Download now". Torrent want/skip files has an API but no Web UI.
+- Desktop capabilities with no Web endpoint: reading room, update check, TMDb key, matching settings and Ignored Files, interface size, import folders from client, per-category catalogue fetch, Search "Download now". Torrent want/skip files is available in both shared inspectors since #103.
 
 ## 3. Open questions
 

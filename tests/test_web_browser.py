@@ -106,21 +106,17 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.locator("#step-indexer [data-i18n=skip]").click()
             expect(page.locator("#capabilities")).to_contain_text("Torrent management")
             page.locator("#finish-setup").click()
-            expect(page.locator("#torrent-table")).to_contain_text("Example book.epub")
-            expect(page.locator("#torrent-table")).to_contain_text("3 (42)")
-            expect(page.locator("#torrent-table")).to_contain_text("2 (13)")
-            # Actions wait for a selection, as on the desktop; a row is selected by clicking it.
-            expect(page.locator("[data-action=pause]")).to_be_disabled()
-            page.locator("#torrent-table tbody tr").click()
-            expect(page.locator("#torrent-table tbody tr.selected")).to_have_count(1)
-            expect(page.locator("#torrent-details")).to_contain_text("Example book.epub")
-            page.locator("#torrent-details").get_by_role("button", name="Files").click()
-            expect(page.locator("#torrent-details tbody")).to_contain_text("Example book.epub")
-            page.locator("#torrent-details").get_by_role("button", name="Information").click()
-            page.locator("[data-action=pause]").click()
-            expect(page.locator("#torrent-table")).to_contain_text("Paused", timeout=10000)
-            page.locator("#torrent-details").get_by_role("button", name="Activity").click()
-            expect(page.locator("#torrent-details")).to_contain_text("pause: 1")
+            torrents = page.frame_locator("#torrents-frame")
+            expect(torrents.locator("tbody")).to_contain_text("Example book.epub")
+            expect(torrents.locator("#inspector")).to_contain_text("3 (42) / 2 (13)")
+            expect(torrents.locator("[data-action=pause]")).to_be_disabled()
+            torrents.locator("tbody input").check()
+            torrents.locator("[data-tab=files]").click()
+            expect(torrents.locator(".files")).to_contain_text("Example book.epub")
+            torrents.locator("[data-tab=summary]").click()
+            torrents.locator("[data-action=pause]").click()
+            torrents.locator("#confirm").click()
+            expect(torrents.locator("tbody")).to_contain_text("Paused", timeout=10000)
             # Assistant writes use a separate connection while this view stays open.
             from torrentlinker.download_queue import enqueue, entries
             from torrentlinker.indexer import Candidate, Indexer
@@ -331,7 +327,9 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             )
             page.locator("#target-client").select_option("all")
             expect(page.locator("#view-torrents")).to_be_visible()
-            expect(page.locator("#torrent-table")).to_contain_text("Remote Deluge")
+            expect(page.frame_locator("#torrents-frame").locator("tbody")).to_contain_text(
+                "Remote Deluge"
+            )
             page.locator("#target-client").select_option("default")
             page.locator("[data-view=zen]").click()
             expect(page.locator("#zen-profile-panel")).to_be_visible()

@@ -337,6 +337,7 @@ def create_app(
             "/static/profile/view.html",
             "/static/search/view.html",
             "/static/feeds/view.html",
+            "/static/torrents/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
@@ -895,6 +896,10 @@ def create_app(
             if target.connection_error
         ]
         return result
+
+    @app.post("/api/torrents/workspace")
+    def torrent_workspace(body: dict) -> dict:
+        return agent_service.torrents_workspace.request(body["action"], body.get("body"))
 
     @app.get("/api/torrents")
     def torrents(

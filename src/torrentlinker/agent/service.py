@@ -146,6 +146,9 @@ class AgentService:
         from torrentlinker.feed_control import FeedControl
 
         self.feed_control = FeedControl(self)
+        from torrentlinker.torrents_workspace import TorrentWorkspace
+
+        self.torrents_workspace = TorrentWorkspace(setup, for_client)
         with self.access.lock, self.access.db:
             self.access.db.execute(
                 "CREATE TABLE IF NOT EXISTS managed_targets ("

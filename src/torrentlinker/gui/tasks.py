@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from typing import Any
 
 from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QRunnable, QThreadPool, Signal
 
-from torrentlinker.agent.coordination import desktop_worker
+from torrentlinker.agent.coordination import coordinator
 
 
 class _Signals(QObject):
@@ -17,15 +18,16 @@ class _Signals(QObject):
 
 
 class _Job(QRunnable):
-    def __init__(self, fn: Callable[[], Any]) -> None:
+    def __init__(self, fn: Callable[[], Any], coordinate: bool = True) -> None:
         super().__init__()
         self.fn = fn
+        self.coordinate = coordinate
         self.signals = _Signals()
 
-    @desktop_worker
     def run(self) -> None:
         try:
-            result = self.fn()
+            with coordinator.desktop() if self.coordinate else nullcontext():
+                result = self.fn()
         except Exception as e:  # noqa: BLE001 - surfaced to the GUI
             self.signals.failed.emit(e)
         else:
@@ -57,10 +59,12 @@ def run_in_background(
     fn: Callable[[], Any],
     on_done: Callable[[Any], object],
     on_error: Callable[[Exception], object],
+    *,
+    coordinate: bool = True,
 ) -> None:
     if _closing:
         return
-    job = _Job(fn)
+    job = _Job(fn, coordinate)
     job.setAutoDelete(False)
     _alive.add(job)
 

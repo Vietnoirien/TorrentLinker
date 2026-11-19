@@ -15,7 +15,6 @@ from typing import Any
 from PySide6.QtCore import QEvent, QFile, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeyEvent
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QFrame,
@@ -30,7 +29,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QStackedWidget,
     QToolBar,
     QToolButton,
     QVBoxLayout,
@@ -329,21 +327,8 @@ class MainWindow(QMainWindow):
         self.feeds_tab = FeedsTab(lambda: self.assistant_service().agent.feed_control, self)
         self.tabs.addTab(self.feeds_tab, self.tr("RSS"))
         self.search_tab.subscribe_requested.connect(lambda query: self.feeds_tab.edit(query=query))
-        self.torrents_tab = TorrentsTab(self.qbit)
-        from torrentlinker.gui.client_overview import ClientOverview
-
-        self.client_overview = ClientOverview(settings, store)
-        torrents_page = QWidget()
-        torrents_layout = QVBoxLayout(torrents_page)
-        torrents_layout.setContentsMargins(0, 0, 0, 0)
-        self.all_clients = QCheckBox(self.tr("All clients"))
-        torrents_layout.addWidget(self.all_clients)
-        self.torrent_stack = QStackedWidget()
-        self.torrent_stack.addWidget(self.torrents_tab)
-        self.torrent_stack.addWidget(self.client_overview)
-        torrents_layout.addWidget(self.torrent_stack)
-        self.all_clients.toggled.connect(self._show_all_clients)
-        self.tabs.addTab(torrents_page, self.tr("Torrents"))
+        self.torrents_tab = TorrentsTab(self)
+        self.tabs.addTab(self.torrents_tab, self.tr("Torrents"))
         from torrentlinker.gui.assistant import AssistantTab
 
         self.assistant_tab = AssistantTab(self.assistant_service)
@@ -369,7 +354,6 @@ class MainWindow(QMainWindow):
         self.band.refresh_requested.connect(self.refresh_profile)
         self.zen_tab.seeding_view.updated.connect(self.band.set_seeding)
         self.zen_tab.seeding_view.updated.connect(self.search_tab.set_seeding)
-        self.zen_tab.seeding_view.updated.connect(self.torrents_tab.set_seeding)
         self.zen_tab.seeding_view.updated.connect(self.library_model.set_seeding)
         self.zen_tab.seeding_view.unavailable.connect(lambda: self.library_model.set_seeding(None))
         self.zen_tab.seeding_view.updated.connect(self._update_reading_room)
@@ -724,11 +708,6 @@ class MainWindow(QMainWindow):
             self.update_notice.show_release,
             lambda error: log.debug("release check unavailable: %s", error),
         )
-
-    def _show_all_clients(self, checked: bool) -> None:
-        self.torrent_stack.setCurrentIndex(int(checked))
-        if checked:
-            self.client_overview.refresh()
 
     def open_torrents(self, hash: str = "") -> None:
         self.tabs.setCurrentIndex(self.tabs.indexOf(self.feeds_tab) + 1)
