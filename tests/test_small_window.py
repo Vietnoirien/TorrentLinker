@@ -11,8 +11,12 @@ from torrentlinker.store import Store
 @pytest.mark.parametrize("language", ["en", "fr"])
 @pytest.mark.parametrize("size", [(1000, 650), (800, 560)])
 def test_small_window_keeps_every_workspace_action_reachable(
-    qtbot, qapp, tmp_path, monkeypatch, language, size
+    qtbot, qapp, tmp_path, monkeypatch, language, size, request
 ):
+    from tests.webengine_support import isolated_webengine_render
+
+    if isolated_webengine_render(request):
+        return
     monkeypatch.setattr("keyring.get_password", lambda *args: None)
     palette = qapp.palette()
     stylesheet = qapp.styleSheet()
@@ -60,8 +64,13 @@ def test_small_window_keeps_every_workspace_action_reachable(
         qapp.setStyleSheet(stylesheet)
 
 
-def test_initial_window_size_fits_available_screen(qtbot, qapp, tmp_path, monkeypatch):
+def test_initial_window_size_fits_available_screen(qtbot, qapp, tmp_path, monkeypatch, request):
     from PySide6.QtCore import QRect
+
+    from tests.webengine_support import isolated_webengine_render
+
+    if isolated_webengine_render(request):
+        return
 
     class Screen:
         def availableGeometry(self):
