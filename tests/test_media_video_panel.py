@@ -6,6 +6,7 @@ import sys
 
 from fastapi.testclient import TestClient
 
+from tests.shell_support import shell_navigate
 from tests.test_media_api import login, media_app, scan
 
 
@@ -127,7 +128,7 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             page.goto(f"http://127.0.0.1:{port}")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             panel = page.frame_locator("#media-frame")
             expect(panel.locator("#media-feature")).to_contain_text("A Journey")
             panel.get_by_role("button", name="Details", exact=True).first.click()
@@ -139,16 +140,16 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             expect(panel.locator("#media-home-rows")).to_contain_text("Show")
             panel.locator(".media-row-card").first.click()
             expect(panel.get_by_role("button", name="Season 2", exact=True)).to_be_visible()
-            page.locator("#theme").select_option("dark")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
             panel.locator("body").evaluate("() => window.scrollTo(0,0)")
             page.screenshot(path="/tmp/media108-web-dark.png")
-            page.locator("#theme").select_option("light")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(panel.get_by_role("tab", name="Musique", exact=True)).to_be_visible()
             expect(panel.get_by_role("button", name="Lire", exact=True)).to_be_visible()
             expect(panel.get_by_role("button", name="Saison 2", exact=True)).to_be_visible()
             page.screenshot(path="/tmp/media108-web-light-fr.png")
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             panel.get_by_role("tab", name="Music", exact=True).click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(panel.locator("#media-results")).to_contain_text("track")

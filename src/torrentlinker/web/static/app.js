@@ -169,7 +169,6 @@ let language =
 const english = new Map();
 function translate() {
   document.documentElement.lang = language;
-  $("language").value = language;
   document.querySelectorAll("[data-en][data-fr]").forEach(el => {
     el.textContent = language === "fr" ? el.dataset.fr : el.dataset.en;
   });
@@ -345,16 +344,13 @@ function table(target, rows, columns, selection, key = "hash", onChange, onRow) 
   host.append(t);
 }
 async function refreshSetup() {
-  state.setup = await api("setup");
+  const client = state.clientId;
+  const setup = await api("setup");
+  if (client && client !== state.clientId) return;
+  state.setup = setup;
   for (const node of document.querySelectorAll("[data-adult]")) node.hidden = !state.setup.adult_content;
   if (!state.clientId) state.clientId = state.setup.client_id;
-  const selector = $("target-client");
-  selector.replaceChildren(new Option(say("All clients · overview", "Tous les clients · aperçu"), "all"),
-    ...state.setup.clients.map(p => new Option(p.name, p.id)));
-  selector.value = state.clientId;
-  $("connection-status").textContent = state.setup.configured
-    ? `${state.setup.name} · ${state.setup.client.toUpperCase()} · ${new URL(state.setup.host).host}`
-    : "TORRENTLINKER WEB";
+  if (typeof shellEnvironment === "function") shellEnvironment();
   if (typeof settingsEnvironment === "function") settingsEnvironment();
 }
 function clearAgentToken() {
@@ -434,17 +430,21 @@ async function navigate(view, section, detail) {
   document
     .querySelectorAll(".view")
     .forEach((el) => (el.hidden = el.id !== `view-${view}`));
-  document
-    .querySelectorAll("[data-view]")
-    .forEach((b) => b.classList.toggle("active", b.dataset.view === view));
-  $("page-title").textContent =
-    document.querySelector(`[data-view="${view}"]`)?.textContent || view;
+  if (state.clientId === "all" && view !== "torrents") {
+    state.clientId = shellSpecificClient();
+    document.dispatchEvent(new Event("tl-client-changed"));
+    state.selected.clear(); state.queueSelected.clear();
+    await refreshSetup();
+    if (activeRoute !== route) return;
+  }
+  shellEnvironment();
   if (view === "setup") {
     if (state.clientId === "all") state.clientId = state.setup.default_client_id;
     await settingsSection(section, detail);
     await refreshSetup();
     if (activeRoute !== route) return;
   }
+  shellEnsureBand();
   if (view === "assistant") await loadAssistant();
   if (view === "media") {
     media.kind = section;
@@ -627,7 +627,8 @@ async function reseedAllMatches() {
 }
 async function enter() {
   await refreshSetup();
-  $("logout").hidden = state.setup.web_auth === "proxy";
+  shellEnvironment();
+  shellRelease();
   $("login-screen").hidden = true;
   $("workspace").hidden = false;
   const parts = resolveRoute(location.hash);
@@ -644,42 +645,32 @@ $("login-form").onsubmit = (e) => {
     await enter();
   });
 };
-document
-  .querySelectorAll("[data-view]")
-  .forEach((b) => (b.onclick = () => guard(() => navigate(b.dataset.view))));
-$("logout").onclick = () =>
-  guard(async () => {
-    await api("logout", {});
-    state.jobs.clear();
-    clearAgentToken();
-    $("workspace").hidden = true;
-    $("login-screen").hidden = false;
-  });
-$("theme").value = localStorage.getItem("tl-theme") || "auto";
-function theme() {
-  const value = $("theme").value;
-  document.documentElement.dataset.theme = value === "auto"
-    ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-    : value;
-  localStorage.setItem("tl-theme", value);
+async function logout() {
+  document.dispatchEvent(new Event("tl-logout"));
+  await api("logout", {});
+  state.jobs.clear(); clearAgentToken();
+  $("workspace").hidden = true; $("login-screen").hidden = false;
 }
-$("theme").onchange = theme;
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", theme);
+let themeChoice = localStorage.getItem("tl-theme") || "auto";
+function theme(value = themeChoice) {
+  themeChoice = value;
+  document.documentElement.dataset.theme = value === "auto"
+    ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : value;
+  localStorage.setItem("tl-theme", value);
+  if (typeof shellEnvironment === "function") shellEnvironment();
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => theme());
 theme();
-$("language").onchange = () => {
-  language = $("language").value;
+function changeLanguage(value) {
+  language = value;
   localStorage.setItem("tl-language", language);
-  translate();
-  document.dispatchEvent(new Event("tl-language-changed"));
+  translate(); document.dispatchEvent(new Event("tl-language-changed"));
   if (state.view === "zen") { guard(loadZenSeeding); planEnvironment(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") uploadEnvironment();
   if (state.view === "torrents") guard(loadTorrents);
   if (state.view === "media") { guard(loadMedia); mediaQueueRender(); }
-  $("page-title").textContent =
-    document.querySelector(`[data-view="${state.view}"]`)?.textContent ||
-    state.view;
-};
+}
 translate();
 setInterval(() => {
   if (!$("workspace").hidden) guard(pollJobs);
@@ -702,30 +693,9 @@ document.addEventListener("DOMContentLoaded", () => guard(async () => {
   }
 }));
 
-$("target-client").onchange = () => guard(async () => {
-  state.clientId = $("target-client").value;
-  uploadEnvironment();
-  state.selected.clear(); state.queueSelected.clear();
-  state.offset = 0; state.libraryOffset = 0; state.localItem = "";
-  await refreshSetup();
-  await navigate(state.clientId === "all" && state.view !== "zen" ? "torrents" : state.view);
-  if (state.setup.configured && state.view !== "media") await job({kind: "refresh"}, state.view === "zen" ? loadZenSeeding : loadTorrents);
-});
 $("navigation-toggle").onclick = () => {
   const collapsed = document.body.classList.toggle("navigation-collapsed");
   $("navigation-toggle").setAttribute("aria-expanded", String(!collapsed));
-};
-
-if (matchMedia("(max-width: 1050px)").matches) {
-  document.body.classList.add("navigation-collapsed");
-  $("navigation-toggle").setAttribute("aria-expanded", "false");
-}
-
-
-$("navigation-close").onclick = () => {
-  document.body.classList.add("navigation-collapsed");
-  $("navigation-toggle").setAttribute("aria-expanded", "false");
-  $("navigation-toggle").focus();
 };
 
 async function waitForJob(identifier) {

@@ -72,15 +72,15 @@ def test_offline_guides_links_history_language_and_images(qtbot):
 def test_documentation_navigation_without_connections(qtbot, tmp_path):
     window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "store.db"))
     qtbot.addWidget(window)
-    window.documentation_button.click()
+    window.shell_host.command("navigate", {"view": "documentation"})
     guide = window.documentation_tab
     assert window.tabs.currentWidget() is guide
-    assert window.documentation_button.isChecked()
-    assert not window.reader_button.isChecked()
+    assert window.shell_host.page() == "documentation"
+    assert window.shell_host.page() != "reading"
     assert window.reading_room is None
     window.tabs.setCurrentIndex(1)
-    assert not window.documentation_button.isChecked()
-    window.documentation_button.click()
+    assert window.shell_host.page() != "documentation"
+    window.shell_host.command("navigate", {"view": "documentation"})
     assert window.documentation_tab is guide
     window._lock_reading_room()
     assert window.tabs.currentWidget() is guide

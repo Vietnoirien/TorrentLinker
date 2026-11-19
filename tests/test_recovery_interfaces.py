@@ -93,7 +93,9 @@ def test_shared_repair_opt_in_separate_confirmation_and_history(tmp_path, langua
             page.goto(f"http://127.0.0.1:{port}/#/library/reseed")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("#language").select_option(language)
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                language
+            )
             frame = page.frame_locator("#reseed-frame")
             frame.locator(".torrent").filter(has_text="Film.mkv").first.click()
             frame.get_by_role(
@@ -134,11 +136,15 @@ def test_shared_repair_opt_in_separate_confirmation_and_history(tmp_path, langua
             expect(confirm).to_be_visible()
             confirm.click()
             confirmation = frame.locator("#recovery-confirm")
-            page.locator("#language").select_option("en" if language == "fr" else "fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                "en" if language == "fr" else "fr"
+            )
             expect(confirmation).to_contain_text(
                 "Download into this copy?" if language == "fr" else "Télécharger dans cette copie ?"
             )
-            page.locator("#language").select_option(language)
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                language
+            )
 
             confirmation.get_by_role("button", name=label("Annuler", "Cancel"), exact=True).click()
             assert not client.started

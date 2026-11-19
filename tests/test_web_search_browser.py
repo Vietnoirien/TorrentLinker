@@ -9,6 +9,7 @@ import time
 import httpx
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_web_jobs import Client
 from tests.test_web_search import HASHES, fake_net
 
@@ -56,7 +57,7 @@ def open_search(playwright, base, locale="en-US", scheme="light"):
     page.goto(base + "/")
     page.locator("#login-password").fill("test-password-long")
     page.locator("#login-form button").click()
-    page.locator("[data-view=search]").click()
+    shell_navigate(page, "search")
     return browser, page, errors
 
 
@@ -169,7 +170,7 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             )
             panel.locator("#detail-tabs [role=tab]").first.click()
             page.reload()
-            page.locator("[data-view=search]").click()
+            shell_navigate(page, "search")
             expect(panel.locator("#search-density-compact")).to_have_attribute(
                 "aria-pressed", "true"
             )
@@ -215,7 +216,7 @@ def test_shared_search_panel_preserves_results_when_visiting_queue(
                     else None
                 ),
             )
-            page.locator("#app-sidebar [data-view=setup]").click()
+            shell_navigate(page, "setup")
             page.wait_for_timeout(250)
             before = len(polls)
             # A hidden frame can deliver a poll queued before it became inactive.
@@ -355,8 +356,8 @@ def test_entering_search_loads_latest_once_and_keeps_results_on_return(tmp_path,
             panel.locator("#search-queue-link").click()
             panel.locator("#back-results").click()
             expect(panel.locator(".sr-row")).to_have_count(2)
-            page.locator("#app-sidebar [data-view=setup]").click()
-            page.locator("[data-view=search]").click()
+            shell_navigate(page, "setup")
+            shell_navigate(page, "search")
             expect(panel.locator(".sr-row")).to_have_count(2)
             page.wait_for_timeout(500)
             assert len(listings()) == 1
@@ -389,12 +390,12 @@ def test_torrent_details_open_in_shared_tabs_and_return_to_search(tmp_path, monk
             panel.locator("#detail-tabs [role=tab]").last.focus()
             page.keyboard.press("ArrowLeft")
             expect(panel.locator(".torrent-detail:visible .dt-title")).to_contain_text("Release.1")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(panel.locator(".torrent-detail:visible")).to_contain_text(
                 "Télécharger maintenant"
             )
             expect(panel.locator(".torrent-detail:visible")).to_contain_text("Envoyé par up1")
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             expect(panel.locator(".torrent-detail:visible")).to_contain_text("Download now")
             panel.locator(".detail-tab").nth(2).drag_to(panel.locator(".detail-tab").nth(1))
             expect(panel.locator("#detail-tabs [role=tab]").nth(1)).to_contain_text("Release.2")
@@ -440,9 +441,13 @@ def test_details_inline_image_retry_and_language_changes(tmp_path, monkeypatch):
             expect(panel.locator(".detail-image-error")).to_have_count(0)
             assert len(attempts) == 2
             for language in ("fr", "en"):
-                page.locator("#language").select_option(language)
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    language
+                )
                 for theme in ("dark", "light"):
-                    page.locator("#theme").select_option(theme)
+                    page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                        theme
+                    )
                     expect(panel.locator(".torrent-detail:visible .dt-bar")).to_contain_text(
                         "Télécharger maintenant" if language == "fr" else "Download now"
                     )

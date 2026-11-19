@@ -53,9 +53,9 @@ def test_search_shortcut_returns_to_shared_library(qtbot, tmp_path):
     ]
     window.library_model.set_entries(entries)
     window.tabs.setCurrentIndex(2)
-    assert window.navigation.currentRow() == 2
+    assert window.tabs.currentIndex() == 2
     window._focus_search()
-    assert window.navigation.currentRow() == 1
+    assert window.tabs.currentIndex() == 1
 
 
 def test_seeding_filter_and_numeric_order_survive_refresh(qtbot):

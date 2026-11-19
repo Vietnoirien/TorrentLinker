@@ -9,6 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.shell_support import shell_close_navigation, shell_navigate
 from tests.test_agent_download_folders import MountedClient
 from tests.test_assistant import generation_transport, login, wait_run
 from tests.test_assistant_download_folders import (
@@ -147,8 +148,8 @@ def test_browser_missing_folder_custom_answer_approval_and_resume(tmp_path):
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.locator("#navigation-toggle").click()
-            page.locator('[data-view="assistant"]').click()
-            page.locator("#navigation-close").click()
+            shell_navigate(page, "assistant")
+            shell_close_navigation(page)
             # The first chat was created through the same public owner endpoints.
             page.get_by_role("button", name="Discussions", exact=True).click()
             page.locator(".assistant-conversations button").last.click()

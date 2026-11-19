@@ -96,12 +96,11 @@ function notify(s) {
 
 function paint() {
   document.documentElement.dataset.theme = theme;
-  const unused = `<div class="brand">TL · TorrentLinker</div>${["Zen", t("Bibliothèque", "Library"), "Upload", t("Recherche", "Search"), "RSS", "Torrents", t("Assistant", "Assistant"), t("Médias", "Media")].map((x) => `<button class="${x === "Torrents" ? "selected" : ""}" disabled>${x}</button>`).join("")}`;
   const rows = matching(),
     slice = rows;
   const multi = client === "all";
   $("app").innerHTML =
-    `<header><label>${t("Client cible", "Target client")} <select id="client"><option value="all">${t("Tous les clients", "All clients")}</option>${snapshot.clients.map((c) => `<option value="${escape(c.id)}" ${client === c.id ? "selected" : ""}>${escape(c.name)}</option>`).join("")}</select></label></header>${
+    `${
       multi
         ? `<div class="stats">${[
             [
@@ -340,12 +339,6 @@ function bind() {
   $("more-actions").onclick = moreActions;
   $("transfer-selection").onclick = () => guard(openTransfer);
   $("transfer-history").onclick = () => guard(transferHistory);
-  $("client").value = client;
-  $("client").onchange = (e) => {
-    client = e.target.value;
-    page = 0;
-    guard(load);
-  };
   $("query").oninput = (e) => {
     query = e.target.value;
     page = 0;
@@ -423,11 +416,8 @@ function bind() {
     d.querySelectorAll("[data-tr]").forEach(
       (b) =>
         (b.onclick = () => {
-          filters.tracker = b.dataset.tr;
-          client = b.dataset.client;
-          page = 0;
           d.close();
-          guard(load);
+          guard(() => request("target-client", {client_id:b.dataset.client, tracker:b.dataset.tr}));
         }),
     );
     $("close-tree").onclick = () => d.close();

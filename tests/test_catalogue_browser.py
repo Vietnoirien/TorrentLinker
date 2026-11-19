@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_catalogue_sync import native_indexer
 from tests.test_web_plan_execution import prepared, second_client
 from torrentlinker.catalogue_sync import LISTED_ROOTS
@@ -63,8 +64,8 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
             page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=zen]").first.click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "zen")
             page.locator("#zen-catalogue-tab").click()
             panel = page.frame_locator("#catalogue-frame")
             expect(panel.locator(".category")).to_have_count(len(LISTED_ROOTS))
@@ -94,7 +95,7 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
             assert panel.locator("#catalogue-fetch").is_disabled()
             assert panel.locator("#catalogue-pause").is_visible()
             page.reload()
-            page.locator("[data-view=zen]").first.click()
+            shell_navigate(page, "zen")
             page.locator("#zen-catalogue-tab").click()
             expect(panel.locator("#catalogue-pause")).to_be_visible()
             panel.locator("#catalogue-pause").click()
@@ -146,7 +147,9 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
                 page.wait_for_timeout(20)
             assert len(cancellations) == 1
             if switch_client is True:
-                page.locator("#target-client").select_option(other.id)
+                page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                    other.id
+                )
                 cancellations[0][0].continue_()
             else:
                 release.set()
@@ -159,7 +162,9 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
                         break
                     page.wait_for_timeout(20)
                 assert delayed_plan
-                page.locator("#target-client").select_option(other.id)
+                page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                    other.id
+                )
                 # Release only the old client's pending snapshot after ownership changed.
                 for route, response in list(delayed_plan):
                     route.fulfill(response=response)
@@ -169,10 +174,12 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
             page.wait_for_timeout(200)
             jobs = page.request.get(page.url.split("#")[0] + "api/jobs").json()
             assert any(job["kind"] == "plan" for job in jobs) is not bool(switch_client)
-            page.locator("#target-client").select_option("default")
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                "default"
+            )
             page.locator("#zen-catalogue-tab").click()
-            page.locator("#language").select_option("fr")
-            page.locator("#theme").select_option("light")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             expect(panel.get_by_role("button", name="Récupérer seulement Audio")).to_be_visible()
             if output := os.getenv("TL_CATALOGUE_SCREENSHOTS"):

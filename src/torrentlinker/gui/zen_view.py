@@ -7,19 +7,16 @@ from collections.abc import Callable
 from PySide6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
     QVBoxLayout,
     QWidget,
 )
 
 from torrentlinker.catalogue_workspace import CategoryCard as CategoryCard
 from torrentlinker.gui.catalogue_view import CatalogueBox as CatalogueBox
-from torrentlinker.gui.controls import icon_button
 from torrentlinker.gui.plan_view import PlanView as PlanView
 from torrentlinker.gui.profile_view import ProfileView
 from torrentlinker.gui.seeding_view import SeedingView as SeedingView
+from torrentlinker.gui.shell_view import ShellView
 from torrentlinker.profile import ProfileError, ProfileProblem, UserProfile
 from torrentlinker.seeding import Seeding
 from torrentlinker.send import SendProgress
@@ -71,71 +68,67 @@ KEYS_URL = "https://c411.org/user/integrations"
 WARNING = QColor("#c62828")
 
 
-class ZenBand(QFrame):
+class ZenBand(ShellView):
     """In the window's footer, on the right: Zen Balance, what seeding earns, Plan and
     Catalogue. `message`, for profile problems, goes above the workspace instead."""
 
     refresh_requested = Signal()
     catalogue_changed = Signal(str)
+    profile_notice_changed = Signal(str)
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, language="en") -> None:
+        self.values: dict[str, str | bool | None] = {
+            "balance": None,
+            "seeding": None,
+            "plan": None,
+            "catalogue": None,
+            "busy": False,
+        }
+        super().__init__("band", self._snapshot, self._command, language=language)
         self.setObjectName("zenBand")
-        row = QHBoxLayout(self)
-        row.setContentsMargins(0, 0, 4, 0)
-        row.setSpacing(6)
-        self.balance = QLabel()
-        self.seeding = QLabel()
-        self.plan = QLabel()
-        self.catalogue = QLabel()
-        for i, label in enumerate((self.balance, self.seeding, self.plan, self.catalogue)):
-            if i:
-                row.addWidget(QLabel("·"))
-            row.addWidget(label)
-        self.refresh_button = icon_button("⟳", self.tr("Refresh profile"))
-        self.refresh_button.setToolTip(self.tr("Read your Zen Balance and Class from c411"))
-        self.refresh_button.clicked.connect(self.refresh_requested)
-        row.addWidget(self.refresh_button)
-        self.message = QLabel()
-        self.message.setWordWrap(True)
-        self.message.setOpenExternalLinks(True)
-        self.message.setProperty("role", "error")
-        self.message.hide()
-        self.set_balance(None)
-        self.set_seeding(None)
-        self.set_plan(None)
-        self.set_catalogue(None)
+        self.profile_notice = ""
+
+    def _snapshot(self):
+        return {"language": self.language, "band": self.values}
+
+    def _command(self, action, values):
+        if action == "refresh-profile":
+            self.refresh_requested.emit()
 
     def set_balance(self, balance: float | None) -> None:
-        value = f"{balance:.1f}" if balance is not None else "–"
-        self.balance.setText(self.tr("Zen Balance: <b>{0}</b>").format(value))
+        self.values["balance"] = f"{balance:.1f}" if balance is not None else None
+        self.refresh()
 
     def set_seeding(self, view: Seeding | None) -> None:
-        value = zen_text(view.day.total) if view is not None else "–"
-        self.seeding.setText(self.tr("Seeding: <b>{0}</b> Zen/day").format(value))
+        self.values["seeding"] = zen_text(view.day.total) if view is not None else None
+        self.refresh()
 
     def set_plan(self, added: float | None) -> None:
-        value = f"+{added:.2f}" if added is not None else "–"
-        self.plan.setText(self.tr("with Plan: {0}").format(value))
+        self.values["plan"] = f"+{added:.2f}" if added is not None else None
+        self.refresh()
 
     def set_sending(self, progress: SendProgress | None, added: float | None = None) -> None:
-        """Sending progress after the Plan's Zen; with None, the Plan's Zen alone."""
         self.set_plan(added)
-        if progress is None:
-            return
-        self.plan.setText(
-            self.plan.text()
-            + " · "
-            + self.tr("Sending the Plan: <b>{0}/{1}</b>").format(progress.done, progress.total)
-            + (" " + self.tr("(c411 limit, waiting)") if progress.retry_at is not None else "")
-        )
+        if progress is not None:
+            self.values["plan"] = (
+                str(self.values["plan"] or "–")
+                + " · "
+                + self.tr("Sending the Plan: <b>{0}/{1}</b>")
+                .format(progress.done, progress.total)
+                .replace("<b>", "")
+                .replace("</b>", "")
+                + (" " + self.tr("(c411 limit, waiting)") if progress.retry_at is not None else "")
+            )
+            self.refresh()
 
     def set_catalogue(self, text: str | None) -> None:
-        self.catalogue.setText(self.tr("Catalogue: {0}").format(text or "–"))
-        self.catalogue_changed.emit(self.catalogue.text())
+        self.values["catalogue"] = text
+        self.catalogue_changed.emit(self.tr("Catalogue: {0}").format(text or "–"))
+        self.refresh()
 
     def busy(self, busy: bool) -> None:
-        self.refresh_button.setEnabled(not busy)
+        self.values["busy"] = busy
+        self.refresh()
 
     def show_profile(self, profile: UserProfile) -> None:
         self.busy(False)
@@ -182,5 +175,8 @@ class ZenBand(QFrame):
         )
 
     def _message(self, text: str) -> None:
-        self.message.setText(text)
-        self.message.setVisible(bool(text) and not self.isHidden())  # hidden with the band
+        import re
+        from html import unescape
+
+        self.profile_notice = unescape(re.sub(r"<[^>]+>", "", text))
+        self.profile_notice_changed.emit(self.profile_notice)

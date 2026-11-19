@@ -55,6 +55,7 @@ function mediaPlayerSnapshot() {
   };
 }
 function mediaPlayerEnvironment() {
+  if (typeof mediaPositionCaptions !== "function") return;
   mediaPositionCaptions();
   $("player-frame").title = say(
     "Media player controls",

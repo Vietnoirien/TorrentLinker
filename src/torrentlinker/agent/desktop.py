@@ -396,11 +396,7 @@ def agent_settings_change(fn):
             with runtime.editing_settings():
                 return fn(window, *args, **kwargs)
         except ValueError as error:
-            window.client_selector.blockSignals(True)
-            window.client_selector.setCurrentIndex(
-                window.client_selector.findData(window.settings.active_client_id)
-            )
-            window.client_selector.blockSignals(False)
+            window.shell_host.refresh()
             window.statusBar().showMessage(window.tr(str(error)))
 
     return guarded

@@ -26,14 +26,19 @@ const $ = id => {
   if (!nodes.has(id)) nodes.set(id, {hidden:false, classList:{toggle(){}}, setAttribute(){}});
   return nodes.get(id);
 };
-const document = {querySelectorAll:()=>[],
+const document = {dispatchEvent(){}, querySelectorAll:()=>[],
   querySelector:selector=>selector===".library-nav"?$("library-nav"):null,
   body:{classList:{contains:()=>false,toggle(){}}}};
-const state = {view:'torrents', setup:{configured:true, indexer_configured:true}};
+const state = {selected:new Set(), queueSelected:new Set(), view:'torrents',
+  setup:{configured:true, indexer_configured:true}};
 const media = {kind:'video', view:'recent'};
 const loaded = []; const reseedUI = {tab:'reseed'};
 function clearAgentToken() {}
 function settingsEnvironment() {}
+function shellEnvironment() {}
+function shellRelease() {}
+function shellEnsureBand() {}
+function shellSpecificClient() { return state.setup.default_client_id; }
 function resetLibraryReview() {}
 function step() {}
 async function refreshSetup() {}
@@ -98,7 +103,6 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
   for(const mode of ['password','proxy']){
     state.setup.web_auth=mode;const count=entries.length;
     await enter();await settle();assert.equal(entries.length,count);
-    assert.equal($('logout').hidden,mode==='proxy');
     assert.equal($('library-activity').hidden,false);
   }
   const count=entries.length;

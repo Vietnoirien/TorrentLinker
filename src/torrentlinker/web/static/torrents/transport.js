@@ -200,6 +200,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (newCommand) {
         commandId = next.command.id;
         query = next.command.hash || "";
+        if (typeof next.command.tracker === "string") filters.tracker = next.command.tracker;
         focus = "";
         page = 0;
       }

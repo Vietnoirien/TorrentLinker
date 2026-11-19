@@ -6,6 +6,7 @@ torrentsFrame.src = "static/torrents/view.html";
 torrentsFrame.style.cssText =
   "width:100%;height:70vh;min-height:240px;border:0;display:block";
 $("view-torrents").append(torrentsFrame);
+let torrentsCommand = null, torrentsSequence = 0;
 function torrentsEnvironment() {
   const active = state.view === "torrents" && !$("workspace").hidden;
   if (active)
@@ -19,6 +20,7 @@ function torrentsEnvironment() {
         language,
         theme: document.documentElement.dataset.theme || "dark",
         active,
+        command: torrentsCommand,
       },
     },
     location.origin,
@@ -38,7 +40,13 @@ window.addEventListener("message", async (e) => {
     if (m.body?._client !== state.clientId)
       throw Error("The target client changed.");
     let value;
-    if (m.path === "preferences") {
+    if (m.path === "target-client") {
+      await shellSelectClient(m.body.client_id);
+      if (state.clientId !== m.body.client_id) throw Error("The target client changed.");
+      torrentsCommand = {id:++torrentsSequence, tracker:String(m.body.tracker || ""), hash:""};
+      torrentsEnvironment();
+      value = null;
+    } else if (m.path === "preferences") {
       if (m.body.columns)
         localStorage.setItem(
           "tl-torrents-columns",

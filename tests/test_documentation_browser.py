@@ -7,6 +7,8 @@ import time
 
 import pytest
 
+from tests.shell_support import shell_navigate
+
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
@@ -42,8 +44,8 @@ def test_guides_filter_history_language_images_and_retry(tmp_path, root_path):
             page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}{root_path}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=documentation]").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "documentation")
             panel = page.frame_locator("#documentation-frame")
             expect(panel.locator("#guide-content h1")).to_have_text("Install and configure")
             panel.locator('[data-guide-path="guide/en/torrents.md"]').click()
@@ -78,14 +80,14 @@ def test_guides_filter_history_language_images_and_retry(tmp_path, root_path):
             panel.get_by_label("Filter guides", exact=True).fill("not-a-guide")
             expect(panel.locator("#guide-empty")).to_have_text("No matching guide")
             panel.get_by_label("Filter guides", exact=True).fill("")
-            page.locator("#language").select_option("fr")
-            page.locator("#theme").select_option("light")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             # Guide language remains an independent choice when the shell changes.
             panel.get_by_label("Langue du guide", exact=True).select_option("en")
             expect(panel.locator("#guide-content h1")).to_have_text("Manage torrents")
-            page.locator("[data-view=torrents]").click()
-            page.locator("[data-view=documentation]").click()
+            shell_navigate(page, "torrents")
+            shell_navigate(page, "documentation")
             expect(panel.locator("#guide-language")).to_have_value("en")
             expect(panel.locator("#guide-content h1")).to_have_text("Manage torrents")
             page.route(

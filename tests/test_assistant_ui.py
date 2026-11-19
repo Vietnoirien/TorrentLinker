@@ -9,6 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.shell_support import shell_close_navigation, shell_navigate
 from tests.test_assistant import login
 from torrentlinker.web.app import create_app
 
@@ -136,8 +137,8 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.locator("#navigation-toggle").click()
-            page.locator('[data-view="assistant"]').click()
-            page.locator("#navigation-close").click()
+            shell_navigate(page, "assistant")
+            shell_close_navigation(page)
             # Without a model the composer is replaced by one way to connect one, in Settings.
             expect(panel.locator(".assistant-composer")).to_be_hidden()
             panel.get_by_role("button", name="Connect a model", exact=True).click()
@@ -178,8 +179,8 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             ).to_be_disabled()
             dialog.get_by_role("button", name="Cancel", exact=True).click()
             page.locator("#navigation-toggle").click()
-            page.locator('[data-view="assistant"]').click()
-            page.locator("#navigation-close").click()
+            shell_navigate(page, "assistant")
+            shell_close_navigation(page)
             panel.get_by_role("tab", name="Discussion", exact=True).click()
             panel.get_by_role("button", name="Discussions", exact=True).click()
             # An example prompt fills the composer without sending it.
@@ -290,9 +291,13 @@ def test_browser_can_configure_model_chat_and_schedule_on_small_screen(tmp_path)
             output = os.getenv("TL_AUTOMATION_WEB_SCREENSHOTS")
             page.set_viewport_size({"width": 1280, "height": 720})
             for lang in ("fr", "en"):
-                page.locator("#language").select_option(lang, force=True)
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    lang, force=True
+                )
                 for theme in ("light", "dark"):
-                    page.locator("#theme").select_option(theme, force=True)
+                    page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                        theme, force=True
+                    )
                     expect(panel.locator("html")).to_have_attribute("lang", lang)
                     expect(panel.locator("html")).to_have_attribute("data-theme", theme)
                     expect(
@@ -622,8 +627,8 @@ def test_browser_inline_question_approval_and_safe_table(tmp_path):
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.locator("#navigation-toggle").click()
-            page.locator('[data-view="assistant"]').click()
-            page.locator("#navigation-close").click()
+            shell_navigate(page, "assistant")
+            shell_close_navigation(page)
             panel = page.frame_locator("#assistant-frame")
             panel.locator("#assistant-prompt").fill("Help choose an action.")
             panel.locator("#assistant-prompt").press("Enter")

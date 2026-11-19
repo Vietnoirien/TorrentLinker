@@ -186,14 +186,14 @@ def test_desktop_switch_rebuilds_scoped_views_without_moving_the_queue(
     remote.host = "https://seedbox.test"
     window = MainWindow(settings, tmp_path / "settings.json", Store(tmp_path / "state.db"))
     window.show()
-    window.client_selector.setCurrentIndex(window.client_selector.findData(remote.id))
+    window.shell_host.command("client", {"client_id": remote.id})
     qtbot.waitUntil(lambda: bool(started))
     replacement = started[0]
     qtbot.addWidget(replacement)
     assert QApplication.instance().torrentlinker_window is replacement
     assert replacement.store.client_id == remote.id
     assert replacement.settings.qbit.host == "https://seedbox.test"
-    assert replacement.client_selector.currentText() == "Seedbox"
+    assert replacement.settings.profile().name == "Seedbox"
     assert Settings.load(tmp_path / "settings.json").profile().id == remote.id
 
 

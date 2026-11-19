@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="static/library.css" />
     <link rel="stylesheet" href="static/reseed.css" />
     <script src="static/app.js" defer></script>
+    <script src="static/shell_host.js" defer></script>
     <script src="static/categories.js" defer></script>
     <script src="static/documentation.js" defer></script>
     <script src="static/library.js" defer></script>
@@ -52,51 +53,10 @@
       </form>
     </section>
     <div id="workspace" hidden>
-      <aside class="sidebar" id="app-sidebar">
-        <button id="navigation-close" class="quiet" type="button" data-i18n="closeNavigation">Close navigation</button>
-        <a class="brand" href="#torrents"
-          ><img class="brandmark small" src="static/favicon.svg" alt="" width="32" height="32" /> TorrentLinker</a
-        >
-        <nav aria-label="Main navigation">
-          <button data-view="torrents" data-i18n="torrents">Torrents</button
-          ><button data-view="zen">Zen</button
-          ><button data-view="search" data-i18n="search">Search</button
-          ><button data-view="feeds">RSS</button
-          ><button data-view="queue" data-i18n="queue">Download queue</button
-          ><button data-view="media">Media</button
-          ><button data-view="library" data-i18n="library">Library</button
-          ><button data-view="upload">Upload</button
-          ><button data-view="assistant">Assistant</button><button data-view="jobs" data-i18n="activity">Activity</button>
-        </nav>
-        <div class="sidebar-bottom">
-          <button data-view="documentation">Documentation</button>
-          <button data-view="setup" data-i18n="settings">Settings</button
-          ><label
-            ><span data-i18n="theme">Theme</span
-            ><select id="theme">
-              <option value="auto" data-i18n="system">System</option>
-              <option value="light" data-i18n="light">Light</option>
-              <option value="dark" data-i18n="dark">Dark</option>
-            </select></label
-          ><label
-            >Language<select id="language">
-              <option value="en">English</option>
-              <option value="fr">Français</option>
-            </select></label
-          ><button id="logout" data-i18n="signOut">Sign out</button>
-        </div>
-      </aside>
+      <aside class="sidebar" id="app-sidebar"><iframe id="shell-navigation-frame" title="Navigation" src="static/shell/view.html"></iframe></aside>
       <main>
-        <header>
-          <button id="navigation-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" data-i18n="navigation">Navigation</button>
-          <div>
-            <p class="eyebrow" id="connection-status">TORRENTLINKER WEB</p>
-            <h1 id="page-title">Torrents</h1>
-          </div>
-          <label><span data-i18n="targetClient">Target client</span>
-            <select id="target-client" aria-label="Target client"></select></label>
-          <span id="work-status" class="badge" role="status"></span>
-        </header>
+        <header><button id="navigation-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" data-i18n="navigation">Navigation</button><iframe id="shell-header-frame" title="Workspace" src="static/shell/view.html"></iframe><span id="work-status" class="badge" role="status"></span></header>
+        <div id="shell-update-host" hidden><iframe id="shell-update-frame" title="Update notice" src="static/shell/view.html"></iframe></div>
         <section id="media-player-shell" aria-label="Media player" hidden>
           <div class="toolbar media-player-heading"><h2 id="media-now-playing">Now playing</h2></div>
           <p id="media-preview-state" class="media-preview-state" role="status" hidden></p>
@@ -159,6 +119,8 @@
           </p>
           <div id="job-list"></div>
         </section>
+        <div id="shell-band-host" hidden><iframe id="shell-band-frame" title="Zen overview" src="static/shell/view.html"></iframe></div>
+        <dialog id="shell-help-dialog"><iframe id="shell-help-frame" title="Keyboard shortcuts" src="static/shell/view.html"></iframe></dialog>
       </main>
       <aside id="media-chat-panel" aria-label="Media Assistant" hidden><div id="media-chat-resize" role="separator" aria-orientation="vertical" tabindex="0"></div><div id="media-chat-content"></div></aside>
     </div>

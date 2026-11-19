@@ -16,6 +16,7 @@ try {
 } catch {}
 function showZenProfile(data) {
   profileState = data;
+  shellEnvironment();
   $("zen-profile-tab").textContent = say("Profile", "Profil");
   profileEnvironment();
 }
@@ -47,11 +48,13 @@ async function loadZenProfile(initial = false) {
 async function refreshZenProfile() {
   if (profileLoading) return;
   profileLoading = true;
+  shellEnvironment();
   profileEnvironment();
   try {
     showZenProfile(await api(`zen/profile/refresh?days=${profileDays}`, {}));
   } finally {
     profileLoading = false;
+    shellEnvironment();
     profileEnvironment();
   }
 }

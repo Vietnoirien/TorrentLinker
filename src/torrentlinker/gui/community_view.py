@@ -170,6 +170,9 @@ class BundledView(QWidget):
                             "torrent-filters.js",
                         )
                     }
+                    or self_view.channel_name == "shell"
+                    and url.isLocalFile()
+                    and Path(url.toLocalFile()).resolve() == assets.parent / "favicon.svg"
                     or self_view.channel_name == "media"
                     and url.isLocalFile()
                     and Path(url.toLocalFile()).resolve() == assets.parent / "media.css"

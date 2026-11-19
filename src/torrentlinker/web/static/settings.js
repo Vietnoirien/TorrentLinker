@@ -125,8 +125,7 @@ window.addEventListener("message", async (event) => {
       });
       if (body.group === "general" && _client === state.clientId) {
         mediaSetLayout(value.general.media_layout);
-        $("theme").value = value.general.theme;
-        theme();
+        theme(value.general.theme);
         language =
           value.general.language === "auto"
             ? navigator.language.startsWith("fr")

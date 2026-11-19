@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_web_archives import archive_app
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
@@ -53,8 +54,10 @@ def test_archive_review_cancel_then_confirm(tmp_path, language, partial):
                 page.goto(f"http://127.0.0.1:{port}/")
                 page.locator("#login-password").fill("test-password-long")
                 page.locator("#login-form button").click()
-                page.locator("#language").select_option(language)
-                page.locator("[data-view=library]").first.click()
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    language
+                )
+                shell_navigate(page, "library")
                 frame = page.frame_locator("#reseed-frame")
                 frame.locator(".torrent").filter(has_text="Kaneda.zip").first.click()
                 action = frame.get_by_role(

@@ -23,8 +23,24 @@ class TorrentBridge(ViewBridge):
     def requestAsync(self, identifier, action, payload):
         try:
             body = json.loads(payload)
-            if body.pop("_client", None) != self.board.owner.settings.active_client_id:
+            if body.pop("_client", None) != self.board.target_client:
                 raise ValueError("The target client changed. Reopen Torrents.")
+            if action == "target-client":
+                from PySide6.QtWidgets import QApplication
+
+                owner = self.board.owner
+                target = body.get("client_id")
+                owner.shell_host.command("client", {"client_id": target})
+                app = QApplication.instance()
+                current = (
+                    owner
+                    if owner.settings.active_client_id == target
+                    else getattr(app, "torrentlinker_window", owner)
+                )
+                if current.settings.active_client_id == target:
+                    current.torrents_tab.focus_tracker(str(body.get("tracker", "")))
+                self.response.emit(identifier, json.dumps({"data": None}))
+                return
             if action == "transfer-browse":
                 from PySide6.QtWidgets import QFileDialog
 
@@ -80,6 +96,14 @@ class TorrentsTab(BundledView):
             TorrentBridge(self), Path(__file__).parents[1] / "web/static/torrents", "torrents"
         )
 
+    @property
+    def target_client(self):
+        return (
+            "all"
+            if getattr(self.owner, "aggregate_clients", False)
+            else self.owner.settings.active_client_id
+        )
+
     def refresh(self):
         settings = self.owner.settings
         self.language = settings.language
@@ -87,7 +111,7 @@ class TorrentsTab(BundledView):
             {
                 "mode": "desktop",
                 "language": self.language,
-                "client": settings.active_client_id,
+                "client": self.target_client,
                 "active": self.isVisible(),
                 "command": self.command,
                 "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
@@ -101,4 +125,9 @@ class TorrentsTab(BundledView):
     def focus_torrent(self, hash=""):
         self.sequence += 1
         self.command = {"id": self.sequence, "hash": hash}
+        self.refresh()
+
+    def focus_tracker(self, tracker):
+        self.sequence += 1
+        self.command = {"id": self.sequence, "hash": "", "tracker": tracker}
         self.refresh()

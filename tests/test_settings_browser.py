@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_web_plan_execution import prepared
 from torrentlinker.web.app import create_app
 
@@ -50,7 +51,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 assert not errors
                 page.locator("#login-password").fill("test-password-long")
                 page.locator("#login-form button").click()
-                page.locator("[data-view=setup]").first.click()
+                shell_navigate(page, "setup")
                 panel = page.frame_locator("#settings-frame")
                 name = panel.get_by_label("Client name", exact=True)
                 expect(name).to_be_visible(timeout=5000)
@@ -66,7 +67,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 page.route(
                     "**/api/setup?*", lambda route: pending_setup.append((route, route.fetch()))
                 )
-                page.locator("[data-view=setup]").first.click()
+                shell_navigate(page, "setup")
                 for _ in range(100):
                     if pending_setup:
                         break
@@ -107,7 +108,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 if not configured:
                     assert setup.marker.read_text() == "connected"
                 page.reload()
-                page.locator("[data-view=setup]").first.click()
+                shell_navigate(page, "setup")
                 expect(name).to_have_value("Studio draft")
                 assert "private-existing-key" not in panel.locator("body").inner_text()
                 panel.get_by_role("button", name="Clients", exact=True).click()
@@ -132,7 +133,9 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
 
                     pattern = f"**/api/settings?client_id={second}"
                     page.route(pattern, delay_client)
-                    page.locator("#target-client").select_option(second)
+                    page.frame_locator("#shell-header-frame").locator(
+                        "#target-client"
+                    ).select_option(second)
                     expect(panel.locator("#settings-body")).to_have_text("Loading Settings…")
                     for _ in range(100):
                         if pending:
@@ -147,7 +150,9 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                     pending[0][0].fulfill(response=pending[0][1])
                     expect(panel.get_by_label("Client name", exact=True)).to_have_value("Seedbox")
                     page.unroute(pattern, delay_client)
-                    page.locator("#target-client").select_option("default")
+                    page.frame_locator("#shell-header-frame").locator(
+                        "#target-client"
+                    ).select_option("default")
                     expect(panel.get_by_label("Client name", exact=True)).to_have_value(
                         "Studio draft"
                     )
@@ -170,21 +175,21 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 panel.get_by_role("button", name="Save", exact=True).click()
                 expect(panel.locator("#settings-status")).to_contain_text("Settings saved")
                 page.reload()
-                page.locator("[data-view=setup]").first.click()
+                shell_navigate(page, "setup")
                 panel.get_by_role("button", name="Zen", exact=True).click()
                 expect(panel.get_by_label("Seed hours per day", exact=True)).to_have_value("12")
                 # Changes made elsewhere refresh clean sections; edited drafts survive reopening.
-                page.locator("[data-view=torrents]").click()
+                shell_navigate(page, "torrents")
                 setup.settings.zen = replace(setup.settings.zen, seed_hours=13)
                 setup.save()
-                page.locator("[data-view=setup]").first.click()
+                shell_navigate(page, "setup")
                 panel.get_by_role("button", name="Zen", exact=True).click()
                 expect(panel.get_by_label("Seed hours per day", exact=True)).to_have_value("13")
                 panel.get_by_label("Seed hours per day", exact=True).fill("9")
-                page.locator("[data-view=torrents]").click()
+                shell_navigate(page, "torrents")
                 setup.settings.zen = replace(setup.settings.zen, seed_hours=18)
                 setup.save()
-                page.locator("[data-view=setup]").first.click()
+                shell_navigate(page, "setup")
                 panel.get_by_role("button", name="Zen", exact=True).click()
                 expect(panel.get_by_label("Seed hours per day", exact=True)).to_have_value("9")
                 for section in ("Library Folders", "Download Folders", "Client Paths"):

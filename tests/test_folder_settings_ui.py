@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_folder_probe import ProbeClient
 from torrentlinker.config import Settings
 from torrentlinker.domain import PathMapping
@@ -112,7 +113,7 @@ def test_browser_category_tree_and_empty_folder_save(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=setup]").first.click()
+            shell_navigate(page, "setup")
             panel = page.frame_locator("#settings-frame")
             panel.get_by_role("button", name="Download Folders", exact=True).click()
             picker = panel.get_by_label("Category", exact=True)

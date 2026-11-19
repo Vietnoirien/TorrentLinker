@@ -8,6 +8,7 @@ const catalogueUI={value:{cards:[]},job:null,progress:null,stopping:false,plan:f
 const catalogueFinished=new Set();
 function showCatalogue(value){if(value){catalogueUI.value=value;catalogueEnvironment()}}
 function catalogueEnvironment(){
+  shellEnvironment();
   const active=state.view==="zen"&&!$("zen-catalogue-panel").hidden&&!$("workspace").hidden;
   if(active)catalogueFrame.style.height=`${Math.max(300,innerHeight-catalogueFrame.getBoundingClientRect().top-24)}px`;
   const p=catalogueUI.progress,root=p?.catalogue_root;

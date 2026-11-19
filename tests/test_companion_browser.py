@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_profile import PROFILE
 from tests.test_web_profile import prepared, snapshot
 
@@ -91,8 +92,8 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=setup]").first.click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
             settings.get_by_role("button", name="Companion", exact=True).click()
             with context.expect_page() as handoff_opened:
@@ -184,7 +185,7 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
 
             page = context.new_page()
             page.goto(f"http://127.0.0.1:{port}/")
-            page.locator("[data-view=setup]").first.click()
+            shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
             settings.get_by_role("button", name="Companion", exact=True).click()
             settings.get_by_role("button", name="Disconnect & clear", exact=True).click()

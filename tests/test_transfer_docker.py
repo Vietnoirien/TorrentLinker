@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_multi_client_docker import until
 from tests.torrents import make_torrent
 from torrentlinker.torrent_meta import read_torrent
@@ -166,8 +167,8 @@ def test_web_transfer_options_defaults_overrides_and_rendering(cluster, tmp_path
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator("#workspace")).to_be_visible()
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=torrents]").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "torrents")
             panel = page.frame_locator("#torrents-frame")
             panel.locator("#query").fill("browser-source")
             expect(panel.locator("tbody tr")).to_have_count(1)
@@ -210,8 +211,8 @@ def test_web_transfer_options_defaults_overrides_and_rendering(cluster, tmp_path
             panel.locator("[data-transfer-id]").filter(has_text="Complete").click()
             expect(panel.locator(".transfer-item")).to_contain_text("Confirmed cleanup completed")
             panel.locator("#transfer-close").click()
-            page.locator("#language").select_option("fr")
-            page.locator("#theme").select_option("dark")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
             expect(panel.locator("html")).to_have_attribute("data-theme", "dark")
             panel.locator("#transfer-history").click()
             panel.locator("[data-transfer-id]").filter(has_text="Terminé").click()

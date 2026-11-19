@@ -8,6 +8,7 @@ import threading
 import httpx
 from fastapi.testclient import TestClient
 
+from tests.shell_support import shell_navigate
 from tests.test_assistant import login
 from tests.test_assistant_ui import provider
 from torrentlinker.config import Settings
@@ -264,7 +265,7 @@ def test_media_chat_shared_browser_workflow(tmp_path):
             page.goto(f"http://127.0.0.1:{port}")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             media = page.frame_locator("#media-frame")
             expect(media.locator("#media-feature")).to_contain_text("A Journey")
             media.locator("#media-toolbar-chat").click()
@@ -326,9 +327,13 @@ def test_media_chat_shared_browser_workflow(tmp_path):
             expect(chat.locator("dialog[open]")).to_be_visible()
             chat.get_by_role("button", name="Cancel", exact=True).click()
             for language in ("en", "fr"):
-                page.locator("#language").select_option(language)
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    language
+                )
                 for theme in ("dark", "light"):
-                    page.locator("#theme").select_option(theme)
+                    page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                        theme
+                    )
                     expect(chat.locator("html")).to_have_attribute("lang", language)
                     expect(chat.locator("html")).to_have_attribute("data-theme", theme)
                     expect(chat.locator("#view-assistant")).not_to_have_attribute("inert", "")

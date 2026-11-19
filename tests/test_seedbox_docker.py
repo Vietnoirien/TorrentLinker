@@ -9,6 +9,7 @@ from contextlib import contextmanager
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_multi_client_docker import docker
 from torrentlinker.remote_access import RemoteAccess
 from torrentlinker.web.security import ServerSecrets
@@ -275,8 +276,8 @@ def test_seedbox_dialog_access_mapping_and_progress(cluster, seedbox, tmp_path):
             page.goto(f"http://127.0.0.1:{port}")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=torrents]").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "torrents")
             panel = page.frame_locator("#torrents-frame")
             panel.locator("#query").fill("sftp-ui")
             expect(panel.locator("tbody tr")).to_have_count(1)
@@ -313,8 +314,8 @@ def test_seedbox_dialog_access_mapping_and_progress(cluster, seedbox, tmp_path):
                 path=os.getenv("TL_SEEDBOX_SCREENSHOT", str(tmp_path / "seedbox-web.png"))
             )
             panel.locator("#transfer-close").click()
-            page.locator("#language").select_option("fr")
-            page.locator("#theme").select_option("light")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             panel.locator("#transfer-history").click()
             panel.locator("[data-transfer-id]").first.click()
             expect(panel.locator(".transfer-heading")).to_contain_text(

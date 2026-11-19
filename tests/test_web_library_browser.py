@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
+
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
@@ -72,7 +74,7 @@ def test_folder_explorer_and_candidate_review(tmp_path):
             assert not errors, errors
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=library]").first.click()
+            shell_navigate(page, "library")
             frame = page.frame_locator("#reseed-frame")
             frame.get_by_role("button", name="Folders", exact=True).click()
             frame.get_by_role("button", name="+ Add a folder", exact=True).click()
@@ -113,7 +115,9 @@ def test_folder_explorer_and_candidate_review(tmp_path):
                 page.screenshot(
                     path=str(Path(destination) / "library-features-web.png"), full_page=True
                 )
-                page.locator("#language").select_option("fr")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "fr"
+                )
                 page.locator("#inspect-evidence").click()
                 expect(page.locator("#evidence-report")).to_contain_text(
                     "Hashes vérifiés", timeout=15000
@@ -121,7 +125,9 @@ def test_folder_explorer_and_candidate_review(tmp_path):
                 page.screenshot(
                     path=str(Path(destination) / "library-features-web-fr.png"), full_page=True
                 )
-                page.locator("#language").select_option("en")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "en"
+                )
             page.locator("[data-candidate-tab=files]").click()
             expect(page.locator("#candidate-files")).to_contain_text("The Time Machine.epub")
             page.locator("#candidate-actions").get_by_role(
@@ -137,7 +143,7 @@ def test_folder_explorer_and_candidate_review(tmp_path):
             page.set_viewport_size({"width": 650, "height": 950})
             frame.get_by_role("button", name="+ Add a folder", exact=True).click()
             expect(frame.locator("#folder-form")).to_be_visible()
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(frame.get_by_role("heading", name="Ajouter à la bibliothèque")).to_be_visible()
             expect(frame.locator("[name=local]")).to_be_visible()
             assert not errors, errors

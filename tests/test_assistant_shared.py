@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from tests.shell_support import shell_navigate
 from tests.test_assistant import login
 from torrentlinker.web.app import create_app
 
@@ -73,8 +74,8 @@ def test_web_shared_discussion_and_history(tmp_path):
                 data={"name": "Test", "kind": "ollama", "model": "test"},
                 headers={"X-TorrentLinker": "1"},
             )
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=assistant]").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "assistant")
             panel = page.frame_locator("#assistant-frame")
             try:
                 panel.locator("#assistant-prompt").fill("Help me build a Plan.")
@@ -129,14 +130,18 @@ def test_web_shared_discussion_and_history(tmp_path):
                 page.set_viewport_size({"width": 1280, "height": 720})
                 panel.get_by_role("button", name="Discussions", exact=True).click()
                 for lang in ("en", "fr"):
-                    page.locator("#language").select_option(lang)
+                    page.frame_locator("#shell-navigation-frame").locator(
+                        "#language"
+                    ).select_option(lang)
                     for theme in ("dark", "light"):
                         page.evaluate(
                             "theme => document.documentElement.dataset.theme=theme", theme
                         )
                         page.wait_for_timeout(300)
                         page.screenshot(path=f"{directory}/{lang}-{theme}.png")
-                page.locator("#language").select_option("en")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "en"
+                )
             panel.locator("#assistant-more").click()
             panel.get_by_role("menuitem", name="Discussion settings", exact=True).click()
             panel.get_by_label("Action policy", exact=True).select_option("execute")
@@ -155,13 +160,13 @@ def test_web_shared_discussion_and_history(tmp_path):
             expect(panel.locator("#assistant-mode")).to_have_text("Execute within limits")
             assert len(confirmations) == 1
             panel.locator("#assistant-prompt").fill("Keep this unsent draft")
-            page.locator("[data-view=media]").click()
+            shell_navigate(page, "media")
             page.locator("#media-toolbar-chat").click()
             compact_prompt = page.locator("#media-chat-content #assistant-prompt")
             expect(compact_prompt).to_be_visible()
             box = compact_prompt.bounding_box()
             assert box is not None and box["y"] + box["height"] <= page.viewport_size["height"]
-            page.locator("[data-view=assistant]").click()
+            shell_navigate(page, "assistant")
             expect(panel.locator("#assistant-prompt")).to_have_value("Keep this unsent draft")
             # Context actions work directly on a sidebar discussion.
             toggle = panel.get_by_role("button", name="Discussions", exact=True)

@@ -24,6 +24,7 @@ function planOperation(client, advance = false) {
   return value;
 }
 function planEnvironment(force = false) {
+  shellEnvironment();
   const active =
     state.view === "zen" &&
     !$("zen-plan-panel").hidden &&

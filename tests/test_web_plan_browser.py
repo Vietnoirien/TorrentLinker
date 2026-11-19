@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
 from tests.test_web_plan_execution import prepared, second_client
 from torrentlinker.web.app import create_app
 
@@ -52,7 +53,7 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.locator("#login-form button").click()
             initial_load = []
             page.route("**/api/zen/plan?*", lambda route: initial_load.append(route))
-            page.locator("[data-view=zen]").first.click()
+            shell_navigate(page, "zen")
             page.locator("#zen-plan-tab").click()
             panel = page.frame_locator("#plan-frame")
             expect(panel.locator("#plan-send")).to_be_disabled()
@@ -142,8 +143,8 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             expect(panel.locator("#plan-send")).to_be_enabled(timeout=15000)
             stale_load = []
             page.route("**/api/zen/plan?*", lambda route: stale_load.append((route, route.fetch())))
-            page.locator("[data-view=torrents]").first.click()
-            page.locator("[data-view=zen]").first.click()
+            shell_navigate(page, "torrents")
+            shell_navigate(page, "zen")
             page.locator("#zen-plan-tab").click()
             panel.locator("#plan-result thead input").uncheck()
             panel.locator("#plan-result tbody input").first.check()
@@ -179,8 +180,12 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.route(
                 next_client_url, lambda route: next_client_load.append((route, route.fetch()))
             )
-            page.locator("#target-client").select_option(profile.id)
-            expect(page.locator("#target-client")).to_have_value(profile.id)
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                profile.id
+            )
+            expect(
+                page.frame_locator("#shell-header-frame").locator("#target-client")
+            ).to_have_value(profile.id)
             wait_for_route(page, next_client_load)
             assert len(next_client_load) == 1
             with page.expect_response(
@@ -192,13 +197,15 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             next_client_load[0][0].fulfill(response=next_client_load[0][1])
             page.unroute(next_client_url)
             expect(panel.locator(f'input[data-client-id="{profile.id}"]')).to_be_checked()
-            page.locator("#target-client").select_option("default")
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                "default"
+            )
             page.unroute("**/api/jobs", hold_send)
             expect(panel.locator("#plan-result tbody tr")).to_have_count(2, timeout=15000)
 
             assert len(client.downloads) == 1
             page.reload()
-            page.locator("[data-view=zen]").first.click()
+            shell_navigate(page, "zen")
             page.locator("#zen-plan-tab").click()
             panel = page.frame_locator("#plan-frame")
             expect(panel.locator("#plan-result tbody tr")).to_have_count(2)
@@ -248,7 +255,7 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.keyboard.press("Escape")
             expect(panel.locator(f'input[data-budget-id="{profile.id}"]')).to_have_value("0.5")
             expect(panel.locator("#plan-send")).to_be_disabled()
-            page.locator("#theme").select_option("dark")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
             panel.locator("#plan-cached").check()
             panel.locator("#plan").click()
             expect(panel.locator("#plan-send")).to_be_enabled(timeout=15000)
@@ -277,7 +284,7 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             if destination := os.getenv("TL_WEB_SCREENSHOTS"):
                 Path(destination).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(destination) / "web-plan-parity.png"), full_page=True)
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(panel.locator("#plan-summary")).to_contain_text("amorti")
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -310,7 +317,9 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             catalogue.locator("#catalogue-fetch").click()
             try:
                 assert entered.wait(5)
-                page.locator("#target-client").select_option(profile.id)
+                page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                    profile.id
+                )
                 expect(catalogue.locator("#catalogue-fetch")).to_be_disabled()
                 catalogue.locator("#catalogue-pause").click()
             finally:

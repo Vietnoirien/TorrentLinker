@@ -74,13 +74,13 @@ def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monk
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     assert window.isFullScreen()
     assert not window.navigation.isVisible()
-    assert not window.page_title.isVisible()
+    assert not window.app_header.isVisible()
     assert window.media_tab.browser.isVisible()
     assert window.media_tab.player is player
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     assert not window.isFullScreen()
     assert window.navigation.isVisible()
-    assert window.page_title.isVisible()
+    assert window.app_header.isVisible()
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     qtbot.keyClick(window.media_tab.center_button, Qt.Key_Escape)
     qtbot.waitUntil(lambda: not window.isFullScreen())
@@ -140,7 +140,7 @@ def test_configured_startup_loads_once_without_welcome(qtbot, tmp_path, monkeypa
     }
     assert not messages
     assert window.seeding_timer.isActive()
-    assert window.setup_notice.isHidden()
+    assert not window.setup_needed
 
 
 def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypatch):
@@ -173,7 +173,7 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
     assert opened == [True]
     assert not calls
     assert not window.seeding_timer.isActive()
-    assert not window.setup_notice.isHidden()
+    assert window.setup_needed
     assert window.tabs.isEnabled()
     assert window.tabs.isTabEnabled(window.tabs.indexOf(window.media_tab))
     assert not window.tabs.isTabEnabled(window.tabs.indexOf(window.search_tab))
@@ -181,7 +181,7 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
     window.open_settings()
     qtbot.waitUntil(lambda: len(calls) == 6)
     assert window.tabs.isEnabled()
-    assert window.setup_notice.isHidden()
+    assert not window.setup_needed
     assert window.seeding_timer.isActive()
 
 
@@ -206,7 +206,7 @@ def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, mon
     assert window.settings_path.exists()
     assert not calls
     assert not window.seeding_timer.isActive()
-    assert not window.setup_notice.isHidden()
+    assert window.setup_needed
     secret["key"] = "test-key"
     window.open_settings()
     qtbot.waitUntil(lambda: len(calls) == 6)

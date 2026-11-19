@@ -71,6 +71,7 @@ async function loadZenSeeding() {
     if (running.length)
       seedingHost.busy.add(client);
     else seedingHost.busy.delete(client);
+    shellSetSeeding(client, result.summary.daily);
     $("zen-daily").textContent = num(result.summary.daily);
     $("zen-count").textContent = result.summary.count;
   } catch (error) {

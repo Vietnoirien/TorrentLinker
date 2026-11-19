@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
+
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
@@ -85,9 +87,10 @@ def test_sort_filters_columns_and_refresh_preserve_selection(tmp_path):
             )
             assert saved.ok, saved.text()
             page.reload()
-            page.locator("#language").select_option("en")
-            page.locator("#theme").select_option("dark")
-            page.locator("[data-view=torrents]").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
+            shell_navigate(page, "torrents")
+            expect(page.frame_locator("#torrents-frame").locator("#client")).to_have_count(0)
             panel = page.frame_locator("#torrents-frame")
             try:
                 expect(panel.locator("tbody tr")).to_have_count(100)
@@ -142,9 +145,9 @@ def test_sort_filters_columns_and_refresh_preserve_selection(tmp_path):
             if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
                 Path(folder).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(folder) / "torrents-dark.png"))
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(panel.locator("#columns")).to_have_text("Colonnes")
-            page.locator("#theme").select_option("light")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             page.set_viewport_size({"width": 390, "height": 844})
             expect(panel.locator("#columns")).to_be_visible()

@@ -25,7 +25,7 @@ from torrentlinker.clients import connect
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
 from torrentlinker.torrent_management import peer_count_order, tracker_group
-from torrentlinker.updates import installed_version
+from torrentlinker.updates import check_for_update, installed_version
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
@@ -347,6 +347,7 @@ def create_app(
             "/static/seeding/view.html",
             "/static/settings/view.html",
             "/static/player/view.html",
+            "/static/shell/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.
@@ -874,6 +875,14 @@ def create_app(
             idle()
             service.store.remove_downloads(keys[:1000])
         return {"ok": True}
+
+    @app.get("/api/shell")
+    def shell_state() -> dict:
+        release = check_for_update(directory / "release-check.json", current=app_version)
+        return {
+            "version": app_version,
+            "release": {"tag": release.tag, "url": release.url} if release else None,
+        }
 
     @app.get("/api/zen/catalogue")
     def zen_catalogue() -> dict:

@@ -11,12 +11,13 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
+
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
 def media_browse(page):
-    frame = page.locator("#media-frame")
-    return page.frame_locator("#media-frame") if frame.count() and frame.is_visible() else page
+    return page.frame_locator("#media-frame")
 
 
 def media_locator(page, selector):
@@ -179,7 +180,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", "cinematic")
             # The toolbar ⟳ refreshes the library and shows that a refresh is running.
             media_locator(page, "#media-toolbar-refresh").click()
@@ -606,14 +607,14 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                     expect(media_locator(page, "#view-media")).to_have_attribute(
                         "data-empty", "false"
                     )
-            page.locator('[data-view="setup"][data-i18n="settings"]').click()
+            shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
             settings.get_by_role("button", name="General", exact=True).click()
             settings.get_by_label("Media interface", exact=True).select_option("collection")
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
             page.reload()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             expect(media_locator(page, "#view-media")).to_have_attribute(
                 "data-layout", "collection"
             )
@@ -675,14 +676,14 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             toolbar_chat.click()
             expect(panel).to_be_visible()
             page.frame_locator("#media-assistant-frame").locator("#media-chat-close").click()
-            page.locator('[data-view="library"]').click()
+            shell_navigate(page, "library")
             expect(video).to_be_visible()
             assert video.get_attribute("src") == source
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             video.evaluate("node => { node.pause(); node.currentTime = 5; }")
             page.wait_for_timeout(1300)
             page.reload()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             page.wait_for_function(
                 "() => document.querySelector('#media-video').currentTime >= 4.9"
             )
@@ -695,15 +696,19 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                         path=str(Path(screenshots) / f"media-layout-{layout}.png"), full_page=True
                     )
                 choose_layout("cinematic")
-                page.locator("#theme").select_option("light")
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "light"
+                )
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshots) / "media-layout-light.png"))
-                page.locator("#theme").select_option("dark")
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "dark"
+                )
 
             with page.expect_popup() as opening:
                 page.evaluate("() => window.open(location.href)")
             other = opening.value
-            other.locator('[data-view="media"]').click()
+            shell_navigate(other, "media")
             expect(other.locator("#media-player-shell")).to_be_hidden()
             open_films_grid(other)
             media_locator(other, ".media-card").filter(has_text="Validation Film").get_by_role(
@@ -805,10 +810,14 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
             if screenshots:
                 page.screenshot(path=str(Path(screenshots) / "media-music-tracks.png"))
-                page.locator("#theme").select_option("light")
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "light"
+                )
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshots) / "media-music-light.png"))
-                page.locator("#theme").select_option("dark")
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "dark"
+                )
                 page.wait_for_timeout(250)
                 media_locator(page, "#media-center-mode").click()
                 page.wait_for_function(
@@ -829,7 +838,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(media_locator(page, "#media-playlist-list")).to_contain_text("Full listening")
             page.wait_for_timeout(1300)
             page.reload()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             media_locator(page, "#media-music-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-playlist-list")).to_contain_text("Evening listening")
@@ -842,7 +851,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "Restored listening"
             )
             # A saved queue belongs to its playback client even while browsing another.
-            page.locator("#target-client").select_option("other")
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                "other"
+            )
             expect(media_locator(page, "#media-music-tab")).to_be_visible()
             media_locator(page, "#media-music-tab").click()
             media_locator(page, "#media-playlist-name").fill("Original client queue")
@@ -863,7 +874,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 ).json()
                 == []
             )
-            page.locator("#target-client").select_option("default")
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                "default"
+            )
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             media_locator(page, "#media-video-tab").click()
@@ -993,7 +1006,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator('[data-view="media"]').click()
+            shell_navigate(page, "media")
             expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", "cinematic")
             media_locator(page, "#media-library-options summary").click()
             media_locator(page, "#media-refresh").click()
@@ -1127,7 +1140,10 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                         "button", name="Play", exact=True
                     ).click()
                 else:
-                    page.locator("#target-client").select_option("all")
+                    shell_navigate(page, "torrents")
+                    page.frame_locator("#shell-header-frame").locator(
+                        "#target-client"
+                    ).select_option("all")
                 with page.expect_response(
                     lambda reply, expected=preview_id: (
                         reply.request.method == "DELETE" and f"/previews/{expected}" in reply.url

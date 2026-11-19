@@ -8,6 +8,8 @@ import time
 
 import pytest
 
+from tests.shell_support import shell_navigate
+
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
@@ -41,7 +43,7 @@ def test_rss_preview_sidebar_unread_and_saved_selection(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=feeds]").click()
+            shell_navigate(page, "feeds")
             page.frame_locator("#feeds-frame").locator("#feeds-empty").get_by_role(
                 "button", name="New subscription"
             ).click()
@@ -119,7 +121,7 @@ def test_rss_preview_sidebar_unread_and_saved_selection(tmp_path):
                 "Queue selected releases"
             )
             page.frame_locator("#feeds-frame").locator("#dialog .close").click()
-            page.locator("[data-view=search]").click()
+            shell_navigate(page, "search")
             panel = page.frame_locator("#search-frame")
             panel.locator("#detail-tabs [role=tab]").first.click()
             panel.locator("#search-query").fill("A new title")
@@ -178,7 +180,7 @@ def test_rss_editor_chips_judge_fetched_releases(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=feeds]").click()
+            shell_navigate(page, "feeds")
             page.frame_locator("#feeds-frame").locator("#feeds-empty").get_by_role(
                 "button", name="New subscription"
             ).click()
@@ -271,7 +273,7 @@ def test_rss_category_legend_and_rich_editor_roundtrip(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=feeds]").click()
+            shell_navigate(page, "feeds")
             panel = page.frame_locator("#feeds-frame")
             panel.locator("#feeds-sidebar").get_by_role("button", name=re.compile("^Rich")).click()
             panel.locator("#feeds-header").get_by_label("More", exact=True).click()
@@ -296,22 +298,28 @@ def test_rss_category_legend_and_rich_editor_roundtrip(tmp_path):
             format_row.locator("input").press("Enter")
             expect(format_row.locator(".prefer")).to_contain_text("EPUB")
             editor.get_by_label("Name", exact=True).fill("Mixed categories")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(editor.get_by_label("Nom", exact=True)).to_have_value("Mixed categories")
             expect(editor.get_by_role("button", name="Légende de sélection")).to_be_visible()
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             expect(editor.get_by_label("Name", exact=True)).to_have_value("Mixed categories")
             if folder := os.getenv("TL_RSS_SCREENSHOTS"):
                 from pathlib import Path
 
                 Path(folder).mkdir(parents=True, exist_ok=True)
                 for lang in ("en", "fr"):
-                    page.locator("#language").select_option(lang)
+                    page.frame_locator("#shell-navigation-frame").locator(
+                        "#language"
+                    ).select_option(lang)
                     for theme in ("dark", "light"):
-                        page.locator("#theme").select_option(theme)
+                        page.frame_locator("#shell-navigation-frame").locator(
+                            "#theme"
+                        ).select_option(theme)
                         editor.locator(".criterion-help").scroll_into_view_if_needed()
                         page.screenshot(path=str(Path(folder) / f"rss-web-{lang}-{theme}.png"))
-                page.locator("#language").select_option("en")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "en"
+                )
                 page.set_viewport_size({"width": 390, "height": 844})
                 assert panel.locator("body").evaluate("el => el.scrollWidth <= innerWidth")
                 page.screenshot(path=str(Path(folder) / "rss-web-narrow.png"))
@@ -382,7 +390,7 @@ def test_cancel_pending_preview_never_saves_and_repeated_save_is_locked(tmp_path
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
-            page.locator("[data-view=feeds]").click()
+            shell_navigate(page, "feeds")
             panel = page.frame_locator("#feeds-frame")
             panel.locator("#feeds-empty").get_by_role("button").click()
             expect(panel.locator(".feed-strip")).to_have_text("")

@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.shell_support import shell_navigate
+
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
 
@@ -81,12 +83,33 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             page = browser.new_page(viewport={"width": 1100, "height": 850}, locale="en-US")
+            page.route(
+                "**/api/shell",
+                lambda route: route.fulfill(
+                    json={
+                        "version": "1.0.0",
+                        "release": {
+                            "tag": "v1.1.0",
+                            "url": "https://github.com/Vietnoirien/TorrentLinker/releases/tag/v1.1.0",
+                        },
+                    }
+                ),
+            )
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator("#view-setup")).to_be_visible()
+            navigation = page.frame_locator("#shell-navigation-frame")
+            update = page.frame_locator("#shell-update-frame")
+            expect(update.locator("#update-message")).to_contain_text("Web server installation")
+            navigation.locator("#shortcuts").click()
+            help_panel = page.frame_locator("#shell-help-frame")
+            expect(help_panel.locator("#help-text")).to_contain_text("remain with the browser")
+            help_panel.locator("#help-close").click()
+            update.locator("#dismiss").click()
+            expect(page.locator("#shell-update-host")).to_be_hidden()
             settings = page.frame_locator("#settings-frame")
             for label in ("Password", "Client API key", "Proxy password", "Announce URL"):
                 expect(settings.get_by_label(label, exact=True)).to_have_value("")
@@ -101,15 +124,24 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             if screenshot:
                 Path(screenshot).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(screenshot) / "setup-en.png"))
-                page.locator("#language").select_option("fr")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "fr"
+                )
                 page.screenshot(path=str(Path(screenshot) / "setup-fr.png"))
-                page.locator("#language").select_option("en")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "en"
+                )
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
             settings.get_by_role("button", name="Download Folders", exact=True).click()
             settings.get_by_role("button", name="Read folders from client", exact=True).click()
             expect(settings.locator(".settings-form")).to_contain_text("/downloads")
-            page.locator("[data-view=torrents]").click()
+            shell_navigate(page, "library")
+            band = page.frame_locator("#shell-band-frame")
+            expect(page.locator("#shell-band-host")).to_be_visible()
+            expect(band.locator("#seeding")).not_to_contain_text("—")
+            expect(band.locator("#catalogue")).to_contain_text("torrents")
+            shell_navigate(page, "torrents")
             torrents = page.frame_locator("#torrents-frame")
             expect(torrents.locator("tbody")).to_contain_text("Example book.epub")
             expect(torrents.locator("#inspector")).to_contain_text("3 (42) / 2 (13)")
@@ -143,7 +175,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             candidate = Candidate(
                 "Assistant queue entry", 1024, "https://example.test/a", 2, "b" * 40
             )
-            page.locator("[data-view=queue]").click()
+            shell_navigate(page, "queue")
             queue = page.frame_locator("#search-frame")
             enqueue(writer, indexer, candidate, tmp_path)
             expect(queue.locator("#queue-table")).to_contain_text(candidate.title, timeout=6000)
@@ -220,12 +252,14 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(queue.locator("#queue-summary")).to_contain_text("0 total", timeout=6000)
             expect(queue.locator("#queue-table tbody tr[data-key]")).to_have_count(0)
             expect(queue.locator("#start-queue")).to_be_disabled()
-            page.locator("[data-view=torrents]").click()
+            shell_navigate(page, "torrents")
             if screenshot:
                 for lang in ("fr", "en"):
-                    page.locator("#language").select_option(lang)
+                    page.frame_locator("#shell-navigation-frame").locator(
+                        "#language"
+                    ).select_option(lang)
                     page.screenshot(path=str(Path(screenshot) / f"torrents-{lang}.png"))
-            page.locator("[data-view=documentation]").click()
+            shell_navigate(page, "documentation")
             guide = page.frame_locator("#documentation-frame")
             expect(guide.locator("#guide-content")).to_contain_text("Read guides inside the app")
             guide.locator('[data-guide-path="guide/en/torrents.md"]').click()
@@ -236,7 +270,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.screenshot(path=str(Path(screenshot) / "documentation-en.png"))
             guide.locator("#guide-back").click()
             expect(guide.locator("#guide-content")).to_contain_text("Read guides inside the app")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             guide.locator("#guide-language").select_option("fr")
             expect(guide.locator("#guide-content")).to_contain_text("Consulter les guides")
             if screenshot:
@@ -247,16 +281,23 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 )
                 assert guide.locator("#guide-content img").first.evaluate("i=>i.naturalWidth>0")
                 page.screenshot(path=str(Path(screenshot) / "documentation-fr.png"))
-            page.set_viewport_size({"width": 600, "height": 800})
+            page.set_viewport_size({"width": 390, "height": 800})
+            expect(navigation.locator("#page-select")).to_be_visible()
+            expect(navigation.locator("#pages")).to_be_hidden()
+            header = page.frame_locator("#shell-header-frame")
+            expect(header.locator("#target-client")).to_be_visible()
+            assert header.locator("#target-client").evaluate(
+                "el => el.getBoundingClientRect().right <= innerWidth"
+            )
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            page.locator("#language").select_option("en")
-            page.locator("[data-view=torrents]").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "torrents")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            page.locator("#theme").select_option("dark")
+            page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
             if screenshot:
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshot) / "torrents-small.png"))
-            page.locator("[data-view=setup][data-i18n=settings]").click()
+            shell_navigate(page, "setup")
             settings.get_by_role("button", name="Connections", exact=True).click()
             password = settings.get_by_label("Password", exact=True)
             expect(password).to_have_attribute("placeholder", "Saved; leave blank to keep")
@@ -287,20 +328,24 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(announce).to_have_value("")
             expect(announce).to_have_attribute("placeholder", "Saved; leave blank to keep")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(settings.get_by_label("Mot de passe", exact=True)).to_have_attribute(
                 "placeholder", "Enregistré ; laisser vide pour conserver"
             )
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Clients", exact=True).click()
             settings.get_by_label("New client name", exact=True).fill("Unsubmitted client")
-            page.locator("[data-view=torrents]").click()
-            page.locator("[data-view=setup][data-i18n=settings]").click()
+            shell_navigate(page, "torrents")
+            shell_navigate(page, "setup")
             settings.get_by_role("button", name="Connections", exact=True).click()
             settings.get_by_label("Client name", exact=True).fill("Seedbox renamed")
             settings.get_by_role("button", name="Save", exact=True).click()
-            expect(page.locator("#target-client option")).to_have_count(2)
-            expect(page.locator("#target-client option:checked")).to_have_text("Seedbox renamed")
+            expect(
+                page.frame_locator("#shell-header-frame").locator("#target-client option")
+            ).to_have_count(1)
+            expect(
+                page.frame_locator("#shell-header-frame").locator("#target-client option:checked")
+            ).to_have_text("Seedbox renamed")
             settings.get_by_role("button", name="Clients", exact=True).click()
             settings.get_by_label("New client name", exact=True).fill("Remote Deluge")
             settings.get_by_role("button", name="Add client", exact=True).click()
@@ -313,19 +358,26 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             settings.get_by_label("Password", exact=True).fill("second-password")
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
-            expect(page.locator("#target-client option:checked")).to_have_text("Remote Deluge")
-            page.locator("#target-client").select_option("default")
+            expect(
+                page.frame_locator("#shell-header-frame").locator("#target-client option:checked")
+            ).to_have_text("Remote Deluge")
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
+                "default"
+            )
             expect(settings.get_by_label("Client type", exact=True)).to_have_value("qbittorrent")
             expect(settings.get_by_label("Address", exact=True)).to_have_value(
                 "https://seedbox.example/qbittorrent"
             )
-            page.locator("#target-client").select_option("all")
+            shell_navigate(page, "torrents")
+            page.frame_locator("#shell-header-frame").locator("#target-client").select_option("all")
             expect(page.locator("#view-torrents")).to_be_visible()
             expect(page.frame_locator("#torrents-frame").locator("tbody")).to_contain_text(
                 "Remote Deluge"
             )
-            page.locator("#target-client").select_option("default")
-            page.locator("[data-view=zen]").click()
+            shell_navigate(page, "zen")
+            expect(
+                page.frame_locator("#shell-header-frame").locator("#target-client")
+            ).to_have_value("default")
             expect(page.locator("#zen-profile-panel")).to_be_visible()
             page.locator("#zen-seeding-tab").click()
             expect(page.locator("#zen-seeding-panel")).to_be_visible()
@@ -335,21 +387,22 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             )
             if screenshot:
                 page.set_viewport_size({"width": 1100, "height": 850})
-                page.frame_locator("#plan-frame").locator("#plan-options > summary").click()
-                page.frame_locator("#plan-frame").locator("#plan-clients").locator("..").locator(
-                    "summary"
-                ).click()
+                expect(page.frame_locator("#plan-frame").locator("#plan-clients")).to_be_visible()
                 for language in ("en", "fr"):
-                    page.locator("#language").select_option(language)
+                    page.frame_locator("#shell-navigation-frame").locator(
+                        "#language"
+                    ).select_option(language)
                     page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
-            page.locator("[data-view=setup][data-i18n=settings]").click()
-            page.locator("#language").select_option("en")
+            shell_navigate(page, "setup")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Agent access", exact=True).click()
             expect(settings.locator("#view-agents")).to_be_visible()
             expect(settings.locator("#agents-enabled")).not_to_be_checked()
             settings.locator("#agents-enabled").check()
             expect(page.locator("#view-setup")).to_be_visible()
-            expect(page.locator("#page-title")).to_have_text("Settings")
+            expect(page.frame_locator("#shell-header-frame").locator("#page-title")).to_have_text(
+                "Settings"
+            )
             expect(settings.locator("#agent-connections")).to_contain_text("No connections yet")
             settings.locator("[data-agent-tab=new]").click()
             settings.locator("#agent-name").fill("My assistant")
@@ -369,11 +422,11 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(settings.locator("#agent-connections")).to_contain_text("Seedbox renamed")
             expect(settings.locator("#agent-connections")).to_contain_text("10 GiB")
             expect(settings.locator("#agent-connections")).to_contain_text("None")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(settings.locator("#agent-connections")).to_contain_text(
                 "Propositions uniquement"
             )
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.locator("[data-agent-tab=new]").click()
             expect(settings.locator("#agent-token")).to_have_value("")
             settings.locator("#agent-name").fill("Upload helper")
@@ -386,7 +439,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(
                 settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
             ).to_have_text("Export diagnostics…")
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(
                 settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
             ).to_have_text("Exporter le diagnostic…")
@@ -396,7 +449,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             support = json.loads(Path(diagnostic_download.value.path()).read_text())
             assert support["schema_version"] == 1
             assert token not in json.dumps(support)
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Agent access", exact=True).click()
             expect(settings.locator("#agent-token")).to_have_value("")
             settings.locator("[data-agent-tab=connections]").click()
@@ -417,7 +470,9 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 )
                 page.set_viewport_size({"width": 1440, "height": 1000})
                 for language in ("en", "fr"):
-                    page.locator("#language").select_option(language)
+                    page.frame_locator("#shell-navigation-frame").locator(
+                        "#language"
+                    ).select_option(language)
                     expect(settings.locator("#agent-connections")).to_contain_text(
                         "Revoked" if language == "en" else "Révoquée"
                     )
@@ -425,8 +480,12 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     page.screenshot(
                         path=str(Path(screenshot) / f"agent-access-{language}.png"), full_page=True
                     )
-                page.locator("#language").select_option("en")
-                page.locator("#theme").select_option("light")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "en"
+                )
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "light"
+                )
                 page.screenshot(
                     path=str(Path(screenshot) / "agent-settings-light.png"), full_page=True
                 )
@@ -570,7 +629,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.locator("#navigation-toggle").click()
-            page.locator('[data-view="upload"]').click()
+            shell_navigate(page, "upload")
             upload = page.frame_locator("#upload-frame")
             upload.locator("[data-tab=drafts]").click()
             expect(upload.locator(".item")).to_contain_text("Cable.Holder.NOTAG.STL")
@@ -583,13 +642,13 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             expect(upload.locator(".editor")).to_contain_text(
                 "c411 forbids files from independent creators who live off them"
             )
-            page.locator("#language").select_option("fr")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(upload.locator(".editor")).to_contain_text(
                 "c411 interdit les fichiers de créateurs indépendants"
             )
             expect(upload.locator(".editor")).to_contain_text("Remplissez la section")
             expect(upload.locator(".editor")).not_to_contain_text("paid-creators:")
-            page.locator("#language").select_option("en")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             # Edit through the same preparation dialog used by desktop.
             upload.locator("[data-step='2']").click()
             upload.locator("[data-action=advanced]").click()
@@ -617,7 +676,9 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             page.set_viewport_size({"width": 600, "height": 800})
             assert upload.locator("body").evaluate("el => el.scrollWidth <= innerWidth")
             for language in ("fr", "en"):
-                page.locator("#language").select_option(language)
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    language
+                )
                 expect(upload.locator(".editor pre").first).to_contain_text(
                     "Reviewed cable holder description"
                 )

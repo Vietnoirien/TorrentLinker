@@ -694,7 +694,7 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
     request.addfinalizer(cleanup)
     window.media_tab.get_service = lambda: app.state.assistant
     window.show()
-    window.navigation.setCurrentRow(window.tabs.indexOf(window.media_tab))
+    window.tabs.setCurrentWidget(window.media_tab)
     tab = window.media_tab
     qtbot.waitUntil(lambda: tab.browser is not None and tab.player is not None)
     tab.command("shuffle", shuffle=True)

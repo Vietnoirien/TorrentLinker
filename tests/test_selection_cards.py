@@ -6,6 +6,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton
 
 from tests import test_catalogue_selection
+from tests.shell_support import shell_navigate
 from tests.test_tool_activity import narrative_run
 from torrentlinker.gui.chat_transcript import ChatTranscript, MessageText
 
@@ -346,7 +347,7 @@ def test_browser_cards_open_modal_and_keep_exact_pagination(tmp_path, root_path,
             page.locator("#login-form button").click()
             expect(page.locator("#workspace")).to_be_visible()
             page.route("**/api/assistant/jobs*", lambda route: route.fulfill(json=[run]))
-            page.locator("[data-view=assistant]").click()
+            shell_navigate(page, "assistant")
             panel = page.frame_locator("#assistant-frame")
             panel.get_by_role("tab", name="History", exact=True).click()
             expect(panel.locator(".selection-presentation")).to_have_count(1)

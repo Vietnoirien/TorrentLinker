@@ -370,9 +370,7 @@ class ReseedBoard(BundledView):
             done({**result, "client_id": profile.id})
             QTimer.singleShot(
                 0,
-                lambda: self.owner.client_selector.setCurrentIndex(
-                    self.owner.client_selector.findData(profile.id)
-                ),
+                lambda: self.owner.shell_host.command("client", {"client_id": profile.id}),
             )
 
         def failure(error):

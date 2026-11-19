@@ -43,7 +43,8 @@ def test_small_window_keeps_every_workspace_action_reachable(
             if index in {2, 3}:
                 assert control.isVisible()
                 assert window.workspace_scroll.verticalScrollBar().maximum() == 0
-            assert window.navigation.visibleRegion().boundingRect() == window.navigation.rect()
+            assert window.navigation.isVisible()
+            assert window.centralWidget().rect().contains(window.navigation.geometry())
         window.tabs.setCurrentIndex(0)
         assert window.workspace_scroll.horizontalScrollBar().value() == 0
         assert window.workspace_scroll.verticalScrollBar().value() == 0

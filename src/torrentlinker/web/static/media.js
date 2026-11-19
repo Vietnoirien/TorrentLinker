@@ -435,8 +435,8 @@ document.addEventListener("keydown", event => {
   }
 });
 mediaSetLayout(media.layout);
-$("logout").addEventListener("click", () => { mediaInvalidatePlayback(); mediaPlayer().pause(); });
-$("target-client").addEventListener("change", mediaInvalidatePlayback);
+document.addEventListener("tl-logout", () => { mediaInvalidatePlayback(); mediaPlayer().pause(); });
+document.addEventListener("tl-client-changed", mediaInvalidatePlayback);
 for (const event of ["play", "pause", "ended", "emptied"]) $("media-audio").addEventListener(event, mediaMusicBar);
 mediaCenterAppearance(document.body.classList.contains("media-center-mode")); mediaChatButtons();
 $("media-chat-resize").addEventListener("pointerdown", mediaStartChatResize); $("media-chat-resize").addEventListener("keydown", mediaChatResizeKey);

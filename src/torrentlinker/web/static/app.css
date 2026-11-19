@@ -209,31 +209,10 @@ a {
   flex-direction: column;
   overflow: auto;
 }
-.sidebar nav {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.sidebar nav button,
-.sidebar-bottom > button {
-  text-align: left;
-  border-color: transparent;
-  background: transparent;
-  padding: 12px;
-}
-.sidebar button.active,
 .steps button.active {
   background: var(--tint);
   color: var(--accent);
   border-color: var(--accent);
-}
-.sidebar-bottom {
-  margin-top: auto;
-  padding-top: 25px;
-}
-.sidebar-bottom label {
-  font-size: 12px;
-  color: var(--muted);
 }
 main {
   margin-left: 190px;
@@ -487,27 +466,6 @@ dialog .description img {
   .brand {
     padding: 0 0 12px;
   }
-  .sidebar nav {
-    flex-direction: row;
-    overflow: auto;
-  }
-  .sidebar nav button {
-    white-space: nowrap;
-  }
-  .sidebar-bottom {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0 0;
-    margin: 0;
-  }
-  .sidebar-bottom label {
-    margin: 0;
-    max-width: 100px;
-  }
-  .sidebar-bottom > button {
-    font-size: 12px;
-  }
   main {
     margin: 0;
     padding: 20px;
@@ -679,8 +637,7 @@ dialog .description img {
 .review-panel { min-height: 160px; }
 .review-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 1050px) {
-  .chat-view:not(.navigation-collapsed) .sidebar { position: fixed; width: 240px; z-index: 5; box-shadow: var(--shadow); }
-  .chat-view main { margin-left: 0; padding: 12px; }
+  .chat-view main { padding: 12px; }
   .chat-view header { gap: 8px; margin-bottom: 8px; }
   .chat-view header h1 { font-size: 22px; margin-bottom: 0; }
   .chat-view .eyebrow { display: none; }
@@ -703,13 +660,6 @@ dialog .description img {
 .selection-description { line-height: 1.6; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
 .selection-description p { max-width: none; }
 
-#navigation-close { display: none; }
-@media (max-width: 1050px) {
-  .chat-view #navigation-close { display: block; margin-bottom: 12px; }
-  .chat-view .sidebar nav { flex-direction: column; overflow: visible; }
-  .chat-view .sidebar-bottom { display: block; margin-top: auto; }
-  .chat-view .sidebar-bottom label { max-width: none; margin: 12px 0; }
-}
 
 .upload-review-header { grid-template-columns: 110px 1fr; gap: 16px; }
 .upload-review-header .selection-artwork.large { height: 160px; }
@@ -959,3 +909,27 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 .queue-context-menu button { display: block; width: 100%; text-align: left; margin: 2px 0; }
 
 #upload-frame[hidden]{display:none!important}
+/* The bundled shell renders navigation, headings, update notices and the Zen band. */
+#app-sidebar { padding:0; overflow:hidden; }
+#shell-navigation-frame { width:100%; height:100%; border:0; display:block; }
+#shell-header-frame { flex:1; width:100%; min-width:0; border:0; display:block; height:110px; }
+#shell-band-frame,#shell-update-frame { width:100%; border:0; display:block; height:44px; }
+#shell-band-host { position:sticky; bottom:0; background:var(--bg); z-index:2; }
+#shell-update-host { margin-bottom:16px; }
+#shell-help-dialog { width:min(500px,calc(100vw - 24px)); padding:0; }
+#shell-help-frame { width:100%; height:320px; border:0; display:block; }
+@media(max-width:650px) {
+  #workspace #app-sidebar { position:relative; inset:auto; width:100%; display:block; height:auto; }
+  #workspace main { margin-left:0; }
+  #shell-navigation-frame { height:160px; }
+  #navigation-toggle { display:inline-block; }
+  #workspace main > header { display:flex; flex-wrap:wrap; padding:12px 0; }
+  #shell-header-frame { flex:1 0 100%; order:2; }
+  #work-status { margin-left:auto; }
+}
+@media(max-width:650px) { .navigation-collapsed #workspace #app-sidebar { display:none; } }
+@media(min-width:651px) {
+  #app-sidebar { position:fixed; width:190px; border-right:1px solid var(--line); }
+  #workspace main { margin-left:190px; }
+  .navigation-collapsed #workspace main { margin-left:0; }
+}

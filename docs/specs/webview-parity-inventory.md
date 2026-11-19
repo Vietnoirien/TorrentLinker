@@ -20,7 +20,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | 3 | Plan | Native `PlanView` (`zen_view.py:496`) + plan dialogs in `main_window.py` | `plan.js`, `index.html:588-647` | NU | none | Native folder pickers, speed test, send progress |
 | 4 | Catalogue | **BV** `CatalogueBox` (`gui/catalogue_view.py`) | `catalogue.js` iframe, same `static/catalogue/` view | **Implemented #90** | Approved `interface-backlog/` prototype | Shared coverage, per-category/all fetch, pause/resume and progress |
 | 5 | Community / Communauté | **BV** `CommunityView` | `community.js` iframe | **Done** | `community-redesign/` (WebView) | reference implementation |
-| 6 | Zen band (footer) | Native `ZenBand` (`zen_view.py:1144`) in status bar | Zen page header cards only | NU | none | lives in native status bar |
+| 6 | Zen band (footer) | **BV** shell band in status bar | Same bundled shell band | **Done** (#115) | `shell-shared-implementation.md` | Host status messages remain separate |
 
 ### Library / Bibliothèque
 
@@ -101,8 +101,8 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | 46 | Settings › Companion | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | local receiver port 8767 |
 | 47 | Settings › Agent access | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
 | 48 | Clients… dialog | **BV** `SettingsView` | Same bundled Settings view | **Done** (#112/#113) | `settings-shared-implementation.md` | — |
-| 49 | Update notice | Native `UpdateNotice` | none | DO | none | — |
-| 50 | Shell: sidebar, header, client selector, status bar | `main_window.py:441-535`, `WorkspaceTabs` | `index.html:52-92` | NU | none | native status bar, menus |
+| 49 | Update notice | **BV** shell update region | Same bundled update region | **Done** (#115) | `shell-shared-implementation.md` | Web notice refers to server installation |
+| 50 | Shell: sidebar, header, client selector, status bar | **BV** `ShellView` | Same bundled shell view | **Done** (#115) | `shell-shared-implementation.md` | Browser-reserved shortcuts; Web authentication/Activity |
 | 51 | Login | none | `/api/login` | WO | `web-070.md`, ADR-0016 | — |
 | 52 | Activity (jobs) | none (status bar) | `/api/jobs*` | WO | `web-070.md` | — |
 | 53 | Companion pairing page | served by desktop to the user's browser | `companion-connect.*` | WO | none | not an app panel |
@@ -131,10 +131,9 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 - **Preferences** stored in QSettings on desktop vs `localStorage` on Web (Search state, Assistant sidebar width), so nothing carries between hosts.
 
 ### Shell
-- Differs (Gap): desktop footer Zen band (balance, Zen/day, Plan, Catalogue) on every Zen page; Web shows a reduced header only.
-- Desktop-only (Gap): per-page description lines; Ctrl+1..8, Ctrl+, and Ctrl+F; update banner.
-- Differs (Gap): "All clients" is a Web header option vs a checkbox inside desktop Torrents.
-- Web-only (Limit): login/sign-out, Activity page, theme and language selects in the sidebar.
+- Resolved by #115: shared sidebar/compact navigation, headings and descriptions, target-client selector, Zen band, update notice, theme/language and shortcut help.
+- All clients is available only in Torrents; leaving it restores a specific client before scoped operations. The duplicate Torrents selector is removed.
+- Platform limits: browser-reserved shortcuts; Web login/sign-out and Activity; native status messages. Update notices distinguish the running desktop from the server installation. See `shell-shared-implementation.md`.
 
 ### Zen
 - Profile — Resolved by #91: both hosts load `static/profile/view.html` and its SVG charts. The measured-Zen label uses the selected period; “all history” applies only to All. The old implementations already used this same rule. Desktop persists the period in QSettings; Web uses localStorage. No deliberate platform limit.

@@ -290,11 +290,11 @@ def test_zen_band_shows_the_balance_and_explains_a_key_without_profile_scope(qtb
     band.show_profile(
         UserProfile("v", "tanker", ZenClass.TANKER, 0.02, 12.5, False, "insufficient_balance")
     )
-    assert "12.5" in band.balance.text()
-    assert "not enough Zen" in band.message.text()
+    assert "12.5" in band.values["balance"]
+    assert "not enough Zen" in band.profile_notice
 
     band.show_profile_error(ProfileError(ProfileProblem.MISSING_SCOPE))
-    assert "Profil (lecture)" in band.message.text()
+    assert "Profil (lecture)" in band.profile_notice
 
 
 def test_profile_read_at_startup_fills_the_zen_profile(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
@@ -383,7 +383,7 @@ def test_band_shows_the_catalogue_age(qtbot, tmp_path: Path) -> None:  # type: i
     window = MainWindow(Settings(), tmp_path / "settings.json", store)
     qtbot.addWidget(window)
 
-    assert "1 torrents, 2 h old" in window.band.catalogue.text()
+    assert "1 torrents, 2 h old" in window.band.values["catalogue"]
 
 
 def test_catalogue_update_runs_off_the_gui_thread_and_reports_progress(
@@ -472,7 +472,7 @@ def test_plan_view_shows_zen_added_size_and_payback_and_the_band_follows(
 
     result = window.zen_tab.plan_view.state()["result"]
     assert result["zen"] == 0.4 and result["size"] == 8 * GB and result["payback_days"] == 20
-    assert "+0.40" in window.band.plan.text()
+    assert "+0.40" in window.band.values["plan"]
     assert len(window.zen_tab.plan_view.state()["result"]["rows"]) == 1
 
 
@@ -709,7 +709,7 @@ def test_sending_shows_progress_and_the_c411_limit_and_can_be_stopped(
     assert view.state()["progress"]["done"] == 0 and view.state()["progress"]["total"] == 3
     assert view.state()["result"]["zen"] == pytest.approx(0.3)  # the Plan's Zen stays in view
     assert view.state()["progress"]["zen_added"] == 0
-    band = window.band.plan.text()
+    band = window.band.values["plan"]
     assert "+0.30" in band and "0/3" in band and "waiting" in band
 
     view.request("stop-send", {})
