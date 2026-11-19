@@ -43,7 +43,8 @@ def test_report_excludes_private_fields_and_preserves_running_state(tmp_path, mo
             )
         with jobs.db:
             jobs.db.executemany(
-                "INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO jobs (id,kind,status,created,progress,result,error,client_id) "
+                "VALUES (?,?,?,?,?,?,?,?)",
                 [
                     (
                         str(i),

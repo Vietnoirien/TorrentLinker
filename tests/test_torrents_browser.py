@@ -205,7 +205,7 @@ window.dispatchEvent(new MessageEvent('message', {
             panel.locator("body").evaluate("""() => {
               const original = showAudit;
               window.showAudit = async (...args) => {
-                await original(...args); window.auditRequestFinished = true;
+                await original(...args); document.body.dataset.auditRequestFinished = "true";
               };
             }""")
             panel.locator("#audit-refresh").click()
@@ -216,9 +216,7 @@ window.dispatchEvent(new MessageEvent('message', {
             assert len(pending_reports) == 1
             page.keyboard.press("Escape")
             pending_reports[0][0].fulfill(response=pending_reports[0][1])
-            page.wait_for_function(
-                "document.querySelector('#torrents-frame').contentWindow.auditRequestFinished"
-            )
+            expect(panel.locator("body")).to_have_attribute("data-audit-request-finished", "true")
             expect(panel.locator("#dialog")).not_to_be_visible()
             page.unroute("**/api/torrents/workspace", delay_audit_report)
             expect(page.locator("#toast")).not_to_contain_text("is not defined")
