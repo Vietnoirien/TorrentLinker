@@ -229,12 +229,19 @@ function inspect() {
       body.innerHTML = `<table class="files">${result.files.map((f) => `<tr><td>${escape(f.name)}<br><small>${formatBytes(f.size)}</small></td><td><select data-file="${f.index}" aria-label="${escape(f.name)}"><option value="want_files" ${f.wanted ? "selected" : ""}>${t("Télécharger", "Download")}</option><option value="skip_files" ${!f.wanted ? "selected" : ""}>${t("Ignorer", "Skip")}</option></select></td></tr>`).join("")}</table>`;
       body.querySelectorAll("[data-file]").forEach(
         (e) =>
-          (e.onchange = () =>
+          (e.onchange = () => {
+            const action = e.value;
+            const file = result.files.find(
+              (f) => f.index === Number(e.dataset.file),
+            );
+            // Keep the observed state until the reviewed command succeeds.
+            e.value = file.wanted ? "want_files" : "skip_files";
             guard(() =>
-              confirmAction(e.value, [r], {
-                file_indexes: [Number(e.dataset.file)],
+              confirmAction(action, [r], {
+                file_indexes: [file.index],
               }),
-            )),
+            );
+          }),
       );
     });
   }
@@ -454,7 +461,7 @@ async function confirmAction(
       ...extra,
     };
   const review = await request("review", payload);
-  d.innerHTML = `<h2>${actionLabel(action)}</h2><p>${review.rows.length} torrents</p><div style="max-height:200px;overflow:auto">${review.rows.map((r) => `<p>${escape(r.name)} · ${escape(r.client_name)}<br><small>${escape(r.folder)}</small></p>`).join("")}</div><p>${action === "delete" ? t("Les fichiers seront définitivement supprimés. D’autres torrents peuvent les utiliser.", "Files will be permanently deleted. Other torrents may use them.") : action === "remove" ? t("Les fichiers seront conservés.", "Files will be kept.") : t("Appliquer aux torrents affichés ci-dessus ?", "Apply to the torrents listed above?")}</p>${action === "remove" ? `<label><input type="checkbox" id="delete-files">${t("Supprimer aussi les fichiers", "Also delete files")}</label>` : ""}${reviewParameters(extra)}<p><button id="cancel">${t("Annuler", "Cancel")}</button> <button id="confirm" class="primary">${t("Confirmer", "Confirm")}</button></p>`;
+  d.innerHTML = `<h2>${actionLabel(action)}</h2><p>${review.rows.length} torrents</p><div style="max-height:200px;overflow:auto">${review.rows.map((r) => `<p>${escape(r.name)} · ${escape(r.client_name)}<br><small>${escape(r.folder)}</small>${r.files ? `<ul>${r.files.map((f) => `<li>${escape(f.name)} · ${formatBytes(f.size)}</li>`).join("")}</ul>` : ""}</p>`).join("")}</div><p>${action === "delete" ? t("Les fichiers seront définitivement supprimés. D’autres torrents peuvent les utiliser.", "Files will be permanently deleted. Other torrents may use them.") : action === "remove" ? t("Les fichiers seront conservés.", "Files will be kept.") : t("Appliquer aux torrents affichés ci-dessus ?", "Apply to the torrents listed above?")}</p>${action === "remove" ? `<label><input type="checkbox" id="delete-files">${t("Supprimer aussi les fichiers", "Also delete files")}</label>` : ""}${reviewParameters(extra)}<p><button id="cancel">${t("Annuler", "Cancel")}</button> <button id="confirm" class="primary">${t("Confirmer", "Confirm")}</button></p>`;
   d.showModal();
   $("cancel").onclick = () => d.close();
   $("confirm").onclick = () =>

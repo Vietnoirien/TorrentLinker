@@ -38,6 +38,12 @@ def test_desktop_torrent_sort_filter_and_preferences(
 
     operations = DesktopOperations(operations.setup)
     service = workspace(operations)
+    from dataclasses import replace
+
+    fake = operations.setup.client()
+    fake.by_hash["c" * 40] = replace(
+        fake.by_hash["c" * 40], files={"main.bin": 1000, "notes.nfo": 20}
+    )
     operations.setup.settings.language = "en"
     tab = TorrentsTab(SimpleNamespace(settings=operations.setup.settings), lambda: service)
     qtbot.addWidget(tab)
@@ -65,6 +71,29 @@ def test_desktop_torrent_sort_filter_and_preferences(
         "document.querySelectorAll('tbody tr').length===1 && "
         "document.querySelector('#inspector').textContent.includes('Small')",
     )
+    js(qtbot, tab, "document.querySelector('[data-tab=files]').click()")
+    wait_js(qtbot, tab, "document.querySelector('[data-file=\"1\"]') !== null")
+    js(
+        qtbot,
+        tab,
+        "const choice=document.querySelector('[data-file=\"1\"]');"
+        "choice.value='skip_files';choice.dispatchEvent(new Event('change'))",
+    )
+    wait_js(qtbot, tab, "document.querySelector('dialog').open")
+    assert js(qtbot, tab, "document.querySelector('dialog li').textContent").startswith("notes.nfo")
+    js(qtbot, tab, "document.querySelector('#cancel').click()")
+    assert js(qtbot, tab, "document.querySelector('[data-file=\"1\"]').value") == "want_files"
+    js(
+        qtbot,
+        tab,
+        "document.querySelector('[data-file=\"1\"]').value='skip_files';"
+        "document.querySelector('[data-file=\"1\"]').dispatchEvent(new Event('change'))",
+    )
+    wait_js(qtbot, tab, "document.querySelector('dialog').open")
+    js(qtbot, tab, "document.querySelector('#confirm').click()")
+    wait_js(qtbot, tab, "document.querySelector('[data-file=\"1\"]')?.value==='skip_files'")
+    assert js(qtbot, tab, "document.querySelector('[data-file=\"0\"]').value") == "want_files"
+    js(qtbot, tab, "document.querySelector('[data-tab=summary]').click()")
     tab.focus_torrent("d" * 40)
     wait_js(
         qtbot,

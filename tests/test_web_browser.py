@@ -24,6 +24,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
     class Client:
         def __init__(self):
             self.paused = False
+            self.wanted = True
 
         def check(self):
             return "qBittorrent test"
@@ -52,7 +53,12 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
         def file_listing(self, hash):
             from torrentlinker.domain import TorrentFile
 
-            return [TorrentFile(0, "Example book.epub", 1048576, True)]
+            return [TorrentFile(0, "Example book.epub", 1048576, self.wanted)]
+
+        def set_file_priority(self, hash, indexes, priority):
+            assert hash == "a" * 40
+            assert indexes == [0]
+            self.wanted = priority > 0
 
         def pause(self, hash):
             self.paused = True
@@ -113,7 +119,19 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             torrents.locator("tbody input").check()
             torrents.locator("[data-tab=files]").click()
             expect(torrents.locator(".files")).to_contain_text("Example book.epub")
+            file_choice = torrents.locator("[data-file]")
+            file_choice.select_option("skip_files")
+            expect(torrents.locator("#dialog li")).to_contain_text("Example book.epub")
+            torrents.locator("#cancel").click()
+            expect(file_choice).to_have_value("want_files", timeout=500)
+            file_choice.select_option("skip_files")
+            torrents.locator("#confirm").click()
+            expect(file_choice).to_have_value("skip_files")
+            file_choice.select_option("want_files")
+            torrents.locator("#confirm").click()
+            expect(file_choice).to_have_value("want_files")
             torrents.locator("[data-tab=summary]").click()
+            torrents.locator("tbody input").check()
             torrents.locator("[data-action=pause]").click()
             torrents.locator("#confirm").click()
             expect(torrents.locator("tbody")).to_contain_text("Paused", timeout=10000)

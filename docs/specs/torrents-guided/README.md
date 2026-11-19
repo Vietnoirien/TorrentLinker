@@ -71,3 +71,14 @@ production DesktopOperations integration in Qt WebEngine. No live torrents or
 files are changed by these tests.
 
 Owner follow-up: minimum and maximum size each have a small MiB/GiB toggle. Switching converts the value and preserves the size threshold, independently for each bound.
+
+Inspector completion #104
+-------------------------
+The retained Summary/Files/Trackers layout is unchanged. A file's Download/Skip
+choice continues to show the observed setting while its command awaits review;
+cancelling leaves that setting intact. Confirmation lists the selected filenames
+and sizes. The service binds the client's original file indexes and listing to the
+review, rejecting changed files until reviewed again. Browser and Wayland checks
+cover cancellation and applied priorities; service tests include non-contiguous
+indexes and changed-file rejection. Live files and torrent clients remain excluded
+from these tests.

@@ -203,3 +203,44 @@ def test_combined_clients_sort_swarm_totals_numerically(operations):
     assert rows[0]["total_seeds"] == 100
     assert rows[0]["total_peers"] == 13
     assert rows[1]["total_seeds"] == 10
+
+
+def test_file_review_names_original_indexes_and_rejects_changed_files(operations):
+
+    import pytest
+
+    from torrentlinker.domain import TorrentFile
+
+    service = workspace(operations)
+
+    class IndexedClient(FakeQbit):
+        names = ["main.bin", "notes.nfo"]
+
+        def file_listing(self, hash):
+            return [
+                TorrentFile(index, name, size, self.priorities.get(hash, {}).get(index, 1) > 0)
+                for index, name, size in zip((7, 42), self.names, (1000, 20), strict=True)
+            ]
+
+    client = IndexedClient(by_hash=dict(operations.setup.client().by_hash))
+    operations.setup._client = client
+    payload = {
+        "action": "skip_files",
+        "items": [{"client_id": "default", "hash": "c" * 40}],
+        "file_indexes": [42],
+    }
+    review = service.request("review", payload)
+    assert review["rows"][0]["files"] == [
+        {"index": 42, "name": "notes.nfo", "size": 20, "wanted": True}
+    ]
+    client.names = ["main.bin", "different.nfo"]
+    with pytest.raises(ValueError, match="Review"):
+        service.request("apply", {**payload, "token": review["token"]})
+    assert not client.priorities
+    review = service.request("review", payload)
+    service.request("apply", {**payload, "token": review["token"]})
+    files = service.request("files", payload["items"][0])["files"]
+    assert files[0]["wanted"] is True
+    assert files[1]["wanted"] is False
+    with pytest.raises(ValueError, match="file indexes"):
+        service.request("review", {**payload, "file_indexes": [99]})

@@ -273,6 +273,12 @@ class TorrentWorkspace:
                     "folder": str(torrent.save_path),
                 }
             )
+            if body.action.endswith("_files"):
+                listing = target.setup.client().file_listing(item.hash)
+                indexes = {f.index for f in listing}
+                if not body.file_indexes or not set(body.file_indexes) <= indexes:
+                    raise ValueError("Choose existing file indexes.")
+                rows[-1]["files"] = [asdict(f) for f in listing if f.index in body.file_indexes]
         identity = (payload, identities, rows)
         if operation == "review":
             now = time.monotonic()
