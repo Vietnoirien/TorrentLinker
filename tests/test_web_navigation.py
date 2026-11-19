@@ -16,11 +16,7 @@ def test_fragment_navigation_and_subtabs():
     routing = app[app.index("async function settingsSection(") : app.index("async function job(")]
     enter = app[app.index("async function enter()") : app.index('$("login-form").onsubmit')]
     library = (static / "library.js").read_text()
-    library = library[
-        library.index("async function libraryTab(") : library.index(
-            "async function browseLibraryFolder("
-        )
-    ]
+    library = library[library.index("async function libraryTab(") :]
     zen = (static / "zen.js").read_text()
     zen = zen[zen.index("function zenTab(") : zen.index("for (const name of")]
     script = r"""
@@ -37,6 +33,7 @@ const state = {view:'torrents', setup:{configured:true, indexer_configured:true}
 const media = {kind:'video', view:'recent'};
 const loaded = []; const reseedUI = {tab:'reseed'};
 function clearAgentToken() {}
+function settingsEnvironment() {}
 function resetLibraryReview() {}
 function step() {}
 async function refreshSetup() {}
@@ -122,7 +119,7 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
       await enter();await settle();
       assert.equal(state.view,view);
       const canonical=view==='library' && ['items','review'].includes(tab)
-        ?['library','reseed']:parts;
+        ?['library','reseed']:view==='setup' && tab==='interface'?['setup','general']:parts;
       assert.equal(location.hash,routeFragment(canonical));
     }
   }

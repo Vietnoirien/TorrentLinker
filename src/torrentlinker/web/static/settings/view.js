@@ -4,9 +4,11 @@ let language = "en",
   environment = {},
   request,
   snapshot,
+  loadingClient,
   section = "connections",
   generation = 0;
 const drafts = new Map();
+const draftBaselines = new Map();
 const say = (en, fr) => (language === "fr" ? fr : en);
 const sections = () => ({
   connections: say("Connections", "Connexions"),
@@ -46,9 +48,20 @@ async function guard(work) {
   }
 }
 function button(text, action, className = "") {
+  const client = environment.client_id;
   const node = element("button", text, className);
   node.type = "button";
-  node.onclick = () => guard(action);
+  node.onclick = () =>
+    guard(() => {
+      if (client !== environment.client_id || snapshot?.client_id !== client)
+        throw Error(
+          say(
+            "Wait for the selected client's settings.",
+            "Attendez les paramètres du client sélectionné.",
+          ),
+        );
+      return action();
+    });
   return node;
 }
 const draftKey = (group) => `${environment.client_id}:${group}`;
@@ -59,6 +72,7 @@ function draft(group) {
     delete value.secrets;
     delete value.managed_secrets;
     drafts.set(key, value);
+    draftBaselines.set(key, JSON.stringify(value));
   }
   return drafts.get(key);
 }
@@ -668,7 +682,7 @@ function storageEditor(form, group) {
   data.local ??= "";
   data.client_path ??= "";
   data.kind ??= "other";
-  data.depth ??= 1;
+  if (data.depth === undefined) data.depth = 1;
   const fields = box(form, say("Folder", "Dossier"));
   field(
     fields,
@@ -967,6 +981,16 @@ function storageSection(form, group) {
   storageEditor(form, group);
 }
 async function saveGroup(group, form) {
+  if (
+    form.dataset.clientId !== environment.client_id ||
+    snapshot?.client_id !== environment.client_id
+  )
+    throw Error(
+      say(
+        "The target client changed. Reopen Settings.",
+        "Le client cible a changé. Rouvrez les paramètres.",
+      ),
+    );
   if (!form.reportValidity()) return;
   const client = environment.client_id;
   $("settings-status").textContent = say("Saving…", "Enregistrement…");
@@ -983,6 +1007,7 @@ async function saveGroup(group, form) {
   render();
 }
 function render() {
+  if (!snapshot || snapshot.client_id !== environment.client_id) return;
   $("settings-title").textContent = say("Settings", "Paramètres");
   const names = sections();
   $("settings-navigation").replaceChildren(
@@ -1004,6 +1029,7 @@ function render() {
     undefined,
     "settings-form",
   );
+  form.dataset.clientId = snapshot.client_id;
   form.onsubmit = (event) => event.preventDefault();
   form.append(element("h2", names[section]));
   if (["connections", "general", "matching", "zen"].includes(section)) {
@@ -1044,6 +1070,7 @@ function render() {
 }
 async function applyEnvironment(value) {
   const changed = environment.client_id !== value.client_id;
+  const activated = !environment.active && value.active;
   if (changed || (environment.active && !value.active)) {
     clearAgentToken();
     document.querySelectorAll("dialog").forEach((dialog) => dialog.close());
@@ -1062,13 +1089,43 @@ async function applyEnvironment(value) {
   document.documentElement.lang = language;
   document.documentElement.dataset.theme = value.theme || "dark";
   if (!request) return;
-  if (changed || !snapshot) {
+  if (!snapshot && loadingClient === environment.client_id) return;
+  if (changed || !snapshot || activated) {
+    for (const group of ["connections", "general", "matching", "zen"]) {
+      const key = draftKey(group);
+      if (
+        drafts.has(key) &&
+        JSON.stringify(drafts.get(key)) === draftBaselines.get(key)
+      ) {
+        drafts.delete(key);
+        draftBaselines.delete(key);
+      }
+    }
+    snapshot = null;
+    $("settings-navigation").inert = true;
+    $("settings-body").replaceChildren(
+      element("p", say("Loading Settings…", "Chargement des paramètres…")),
+    );
     const current = ++generation;
-    const result = await request("snapshot");
+    loadingClient = environment.client_id;
+    let result;
+    try {
+      result = await request("snapshot");
+    } finally {
+      if (current === generation) loadingClient = undefined;
+    }
     if (current !== generation) return;
     snapshot = result;
+    $("settings-navigation").inert = false;
   }
-  if (changed || translated || missing || section !== previousSection) render();
+  if (
+    changed ||
+    translated ||
+    missing ||
+    activated ||
+    section !== previousSection
+  )
+    render();
 }
 window.addEventListener("settings-environment", (event) =>
   guard(() => applyEnvironment(event.detail)),

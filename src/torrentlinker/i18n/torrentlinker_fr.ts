@@ -4606,6 +4606,10 @@ La mettre à la corbeille ?</translation>
         <source>Reading client files: {0}/{1} · up to {2} requests/s</source>
         <translation>Lecture des fichiers du client : {0}/{1} · jusqu’à {2} requêtes/s</translation>
     </message>
+    <message>
+        <source>Wait for the current operation before changing settings.</source>
+        <translation>Attendez la fin de l’opération en cours avant de modifier les paramètres.</translation>
+    </message>
 </context>
 <context>
     <name>MediaHero</name>
@@ -9151,6 +9155,10 @@ Le torrent est ensuite ajouté à votre client torrent avec les fichiers décomp
         <source>Browse…</source>
         <translation>Parcourir…</translation>
     </message>
+    <message>
+        <source>Wait for the current Settings operation to finish.</source>
+        <translation>Attendez la fin de l’opération en cours dans les paramètres.</translation>
+    </message>
 </context>
 <context>
     <name>SizeField</name>
@@ -12061,6 +12069,17 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
     <message>
         <source>Upload preparation tools</source>
         <translation>Outils de préparation de l’upload</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsView</name>
+    <message>
+        <source>Choose folder</source>
+        <translation>Choisir un dossier</translation>
+    </message>
+    <message>
+        <source>Save token</source>
+        <translation>Enregistrer le jeton</translation>
     </message>
 </context>
 </TS>

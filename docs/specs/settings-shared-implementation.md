@@ -46,4 +46,13 @@ providers. No live tracker or user torrent client is used. Shared Settings tests
 first-run setup, saved-secret handling, failed-save drafts, multiple clients, preference
 persistence, folder verification, context/sampling controls, agent tokens and Companion
 handoff. Native rendering has been checked on Wayland in English/dark and French/light.
-Full-suite and browser regression verification is in progress.
+The full offline suite reported 2,142 passes and 217 skips. Its five failures were
+corrected: three viewport-resize waits, native French messages, and the navigation
+fixture's legacy code boundary. The subsequent acceptance batch passed all 29 checks,
+including browser workflows and the affected native tests. The final Wayland rendering
+check passed after these corrections. CI remains the final integration check.
+
+Review corrections have explicit regressions: stale client controls cannot act while a
+new snapshot loads, first-run checks use the submitted proxy, Automatic folder grouping
+stays automatic, and reopening Settings refreshes unchanged sections while retaining
+edited drafts.

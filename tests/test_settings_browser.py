@@ -4,6 +4,7 @@ import os
 import socket
 import threading
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -91,6 +92,41 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 expect(card).to_be_visible()
                 card.get_by_role("button", name="Make default", exact=True).click()
                 expect(card).to_contain_text("Default")
+                if configured:
+                    second = next(
+                        p.id for p in setup.settings.client_profiles if p.name == "Seedbox"
+                    )
+                    panel.get_by_role("button", name="Connections", exact=True).click()
+                    stale_save = panel.get_by_role(
+                        "button", name="Save", exact=True
+                    ).element_handle()
+                    pending = []
+
+                    def delay_client(route):
+                        pending.append((route, route.fetch()))
+
+                    pattern = f"**/api/settings?client_id={second}"
+                    page.route(pattern, delay_client)
+                    page.locator("#target-client").select_option(second)
+                    expect(panel.locator("#settings-body")).to_have_text("Loading Settings…")
+                    for _ in range(100):
+                        if pending:
+                            break
+                        page.wait_for_timeout(20)
+                    assert pending
+                    stale_save.evaluate("button => button.click()")
+                    expect(panel.locator("#settings-error")).to_contain_text(
+                        "Wait for the selected client"
+                    )
+                    assert setup.settings.profile(second).name == "Seedbox"
+                    pending[0][0].fulfill(response=pending[0][1])
+                    expect(panel.get_by_label("Client name", exact=True)).to_have_value("Seedbox")
+                    page.unroute(pattern, delay_client)
+                    page.locator("#target-client").select_option("default")
+                    expect(panel.get_by_label("Client name", exact=True)).to_have_value(
+                        "Studio draft"
+                    )
+                    panel.get_by_role("button", name="Clients", exact=True).click()
                 page.once("dialog", lambda dialog: dialog.accept())
                 card.get_by_role("button", name="Remove client", exact=True).click()
                 expect(panel.locator(".client-card")).to_have_count(1)
@@ -112,6 +148,20 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 page.locator("[data-view=setup]").first.click()
                 panel.get_by_role("button", name="Zen", exact=True).click()
                 expect(panel.get_by_label("Seed hours per day", exact=True)).to_have_value("12")
+                # Changes made elsewhere refresh clean sections; edited drafts survive reopening.
+                page.locator("[data-view=torrents]").click()
+                setup.settings.zen = replace(setup.settings.zen, seed_hours=13)
+                setup.save()
+                page.locator("[data-view=setup]").first.click()
+                panel.get_by_role("button", name="Zen", exact=True).click()
+                expect(panel.get_by_label("Seed hours per day", exact=True)).to_have_value("13")
+                panel.get_by_label("Seed hours per day", exact=True).fill("9")
+                page.locator("[data-view=torrents]").click()
+                setup.settings.zen = replace(setup.settings.zen, seed_hours=18)
+                setup.save()
+                page.locator("[data-view=setup]").first.click()
+                panel.get_by_role("button", name="Zen", exact=True).click()
+                expect(panel.get_by_label("Seed hours per day", exact=True)).to_have_value("9")
                 for section in ("Library Folders", "Download Folders", "Client Paths"):
                     panel.locator("#settings-navigation").get_by_role(
                         "button", name=section, exact=True

@@ -212,3 +212,44 @@ def test_mapping_edit_replaces_both_paths_and_rolls_back_failed_persistence(tmp_
     monkeypatch.setattr(setup, "save", save)
     workspace.storage("mapping", body)
     assert setup.settings.path_mappings == [PathMapping(str(new), "/new")]
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_first_run_validates_through_draft_proxy_and_restores_it_on_failure(
+    tmp_path, monkeypatch, failed
+):
+    from torrentlinker import net
+
+    _, setup, _, _ = prepared(tmp_path)
+    setup.configured = False
+    monkeypatch.setattr(net, "_internet", None)
+    monkeypatch.setattr(net, "_torrent_client", None)
+    proxy = "http://owner:secret@proxy.test:1080"
+
+    def check(value):
+        assert net.current() == (proxy, proxy)
+        if failed:
+            raise ValueError("Cannot connect")
+        return {"version": "fixture"}
+
+    monkeypatch.setattr(setup, "test_client", check)
+    workspace = SettingsWorkspace(setup)
+    body = workspace.snapshot()["connections"]
+    del body["secrets"]
+    del body["managed_secrets"]
+    body["proxy"] = {
+        "address": "http://proxy.test:1080",
+        "username": "owner",
+        "password": "secret",
+        "torrent_client": True,
+    }
+    if failed:
+        with pytest.raises(ValueError, match="Cannot connect"):
+            workspace.save("connections", body)
+        assert net.current() == (None, None)
+        assert not setup.configured
+        assert setup.secrets.get("proxy-password") == ""
+    else:
+        workspace.save("connections", body)
+        assert setup.configured
+        assert net.current() == (proxy, proxy)

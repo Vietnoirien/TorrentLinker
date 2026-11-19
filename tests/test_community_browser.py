@@ -272,8 +272,9 @@ def test_webui_to_real_extension_and_durable_receipt(tmp_path, monkeypatch):
             page.locator("#login-form button").click()
             page.locator("#language").select_option("en")
             page.locator("[data-view=setup]").first.click()
-            page.locator("[data-settings-section=companion]").click()
-            page.locator("#profile-pair").click()
+            settings = page.frame_locator("#settings-frame")
+            settings.get_by_role("button", name="Companion", exact=True).click()
+            settings.get_by_role("button", name="Connect companion", exact=True).click()
             for _ in range(100):
                 if w.state()["paired"]:
                     break

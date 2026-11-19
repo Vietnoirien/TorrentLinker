@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from pydantic import ValidationError
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import QCoreApplication, Signal, Slot
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QVBoxLayout
 from shiboken6 import isValid
 
@@ -80,14 +80,21 @@ class SettingsBridge(ViewBridge):
             if action == "choose-folder":
                 from torrentlinker.gui.settings_common import choose_directory
 
-                path = choose_directory(view, view.tr("Choose folder"), body.get("path", ""))
+                path = choose_directory(
+                    view,
+                    QCoreApplication.translate("SettingsView", "Choose folder"),
+                    body.get("path", ""),
+                )
                 done(path)
                 return
             if action == "save-token":
                 from PySide6.QtWidgets import QFileDialog
 
                 path, _ = QFileDialog.getSaveFileName(
-                    view, view.tr("Save token"), "torrentlinker-token.txt", "Text (*.txt)"
+                    view,
+                    QCoreApplication.translate("SettingsView", "Save token"),
+                    "torrentlinker-token.txt",
+                    "Text (*.txt)",
                 )
                 if path and body.get("token"):
                     from torrentlinker.web.security import atomic_private
@@ -227,7 +234,7 @@ class SettingsDialog(QDialog):
 
         super().__init__(owner)
         dialog = self
-        dialog.setWindowTitle(owner.tr("Settings"))
+        dialog.setWindowTitle(self.tr("Settings"))
         available = dialog.screen().availableGeometry()
         dialog.resize(min(1200, available.width() - 40), min(850, available.height() - 60))
         setup = DesktopSetup(owner.settings, owner.settings_path, owner.store)

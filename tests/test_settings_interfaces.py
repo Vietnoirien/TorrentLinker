@@ -112,7 +112,7 @@ def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path)
     close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
     assert available.contains(close.mapToGlobal(close.rect().bottomRight()))
     assert dialog.height() <= available.height() - 60
-    assert js(
+    wait_js(
         qtbot,
         view,
         "document.querySelector('.settings-form > .settings-actions')"
@@ -135,3 +135,32 @@ def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path)
     if output:
         qtbot.wait(250)
         dialog.grab().save(str(Path(output) / "settings-desktop-fr-light.png"))
+
+
+def test_automatic_library_grouping_survives_editing_another_field(qtbot, tmp_path):
+    from tests.settings_support import edit_field, settings_dialog
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+
+    folder = tmp_path / "library"
+    folder.mkdir()
+    settings = Settings(language="en", library_folders=[LibraryFolder(folder, None)])
+    dialog = settings_dialog(qtbot, tmp_path, settings, section="library")
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Edit').click()",
+    )
+    assert (
+        js(qtbot, dialog.view, "document.querySelector('[aria-label=\"Grouping depth\"]').value")
+        == "auto"
+    )
+    edit_field(qtbot, dialog.view, "Content kind", "ebook")
+    js(
+        qtbot,
+        dialog.view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Save folder').click()",
+    )
+    qtbot.waitUntil(lambda: dialog.setup.path.exists())
+    qtbot.waitUntil(lambda: dialog.view.pending == 0)
+    assert Settings.load(dialog.setup.path).library_folders[0].depth is None

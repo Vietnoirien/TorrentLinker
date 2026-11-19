@@ -51,7 +51,7 @@ def test_settings_save_fits_available_screen(qtbot, tmp_path):
     assert available.contains(dialog.frameGeometry())
     close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
     assert available.contains(close.mapToGlobal(close.rect().bottomRight()))
-    assert js(
+    wait_js(
         qtbot,
         dialog.view,
         "document.querySelector('.settings-form > .settings-actions').g"
@@ -75,7 +75,7 @@ def test_settings_uses_short_work_area_above_taskbar(qtbot, tmp_path, monkeypatc
     assert dialog.height() <= area.height() - 60
     close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
     assert dialog.rect().contains(close.mapTo(dialog, close.rect().bottomRight()))
-    assert js(
+    wait_js(
         qtbot,
         dialog.view,
         "document.querySelector('.settings-form > .settings-actions').g"

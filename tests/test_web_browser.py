@@ -289,7 +289,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(announce).to_have_attribute("placeholder", "Saved; leave blank to keep")
             page.locator("#language").select_option("fr")
             expect(settings.get_by_label("Mot de passe", exact=True)).to_have_attribute(
-                "placeholder", "Enregistrée ; laisser vide pour conserver"
+                "placeholder", "Enregistré ; laisser vide pour conserver"
             )
             page.locator("#language").select_option("en")
             settings.get_by_role("button", name="Clients", exact=True).click()
@@ -367,7 +367,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(settings.locator("#agent-connections")).to_contain_text("My assistant")
             expect(settings.locator("#agent-connections")).to_contain_text("Proposals only")
             expect(settings.locator("#agent-connections")).to_contain_text("Seedbox renamed")
-            expect(settings.locator("#agent-connections")).to_contain_text("10.0 GiB")
+            expect(settings.locator("#agent-connections")).to_contain_text("10 GiB")
             expect(settings.locator("#agent-connections")).to_contain_text("None")
             page.locator("#language").select_option("fr")
             expect(settings.locator("#agent-connections")).to_contain_text(
@@ -384,20 +384,14 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             settings.get_by_role("button", name="General", exact=True).click()
             expect(settings.get_by_label("Media interface", exact=True)).to_be_visible()
             expect(
-                settings.get_by_role(
-                    "button", name=re.compile("Export.*report|Exporter.*diagnostic")
-                )
-            ).to_have_text("Export support report…")
+                settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
+            ).to_have_text("Export diagnostics…")
             page.locator("#language").select_option("fr")
             expect(
-                settings.get_by_role(
-                    "button", name=re.compile("Export.*report|Exporter.*diagnostic")
-                )
-            ).to_have_text("Exporter le rapport de diagnostic…")
+                settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
+            ).to_have_text("Exporter le diagnostic…")
             with page.expect_download() as diagnostic_download:
-                settings.get_by_role(
-                    "button", name=re.compile("Export.*report|Exporter.*diagnostic")
-                ).click()
+                settings.get_by_role("button", name=re.compile("Export.*diagnostic")).click()
             assert diagnostic_download.value.suggested_filename == "torrentlinker-diagnostics.json"
             support = json.loads(Path(diagnostic_download.value.path()).read_text())
             assert support["schema_version"] == 1

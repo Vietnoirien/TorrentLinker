@@ -173,8 +173,9 @@ def test_profile_first_pair_snapshot_disconnect_browser(tmp_path, monkeypatch):
                 page.evaluate("window.scrollTo(0, 0)")
                 page.screenshot(path=str(target / "web-profile.png"), full_page=True)
             page.locator("[data-view=setup]").first.click()
-            page.locator("[data-settings-section=companion]").click()
-            page.locator("#profile-disconnect").click()
+            settings = page.frame_locator("#settings-frame")
+            settings.get_by_role("button", name="Companion", exact=True).click()
+            settings.get_by_role("button", name="Disconnect & clear", exact=True).click()
             page.locator("[data-view=zen]").first.click()
             expect(
                 page.frame_locator("#profile-frame").locator("#profile-seeding")

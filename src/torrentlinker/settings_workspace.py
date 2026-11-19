@@ -425,7 +425,20 @@ class SettingsWorkspace:
                     }
                 )
             if not root.configured:
-                setup.test_client(value.client)
+                from torrentlinker import net
+
+                previous_proxy, previous_client_proxy = net.current()
+                password = value.proxy.password
+                if password is None:
+                    password = setup.secrets.get("proxy-password")
+                net.configure(
+                    net.proxy_url(value.proxy.address, value.proxy.username, password),
+                    value.proxy.torrent_client,
+                )
+                try:
+                    setup.test_client(value.client)
+                finally:
+                    net.configure(previous_proxy, previous_client_proxy is not None)
             credentials = {key: item for key, item in values.items() if item is not None}
             previous_credentials = {key: setup.secrets.get(key) for key in credentials}
             draft.capture_client()
