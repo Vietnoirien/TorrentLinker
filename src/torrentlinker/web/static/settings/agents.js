@@ -1,6 +1,5 @@
 "use strict";
-let agentRenderSnapshot = "",
-  agentTokenGeneration = 0;
+let agentRenderSnapshot = "";
 const agentApi = (path, body, method) =>
   request("agents", {
     path,
@@ -20,11 +19,6 @@ async function approveAgentProposal(id) {
 }
 const bytes = (value) =>
   `${(Number(value || 0) / 1024 ** 3).toLocaleString(language)} GiB`;
-function clearAgentToken() {
-  agentTokenGeneration++;
-  if ($("agent-token")) $("agent-token").value = "";
-  if ($("agent-token-box")) $("agent-token-box").hidden = true;
-}
 function agentTab(name) {
   document
     .querySelectorAll("[data-agent-panel]")

@@ -6,10 +6,16 @@ let language = "en",
   snapshot,
   loadingClient,
   section = "connections",
-  generation = 0;
+  generation = 0,
+  agentTokenGeneration = 0;
 const drafts = new Map();
 const draftBaselines = new Map();
 const say = (en, fr) => (language === "fr" ? fr : en);
+function clearAgentToken() {
+  agentTokenGeneration++;
+  if ($("agent-token")) $("agent-token").value = "";
+  if ($("agent-token-box")) $("agent-token-box").hidden = true;
+}
 const sections = () => ({
   connections: say("Connections", "Connexions"),
   clients: "Clients",

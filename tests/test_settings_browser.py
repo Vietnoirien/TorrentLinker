@@ -200,3 +200,30 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
         finally:
             server.should_exit = True
             worker.join(10)
+
+
+def test_clear_secrets_before_agent_settings_script_loads():
+    """Host navigation can arrive between the deferred Settings scripts."""
+    from pathlib import Path
+
+    from playwright.sync_api import expect, sync_playwright
+
+    static = Path(__file__).parents[1] / "src/torrentlinker/web/static/settings"
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page()
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.set_content(
+            '<div id="agent-token-box"><input id="agent-token" value="temporary"></div>'
+        )
+        page.add_script_tag(path=str(static / "view.js"))
+        page.evaluate("""window.dispatchEvent(new MessageEvent('message', {
+            source: window, origin: location.origin, data: {type: 'settings-clear-secrets'}
+        }))""")
+        assert not errors, errors
+        expect(page.locator("#agent-token")).to_have_value("")
+        expect(page.locator("#agent-token-box")).to_be_hidden()
+        page.add_script_tag(path=str(static / "agents.js"))
+        assert page.evaluate("agentTokenGeneration") == 1
+        browser.close()
