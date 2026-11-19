@@ -76,7 +76,23 @@ def test_sort_filters_columns_and_refresh_preserve_selection(tmp_path):
                 )
 
             page.route("**/torrents/view.js", early_environment)
+
+            def early_search_environment(route):
+                response = route.fetch()
+                route.fulfill(
+                    response=response,
+                    body=response.text()
+                    + """
+window.dispatchEvent(new MessageEvent('message', {
+  source: parent, origin: location.origin,
+  data: {type:'search-environment', value:{client:'default', language:'en', active:false}}
+}));
+""",
+                )
+
+            page.route("**/search/queue.js", early_search_environment)
             page.goto(f"http://127.0.0.1:{port}")
+            assert not errors, errors
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator("#workspace")).to_be_visible()
