@@ -47,20 +47,17 @@ def test_profile_reads_no_torrent_client_before_setup(qtbot, tmp_path, monkeypat
 
 
 def test_media_layout_shortcut_is_restored_when_the_app_reopens(qtbot, tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QComboBox
-
     window, calls, _ = setup_window(qtbot, tmp_path, monkeypatch)
-    selector = window.media_tab.findChild(QComboBox, "media-layout")
-    assert selector.currentData() == "cinematic"
-    selector.setCurrentIndex(selector.findData("focus"))
+    assert window.media_tab.media_layout == "cinematic"
+    # The shared view's layout choice reaches the host as a layout action.
+    window.media_tab._browser_action("layout", {"layout": "focus"})
     saved = Settings.load(window.settings_path)
     assert saved.media_layout == "focus"
 
     reopened = main_window.MainWindow(saved, window.settings_path, window.store)
     qtbot.addWidget(reopened)
-    restored = reopened.media_tab.findChild(QComboBox, "media-layout")
-    assert restored.currentData() == "focus"
-    restored.setCurrentIndex(restored.findData("collection"))
+    assert reopened.media_tab.media_layout == "focus"
+    reopened.media_tab._browser_action("layout", {"layout": "collection"})
     assert Settings.load(window.settings_path).media_layout == "collection"
     assert not calls
 
@@ -76,7 +73,7 @@ def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monk
     assert window.isFullScreen()
     assert not window.navigation.isVisible()
     assert not window.page_title.isVisible()
-    assert window.media_tab.video_browser.isVisible()
+    assert window.media_tab.browser.isVisible()
     assert window.media_tab.player is player
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     assert not window.isFullScreen()

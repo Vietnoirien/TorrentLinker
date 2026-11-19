@@ -78,10 +78,10 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
-| 31 | Video library | **BV** `MediaVideoPanel` | same bundled `media/view.html` iframe | #108 local implementation | `media-center-redesign.md` | Host dispatch retains native decoding; Music remains #109 |
-| 32 | Music | Native, `media_audio.py` | `media.js` | NU | same | QtMultimedia audio |
+| 31 | Video library | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | #108 local implementation | `media-center-redesign.md` | Host dispatch retains native decoding |
+| 32 | Music | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | #109 local implementation | same | Playback and the queue stay with the host player until #110. The desktop player also lists saved playlists next to its queue |
 | 33 | Player / Media Center mode | `QMediaPlayer`, partial-download device, fullscreen window | `<video>/<audio>` + stream API | NU | same | Decision #89: retain native desktop decoding/verified-piece preview; shared browsing can dispatch to host |
-| 34 | Media details | **BV** `MediaVideoPanel` | same bundled dialog | #108 local implementation | same | Original-file downloads remain Web-only; desktop uses its native player/external-player controls |
+| 34 | Media details | **BV** `MediaBrowserPanel` | same bundled dialog | #108 local implementation | same | Original-file downloads remain Web-only; desktop uses its native player/external-player controls |
 | 35 | Media chat side panel | embedded compact `AssistantTab` | `#media-chat-panel` | NU | same | — |
 
 ### Shell and standalone

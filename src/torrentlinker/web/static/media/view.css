@@ -95,6 +95,13 @@ html[data-theme] #view-media .media-browse-nav button.active  {
    color:var(--accent)!important;
   border-color:var(--accent)!important;
    }
+html[data-theme] #view-media .media-music-nav button  {
+   background:none;
+   color:var(--muted);
+   }
+html[data-theme] #view-media .media-music-nav button.active  {
+   color:var(--text);
+   }
 html[data-theme] #view-media .media-feature  {
    color:var(--text);
    }

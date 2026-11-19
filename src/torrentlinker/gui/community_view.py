@@ -153,6 +153,7 @@ class BundledView(QWidget):
                             "details.css",
                             "queue.js",
                             "browser.js",
+                            "common.js",
                         )
                     }
                     | {

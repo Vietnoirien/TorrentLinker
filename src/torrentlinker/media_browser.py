@@ -78,6 +78,14 @@ class MediaBrowserService:
                 return {"data_url": f"data:{mime};base64," + base64.b64encode(data).decode()}
             if len(parts) == 4 and parts[3] == "watched" and method == "POST":
                 return media.watched(client, identifier, bool(body["watched"]))
+        if parts == ["media", "playlists"] and method == "GET":
+            return media.playlists(client)
+        if parts == ["media", "playlists"] and method == "POST":
+            return media.save_playlist(
+                client, str(body["name"]), list(body["media_ids"]), str(body.get("id", ""))
+            )
+        if len(parts) == 3 and parts[:2] == ["media", "playlists"] and method == "DELETE":
+            return media.delete_playlist(client, parts[2])
         if parts == ["media", "scan"] and method == "POST":
             media.setup(client)
             return {

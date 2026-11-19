@@ -11,7 +11,7 @@ const api=(path,body,method)=>panelRequest(path,{body,method:method||(body===und
 const host=(action,values={})=>panelRequest("host",{action,values});
 const navigate=()=>host("settings");
 function rememberTab(){}
-const mediaViewsByKind={video:["recent"],music:["albums"]};
+const mediaViewsByKind={video:["recent","continue","films","series","anime","rated","unwatched","all"],music:["albums","artists","tracks"]};
 const prefs=new Map();
 window.mediaHostPreferences={getItem:key=>prefs.get(key),setItem:(key,value)=>{prefs.set(key,value);if(panelRequest)guard(()=>panelRequest("preferences",{layout:value}))}};
 const artCache=new Map();
@@ -36,6 +36,7 @@ function pumpArt(){
   }
 }
 function translate(){
+  for(const node of document.querySelectorAll("[data-aria-en]"))node.setAttribute("aria-label",say(node.dataset.ariaEn,node.dataset.ariaFr));
   for(const node of document.querySelectorAll("[data-en][data-fr]"))node.textContent=say(node.dataset.en,node.dataset.fr);
   for(const [id,en,fr] of [["media-toolbar-refresh","Refresh library","Actualiser la médiathèque"],["media-toolbar-chat","Assistant","Assistant"],["media-center-mode","Media Center mode","Mode Media Center"]]){const node=$(id);node.title=say(en,fr);node.setAttribute("aria-label",node.title)}
   for(const node of document.querySelectorAll("[data-adult]"))node.hidden=!state.setup.adult_content;
@@ -55,6 +56,7 @@ async function applyEnvironment(){
   center.title=env.center_mode?say("Return to TorrentLinker","Revenir à TorrentLinker"):say("Media Center mode","Mode Media Center");
   center.setAttribute("aria-label",center.title);
   $("media-toolbar-chat").setAttribute("aria-pressed",String(!!env.chat_open));
+  mediaQueueLabel();
   if(!env.active)return;
   const key=JSON.stringify([env.client_id,env.language,env.adult_content,env.revision]);
   if(loadedEnvironment===key||pendingEnvironment===key)return;
@@ -64,6 +66,7 @@ async function applyEnvironment(){
     const preferences=await panelRequest("preferences",{});
     if(version!==environmentVersion)return;
     media.layout=preferences.layout||"cinematic";
+    if(mediaViewsByKind[env.kind]&&(env.kind!==media.kind||env.view)){media.kind=env.kind;media.view=mediaViewsByKind[env.kind].includes(env.view)||env.view==="adult"&&state.setup.adult_content?env.view:mediaViewsByKind[env.kind][0]}
     translate();mediaViews();$("view-media").inert=false;
     await loadMedia();
     if(version===environmentVersion)loadedEnvironment=key;

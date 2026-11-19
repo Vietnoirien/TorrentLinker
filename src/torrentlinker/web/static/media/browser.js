@@ -1,48 +1,19 @@
-/* The player lives outside navigation views, so browsing never replaces its DOM. */
-const media = {kind: "video", view: "recent", animeFilters: {}, rows: [], homeRows: [], gridMode: false, selected: null, session: null,
-  playerClient: "", queue: [], index: 0, shuffle: false, repeat: "off", ack: 0,
-  busy: false, preview: null, playbackGeneration: 0, featureId: null, continueRows: [], next: null, chat: false, scan: "", scanQuiet: false, request: 0};
-const mediaTab = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
-const mediaChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("torrentlinker-media") : null;
-const mediaClaims = new Set();
-if (mediaChannel) mediaChannel.onmessage = event => {
-  const message = event.data;
-  if (message?.type === "probe" && message.tab !== mediaTab && message.id === media.session?.id)
-    mediaChannel.postMessage({type: "claimed", tab: message.tab, id: message.id});
-  if (message?.type === "claimed" && message.tab === mediaTab) mediaClaims.add(message.id);
-};
-async function mediaSessionClaimed(id) {
-  if (!mediaChannel) return false;
-  mediaChannel.postMessage({type: "probe", tab: mediaTab, id});
-  await new Promise(resolve => setTimeout(resolve, 100));
-  return mediaClaims.delete(id);
-}
+/* Shared Media browsing. The host keeps the player, its queue and the chat. */
+const media = {kind: "video", view: "recent", animeFilters: {}, rows: [], homeRows: [], gridMode: false, selected: null, featureId: null, continueRows: [], next: null, scan: "", request: 0};
 const mediaItems = new Map();
-const mediaLayouts = ["cinematic", "focus", "collection"];
 const mediaPreferences = window.mediaHostPreferences || localStorage;
 media.layout = mediaLayouts.includes(mediaPreferences.getItem("tl-media-layout")) ? mediaPreferences.getItem("tl-media-layout") : "cinematic";
 function mediaSetLayout(value) {
   media.layout = mediaLayouts.includes(value) ? value : "cinematic";
   mediaPreferences.setItem("tl-media-layout", media.layout);
   $("view-media").dataset.layout = media.layout;
-  $("media-layout-switch").value = media.layout; if ($("settings-media-layout")) $("settings-media-layout").value = media.layout;
+  $("media-layout-switch").value = media.layout;
   mediaRender();
 }
-const mediaClient = () => state.clientId === "all" ? state.setup?.default_client_id || "default" : state.clientId || "default";
-const mediaQuery = values => new URLSearchParams({client_id: mediaClient(), ...values}).toString();
-const mediaURL = (id, suffix = "stream") => `api/media/items/${encodeURIComponent(id)}/${suffix}?${new URLSearchParams({client_id: media.playerClient || mediaClient()})}`;
-const mediaPlayer = () => $("media-audio").hidden ? $("media-video") : $("media-audio");
-const mediaTime = n => {
-  const seconds = Math.max(0, Math.floor(Number(n) || 0)), clock = `${String(seconds % 60).padStart(2, "0")}`;
-  return seconds >= 3600 ? `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${clock}` : `${Math.floor(seconds / 60)}:${clock}`;
-};
 function mediaStatus(text) { $("media-status").textContent = text; }
-function mediaOption(select, value, label) { const option = element("option", label); option.value = value; select.append(option); }
 function mediaViews() {
   rememberMediaView();
-  if (typeof mediaPlayerLabels === "function") mediaPlayerLabels();
   $("media-layout-switch").setAttribute("aria-label", say("Media layout", "Disposition des médias"));
-  $("settings-media-layout")?.setAttribute("aria-label", say("Settings Media layout", "Disposition des médias dans les paramètres"));
   $("media-search").placeholder = say("Search your media", "Rechercher dans vos médias");
   $("media-playlist-name").placeholder = say("Playlist name", "Nom de la playlist");
   const select = $("media-view"); select.replaceChildren();
@@ -105,18 +76,7 @@ async function loadMedia(append = false) {
   mediaRender();
   window.scrollTo(0,savedScroll);
   if(version!==media.request)return;
-  if (typeof mediaSession === "function" && !media.session && sessionStorage.getItem(`tl-media-session:${mediaClient()}`)) await mediaSession();
   if (media.kind === "music") await mediaPlaylists();
-}
-function mediaArt(row, className = "") {
-  const art = element("div", undefined, `media-art ${className}`);
-  if (row.artwork_url) {
-    const image = element("img"); if (typeof mediaImage === "function") mediaImage(image, row); else image.src = row.artwork_url; image.alt = ""; image.loading = "lazy";
-    image.onerror = () => { image.remove(); art.classList.add("missing-art"); };
-    art.append(image);
-  } else art.classList.add("missing-art");
-  const fallback = element("span", row.title || row.album || say("Artwork unavailable", "Illustration indisponible"), "media-art-title");
-  art.append(fallback); return art;
 }
 function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); mediaRenderEpisodes(row).catch(() => {}); }
 // A chosen series unfolds under its description: one tab per season, then its episodes.
@@ -163,7 +123,11 @@ function mediaRenderFeature() {
   const candidates = [...media.rows, ...media.continueRows, ...media.homeRows.flatMap(r => r.rows)];
   const row = candidates.find(item => item.id === media.featureId) || candidates.find(item => item.available !== false && item.artwork_url) || candidates.find(item => item.available !== false) || candidates[0];
   root.hidden = media.kind !== "video" || !row;
-  if (root.hidden) { media.selected = null; if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(null); return; }
+  if (root.hidden) {
+    if (media.selected?.kind !== media.kind) media.selected = null;
+    if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(media.selected);
+    return;
+  }
   media.featureId = row.id; media.selected = row;
   if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(row);
   const scroll = root.querySelector(".media-focus-strip")?.scrollLeft || 0;
@@ -261,19 +225,12 @@ async function mediaSeeAll(filters) {
   await loadMedia();
   window.scrollTo({top: 0});
 }
-// In Video, a music track keeps its bar only while it plays, so it can still be paused.
-function mediaMusicBar() {
-  const shell = $("media-player-shell");
-  if (!shell) return;
-  shell.classList.toggle("media-shell-parked", shell.dataset.kind === "music" && media.kind === "video" && $("media-audio").paused);
-}
 function mediaRender() {
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout;
   $("view-media").dataset.musicView = media.view;
   $("view-media").dataset.empty = String(media.rows.length === 0);
   for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
   for (const item of document.querySelectorAll("[data-media-music-view]")) { item.classList.toggle("active", item.dataset.mediaMusicView === media.view); item.setAttribute("aria-current", item.dataset.mediaMusicView === media.view ? "page" : "false"); }
-  mediaMusicBar();
   mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome(); mediaRenderEpisodes(media.selected).catch(() => {});
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries"), anime: say("Anime", "Animés"), adult: "XXX"})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
@@ -282,12 +239,12 @@ function mediaRender() {
   if (media.kind === "music" && media.view === "tracks") { mediaRenderTracks(root); return; }
   const groups = new Map();
   for (const row of media.rows) {
-    const key = media.kind === "music" && media.view === "albums" ? row.album_id || row.id : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : media.kind === "video" ? row.content_id || row.id : row.id;
+    const key = media.kind === "music" && media.view === "albums" ? row.album_id || row.id : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : media.kind === "video" ? row.content_id || row.id : row.id;
     if (!groups.has(key)) groups.set(key, []); groups.get(key).push(row);
   }
   for (const rows of groups.values()) {
     const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
-    const title = media.kind === "music" && media.view === "albums" ? row.album || "Unknown album" : media.kind === "music" && media.view === "artists" ? row.artist || "Unknown artist" : row.title;
+    const title = media.kind === "music" && media.view === "albums" ? row.album || say("Unknown album", "Album inconnu") : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : row.title;
     // A series card unfolds its episodes; any other card opens its details.
     const artwork = button("", () => row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`);
     if (media.kind === "music" && media.view === "artists") {
@@ -342,10 +299,11 @@ async function mediaGroupIds(rows) {
 }
 async function mediaDetails(id) {
   const row = await api(`media/items/${encodeURIComponent(id)}?${mediaQuery({})}`); media.selected = row;
+  if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(row);
   const root = $("media-details"); root.replaceChildren(); root.hidden = false;
   root.append(mediaArt(row, "media-detail-art"));
   if (!root.open) root.showModal();
-  root.append(button(say("Close details", "Fermer les détails"), () => { root.close(); media.selected = null; }), element("h2", row.title));
+  root.append(button(say("Close details", "Fermer les détails"), () => { root.close(); }), element("h2", row.title));
   root.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible.")));
   if (row.identity_source) root.append(element("p", say(`Metadata: ${row.identity_source}`, `Métadonnées : ${row.identity_source}`), "muted"));
   if (row.release) root.append(element("p", say(`Release: ${row.release}`, `Version : ${row.release}`), "muted"));
@@ -403,9 +361,9 @@ async function mediaDetails(id) {
     const tracks = await mediaTrackGroup(row, artistView ? "artists" : "albums");
     if (media.selected?.id !== id || !root.open) return;
     const ids = tracks.map(item => item.id);
-    root.append(element("h3", artistView ? row.artist || "Unknown artist" : row.album || "Track"), button(artistView ? say("Play artist", "Lire cet artiste") : say("Play album", "Lire cet album"), () => { root.close(); return mediaStart(ids); }), button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue(ids)));
+    root.append(element("h3", artistView ? row.artist || say("Unknown artist", "Artiste inconnu") : row.album || say("Track", "Piste")), button(artistView ? say("Play artist", "Lire cet artiste") : say("Play album", "Lire cet album"), () => { root.close(); return mediaStart(ids); }), button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue(ids)));
     const list = element("ol");
-    tracks.forEach((item, index) => { const entry = element("li"); entry.append(button(`${item.title}${artistView ? ` · ${item.album || "Unknown album"}` : ""}`, () => { root.close(); return mediaStart(ids, index); }), element("span", item.duration > 0 ? ` ${mediaTime(item.duration)}` : " Duration unknown", "muted")); list.append(entry); });
+    tracks.forEach((item, index) => { const entry = element("li"); entry.append(button(`${item.title}${artistView ? ` · ${item.album || say("Unknown album", "Album inconnu")}` : ""}`, () => { root.close(); return mediaStart(ids, index); }), element("span", item.duration > 0 ? ` ${mediaTime(item.duration)}` : say(" Duration unknown", " Durée inconnue"), "muted")); list.append(entry); });
     root.append(list);
   }
 }

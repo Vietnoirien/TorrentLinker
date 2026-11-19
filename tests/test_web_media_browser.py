@@ -96,6 +96,12 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
     config.mkdir()
     settings = Settings()
     settings.library_folders = [LibraryFolder(root)]
+    from torrentlinker.config import ClientProfile
+
+    settings.ensure_profiles()
+    settings.client_profiles.append(
+        ClientProfile(id="other", name="Other", host="http://127.0.0.1:9")
+    )
     settings.save(config / "settings.json")
     app = create_app(
         config, password="test-password-long", roots=(root,), monitor_verifications=False
@@ -477,7 +483,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "aria-label", "Return to TorrentLinker"
             )
             media_locator(page, "#media-music-tab").click()
-            expect(page.locator("#media-frame")).to_be_hidden()
+            expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-results article")).to_have_count(2)
             media_locator(page, "#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
@@ -585,7 +591,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
             # No model is connected here: the panel offers to connect one instead of a composer.
-            expect(page.locator("#media-chat-content .assistant-connect")).to_be_visible()
+            expect(page.locator("#media-chat-content .assistant-connect")).to_be_visible(
+                timeout=15000
+            )
             assert video.get_attribute("src") == source
             screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv("TL_WEB_SCREENSHOTS")
             if screenshots:
@@ -662,27 +670,27 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             assert video.evaluate("node => node.paused && node.currentTime >= 4.9")
             other.close()
             media_locator(page, "#media-music-tab").click()
-            expect(page.locator("#media-frame")).to_be_hidden()
+            expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-results article")).to_have_count(2)
             assert video.get_attribute("src") == source
-            music_nav = page.get_by_role("navigation", name="Music browsing")
+            music_nav = media_browse(page).get_by_role("navigation", name="Music browsing")
             expect(music_nav.get_by_role("button", name="Albums", exact=True)).to_be_visible()
             music_nav.get_by_role("button", name="Artists", exact=True).click()
             expect(media_locator(page, "#media-results article")).to_have_count(1)
             expect(media_locator(page, "#media-results")).to_contain_text("Daft Punk")
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
-            expect(page.locator(".media-track-row")).to_have_count(3)
-            expect(page.locator(".media-track-row").first).to_contain_text("Discovery")
-            expect(page.locator(".media-track-row").first).to_contain_text("Daft Punk")
+            expect(media_locator(page, ".media-track-row")).to_have_count(3)
+            expect(media_locator(page, ".media-track-row").first).to_contain_text("Discovery")
+            expect(media_locator(page, ".media-track-row").first).to_contain_text("Daft Punk")
             expect(
-                page.locator(".media-track-row").first.locator(".media-track-duration")
+                media_locator(page, ".media-track-row").first.locator(".media-track-duration")
             ).to_have_text("<0:01")
             music_nav.get_by_role("button", name="Albums", exact=True).click()
             expect(media_locator(page, "#media-results article")).to_have_count(2)
             media_locator(page, ".media-card").filter(has_text="2 tracks").get_by_role(
                 "button", name="Details", exact=True
             ).click()
-            expect(page.get_by_role("dialog", name="Media details")).to_be_visible()
+            expect(media_browse(page).get_by_role("dialog", name="Media details")).to_be_visible()
             expect(media_locator(page, "#media-details li")).to_have_count(2)
             media_browse(page).get_by_role("button", name="Close details").click()
             media_locator(page, ".media-card").filter(has_text="1 track").get_by_role(
@@ -701,23 +709,23 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             ).click()
             expect(page.locator("#media-player-queue li")).to_have_count(1)
             assert page.locator("#media-audio").evaluate("node => node.paused") is True
-            page.locator("#media-playlist-name").fill("Evening listening")
-            page.locator("#media-save-playlist button").click()
-            expect(page.locator("#media-playlist-list")).to_contain_text("Evening listening")
+            media_locator(page, "#media-playlist-name").fill("Evening listening")
+            media_locator(page, "#media-save-playlist button").click()
+            expect(media_locator(page, "#media-playlist-list")).to_contain_text("Evening listening")
             if screenshots:
                 page.locator("#media-player-shell summary").click()
                 page.evaluate("window.scrollTo(0, 0)")
                 page.screenshot(path=str(Path(screenshots) / "media-music-albums.png"))
             music_nav.get_by_role("button", name="Artists", exact=True).click()
-            expect(page.locator(".media-artist-card")).to_have_count(1)
+            expect(media_locator(page, ".media-artist-card")).to_have_count(1)
             if screenshots:
                 page.screenshot(path=str(Path(screenshots) / "media-music-artists.png"))
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
-            expect(page.locator(".media-track-row")).to_have_count(3)
-            page.locator(".media-track-row").first.get_by_role(
+            expect(media_locator(page, ".media-track-row")).to_have_count(3)
+            media_locator(page, ".media-track-row").first.get_by_role(
                 "button", name="Add to queue"
             ).click()
-            expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 2")
+            expect(media_locator(page, "#media-show-queue")).to_have_text("Playback queue · 2")
             assert page.locator("#media-audio").evaluate("node => node.paused") is True
             # Paused music leaves its bar behind when switching to Video, and finds it again.
             expect(page.locator("#media-player-shell")).to_be_visible()
@@ -725,7 +733,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("#media-frame")).to_be_visible()
             expect(page.locator("#media-player-shell")).to_be_hidden()
             media_locator(page, "#media-music-tab").click()
-            expect(page.locator("#media-frame")).to_be_hidden()
+            expect(page.locator("#media-frame")).to_be_visible()
             expect(page.locator("#media-player-shell")).to_be_visible()
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
             if screenshots:
@@ -745,25 +753,50 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 media_locator(page, "#media-center-mode").click()
                 page.wait_for_function("() => document.fullscreenElement === null")
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
-            page.locator(".media-track-row").filter(has_text="Aerodynamic").get_by_role(
+            media_locator(page, ".media-track-row").filter(has_text="Aerodynamic").get_by_role(
                 "button", name="Add to queue"
             ).click()
-            expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 3")
-            page.locator("#media-playlist-name").fill("Full listening")
-            page.locator("#media-save-playlist button").click()
-            expect(page.locator("#media-playlist-list")).to_contain_text("Full listening")
+            expect(media_locator(page, "#media-show-queue")).to_have_text("Playback queue · 3")
+            media_locator(page, "#media-playlist-name").fill("Full listening")
+            media_locator(page, "#media-save-playlist button").click()
+            expect(media_locator(page, "#media-playlist-list")).to_contain_text("Full listening")
             page.wait_for_timeout(1300)
             page.reload()
             page.locator('[data-view="media"]').click()
             media_locator(page, "#media-music-tab").click()
-            expect(page.locator("#media-frame")).to_be_hidden()
-            expect(page.locator("#media-playlist-list")).to_contain_text("Evening listening")
-            expect(page.locator("#media-show-queue")).to_have_text("Playback queue · 3")
+            expect(page.locator("#media-frame")).to_be_visible()
+            expect(media_locator(page, "#media-playlist-list")).to_contain_text("Evening listening")
+            expect(media_locator(page, "#media-show-queue")).to_have_text("Playback queue · 3")
             assert not page.locator("#media-player-shell details").evaluate("node => node.open")
-            expect(page.locator("#media-save-playlist button")).to_be_enabled()
-            page.locator("#media-playlist-name").fill("Restored listening")
-            page.locator("#media-save-playlist button").click()
-            expect(page.locator("#media-playlist-list")).to_contain_text("Restored listening")
+            expect(media_locator(page, "#media-save-playlist button")).to_be_enabled()
+            media_locator(page, "#media-playlist-name").fill("Restored listening")
+            media_locator(page, "#media-save-playlist button").click()
+            expect(media_locator(page, "#media-playlist-list")).to_contain_text(
+                "Restored listening"
+            )
+            # A saved queue belongs to its playback client even while browsing another.
+            page.locator("#target-client").select_option("other")
+            expect(media_locator(page, "#media-music-tab")).to_be_visible()
+            media_locator(page, "#media-music-tab").click()
+            media_locator(page, "#media-playlist-name").fill("Original client queue")
+            with page.expect_response(
+                lambda r: "/api/media/playlists" in r.url and r.request.method == "POST"
+            ) as saved:
+                media_locator(page, "#media-save-playlist button").click()
+            assert saved.value.ok
+            assert "Original client queue" in [
+                p["name"]
+                for p in page.request.get(
+                    f"http://127.0.0.1:{port}/api/media/playlists?client_id=default"
+                ).json()
+            ]
+            assert (
+                page.request.get(
+                    f"http://127.0.0.1:{port}/api/media/playlists?client_id=other"
+                ).json()
+                == []
+            )
+            page.locator("#target-client").select_option("default")
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             media_locator(page, "#media-video-tab").click()

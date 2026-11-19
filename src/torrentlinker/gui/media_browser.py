@@ -1,10 +1,11 @@
-"""Shared video library host; playback remains with the native Media session."""
+"""Shared Media library host; playback and the queue remain with the native Media session."""
 
 import json
 from pathlib import Path
 
 from fastapi.encoders import jsonable_encoder
 from PySide6.QtCore import Signal, Slot
+from shiboken6 import isValid
 
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.tasks import run_in_background
@@ -27,7 +28,9 @@ class MediaBrowserBridge(ViewBridge):
                 if action not in {
                     "play",
                     "preview",
-                    "music",
+                    "enqueue",
+                    "queue",
+                    "kind",
                     "chat",
                     "center",
                     "settings",
@@ -73,15 +76,22 @@ class MediaBrowserBridge(ViewBridge):
 
             run_in_background(
                 work,
-                lambda result: self.response.emit(identifier, json.dumps(result)),
-                lambda error: self.response.emit(identifier, json.dumps({"error": str(error)})),
+                lambda result: self._complete(identifier, result, parsed.path, body.get("method")),
+                lambda error: self._complete(identifier, {"error": str(error)}),
                 coordinate=False,
             )
         except Exception as error:
             self.response.emit(identifier, json.dumps({"error": str(error)}))
 
+    def _complete(self, identifier, result, path="", method="GET"):
+        if not isValid(self):
+            return
+        if "error" not in result and path.startswith("media/playlists") and method != "GET":
+            self.panel.hostRequested.emit("playlists-changed", {})
+        self.response.emit(identifier, json.dumps(result))
 
-class MediaVideoPanel(BundledView):
+
+class MediaBrowserPanel(BundledView):
     hostRequested = Signal(str, dict)
 
     def __init__(self, get_service, client_id, parent=None):
@@ -90,6 +100,9 @@ class MediaVideoPanel(BundledView):
         self.center_mode = False
         self.chat_open = False
         self.revision = 0
+        self.kind, self.view = "video", "recent"
+        self.queue: list[str] = []
+        self.queue_music = True
         super().__init__(
             MediaBrowserBridge(self), Path(__file__).parents[1] / "web/static/media", "media"
         )
@@ -103,9 +116,14 @@ class MediaVideoPanel(BundledView):
             )
 
     def activate(self):
+        """Reload browsing with the host's current settings."""
+        self.revision += 1
+        self.publish()
+
+    def publish(self):
+        """Send the host state; the view reloads only when the revision changes."""
         service = self.get_service()
         self.language = service.setup.settings.language
-        self.revision += 1
         self.bridge.environment_value = json.dumps(
             {
                 "mode": "desktop",
@@ -113,6 +131,10 @@ class MediaVideoPanel(BundledView):
                 "chat_open": self.chat_open,
                 "active": self.isVisible(),
                 "revision": self.revision,
+                "kind": self.kind,
+                "view": self.view,
+                "queue": self.queue,
+                "queue_music": self.queue_music,
                 "client_id": self.client_id(),
                 "language": self.language,
                 "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",

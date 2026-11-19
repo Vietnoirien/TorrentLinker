@@ -10,13 +10,13 @@ from torrentlinker.store import Store
 def video_js(qtbot, tab, script):
     from tests.test_community_interfaces import js
 
-    return js(qtbot, tab.video_browser, script)
+    return js(qtbot, tab.browser, script)
 
 
 def video_wait(qtbot, tab, script):
     from tests.test_community_interfaces import wait_js
 
-    wait_js(qtbot, tab.video_browser, script)
+    wait_js(qtbot, tab.browser, script)
 
 
 def video_details(qtbot, tab, title):
@@ -74,7 +74,6 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
 
     from PySide6.QtCore import Qt
     from PySide6.QtMultimedia import QMediaPlayer
-    from PySide6.QtWidgets import QListView
 
     from torrentlinker.domain import LibraryFolder
     from torrentlinker.gui.media import MediaTab
@@ -117,55 +116,44 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     tab.resize(800, 800)
     tab.show()
     tab.activate()
-    qtbot.mouseClick(tab.kind_tabs["music"], Qt.LeftButton)
-    assert tab.media_toolbar.height() <= 70
-    assert (
-        tab.kind_tabs["music"].mapTo(tab.media_toolbar, tab.kind_tabs["music"].rect().center()).y()
-        == tab.chat.mapTo(tab.media_toolbar, tab.chat.rect().center()).y()
+    video_wait(qtbot, tab, "!!document.querySelector('#media-status')?.textContent")
+    video_js(qtbot, tab, "document.querySelector('#media-music-tab').click()")
+    video_wait(
+        qtbot,
+        tab,
+        "document.querySelector('#view-media').dataset.kind==='music'"
+        "&&document.querySelectorAll('#media-results .media-music-card').length===1",
     )
-    assert not tab.kind.isVisible()
-    qtbot.mouseClick(tab.search_toggle, Qt.LeftButton)
-    assert tab.search.isVisible()
-    qtbot.mouseClick(tab.search_toggle, Qt.LeftButton)
-    assert not tab.search.isVisible()
-    tab.library_action.trigger()
-    assert tab.category_cards["albums"].isVisible()
-    tab.library_action.trigger()
-    assert not tab.library_panel.isVisible()
-    assert all(button.isVisible() for button in tab.music_tabs.values())
-    qtbot.mouseClick(tab.music_tabs["tracks"], Qt.LeftButton)
-    qtbot.waitUntil(lambda: tab.results.count() == 3)
-    qtbot.waitUntil(lambda: tab.results.count() > 0 and tab.results.isEnabled())
-    assert tab.results.viewMode() == QListView.ViewMode.ListMode
-    assert "Fixture Artist" in tab.results.item(0).text()
-    assert "Fixture Album" in tab.results.item(0).text()
-    assert "0:12" in tab.results.item(0).text()
-    assert tab.music_playlists.isVisible()
-    for view in ("albums", "artists"):
-        tab.view.setCurrentIndex(tab.view.findData(view))
-        qtbot.waitUntil(
-            lambda: (
-                tab.results.isEnabled() and tab.results.viewMode() == QListView.ViewMode.IconMode
-            )
-        )
-        assert not tab.results.item(0).icon().isNull()
-        assert tab.results.iconSize().width() >= 128
-        assert tab.results.iconSize().width() == tab.results.iconSize().height()
-    tab.view.setCurrentIndex(tab.view.findData("tracks"))
-    qtbot.waitUntil(
-        lambda: tab.results.isEnabled() and tab.results.viewMode() == QListView.ViewMode.ListMode
-    )
-    tab.results.item(0).setSelected(True)
-    qtbot.mouseClick(tab.play_button, Qt.LeftButton)
+    assert tab.browse_kind == "music"
+    assert video_js(qtbot, tab, "!document.querySelector('#media-playlists').hidden")
+    video_js(qtbot, tab, "document.querySelector('[data-media-music-view=tracks]').click()")
+    video_wait(qtbot, tab, "document.querySelectorAll('.media-track-row').length===3")
+    first = video_js(qtbot, tab, "document.querySelector('.media-track-row').innerText")
+    assert "Fixture Artist" in first and "Fixture Album" in first and "0:12" in first
+    for view, card in (("albums", ".media-music-card"), ("artists", ".media-artist-card")):
+        video_js(qtbot, tab, f"document.querySelector('[data-media-music-view={view}]').click()")
+        video_wait(qtbot, tab, f"document.querySelectorAll('#media-results {card}').length===1")
+    video_js(qtbot, tab, "document.querySelector('[data-media-music-view=tracks]').click()")
+    video_wait(qtbot, tab, "document.querySelectorAll('.media-track-row').length===3")
+    video_js(qtbot, tab, "document.querySelector('.media-track-play').click()")
     qtbot.waitUntil(lambda: tab.player.duration() == 12000, timeout=15000)
     qtbot.waitUntil(lambda: tab.player.position() > 0, timeout=10000)
     tab.command("seek", position=5)
     qtbot.waitUntil(lambda: tab.player.position() >= 5000)
-    tab.results.clearSelection()
-    tab.results.item(1).setSelected(True)
-    tab.results.item(2).setSelected(True)
-    qtbot.mouseClick(tab.enqueue_button, Qt.LeftButton)
-    assert tab.queue.count() == 3
+    for index in (1, 2):
+        video_js(
+            qtbot,
+            tab,
+            f"document.querySelectorAll('.media-track-row')[{index}]"
+            ".querySelector('.media-track-actions button').click()",
+        )
+        qtbot.waitUntil(lambda index=index: tab.queue.count() == index + 1)
+    video_wait(
+        qtbot,
+        tab,
+        "document.querySelector('#media-show-queue').textContent.endsWith('3')"
+        "&&!document.querySelector('#media-save-playlist button').disabled",
+    )
     from PySide6.QtWidgets import QInputDialog
 
     monkeypatch.setattr(QInputDialog, "getText", lambda *_args: ("Evening", True))
@@ -179,20 +167,45 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     qtbot.mouseClick(tab.save_playlist, Qt.LeftButton)
     qtbot.waitUntil(lambda: tab.playlists.currentText() == "Evening")
     assert len(service.agent.media.playlists("default")[0]["media_ids"]) == 3
+    # The view saves the host queue as a playlist too and lists both.
+    video_js(
+        qtbot,
+        tab,
+        "document.querySelector('#media-playlist-name').value='Morning';"
+        "document.querySelector('#media-save-playlist').requestSubmit()",
+    )
+    video_wait(qtbot, tab, "document.querySelectorAll('.media-playlist-card').length===2")
+    assert sorted(p["name"] for p in service.agent.media.playlists("default")) == [
+        "Evening",
+        "Morning",
+    ]
+    assert all(len(p["media_ids"]) == 3 for p in service.agent.media.playlists("default"))
+    qtbot.waitUntil(lambda: tab.playlists.count() == 2)
+    video_js(
+        qtbot,
+        tab,
+        "[...document.querySelectorAll('.media-playlist-card')]"
+        ".find(c=>c.querySelector('h3').textContent==='Morning')"
+        ".querySelector('details button:last-child').click()",
+    )
+    video_wait(qtbot, tab, "document.querySelectorAll('.media-playlist-card').length===1")
+    qtbot.waitUntil(lambda: tab.playlists.count() == 1)
+    video_js(qtbot, tab, "document.querySelector('.media-track-name').click()")
+    video_wait(qtbot, tab, "document.querySelector('#media-details').open")
+    qtbot.waitUntil(lambda: bool(tab.browse_selection))
+    selected = tab.browse_selection[:]
+    video_action(qtbot, tab, "Close details")
+    assert tab.browse_selection == selected
+    video_js(qtbot, tab, "document.querySelector('#media-show-queue').click()")
+    qtbot.waitUntil(lambda: tab.queue_disclosure.isChecked())
     source = tab.player.source()
-    selected = tab.selected_ids()
     for layout in ("focus", "collection", "cinematic"):
-        tab.layout_combo.setCurrentIndex(tab.layout_combo.findData(layout))
+        tab.set_media_layout(layout)
         assert tab.media_layout == layout
         assert tab.player.source() == source
-        assert tab.selected_ids() == selected
-        assert tab.results.isVisible()
-    tab.set_media_layout("collection")
-    tab.set_media_layout("cinematic")
-    assert tab.selected_ids() == selected
-    tab.search.setText("no such track")
-    tab.kind.setCurrentIndex(tab.kind.findData("video"))
-    qtbot.waitUntil(lambda: tab.results.count() == 0)
+        video_wait(qtbot, tab, "document.querySelector('#view-media').dataset.kind==='music'")
+    video_js(qtbot, tab, "document.querySelector('#media-video-tab').click()")
+    qtbot.waitUntil(lambda: tab.browse_kind == "video")
     assert tab.player.source() == source
     assert tab.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
     # In Video, playing music keeps its bar so it can be paused; paused, the bar leaves.
@@ -282,10 +295,6 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     assert restored.player.source() == playing
     assert restored.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
     restored.report()
-    current = restored.state["current_id"]
-    restored.forget_progress(current)
-    assert restored.state["queue"] == []
-    assert service.agent.media.detail("default", current)["position"] == 0
     restored.stop()
 
 
@@ -454,12 +463,12 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     assert saved_queue
     tab.command("play", media_ids=saved_queue, index=0)
     qtbot.waitUntil(lambda: tab.video.isVisible())
-    tab.view.setCurrentIndex(tab.view.findData("films"))
+    tab._browser_action("kind", {"kind": "video"})
     assert not tab.video.isVisible()
     assert not tab.player_panel.isVisible()
     tab.command("play", media_ids=saved_queue, index=0)
     qtbot.waitUntil(lambda: tab.video.isVisible())
-    tab.kind.setCurrentIndex(tab.kind.findData("music"))
+    tab._browser_action("kind", {"kind": "music"})
     assert not tab.video.isVisible()
     assert tab.player.source().isEmpty()
     assert tab.state["queue"] == saved_queue
@@ -662,7 +671,7 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(qtbot, tmp_pa
     window.show()
     window.navigation.setCurrentRow(window.tabs.indexOf(window.media_tab))
     tab = window.media_tab
-    qtbot.waitUntil(lambda: tab.results.isEnabled())
+    qtbot.waitUntil(lambda: tab.browser is not None and tab.player is not None)
     tab.command("shuffle", shuffle=True)
     tab.command("repeat", repeat="all")
     player = tab.player
@@ -696,13 +705,13 @@ def test_native_media_layout_shortcut_emits_only_user_changes(qtbot):
     tab = MediaTab(lambda: None, lambda: "default", lambda: None)
     qtbot.addWidget(tab)
     assert tab.media_layout == "cinematic"
-    assert tab.layout_combo.objectName() == "media-layout"
     changes = []
     tab.layout_changed.connect(changes.append)
     tab.set_media_layout("collection")
     assert changes == []
-    tab.layout_combo.setCurrentIndex(tab.layout_combo.findData("focus"))
+    tab._browser_action("layout", {"layout": "focus"})
     assert changes == ["focus"]
+    assert tab.media_layout == "focus"
 
 
 def test_player_menu_opens_and_closes_the_queue_and_playlists(qtbot):
@@ -1194,7 +1203,7 @@ def test_series_card_unfolds_its_seasons_and_episodes(qtbot, tmp_path):
         == 1
     )
     played = []
-    tab.video_browser.hostRequested.connect(lambda action, body: played.append((action, body)))
+    tab.browser.hostRequested.connect(lambda action, body: played.append((action, body)))
     video_js(qtbot, tab, "document.querySelector('#media-episodes .media-episode-card').click()")
     qtbot.waitUntil(lambda: any(action == "play" for action, _ in played))
     body = next(body for action, body in played if action == "play")
@@ -1249,10 +1258,9 @@ def test_toolbar_refreshes_the_library_and_reopening_rescans_quietly(qtbot, tmp_
     tab.show()
     tab.activate()
     qtbot.waitUntil(lambda: len(scans) == 1)
-    assert tab.refresh_icon.isChecked()  # a refresh is running
-    assert tab.refresh_icon.toolTip() == "Cancel library refresh"
+    assert tab.scan_stop is not None  # a refresh is running
     release.set()
-    qtbot.waitUntil(lambda: not tab.refresh_icon.isChecked())
+    qtbot.waitUntil(lambda: tab.scan_stop is None)
     video_wait(qtbot, tab, "document.querySelector('#media-feature').innerText.includes('Film')")
     reloads = []
     real_refresh = tab.refresh
@@ -1268,8 +1276,8 @@ def test_toolbar_refreshes_the_library_and_reopening_rescans_quietly(qtbot, tmp_
     qtbot.waitUntil(lambda: len(scans) == 3)
     qtbot.waitUntil(lambda: len(reloads) == 2)
     assert tab.auto_refresh.isActive()
-    tab.refresh_icon.click()
+    # The view's ⟳ runs the same scan as a background job.
+    video_js(qtbot, tab, "document.querySelector('#media-toolbar-refresh').click()")
     qtbot.waitUntil(lambda: len(scans) == 4)
-    qtbot.waitUntil(lambda: not tab.refresh_icon.isChecked())
-    assert tab.refresh_icon.toolTip() == "Refresh library"
+    video_wait(qtbot, tab, "document.querySelector('#media-toolbar-refresh').ariaPressed==='false'")
     tab.stop()

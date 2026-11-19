@@ -24,7 +24,7 @@
     <script src="static/assistant.js" defer></script>
     <script src="static/assistant_cards.js" defer></script>
     <script src="static/assistant_panel.js" defer></script>
-    <script src="static/media/browser.js" defer></script>
+    <script src="static/media/common.js" defer></script>
     <script src="static/media.js" defer></script>
     <script src="static/media_panel.js" defer></script>
     <script src="static/upload-workspace.js" defer></script>
@@ -105,28 +105,7 @@
           <div class="toolbar media-player-transport"><button id="media-previous" data-i18n="mediaPrevious">Previous</button><button id="media-next" data-i18n="mediaNext">Next</button><button id="media-shuffle" data-i18n="mediaShuffle" aria-pressed="false">Shuffle</button><label>Repeat <select id="media-repeat"><option value="off">Off</option><option value="all">All</option><option value="one">One</option></select></label></div>
           <details id="media-queue-details"><summary>Playback queue</summary><ol id="media-player-queue"></ol></details>
         </section>
-        <section id="view-media" class="view" data-layout="cinematic" data-kind="video" hidden>
-          <div class="media-topbar">
-            <div class="media-tabs" role="tablist" aria-label="Media kind"><button id="media-video-tab" data-i18n="mediaVideo" role="tab" aria-selected="true">Video</button><button id="media-music-tab" data-i18n="mediaMusic" role="tab" aria-selected="false">Music</button></div>
-            <nav class="media-browse-nav" aria-label="Video browsing"><button data-media-view="recent" data-i18n="mediaHome">Home</button><button data-media-view="films" data-i18n="mediaFilms">Films</button><button data-media-view="series" data-i18n="mediaSeries">Series</button><button data-media-view="anime" data-en="Anime" data-fr="Animés">Anime</button><button data-media-view="adult" data-adult hidden>XXX</button><button data-media-view="continue" data-i18n="mediaContinue">Continue watching</button></nav>
-            <nav id="media-music-nav" class="media-music-nav" aria-label="Music browsing" hidden><button data-media-music-view="albums">Albums</button><button data-media-music-view="artists">Artists</button><button data-media-music-view="tracks">Tracks</button></nav>
-            <input id="media-search" type="search" aria-label="Search media" placeholder="Search your media" />
-            <details id="media-library-options" class="media-library-options"><summary data-en="Options" data-fr="Options">Options</summary><div class="media-options-panel"><label class="media-layout-control"><span data-i18n="mediaLayoutShort">Layout</span><select id="media-layout-switch" aria-label="Media layout"><option value="cinematic" data-i18n="mediaLayoutCinematic">Cinematic home</option><option value="focus" data-i18n="mediaLayoutFocus">Focus</option><option value="collection" data-i18n="mediaLayoutCollection">Collection</option></select></label><div class="toolbar media-filters"><select id="media-view" aria-label="Media view"></select><select id="media-genre" aria-label="Genre"></select><select id="media-year" aria-label="Year"></select><select id="media-language" aria-label="Language"></select><select id="media-availability" aria-label="Availability"></select><button id="media-refresh" data-i18n="mediaRefresh">Refresh inventory</button><button id="media-cancel-scan" class="quiet" data-i18n="mediaCancelScan" hidden>Cancel scan</button><button data-view="setup" data-i18n="mediaAddFolder">Add Library Folder</button></div></div></details>
-            <button id="media-toolbar-refresh" class="icon-button" type="button" aria-pressed="false">⟳</button><button id="media-toolbar-chat" class="icon-button" type="button" aria-pressed="false">✦</button><button id="media-center-mode" class="icon-button" type="button" aria-pressed="false">⤢</button>
-          </div>
-          <section id="media-feature" class="media-feature" aria-label="Featured title" hidden></section>
-          <div class="media-shelves">
-            <div class="media-collection-heading"><p class="media-eyebrow" data-i18n="mediaYourLibrary">Your library</p><h2 data-i18n="mediaYourCollection">Your collection</h2></div>
-            <p id="media-status" role="status" class="media-inventory-status"></p>
-            <section id="media-continue" class="media-continue" aria-label="Continue watching" hidden><h2 data-i18n="mediaContinue">Continue watching</h2><div id="media-continue-items" class="media-continue-row"></div></section>
-            <section id="media-episodes" class="media-episodes" aria-label="Episodes" hidden></section>
-            <div id="media-home-rows" class="media-home-rows" hidden></div>
-            <div class="media-library-layout"><div class="media-library-content"><div class="media-section-heading"><h2 id="media-shelf-title">Recently added</h2><span id="media-shelf-count"></span></div>
-            <div id="media-results" class="media-grid"></div><button id="media-more" data-i18n="mediaMore" hidden>Load more</button>
-            </div><aside id="media-playlists" hidden><p class="media-eyebrow" data-en="Your listening" data-fr="Votre écoute">Your listening</p><h2 data-en="Playlists" data-fr="Playlists">Playlists</h2><button id="media-show-queue" class="media-queue-link">Playback queue · 0</button><div id="media-playlist-list"></div><form id="media-save-playlist"><label for="media-playlist-name" data-en="Save the current queue" data-fr="Enregistrer la file actuelle">Save the current queue</label><input id="media-playlist-name" aria-label="Playlist name" placeholder="Playlist name" required maxlength="100"/><button data-en="Save playlist" data-fr="Enregistrer la playlist">Save playlist</button></form><p class="media-playlist-note" data-en="Music playlists are separate from Download Queues." data-fr="Les playlists musicales sont distinctes des files de téléchargement.">Music playlists are separate from Download Queues.</p></aside></div>
-          </div>
-          <dialog id="media-details" class="media-detail-dialog" aria-label="Media details"></dialog>
-        </section>
+        <section id="view-media" class="view" data-layout="cinematic" data-kind="video" hidden></section>
         <section id="view-assistant" class="view" hidden></section>
         <section id="view-setup" class="view settings-layout" hidden>
           <nav class="settings-navigation" aria-label="Settings sections">

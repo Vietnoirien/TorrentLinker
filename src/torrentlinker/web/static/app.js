@@ -755,7 +755,6 @@ async function navigate(view, section, detail) {
   if (view === "media") {
     media.kind = section;
     media.view = detail || mediaViewsByKind[section][0];
-    mediaViews();
     await loadMedia(); guard(mediaAutoScan);
   }
   if (view !== "setup") clearAgentToken();
@@ -1037,7 +1036,7 @@ $("language").onchange = () => {
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") uploadEnvironment();
   if (state.view === "torrents") guard(loadTorrents);
-  if (state.view === "media") { mediaViews(); guard(loadMedia); mediaQueueRender(); }
+  if (state.view === "media") { guard(loadMedia); mediaQueueRender(); }
   $("page-title").textContent =
     document.querySelector(`[data-view="${state.view}"]`)?.textContent ||
     state.view;

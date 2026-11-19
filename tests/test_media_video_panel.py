@@ -42,7 +42,7 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
         tab.resize(1280, 720)
         tab.show()
         tab.activate()
-        panel = tab.video_browser
+        panel = tab.browser
         panel.hostRequested.connect(lambda action, body: actions.append((action, body)))
         wait_js(
             qtbot,
@@ -150,9 +150,9 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             page.screenshot(path="/tmp/media108-web-light-fr.png")
             page.locator("#language").select_option("en")
             panel.get_by_role("tab", name="Music", exact=True).click()
-            expect(page.locator("#media-frame")).to_be_hidden()
-            expect(page.locator("#media-results")).to_contain_text("track")
-            page.locator("#media-video-tab").click()
+            expect(page.locator("#media-frame")).to_be_visible()
+            expect(panel.locator("#media-results")).to_contain_text("track")
+            panel.locator("#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(panel.locator("#media-home-rows")).to_contain_text("Show")
             assert not errors, errors

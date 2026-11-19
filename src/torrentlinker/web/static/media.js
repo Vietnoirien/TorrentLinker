@@ -1,3 +1,39 @@
+"use strict";
+/* The Web player host. Browsing runs in the shared media/view.html frame. */
+const media = {kind: "video", view: "recent", selected: null, session: null, playerClient: "", queue: [], index: 0, shuffle: false, repeat: "off", ack: 0,
+  busy: false, preview: null, playbackGeneration: 0, chat: false, scan: "", scanQuiet: false, browseContext: null};
+const mediaTab = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
+const mediaChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("torrentlinker-media") : null;
+const mediaClaims = new Set();
+if (mediaChannel) mediaChannel.onmessage = event => {
+  const message = event.data;
+  if (message?.type === "probe" && message.tab !== mediaTab && message.id === media.session?.id)
+    mediaChannel.postMessage({type: "claimed", tab: message.tab, id: message.id});
+  if (message?.type === "claimed" && message.tab === mediaTab) mediaClaims.add(message.id);
+};
+async function mediaSessionClaimed(id) {
+  if (!mediaChannel) return false;
+  mediaChannel.postMessage({type: "probe", tab: mediaTab, id});
+  await new Promise(resolve => setTimeout(resolve, 100));
+  return mediaClaims.delete(id);
+}
+const mediaItems = new Map();
+const mediaURL = (id, suffix = "stream") => `api/media/items/${encodeURIComponent(id)}/${suffix}?${new URLSearchParams({client_id: media.playerClient || mediaClient()})}`;
+const mediaPlayer = () => $("media-audio").hidden ? $("media-video") : $("media-audio");
+function mediaStatus(text) { if (text) toast(text); }
+function mediaSetLayout(value) {
+  media.layout = mediaLayouts.includes(value) ? value : "cinematic";
+  try { localStorage.setItem("tl-media-layout", media.layout); } catch {}
+  $("view-media").dataset.layout = media.layout; $("settings-media-layout").value = media.layout;
+  if (typeof mediaRefreshView === "function") mediaRefreshView();
+}
+try { media.layout = localStorage.getItem("tl-media-layout"); } catch {}
+// In Video, a music track keeps its bar only while it plays, so it can still be paused.
+function mediaMusicBar() {
+  const shell = $("media-player-shell");
+  $("view-media").dataset.kind = media.kind;
+  shell.classList.toggle("media-shell-parked", shell.dataset.kind === "music" && media.kind === "video" && $("media-audio").paused);
+}
 function mediaPlayerLabels() {
   $("media-player-menu-toggle").setAttribute("aria-label", say("Player options", "Options du lecteur"));
   $("media-player-menu-toggle").title = say("Player options", "Options du lecteur");
@@ -274,9 +310,7 @@ async function mediaQueueMetadata() {
 }
 function mediaQueueRender() {
   $("media-shuffle").setAttribute("aria-pressed", String(media.shuffle)); $("media-repeat").value = media.repeat;
-  $("media-show-queue").textContent = say(`Playback queue · ${media.queue.length}`, `File de lecture · ${media.queue.length}`);
-  // Restored queues can contain uncached tracks; the server validates every saved item.
-  $("media-save-playlist").querySelector("button").disabled = !media.queue.length || media.queue.some(id => { const row = mediaItems.get(id); return row && row.kind !== "music"; });
+  if (typeof mediaEnvironment === "function") mediaEnvironment();
   const list = $("media-player-queue"), signature = JSON.stringify([language, media.index, media.queue.map(id => [id, mediaItems.get(id)?.title])]);
   if (list.dataset.signature === signature) return;
   list.dataset.signature = signature; list.replaceChildren();
@@ -328,58 +362,30 @@ async function mediaHeartbeat() {
   if (!media.session || media.busy || $("workspace").hidden) return;
   media.busy = true;
   try {
-    const browsing=media.kind==="video"&&media.browseContext;
+    const browsing=media.browseContext||{};
     const player = mediaPlayer();
     const report = {current_id: player.dataset.mediaId || null, queue: media.queue, index: media.index, position: player.currentTime || 0, duration: Number.isFinite(player.duration) ? player.duration : 0, paused: player.paused, volume: player.volume, shuffle: media.shuffle, repeat: media.repeat, command_ack: media.ack, track_state: mediaTrackState(), track_result: media.trackResult || null};
-    const response = await api(`media/sessions/${encodeURIComponent(media.session.id)}`, {token: media.session.token, report, context: {preview: media.preview ? {item_id: media.preview.item_id, verified_bytes: media.preview.verified_bytes, total_bytes: media.preview.total_bytes} : null, kind: media.kind, view: browsing?.view || media.view, selection: media.selected?.id || null, filters: browsing || {q: $("media-search").value, genre: $("media-genre").value, year: $("media-year").value, language: $("media-language").value}}});
+    const response = await api(`media/sessions/${encodeURIComponent(media.session.id)}`, {token: media.session.token, report, context: {preview: media.preview ? {item_id: media.preview.item_id, verified_bytes: media.preview.verified_bytes, total_bytes: media.preview.total_bytes} : null, kind: media.kind, view: browsing.view || media.view, selection: media.selected?.id || null, filters: browsing}});
     mediaTrackRequestFailure(response.state?.track_request);
     await mediaCommands(response.commands || []);
     if (!$("media-player-menu").hidden && !$("media-player-tracks").contains(document.activeElement)) { mediaRenderPlayerTracks(); mediaPositionPlayerMenu(); }
   } finally { media.busy = false; }
 }
-async function mediaPlaylists() {
-  const rows = await api(`media/playlists?${mediaQuery({})}`), root = $("media-playlist-list"); root.replaceChildren();
-  const playlists = rows.rows || rows;
-  if (!playlists.length) root.append(element("p", say("Your saved playlists will appear here. Start with a track or album, then save its queue.", "Vos playlists apparaîtront ici. Lancez une piste ou un album, puis enregistrez la file."), "media-playlist-empty"));
-  for (const row of playlists) {
-    const item = element("article", undefined, "media-playlist-card"), actions = element("div", undefined, "media-card-actions");
-    const count = row.media_ids?.length || 0;
-    item.append(element("h3", row.name), element("p", say(`${count} track${count === 1 ? "" : "s"}`, `${count} piste${count === 1 ? "" : "s"}`), "media-card-meta"));
-    actions.append(button(say("Play", "Lire"), () => mediaStart(row.media_ids || [])), button(say("Add to queue", "Ajouter à la file"), () => mediaEnqueue(row.media_ids || [])));
-    const options = element("details"), more = element("summary", say("Edit playlist", "Modifier la playlist"));
-    options.append(more, button(say("Replace with queue", "Remplacer par la file"), async () => { await api("media/playlists", {client_id: mediaClient(), id: row.id, name: row.name, media_ids: media.queue}); await mediaPlaylists(); }), button(say("Delete", "Supprimer"), async () => { await api(`media/playlists/${encodeURIComponent(row.id)}?${mediaQuery({})}`, undefined, "DELETE"); await mediaPlaylists(); }));
-    item.append(actions, options); root.append(item);
-  }
-  mediaQueueRender();
-}
-async function mediaScan(quiet = false) {
-  if (!quiet) $("media-library-options").open = false;
-  const job = await api("media/scan", {client_id: mediaClient()}); media.scan = job.id; media.scanQuiet = quiet;
-  $("media-cancel-scan").hidden = false; $("media-refresh").disabled = true;
-  mediaScanIcon();
-  if (!quiet) mediaStatus("Scanning Library Folders...");
+async function mediaScan() {
+  const job = await api("media/scan", {client_id: mediaClient()}); media.scan = job.id; media.scanQuiet = true;
 }
 // New films and episodes appear on their own: a quiet rescan reloads only what changed.
 const MEDIA_AUTO_REFRESH = 60000;
 async function mediaAutoScan() {
   if (state.view !== "media" || $("workspace").hidden || media.scan || !state.setup?.capabilities?.scan) return;
-  await mediaScan(true);
-}
-// The toolbar ⟳ refreshes the library; while a refresh runs, the same button cancels it.
-function mediaScanIcon() {
-  const running = !!media.scan, icon = $("media-toolbar-refresh");
-  const label = running ? say("Cancel library refresh", "Annuler l’actualisation") : say("Refresh library", "Actualiser la médiathèque");
-  icon.setAttribute("aria-pressed", String(running)); icon.title = label; icon.setAttribute("aria-label", label);
+  await mediaScan();
 }
 async function mediaPollScan() {
   if (!media.scan) return;
   const job = await api(`jobs/${encodeURIComponent(media.scan)}`);
-  const quiet = media.scanQuiet;
-  if (!quiet) mediaStatus(job.progress?.message || (job.progress?.items !== undefined ? `Scanning Library Folders... ${job.progress.items} items found` : job.message || `Scan ${job.status}`));
   if (!["queued", "running"].includes(job.status)) {
-    media.scan = ""; media.scanQuiet = false; mediaScanIcon(); $("media-cancel-scan").hidden = true; $("media-refresh").disabled = false;
-    if (!quiet || job.result?.changed) await loadMedia();
-    if (job.error && !quiet) mediaStatus(job.error);
+    media.scan = ""; media.scanQuiet = false;
+    if (job.result?.changed) await loadMedia();
   }
 }
 const MEDIA_CHAT_MIN = 320, MEDIA_SIDE_MIN = 480;
@@ -402,8 +408,7 @@ function mediaChatButtons() {
     $(id).title = label; $(id).setAttribute("aria-label", label);
   }
   $("media-chat-resize").setAttribute("aria-label", say("Resize chat", "Redimensionner la discussion"));
-  for (const id of ["media-chat", "media-feature-chat", "media-toolbar-chat"]) $(id)?.setAttribute("aria-pressed", String(media.chat));
-  $("media-toolbar-chat").title = say("Chat", "Discussion"); $("media-toolbar-chat").setAttribute("aria-label", say("Chat", "Discussion"));
+  $("media-chat").setAttribute("aria-pressed", String(media.chat));
 }
 async function mediaOpenChat(conversationId = "", fresh = false) {
   await mediaSession(); await mediaHeartbeat();
@@ -469,30 +474,19 @@ function mediaChatResizeKey(event) {
 function mediaCenterAppearance(enabled) {
   queueMicrotask(()=>window.dispatchEvent(new Event("media-host-changed")));
   document.body.classList.toggle("media-center-mode", enabled);
-  const label = enabled ? say("Return to TorrentLinker", "Revenir à TorrentLinker") : say("Media Center mode", "Mode Media Center");
-  $("media-center-mode").title = label; $("media-center-mode").setAttribute("aria-label", label);
-  $("media-center-mode").setAttribute("aria-pressed", String(enabled));
 }
 async function mediaExitCenter() {
   if (document.fullscreenElement === document.documentElement) await document.exitFullscreen();
   mediaCenterAppearance(false);
 }
-$("media-center-mode").onclick = () => guard(async () => {
+const mediaToggleCenter = () => guard(async () => {
   if (document.body.classList.contains("media-center-mode")) await mediaExitCenter();
   else {
     if (document.fullscreenEnabled) await document.documentElement.requestFullscreen();
     mediaCenterAppearance(true);
   }
 });
-$("media-layout-switch").onchange = event => mediaSetLayout(event.target.value);
 $("settings-media-layout").onchange = event => mediaSetLayout(event.target.value);
-for (const item of document.querySelectorAll("[data-media-view]")) item.onclick = () => guard(async () => {
-  // A browse tab returns to its rows, so it clears the filters a row's "See all" applied.
-  media.gridMode = false; media.animeFilters = {};
-  for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}`).value = "";
-  media.view = item.dataset.mediaView; $("media-view").value = media.view; await loadMedia();
-});
-$("media-details").addEventListener("click", event => { if (event.target === $("media-details")) { const box = event.target.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) event.target.close(); } });
 $("media-player-expand").onclick = () => { const expanded = $("media-player-shell").classList.toggle("media-player-expanded"); $("media-player-expand").textContent = expanded ? say("Compact player", "Réduire le lecteur") : say("Expand player", "Agrandir le lecteur"); };
 $("media-fullscreen").hidden = !document.fullscreenEnabled;
 $("media-fullscreen").onclick = () => guard(async () => {
@@ -518,20 +512,8 @@ $("logout").addEventListener("click", () => { mediaInvalidatePlayback(); mediaPl
 $("target-client").addEventListener("change", mediaInvalidatePlayback);
 $("media-stop").onclick = () => guard(mediaStop);
 $("media-refresh-preview").onclick = () => guard(() => { if (media.preview) return mediaPreview(media.preview.item_id, true); });
-$("media-video-tab").onclick = () => guard(async () => { media.kind = "video"; media.view = "recent"; mediaViews(); await loadMedia(); });
-$("media-music-tab").onclick = () => guard(async () => { media.kind = "music"; media.view = "albums"; mediaViews(); await loadMedia(); });
-$("media-view").onchange = () => guard(async () => { media.view = $("media-view").value; await loadMedia(); });
-for (const item of document.querySelectorAll("[data-media-music-view]")) item.onclick = () => guard(async () => { media.view = item.dataset.mediaMusicView; $("media-view").value = media.view; await loadMedia(); });
-for (const key of ["genre", "year", "language", "availability"]) $(`media-${key}`).onchange = () => guard(loadMedia);
-let mediaSearchTimer;
-$("media-search").oninput = () => { clearTimeout(mediaSearchTimer); mediaSearchTimer = setTimeout(() => guard(loadMedia), 250); };
-$("media-refresh").onclick = () => guard(mediaScan);
 for (const event of ["play", "pause", "ended", "emptied"]) $("media-audio").addEventListener(event, mediaMusicBar);
-$("media-toolbar-refresh").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); else await mediaScan(); });
-mediaScanIcon();
-$("media-more").onclick = () => guard(() => loadMedia(true));
-$("media-cancel-scan").onclick = () => guard(async () => { if (media.scan) await api(`jobs/${encodeURIComponent(media.scan)}/cancel`, {}); });
-$("media-chat").onclick = () => guard(mediaToggleChat); $("media-toolbar-chat").onclick = () => guard(mediaToggleChat); $("media-chat-close").onclick = mediaCloseChat;
+$("media-chat").onclick = () => guard(mediaToggleChat); $("media-chat-close").onclick = mediaCloseChat;
 mediaCenterAppearance(document.body.classList.contains("media-center-mode")); mediaChatButtons();
 $("media-chat-history").onclick = () => guard(mediaChatHistory); $("media-chat-more").onclick = mediaChatMore;
 $("media-chat-resize").addEventListener("pointerdown", mediaStartChatResize); $("media-chat-resize").addEventListener("keydown", mediaChatResizeKey);
@@ -541,7 +523,7 @@ $("media-previous").onclick = () => guard(() => mediaAdvance(-1)); $("media-next
 $("media-shuffle").onclick = () => { media.shuffle = !media.shuffle; mediaQueueRender(); guard(mediaHeartbeat); };
 $("media-repeat").onchange = () => { media.repeat = $("media-repeat").value; guard(mediaHeartbeat); };
 $("media-queue-details").ontoggle = event => { if (event.target.open) { guard(mediaQueueMetadata); mediaPositionPlayerMenu(); } };
-$("media-show-queue").onclick = () => { if (!media.queue.length) return; if (mediaPlayer() === $("media-video")) mediaOpenPlayerMenu(); $("media-queue-details").open = true; $("media-player-shell").scrollIntoView({block: "nearest"}); };
+const mediaShowQueue = () => { if (!media.queue.length) return; if (mediaPlayer() === $("media-video")) mediaOpenPlayerMenu(); $("media-queue-details").open = true; $("media-player-shell").scrollIntoView({block: "nearest"}); };
 $("media-player-menu-toggle").onclick = () => $("media-player-menu").hidden ? mediaOpenPlayerMenu() : mediaClosePlayerMenu(true);
 $("media-player-menu-close").onclick = () => mediaClosePlayerMenu(true);
 $("media-video-stage").oncontextmenu = event => { event.preventDefault(); mediaOpenPlayerMenu({x: event.clientX, y: event.clientY}); };
@@ -568,7 +550,6 @@ $("media-video-stage").addEventListener("pointerdown", () => {
 for (const event of ["play", "pause", "ended", "emptied"]) $("media-video").addEventListener(event, () => { $("media-video-stage").dataset.playing = String(!$("media-video").paused && !$("media-video").ended); });
 window.addEventListener("resize", () => mediaPositionPlayerMenu());
 document.addEventListener("fullscreenchange", () => mediaPositionPlayerMenu());
-$("media-save-playlist").onsubmit = e => { e.preventDefault(); guard(async () => { await api("media/playlists", {client_id: media.playerClient || mediaClient(), name: $("media-playlist-name").value, media_ids: media.queue}); $("media-playlist-name").value = ""; await mediaPlaylists(); }); };
 for (const player of [$("media-video"), $("media-audio")]) { player.onerror = mediaCodecError; player.onwaiting = () => { if (media.preview && player.currentTime > 0) mediaStatus(say("The fixed partial preview has no more playable data here. Wait for more download progress, then refresh preview.", "L’aperçu partiel fixe ne contient plus de données lisibles à cet endroit. Attendez la progression du téléchargement, puis actualisez l’aperçu.")); }; player.onended = () => guard(async () => { if (media.preview) { mediaStatus(say("End of fixed partial preview. Wait for more data, then refresh preview.", "Fin de l’aperçu partiel fixe. Attendez davantage de données, puis actualisez l’aperçu.")); } else if (media.repeat === "one") { player.currentTime = 0; await mediaTryPlay(player); } else await mediaAdvance(1); await mediaHeartbeat(); }); }
 setInterval(() => { guard(mediaHeartbeat); guard(mediaPollScan); }, 1000);
 setInterval(() => guard(mediaAutoScan), MEDIA_AUTO_REFRESH);

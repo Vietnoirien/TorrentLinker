@@ -2,15 +2,45 @@
 const mediaExternalURL=id=>new URL(`../../api/media/items/${encodeURIComponent(id)}/stream?${mediaQuery({})}`,location.href).href;
 const mediaStart=async(ids,index=0)=>host("play",{media_ids:await ids,index});
 const mediaPreview=id=>host("preview",{media_id:id});
-const mediaToggleChat=()=>host("chat",{selected_ids:media.selected?[media.selected.id]:[]});
+const mediaToggleChat=async()=>{await mediaSelectionChanged(media.selected);return host("chat",{selected_ids:media.selected?[media.selected.id]:[]})};
 function mediaSelectionChanged(row){
-  guard(async()=>{
-    await host("context",{view:media.view,q:$("media-search").value,...Object.fromEntries(["genre","year","language","availability"].map(key=>[key,$(`media-${key}`).value]))});
+  return guard(async()=>{
+    await host("context",{kind:media.kind,view:media.view,q:$("media-search").value,...Object.fromEntries(["genre","year","language","availability"].map(key=>[key,$(`media-${key}`).value]))});
     await host("selection",{selected_ids:row?[row.id]:[]});
   });
 }
-$("media-music-tab").onclick=()=>guard(()=>host("music"));
-$("media-video-tab").onclick=()=>guard(async()=>{media.view="recent";media.gridMode=false;mediaViews();await loadMedia()});
+async function mediaKind(kind){
+  media.kind=kind;media.view=mediaViewsByKind[kind][0];media.gridMode=false;media.animeFilters={};
+  for(const key of ["genre","year","language","availability"])$(`media-${key}`).value="";
+  mediaViews();await host("kind",{kind});await loadMedia();
+}
+const mediaEnqueue=async ids=>host("enqueue",{media_ids:await ids});
+// The host owns the playback queue; the view reads it from the environment.
+function mediaQueueLabel(){
+  const queue=environment.queue||[];
+  $("media-show-queue").textContent=say(`Playback queue · ${queue.length}`,`File de lecture · ${queue.length}`);
+  $("media-save-playlist").querySelector("button").disabled=!queue.length||!environment.queue_music;
+}
+async function mediaPlaylists(){
+  const rows=await api(`media/playlists?${mediaQuery({})}`),root=$("media-playlist-list");root.replaceChildren();
+  const playlists=rows.rows||rows;
+  if(!playlists.length)root.append(element("p",say("Your saved playlists will appear here. Start with a track or album, then save its queue.","Vos playlists apparaîtront ici. Lancez une piste ou un album, puis enregistrez la file."),"media-playlist-empty"));
+  for(const row of playlists){
+    const item=element("article",undefined,"media-playlist-card"),actions=element("div",undefined,"media-card-actions");
+    const count=row.media_ids?.length||0;
+    item.append(element("h3",row.name),element("p",say(`${count} track${count===1?"":"s"}`,`${count} piste${count===1?"":"s"}`),"media-card-meta"));
+    actions.append(button(say("Play","Lire"),()=>mediaStart(row.media_ids||[])),button(say("Add to queue","Ajouter à la file"),()=>mediaEnqueue(row.media_ids||[])));
+    const options=element("details"),more=element("summary",say("Edit playlist","Modifier la playlist"));
+    options.append(more,button(say("Replace with queue","Remplacer par la file"),async()=>{await api("media/playlists",{id:row.id,name:row.name,media_ids:environment.queue||[]});await mediaPlaylists()}),button(say("Delete","Supprimer"),async()=>{await api(`media/playlists/${encodeURIComponent(row.id)}?${mediaQuery({})}`,undefined,"DELETE");await mediaPlaylists()}));
+    item.append(actions,options);root.append(item);
+  }
+  mediaQueueLabel();
+}
+$("media-save-playlist").onsubmit=event=>{event.preventDefault();guard(async()=>{await api("media/playlists",{name:$("media-playlist-name").value,media_ids:environment.queue||[]});$("media-playlist-name").value="";await mediaPlaylists()})};
+$("media-show-queue").onclick=()=>guard(()=>host("queue"));
+$("media-music-tab").onclick=()=>guard(()=>mediaKind("music"));
+$("media-video-tab").onclick=()=>guard(()=>mediaKind("video"));
+for(const node of document.querySelectorAll("[data-media-music-view]"))node.onclick=()=>guard(async()=>{media.view=node.dataset.mediaMusicView;$("media-view").value=media.view;await loadMedia()});
 $("media-toolbar-chat").onclick=()=>guard(mediaToggleChat);
 $("media-toolbar-chat").title=say("Assistant","Assistant");
 $("media-center-mode").onclick=()=>guard(()=>host("center"));
