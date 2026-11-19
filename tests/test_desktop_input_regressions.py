@@ -44,9 +44,9 @@ def test_scrolling_over_focused_plan_size_does_not_change_value(qtbot):
 
 
 def test_settings_save_fits_available_screen(qtbot, tmp_path, request):
-    from tests.settings_support import isolated_settings_render
+    from tests.webengine_support import isolated_webengine_render
 
-    if isolated_settings_render(request):
+    if isolated_webengine_render(request):
         return
 
     from tests.settings_support import settings_dialog
@@ -65,9 +65,9 @@ def test_settings_save_fits_available_screen(qtbot, tmp_path, request):
 
 
 def test_settings_uses_short_work_area_above_taskbar(qtbot, tmp_path, monkeypatch, request):
-    from tests.settings_support import isolated_settings_render
+    from tests.webengine_support import isolated_webengine_render
 
-    if isolated_settings_render(request):
+    if isolated_webengine_render(request):
         return
 
     from types import SimpleNamespace

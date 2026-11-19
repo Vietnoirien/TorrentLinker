@@ -7,7 +7,6 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from functools import partial
 from typing import Any
 from uuid import uuid4
 
@@ -20,7 +19,6 @@ from PySide6.QtCore import (
     QRect,
     QRectF,
     QSettings,
-    QSignalBlocker,
     QSize,
     QSizeF,
     Qt,
@@ -30,13 +28,10 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
-    QActionGroup,
     QColor,
     QDesktopServices,
     QFont,
     QFontMetrics,
-    QIcon,
-    QPainter,
     QTextDocumentFragment,
 )
 from PySide6.QtMultimedia import (
@@ -49,31 +44,24 @@ from PySide6.QtMultimedia import (
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
-    QComboBox,
     QDialog,
     QGraphicsDropShadowEffect,
     QGraphicsScene,
     QGraphicsView,
-    QHBoxLayout,
-    QInputDialog,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QMenu,
     QPushButton,
-    QSlider,
     QSplitter,
-    QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 from shiboken6 import isValid
 
+from torrentlinker import i18n
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.media_audio import create_audio_output
 from torrentlinker.gui.media_browser import MediaBrowserPanel
+from torrentlinker.gui.player_view import PlayerView
 from torrentlinker.gui.tasks import run_in_background
 
 # The Media Center chat panel and the media beside it never shrink below these.
@@ -425,6 +413,11 @@ class MediaTab(QWidget):
         }
         self.conversation_id = ""
         self.current_playlist = ""
+        self.saved_playlists: list[dict[str, Any]] = []
+        self.queue_rows: list[dict[str, Any]] = []
+        self.queue_order = ()
+        self.queue_revision = 0
+        self.queue_open = False
         self.assistant: Any = None
         self.scan_stop: threading.Event | None = None
         self.scan_quiet = False  # an automatic refresh shows no progress
@@ -522,10 +515,7 @@ class MediaTab(QWidget):
         self.notice.setWordWrap(True)
         self.notice.hide()
         left_box.addWidget(self.notice)
-        self.refresh_preview = QPushButton(self.tr("Refresh preview"))
-        set_role(self.refresh_preview, "quiet")
-        self.refresh_preview.clicked.connect(self.start_preview)
-        self.refresh_preview.hide()
+        self.preview_loading = False
         self.player_panel = QWidget()
         self.player_home_layout = left_box
         self.player_base_layout = left_box
@@ -564,31 +554,6 @@ class MediaTab(QWidget):
         self.video.overlay.installEventFilter(self)
         self._scale_caption()
         self.video_overlay_box.addWidget(self.caption, 0, Qt.AlignmentFlag.AlignHCenter)
-        self.video_controls = QWidget()
-        self.video_controls.setObjectName("mediaVideoControls")
-        self.video_controls.setStyleSheet("""
-            QWidget#mediaVideoControls { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
-                stop:0 rgba(0,0,0,50),stop:1 rgba(0,0,0,210)); color: white; }
-            QWidget#mediaVideoControls [role="icon"] { color: white; }
-        """)
-        controls_box = QVBoxLayout(self.video_controls)
-        controls_box.setContentsMargins(14, 10, 14, 8)
-        controls_box.setSpacing(5)
-        self.seek = QSlider(Qt.Orientation.Horizontal)
-        self.seek.setAccessibleName(self.tr("Seek"))
-        self.seek.setRange(0, 0)
-        self.seek.sliderReleased.connect(lambda: self.command("seek", position=self.seek.value()))
-        controls_box.addWidget(self.seek)
-        self.transport = QHBoxLayout()
-        controls_box.addLayout(self.transport)
-        self.previous_button = QPushButton()
-        self.previous_button.clicked.connect(lambda: self._transport_step(-1))
-        self.pause = QPushButton()
-        self.pause.setAccessibleName(self.tr("Play / pause"))
-        self.pause.clicked.connect(self.toggle_pause)
-        self.next_button = QPushButton()
-        self.next_button.clicked.connect(lambda: self._transport_step(1))
-        previous, next_button = self.previous_button, self.next_button
         self.now_playing = QLabel(self.tr("Nothing playing"))
         self.now_playing.setTextFormat(Qt.TextFormat.PlainText)
         self.player_heading = QWidget()
@@ -599,99 +564,13 @@ class MediaTab(QWidget):
         self.playing_description.setTextFormat(Qt.TextFormat.PlainText)
         self.playing_description.setWordWrap(True)
         self.player_heading_box.addWidget(self.playing_description)
-        self.preview_refresh_home = QHBoxLayout()
-        self.preview_refresh_home.addWidget(self.refresh_preview)
-        self.player_heading_box.addLayout(self.preview_refresh_home)
         player_box.addWidget(self.player_heading)
-        self.elapsed = QLabel("0:00 / 0:00")
-        self.volume = QSlider(Qt.Orientation.Horizontal)
-        self.volume.setRange(0, 100)
-        self.volume.setValue(100)
-        self.volume.setMaximumWidth(90)
-        self.volume.setAccessibleName(self.tr("Volume"))
-        self.volume.setToolTip(self.tr("Volume"))
-        self.volume.sliderReleased.connect(
-            lambda: self.command("volume", volume=self.volume.value() / 100)
-        )
-        for widget in (previous, self.pause, next_button, self.elapsed, self.volume):
-            self.transport.addWidget(widget)
-        self.transport.addStretch()
-        self.fullscreen_button = QPushButton()
-        self.fullscreen_button.setObjectName("media-fullscreen")
-        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
-        self.player_options = QToolButton()
-        self.player_options.setText("⋯")
-        self.player_options.setAccessibleName(self.tr("Player options"))
-        self.player_options.setToolTip(self.tr("Player options"))
-        self.player_options.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.player_menu = QMenu(self.player_options)
-        self.player_options.setMenu(self.player_menu)
-        self.audio_menu = self.player_menu.addMenu(self.tr("Audio track"))
-        self.subtitle_menu = self.player_menu.addMenu(self.tr("Subtitle track"))
-        self.repeat_menu = self.player_menu.addMenu(self.tr("Repeat off"))
-        self.shuffle_action = self.player_menu.addAction(self.tr("Shuffle"))
-        self.shuffle_action.setCheckable(True)
-        self.shuffle_action.triggered.connect(
-            lambda checked: self.command("shuffle", shuffle=checked)
-        )
-        self.queue_action = self.player_menu.addAction(self.tr("Queue & playlists"))
-        self.queue_action.setCheckable(True)
-        self.player_menu.aboutToShow.connect(self._build_player_menu)
-        self.player_menu.aboutToShow.connect(self._show_video_controls)
-        self.player_menu.aboutToHide.connect(self._show_video_controls)
-        self.transport.addWidget(self.player_options)
-        self.transport.addWidget(self.fullscreen_button)
-        for widget in (
-            previous,
-            self.pause,
-            next_button,
-            self.player_options,
-            self.fullscreen_button,
-        ):
-            set_role(widget, "icon")
-            widget.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        self.fullscreen_button.setObjectName("media-fullscreen")
-        self.fullscreen_button.setIcon(
-            self._player_icon(QStyle.StandardPixmap.SP_TitleBarMaxButton)
-        )
-        self.fullscreen_button.setToolTip(self.tr("Fullscreen"))
-        self.fullscreen_button.setAccessibleName(self.tr("Fullscreen"))
+        self.video_controls = PlayerView(self._player_snapshot, self._player_control)
+        self.video_controls.interacted.connect(self._show_video_controls)
         self.video_overlay_box.addWidget(self.video_controls)
         self.music_controls_home = QVBoxLayout()
         self.music_controls_home.setContentsMargins(0, 0, 0, 0)
         player_box.addLayout(self.music_controls_home)
-        self.shuffle = QCheckBox(self.tr("Shuffle"), self.player_panel)
-        self.shuffle.clicked.connect(lambda on: self.command("shuffle", shuffle=on))
-        self.repeat = QComboBox(self.player_panel)
-        for label, value in (
-            (self.tr("Repeat off"), "off"),
-            (self.tr("Repeat all"), "all"),
-            (self.tr("Repeat one"), "one"),
-        ):
-            self.repeat.addItem(label, value)
-        self.repeat.currentIndexChanged.connect(
-            lambda: self.command("repeat", repeat=self.repeat.currentData())
-        )
-        self.audio_tracks = QComboBox(self.player_panel)
-        self.audio_tracks.setAccessibleName(self.tr("Audio track"))
-        self.audio_tracks.currentIndexChanged.connect(self._select_audio)
-        self.subtitles = QComboBox(self.player_panel)
-        self.subtitles.setAccessibleName(self.tr("Subtitle track"))
-        self.subtitles.addItem(self.tr("Subtitles off"), -1)
-        self.subtitles.currentIndexChanged.connect(self._select_subtitle)
-        self.queue_disclosure = QPushButton(self.tr("Queue & playlists"), self.player_panel)
-        self.queue_disclosure.setCheckable(True)
-        self.queue_action.triggered.connect(
-            lambda checked: self.queue_disclosure.setChecked(checked)
-        )
-        for widget in (
-            self.shuffle,
-            self.repeat,
-            self.audio_tracks,
-            self.subtitles,
-            self.queue_disclosure,
-        ):
-            widget.hide()
         self.click_timer = QTimer(self)
         self.click_timer.setSingleShot(True)
         self.click_timer.timeout.connect(self.toggle_pause)
@@ -709,61 +588,6 @@ class MediaTab(QWidget):
         ):
             widget.installEventFilter(self)
         self._playback_controls_changed()
-        self.external = QPushButton(self.tr("Open in external player"))
-        self.external.clicked.connect(self.open_external)
-        self.external.hide()
-        player_box.addWidget(self.external)
-        self.queue_panel = QWidget()
-        queue_box = QHBoxLayout(self.queue_panel)
-        self.queue = QListWidget()
-        self.queue.setMaximumHeight(150)
-        self.queue.itemDoubleClicked.connect(self._queue_play)
-        queue_box.addWidget(self.queue, 1)
-        queue_controls = QVBoxLayout()
-        remove = QPushButton(self.tr("Remove from queue"))
-        remove.clicked.connect(self.remove_from_queue)
-        self.save_playlist = QPushButton(self.tr("Save queue as playlist…"))
-        self.save_playlist.clicked.connect(self._save_playlist)
-        self.playlists = QComboBox()
-        self.playlists.setPlaceholderText(self.tr("Saved playlists"))
-        self.load_playlist = QPushButton(self.tr("Load playlist"))
-        self.load_playlist.clicked.connect(self._load_playlist)
-        delete_playlist = QPushButton(self.tr("Delete playlist"))
-        delete_playlist.clicked.connect(self._delete_playlist)
-        for widget in (
-            remove,
-            self.save_playlist,
-            self.playlists,
-            self.load_playlist,
-            delete_playlist,
-        ):
-            queue_controls.addWidget(widget)
-        queue_box.addLayout(queue_controls)
-        self.queue_panel.hide()
-        self.queue_disclosure.toggled.connect(self.queue_panel.setVisible)
-        player_box.addWidget(self.queue_panel)
-        self.playback_widgets = [
-            self.now_playing,
-            previous,
-            self.pause,
-            next_button,
-            self.seek,
-            self.elapsed,
-            self.volume,
-            self.shuffle,
-            self.repeat,
-            self.audio_tracks,
-            self.subtitles,
-            self.fullscreen_button,
-        ]
-        self.queue_widgets = [
-            self.queue,
-            remove,
-            self.save_playlist,
-            self.playlists,
-            self.load_playlist,
-            delete_playlist,
-        ]
         left_box.addWidget(self.player_panel)
         self.scan_progress.connect(self._scan_progress)
         self.chat.clicked.connect(self.toggle_chat)
@@ -785,9 +609,9 @@ class MediaTab(QWidget):
             self.browser.show_notice(text)
 
     def _open_queue(self) -> None:
-        self.queue_disclosure.setChecked(True)
+        self.queue_open = True
         self._update_panes()
-        self.queue.setFocus()
+        self.video_controls.open_menu(queue=True)
 
     def set_adult(self, enabled: bool) -> None:
         """Show or hide the XXX tab (Settings → Adult content)."""
@@ -813,6 +637,7 @@ class MediaTab(QWidget):
         label = self.tr("Return to TorrentLinker") if enabled else self.tr("Media Center mode")
         self.center_button.setAccessibleName(label)
         self.center_button.setToolTip(label)
+        self.video_controls.refresh()
 
     def _transport_step(self, direction: int) -> None:
         if self._player_video_mode:
@@ -820,27 +645,12 @@ class MediaTab(QWidget):
         else:
             self.command("next" if direction > 0 else "previous")
 
-    def _player_icon(self, standard: QStyle.StandardPixmap) -> QIcon:
-        pixmap = self.style().standardIcon(standard).pixmap(24, 24)
-        painter = QPainter(pixmap)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-        painter.fillRect(pixmap.rect(), QColor("white"))
-        painter.end()
-        return QIcon(pixmap)
-
     def _playback_controls_changed(self, *_args) -> None:
         playing = (
             self.player is not None
             and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
         )
-        self.pause.setIcon(
-            self._player_icon(
-                QStyle.StandardPixmap.SP_MediaPause
-                if playing
-                else QStyle.StandardPixmap.SP_MediaPlay
-            )
-        )
-        self.pause.setToolTip(self.tr("Pause") if playing else self.tr("Play"))
+        self.video_controls.refresh()
         video = playing and self.current_row.get("kind") != "music"
         if video != self.video_playing:
             self.video_playing = video
@@ -889,76 +699,20 @@ class MediaTab(QWidget):
             self.controls_timer.start()
 
     def _hide_video_controls(self) -> None:
-        focus = QApplication.focusWidget()
         if not self._player_video_mode:
             self.controls_timer.stop()
             return
         if (
             self.player is None
             or self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
-            or self.player_menu.isVisible()
-            or (focus is not None and self.video_controls.isAncestorOf(focus))
+            or self.video_controls.menu_open
+            or self.video_controls.keyboard_focus
         ):
             self.controls_timer.start()
             return
         self.video_controls.hide()
         self.player_back.hide()
         self.video.viewport().setCursor(Qt.CursorShape.BlankCursor)
-
-    def _choose_menu_track(
-        self, kind: str, identifier: str, token: str, media_id: str, _checked: bool = False
-    ) -> None:
-        if token != self.track_source_token or media_id != self.last_source:
-            self.player_menu.close()
-            return
-        self.report()
-        if token == self.track_source_token and media_id == self.last_source:
-            self.command("select_track", kind=kind, track_id=identifier, source_token=token)
-
-    def _build_player_menu(self) -> None:
-        snapshot = self._track_state()
-        token, media_id = snapshot["source_token"], snapshot["media_id"]
-        for kind, menu, rows in (
-            ("audio", self.audio_menu, snapshot["audio"]),
-            ("subtitle", self.subtitle_menu, snapshot["subtitles"]),
-        ):
-            menu.clear()
-            for previous_group in menu.findChildren(QActionGroup):
-                previous_group.deleteLater()
-            group = QActionGroup(menu)
-            choices = (
-                [
-                    {
-                        "id": "off",
-                        "label": self.tr("Subtitles off"),
-                        "selected": not any(row["selected"] for row in rows),
-                    }
-                ]
-                if kind == "subtitle"
-                else []
-            ) + rows
-            for row in choices:
-                action = menu.addAction(row["label"])
-                action.setCheckable(True)
-                action.setChecked(row["selected"])
-                action.setData(row["id"])
-                group.addAction(action)
-                action.triggered.connect(
-                    partial(self._choose_menu_track, kind, row["id"], token, media_id)
-                )
-            menu.setEnabled(snapshot[f"{kind}_supported"])
-        self.repeat_menu.clear()
-        for previous_group in self.repeat_menu.findChildren(QActionGroup):
-            previous_group.deleteLater()
-        repeat_group = QActionGroup(self.repeat_menu)
-        for index in range(self.repeat.count()):
-            action = self.repeat_menu.addAction(self.repeat.itemText(index))
-            action.setCheckable(True)
-            action.setChecked(index == self.repeat.currentIndex())
-            repeat_group.addAction(action)
-            action.triggered.connect(lambda _checked=False, i=index: self.repeat.setCurrentIndex(i))
-        self.shuffle_action.setChecked(self.shuffle.isChecked())
-        self.queue_action.setChecked(self.queue_disclosure.isChecked())
 
     def _arrange_player(self) -> None:
         active_video = bool(self.last_source) and self.current_row.get("kind") == "video"
@@ -984,26 +738,8 @@ class MediaTab(QWidget):
                 self.player_home_layout = self.player_base_layout
             if self.music_controls_home.indexOf(self.video_controls) < 0:
                 self.music_controls_home.addWidget(self.video_controls)
-            if self.transport.indexOf(self.now_playing) < 0:
-                self.transport.insertWidget(3, self.now_playing, 1)
             self.now_playing.setStyleSheet("color: #e7eeeb;")
         self.player_heading.setVisible(active_video and not self.fullscreen_dialog.isVisible())
-        self.fullscreen_button.setVisible(active_video)
-        for button, icon, label in (
-            (
-                self.previous_button,
-                QStyle.StandardPixmap.SP_MediaSeekBackward,
-                self.tr("Back 10 seconds") if active_video else self.tr("Previous"),
-            ),
-            (
-                self.next_button,
-                QStyle.StandardPixmap.SP_MediaSeekForward,
-                self.tr("Forward 10 seconds") if active_video else self.tr("Next"),
-            ),
-        ):
-            button.setIcon(self._player_icon(icon))
-            button.setToolTip(label)
-            button.setAccessibleName(label)
         if active_video and not self.fullscreen_dialog.isVisible():
             self.video.setFixedHeight(
                 min(
@@ -1041,20 +777,16 @@ class MediaTab(QWidget):
             self.player_box.setContentsMargins(0, 0, 0, 0)
             self.video.setMinimumHeight(0)
             self.video.setMaximumHeight(16777215)
-            self.fullscreen_button.setToolTip(self.tr("Exit fullscreen"))
-            self.fullscreen_button.setAccessibleName(self.tr("Exit fullscreen"))
             self.player_heading.hide()
             self.fullscreen_dialog.showFullScreen()
-            self.fullscreen_button.setFocus()
+            self.video_controls.focus_fullscreen()
 
     def _leave_fullscreen(self) -> None:
         self.player_box.setContentsMargins(12, 8, 12, 8)
         self.player_home_layout.insertWidget(self._player_home_index, self.player_panel)
         self._arrange_player()
-        self.fullscreen_button.setToolTip(self.tr("Fullscreen"))
-        self.fullscreen_button.setAccessibleName(self.tr("Fullscreen"))
         self.player_panel.show()
-        self.fullscreen_button.setFocus()
+        self.video_controls.focus_fullscreen()
 
     @staticmethod
     def _time_label(seconds: float) -> str:
@@ -1157,10 +889,6 @@ class MediaTab(QWidget):
                 self.player.tracksChanged.connect(self._playback_tracks)
                 self.player.sourceChanged.connect(self._track_source_changed)
                 self.audio.setVolume(float(self.state["volume"]))
-                self.volume.setValue(round(float(self.state["volume"]) * 100))
-                with QSignalBlocker(self.shuffle), QSignalBlocker(self.repeat):
-                    self.shuffle.setChecked(bool(self.state["shuffle"]))
-                    self.repeat.setCurrentIndex(max(0, self.repeat.findData(self.state["repeat"])))
                 self.heartbeat.start()
                 try:
                     # Start on the library; Continue watching keeps the saved video position.
@@ -1235,7 +963,7 @@ class MediaTab(QWidget):
             ):
                 self._show_video_controls()
             if surface and event.type() == QEvent.Type.ContextMenu:
-                self.player_menu.popup(event.globalPos())
+                self.video_controls.open_menu()
                 return True
             if watched is self.video.overlay and event.type() == QEvent.Type.Resize:
                 self._scale_caption()
@@ -1293,19 +1021,11 @@ class MediaTab(QWidget):
         browser.activate()
 
     def _refresh_playlists(self) -> None:
-        """Fill the player's saved-playlist choice; the view lists its own."""
         try:
-            playlists = self.library.playlists(self.session_client)
+            self.saved_playlists = self.library.playlists(self.session_client)
+            self.video_controls.refresh()
         except (OSError, ValueError) as error:
             self._set_notice(str(error))
-            return
-        name = self.current_playlist or self.playlists.currentText()
-        with QSignalBlocker(self.playlists):
-            self.playlists.clear()
-            for playlist in playlists:
-                self.playlists.addItem(playlist["name"], playlist)
-            if playlists:
-                self.playlists.setCurrentIndex(max(0, self.playlists.findText(name)))
 
     def _update_panes(self) -> None:
         active = bool(self.last_source)
@@ -1313,7 +1033,6 @@ class MediaTab(QWidget):
             self.fullscreen_dialog.reject()
         video = self.browse_kind == "video"
         active_video = active and self.current_row.get("kind") == "video"
-        self.refresh_preview.setVisible(bool(self.preview_id))
         playing = (
             self.player is not None
             and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
@@ -1323,19 +1042,13 @@ class MediaTab(QWidget):
         self.player_panel.setVisible(
             (active and not background_music)
             or (background_music and playing)
-            or (not video and (bool(self.state["queue"]) or self.queue_disclosure.isChecked()))
+            or (not video and (bool(self.state["queue"]) or self.queue_open))
         )
         self.video.setVisible(active_video)
         self._arrange_player()
         self._render_caption()
-        for widget in self.playback_widgets:
-            widget.setVisible(
-                active
-                and widget not in {self.shuffle, self.repeat, self.audio_tracks, self.subtitles}
-            )
-        self.fullscreen_button.setVisible(active_video)
-        for widget in self.queue_widgets:
-            widget.setVisible(bool(self.state["queue"]) or not video)
+        self.video_controls.setVisible(active or bool(self.state["queue"]) or self.queue_open)
+        self.video_controls.refresh()
         if self.browser is not None:
             self.browser.setVisible(not active_video)
 
@@ -1366,7 +1079,7 @@ class MediaTab(QWidget):
         elif action == "play":
             self.command("play", media_ids=values["media_ids"], index=values.get("index", 0))
         elif action == "enqueue":
-            self.queue_disclosure.setChecked(True)
+            self.queue_open = True
             self.command(
                 "queue",
                 media_ids=[*self.state["queue"], *values.get("media_ids", [])][:1000],
@@ -1407,15 +1120,15 @@ class MediaTab(QWidget):
     def selected_ids(self) -> list[str]:
         return self.browse_selection
 
-    def start_preview(self) -> None:
-        ids = self.selected_ids()
+    def start_preview(self, identifier: str | None = None) -> None:
+        ids = [identifier] if identifier else self.selected_ids()
         if not ids:
             return
         identifier = ids[0]
         self.preview_generation += 1
         generation = self.preview_generation
         library, client, session_id = self.library, self.session_client, self.session_id
-        self.refresh_preview.setEnabled(False)
+        self.preview_loading = True
         self._set_notice(self.tr("Checking downloaded pieces with qBittorrent…"))
 
         def work():
@@ -1464,9 +1177,7 @@ class MediaTab(QWidget):
                 )
             )
             self.video.show()
-            self.external.hide()
-            self.refresh_preview.setEnabled(True)
-            self.refresh_preview.show()
+            self.preview_loading = False
             self._render_queue()
             self.player.play()
             self.report()
@@ -1482,13 +1193,13 @@ class MediaTab(QWidget):
         def failed(error):
             if isValid(self) and generation == self.preview_generation:
                 self._set_notice(str(error))
-                self.refresh_preview.setEnabled(True)
+                self.preview_loading = False
 
         run_in_background(work, ready, failed)
 
     def _invalidate_preview_request(self) -> None:
         self.preview_generation += 1
-        self.refresh_preview.setEnabled(True)
+        self.preview_loading = False
 
     def _close_preview(self) -> None:
         if self.preview_device is not None:
@@ -1501,7 +1212,6 @@ class MediaTab(QWidget):
             self.library.close_preview(self.session_client, self.preview_id)
         self.preview_id = ""
         self.preview_item = ""
-        self.refresh_preview.hide()
 
     def _check_preview(self) -> None:
         if self.preview_check_pending or time.monotonic() - self.preview_checked < 2:
@@ -1606,17 +1316,12 @@ class MediaTab(QWidget):
                 self.player.setPosition(int(float(command["position"]) * 1000))
             elif action == "volume":
                 self.audio.setVolume(float(command["volume"]))
-                self.volume.setValue(round(float(command["volume"]) * 100))
             elif action in {"next", "previous"}:
                 self._advance(1 if action == "next" else -1)
             elif action == "shuffle":
                 self.state["shuffle"] = bool(command["shuffle"])
-                with QSignalBlocker(self.shuffle):
-                    self.shuffle.setChecked(self.state["shuffle"])
             elif action == "repeat":
                 self.state["repeat"] = command["repeat"]
-                with QSignalBlocker(self.repeat):
-                    self.repeat.setCurrentIndex(max(0, self.repeat.findData(command["repeat"])))
             if scoped_resume:
                 self._track_resume_result(sequence)
             self.command_ack = sequence
@@ -1630,7 +1335,7 @@ class MediaTab(QWidget):
             self.player.setSource(QUrl())
             self.state.update(current_id="", index=0)
             self.last_source = ""
-            self.queue.clear()
+            self.queue_rows.clear()
             self.now_playing.setText(self.tr("Nothing playing"))
             self._update_panes()
             return
@@ -1648,7 +1353,6 @@ class MediaTab(QWidget):
             self.caption.clear()
             self.state["current_id"] = identifier
             self.pending_seek = round(float(row.get("position") or 0) * 1000)
-            self.external.hide()
             self.now_playing.setText(row["title"])
             self._prepare_track_source(load_token)
             self.player.setSource(QUrl.fromLocalFile(str(path)))
@@ -1666,17 +1370,20 @@ class MediaTab(QWidget):
         self._render_queue()
 
     def _render_queue(self) -> None:
-        self.queue.clear()
+        order = tuple(self.state["queue"])
+        if order != self.queue_order:
+            self.queue_revision += 1
+            self.queue_order = order
+        self.queue_rows = []
         self.queue_music = True
-        for media_id in self.state["queue"]:
+        for media_id in order:
             try:
                 row = self.library.detail(self.session_client, media_id)
                 title = row["title"]
                 self.queue_music = self.queue_music and row["kind"] == "music"
             except Exception:
                 title = self.tr("Unavailable media")
-            self.queue.addItem(title)
-        self.queue.setCurrentRow(int(self.state["index"]))
+            self.queue_rows.append({"id": media_id, "title": title})
         self._publish_queue()
         self._update_panes()
 
@@ -1695,12 +1402,8 @@ class MediaTab(QWidget):
         self.state["index"] = index
         self._load_current(play=True)
 
-    def _queue_play(self, item: QListWidgetItem) -> None:
-        self.command("play", media_ids=self.state["queue"], index=self.queue.row(item))
-
-    def remove_from_queue(self) -> None:
-        index = self.queue.currentRow()
-        if index < 0:
+    def remove_from_queue(self, index: int) -> None:
+        if not 0 <= index < len(self.state["queue"]):
             return
         queue = list(self.state["queue"])
         queue.pop(index)
@@ -1713,34 +1416,7 @@ class MediaTab(QWidget):
             self.player.setSource(QUrl())
             self.last_source = ""
             self.state["current_id"] = ""
-            self.queue.clear()
-
-    def _save_playlist(self) -> None:
-        if self.library is None or not self.state["queue"]:
-            return
-        name, ok = QInputDialog.getText(self, self.tr("Playlist"), self.tr("Name"))
-        if ok and name.strip():
-            try:
-                self.library.save_playlist(self.session_client, name.strip(), self.state["queue"])
-                self.current_playlist = name.strip()
-                self.refresh()
-            except Exception as error:
-                self._set_notice(str(error))
-
-    def _load_playlist(self) -> None:
-        playlist = self.playlists.currentData()
-        if playlist:
-            self.current_playlist = playlist["name"]
-            self.command("queue", media_ids=playlist["media_ids"], index=0)
-
-    def _delete_playlist(self) -> None:
-        playlist = self.playlists.currentData()
-        if playlist:
-            try:
-                self.library.delete_playlist(self.session_client, playlist["id"])
-                self.refresh()
-            except Exception as error:
-                self._set_notice(str(error))
+            self.queue_rows.clear()
 
     def report(self) -> None:
         if not self.library:
@@ -1786,17 +1462,110 @@ class MediaTab(QWidget):
         except Exception as error:
             self._set_notice(str(error))
 
+    def _player_snapshot(self) -> dict[str, Any]:
+        app = QApplication.instance()
+        language = i18n.pick_language(
+            self.service.agent.setup.settings.language
+            if self.service
+            else (app.property("language") if app else None) or "auto"
+        )
+        player = self.player
+        return {
+            "mode": "desktop",
+            "language": language,
+            "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
+            "client_id": self.session_client,
+            "media_id": self.last_source,
+            "source_token": self.track_source_token,
+            "queue_revision": self.queue_revision,
+            "kind": self.current_row.get("kind", self.browse_kind),
+            "title": self.now_playing.text(),
+            "playing": player is not None
+            and player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
+            "position": player.position() / 1000 if player else 0,
+            "duration": player.duration() / 1000 if player else 0,
+            "volume": self.audio.volume() if self.audio else self.state["volume"],
+            "shuffle": self.state["shuffle"],
+            "repeat": self.state["repeat"],
+            "tracks": self._track_state(),
+            "queue": self.queue_rows,
+            "index": self.state["index"],
+            "playlists": self.saved_playlists,
+            "fullscreen": self.fullscreen_dialog.isVisible(),
+            "center": self.center_button.isChecked(),
+            "can_expand": False,
+            "external_available": bool(self.last_source) and not self.preview_id,
+            "preview": bool(self.preview_id),
+            "preview_loading": self.preview_loading,
+            "available_height": max(180, self.video.overlay.height() - self.caption.height() - 10)
+            if self._player_video_mode
+            else 380,
+        }
+
+    def _player_control(self, action: str, values: dict) -> None:
+        if action == "toggle":
+            self.toggle_pause()
+        elif action in {"seek", "volume", "shuffle", "repeat"}:
+            key = "position" if action == "seek" else action
+            self.command(action, **{key: values[key]})
+        elif action in {"previous", "next"}:
+            self._transport_step(-1 if action == "previous" else 1)
+        elif action == "select_track":
+            source = (self.last_source, self.track_source_token)
+            self.report()
+            if source != (self.last_source, self.track_source_token):
+                raise ValueError("Player source changed. Use the current controls.")
+            self.command(
+                "select_track",
+                kind=values["kind"],
+                track_id=values["track_id"],
+                source_token=self.track_source_token,
+            )
+        elif action == "fullscreen":
+            self.toggle_fullscreen()
+        elif action == "stop":
+            self.dismiss_video()
+        elif action == "external":
+            self.open_external()
+        elif action == "chat":
+            self.toggle_chat(not self.chat.isChecked())
+        elif action == "center":
+            self.center_mode_requested.emit(not self.center_button.isChecked())
+        elif action == "refresh-preview":
+            if self.preview_item and not self.preview_loading:
+                self.start_preview(self.preview_item)
+        elif action in {"queue-play", "queue-remove"}:
+            index = int(values["index"])
+            if not 0 <= index < len(self.state["queue"]):
+                raise ValueError("Queue item is unavailable.")
+            if action == "queue-play":
+                self.command("play", media_ids=self.state["queue"], index=index)
+            else:
+                self.remove_from_queue(index)
+        elif action == "playlist-save":
+            name = str(values["name"]).strip()
+            if name and self.library and self.state["queue"]:
+                self.library.save_playlist(self.session_client, name, self.state["queue"])
+                self.refresh()
+        elif action in {"playlist-load", "playlist-delete"}:
+            playlist = next(
+                (row for row in self.saved_playlists if row["id"] == values["id"]), None
+            )
+            if playlist is None:
+                raise ValueError("Playlist is unavailable.")
+            if action == "playlist-load":
+                self.command("queue", media_ids=playlist["media_ids"], index=0)
+            else:
+                self.library.delete_playlist(self.session_client, playlist["id"])
+                self.refresh()
+        self.video_controls.refresh()
+
     def _position_changed(self, position: int) -> None:
         self._render_caption()
-        if not self.seek.isSliderDown():
-            self.seek.setValue(position // 1000)
-        self.elapsed.setText(
-            f"{self._time_label(position / 1000)} / "
-            f"{self._time_label(self.player.duration() / 1000)}"
-        )
+        self.video_controls.refresh()
 
     def _duration_changed(self, duration: int) -> None:
-        self.seek.setMaximum(duration // 1000)
+        self.video_controls.refresh()
 
     def _media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         if status in {QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia}:
@@ -1817,10 +1586,9 @@ class MediaTab(QWidget):
             else:
                 self._advance(1)
 
-    def _select_subtitle(self) -> bool:
+    def _select_subtitle(self, value: int | str) -> bool:
         if self.player is None:
             return False
-        value = self.subtitles.currentData()
         if value is None:
             return False
         self.subtitle_error = ""
@@ -1861,12 +1629,10 @@ class MediaTab(QWidget):
         except Exception as error:
             self.subtitle_error = str(error)
             self._set_notice(str(error))
-            with QSignalBlocker(self.subtitles):
-                self.subtitles.setCurrentIndex(self.subtitles.findData(self.subtitle_choice))
             return False
 
     def _prepare_track_source(self, token: str = "") -> None:
-        self.player_menu.close()
+        self.video_controls.close_menu()
         self.track_source_token = token or str(uuid4())
         self.track_result = {}
         self.tracks_ready = False
@@ -1977,9 +1743,7 @@ class MediaTab(QWidget):
         if not error:
             if kind == "audio":
                 index = int(identifier.removeprefix("audio:"))
-                with QSignalBlocker(self.audio_tracks):
-                    self.audio_tracks.setCurrentIndex(self.audio_tracks.findData(index))
-                self._select_audio()
+                self._select_audio(index)
                 applied = self.player.activeAudioTrack() == index
             else:
                 value = (
@@ -1989,9 +1753,7 @@ class MediaTab(QWidget):
                     if identifier.startswith("embedded:")
                     else identifier.removeprefix("external:")
                 )
-                with QSignalBlocker(self.subtitles):
-                    self.subtitles.setCurrentIndex(self.subtitles.findData(value))
-                applied = self._select_subtitle()
+                applied = self._select_subtitle(value)
             if not applied:
                 error = self.tr("Player did not apply the requested track.")
                 if kind == "subtitle":
@@ -2014,10 +1776,6 @@ class MediaTab(QWidget):
         self.embedded_caption = ""
         self.subtitle_cues = []
         self.caption.clear()
-        with QSignalBlocker(self.audio_tracks), QSignalBlocker(self.subtitles):
-            self.audio_tracks.clear()
-            self.subtitles.clear()
-            self.subtitles.addItem(self.tr("Subtitles off"), -1)
 
     def _track_label(self, metadata: QMediaMetaData, fallback: str) -> str:
         labels = [fallback]
@@ -2034,9 +1792,8 @@ class MediaTab(QWidget):
             labels.append(title)
         return " · ".join(labels)
 
-    def _select_audio(self) -> None:
-        choice = self.audio_tracks.currentData()
-        if self.player is not None and isinstance(choice, int):
+    def _select_audio(self, choice: int) -> None:
+        if self.player is not None:
             self.audio_choice = choice
             self.player.setActiveAudioTrack(choice)
 
@@ -2049,30 +1806,13 @@ class MediaTab(QWidget):
             choice = self.audio_choice
             if choice is None or not 0 <= choice < len(audio):
                 choice = max(0, self.player.activeAudioTrack())
-            with QSignalBlocker(self.audio_tracks):
-                self.audio_tracks.clear()
-                for index, track in enumerate(audio):
-                    self.audio_tracks.addItem(
-                        self._track_label(track, self.tr("Audio {0}").format(index + 1)), index
-                    )
-                self.audio_tracks.setCurrentIndex(self.audio_tracks.findData(choice))
             self.audio_choice = choice
             if self.player.activeAudioTrack() != choice:
                 self.player.setActiveAudioTrack(choice)
-        with QSignalBlocker(self.subtitles):
-            self.subtitles.clear()
-            self.subtitles.addItem(self.tr("Subtitles off"), -1)
-            for index, track in enumerate(self.player.subtitleTracks()[:100]):
-                self.subtitles.addItem(
-                    self._track_label(track, self.tr("Embedded subtitle {0}").format(index + 1)),
-                    index,
-                )
-            for subtitle in self.current_row.get("subtitles", []):
-                self.subtitles.addItem(subtitle["label"], subtitle["id"])
-            self.subtitles.setCurrentIndex(max(0, self.subtitles.findData(self.subtitle_choice)))
         choice = self.subtitle_choice if isinstance(self.subtitle_choice, int) else -1
         if self.player.activeSubtitleTrack() != choice:
             self.player.setActiveSubtitleTrack(choice)
+        self.video_controls.refresh()
 
     def _codec_error(self, *_args: Any) -> None:
         if self.player.error() != QMediaPlayer.Error.NoError:
@@ -2088,7 +1828,6 @@ class MediaTab(QWidget):
                 )
                 + self.player.errorString()
             )
-            self.external.setVisible(not bool(self.preview_id))
 
     def open_external(self) -> None:
         if self.library and self.state["current_id"] and not self.preview_id:

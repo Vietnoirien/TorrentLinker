@@ -79,8 +79,8 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 | # | Surface | Desktop | Web | Status | Spec | Blockers |
 |---|---|---|---|---|---|---|
 | 31 | Video library | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | **Done** (#108) | `media-center-redesign.md` | Host dispatch retains native decoding |
-| 32 | Music | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | **Done** (#109) | same | Playback and the queue stay with the host player until #110. The desktop player also lists saved playlists next to its queue |
-| 33 | Player / Media Center mode | `QMediaPlayer`, partial-download device, fullscreen window | `<video>/<audio>` + stream API | NU | same | Decision #89: retain native desktop decoding/verified-piece preview; shared browsing can dispatch to host |
+| 32 | Music | **BV** `MediaBrowserPanel` | same bundled `media/view.html` iframe | **Done** (#109) | same | Playback stays with each host; shared controls provide the queue and saved-playlist actions (#110) |
+| 33 | Player / Media Center mode | **BV** `PlayerView`, native decoding | Same bundled `player/view.html`, HTML decoding | Implemented (#110) | same | Native playback decision #89; external-player launch vs Web open/download; fullscreen APIs and partial-preview mechanisms remain host-owned |
 | 34 | Media details | **BV** `MediaBrowserPanel` | same bundled dialog | **Done** (#108) | same | Original-file downloads remain Web-only; desktop uses its native player/external-player controls |
 | 35 | Media chat side panel | **BV** compact `AssistantPanel` | same bundled `assistant/view.html` | **Done** (#111) | same | Native splitter vs Web resize handle; width stored per device |
 
@@ -177,8 +177,8 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 
 ### Media
 - Differs (Limit): `QMediaPlayer` vs HTML media; Media Center mode (window fullscreen vs Fullscreen API).
-- Desktop-only: launch external player; ±10 s buttons; "Fetching film details" progress (*unsure* on Web); "Save queue as playlist / Load / Delete playlist"; "Remove from Continue watching" (*unsure*).
-- Web-only: Mark watched/unwatched, Edit playlist, Replace with queue, Compact/Expand player.
+- Both hosts: shared transport, ±10 s video controls, audio/subtitle selection, repeat/shuffle, queue removal, save/load/delete playlists, chat and Media Center actions. The shared browser supplies watched state, Continue watching and playlist editing.
+- Deliberate limits: OS external-player launch on desktop vs original-file/preview download in Web; browser-dependent embedded tracks; native verified-piece streaming vs Web fixed-prefix preview. Compact/Expand remains Web-only; desktop video fills its workspace.
 
 ### Settings
 - Both hosts use `static/settings/view.html` for Connections, Clients, Companion, Agent access, Assistant, Library Folders, Download Folders, Client Paths, Search & Matching, Zen and General. TMDb and additional API keys, matching rules, client-folder import, diagnostics and media layout are available in both.

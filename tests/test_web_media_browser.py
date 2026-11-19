@@ -38,11 +38,18 @@ def open_films_grid(page):
     expect(media_locator(page, "#media-results")).to_be_visible()
 
 
+def player_locator(page, selector):
+    return page.frame_locator("#player-frame").locator(selector)
+
+
 def player_action(page, identifier):
-    control = page.locator(identifier)
+    identifier = {"#media-player-expand": "#player-expand"}.get(
+        identifier, identifier.replace("#media-", "#player-")
+    )
+    control = player_locator(page, identifier)
     if not control.is_visible():
-        page.locator("#media-player-menu-toggle").focus()
-        page.locator("#media-player-menu-toggle").press("Enter")
+        player_locator(page, "#player-options").focus()
+        player_locator(page, "#player-options").press("Enter")
     control.click()
 
 
@@ -225,50 +232,66 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             if control_screenshots:
                 Path(control_screenshots).mkdir(parents=True, exist_ok=True)
             video.evaluate("node => node.pause()")
-            expect(page.locator("#media-player-menu-toggle")).to_be_visible()
-            page.locator("#media-player-menu-toggle").focus()
+            expect(player_locator(page, "#player-options")).to_be_visible()
+            player_locator(page, "#player-options").focus()
             page.keyboard.press("Enter")
-            expect(page.get_by_role("dialog", name="Player options", exact=True)).to_be_visible()
-            expect(page.get_by_label("Subtitle track", exact=True)).to_be_visible()
-            expect(page.get_by_label("Audio track", exact=True)).to_be_hidden()
-            page.get_by_label("Subtitle track", exact=True).select_option("subtitle:0")
+            expect(
+                page.frame_locator("#player-frame").get_by_role(
+                    "dialog", name="Player options", exact=True
+                )
+            ).to_be_visible()
+            expect(
+                page.frame_locator("#player-frame").get_by_label("Subtitle track", exact=True)
+            ).to_be_visible()
+            expect(
+                page.frame_locator("#player-frame").get_by_label("Audio track", exact=True)
+            ).to_be_disabled()
+            page.frame_locator("#player-frame").get_by_label(
+                "Subtitle track", exact=True
+            ).select_option("subtitle:0")
             assert video.evaluate("node => node.textTracks[0].mode") == "showing"
             video.evaluate("node => { node.currentTime = 1; }")
             page.wait_for_function(
                 "() => document.querySelector('#media-video').textTracks[0].activeCues?.length > 0"
             )
             page.keyboard.press("Escape")
-            expect(page.locator("#media-player-menu")).to_be_hidden()
-            expect(page.locator("#media-player-menu-toggle")).to_be_focused()
+            expect(player_locator(page, "#player-menu")).to_be_hidden()
+            expect(player_locator(page, "#player-options")).to_be_focused()
             if control_screenshots:
                 page.screenshot(path=str(Path(control_screenshots) / "player-caption-controls.png"))
             video.evaluate("node => node.play()")
             media_locator(page, "#media-search").focus()
             page.mouse.move(20, 20)
-            expect(page.locator(".media-video-overlay")).to_have_css("opacity", "0")
+            expect(page.locator("#player-frame")).to_have_css("opacity", "0")
             video.evaluate("node => node.pause()")
-            expect(page.locator(".media-video-overlay")).to_have_css("opacity", "1")
+            expect(page.locator("#player-frame")).to_have_css("opacity", "1")
             video.click(button="right", position={"x": 40, "y": 40})
-            expect(page.locator("#media-player-menu")).to_be_visible()
+            expect(player_locator(page, "#player-menu")).to_be_visible()
             page.keyboard.press("Tab")
-            expect(page.get_by_label("Subtitle track", exact=True)).to_be_focused()
-            page.get_by_label("Subtitle track", exact=True).select_option("off")
+            expect(
+                page.frame_locator("#player-frame").get_by_label("Subtitle track", exact=True)
+            ).to_be_focused()
+            page.frame_locator("#player-frame").get_by_label(
+                "Subtitle track", exact=True
+            ).select_option("off")
             assert video.evaluate("node => node.textTracks[0].mode") == "disabled"
-            page.locator("#media-queue-details summary").click()
-            queue_remove = page.locator("#media-player-queue").get_by_role("button", name="Remove")
+            player_locator(page, "#player-queue-details summary").click()
+            queue_remove = player_locator(page, "#player-queue").get_by_role(
+                "button", name="Remove"
+            )
             queue_remove.focus()
             page.wait_for_timeout(1200)
             expect(queue_remove).to_be_focused()
-            page.locator("#media-queue-details summary").click()
+            player_locator(page, "#player-queue-details summary").click()
             if control_screenshots:
                 page.screenshot(path=str(Path(control_screenshots) / "player-context-menu.png"))
-            page.locator("#media-player-menu-close").click()
-            page.locator("#media-player-menu-toggle").tap()
-            expect(page.locator("#media-player-menu")).to_be_visible()
-            page.locator("#media-player-menu-close").click()
+            player_locator(page, "#player-menu-close").click()
+            player_locator(page, "#player-options").tap()
+            expect(player_locator(page, "#player-menu")).to_be_visible()
+            player_locator(page, "#player-menu-close").click()
             page.locator("#media-video-stage").focus()
             page.keyboard.press("Shift+F10")
-            expect(page.locator("#media-player-menu")).to_be_visible()
+            expect(player_locator(page, "#player-menu")).to_be_visible()
             page.keyboard.press("Escape")
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
@@ -277,10 +300,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 not page.locator("#media-video-stage").locator("#media-playing-description").count()
             )
             video.evaluate("node => node.play()")
-            expect(page.locator("#media-track-support")).to_contain_text(
-                "If sound or a track is missing"
+            expect(player_locator(page, "#player-track-limit")).to_contain_text(
+                "Use an external player if a track is unavailable"
             )
-            expect(page.locator("#media-track-external")).to_have_attribute("href", source)
+            expect(player_locator(page, "#player-external")).to_be_enabled()
             track_report = wait_report(lambda report: report.get("track_state", {}).get("ready"))
             track_state = track_report["track_state"]
             assert track_state["subtitle_supported"]
@@ -353,9 +376,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
 
             subtitle_pattern = "**/api/media/items/*/subtitles/*?*"
             page.route(subtitle_pattern, hold_subtitles)
-            page.locator("#media-player-menu-toggle").focus()
-            page.locator("#media-player-menu-toggle").press("Enter")
-            expect(page.locator("#media-player-menu")).to_be_visible()
+            player_locator(page, "#player-options").focus()
+            player_locator(page, "#player-options").press("Enter")
+            expect(player_locator(page, "#player-menu")).to_be_visible()
             load_token = "00000000-0000-4000-8000-000000000001"
             prepared = send_player_command(
                 {
@@ -367,7 +390,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 }
             )
             assert prepared["paused"]
-            expect(page.locator("#media-player-menu")).to_be_hidden()
+            expect(player_locator(page, "#player-menu")).to_be_hidden()
             assert prepared["track_state"]["source_token"] == load_token
             assert not prepared["track_state"]["ready"]
             assert loading_subtitles
@@ -515,10 +538,14 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             player_action(page, "#media-player-expand")
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
-            expect(page.locator("#media-fullscreen")).to_have_text("Exit fullscreen")
+            expect(player_locator(page, "#player-fullscreen")).to_have_attribute(
+                "aria-label", "Exit fullscreen"
+            )
             video.click(button="right", position={"x": 40, "y": 40})
-            expect(page.locator("#media-player-menu")).to_be_visible()
-            expect(page.get_by_label("Subtitle track", exact=True)).to_be_visible()
+            expect(player_locator(page, "#player-menu")).to_be_visible()
+            expect(
+                page.frame_locator("#player-frame").get_by_label("Subtitle track", exact=True)
+            ).to_be_visible()
             page.wait_for_function(
                 "node => { const r = node.getBoundingClientRect(); "
                 "return r.x === 0 && r.y === 0 && r.width === innerWidth "
@@ -529,13 +556,15 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("#media-playing-description")).to_be_hidden()
             if control_screenshots:
                 page.screenshot(path=str(Path(control_screenshots) / "player-fullscreen-menu.png"))
-            page.locator("#media-player-menu-close").click()
+            player_locator(page, "#player-menu-close").click()
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
             assert video.evaluate("node => !node.paused && node.currentTime > 0")
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement === null")
-            expect(page.locator("#media-fullscreen")).to_have_text("Fullscreen")
+            expect(player_locator(page, "#player-fullscreen")).to_have_attribute(
+                "aria-label", "Fullscreen"
+            )
             player_action(page, "#media-player-expand")
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement !== null")
@@ -711,23 +740,47 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "button", name="Play", exact=True
             ).click()
             page.wait_for_function("() => document.querySelector('#media-audio').currentTime > 0")
-            page.locator("#media-player-shell summary").click()
-            expect(page.locator("#media-player-queue li")).to_have_count(1)
+            player_locator(page, "#player-options").click()
+            player_locator(page, "#player-queue-details summary").click()
+            expect(player_locator(page, "#player-queue li")).to_have_count(1)
             page.locator("#media-audio").evaluate("node => node.pause()")
+            player_locator(page, "#player-queue li button").last.evaluate(
+                "node => window.staleRemove = node.onclick"
+            )
+            player_locator(page, "#player-menu-close").click()
             media_locator(page, ".media-card").filter(has_text="1 track").get_by_role(
                 "button", name="Add to queue"
             ).click()
-            expect(page.locator("#media-player-queue li")).to_have_count(2)
-            page.locator("#media-player-queue li").nth(1).get_by_role(
+            expect(player_locator(page, "#player-queue li")).to_have_count(2)
+            player_locator(page, "#player-options").click()
+            player_locator(page, "#player-queue").evaluate("() => window.staleRemove()")
+            expect(player_locator(page, "#player-error")).to_contain_text("queue changed")
+            expect(player_locator(page, "#player-queue li")).to_have_count(2)
+            player_locator(page, "#player-queue li").nth(1).get_by_role(
                 "button", name="Remove"
             ).click()
-            expect(page.locator("#media-player-queue li")).to_have_count(1)
+            expect(player_locator(page, "#player-queue li")).to_have_count(1)
             assert page.locator("#media-audio").evaluate("node => node.paused") is True
-            media_locator(page, "#media-playlist-name").fill("Evening listening")
-            media_locator(page, "#media-save-playlist button").click()
+            page.once("dialog", lambda dialog: dialog.accept("Evening listening"))
+            player_locator(page, "#player-playlist-save").click()
             expect(media_locator(page, "#media-playlist-list")).to_contain_text("Evening listening")
+            cache_check = page.evaluate("""async () => {
+              const owner = playerPlaylistsClient, queue = [...media.queue];
+              try {
+                playerPlaylistsClient = 'another-client';
+                const snapshot = mediaPlayerSnapshot();
+                let error = '';
+                try { await mediaPlayerControl({...snapshot, action:'playlist-load',
+                  values:{id:playerPlaylists[0].id}});
+                } catch (failure) { error = failure.message; }
+                return {hidden:snapshot.playlists.length === 0, error,
+                  unchanged:JSON.stringify(queue) === JSON.stringify(media.queue)};
+              } finally { playerPlaylistsClient = owner; }
+            }""")
+            assert cache_check["hidden"] and cache_check["unchanged"]
+            assert "this client" in cache_check["error"]
+            player_locator(page, "#player-menu-close").click()
             if screenshots:
-                page.locator("#media-player-shell summary").click()
                 page.evaluate("window.scrollTo(0, 0)")
                 page.screenshot(path=str(Path(screenshots) / "media-music-albums.png"))
             music_nav.get_by_role("button", name="Artists", exact=True).click()
@@ -781,7 +834,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-playlist-list")).to_contain_text("Evening listening")
             expect(media_locator(page, "#media-show-queue")).to_have_text("Playback queue · 3")
-            assert not page.locator("#media-player-shell details").evaluate("node => node.open")
+            assert not player_locator(page, "#player-queue-details").evaluate("node => node.open")
             expect(media_locator(page, "#media-save-playlist button")).to_be_enabled()
             media_locator(page, "#media-playlist-name").fill("Restored listening")
             media_locator(page, "#media-save-playlist button").click()

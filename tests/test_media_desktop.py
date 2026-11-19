@@ -19,6 +19,24 @@ def video_wait(qtbot, tab, script):
     wait_js(qtbot, tab.browser, script)
 
 
+def player_js(qtbot, tab, script):
+    from tests.test_community_interfaces import js, wait_js
+
+    wait_js(qtbot, tab.video_controls, "typeof request === 'function'")
+    return js(qtbot, tab.video_controls, script)
+
+
+def player_select(qtbot, tab, kind, identifier):
+    import json
+
+    player_js(
+        qtbot,
+        tab,
+        f"{{const input=document.getElementById('player-{kind}');"
+        f"input.value={json.dumps(identifier)};input.dispatchEvent(new Event('change'));}}",
+    )
+
+
 def video_details(qtbot, tab, title):
     import json
 
@@ -147,25 +165,22 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
             f"document.querySelectorAll('.media-track-row')[{index}]"
             ".querySelector('.media-track-actions button').click()",
         )
-        qtbot.waitUntil(lambda index=index: tab.queue.count() == index + 1)
+        qtbot.waitUntil(lambda index=index: len(tab.queue_rows) == index + 1)
     video_wait(
         qtbot,
         tab,
         "document.querySelector('#media-show-queue').textContent.endsWith('3')"
         "&&!document.querySelector('#media-save-playlist button').disabled",
     )
-    from PySide6.QtWidgets import QInputDialog
-
-    monkeypatch.setattr(QInputDialog, "getText", lambda *_args: ("Evening", True))
-    qtbot.wait(20)  # Let the newly opened queue panel finish its layout and paint.
-    assert tab.queue_panel.isVisible()
-    assert tab.save_playlist.visibleRegion().contains(tab.save_playlist.rect().center()), (
-        tab.size(),
-        tab.save_playlist.geometry(),
-        tab.queue_panel.geometry(),
+    tab._open_queue()
+    player_js(
+        qtbot,
+        tab,
+        "window.prompt=()=> 'Evening';document.getElementById('player-playlist-save').click()",
     )
-    qtbot.mouseClick(tab.save_playlist, Qt.LeftButton)
-    qtbot.waitUntil(lambda: tab.playlists.currentText() == "Evening")
+    qtbot.waitUntil(
+        lambda: bool(tab.saved_playlists) and tab.saved_playlists[0]["name"] == "Evening"
+    )
     assert len(service.agent.media.playlists("default")[0]["media_ids"]) == 3
     # The view saves the host queue as a playlist too and lists both.
     video_js(
@@ -180,7 +195,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
         "Morning",
     ]
     assert all(len(p["media_ids"]) == 3 for p in service.agent.media.playlists("default"))
-    qtbot.waitUntil(lambda: tab.playlists.count() == 2)
+    qtbot.waitUntil(lambda: len(tab.saved_playlists) == 2)
     video_js(
         qtbot,
         tab,
@@ -189,7 +204,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
         ".querySelector('details button:last-child').click()",
     )
     video_wait(qtbot, tab, "document.querySelectorAll('.media-playlist-card').length===1")
-    qtbot.waitUntil(lambda: tab.playlists.count() == 1)
+    qtbot.waitUntil(lambda: len(tab.saved_playlists) == 1)
     video_js(qtbot, tab, "document.querySelector('.media-track-name').click()")
     video_wait(qtbot, tab, "document.querySelector('#media-details').open")
     qtbot.waitUntil(lambda: bool(tab.browse_selection))
@@ -197,7 +212,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     video_action(qtbot, tab, "Close details")
     assert tab.browse_selection == selected
     video_js(qtbot, tab, "document.querySelector('#media-show-queue').click()")
-    qtbot.waitUntil(lambda: tab.queue_disclosure.isChecked())
+    qtbot.waitUntil(lambda: tab.queue_open)
     source = tab.player.source()
     for layout in ("focus", "collection", "cinematic"):
         tab.set_media_layout(layout)
@@ -283,19 +298,18 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     tab.command("play", media_ids=tab.state["queue"], index=1)
     qtbot.waitUntil(lambda: tab.player.duration() == 12000)
     playing = tab.player.source()
-    tab.queue.setCurrentRow(0)
-    tab.remove_from_queue()
+    tab.remove_from_queue(0)
     assert tab.player.source() == playing
     assert tab.state["index"] == 0
-    assert tab.queue.count() == 2
+    assert len(tab.queue_rows) == 2
     tab.stop()
     restored = MediaTab(lambda: service, lambda: "default", lambda: None)
     qtbot.addWidget(restored)
     restored.activate()
     assert restored.session_id == tab.session_id
     assert restored.state["queue"] == tab.state["queue"]
-    assert restored.shuffle.isChecked()
-    assert restored.repeat.currentData() == "all"
+    assert restored.state["shuffle"]
+    assert restored.state["repeat"] == "all"
     assert restored.conversation_id == first_conversation
     qtbot.waitUntil(lambda: restored.player.duration() == 12000)
     assert restored.player.source() == playing
@@ -369,8 +383,8 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     )
     video_action(qtbot, tab, "Play")
     qtbot.waitUntil(lambda: tab.player.hasVideo(), timeout=15000)
-    qtbot.waitUntil(lambda: tab.subtitles.count() == 2)
-    tab.subtitles.setCurrentIndex(1)
+    qtbot.waitUntil(lambda: len(tab._track_state()["subtitles"]) == 1)
+    player_select(qtbot, tab, "subtitle", tab._track_state()["subtitles"][0]["id"])
     tab.command("seek", position=2)
     qtbot.waitUntil(lambda: tab.caption.text() == "A local caption")
     qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=10000)
@@ -399,20 +413,20 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
         QContextMenuEvent.Reason.Mouse, local, tab.video.viewport().mapToGlobal(local)
     )
     QCoreApplication.sendEvent(tab.video.viewport(), context)
-    assert tab.player_menu.isVisible()
+    qtbot.waitUntil(lambda: tab.video_controls.menu_open)
     tab.player.play()
     qtbot.wait(180)
     assert tab.video_controls.isVisible()
     tab.player.pause()
-    qtbot.keyClick(tab.player_menu, Qt.Key_Escape)
-    qtbot.waitUntil(lambda: not tab.player_menu.isVisible())
+    player_js(qtbot, tab, "document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))")
+    qtbot.waitUntil(lambda: not tab.video_controls.menu_open)
     assert tab.player.playbackState() != tab.player.PlaybackState.PlayingState
     source, position = tab.player.source(), tab.player.position()
     original_parent = tab.player_panel.parentWidget()
-    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
+    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
     qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
     assert tab.caption.isVisible()
-    assert tab.subtitles.currentIndex() == 1
+    assert tab.subtitle_choice == tab.current_row["subtitles"][0]["id"]
     assert tab.video.mapTo(tab.fullscreen_dialog, tab.video.rect().topLeft()).isNull()
     assert tab.video.size() == tab.fullscreen_dialog.size()
     assert tab.player.source() == source
@@ -437,7 +451,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
         bottom = tab.caption.mapTo(tab.video, tab.caption.rect().bottomLeft())
         assert tab.video.rect().contains(bottom)
     fullscreen_size = tab.caption_size
-    qtbot.keyClick(tab.fullscreen_button, Qt.Key_Escape)
+    player_js(qtbot, tab, "document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))")
     qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
     tab.caption.setText("Viens à moi.")
     tab._fit_caption()
@@ -453,10 +467,10 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     qtbot.wait(QApplication.doubleClickInterval() + 50)
     assert tab.player.playbackState() == state
     assert tab.player.position() == position
-    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
-    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
+    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
+    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
     assert tab.player_panel.parentWidget() is original_parent
-    qtbot.mouseClick(tab.fullscreen_button, Qt.LeftButton)
+    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
     qtbot.mouseClick(tab.player_back, Qt.LeftButton)
     assert not tab.fullscreen_dialog.isVisible()
     assert tab.player_panel.window() is tab
@@ -584,7 +598,8 @@ def test_native_explicit_preview_decodes_h264_without_reading_missing_pieces(qtb
         qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=15000)
         assert tab.player.sourceDevice().size() == total  # the whole file, read as it downloads
         assert tab.player.source().toString() == "verified-preview.mp4"
-        assert tab.refresh_preview.isVisible()
+        assert tab._player_snapshot()["preview"]
+        assert not tab._player_snapshot()["preview_loading"]
         tab.command("seek", position=1)
         qtbot.waitUntil(lambda: tab.player.position() >= 1000)
         completed = root / "Complete.mp4"
@@ -713,8 +728,8 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
     assert tab.center_button.isChecked()
     assert replacement.media_tab.player is player
     assert tab.heartbeat.isActive()
-    assert tab.shuffle.isChecked()
-    assert tab.repeat.currentData() == "all"
+    assert tab.state["shuffle"]
+    assert tab.state["repeat"] == "all"
     replacement.assistant_tab.get_service = lambda: app.state.assistant
     opened = []
     replacement.assistant_tab.select_conversation = opened.append
@@ -744,10 +759,13 @@ def test_player_menu_opens_and_closes_the_queue_and_playlists(qtbot):
 
     tab = MediaTab(lambda: None, lambda: "default", lambda: None)
     qtbot.addWidget(tab)
-    tab.queue_action.trigger()
-    assert tab.queue_disclosure.isChecked()
-    tab.queue_action.trigger()
-    assert not tab.queue_disclosure.isChecked()
+    tab.browse_kind = "music"
+    tab.resize(900, 700)
+    tab.show()
+    tab._open_queue()
+    assert player_js(qtbot, tab, "document.getElementById('player-queue-details').open")
+    player_js(qtbot, tab, "document.getElementById('player-queue-title').click()")
+    assert not player_js(qtbot, tab, "document.getElementById('player-queue-details').open")
 
 
 def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choices(qtbot, tmp_path):
@@ -891,7 +909,9 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         deliver(
             "play", media_ids=[media_id], index=0, start_paused=True, load_token="prepared-fixture"
         )
-        qtbot.waitUntil(lambda: tab.audio_tracks.count() == 2 and tab.subtitles.count() == 3)
+        qtbot.waitUntil(
+            lambda: len(tab.player.audioTracks()) == 2 and len(tab._track_state()["subtitles"]) == 2
+        )
         from PySide6.QtMultimedia import QMediaPlayer
 
         assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
@@ -903,7 +923,7 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         assert reported["audio"][1]["id"] == "audio:1"
         assert reported["audio"][1]["language"] == "en"
         assert len(reported["audio"][1]["label"]) == 300
-        assert len(tab.audio_tracks.itemText(1)) > 400
+        assert len(tab._track_label(tab.player.audioTracks()[1], "Audio 2")) > 400
         rejected = deliver(
             "select_track",
             kind="audio",
@@ -916,10 +936,10 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         assert failure["sequence"] == rejected
         assert not failure["applied"]
         assert tab.player.activeAudioTrack() == 0
-        assert "French" in tab.audio_tracks.itemText(0)
-        assert "Low tone" in tab.audio_tracks.itemText(0)
-        assert "English" in tab.audio_tracks.itemText(1)
-        assert "French" in tab.subtitles.itemText(1)
+        assert "French" in tab._track_state()["audio"][0]["label"]
+        assert "Low tone" in tab._track_state()["audio"][0]["label"]
+        assert "English" in tab._track_state()["audio"][1]["label"]
+        assert "French" in tab._track_state()["subtitles"][0]["label"]
         deliver("play", media_id=media_id, source_token="prepared-fixture")
         qtbot.waitUntil(lambda: any(400 < value < 480 for value in frequencies), timeout=10000)
         selected_sequence = deliver(
@@ -962,28 +982,27 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         deliver("seek", position=3)
         tab.player.tracksChanged.emit()
         tab.toggle_fullscreen()
-        assert tab.audio_tracks.currentData() == 1
-        assert tab.subtitles.currentData() == 1
+        assert tab.audio_choice == 1
+        assert tab.subtitle_choice == 1
         assert tab.player.activeAudioTrack() == 1
         assert tab.player.activeSubtitleTrack() == 1
         tab.toggle_fullscreen()
-        tab.player_menu.popup(tab.video.mapToGlobal(tab.video.rect().center()))
-        qtbot.waitUntil(lambda: tab.player_menu.isVisible())
-        french_action = next(
-            action for action in tab.audio_menu.actions() if action.data() == "audio:0"
+        tab.video_controls.open_menu()
+        player_js(
+            qtbot, tab, "window.staleAudioChange=document.getElementById('player-audio').onchange"
         )
-        french_action.trigger()
-        tab.player_menu.close()
+        player_select(qtbot, tab, "audio", "audio:0")
+        tab.video_controls.close_menu()
         qtbot.waitUntil(lambda: tab.player.activeAudioTrack() == 0)
-        tab.subtitles.setCurrentIndex(1)
+        player_select(qtbot, tab, "subtitle", "embedded:0")
         frequencies.clear()
         qtbot.waitUntil(lambda: any(400 < value < 480 for value in frequencies), timeout=10000)
         qtbot.waitUntil(
             lambda: any("French fixture caption" in text for text in captions), timeout=10000
         )
         qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid())
-        tab.audio_tracks.setCurrentIndex(1)
-        assert tab.player.activeAudioTrack() == 1
+        player_select(qtbot, tab, "audio", "audio:1")
+        qtbot.waitUntil(lambda: tab.player.activeAudioTrack() == 1)
         current = tab.state["current_id"]
         other = next(
             row["id"]
@@ -994,8 +1013,16 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         tab.report()
         replacement = service.agent.media.session(tab.session_id, tab.token)["state"]["track_state"]
         assert replacement["source_token"] != "prepared-fixture"
+        qtbot.waitUntil(lambda: tab.player.activeAudioTrack() >= 0)
         stale_track = tab.player.activeAudioTrack()
-        french_action.trigger()
+        player_js(qtbot, tab, "window.staleAudioChange()")
+        from tests.test_community_interfaces import wait_js
+
+        wait_js(
+            qtbot,
+            tab.video_controls,
+            "document.getElementById('player-error').textContent.includes('changed')",
+        )
         assert tab.player.activeAudioTrack() == stale_track
         deliver("pause")
         stale_resume = deliver("play", media_id=media_id, source_token="prepared-fixture")
@@ -1004,10 +1031,12 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         failure = service.agent.media.session(tab.session_id, tab.token)["state"]["track_result"]
         assert failure["sequence"] == stale_resume
         assert not failure["applied"]
-        qtbot.waitUntil(lambda: tab.player.duration() == 10000 and tab.audio_tracks.count() == 2)
-        assert tab.audio_tracks.currentData() == 0
+        qtbot.waitUntil(
+            lambda: tab.player.duration() == 10000 and len(tab.player.audioTracks()) == 2
+        )
+        assert tab.audio_choice == 0
         assert tab.player.activeAudioTrack() == 0
-        assert tab.subtitles.currentData() == -1
+        assert tab.subtitle_choice == -1
         assert tab.player.activeSubtitleTrack() == -1
         from tests.test_agent_media import invoke
 

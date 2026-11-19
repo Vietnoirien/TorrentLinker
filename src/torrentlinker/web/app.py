@@ -346,6 +346,7 @@ def create_app(
             "/static/plan/view.html",
             "/static/seeding/view.html",
             "/static/settings/view.html",
+            "/static/player/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
             # Other pages remain unframeable; the component has no network access.

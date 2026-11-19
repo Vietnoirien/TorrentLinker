@@ -26,8 +26,8 @@ def test_media_center_buttons_use_shared_roles(qtbot):
 
     tab = MediaTab(lambda: None, lambda: "default", lambda: None)
     qtbot.addWidget(tab)
-    assert {tab.pause.property("role"), tab.player_options.property("role")} == {"icon"}
-    assert tab.refresh_preview.property("role") == "quiet"
+    assert tab.player_back.property("role") == "icon"
+    assert tab.video_controls.channel_name == "player"
     # No page stylesheet in the Media Center gives buttons their own shape any more.
     assert (
         "padding"
