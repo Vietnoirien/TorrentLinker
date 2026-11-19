@@ -50,10 +50,18 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.goto(f"http://127.0.0.1:{port}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
+            initial_load = []
+            page.route("**/api/zen/plan?*", lambda route: initial_load.append(route))
             page.locator("[data-view=zen]").first.click()
             page.locator("#zen-plan-tab").click()
             panel = page.frame_locator("#plan-frame")
             expect(panel.locator("#plan-send")).to_be_disabled()
+            expect(panel.locator("#plan-limit-count")).to_be_disabled()
+            wait_for_route(page, initial_load)
+            for route in list(initial_load):
+                route.continue_()
+            page.unroute("**/api/zen/plan?*")
+            expect(panel.locator("#plan-limit-count")).to_be_enabled()
             for control in (
                 "plan-category",
                 "plan-goal",

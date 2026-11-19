@@ -84,12 +84,13 @@ def test_browser_queue_removal_review_lists_targets_before_deciding(tmp_path, la
               const el = element('button', text, cls); el.type = 'button';
               el.onclick = action; return el;
             }
-            async function api(path, body) {
+            async function request(action, {path, body}) {
               calls.push(path); return window.review;
             }
         """
         )
-        page.add_script_tag(path=str(static / "assistant.js"))
+        page.add_script_tag(path=str(static / "settings/assistant.js"))
+        page.add_script_tag(path=str(static / "settings/agents.js"))
         page.evaluate(
             "data => { language = data.language; window.review = data.review; }",
             {"language": language, "review": queue_removal_event()["review"]},

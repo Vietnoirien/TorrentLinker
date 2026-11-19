@@ -20,7 +20,8 @@ const planUI = {
   sending: false,
   pending: false,
 };
-let initialized = false,
+let environmentReady = false,
+  initialized = false,
   configureTimer,
   reviewAfter = false,
   preferencesDirty = false,
@@ -40,8 +41,8 @@ function planActions() {
   for (const input of document.querySelectorAll(
     "#plan-form input,#plan-form select,#plan-form button,#plan-clients input,#plan,#plan-folders,#zen-preferences-form input,#zen-preferences-form select,#zen-preferences-form textarea,#zen-preferences-form button,#plan-speed-save",
   ))
-    input.disabled = planUI.busy;
-  if (!planUI.busy) {
+    input.disabled = planUI.busy || !environmentReady;
+  if (!planUI.busy && environmentReady) {
     $("plan-count").disabled = !$("plan-limit-count").checked;
     $("plan-seeders").disabled = !$("plan-limit-seeders").checked;
   }
@@ -50,7 +51,7 @@ function planActions() {
   for (const input of document.querySelectorAll(
     "#plan-result input,#plan-select-all,#plan-select-none",
   ))
-    input.disabled = planUI.busy;
+    input.disabled = planUI.busy || !environmentReady;
 }
 function planDuration(seconds) {
   if (seconds === null || seconds === undefined) return "—";
@@ -376,7 +377,11 @@ function planApplyEnvironment(env) {
   language = env.language || "en";
   document.documentElement.dataset.theme = env.theme || "dark";
   translate();
-  if (value.ready === false) return;
+  environmentReady = value.ready !== false;
+  if (!environmentReady) {
+    planActions();
+    return;
+  }
   if (newClient) {
     state.planId = "";
     initialized = false;
@@ -817,6 +822,7 @@ async function folderDialog(clientId = state.clientId, category = null) {
   await load();
 }
 function planInit() {
+  planActions();
   $("plan-info").onclick = () => {
     const box = $("plan-info-box");
     box.hidden = !box.hidden;
