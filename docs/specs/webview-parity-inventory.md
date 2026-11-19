@@ -80,7 +80,7 @@ bridge; the Web hosts the same `view.html` in an iframe with postMessage. Only `
 |---|---|---|---|---|---|---|
 | 31 | Video library | Native `MediaTab` (`media.py`, 3,788 lines) | `media.js`, `media.css` | NU | `media-center-redesign.md` (status line stale) | — |
 | 32 | Music | Native, `media_audio.py` | `media.js` | NU | same | QtMultimedia audio |
-| 33 | Player / Media Center mode | `QMediaPlayer`, partial-download device, fullscreen window | `<video>/<audio>` + stream API | NU | same | Chromium codecs; `--disable-gpu` on Wayland may hurt video |
+| 33 | Player / Media Center mode | `QMediaPlayer`, partial-download device, fullscreen window | `<video>/<audio>` + stream API | NU | same | Decision #89: retain native desktop decoding/verified-piece preview; shared browsing can dispatch to host |
 | 34 | Media details | Native `QDialog` | `<dialog id="media-details">` | NU | same | — |
 | 35 | Media chat side panel | embedded compact `AssistantTab` | `#media-chat-panel` | NU | same | — |
 
@@ -197,7 +197,7 @@ Tag: **Limit** = deliberate platform limit, **Gap** = plain gap, *unsure* where 
 
 - U1: whether the desktop Library Activity log is reachable at all.
 - U3/U4: `rss-redesign.md` and `media-center-redesign.md` status lines say nothing is built, but the code implements them.
-- U5: QtWebEngine codec support in shipped builds and the effect of `--disable-gpu` on video.
+- U5 (#89 decision): retain native desktop playback. The Linux Wayland WebEngine probe rejects H.264/HEVC/AAC; VP9 plays with `--disable-gpu`. Windows/macOS artifact codec matrices remain unverified. See [playback investigation](../research/media-webview-playback.md).
 - U6: whether the Web build omits the update check on purpose.
 - U7: how the Web server receives the TMDb key.
 - U9-U12: parity was compared from string sets and targeted reads, not by running both UIs; layout, ordering and enabled states may differ where strings match.
