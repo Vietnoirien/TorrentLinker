@@ -100,6 +100,22 @@ class RemoteAccess:
     def secret_name(identifier):
         return "transfer-sftp-" + hashlib.sha256(identifier.encode()).hexdigest()
 
+    def remove(self, identifier):
+        """Forget access without changing any remote files or Torrent Client settings."""
+        with self.lock:
+            self.call(self.disconnect(identifier))
+            self.checked.discard(identifier)
+            previous = dict(self.profiles)
+            updated = {key: value for key, value in previous.items() if key != identifier}
+            atomic_private(self.path, json.dumps(updated).encode())
+            try:
+                self.secrets.update({self.secret_name(identifier): ""})
+            except Exception:
+                atomic_private(self.path, json.dumps(previous).encode())
+                raise
+            self.profiles = updated
+        return self.snapshot(identifier)
+
     def snapshot(self, identifier):
         profile = self.profiles.get(identifier)
         if profile is None:

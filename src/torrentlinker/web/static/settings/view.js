@@ -43,6 +43,7 @@ async function guard(work) {
   try {
     return await work();
   } catch (error) {
+    error.message = fileAccessError(error.message);
     $("settings-status").textContent = "";
     $("settings-error").textContent = error.message;
     const modal = document.querySelector("dialog[open]");
@@ -249,6 +250,7 @@ function connections(form) {
         `${say("Connected", "Connecté")} · ${result.version}`;
     }),
   );
+  fileAccessCard(form);
   const indexer = box(form, say("Indexer", "Indexeur"));
   field(indexer, say("Indexer URL", "URL de l’indexeur"), data.indexer, "url");
   secret(
@@ -1079,6 +1081,7 @@ async function applyEnvironment(value) {
   const activated = !environment.active && value.active;
   if (changed || (environment.active && !value.active)) {
     clearAgentToken();
+    clearFileAccess();
     document.querySelectorAll("dialog").forEach((dialog) => dialog.close());
   }
   const translated = language !== (value.language || "en");
@@ -1097,6 +1100,7 @@ async function applyEnvironment(value) {
   if (!request) return;
   if (!snapshot && loadingClient === environment.client_id) return;
   if (changed || !snapshot || activated) {
+    fileAccessValues.delete(environment.client_id);
     for (const group of ["connections", "general", "matching", "zen"]) {
       const key = draftKey(group);
       if (
@@ -1132,6 +1136,7 @@ async function applyEnvironment(value) {
     section !== previousSection
   )
     render();
+  if (translated) fileAccessEditor?.redraw();
 }
 window.addEventListener("settings-environment", (event) =>
   guard(() => applyEnvironment(event.detail)),

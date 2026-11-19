@@ -84,6 +84,27 @@ def sftp_endpoint(data, client_root="/data", sftp_options="", authorized_key="")
         subprocess.run(["docker", "network", "rm", network], capture_output=True)
 
 
+def open_seedbox_browser(page, url, errors):
+    """Docker network creation can cancel Chromium's initial asset requests."""
+    network_changes = []
+
+    def failed(request):
+        if request.failure == "net::ERR_NETWORK_CHANGED":
+            network_changes.append(request.url)
+
+    page.on("requestfailed", failed)
+    try:
+        for _ in range(3):
+            network_changes.clear()
+            errors.clear()
+            page.goto(url)
+            if not network_changes:
+                return
+        pytest.fail("Docker network changes repeatedly interrupted browser startup")
+    finally:
+        page.remove_listener("requestfailed", failed)
+
+
 @pytest.fixture
 def seedbox(tmp_path, request):
     cluster = request.getfixturevalue("cluster") if "cluster" in request.fixturenames else None
@@ -273,7 +294,7 @@ def test_seedbox_dialog_access_mapping_and_progress(cluster, seedbox, tmp_path):
             page = browser.new_page(viewport={"width": 1500, "height": 1000})
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            page.goto(f"http://127.0.0.1:{port}")
+            open_seedbox_browser(page, f"http://127.0.0.1:{port}", errors)
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
@@ -395,3 +416,254 @@ def test_ssh_key_authentication_and_unreported_capacity(tmp_path):
             access.check("remote")
         assert not access.snapshot("remote")["checked"]
         access.close()
+
+
+def test_settings_saved_access_reuses_sftp_and_reports_connection_failures(seedbox, tmp_path):
+    import asyncssh
+    from fastapi.testclient import TestClient
+
+    from tests.test_web_jobs import login
+    from tests.test_web_plan_execution import prepared
+    from torrentlinker.web.app import create_app
+
+    values, data = seedbox
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with TestClient(app) as browser:
+        login(browser)
+
+        def call(action, value=None):
+            return browser.post(
+                "/api/settings/file-access/" + action,
+                json={"client_id": "default", "value": value or {}},
+            )
+
+        identity = call("discover", {"config": values}).json()
+        body = {
+            "config": values,
+            "credential": "disposable-test-password",
+            "host_key": identity["host_key"],
+        }
+        assert call("save", body).status_code == 200
+        assert call("check").json()["checked"]
+        assert "/downloads/films" in call("browse").json()["folders"]
+        workspace = app.state.agent_service.torrents_workspace
+        assert workspace.request("transfer-options", {"items": []})["clients"][0]["access"][
+            "checked"
+        ]
+        # Permission failures belong to the operation; a directory-space check
+        # does not claim arbitrary read or write permission.
+        denied = data / "denied"
+        denied.mkdir(mode=0)
+        try:
+            response = call("browse", {"path": "/downloads/denied"})
+            assert response.status_code == 400
+            assert "denied" in response.text.lower()
+        finally:
+            denied.chmod(0o700)
+        wrong = asyncssh.generate_private_key("ssh-ed25519").export_public_key().decode()
+        assert call("save", {**body, "host_key": wrong}).status_code == 200
+        assert call("check").status_code == 400
+        assert not call("snapshot").json()["checked"]
+        assert call("save", {**body, "config": {**values, "port": 1}}).status_code == 200
+        assert call("check").status_code == 400
+        assert not call("snapshot").json()["checked"]
+        assert call("remove", {"confirmed": True}).status_code == 200
+        assert (data / "films").is_dir()
+        assert not call("snapshot").json()["configured"]
+
+
+@pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="set TL_WEB_BROWSER=1")
+def test_settings_file_access_editor_and_transfer_reuse_in_browser(seedbox, tmp_path):
+    import socket
+    import threading
+    from pathlib import Path
+
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_web_plan_execution import prepared
+    from torrentlinker.web.app import create_app
+
+    values, _ = seedbox
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        thread.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1300, "height": 950}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(error.stack))
+                open_seedbox_browser(page, f"http://127.0.0.1:{listener.getsockname()[1]}", errors)
+                page.locator("#login-password").fill("test-password-long")
+                page.locator("#login-form button").click()
+                assert not errors
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "dark"
+                )
+                shell_navigate(page, "setup")
+                panel = page.frame_locator("#settings-frame")
+                name = panel.get_by_label("Client name", exact=True)
+                name.fill("Unsaved API draft")
+                card = panel.locator("#file-access-card")
+                card.get_by_role("button", name="Configure file access…").click()
+                for selector, value in [
+                    ("host", values["host"]),
+                    ("port", str(values["port"])),
+                    ("user", "seed"),
+                    ("client-root", "/downloads"),
+                    ("file-root", "/files"),
+                ]:
+                    panel.locator("#remote-" + selector).fill(value)
+                panel.locator("#remote-auth").select_option("password")
+                panel.locator("#remote-credential").fill("disposable-test-password")
+                panel.locator("#remote-test").click()
+                expect(panel.locator("#remote-trust")).to_be_visible()
+                assert not app.state.agent_service.torrents_workspace.remote.snapshot("default")[
+                    "configured"
+                ]
+                panel.locator("#remote-trust").check()
+                panel.locator("#remote-test").click()
+                expect(panel.locator("#remote-result")).to_contain_text(
+                    "Access verified", timeout=20000
+                )
+                expect(panel.locator("#remote-credential")).to_have_value("")
+                panel.locator("#remote-browse").click()
+                expect(panel.get_by_role("heading", name="Browse SFTP folders")).to_be_visible()
+                panel.locator("#root-cancel").click()
+                panel.locator("#remote-done").click()
+                expect(card).to_contain_text("Checked · SFTP")
+                expect(card).to_contain_text("SFTP alone is not supported")
+                expect(name).to_have_value("Unsaved API draft")
+                output = Path(os.getenv("TL_FILE_ACCESS_SCREENSHOTS", str(tmp_path / "shots")))
+                output.mkdir(parents=True, exist_ok=True)
+                card.scroll_into_view_if_needed()
+                page.screenshot(path=str(output / "settings-en-dark.png"))
+                # Same shared editor retains unsaved credentials when translated,
+                # and discards them when dismissed.
+                card.get_by_role("button", name="Configure file access…").click()
+                panel.locator("#remote-credential").fill("unsaved-credential")
+                pending_discovery = []
+                page.route(
+                    "**/api/settings/file-access/discover",
+                    lambda route: pending_discovery.append(route),
+                )
+                panel.locator("#remote-test").click()
+                expect(panel.locator("#remote-credential")).to_be_disabled()
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "fr"
+                )
+                expect(panel.locator("#remote-credential")).to_be_disabled()
+                expect(panel.locator("#remote-test")).to_be_disabled()
+                for _ in range(100):
+                    if pending_discovery:
+                        break
+                    page.wait_for_timeout(20)
+                assert len(pending_discovery) == 1
+                pending_discovery[0].fulfill(
+                    status=400,
+                    content_type="application/json",
+                    body='{"detail":"Fixture discovery failure"}',
+                )
+                expect(panel.locator("#remote-test")).to_be_enabled()
+                page.unroute("**/api/settings/file-access/discover")
+                page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
+                    "light"
+                )
+                expect(panel.locator("#remote-test")).to_contain_text("accès")
+                expect(panel.locator("#remote-credential")).to_have_value("unsaved-credential")
+                page.screenshot(path=str(output / "editor-fr-light.png"))
+                page.set_viewport_size({"width": 390, "height": 844})
+                assert panel.locator("#file-access-editor").evaluate(
+                    "e => e.scrollWidth <= e.clientWidth + 1"
+                )
+                page.screenshot(path=str(output / "editor-fr-mobile.png"))
+                panel.locator("#remote-done").click()
+                card.get_by_role("button", name="Configurer l’accès aux fichiers…").click()
+                expect(panel.locator("#remote-credential")).to_have_value("")
+                pending_saved_check = []
+                page.route(
+                    "**/api/settings/file-access/check",
+                    lambda route: pending_saved_check.append(route),
+                )
+                panel.locator("#remote-credential").fill("disposable-test-password")
+                panel.locator("#remote-test").click()
+                for _ in range(100):
+                    if pending_saved_check:
+                        break
+                    page.wait_for_timeout(20)
+                assert len(pending_saved_check) == 1
+                expect(panel.locator("#remote-credential")).to_have_value("")
+                page.set_viewport_size({"width": 1300, "height": 950})
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "en"
+                )
+                expect(panel.locator("#remote-credential")).to_be_disabled()
+                expect(panel.locator("#remote-credential")).to_have_value("")
+                pending_saved_check[0].fulfill(
+                    status=400,
+                    content_type="application/json",
+                    body='{"detail":"Fixture connection failure"}',
+                )
+                expect(panel.locator("#remote-result")).to_contain_text(
+                    "Fixture connection failure"
+                )
+                expect(panel.locator("#remote-credential")).to_have_value("")
+                panel.locator("#file-access-editor").press("Escape")
+                expect(card).to_contain_text("Recheck required · SFTP")
+                page.unroute("**/api/settings/file-access/check")
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "fr"
+                )
+                # A completed check response from a previous visit must not
+                # overwrite the fresh snapshot after returning to Settings.
+                page.set_viewport_size({"width": 1300, "height": 950})
+                pending_check = []
+                page.route(
+                    "**/api/settings/file-access/check",
+                    lambda route: pending_check.append((route, route.fetch())),
+                )
+                card.get_by_role("button", name="Tester l’accès", exact=True).click()
+                for _ in range(100):
+                    if pending_check:
+                        break
+                    page.wait_for_timeout(20)
+                assert len(pending_check) == 1
+                shell_navigate(page, "library")
+                shell_navigate(page, "setup")
+                expect(card).to_contain_text("Vérifié · SFTP")
+                pending_check[0][0].fulfill(response=pending_check[0][1])
+                page.unroute("**/api/settings/file-access/check")
+                panel.get_by_role("button", name="Clients", exact=True).click()
+                panel.get_by_role("button", name="Connexions", exact=True).click()
+                expect(card).to_contain_text("Vérifié · SFTP")
+                expect(card).not_to_contain_text("Le client cible a changé")
+                card.get_by_role("button", name="Supprimer l’accès…").click()
+                panel.locator("dialog").get_by_role("button", name="Annuler").click()
+                assert app.state.agent_service.torrents_workspace.remote.snapshot("default")[
+                    "configured"
+                ]
+                card.get_by_role("button", name="Supprimer l’accès…").click()
+                panel.locator("dialog").get_by_role(
+                    "button", name="Supprimer l’accès", exact=True
+                ).click()
+                expect(card).to_contain_text("Non configuré")
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            thread.join(15)

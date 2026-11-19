@@ -228,6 +228,9 @@ class SettingsWorkspace:
                         raise ValueError("Keep at least one client.")
                     if pending_work(draft, root.store, profile.id):
                         raise ValueError("Finish or remove this client's pending work first.")
+                    from torrentlinker.client_profiles import require_no_file_access
+
+                    require_no_file_access(root, profile.id)
                     remaining = [p for p in draft.client_profiles if p.id != profile.id]
                     if draft.active_client_id == profile.id:
                         draft.select_client(remaining[0].id)

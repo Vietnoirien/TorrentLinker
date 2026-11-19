@@ -226,3 +226,45 @@ small,
   border-top: 1px solid var(--line);
   background: var(--bg);
 }
+.file-access-status {
+  color: var(--accent);
+  font-weight: 600;
+}
+.file-access-address {
+  overflow-wrap: anywhere;
+}
+.file-access-capabilities {
+  width: 100%;
+  border-collapse: collapse;
+}
+.file-access-capabilities th,
+.file-access-capabilities td {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.file-access-capabilities th {
+  width: 35%;
+  font-weight: 500;
+}
+.file-access-capabilities td {
+  padding-left: 20px;
+}
+.file-access-note {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  padding: 12px;
+}
+.settings-error {
+  color: var(--danger);
+}
+.file-access-confirm {
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  width: min(560px, 90vw);
+  padding: 24px;
+}

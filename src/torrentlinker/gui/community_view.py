@@ -158,6 +158,7 @@ class BundledView(QWidget):
                             "assistant.js",
                             "companion.js",
                             "agents.js",
+                            "file-access.js",
                         )
                     }
                     | {
@@ -168,6 +169,8 @@ class BundledView(QWidget):
                             "i18n.js",
                             "torrent-list.css",
                             "torrent-filters.js",
+                            "file-access.js",
+                            "file-access.css",
                         )
                     }
                     or self_view.channel_name == "shell"

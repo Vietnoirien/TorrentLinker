@@ -169,3 +169,39 @@ def test_automatic_library_grouping_survives_editing_another_field(qtbot, tmp_pa
     qtbot.waitUntil(lambda: dialog.setup.path.exists())
     qtbot.waitUntil(lambda: dialog.view.pending == 0)
     assert Settings.load(dialog.setup.path).library_folders[0].depth is None
+
+
+def test_native_settings_file_access_uses_transfer_service(qtbot, tmp_path):
+    from tests.test_settings_file_access import access_body
+    from torrentlinker.web.app import create_app
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    service = app.state.agent_service.torrents_workspace
+    body = access_body()
+    service.request("transfer-access-save", {"client_id": "default", **body})
+    view = SettingsView(SettingsWorkspace(setup), agent_service=lambda: app.state.agent_service)
+    qtbot.addWidget(view)
+    view.resize(1200, 900)
+    view.show()
+    wait_js(
+        qtbot,
+        view,
+        "document.querySelector('#file-access-card')?.textContent.includes('seedbox.invalid')",
+    )
+    js(qtbot, view, "document.querySelector('#file-access-card button').click()")
+    wait_js(qtbot, view, "document.querySelector('#remote-host')?.value === 'seedbox.invalid'")
+    assert js(qtbot, view, "document.querySelector('#remote-credential').value") == ""
+    js(
+        qtbot,
+        view,
+        "document.querySelector('#remote-credential').value = 'discard-this'; "
+        "document.querySelector('#remote-done').click()",
+    )
+    wait_js(qtbot, view, "!document.querySelector('#file-access-editor')")
+    js(qtbot, view, "document.querySelector('#file-access-card button').click()")
+    wait_js(qtbot, view, "Boolean(document.querySelector('#remote-credential'))")
+    assert js(qtbot, view, "document.querySelector('#remote-credential').value") == ""
+    service.remote.close()

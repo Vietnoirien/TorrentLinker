@@ -142,7 +142,11 @@ class TorrentWorkspace:
         )
         with access, self.lock:
             if action.startswith("transfer-"):
-                return self.transfer_request(action, body)
+                # Client removal and access persistence share the setup lock,
+                # including validation that the owning client still exists.
+                mutation = action in {"transfer-access-save", "transfer-access-remove"}
+                with self.setup.lock if mutation else nullcontext():
+                    return self.transfer_request(action, body)
             if action == "list":
                 return self.list(TorrentQuery.model_validate(body))
             if action in {"review", "apply"}:
@@ -211,8 +215,23 @@ class TorrentWorkspace:
     def transfer_request(self, action, body):
         if action.startswith("transfer-access-") or action == "transfer-remote-browse":
             identifier = body["client_id"]
-            self.target(identifier)  # Reject unknown or disabled clients.
+            profile = self.setup.settings.profile(identifier)
+            if action not in {"transfer-access-snapshot", "transfer-access-remove"}:
+                self.target(identifier)  # Reject unknown or disabled clients before connecting.
             try:
+                if action == "transfer-access-snapshot":
+                    return {
+                        **self.remote.snapshot(identifier),
+                        "client_id": identifier,
+                        "enabled": profile.enabled,
+                        "busy": bool(self.transfers.running),
+                    }
+                if action == "transfer-access-remove":
+                    if body.get("confirmed") is not True:
+                        raise ValueError("Confirm file-access removal first")
+                    if self.transfers.running:
+                        raise ValueError("Interrupt active transfers before changing file access")
+                    return self.remote.remove(identifier)
                 if action == "transfer-access-discover":
                     return self.remote.discover(body["config"])
                 if action == "transfer-access-save":
@@ -228,8 +247,27 @@ class TorrentWorkspace:
                     return self.remote.check(identifier)
                 if action == "transfer-remote-browse":
                     return self.remote.browse(identifier, body.get("path", ""))
+                raise ValueError("Unknown file-access operation")
             except Exception as error:
-                raise ValueError(self.setup.secrets.redact(str(error))) from None
+                import asyncssh
+
+                if isinstance(error, asyncssh.HostKeyNotVerifiable):
+                    message = (
+                        "Server identity changed. Review its fingerprint in file-access settings."
+                    )
+                elif isinstance(error, asyncssh.PermissionDenied):
+                    message = "SFTP sign-in denied. Check the username and file-access credential."
+                elif isinstance(error, asyncssh.SFTPPermissionDenied):
+                    message = (
+                        "SFTP permission denied. Check this account's access to the mapped folder."
+                    )
+                elif isinstance(error, (ConnectionError, TimeoutError, asyncssh.ConnectionLost)):
+                    message = (
+                        "SFTP server unavailable. Check its address, port and network connection."
+                    )
+                else:
+                    message = str(error)
+                raise ValueError(self.setup.secrets.redact(message)) from None
         if action == "transfer-options":
             items = [TorrentInstance.model_validate(i) for i in body.get("items", [])]
             sources, clients = [], []

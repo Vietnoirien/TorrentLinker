@@ -56,3 +56,13 @@ def pending_work(settings: Settings, store, identifier: str) -> bool:
         if saved and any((i.client_id or profile.id) == identifier for i in saved.pending):
             return True
     return False
+
+
+def require_no_file_access(setup, identifier: str) -> None:
+    """Keep saved file-access credentials reachable until explicitly removed."""
+    import json
+
+    root = setup._root or setup
+    path = root.path.parent / "transfer-access" / "access.json"
+    if path.exists() and identifier in json.loads(path.read_text()):
+        raise ValueError("Remove this client's remote file access in Connections first.")

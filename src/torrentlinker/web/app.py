@@ -473,6 +473,18 @@ def create_app(
             group, body.get("value", {})
         )
 
+    @app.post("/api/settings/file-access/{action}")
+    def settings_file_access(action: str, body: dict) -> dict:
+        if action not in {"snapshot", "discover", "save", "check", "browse", "remove"}:
+            raise ValueError("Unknown file-access operation")
+        identifier = for_client(body.get("client_id", "")).setup.settings.active_client_id
+        if not isinstance(body.get("value", {}), dict):
+            raise ValueError("File-access values must be an object")
+        operation = "transfer-remote-browse" if action == "browse" else "transfer-access-" + action
+        return agent_service.torrents_workspace.request(
+            operation, {**body.get("value", {}), "client_id": identifier}
+        )
+
     @app.post("/api/settings/storage/{action}")
     def settings_storage(action: str, body: dict) -> dict:
         from torrentlinker.settings_workspace import SettingsWorkspace
@@ -590,15 +602,16 @@ def create_app(
 
     @app.post("/api/clients/remove")
     def remove_client(body: ClientSelection) -> dict:
-        from torrentlinker.client_profiles import pending_work
+        from torrentlinker.client_profiles import pending_work, require_no_file_access
 
-        with jobs.lock:
+        with jobs.lock, service.lock:
             idle()
             profile = service.settings.profile(body.client_id)
             if len(service.settings.client_profiles) == 1 or pending_work(
                 service.settings, service.store, profile.id
             ):
                 raise ValueError("This client has pending work or is the only configured client.")
+            require_no_file_access(service, profile.id)
             remaining = [p for p in service.settings.client_profiles if p.id != profile.id]
             if service.settings.active_client_id == profile.id:
                 service.settings.select_client(remaining[0].id)

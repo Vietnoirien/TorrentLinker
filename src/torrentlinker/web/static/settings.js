@@ -52,7 +52,18 @@ window.addEventListener("message", async (event) => {
     let value;
     if (message.path === "snapshot")
       value = await api(`settings?client_id=${encodeURIComponent(_client)}`);
-    else if (message.path === "diagnostics") {
+    else if (message.path === "file-access") {
+      if (
+        !["snapshot", "discover", "save", "check", "browse", "remove"].includes(
+          body.action,
+        )
+      )
+        throw Error("Unknown file-access operation");
+      value = await api(`settings/file-access/${body.action}`, {
+        client_id: _client,
+        value: body.value || {},
+      });
+    } else if (message.path === "diagnostics") {
       const link = document.createElement("a");
       link.href = "api/diagnostics";
       link.download = "torrentlinker-diagnostics.json";
@@ -206,3 +217,7 @@ for (const node of [$("view-setup"), $("workspace")])
     attributes: true,
     attributeFilter: ["hidden"],
   });
+
+const settingsShellResize = new ResizeObserver(settingsEnvironment);
+for (const id of ["shell-header-frame", "shell-navigation-frame"])
+  if ($(id)) settingsShellResize.observe($(id));

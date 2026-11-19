@@ -136,6 +136,25 @@ class SettingsBridge(ViewBridge):
                     )
             elif action == "snapshot":
                 work = workspace.snapshot
+            elif action == "file-access":
+                if view.agent_service is None:
+                    raise ValueError("File access is unavailable.")
+                service = view.agent_service().torrents_workspace
+                operation = body.get("action")
+                if operation not in {"snapshot", "discover", "save", "check", "browse", "remove"}:
+                    raise ValueError("Unknown file-access operation")
+                path = (
+                    "transfer-remote-browse"
+                    if operation == "browse"
+                    else "transfer-access-" + operation
+                )
+                values = {
+                    **body.get("value", {}),
+                    "client_id": workspace.setup.settings.active_client_id,
+                }
+
+                def work():
+                    return service.request(path, values)
             elif action == "save":
 
                 def work():
@@ -169,7 +188,7 @@ class SettingsBridge(ViewBridge):
                     return workspace.clients(body["action"], body["value"])
             else:
                 raise ValueError("Unknown Settings operation.")
-            run_in_background(work, done, failed)
+            run_in_background(work, done, failed, coordinate=action != "file-access")
         except Exception as error:
             failed(error)
 
