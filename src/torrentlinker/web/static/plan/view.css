@@ -298,3 +298,32 @@ progress {
   align-items: center;
   gap: 6px;
 }
+
+.plan-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.plan-heading h1 {
+  margin: 0;
+}
+.plan-heading .icon-button {
+  padding: 5px 9px;
+  color: var(--accent);
+}
+.info-box {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin: 12px 0 18px;
+  color: var(--muted);
+}
+.info-box p:first-child {
+  margin-top: 0;
+}
+.info-box p:last-child {
+  margin-bottom: 0;
+}

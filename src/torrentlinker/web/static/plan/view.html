@@ -14,12 +14,53 @@
     <script defer src="view.js"></script>
   </head>
   <body>
-    <h1>Plan</h1>
-    <p data-i18n="planHelp">
-      Build a proposal using the catalogue and verified mounted storage. Cached
-      Zen and note estimates are provisional. Review the plan before adding
-      torrents to the queue.
-    </p>
+    <div class="plan-heading">
+      <h1>Plan</h1>
+      <button
+        id="plan-info"
+        class="icon-button"
+        type="button"
+        aria-label="About Plan"
+        title="About Plan"
+        aria-expanded="false"
+        aria-controls="plan-info-box"
+      >
+        ⓘ
+      </button>
+    </div>
+    <aside id="plan-info-box" class="info-box" hidden>
+      <p data-i18n="planHelp">
+        Build a proposal using the catalogue and verified mounted storage.
+        Cached Zen and note estimates are provisional. Review the plan before
+        adding torrents to the queue.
+      </p>
+      <p data-i18n="planDestinationHelp">
+        Choose one client or distribute across selected clients. Budget 0 uses
+        available space.
+      </p>
+      <p class="muted" data-i18n="planNoteHelp">
+        Note prioritizes each torrent's initial score, without a seed-age bonus.
+        Equal scores prefer smaller downloads. Zen/day maximizes estimated
+        earnings.
+      </p>
+      <p class="muted" data-i18n="planZeroHelp">
+        A budget or maximum size of 0 means no additional limit. Available disk
+        space still applies to the plan.
+      </p>
+      <p
+        class="muted"
+        data-en="The minimum count is checked against the built Plan. If it cannot be reached within the other limits, the Plan explains the shortfall."
+        data-fr="Le nombre minimal est vérifié sur le Plan créé. Si les autres limites empêchent de l’atteindre, le Plan signale le manque."
+      >
+        The minimum count is checked against the built Plan. If it cannot be
+        reached within the other limits, the Plan explains the shortfall.
+      </p>
+      <p class="muted" data-i18n="planReseedHelp">
+        Checked Full Matches from the Library are included as Reseeds for a
+        single destination without a client budget. They use no download budget.
+        Size, seeder and torrent limits still apply.
+      </p>
+    </aside>
 
     <section class="profile-card">
       <div>
@@ -60,10 +101,7 @@
       <form id="plan-form">
         <details open>
           <summary data-i18n="planDestinations">Plan destinations</summary>
-          <p data-i18n="planDestinationHelp">
-            Choose one client or distribute across selected clients. Budget 0
-            uses available space.
-          </p>
+
           <div id="plan-clients" class="form-grid"></div>
         </details>
         <div class="metric-grid plan-limits">
@@ -188,28 +226,6 @@
             ></label
           >
         </div>
-        <p class="muted" data-i18n="planNoteHelp">
-          Note prioritizes each torrent's initial score, without a seed-age
-          bonus. Equal scores prefer smaller downloads. Zen/day maximizes
-          estimated earnings.
-        </p>
-        <p class="muted" data-i18n="planZeroHelp">
-          A budget or maximum size of 0 means no additional limit. Available
-          disk space still applies to the plan.
-        </p>
-        <p
-          class="muted"
-          data-en="The minimum count is checked against the built Plan. If it cannot be reached within the other limits, the Plan explains the shortfall."
-          data-fr="Le nombre minimal est vérifié sur le Plan créé. Si les autres limites empêchent de l’atteindre, le Plan signale le manque."
-        >
-          The minimum count is checked against the built Plan. If it cannot be
-          reached within the other limits, the Plan explains the shortfall.
-        </p>
-        <p class="muted" data-i18n="planReseedHelp">
-          Checked Full Matches from the Library are included as Reseeds for a
-          single destination without a client budget. They use no download
-          budget. Size, seeder and torrent limits still apply.
-        </p>
 
         <label
           ><input id="plan-cached" type="checkbox" /><span

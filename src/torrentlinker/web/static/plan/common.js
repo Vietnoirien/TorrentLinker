@@ -77,6 +77,9 @@ function button(text, callback, cls) {
 }
 const english = new Map();
 function translate() {
+  const info = $("plan-info");
+  info.title = say("About Plan", "À propos du Plan");
+  info.setAttribute("aria-label", info.title);
   document.documentElement.lang = language;
   for (const el of document.querySelectorAll("[data-i18n]")) {
     if (!english.has(el)) english.set(el, el.textContent);

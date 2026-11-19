@@ -67,9 +67,12 @@ function showPlan(result) {
   state.planOffset = 0;
   state.planDirty = false;
   $("plan-diagnostics").replaceChildren(
-    ...(result.issues || []).map((i) => element("p", diagnostic(i))),
+    ...(result.issues || []).map((i) =>
+      element("p", diagnostic(i), "info-box"),
+    ),
   );
-  if (result.notice) $("plan-diagnostics").prepend(element("p", result.notice));
+  if (result.notice)
+    $("plan-diagnostics").prepend(element("p", result.notice, "info-box"));
   if (result.on_disk?.length) {
     const details = element("details"),
       summary = element(
@@ -814,6 +817,11 @@ async function folderDialog(clientId = state.clientId, category = null) {
   await load();
 }
 function planInit() {
+  $("plan-info").onclick = () => {
+    const box = $("plan-info-box");
+    box.hidden = !box.hidden;
+    $("plan-info").setAttribute("aria-expanded", String(!box.hidden));
+  };
   $("plan-form").onsubmit = (event) => {
     event.preventDefault();
     guard(() => buildPlan());
