@@ -205,3 +205,47 @@ def test_native_settings_file_access_uses_transfer_service(qtbot, tmp_path):
     wait_js(qtbot, view, "Boolean(document.querySelector('#remote-credential'))")
     assert js(qtbot, view, "document.querySelector('#remote-credential').value") == ""
     service.remote.close()
+
+
+def test_desktop_release_score_editor_persists_custom_profile(qtbot, tmp_path):
+    _, setup, _, _ = prepared(tmp_path)
+    view = SettingsView(SettingsWorkspace(setup))
+    qtbot.addWidget(view)
+    view.resize(1200, 900)
+    view.show()
+    wait_js(qtbot, view, "Boolean(document.querySelector('#settings-navigation button'))")
+    js(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('#settings-navigation button')].fin"
+        "d(b=>b.textContent==='Search & Matching').click()",
+    )
+    wait_js(qtbot, view, "Boolean(document.querySelector('[aria-label=\"Edit profile\"]'))")
+    js(
+        qtbot,
+        view,
+        "document.querySelector('[aria-label=\"Profile name\"]').value='Desk"
+        "top cinema';[...document.querySelectorAll('button')].find(b=>b.te"
+        "xtContent==='New').click()",
+    )
+    js(
+        qtbot,
+        view,
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==="
+        "'Save ReleaseScore').click()",
+    )
+    wait_js(
+        qtbot, view, "document.querySelector('#settings-status').textContent==='ReleaseScore saved'"
+    )
+    assert "Desktop cinema" in setup.settings.release_score["profiles"]
+    js(
+        qtbot,
+        view,
+        'const select=document.querySelector(\'[aria-label="Active profile"'
+        "]');select.value='Desktop cinema';select.dispatchEvent(new Event("
+        "'change'))",
+    )
+    qtbot.waitUntil(lambda: setup.settings.release_score["active"] == "Desktop cinema")
+    from torrentlinker.config import Settings
+
+    assert Settings.load(setup.path).release_score["active"] == "Desktop cinema"

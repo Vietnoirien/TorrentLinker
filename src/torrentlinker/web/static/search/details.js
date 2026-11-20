@@ -114,6 +114,7 @@ async function loadDetail(tab) {
   const r = tab.document || (await request("detail", { hash: row.hash }));
   if (!current()) return;
   tab.document = r;
+  if (r.release_score) extras.append(releaseScoreDetails(r.release_score));
   {
     const info = r.info || {};
     if (info.seeders != null) seeds.textContent = `${info.seeders} seeders`;

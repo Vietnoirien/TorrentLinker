@@ -1133,6 +1133,7 @@ function render() {
       }),
     );
     form.append(actions);
+    if (section === "matching") settingsReleaseScore(form);
   } else if (section === "agents") {
     const root = element("div");
     form.append(root);
@@ -1178,7 +1179,7 @@ async function applyEnvironment(value) {
   if (!snapshot && loadingClient === environment.client_id) return;
   if (changed || !snapshot || activated) {
     fileAccessValues.delete(environment.client_id);
-    for (const group of ["connections", "general", "matching", "zen"]) {
+    for (const group of ["connections", "general", "matching", "zen", "release_score"]) {
       const key = draftKey(group);
       if (
         drafts.has(key) &&

@@ -509,7 +509,7 @@ function richRow(row) {
     "sr-title link",
   );
   if (!info) title.title = row.title; // with details, the hover card replaces the tooltip
-  line1.append(title);
+  line1.append(title, releaseScorePill(row));
   if (info?.year) line1.append(element("span", String(info.year), "muted"));
   if (info?.rating)
     line1.append(element("span", `★ ${info.rating.toFixed(1)}`, "tag rating"));
@@ -630,7 +630,10 @@ function compactColumns() {
         const info = SS.listing[r.hash];
         const wrap = element("div", undefined, "compact-name");
         const line = element("div", undefined, "sr-line");
-        line.append(button(r.title, () => details(r), "link sr-release"));
+        line.append(
+          button(r.title, () => details(r), "link sr-release"),
+          releaseScorePill(r),
+        );
         const mark = markChip(r.hash);
         if (mark) line.append(element("span", undefined, "spacer"), mark);
         const tags = element("div", undefined, "sr-line");

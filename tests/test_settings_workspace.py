@@ -282,3 +282,27 @@ def test_reseed_layout_is_saved_per_client_and_forced_for_disk_rename_clients(tm
     body["client"]["host"] = "http://127.0.0.1:8080/RPC2"
     workspace.save("connections", body)
     assert effective_layout(setup.settings.profile()) == "links"
+
+
+def test_release_score_profiles_persist_validate_and_reset(tmp_path):
+    from torrentlinker.config import Settings
+    from torrentlinker.release_score import PROFILES
+
+    _, setup, _, _ = prepared(tmp_path)
+    workspace = SettingsWorkspace(setup)
+    data = workspace.snapshot()["release_score"]
+    data["profiles"]["Cinema"] = {**data["profiles"]["4KLight"], "poidsAudio": 30}
+    data["active"] = "Cinema"
+    data["equipment"]["dv"] = "oui"
+    workspace.save("release_score", data)
+    assert Settings.load(setup.path).release_score == data
+    data["profiles"]["Cinema"]["poidsAudio"] = 500
+    with pytest.raises(ValueError):
+        workspace.save("release_score", data)
+    assert setup.settings.release_score["profiles"]["Cinema"]["poidsAudio"] == 30
+    data = workspace.snapshot()["release_score"]
+    data["profiles"]["HDLight 1080p"] = PROFILES["HDLight 1080p"]
+    del data["profiles"]["Cinema"]
+    data["active"] = "HDLight 1080p"
+    workspace.save("release_score", data)
+    assert "Cinema" not in Settings.load(setup.path).release_score["profiles"]

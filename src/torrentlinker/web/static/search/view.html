@@ -9,6 +9,7 @@
     <script src="../panel/i18n.js" defer></script>
     <script src="../panel/transport.js" defer></script>
     <script src="transport.js" defer></script>
+    <script src="release-score.js" defer></script>
     <script src="view.js" defer></script>
     <script src="results.js" defer></script>
     <script src="queue.js" defer></script>
@@ -20,6 +21,13 @@
       <section id="detail-pages" hidden></section>
       <section id="results">
         <div class="search-head">
+          <label class="release-score-selector"
+            >ReleaseScore
+            <select
+              id="release-score-profile"
+              aria-label="ReleaseScore profile"
+            ></select
+          ></label>
           <span class="search-tools">
             <button
               type="button"
@@ -187,7 +195,14 @@
       </section>
       <section id="queue" hidden>
         <div class="row between">
-          <button id="queue-refresh" type="button" data-en="Refresh" data-fr="Actualiser">Refresh</button>
+          <button
+            id="queue-refresh"
+            type="button"
+            data-en="Refresh"
+            data-fr="Actualiser"
+          >
+            Refresh
+          </button>
           <button
             id="back-results"
             class="quiet"

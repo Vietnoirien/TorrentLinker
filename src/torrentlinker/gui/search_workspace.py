@@ -70,6 +70,20 @@ class SearchBridge(ViewBridge):
                         else "0",
                     }
                 )
+            elif action == "score-profile":
+                from torrentlinker.release_score.preferences import Preferences
+
+                original = board.owner.settings.release_score
+                updated = Preferences.model_validate(original).model_dump(by_alias=True)
+                updated["active"] = body.get("active")
+                updated = Preferences.model_validate(updated).model_dump(by_alias=True)
+                board.owner.settings.release_score = updated
+                try:
+                    board.owner.settings.save(board.owner.settings_path)
+                except Exception:
+                    board.owner.settings.release_score = original
+                    raise
+                done({"ok": True})
             elif action == "pick":
                 done(
                     {

@@ -247,6 +247,7 @@ class Operations:
         self.archives = ArchiveReseeds(self.library)
         self.uploads = Uploads(setup, self.library)
         self.candidates: dict[str, Candidate] = {}
+        self.score_listings: dict[str, dict] = {}
         self.detail_workspace: DetailsWorkspace | None = None
         self.rows: list[dict[str, Any]] = []
         self.observed: list[Torrent] = []
@@ -783,18 +784,32 @@ class Operations:
 
             if len(request.hashes) != 1:
                 raise ValueError("Select one torrent.")
-            detail = parse_details(self.setup.indexer().torrent_json(request.hashes[0]))
+            raw_detail = self.setup.indexer().torrent_json(request.hashes[0])
+            detail = parse_details(raw_detail)
             markup, images = preview_html(detail.description, detail.poster)
             facts = asdict(detail)
             for key in ("description", "nfo", "files", "has_nfo"):
                 facts.pop(key)
-            return {
+            document = {
+                "title": str(raw_detail.get("name") or ""),
+                "size": raw_detail.get("size") if isinstance(raw_detail.get("size"), int) else 0,
                 "description": markup,
                 "images": images,
                 "nfo": detail.nfo,
                 "files": detail.files,
                 "info": facts,
             }
+            from torrentlinker.release_score.service import details_score
+
+            candidate = self.candidates.get(request.hashes[0])
+            document["release_score"] = details_score(
+                document,
+                self.setup.settings.release_score,
+                title=candidate.title if candidate else "",
+                size=candidate.size if candidate else 0,
+                listing=self.score_listings.get(request.hashes[0]),
+            )
+            return document
         if request.kind == "search-options":
             return self.search_options(request.category)
         if request.kind == "scan":
@@ -1003,6 +1018,24 @@ class Operations:
                         time.time(),
                     )
                 )
+            from torrentlinker.release_score.estimate import estimate as release_estimate
+            from torrentlinker.release_score.service import mark_best, score
+
+            for row in result:
+                listing = (
+                    asdict(page.details[row["hash"]])
+                    if indexer.is_c411 and row["hash"] in page.details
+                    else {}
+                )
+                self.score_listings[row["hash"]] = listing
+                row["release_score"] = score(
+                    release_estimate(row["title"], row["size"], listing),
+                    self.setup.settings.release_score,
+                )
+            # Only retain bounded listing facts for local re-scoring of recent pages.
+            while len(self.score_listings) > 2000:
+                self.score_listings.pop(next(iter(self.score_listings)))
+            mark_best(result)
             self.setup.store.save_catalogue(catalogue)
             from torrentlinker.queue_selection import snapshot
 

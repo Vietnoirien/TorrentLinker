@@ -70,7 +70,18 @@ class SearchWorkspace:
         return result
 
     def request(self, action: str, body: dict[str, Any]) -> Any:
-        if action in {"detail", "detail-image"}:
+        if action == "score-profile":
+            from torrentlinker.release_score.preferences import Preferences
+            from torrentlinker.settings_workspace import SettingsWorkspace
+
+            with self.setup.lock:
+                preferences = Preferences.model_validate(
+                    self.setup.settings.release_score
+                ).model_dump(by_alias=True)
+                preferences["active"] = body.get("active")
+                SettingsWorkspace(self.setup).save("release_score", preferences)
+            return {"ok": True}
+        if action in {"detail", "detail-image", "score-details"}:
             from torrentlinker.details_workspace import DetailsWorkspace
 
             indexer = self.setup.indexer()
@@ -78,8 +89,23 @@ class SearchWorkspace:
             if workspace is None or workspace.indexer is not indexer:
                 workspace = DetailsWorkspace(indexer)
                 self.operations.detail_workspace = workspace
-            if action == "detail":
-                return workspace.load(body.get("hash", ""))
+            if action in {"detail", "score-details"}:
+                from torrentlinker.release_score.service import details_score
+
+                identifier = body.get("hash", "")
+                if action == "score-details":
+                    document = dict(workspace.documents.get(identifier, {}))
+                else:
+                    document = dict(workspace.load(identifier))
+                candidate = self.operations.candidates.get(identifier)
+                document["release_score"] = details_score(
+                    document,
+                    self.setup.settings.release_score,
+                    title=candidate.title if candidate else "",
+                    size=candidate.size if candidate else 0,
+                    listing=self.operations.score_listings.get(identifier),
+                )
+                return document if action == "detail" else document["release_score"]
             return workspace.image(body.get("hash", ""), body.get("position", -1))
         if action == "poster":
             import base64
@@ -205,7 +231,7 @@ class SearchWorkspace:
             )
             hashes = JobRequest(kind="search", hashes=body.get("hashes", [])).hashes
             candidates = self.operations.candidates
-            search_rows = [{"hash": h} for h in hashes if h in candidates]
+            search_rows: list[dict[str, Any]] = [{"hash": h} for h in hashes if h in candidates]
             self.estimates(
                 search_rows,
                 [(candidates[row["hash"]], self.setup.settings.indexer.url) for row in search_rows],
@@ -215,7 +241,31 @@ class SearchWorkspace:
                 known.setdefault(entry.candidate.infohash or "", "queued")
             for row in search_rows:
                 row["known"] = known.get(row["hash"], "")
+            import hashlib
+            import json
+
+            from torrentlinker.release_score.estimate import estimate
+            from torrentlinker.release_score.preferences import Preferences
+            from torrentlinker.release_score.service import mark_best, score
+
+            score_preferences = Preferences.model_validate(self.setup.settings.release_score)
+            for row in search_rows:
+                candidate = candidates[row["hash"]]
+                row["release_score"] = score(
+                    estimate(
+                        candidate.title,
+                        candidate.size,
+                        self.operations.score_listings.get(row["hash"], {}),
+                    ),
+                    self.setup.settings.release_score,
+                )
+            mark_best(search_rows)
             return {
+                "score_revision": hashlib.sha256(
+                    json.dumps(self.setup.settings.release_score, sort_keys=True).encode()
+                ).hexdigest(),
+                "score_profiles": list(score_preferences.profiles),
+                "score_active": score_preferences.active,
                 "rows": queued_rows,
                 "active": active,
                 "last": sends[0] if sends else None,

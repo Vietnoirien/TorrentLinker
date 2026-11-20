@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from torrentlinker.client_profiles import pending_work
 from torrentlinker.config import CLIENT_FIELDS, MatchingSettings, ProxySettings
 from torrentlinker.domain import ContentKind, PathMapping
+from torrentlinker.release_score import PROFILES
+from torrentlinker.release_score.preferences import Preferences as ScorePreferences
 from torrentlinker.web.setup import (
     Connection,
     FolderRemoval,
@@ -292,6 +294,13 @@ class SettingsWorkspace:
                         "indexer_categories",
                     )
                 },
+                "score_defaults": PROFILES,
+                "score_recommendation": ScorePreferences.model_validate(
+                    settings.release_score
+                ).equipment.recommendation(),
+                "release_score": ScorePreferences.model_validate(settings.release_score).model_dump(
+                    by_alias=True
+                ),
                 "general": {key: getattr(settings, key) for key in General.model_fields},
                 "matching": {
                     **asdict(settings.matching),
@@ -330,7 +339,7 @@ class SettingsWorkspace:
 
     def save(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
         try:
-            if group in {"general", "matching", "zen"}:
+            if group in {"general", "matching", "zen", "release_score"}:
                 return self._save_preferences(group, body)
             return self._save_connections(group, body)
         except ValidationError as error:
@@ -341,6 +350,7 @@ class SettingsWorkspace:
     def _save_preferences(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
         models: dict[str, type[BaseModel]] = {
             "general": General,
+            "release_score": ScorePreferences,
             "matching": Matching,
             "zen": ZenPreferences,
         }
@@ -349,7 +359,9 @@ class SettingsWorkspace:
             root = self.setup._root or self.setup
             original = root.settings
             draft = copy.deepcopy(original)
-            if isinstance(value, General):
+            if isinstance(value, ScorePreferences):
+                draft.release_score = value.model_dump(by_alias=True)
+            elif isinstance(value, General):
                 for key, item in value.model_dump().items():
                     setattr(draft, key, item)
             elif isinstance(value, Matching):
@@ -372,7 +384,10 @@ class SettingsWorkspace:
                 raise
             if self.setup is not root:
                 self.setup.settings = draft.for_client(self.setup.settings.active_client_id)
-            if group != "general" or original.adult_content != draft.adult_content:
+            if (
+                group not in {"general", "release_score"}
+                or original.adult_content != draft.adult_content
+            ):
                 for profile in draft.client_profiles:
                     root.store.for_client(profile.id).clear_plan()
             return self.snapshot()

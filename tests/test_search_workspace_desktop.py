@@ -67,7 +67,30 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
     tab.show()
     board = tab.board
     wait_js(qtbot, board, "document.querySelector('#search-pills').textContent.includes('Films')")
-    wait_js(qtbot, board, "document.querySelectorAll('.sr-row').length===2")
+    wait_js(
+        qtbot,
+        board,
+        "document.querySelectorAll('.sr-row').length===2 || document.query"
+        "Selector('#toast')?.textContent.length > 0",
+    )
+    assert js(qtbot, board, "document.querySelectorAll('.sr-row').length===2"), js(
+        qtbot, board, "document.body.innerText"
+    )
+    wait_js(qtbot, board, "document.querySelectorAll('.release-score-pill').length===2")
+    wait_js(qtbot, board, "document.querySelector('#release-score-profile').options.length===6")
+    js(
+        qtbot,
+        board,
+        "document.querySelector('#release-score-profile').value='Qualité m"
+        "aximale';document.querySelector('#release-score-profile').dispatc"
+        "hEvent(new Event('change'))",
+    )
+    wait_js(
+        qtbot,
+        board,
+        "document.querySelector('.release-score-pill').title.includes('Qualité maximale')",
+    )
+    assert Settings.load(owner.settings_path).release_score["active"] == "Qualité maximale"
     js(qtbot, board, "document.querySelector('.sr-title').click()")
     wait_js(
         qtbot,
@@ -165,7 +188,8 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
     js(
         qtbot,
         board,
-        "document.querySelector('#search-density-compact').click();document.querySelector('#search-posters').click()",
+        "document.querySelector('#search-density-compact').click();documen"
+        "t.querySelector('#search-posters').click()",
     )
     qtbot.waitUntil(lambda: search_workspace.QSettings().value("search/density") == "compact")
     tab.stop()

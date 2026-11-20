@@ -62,15 +62,20 @@ async function api() {
   const value = await request("state", {
     hashes: SS.rows.map((row) => row.hash),
   });
+  refreshScoreProfiles(value);
+  await refreshDetailScores(value);
   let changed = false;
   for (const fresh of value.search || []) {
     const row = SS.rows.find((row) => row.hash === fresh.hash);
     if (
       row &&
-      (row.zen !== fresh.zen ||
+      (JSON.stringify(row.release_score) !==
+        JSON.stringify(fresh.release_score) ||
+        row.zen !== fresh.zen ||
         row.note !== fresh.note ||
         (SS.known[row.hash] || "") !== fresh.known)
     ) {
+      row.release_score = fresh.release_score;
       row.zen = fresh.zen;
       row.note = fresh.note;
       SS.known[row.hash] = fresh.known;
@@ -86,7 +91,10 @@ async function api() {
 }
 const details = (row) => openDetail(row);
 async function navigate(page) {
-  if (page === "details" && selectedDetail) { selectDetail(selectedDetail); return; }
+  if (page === "details" && selectedDetail) {
+    selectDetail(selectedDetail);
+    return;
+  }
   activePage = page;
   $("detail-pages").hidden = true;
   renderDetailTabs();

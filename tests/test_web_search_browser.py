@@ -462,3 +462,98 @@ def test_details_inline_image_retry_and_language_changes(tmp_path, monkeypatch):
             browser.close()
     finally:
         server.should_exit = True
+
+
+def test_release_score_profiles_details_and_equipment(tmp_path, monkeypatch):
+    import copy
+
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests import test_web_search
+    from tests.test_release_score import NFO
+
+    seen = []
+    original = test_web_search.c411_listing
+
+    def listing(request):
+        result = original(request)
+        for row in result["data"]:
+            row["size"] = 4_000_000_000
+            row["tech"]["videoCodec"] = "HEVC"
+        return result
+
+    monkeypatch.setattr(test_web_search, "c411_listing", listing)
+    detail = copy.deepcopy(test_web_search.DETAIL)
+    detail["metadata"]["nfoContent"] = NFO
+    monkeypatch.setattr(test_web_search, "DETAIL", detail)
+    fake_net(monkeypatch, seen)
+    server, base = serve(tmp_path)
+    try:
+        with sync_playwright() as pw:
+            browser, page, errors = open_search(pw, base)
+            search = page.frame_locator("#search-frame")
+            pills = search.locator(".release-score-pill")
+            expect(pills).to_have_count(2)
+            expect(pills.first).to_contain_text("≈")
+            expect(pills.first).to_have_attribute("title", re.compile("HDLight"))
+            page.screenshot(path="/tmp/release-score-search-web.png")
+            count = len([r for r in seen if r.url.path == "/api/torrents"])
+            search.get_by_label("ReleaseScore profile", exact=True).select_option(
+                "Qualité maximale"
+            )
+            expect(pills.first).to_have_attribute("title", re.compile("Qualité maximale"))
+            assert len([r for r in seen if r.url.path == "/api/torrents"]) == count
+            pills.first.click()
+            score = search.locator(".release-score-details")
+            expect(score).to_contain_text("MediaInfo")
+            details_count = len([r for r in seen if r.url.path.startswith("/api/torrents/")])
+            shell_navigate(page, "setup")
+            settings = page.frame_locator("#settings-frame")
+            settings.get_by_role("button", name="Search & Matching", exact=True).click()
+            settings.get_by_label("Profile name", exact=True).fill("Cinema")
+            settings.get_by_role("button", name="Duplicate", exact=True).click()
+            settings.get_by_role("button", name="Save ReleaseScore", exact=True).click()
+            expect(settings.get_by_label("Edit profile", exact=True)).to_have_value("Cinema")
+            settings.get_by_label("Profile name", exact=True).fill("Cinema renamed")
+            settings.get_by_role("button", name="Rename", exact=True).click()
+            settings.get_by_role("button", name="Save ReleaseScore", exact=True).click()
+            settings.get_by_label("Active profile", exact=True).select_option("Cinema renamed")
+            expect(settings.locator("#settings-status")).to_contain_text("ReleaseScore saved")
+            settings.get_by_label("Edit profile", exact=True).select_option("HDLight 1080p")
+            settings.get_by_label("Audio weight (%)", exact=True).fill("40")
+            settings.get_by_role("button", name="Reset built-in", exact=True).click()
+            expect(settings.get_by_label("Audio weight (%)", exact=True)).to_have_value("15")
+            settings.get_by_role("button", name="Save ReleaseScore", exact=True).click()
+            shell_navigate(page, "search")
+            expect(search.locator(".release-score-details")).to_contain_text("Cinema renamed")
+            assert (
+                len([r for r in seen if r.url.path.startswith("/api/torrents/")]) == details_count
+            )
+            shell_navigate(page, "setup")
+            settings.locator("summary").filter(has_text="Your equipment").click()
+            settings.get_by_label("Screen definition", exact=True).select_option("4k")
+            settings.get_by_label("HDR support", exact=True).select_option("oui")
+            settings.get_by_label("Sound system", exact=True).select_option("atmos")
+            settings.get_by_label("Priority", exact=True).select_option("qualite")
+            settings.get_by_role(
+                "button", name="Save equipment and use its recommendation", exact=True
+            ).click()
+            expect(settings.get_by_label("Active profile", exact=True)).to_have_value(
+                "My equipment"
+            )
+            settings.get_by_label("Edit profile", exact=True).select_option("My equipment")
+            expect(settings.get_by_label("Ideal resolution", exact=True)).to_have_value("2160")
+            expect(settings.get_by_label("Ideal audio", exact=True)).to_have_value("sansperte")
+            page.screenshot(path="/tmp/release-score-settings-web.png")
+            settings.get_by_label("Edit profile", exact=True).select_option("Cinema renamed")
+            settings.get_by_role("button", name="Delete", exact=True).click()
+            settings.get_by_role("button", name="Save ReleaseScore", exact=True).click()
+            expect(
+                settings.get_by_label("Edit profile", exact=True).locator(
+                    'option[value="Cinema renamed"]'
+                )
+            ).to_have_count(0)
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True

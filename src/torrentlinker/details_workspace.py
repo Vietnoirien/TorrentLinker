@@ -32,12 +32,15 @@ class DetailsWorkspace:
             raise ValueError("Select a torrent with a valid hash.")
         infohash = infohash.lower()
         with self.lock:
-            detail = parse_details(self.indexer.torrent_json(infohash))
+            raw = self.indexer.torrent_json(infohash)
+            detail = parse_details(raw)
             markup, images = preview_html(detail.description, detail.poster)
             facts = asdict(detail)
             for key in ("description", "nfo", "files", "has_nfo"):
                 facts.pop(key, None)
             result = {
+                "title": str(raw.get("name") or ""),
+                "size": raw.get("size") if isinstance(raw.get("size"), int) else 0,
                 "description": markup,
                 "images": images,
                 "nfo": detail.nfo,

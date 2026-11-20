@@ -148,6 +148,7 @@ class Settings:
     proxy: ProxySettings = field(default_factory=ProxySettings)
     announce_hosts: list[str] = field(default_factory=list)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
+    release_score: dict = field(default_factory=dict)
     # Torznab categories searched for each Content Kind; none listed = all categories.
     kind_categories: dict[ContentKind, list[int]] = field(default_factory=dict)
     language: str = "auto"  # auto | en | fr
@@ -281,6 +282,7 @@ class Settings:
             "proxy": asdict(self.proxy),
             "announce_hosts": self.announce_hosts,
             "matching": asdict(self.matching),
+            "release_score": self.release_score,
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
             "theme": self.theme,
@@ -326,6 +328,7 @@ class Settings:
             proxy=ProxySettings(**data.get("proxy", {})),
             announce_hosts=list(data.get("announce_hosts", [])),
             matching=MatchingSettings(**data.get("matching", {})),
+            release_score=data.get("release_score", {}),
             language=str(data.get("language", "auto")),
             theme=str(data.get("theme", "auto")),
             ui_scale=ui_scale(data.get("ui_scale", 1.0)),

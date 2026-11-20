@@ -42,7 +42,7 @@ torrentlinker-web = "torrentlinker.web.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-torrentlinker = ["i18n/*.qm", "assets/*.png", "assets/*.svg", "assets/*.tlcat", "assets/*.json", "gui/*.qml", "web/static/*", "web/static/community/*", "web/static/reseed/*", "web/static/upload/*", "web/static/panel/*", "web/static/profile/*", "web/static/search/*", "web/static/feeds/*", "web/static/torrents/*", "web/static/assistant/*", "web/static/media/*", "web/static/documentation/*", "web/static/catalogue/*", "web/static/plan/*", "web/static/seeding/*", "web/static/settings/*", "web/static/player/*", "web/static/shell/*", "companion_extension/*"]
+torrentlinker = ["release_score/*.json", "release_score/LICENSE", "i18n/*.qm", "assets/*.png", "assets/*.svg", "assets/*.tlcat", "assets/*.json", "gui/*.qml", "web/static/*", "web/static/community/*", "web/static/reseed/*", "web/static/upload/*", "web/static/panel/*", "web/static/profile/*", "web/static/search/*", "web/static/feeds/*", "web/static/torrents/*", "web/static/assistant/*", "web/static/media/*", "web/static/documentation/*", "web/static/catalogue/*", "web/static/plan/*", "web/static/seeding/*", "web/static/settings/*", "web/static/player/*", "web/static/shell/*", "companion_extension/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

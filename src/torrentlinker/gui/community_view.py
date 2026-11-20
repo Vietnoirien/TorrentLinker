@@ -152,6 +152,7 @@ class BundledView(QWidget):
                             "preparation.js",
                             "rules.js",
                             "results.js",
+                            "release-score.js",
                             "details.js",
                             "details.css",
                             "queue.js",
