@@ -118,7 +118,7 @@ REVENANT_RELEASES = [
 ]
 
 
-def test_latest_films_and_better_versions_use_two_requests_and_the_catalogue(library, monkeypatch):
+def test_latest_films_fill_once_then_cost_a_page_and_upgrades_cost_none(library, monkeypatch):
     pages = []
 
     def search(indexer, params, page=1):
@@ -129,8 +129,8 @@ def test_latest_films_and_better_versions_use_two_requests_and_the_catalogue(lib
     monkeypatch.setattr("torrentlinker.torrent_search.native_search", search)
     setup = setup_with(FakeStore(REVENANT_RELEASES))
     assert library.tracker_refresh("default", setup, threading.Event()) == "complete"
-    # Two listing pages of the latest films; the library's films cost no request.
-    assert [page for _, page in pages] == [1, 2]
+    # The first fill reads twenty pages of the latest films; library films cost nothing.
+    assert [page for _, page in pages] == list(range(1, 21))
     assert pages[0][0]["sortBy"] == "createdAt" and pages[0][0]["category"] == "1"
     rows = library.tracker_rows("default", setup)
     # A film the library holds is never "available"; it can only be a better version.
@@ -141,7 +141,23 @@ def test_latest_films_and_better_versions_use_two_requests_and_the_catalogue(lib
     assert upgrade["tracker"]["score"] >= upgrade["tracker"]["own_score"] + 5
     # A refresh within ten minutes asks nothing.
     assert library.tracker_refresh("default", setup, threading.Event()) == "waiting"
-    assert len(pages) == 2
+    assert len(pages) == 20
+    # Later, the first page already holds known releases: one request is enough.
+    monkeypatch.setattr("torrentlinker.media_tracker.RUN_INTERVAL", 0)
+    assert library.tracker_refresh("default", setup, threading.Event()) == "complete"
+    assert len(pages) == 21
+
+
+def test_pages_read_before_c411_asks_to_wait_are_kept(library, monkeypatch):
+    def search(indexer, params, page=1):
+        if page == 3:
+            raise RateLimited(60)
+        return latest_page((f"Film {page}", 2020, [OPPENHEIMER[2][1]]), page=page, more=True)
+
+    monkeypatch.setattr("torrentlinker.torrent_search.native_search", search)
+    assert library.tracker_refresh("default", setup_with(), threading.Event()) == "limit"
+    rows = library.tracker_rows("default", setup_with())
+    assert sorted(item["title"] for item in rows["tracker"]["rows"]) == ["Film 1", "Film 2"]
 
 
 def test_changing_the_profile_or_threshold_changes_the_suggestions_at_once(library, monkeypatch):

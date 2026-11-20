@@ -18,7 +18,7 @@ from typing import Any
 
 from guessit import guessit
 
-LATEST_PAGES = 2  # c411 listing pages of the latest releases read per refresh
+LATEST_PAGES = 20  # at most this many listing pages per refresh; known releases end it sooner
 RUN_INTERVAL = 600  # seconds between two refreshes of the same client
 LATEST_KEEP = 30 * 86400  # a latest release stays suggested for a month
 UPGRADES_RECHECK = 86400  # a library film is scored against the Catalogue daily
@@ -105,15 +105,28 @@ class TrackerRows:
 
         return score(estimate(name, size, facts), preferences)
 
-    def _latest(self, setup, indexer) -> dict[str, dict[str, Any]]:
-        """Each film's readable releases on c411's latest listing pages."""
+    def _latest(
+        self, setup, indexer, known: set[str], stop: threading.Event
+    ) -> tuple[dict[str, dict[str, Any]], str]:
+        """Each film's readable releases on c411's latest listing pages, newest first.
+
+        The first refresh reads up to LATEST_PAGES pages; later ones stop at the first page
+        holding a release already known, since everything after it was read before. What was
+        read is kept when c411 asks to wait part-way.
+        """
+        from torrentlinker.indexer import KeyRefused, RateLimited
         from torrentlinker.release_score.estimate import estimate
         from torrentlinker.torrent_search import native_search
 
         found: dict[str, dict[str, Any]] = {}
         params = {"category": "1", "sortBy": "createdAt", "sortOrder": "desc"}
         for page_number in range(1, LATEST_PAGES + 1):
-            page = native_search(indexer, params, page_number)
+            if stop.is_set():
+                return found, "cancelled"
+            try:
+                page = native_search(indexer, params, page_number)
+            except (RateLimited, KeyRefused):
+                return found, "limit"
             for candidate in page.rows:
                 listing = page.details.get(candidate.infohash or "")
                 if listing is None or listing.kind != "movie" or not listing.title:
@@ -142,9 +155,9 @@ class TrackerRows:
                         "published_at": candidate.published_at,
                     }
                 )
-            if not page.has_more:
+            if not page.has_more or any(c.infohash in known for c in page.rows):
                 break
-        return found
+        return found, "complete"
 
     def _upgrade(self, setup, film: dict[str, Any]) -> dict[str, Any]:
         """The film's best Catalogue release, scored with the film's own duration."""
@@ -220,34 +233,30 @@ class TrackerRows:
         return status
 
     def _refresh_latest(self, client_id, setup, stop: threading.Event) -> str:
-        """Available: c411's latest film releases, a couple of listing requests."""
-        from torrentlinker.indexer import KeyRefused, RateLimited
-
+        """Available: c411's latest film releases, newest first."""
         try:
             indexer = setup.indexer()
         except Exception:
             return "off"
         if not indexer.is_c411:
             return "off"
-        try:
-            with indexer.background(stop):
-                latest = self._latest(setup, indexer)
-        except (RateLimited, KeyRefused):
-            return "limit"
         known = self._tracker_cache(client_id, "tracker-new")
+        hashes = {r["hash"] for entry in known.values() for r in entry.get("releases") or []}
+        with indexer.background(stop):
+            latest, status = self._latest(setup, indexer, hashes, stop)
         for key, entry in latest.items():
-            hashes = {release["hash"] for release in entry["releases"]}
+            fresh = {release["hash"] for release in entry["releases"]}
             entry["releases"] += [
                 release
                 for release in known.get(key, {}).get("releases", [])
-                if release["hash"] not in hashes
+                if release["hash"] not in fresh
             ]
             self._tracker_save(client_id, "tracker-new", key, entry)
         with self.lock, self.db:
             for key, entry in known.items():
                 if time.time() - entry.get("at", 0) > LATEST_KEEP and key not in latest:
                     self.db.execute("DELETE FROM media_options WHERE key=?", (entry["cache_key"],))
-        return "complete"
+        return status
 
     # -- Rows -------------------------------------------------------------------------------
 
