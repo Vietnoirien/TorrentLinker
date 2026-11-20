@@ -410,3 +410,18 @@ class TrackerRows:
         )
         added = enqueue(setup.store, indexer, candidate, setup.verified_download_folder(category))
         return {"queued": bool(added), "title": best["name"]}
+
+    def tracker_download(self, client_id, setup, infohash: str) -> dict[str, Any]:
+        """Download now: queue the release, then send it to the client as Search's "Start" does."""
+        from torrentlinker.web.operations import JobRequest
+
+        result = self.tracker_enqueue(client_id, setup, infohash)
+        operations = self.agent.for_client(client_id)  # type: ignore[attr-defined]
+        request = JobRequest(kind="send-queue", hashes=[infohash])
+        job = self.agent.jobs.submit(  # type: ignore[attr-defined]
+            "search-send-queue",
+            lambda stop, progress: operations.run(request, stop, progress),
+            client_id=client_id,
+            parameters=request.model_dump(),
+        )
+        return {**result, "job": job}

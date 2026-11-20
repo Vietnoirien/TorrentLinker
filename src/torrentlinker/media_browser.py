@@ -91,10 +91,10 @@ class MediaBrowserService:
         if (
             len(parts) == 4
             and parts[:2] == ["media", "tracker"]
-            and parts[3] == "enqueue"
+            and parts[3] == "download"
             and method == "POST"
         ):
-            return media.tracker_enqueue(client, media.setup(client), tracker_hash(parts[2]))
+            return media.tracker_download(client, media.setup(client), tracker_hash(parts[2]))
         if parts == ["media", "playlists"] and method == "GET":
             return media.playlists(client)
         if parts == ["media", "playlists"] and method == "POST":

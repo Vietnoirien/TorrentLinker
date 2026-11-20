@@ -213,22 +213,22 @@ def test_queueing_a_tracker_film_needs_its_download_folder(library, monkeypatch,
         library.tracker_enqueue("default", setup_with(folder=tmp_path), "0" * 40)
 
 
-def test_desktop_media_service_queues_a_tracker_release_by_its_hash():
+def test_desktop_media_service_downloads_a_tracker_release_by_its_hash():
     from torrentlinker.media_browser import MediaBrowserService
 
     calls = []
     media = SimpleNamespace(
         setup=lambda client: "setup",
-        tracker_enqueue=lambda client, setup, h: calls.append((client, setup, h)) or {"ok": 1},
+        tracker_download=lambda client, setup, h: calls.append((client, setup, h)) or {"ok": 1},
     )
     agent = SimpleNamespace(
         media=media, setup=SimpleNamespace(settings=SimpleNamespace(default_client_id="default"))
     )
     service = MediaBrowserService(agent)
-    assert service.request(f"media/tracker/{'A' * 40}/enqueue", {}, "POST") == {"ok": 1}
+    assert service.request(f"media/tracker/{'A' * 40}/download", {}, "POST") == {"ok": 1}
     assert calls == [("default", "setup", "a" * 40)]
     with pytest.raises(ValueError, match="Unknown tracker release"):
-        service.request("media/tracker/../enqueue", {}, "POST")
+        service.request("media/tracker/../download", {}, "POST")
 
 
 def test_a_cancelled_refresh_is_retried_at_the_next_scan(library, monkeypatch):
@@ -268,3 +268,30 @@ def test_new_suggestions_make_a_quiet_scan_redraw_the_rows(library, monkeypatch)
         lambda indexer, params, page=1: (_ for _ in ()).throw(RateLimited(60)),
     )
     assert not library.scan("default", threading.Event(), lambda _p: None)["changed"]
+
+
+def test_download_queues_the_release_and_sends_it_like_search_start(library, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "torrentlinker.torrent_search.native_search",
+        lambda indexer, params, page=1: latest_page(OPPENHEIMER),
+    )
+    library.tracker_refresh("default", setup_with(), threading.Event())
+    infohash = library.tracker_rows("default", setup_with())["tracker"]["rows"][0]["tracker"][
+        "hash"
+    ]
+    monkeypatch.setattr("torrentlinker.download_queue.enqueue", lambda *args: True)
+    sent = []
+
+    class Operations:
+        def run(self, request, stop, progress):
+            sent.append((request.kind, request.hashes))
+
+    def submit(kind, work, *, client_id, parameters):
+        work(threading.Event(), lambda _p: None)
+        return f"{kind}:{client_id}"
+
+    monkeypatch.setattr(library.agent, "for_client", lambda client: Operations())
+    monkeypatch.setattr(library.agent.jobs, "submit", submit)
+    result = library.tracker_download("default", setup_with(folder=tmp_path), infohash)
+    assert result["queued"] and result["job"] == "search-send-queue:default"
+    assert sent == [("send-queue", [infohash])]

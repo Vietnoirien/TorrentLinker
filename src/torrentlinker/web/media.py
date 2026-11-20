@@ -102,13 +102,13 @@ def media_routes(app, agent, assistant):
     ):
         return media.home_rows(client(client_id), kind="video", limit=limit, scope=scope)
 
-    @app.post("/api/media/tracker/{infohash}/enqueue")
-    def tracker_enqueue(infohash: str, body: MediaClient):
+    @app.post("/api/media/tracker/{infohash}/download")
+    def tracker_download(infohash: str, body: MediaClient):
         from torrentlinker.media_browser import tracker_hash
 
         target = client(body.client_id)
         try:
-            return media.tracker_enqueue(target, media.setup(target), tracker_hash(infohash))
+            return media.tracker_download(target, media.setup(target), tracker_hash(infohash))
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 

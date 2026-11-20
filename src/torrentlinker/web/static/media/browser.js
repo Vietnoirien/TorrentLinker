@@ -176,11 +176,11 @@ function mediaRenderFeature() {
   if (row.tracker) {
     // A film on c411, not in the library: its best release, and a way to queue it.
     copy.append(mediaTrackerRelease(row.tracker));
-    const queue = button(say("Add to download queue", "Ajouter à la file de téléchargement"), () => guard(async () => {
+    const queue = button(say("Download", "Télécharger"), () => guard(async () => {
       queue.disabled = true;
       try {
-        const result = await api(`media/tracker/${encodeURIComponent(row.tracker.hash)}/enqueue`, {});
-        toast(result.queued ? say("Added to the download queue.", "Ajouté à la file de téléchargement.") : say("Already in the download queue.", "Déjà dans la file de téléchargement."));
+        await api(`media/tracker/${encodeURIComponent(row.tracker.hash)}/download`, {});
+        toast(say(`Sending ${row.tracker.name} to the client.`, `Envoi de ${row.tracker.name} au client.`));
       } finally { queue.disabled = false; }
     }), "media-primary");
     actions.append(queue); copy.append(actions); root.append(copy);
