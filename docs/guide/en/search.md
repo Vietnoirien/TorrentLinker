@@ -5,7 +5,13 @@
 1. Enter a title, pick a category pill and adjust the filters. The page searches by itself a moment after each change.
 2. Click a result's title to open its details in a tab.
 3. Select results and add them to the queue, or use a row's download button.
-4. ### Start and manage the queue
+4. Open **Download queue**, check the client and destination, then choose **Start queue** when ready.
+
+### Start and manage the queue
+
+Adding a result to the queue is a review step. Starting the queue sends it to the Torrent Client. If a send has an uncertain outcome, check that client before retrying to avoid a duplicate.
+
+The small ReleaseScore pill compares video releases with your equipment profile. Its colour and number describe different things. See [ReleaseScore setup and colours](release-score.md) to configure it.
 
 ![Download queue](../images/en/file.png)
 

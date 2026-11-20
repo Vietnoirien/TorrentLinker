@@ -4,6 +4,28 @@
 
 Open **Media** and choose **Video** or **Music**. **Add media folder** registers an ordinary Library Folder. **Refresh media** reads its media files in the background, including files that have no connection to c411. While Media is open, it reads the Library Folders again every minute and each time you open it, so new films and episodes appear on their own; the screen reloads only when something changed. Playback never edits the source files.
 
+## Play a video
+
+1. Add or check the folder under **Library options** on desktop or **Options** on the web, then refresh Media.
+2. Choose a title and check its release or episode. Click **Play** to start it.
+3. Move the pointer over the picture to reveal playback controls. Open the player menu for audio and subtitle choices.
+4. Leave the player and return later through **Continue watching** to resume.
+
+To remove a title from **Continue watching**, click the small **×** on its resume card. This clears its saved resume position and removes that card; it does not delete the video file.
+
+## If playback does not start
+
+| Symptom | Next step |
+| --- | --- |
+| Folder or file is unavailable | Check the local disk or mounted share on the app/server host, then refresh |
+| Picture plays without sound | Try another exposed audio track or open the file in an external player |
+| An audio/subtitle choice is missing | The browser may not expose that embedded track; use an external player |
+| Download is unfinished | Use the explicit partial-preview action only when it is offered |
+
+Desktop uses native playback. Web playback depends on browser support, and TorrentLinker does not convert codecs while playing.
+
+## Browse and control the library
+
 The **Anime** tab, after Series, gathers anime apart from Films and Series: recently added, the series, their OAVs as cards of their own, the films and the main genres. Home still shows everything. A video is anime when its c411 description says Japanese animation; without one, when it sits in a folder named Anime or Manga. Episode names like `Session 01`, `e01` or `OAV 2` are understood, and each OAV opens on its own episodes.
 
 With **Show XXX content** enabled in Settings, an **XXX** tab joins Home, Films and Series. It shows only media from Library Folders of the XXX kind, which never appear in the other tabs, in Continue watching or in the Assistant's media tools. Without the setting, that media stays hidden.
@@ -26,4 +48,20 @@ The desktop player uses the codecs available to QtMultimedia. Its audio and subt
 
 Configure a model connection in Assistant settings before sending a message. You can open the panel and browse your library without a model connection.
 
-For an unfinished **single-file qBittorrent sequential download**, open its details and choose **Preview downloaded portion**. On desktop it plays the file while it downloads, like qBittorrent's preview: it reads only verified pieces, and when playback catches up with the download it waits for the next pieces, then carries on. In the web player the byte window stays fixed until **Refresh preview**. Films and series TorrentLinker sends download in order, first and last pieces first. Turn this off under **Settings → Download Folders → Download films and series in order**. Other Torrent Clients and multi-file torrents do not have a proven preview layout yet. Files using qBittorrent's `.!qB` suffix are included. A format that needs the missing end of the file can remain unplayable until more is downloaded. Preview does not transcode or read download gaps.
+## Preview a video while it downloads
+
+See the [client compatibility table](clients.md#client-compatibility) for the supported features.
+
+For an unfinished **single-file qBittorrent sequential download**, choose **Preview downloaded portion** on the title card or featured title. It is also available in details and for unfinished episode/release choices. Other Torrent Clients do not show this action because their current adapters cannot prove the downloaded piece layout.
+
+![Explicit preview action on a downloading video](../images/en/media-preview-action.png)
+
+If preview reports that sequential mode is disabled, enable it in qBittorrent and retry after any hash check finishes. If the start of the file is not yet verified, let it download further. The action does not enable unsupported client features or treat missing bytes as complete.
+
+On desktop it plays the file while it downloads, like qBittorrent's preview: it reads only verified pieces, and when playback catches up with the download it waits for the next pieces, then carries on. In the web player the byte window stays fixed until **Refresh preview**. Films and series TorrentLinker sends download in order, first and last pieces first. Turn this off under **Settings → Download Folders → Download films and series in order**. Other Torrent Clients and multi-file torrents do not have a proven preview layout yet. Files using qBittorrent's `.!qB` suffix are included. A format that needs the missing end of the file can remain unplayable until more is downloaded. Preview does not transcode or read download gaps.
+
+## Music queue and playlists
+
+Open **Music → Tracks** to choose individual tracks. **Add to queue** builds the playback queue; enter a playlist name and choose **Save playlist** to keep it. This queue is separate from the Download Queue.
+
+![Music tracks, playback queue and playlist controls](../images/en/media-music-tracks.png)

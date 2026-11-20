@@ -4,7 +4,33 @@ ReleaseScore compares a release’s video and audio facts with your selected pro
 
 Colour expresses profile fit, independently of the number: green fits, yellow misses one criterion, grey misses two or more, and red exceeds the profile’s size cap. The star marks the highest scoring green result on the current page. Open a result for the MediaInfo calculation and its explanation, when MediaInfo is available. A calculated score is not a guarantee of subjective quality or playback compatibility.
 
-In Settings → Search & Matching, choose the active profile, edit or reset a built-in profile, and create, duplicate, rename or delete custom profiles. The equipment questionnaire recommends a profile only when you apply it. Dolby Vision, AVI, AV1 and DTS capabilities affect all profiles. Changes re-score open results and details locally. Advanced Poussée scoring is deferred.
+## Choose a profile for your equipment
+
+1. Open **Settings → Search & Matching** and find the **ReleaseScore** card.
+2. Expand **Your equipment**. Enter your screen size and viewing distance, then choose the screen definition and sound system.
+3. Set HDR, Dolby Vision, AV1, DTS and AVI support according to the device you actually use for playback. Leave an unknown capability as **Unknown**.
+4. Choose your priority: saving space, balance or quality.
+5. Click **Save equipment and use its recommendation**. This creates and selects a profile based on those answers.
+6. Return to Search and compare a few familiar releases. Open a result to read the score explanation before choosing it.
+
+![ReleaseScore equipment questionnaire](../images/en/release-score-equipment.png)
+
+To tune a profile yourself, choose it in the same card, adjust its limits, then click **Save ReleaseScore**. **Duplicate** is useful when you want to keep an existing profile and try another preference. Built-in profiles can be reset; custom profiles can be renamed or deleted. Changes update open results locally.
+
+![ReleaseScore profile controls and separate save action](../images/en/settings-search.png)
+
+## Read the pill before choosing a release
+
+| Display | Meaning | What to do |
+| --- | --- | --- |
+| Green | Fits the selected profile | Compare the score and the release details |
+| Yellow | Misses one profile criterion | Open the explanation to see which criterion |
+| Grey | Misses two or more criteria | Check whether this is the right profile or release |
+| Red | Exceeds the profile's size cap | Check the size limit, even if the number is high |
+| Question mark | Not enough facts for a score | Inspect details; a season pack needs reliable duration facts |
+| Star | Highest scoring green result on this page | Treat it as a comparison aid, not a playback guarantee |
+
+A yellow 74 and a red 88 can both be correct. The number estimates quality; the colour reports whether that release fits your profile. A high number does not cancel a size limit. Dolby Vision, AVI, AV1 and DTS capabilities affect all profiles. Advanced Poussée scoring is not available yet.
 
 ## Credits and licence
 
