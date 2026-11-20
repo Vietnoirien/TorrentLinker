@@ -109,3 +109,35 @@ def test_equipment_recommendation_and_validation():
         Equipment(taille=float("nan"))
     with pytest.raises(ValidationError):
         Preferences(profiles={})
+
+
+def test_identical_nfo_does_not_share_document_size_or_duration():
+    from torrentlinker.release_score.service import details_score
+
+    first = details_score({"nfo": NFO}, {}, size=20_000_000_000)
+    second = details_score({"nfo": NFO}, {})
+    assert first["color"] == "red"
+    assert second["gb_per_hour"] == 2
+    assert second["color"] == "green"
+
+
+def test_single_episodes_and_lossless_secondary_tracks():
+    from torrentlinker.release_score import note_track
+    from torrentlinker.release_score.estimate import estimate
+
+    listing = {"runtime": 45, "kind": "tv"}
+    assert estimate("Show.S01E01.1080p.x265", 2_000_000_000, listing) is not None
+    assert estimate("Show.S01.1080p.x265", 2_000_000_000, listing) is None
+    assert estimate("Show.S01E01-E02.1080p.x265", 2_000_000_000, listing) is None
+    assert estimate("Show.S01E01E02.1080p.x265", 2_000_000_000, listing) is None
+    facts = estimate(
+        "Film.MULTI.VF2.1080p.x265.TrueHD.Atmos.7.1",
+        10_000_000_000,
+        {"runtime": 120, "kind": "movie"},
+    )
+    assert facts is not None
+    first, second, third = facts["pistes"]
+    assert first["format"] == "TrueHD Atmos"
+    assert second["format"] == third["format"] == "E-AC-3"
+    assert second["debit"] == third["debit"] == 768
+    assert note_track(first) > note_track({**first, "format": "TrueHD"})

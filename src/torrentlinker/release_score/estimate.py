@@ -35,10 +35,15 @@ def estimate(title: str, size: int, listing: dict) -> dict | None:
     runtime = listing.get("runtime")
     if not isinstance(runtime, (int, float)) or runtime <= 0 or size <= 0:
         return None
-    # A listing runtime for TV is per episode. Do not multiply by guessed/name counts.
-    if listing.get("kind") == "tv" or re.search(
-        r"\bS\d{1,2}(?!E\d)|\b(?:SEASON|SAISON|COMPLETE|INTEGRALE)\b", title, re.I
-    ):
+    # TV runtime is per episode. An explicit single episode is usable; a pack is not.
+    single_episode = re.search(r"\b(?:S\d{1,2}E\d{1,3}|\d{1,2}x\d{1,3})\b", title, re.I)
+    pack = re.search(
+        r"\bS\d{1,2}\b|\b(?:SEASON|SAISON|COMPLETE|INTEGRALE)\b|"
+        r"E\d{1,3}[- ._]*(?:E\d|[-–]\d)|\d{1,2}x\d{1,3}[-–]\d",
+        title,
+        re.I,
+    )
+    if pack or (listing.get("kind") == "tv" and not single_episode):
         return None
     if listing.get("kind") not in ("movie", "tv", ""):
         return None
@@ -75,7 +80,7 @@ def estimate(title: str, size: int, listing: dict) -> dict | None:
         (
             (fmt, rate)
             for pattern, fmt, rate in (
-                (r"TRUEHD|MLP", "TrueHD", 3.3),
+                (r"TRUEHD|MLP", "TrueHD Atmos" if "ATMOS" in audio else "TrueHD", 3.3),
                 (r"DTS[: -]?X", "DTS XLL X", 3.5),
                 (r"DTS.?HD.?MA|DTS.?HD MASTER|XLL", "DTS XLL", 3),
                 (r"L?PCM", "PCM", 1.5 if stereo else 4.6),
@@ -105,9 +110,10 @@ def estimate(title: str, size: int, listing: dict) -> dict | None:
         langs.append("vo")
     langs = (langs or ["?"])[:count]
     langs += ["?"] * (count - len(langs))
+    secondary = ("E-AC-3", eac3) if lossless and lossy[1] == 0.45 else lossy
     tracks = []
     for i, lang in enumerate(langs):
-        fmt, rate = lossless if i == 0 and lossless else lossy
+        fmt, rate = lossless if i == 0 and lossless else secondary
         tracks.append(dict(format=fmt, canaux=channels, debit=rate * 1000, langue=lang))
     result = dict(
         w=width,

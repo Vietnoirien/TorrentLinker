@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 from torrentlinker.release_score import judge
 from torrentlinker.release_score.estimate import estimate
 from torrentlinker.release_score.mediainfo import parse
@@ -71,7 +73,7 @@ def mark_best(rows):
 
 
 def details_score(document: dict, preferences: dict, *, title="", size=0, listing=None):
-    measured = parse(document.get("nfo") or "")
+    measured = copy.deepcopy(parse(document.get("nfo") or ""))
     info = document.get("info") or {}
     media = info.get("media") or {}
     files = document.get("files") or []
