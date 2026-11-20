@@ -298,6 +298,8 @@ function mediaPlayerDetailsSnapshot() {
   };
 }
 function mediaPlayerDetails() {
+  // The frame can be ready before media.js has loaded; its first publish then waits.
+  if (typeof mediaPositionCaptions !== "function") return;
   const value = mediaPlayerDetailsSnapshot(),
     encoded = JSON.stringify(value);
   // Called with every player update: the page renders only when its details change.
