@@ -1288,3 +1288,97 @@ def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+
+
+def test_horizon_home_and_showcase_fill_one_screen_and_the_wheel_moves_the_selection(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "media"
+    root.mkdir()
+    for number in range(70):
+        (root / f"Horizon.Film.{number:02d}.{1950 + number}.mp4").write_bytes(b"not a real video")
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings(language="en")
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", log_config=None))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.02)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1500, "height": 950}, locale="en-US")
+            page.add_init_script(
+                "try{localStorage.setItem('tl-media-layout','horizon');"
+                "localStorage.setItem('tl-media-horizon','home')}catch{}"
+            )
+            page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "media")
+            media_locator(page, "#media-toolbar-refresh").click()
+            expect(media_locator(page, ".media-row-card")).to_have_count(20, timeout=15000)
+            frame = page.frame(name="media-frame")
+
+            def selected():
+                return frame.evaluate("mediaItems.get(media.featureId).title")
+
+            # One screen: nothing scrolls, and the Assistant lives in the menu's ✦ only.
+            assert frame.evaluate("document.documentElement.scrollHeight <= innerHeight")
+            expect(media_locator(page, "#media-feature-chat")).to_have_count(0)
+            # The wheel moves the selection, one title per step, kept in the middle.
+            first = selected()
+            page.mouse.move(700, 400)
+            for _ in range(3):
+                page.mouse.wheel(0, 100)
+                page.wait_for_timeout(150)
+            assert selected() != first
+            assert frame.evaluate("scrollY") == 0
+            # The rest of the category arrives as the selection moves along it.
+            for _ in range(15):
+                page.mouse.wheel(0, 100)
+                page.wait_for_timeout(80)
+            expect(media_locator(page, ".media-row-card")).to_have_count(60, timeout=5000)
+            # The category's title is its menu.
+            category = media_locator(page, ".media-row-category")
+            category.select_option(label="Not watched yet")
+            expect(media_locator(page, ".media-home-row")).to_have_attribute(
+                "aria-label", "Not watched yet"
+            )
+            # See all opens the Wall's compact grid, which scrolls.
+            media_locator(page, ".media-home-row").get_by_role("button", name="See all").click()
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-horizon", "wall")
+            # More titles load as it scrolls: the "Load more" button never shows.
+            assert media_locator(page, "#media-more").evaluate(
+                "node => node.hidden || getComputedStyle(node).opacity === '0'"
+            )
+            # Showcase: one screen too, and the wheel moves its carousel's selection.
+            frame.evaluate("mediaSetHorizon('showcase')")
+            media_locator(page, '[data-media-view="recent"]').click()
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-horizon", "showcase")
+            page.wait_for_timeout(500)
+            assert frame.evaluate("document.documentElement.scrollHeight <= innerHeight")
+            first = selected()
+            page.mouse.wheel(0, 100)
+            page.wait_for_timeout(300)
+            assert selected() != first
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)

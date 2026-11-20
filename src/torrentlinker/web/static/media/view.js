@@ -58,7 +58,7 @@ $("media-view").onchange=()=>guard(async()=>{media.view=$("media-view").value;aw
 for(const key of ["genre","year","language","availability"])$(`media-${key}`).onchange=()=>guard(loadMedia);
 let searchTimer;
 $("media-search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>guard(loadMedia),250)};
-$("media-more").onclick=()=>guard(()=>loadMedia(true));
+$("media-more").onclick=()=>guard(()=>loadMedia(true));$("media-more").tabIndex=-1;
 async function mediaScan(){
   const result=await api("media/scan",{client_id:state.clientId});media.scan=result.id;mediaStatus(say("Scanning Library Folders…","Analyse des dossiers…"));
   $("media-toolbar-refresh").setAttribute("aria-pressed","true");

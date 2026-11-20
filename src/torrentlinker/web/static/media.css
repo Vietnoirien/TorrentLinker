@@ -192,6 +192,8 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 .media-options-panel .media-filters { display: grid; grid-template-columns: 1fr 1fr; margin: 12px 0 0; padding-bottom: 0; }
 .media-options-panel select { width: 100%; max-width: none; }
 #media-center-mode { flex-shrink: 0; }
+/* More titles load as the grid scrolls; the button stays only to mark where. */
+#media-more:not([hidden]) { display: block; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; overflow: hidden; }
 #media-client { width: auto; max-width: 160px; padding: 8px 10px; font-size: 11px; flex-shrink: 0; }
 #view-media[data-kind="music"] .media-layout-control { display: none; }
 #view-media[data-kind="music"] .media-shelves { padding-top: 28px; padding-bottom: 250px; }

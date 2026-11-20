@@ -266,14 +266,16 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   border-color:#80d6c5}
 
 /* Home, as Kodi's Aeon Nox home: one screen, no scrolling. The title sits on the artwork,
-   a row of posters above the main menu, which runs across the foot of the screen. */
+   a row of posters above the main menu, which runs across the foot of the screen. A column,
+   so the title and the row never overlap whatever the screen's height. */
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] {
   height:100vh;
-  overflow:hidden}
+  overflow:hidden;
+  display:flex;
+  flex-direction:column}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature {
-  position:absolute;
-  left:40px;
-  top:86px;
+  flex:none;
+  margin:4px 40px 0;
   width:min(640px,52%);
   min-height:0}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-copy {
@@ -297,11 +299,81 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   color:#d3dde3;
   margin:12px 0 16px}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-shelves {
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  margin:0 40px;
+  padding:0 0 calc(var(--media-nav-height,66px) + 26px);
+  container-type:size}
+/* The posters take the room the title leaves. Unlike Showcase's carousel, nothing grows:
+   the chosen poster lifts into a soft light while the others step back. */
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-home-rows {
+  --poster:clamp(90px,calc((100cqh - 200px) * 2 / 3),200px)}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-track {
+  padding-top:84px;
+  padding-bottom:28px}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] {
+  position:relative;
+  transform-origin:50% 100%;
+  flex-basis:var(--poster);
+  transition:transform .35s cubic-bezier(.2,.8,.2,1),margin .35s cubic-bezier(.2,.8,.2,1),opacity .35s,filter .35s}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card:not([aria-pressed="true"]) {
+  opacity:.4;
+  filter:saturate(.5) brightness(.8)}
+/* A wave: the neighbours rise a little with the chosen poster, and the light fades outwards. */
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] + .media-row-card,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card:has(+ .media-row-card[aria-pressed="true"]) {
+  opacity:.66;
+  filter:saturate(.75) brightness(.92);
+  transform:translateY(-5px) scale(1.02)}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] + .media-row-card + .media-row-card,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card:has(+ .media-row-card + .media-row-card[aria-pressed="true"]) {
+  opacity:.5;
+  filter:saturate(.6) brightness(.86);
+  transform:translateY(-1px)}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-track .media-row-card:not([aria-pressed="true"]):hover {
+  opacity:.8;
+  filter:none}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] {
+  z-index:1;
+  margin-inline:calc(var(--poster) * .08);
+  transform:translateY(-24px) scale(1.15)}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] .media-art {
+  outline-color:transparent;
+  box-shadow:0 0 0 1px #ffffff4d,0 24px 70px -14px #5fd0c3d9,0 34px 80px -24px #000}
+/* A diffuse light under the chosen poster, rather than an outline. */
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"]::before {
+  content:"";
   position:absolute;
-  left:40px;
-  right:40px;
-  bottom:84px;
-  padding:0}
+  inset:18% -22% -10%;
+  z-index:-1;
+  background:radial-gradient(closest-side,#5fd0c385,#5fd0c32e 55%,transparent);
+  filter:blur(26px);
+  pointer-events:none}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] strong {
+  color:#f4f7f9}
+/* The category's title is its menu: a small arrow, then the name. */
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-category {
+  appearance:none;
+  width:auto;
+  margin:0;
+  padding:2px 6px 2px 20px;
+  border:0;
+  border-radius:4px;
+  background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23a3b2bd'/%3E%3C/svg%3E") no-repeat 4px center;
+  color:#a3b2bd;
+  font:600 12px/1.4 inherit;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  cursor:pointer}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-category:hover,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-category:focus-visible {
+  color:#eef3f6;
+  background-color:#ffffff14}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-category option {
+  color:#eef3f6;
+  background:#0d151c;
+  text-transform:none;
+  letter-spacing:0}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] #media-status,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] #media-continue,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-home-row:not(:first-child) {
   display:none}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-home-rows {
@@ -322,18 +394,13 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   font-size:clamp(14px,1.5vw,20px)}
 /* A short screen keeps the title, flags and posters; the plot is in Details. */
 @media (max-height:760px) {
-  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature {
-    top:70px}
   #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature h2 {
     font-size:clamp(26px,3.2vw,44px)}
   #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-description,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card strong,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card span {
     display:none}
   #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-flags {
     margin-bottom:14px}
-  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card {
-    flex-basis:88px}
-  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] {
-    flex-basis:120px}}
+}
 /* A phone keeps the same order in a page that scrolls. */
 @media (max-width:850px) {
   #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] {
@@ -346,7 +413,13 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-browse-nav {
     position:static;
     justify-content:flex-start;
-    overflow-x:auto}}
+    overflow-x:auto}
+  /* The page scrolls here, so the row cannot size its posters from a fixed height. */
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-shelves {
+    container-type:normal;
+    padding-bottom:0}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-home-rows {
+    --poster:150px}}
 #view-media[data-layout="horizon"] .media-home-row-header h2,#view-media[data-layout="horizon"] .media-continue > h2 {
   font-size:12px;
   font-weight:600;
@@ -370,10 +443,23 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
 
 /* Showcase: the whole screen for one title; the carousel grows the chosen poster. */
 /* The panel on top, the carousel at the foot: stacked, so neither covers the other. */
-#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-feature {
-  min-height:calc(100vh - 70px);
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] {
+  height:100vh;
+  overflow:hidden;
   display:flex;
   flex-direction:column}
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-feature {
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column}
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-shelves {
+  flex:none;
+  max-height:38vh;
+  overflow:auto;
+  padding-bottom:0}
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] #media-status {
+  display:none}
 #view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-feature-copy {
   margin:24px 36px 0;
   padding:24px 28px;
@@ -393,7 +479,7 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   overflow-x:auto;
   scrollbar-width:none}
 #view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice {
-  flex:0 0 108px;
+  flex:0 0 clamp(84px,12vh,140px);
   width:auto;
   min-width:0;
   transition:flex-basis .22s ease}
@@ -405,7 +491,7 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   white-space:nowrap;
   text-overflow:ellipsis}
 #view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice[aria-pressed="true"] {
-  flex-basis:168px}
+  flex-basis:clamp(124px,19vh,210px)}
 #view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice[aria-pressed="true"] .media-art {
   outline-color:#5fd0c3;
   box-shadow:0 14px 34px #000c}

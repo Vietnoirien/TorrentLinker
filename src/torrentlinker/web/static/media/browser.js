@@ -4,7 +4,9 @@ const mediaItems = new Map();
 const mediaPreferences = window.mediaHostPreferences || localStorage;
 media.layout = mediaLayoutValue(mediaPreferences.getItem("tl-media-layout"));
 media.horizon = "home"; // Horizon's view, chosen in Settings
-const mediaHorizon = view => media.layout === "horizon" && media.horizon === view;
+// "See all" from Horizon's Home shows the Wall: compact posters that load as they scroll.
+const mediaHorizonScreen = () => media.gridMode && media.horizon === "home" ? "wall" : media.horizon;
+const mediaHorizon = view => media.layout === "horizon" && mediaHorizonScreen() === view;
 function mediaSetLayout(value) {
   media.layout = mediaLayoutValue(value);
   mediaPreferences.setItem("tl-media-layout", media.layout);
@@ -172,7 +174,7 @@ function mediaRenderFeature() {
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
   const actions = element("div", undefined, "media-feature-actions");
   const play = mediaCanPreview(row) ? mediaPreviewAction(row, "media-primary") : button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false && !mediaCanPreview(row);
-  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"), Object.assign(button(say("Assistant", "Assistant"), async () => { media.selected = row; await mediaToggleChat(); }, "media-secondary"), {id: "media-feature-chat"}));
+  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"));
   copy.append(actions);
   if (row.available === false) copy.append(element("p", row.reason || say("Unavailable", "Indisponible"), "media-availability-note"));
   root.append(copy);
@@ -186,7 +188,11 @@ function mediaRenderFeature() {
   root.append(strip); strip.scrollLeft = scroll;
   if (focused) strip.querySelector(`[data-id="${CSS.escape(focused)}"]`)?.focus({preventScroll: true});
   // Horizon's Showcase keeps the chosen poster in view as the carousel grows it.
-  if (mediaHorizon("showcase")) strip.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center"});
+  if (mediaHorizon("showcase")) strip.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center", behavior: "smooth"});
+  // ...and fetches the next titles before the selection reaches the end.
+  if (mediaHorizon("showcase") && media.next && !media.loadingMore && media.rows.findIndex(item => item.id === row.id) >= media.rows.length - 8) {
+    media.loadingMore = true; guard(() => loadMedia(true)).finally(() => { media.loadingMore = false; });
+  }
 }
 function mediaRenderContinue() {
   const root = $("media-continue-items"); root.replaceChildren();
@@ -213,28 +219,20 @@ function mediaHomeActive() {
   return media.kind === "video" && ["recent", "films", "series", "anime", "adult"].includes(media.view) && !media.gridMode && (media.layout === "cinematic" || mediaHorizon("home")) && !$("media-search").value.trim()
     && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);
 }
+const mediaRowTitle = row => row.key === "genre" ? row.title : ({recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")})[row.key] || row.title;
+const mediaRowKey = row => `${row.key}:${row.title}`;
+// Horizon's Home shows one category at a time, chosen from its title.
+const mediaHorizonRow = () => media.homeRows.find(row => mediaRowKey(row) === media.horizonRow) || media.homeRows[0];
 function mediaRenderHome() {
   const root = $("media-home-rows"), active = mediaHomeActive() && media.homeRows.length > 0;
   root.hidden = !active; document.querySelector(".media-library-layout").hidden = active;
   $("view-media").dataset.home = String(active);
   root.replaceChildren();
   if (!active) return;
-  // Whatever scrolls into view lands below the pinned title; a recalled menu sits right above it.
-  if (!mediaPinnedObserver) {
-    mediaPinnedObserver = new ResizeObserver(() => {
-      const style = document.documentElement.style;
-      style.setProperty("--media-topbar-height", `${document.querySelector(".media-topbar").offsetHeight}px`);
-      style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
-    });
-    mediaPinnedObserver.observe(document.querySelector(".media-topbar")); mediaPinnedObserver.observe($("media-feature"));
-    $("media-feature").addEventListener("wheel", mediaFeatureWheel, {passive: false});
-    let lastScroll = scrollY;
-    addEventListener("scroll", () => { if (scrollY > lastScroll) delete $("view-media").dataset.menu; lastScroll = scrollY; }, {passive: true});
-  }
-  const titles = {recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")};
-  for (const row of media.homeRows) {
+  const horizon = media.layout === "horizon";
+  for (const row of horizon ? [mediaHorizonRow()] : media.homeRows) {
     const section = element("section", undefined, "media-home-row"), header = element("div", undefined, "media-home-row-header");
-    const title = row.key === "genre" ? row.title : titles[row.key] || row.title;
+    const title = mediaRowTitle(row);
     section.setAttribute("aria-label", title);
     const track = element("div", undefined, "media-row-track");
     const step = direction => track.scrollBy({left: direction * Math.max(180, track.clientWidth - 180), behavior: "smooth"});
@@ -242,38 +240,101 @@ function mediaRenderHome() {
     const back = button("‹", () => step(-1), "icon-button"), forward = button("›", () => step(1), "icon-button");
     back.setAttribute("aria-label", say("Scroll left", "Défiler à gauche")); forward.setAttribute("aria-label", say("Scroll right", "Défiler à droite"));
     const all = button(say("See all", "Voir tout"), () => guard(() => mediaSeeAll(row.filters)), "quiet");
-    header.append(element("h2", title), element("span", say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward, all);
-    for (const item of row.rows) {
-      const card = button("", () => {
-        mediaSelectFeature(item);
-        for (const other of root.querySelectorAll(".media-row-card")) other.setAttribute("aria-pressed", String(other.dataset.id === item.id));
-        // A pinned title is already in view; scrolling to it would move the page.
-        if (getComputedStyle($("media-feature")).position !== "sticky") $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
-      }, "media-row-card");
-      card.dataset.id = item.id;
-      card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
-      card.ondblclick = () => guard(() => mediaStart([item.id]));
-      card.append(mediaArt(item), element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
-      track.append(card);
+    let heading = element("h2", title);
+    if (horizon && media.homeRows.length > 1) {
+      heading = document.createElement("select"); heading.className = "media-row-category"; heading.setAttribute("aria-label", say("Category", "Catégorie"));
+      for (const other of media.homeRows) heading.append(new Option(mediaRowTitle(other), mediaRowKey(other)));
+      heading.value = mediaRowKey(row);
+      heading.onchange = () => {
+        media.horizonRow = heading.value; mediaRenderHome();
+        root.querySelector(".media-row-card")?.click(); // the category's first title
+        root.querySelector(".media-row-category")?.focus();
+      };
     }
+    header.append(heading, element("span", say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward, all);
+    for (const item of row.rows) track.append(mediaRowCard(item, row, track));
     section.append(header, track); root.append(section);
+    if (horizon) requestAnimationFrame(() => track.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center"}));
   }
   // Rows can be drawn while the page is hidden; measure again whenever a row's size changes.
   mediaRowObserver ||= new ResizeObserver(mediaRowArrows);
   mediaRowObserver.disconnect();
   for (const track of root.querySelectorAll(".media-row-track")) mediaRowObserver.observe(track);
 }
+function mediaRowCard(item, row, track) {
+  const card = button("", () => {
+    mediaSelectFeature(item);
+    for (const other of $("media-home-rows").querySelectorAll(".media-row-card")) other.setAttribute("aria-pressed", String(other.dataset.id === item.id));
+    if (media.layout === "horizon") {
+      // Horizon's row is a carousel: the chosen poster comes to the middle, and the
+      // rest of the category arrives before the end is reached.
+      card.scrollIntoView({block: "nearest", inline: "center", behavior: "smooth"});
+      if ([...track.children].indexOf(card) >= track.childElementCount - 8) guard(() => mediaRowMore(row, track));
+    } else if (getComputedStyle($("media-feature")).position !== "sticky") $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
+    // (A pinned title is already in view; scrolling to it would move the page.)
+  }, "media-row-card");
+  card.dataset.id = item.id;
+  card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
+  card.ondblclick = () => guard(() => mediaStart([item.id]));
+  card.append(mediaArt(item), element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
+  return card;
+}
+async function mediaRowMore(row, track) {
+  if (row.loading || row.rows.length >= row.total) return;
+  row.loading = true;
+  try {
+    const page = await api(`media?${mediaQuery({kind: "video", ...row.filters, offset: row.rows.length, limit: 40})}`);
+    const known = new Set(row.rows.map(item => item.id));
+    for (const item of page.rows) {
+      if (known.has(item.id)) continue;
+      row.rows.push(item); mediaItems.set(item.id, item);
+      if (track.isConnected) track.append(mediaRowCard(item, row, track));
+    }
+    if (!page.has_more) row.total = row.rows.length;
+  } finally { row.loading = false; }
+}
 let mediaRowObserver = null, mediaPinnedObserver = null;
+function mediaWatchLayout() {
+  if (mediaPinnedObserver) return;
+  // Whatever scrolls into view lands below the pinned title; a recalled menu sits right above it.
+  mediaPinnedObserver = new ResizeObserver(() => {
+    const style = document.documentElement.style;
+    style.setProperty("--media-topbar-height", `${document.querySelector(".media-topbar").offsetHeight}px`);
+    style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
+    style.setProperty("--media-nav-height", `${document.querySelector(".media-browse-nav").offsetHeight}px`);
+  });
+  for (const node of [document.querySelector(".media-topbar"), $("media-feature"), document.querySelector(".media-browse-nav")]) mediaPinnedObserver.observe(node);
+  $("media-feature").addEventListener("wheel", mediaFeatureWheel, {passive: false});
+  let lastScroll = scrollY;
+  addEventListener("scroll", () => { if (scrollY > lastScroll) delete $("view-media").dataset.menu; lastScroll = scrollY; }, {passive: true});
+  addEventListener("wheel", mediaHorizonWheel, {passive: false});
+}
 // Scrolled down, one wheel-up on the pinned title brings the menu back above it; scrolling down hides it.
 function mediaFeatureWheel(event) {
   const view = $("view-media");
   if (view.dataset.home !== "true" || view.dataset.layout !== "cinematic" || event.ctrlKey || event.deltaY >= 0) return;
   if (scrollY > 0 && view.dataset.menu !== "shown") { event.preventDefault(); view.dataset.menu = "shown"; }
 }
+// Horizon's Home and Showcase fill one screen, like a living-room interface: the wheel moves
+// the selection along the posters, one title per step, instead of scrolling anything.
+let mediaWheelTotal = 0;
+function mediaHorizonWheel(event) {
+  const home = mediaHorizon("home") && $("view-media").dataset.home === "true", showcase = mediaHorizon("showcase");
+  if (media.kind !== "video" || !(home || showcase) || event.ctrlKey) return;
+  if (event.target.closest?.("dialog, .media-options-panel, select, #media-episodes, #media-search")) return;
+  const delta = (Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY) * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 400 : 1);
+  event.preventDefault();
+  mediaWheelTotal += delta;
+  if (Math.abs(mediaWheelTotal) < 50) return;
+  const step = Math.sign(mediaWheelTotal); mediaWheelTotal = 0;
+  const cards = [...document.querySelectorAll(home ? "#media-home-rows .media-row-card" : "#media-focus-strip .media-focus-choice")];
+  const index = cards.findIndex(card => card.dataset.id === media.featureId);
+  cards[Math.max(0, Math.min(cards.length - 1, index + step))]?.click();
+}
 // The wheel over a row only ever scrolls that row, even at its ends: the page scrolls from the
 // pinned title instead, so it never moves under the pointer.
 function mediaRowWheel(track, event) {
-  if (event.shiftKey || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+  if (media.layout === "horizon" || event.shiftKey || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
   event.preventDefault();
   const delta = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? track.clientWidth : 1);
   // Snapping would pull small wheel steps back to the same card; it returns once the wheel rests.
@@ -303,7 +364,7 @@ async function mediaSeeAll(filters) {
   window.scrollTo({top: 0});
 }
 function mediaRender() {
-  $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout; $("view-media").dataset.horizon = media.horizon;
+  $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout; $("view-media").dataset.horizon = mediaHorizonScreen(); mediaWatchLayout();
   $("media-layout-switch").value = media.layout; // the saved layout, also when the view loads
   $("media-horizon-control").hidden = media.layout !== "horizon"; $("media-horizon-switch").value = media.horizon;
   // Horizon is a cinema skin: dark whatever the app's theme, like Kodi's.
