@@ -58,9 +58,7 @@ window.addEventListener("message",async event=>{
       const url=new URL("api/"+message.path,document.baseURI);url.searchParams.set("client_id",client);
       const path=url.pathname.replace(/^.*\/api\//,"")+url.search;
       if(url.pathname.endsWith("/artwork")){
-        const response=await fetch(url,{credentials:"same-origin"});if(!response.ok)throw Error("Artwork unavailable");
-        const blob=await response.blob();if(blob.size>8*1024*1024)throw Error("Artwork too large");
-        value={data_url:await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})};
+        value={data_url:await mediaArtworkDataURL(url)};
       }else {
         if(url.pathname.includes("/jobs/")){
           const job=await api(`jobs/${url.pathname.split("/jobs/")[1].split("/")[0]}`);

@@ -61,7 +61,7 @@ from torrentlinker import i18n
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.media_audio import create_audio_output
 from torrentlinker.gui.media_browser import MediaBrowserPanel
-from torrentlinker.gui.player_view import PlayerView
+from torrentlinker.gui.player_view import PlayerDetailsView, PlayerView
 from torrentlinker.gui.tasks import run_in_background
 
 # The Media Center chat panel and the media beside it never shrink below these.
@@ -560,10 +560,12 @@ class MediaTab(QWidget):
         self.player_heading_box = QVBoxLayout(self.player_heading)
         self.player_heading_box.setContentsMargins(8, 8, 8, 8)
         self.player_heading_box.addWidget(self.now_playing)
-        self.playing_description = QLabel()
-        self.playing_description.setTextFormat(Qt.TextFormat.PlainText)
-        self.playing_description.setWordWrap(True)
-        self.player_heading_box.addWidget(self.playing_description)
+        # A video's title, facts, files and tracks: the same view as the Web UI's.
+        self.playing_details = PlayerDetailsView(
+            self._details_snapshot, self._player_control, self._details_artwork
+        )
+        self.playing_details.height_changed.connect(self._arrange_player)
+        self.player_heading_box.addWidget(self.playing_details)
         player_box.addWidget(self.player_heading)
         self.video_controls = PlayerView(self._player_snapshot, self._player_control)
         self.video_controls.interacted.connect(self._show_video_controls)
@@ -637,7 +639,7 @@ class MediaTab(QWidget):
         label = self.tr("Return to TorrentLinker") if enabled else self.tr("Media Center mode")
         self.center_button.setAccessibleName(label)
         self.center_button.setToolTip(label)
-        self.video_controls.refresh()
+        self._refresh_player_views()
 
     def _transport_step(self, direction: int) -> None:
         if self._player_video_mode:
@@ -650,7 +652,7 @@ class MediaTab(QWidget):
             self.player is not None
             and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
         )
-        self.video_controls.refresh()
+        self._refresh_player_views()
         video = playing and self.current_row.get("kind") != "music"
         if video != self.video_playing:
             self.video_playing = video
@@ -726,9 +728,8 @@ class MediaTab(QWidget):
                 self.video_overlay_box.addWidget(self.video_controls)
             if self.player_heading_box.indexOf(self.now_playing) < 0:
                 self.player_heading_box.insertWidget(0, self.now_playing)
-            self.now_playing.setStyleSheet("font-size: 23px; font-weight: 600; color: #f1f3ef;")
-            self.playing_description.setText(str(self.current_row.get("description") or ""))
-            self.playing_description.setVisible(bool(self.playing_description.text()))
+            self.now_playing.hide()  # the details view shows the title
+            self.playing_details.refresh()
         else:
             if (
                 not self.fullscreen_dialog.isVisible()
@@ -739,11 +740,12 @@ class MediaTab(QWidget):
             if self.music_controls_home.indexOf(self.video_controls) < 0:
                 self.music_controls_home.addWidget(self.video_controls)
             self.now_playing.setStyleSheet("color: #e7eeeb;")
+            self.now_playing.show()
         self.player_heading.setVisible(active_video and not self.fullscreen_dialog.isVisible())
         if active_video and not self.fullscreen_dialog.isVisible():
             self.video.setFixedHeight(
                 min(
-                    max(300, self.media_column.height() - 90),
+                    max(300, self.media_column.height() - self.playing_details.height() - 40),
                     max(300, self.media_column.width() * 9 // 16),
                 )
             )
@@ -1024,7 +1026,7 @@ class MediaTab(QWidget):
     def _refresh_playlists(self) -> None:
         try:
             self.saved_playlists = self.library.playlists(self.session_client)
-            self.video_controls.refresh()
+            self._refresh_player_views()
         except (OSError, ValueError) as error:
             self._set_notice(str(error))
 
@@ -1049,7 +1051,7 @@ class MediaTab(QWidget):
         self._arrange_player()
         self._render_caption()
         self.video_controls.setVisible(active or bool(self.state["queue"]) or self.queue_open)
-        self.video_controls.refresh()
+        self._refresh_player_views()
         if self.browser is not None:
             self.browser.setVisible(not active_video)
 
@@ -1463,17 +1465,19 @@ class MediaTab(QWidget):
         except Exception as error:
             self._set_notice(str(error))
 
-    def _player_snapshot(self) -> dict[str, Any]:
+    def _player_language(self) -> str:
         app = QApplication.instance()
-        language = i18n.pick_language(
+        return i18n.pick_language(
             self.service.agent.setup.settings.language
             if self.service
             else (app.property("language") if app else None) or "auto"
         )
+
+    def _player_snapshot(self) -> dict[str, Any]:
         player = self.player
         return {
             "mode": "desktop",
-            "language": language,
+            "language": self._player_language(),
             "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
             "client_id": self.session_client,
             "media_id": self.last_source,
@@ -1502,6 +1506,61 @@ class MediaTab(QWidget):
             if self._player_video_mode
             else 380,
         }
+
+    def _refresh_player_views(self) -> None:
+        self.video_controls.refresh()
+        if self._player_video_mode:
+            self.playing_details.refresh()
+
+    def _details_snapshot(self) -> dict[str, Any]:
+        # Only what the details show, so that an unchanged film publishes nothing.
+        row = self.current_row
+        video = self._player_video_mode
+        return {
+            "language": self._player_language(),
+            "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
+            "client_id": self.session_client,
+            "media_id": self.last_source,
+            "source_token": self.track_source_token,
+            "item": {
+                key: row.get(key)
+                for key in (
+                    "title",
+                    "original_title",
+                    "year",
+                    "duration",
+                    "genre",
+                    "rating",
+                    "tagline",
+                    "description",
+                    "director",
+                    "actors",
+                    "release",
+                    "codec",
+                )
+            }
+            | {"artwork": bool(row.get("artwork_url"))}
+            if video
+            else None,
+            "tracks": self._track_state() if video else {},
+        }
+
+    def _details_artwork(self, identifier: str, done, failed) -> None:
+        from urllib.parse import quote, urlencode
+
+        from torrentlinker.media_browser import MediaBrowserService
+
+        service, client = self.service.agent, self.session_client
+        run_in_background(
+            lambda: MediaBrowserService(service).request(
+                f"media/items/{quote(identifier)}/artwork?{urlencode({'client_id': client})}",
+                None,
+                "GET",
+            ),
+            done,
+            failed,
+            coordinate=False,
+        )
 
     def _player_control(self, action: str, values: dict) -> None:
         if action == "toggle":
@@ -1559,7 +1618,7 @@ class MediaTab(QWidget):
             else:
                 self.library.delete_playlist(self.session_client, playlist["id"])
                 self.refresh()
-        self.video_controls.refresh()
+        self._refresh_player_views()
 
     def _position_changed(self, position: int) -> None:
         self._render_caption()
@@ -1813,7 +1872,7 @@ class MediaTab(QWidget):
         choice = self.subtitle_choice if isinstance(self.subtitle_choice, int) else -1
         if self.player.activeSubtitleTrack() != choice:
             self.player.setActiveSubtitleTrack(choice)
-        self.video_controls.refresh()
+        self._refresh_player_views()
 
     def _codec_error(self, *_args: Any) -> None:
         if self.player.error() != QMediaPlayer.Error.NoError:

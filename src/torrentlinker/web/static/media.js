@@ -140,7 +140,7 @@ function mediaOpenPlayerMenu() { mediaPlayerMenu(true); }
 function mediaPlayerComposition(kind) {
   mediaClosePlayerMenu();
   $("media-video-stage").hidden = kind !== "video";
-  $("media-playing-description").hidden = kind !== "video";
+  $("player-details-frame").hidden = kind !== "video";
   const parent = kind === "video" ? $("media-video-stage") : $("media-player-shell");
   if ($("player-frame").parentElement !== parent) parent.append($("player-frame"));
 }
@@ -212,8 +212,6 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   $("media-track-request-error")?.remove();
   player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();
   $("media-player-shell").hidden = false; $("media-player-shell").scrollIntoView({block: "nearest"}); $("media-now-playing").textContent = [row.title, row.artist].filter(Boolean).join(" · ");
-  $("media-playing-description").textContent = [[row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language].filter(Boolean).join(" · "), row.description].filter(Boolean).join(" · ");
-  $("media-playing-description").hidden = row.kind !== "video" || !$("media-playing-description").textContent;
   $("media-player-shell").querySelector(".media-playing-art")?.remove();
   if (row.kind === "music") $("media-player-shell").prepend(mediaArt(row, "media-playing-art"));
   $("media-codec-error").hidden = true;

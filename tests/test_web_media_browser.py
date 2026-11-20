@@ -296,10 +296,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.keyboard.press("Escape")
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
-            expect(page.locator("#media-playing-description")).to_contain_text("0:20")
-            assert (
-                not page.locator("#media-video-stage").locator("#media-playing-description").count()
-            )
+            details = page.frame_locator("#player-details-frame")
+            expect(details.locator("#title")).to_have_text("Validation Film")
+            expect(details.locator("#meta")).to_contain_text("2026")
+            assert not page.locator("#media-video-stage").locator("#player-details-frame").count()
             video.evaluate("node => node.play()")
             expect(player_locator(page, "#player-track-limit")).to_contain_text(
                 "Use an external player if a track is unavailable"
@@ -554,7 +554,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 arg=video_element,
             )
             expect(page.locator("#media-now-playing")).to_be_hidden()
-            expect(page.locator("#media-playing-description")).to_be_hidden()
+            expect(page.locator("#player-details-frame")).to_be_hidden()
             if control_screenshots:
                 page.screenshot(path=str(Path(control_screenshots) / "player-fullscreen-menu.png"))
             player_locator(page, "#player-menu-close").click()

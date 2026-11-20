@@ -348,6 +348,7 @@ def create_app(
             "/static/seeding/view.html",
             "/static/settings/view.html",
             "/static/player/view.html",
+            "/static/player-details/view.html",
             "/static/shell/view.html",
         }:
             # This bundled component may be embedded only by our own Web UI.
@@ -363,6 +364,7 @@ def create_app(
                         "/static/search/view.html",
                         "/static/assistant/view.html",
                         "/static/media/view.html",
+                        "/static/player-details/view.html",
                     }
                     else "img-src 'self'; "
                 )

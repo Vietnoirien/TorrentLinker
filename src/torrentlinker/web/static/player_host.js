@@ -65,6 +65,8 @@ function mediaPlayerEnvironment() {
     { type: "player-environment", value: mediaPlayerSnapshot() },
     location.origin,
   );
+  $("player-details-frame").title = say("Now playing", "En lecture");
+  mediaPlayerDetails();
 }
 function mediaPlayerMenu(open, queue = false) {
   mediaPlayerEnvironment();
@@ -243,4 +245,109 @@ document.addEventListener("tl-language-changed", mediaPlayerEnvironment);
 new MutationObserver(mediaPlayerEnvironment).observe(document.documentElement, {
   attributes: true,
   attributeFilter: ["data-theme"],
+});
+
+// Posters reach the bundled views as data URLs: their pages may not load images.
+async function mediaArtworkDataURL(url) {
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok) throw Error("Artwork unavailable");
+  const blob = await response.blob();
+  if (blob.size > 8 * 1024 * 1024) throw Error("Artwork too large");
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// The playing video's details under the picture: the same view as the desktop's.
+let playerDetailsPublished = "";
+function mediaPlayerDetailsSnapshot() {
+  const player = mediaPlayer(),
+    id = player.dataset.mediaId || "",
+    row = mediaItems.get(id),
+    video = !!row && $("media-player-shell").dataset.kind === "video";
+  const fields = [
+    "title",
+    "original_title",
+    "year",
+    "duration",
+    "genre",
+    "rating",
+    "tagline",
+    "description",
+    "director",
+    "actors",
+    "release",
+    "codec",
+  ];
+  return {
+    language,
+    theme: document.documentElement.dataset.theme || "dark",
+    client_id: media.playerClient || mediaClient(),
+    media_id: id,
+    source_token: player.dataset.sourceToken || "",
+    item: video
+      ? {
+          ...Object.fromEntries(fields.map((key) => [key, row[key] ?? null])),
+          artwork: !!row.artwork_url,
+        }
+      : null,
+    tracks: video ? mediaTrackState() : {},
+  };
+}
+function mediaPlayerDetails() {
+  const value = mediaPlayerDetailsSnapshot(),
+    encoded = JSON.stringify(value);
+  // Called with every player update: the page renders only when its details change.
+  if (encoded === playerDetailsPublished) return;
+  playerDetailsPublished = encoded;
+  $("player-details-frame").contentWindow?.postMessage(
+    { type: "nowplaying-environment", value },
+    location.origin,
+  );
+}
+window.addEventListener("message", async (event) => {
+  const frame = $("player-details-frame"),
+    message = event.data;
+  if (event.origin !== location.origin || event.source !== frame.contentWindow)
+    return;
+  if (message?.type === "nowplaying-ready") {
+    playerDetailsPublished = "";
+    mediaPlayerDetails();
+    return;
+  }
+  if (message?.type !== "nowplaying-request") return;
+  const reply = (value, error) =>
+    frame.contentWindow?.postMessage(
+      { type: "nowplaying-response", id: message.id, value, error },
+      location.origin,
+    );
+  try {
+    if ($("workspace").hidden) throw Error("Sign in first.");
+    const body = message.body;
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      throw Error("Invalid details request.");
+    let value = null;
+    if (message.path === "layout")
+      frame.style.height = `${Math.max(0, Math.min(600, Number(body.height) || 0))}px`;
+    else if (message.path === "artwork") {
+      const current = mediaPlayerDetailsSnapshot();
+      if (body.media_id !== current.media_id || !current.item?.artwork)
+        throw Error("Player source changed.");
+      const url = new URL(
+        `api/media/items/${encodeURIComponent(current.media_id)}/artwork`,
+        document.baseURI,
+      );
+      url.searchParams.set("client_id", current.client_id);
+      value = { data_url: await mediaArtworkDataURL(url) };
+    } else if (message.path === "command") {
+      if (body.action !== "select_track") throw Error("Unknown details control.");
+      await mediaPlayerControl(body);
+    } else throw Error("Unknown details operation.");
+    reply(value);
+  } catch (error) {
+    reply(undefined, error.message);
+  }
 });

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Signal, Slot
 from PySide6.QtGui import QColor
+from shiboken6 import isValid
 
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 
@@ -130,3 +131,82 @@ class PlayerView(BundledView):
         if self.web is not None:
             self.web.setFocus()
             self.web.page().runJavaScript("document.getElementById('player-fullscreen').focus()")
+
+
+class PlayerDetailsBridge(ViewBridge):
+    response = Signal(int, str)
+
+    def __init__(self, view):
+        super().__init__()
+        self.view = view
+
+    @Slot(int, str, str)
+    def requestAsync(self, identifier: int, path: str, payload: str) -> None:
+        try:
+            body = json.loads(payload)
+            if not isinstance(body, dict):
+                raise ValueError("Invalid details operation.")
+            if path == "layout":
+                self.view.setFixedHeight(max(0, min(600, int(body["height"]))))
+                self.view.height_changed.emit()
+            elif path == "artwork":
+                current = self.view.snapshot()
+                if body.get("media_id") != current.get("media_id") or not current.get("item"):
+                    raise ValueError("Player source changed.")
+                self.view.artwork(
+                    current["media_id"],
+                    lambda value: self._respond(identifier, {"data": value}),
+                    lambda error: self._respond(identifier, {"error": str(error)}),
+                )
+                return
+            elif path == "command":
+                current = self.view.snapshot()
+                for key in ("client_id", "media_id", "source_token"):
+                    if body.get(key) != current.get(key):
+                        raise ValueError("Player source changed. Use the current controls.")
+                values = body.get("values")
+                if body.get("action") != "select_track" or not isinstance(values, dict):
+                    raise ValueError("Unknown details control.")
+                self.view.command("select_track", values)
+            else:
+                raise ValueError("Unknown details operation.")
+            self._respond(identifier, {"data": None})
+        except (ValueError, TypeError, KeyError, OverflowError, OSError) as error:
+            self._respond(identifier, {"error": str(error)})
+
+    def _respond(self, identifier: int, result: dict) -> None:
+        if isValid(self):
+            self.response.emit(identifier, json.dumps(result))
+
+
+class PlayerDetailsView(BundledView):
+    """The playing film's details under the picture: the same view as the Web UI's."""
+
+    height_changed = Signal()
+
+    def __init__(self, snapshot, command, artwork):
+        self.snapshot = snapshot
+        self.command = command
+        self.artwork = artwork
+        self.published = ""
+        super().__init__(
+            PlayerDetailsBridge(self),
+            Path(__file__).parents[1] / "web" / "static" / "player-details",
+            "nowplaying",
+        )
+        self.setFixedHeight(200)  # until the page reports its own height
+
+    def _load_view(self):
+        super()._load_view()
+        self.web.page().setBackgroundColor(QColor(0, 0, 0, 0))
+
+    def refresh(self):
+        value = self.snapshot()
+        self.language = value.get("language", "en")
+        encoded = json.dumps(value)
+        # Called with every player update: the page renders only when its details change.
+        if encoded == self.published:
+            return
+        self.published = encoded
+        self.bridge.environment_value = encoded
+        self.bridge.environment.emit(encoded)
