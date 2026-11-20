@@ -908,7 +908,8 @@ class MediaTab(QWidget):
                     self.refresh_on_first_open = False
                     folders = self.library.setup(self.session_client).settings.library_folders
                     if folders:
-                        QTimer.singleShot(0, self.start_scan)
+                        # The saved library shows at once; the screen reloads only on changes.
+                        QTimer.singleShot(0, lambda: self.start_scan(quiet=True))
             self.refresh()
             QTimer.singleShot(0, self, self._auto_scan)  # dropped if the tab is deleted
             self.auto_refresh.start()

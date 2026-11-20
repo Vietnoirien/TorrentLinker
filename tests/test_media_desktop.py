@@ -1325,6 +1325,7 @@ def test_toolbar_refreshes_the_library_and_reopening_rescans_quietly(qtbot, tmp_
     tab.activate()
     qtbot.waitUntil(lambda: len(scans) == 1)
     assert tab.scan_stop is not None  # a refresh is running
+    assert "Scanning" not in tab.notice.text()  # quietly: the saved library is already shown
     release.set()
     qtbot.waitUntil(lambda: tab.scan_stop is None)
     video_wait(qtbot, tab, "document.querySelector('#media-feature').innerText.includes('Film')")
