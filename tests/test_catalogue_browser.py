@@ -182,6 +182,8 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             expect(panel.get_by_role("button", name="Récupérer seulement Audio")).to_be_visible()
+            expect(page.locator("#page-jobs")).not_to_contain_text(" · fetching")
+            expect(page.locator("#page-jobs")).not_to_contain_text(" · planning")
             if output := os.getenv("TL_CATALOGUE_SCREENSHOTS"):
                 Path(output).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(output) / "web-desktop-fr-light.png"))

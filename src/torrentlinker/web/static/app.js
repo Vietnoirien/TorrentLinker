@@ -4,6 +4,33 @@ function loadTorrents() { window.torrentsEnvironment?.(); }
 function loadAssistant() { window.assistantEnvironment?.(); }
 
 "use strict";
+// Keyboard focus inside an iframe dialog does not scroll its outer document.
+document.addEventListener("load", event => {
+  const frame = event.target;
+  if (!(frame instanceof HTMLIFrameElement) || new URL(frame.src).origin !== location.origin) return;
+  const panel = frame.contentDocument;
+  if (!panel) return;
+  const syncDialog = () => {
+    const open = !!panel.querySelector("dialog[open]");
+    const opening = open && !frame.classList.contains("has-open-dialog");
+    frame.classList.toggle("has-open-dialog", open);
+    if (opening) frame.scrollIntoView({block: "center", inline: "nearest"});
+  };
+  new MutationObserver(syncDialog).observe(panel, {
+    subtree: true, childList: true, attributes: true, attributeFilter: ["open"],
+  });
+  syncDialog();
+  let keyboardFocus = false;
+  panel.addEventListener("keydown", () => { keyboardFocus = true; }, true);
+  panel.addEventListener("pointerdown", () => { keyboardFocus = false; }, true);
+  panel.addEventListener("focusin", focused => {
+    if (!keyboardFocus || !focused.target.closest?.("dialog[open]")) return;
+    const bounds = frame.getBoundingClientRect();
+    if (bounds.top < 0 || bounds.bottom > innerHeight)
+      frame.scrollIntoView({block: "center", inline: "nearest"});
+  });
+}, true);
+
 const $ = (id) => document.getElementById(id);
 const state = {
   view: "torrents",
@@ -511,7 +538,19 @@ function jobStatus(row) {
   const p = row.progress || {};
   if (p.done != null && p.total != null) text += ` · ${p.done}/${p.total}`;
   else if (p.items != null) text += say(` · ${p.items} items`, ` · ${p.items} éléments`);
-  if (p.phase || p.stage) text += ` · ${p.phase || p.stage}`;
+  const phase = p.phase || p.stage;
+  const phases = {
+    fetching: ["Fetching", "Récupération"], planning: ["Planning", "Calcul du Plan"],
+    preview: ["Preview", "Aperçu"], "tracker-update": ["Updating trackers", "Mise à jour des trackers"],
+    submitting: ["Sending", "Envoi"], scan: ["Scanning", "Analyse"],
+    "scan-error": ["Scan failed", "Échec de l’analyse"], "item-complete": ["Item completed", "Élément terminé"],
+    find: ["Searching", "Recherche"], candidates: ["Candidates", "Candidats"],
+    incomplete: ["Incomplete", "Incomplet"], links: ["Creating links", "Création des liens"],
+    verify: ["Verifying", "Vérification"], verifying: ["Verifying", "Vérification"],
+    seeding: ["Seeding", "Partage"], "client-files": ["Reading client files", "Lecture des fichiers du client"],
+    extracting: ["Extracting", "Extraction"],
+  };
+  if (phase) text += ` · ${phases[phase] ? say(...phases[phase]) : phase}`;
   return text;
 }
 function jobSubject(row) {

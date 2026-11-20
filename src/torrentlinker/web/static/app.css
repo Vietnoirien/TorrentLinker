@@ -908,6 +908,10 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 .queue-context-menu { position: fixed; z-index: 1000; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 8px 30px #0005; max-width: 100vw; }
 .queue-context-menu button { display: block; width: 100%; text-align: left; margin: 2px 0; }
 
+/* Leave room for the sticky status band when browser focus scrolls an embedded panel. */
+html { scroll-padding-bottom: calc(var(--shell-band-height, 44px) + 16px); }
+/* Embedded modal actions must remain above the sticky status band. */
+iframe.has-open-dialog { position: relative; z-index: 3; }
 #upload-frame[hidden]{display:none!important}
 /* The bundled shell renders navigation, headings, update notices and the Zen band. */
 #app-sidebar { padding:0; overflow:hidden; }

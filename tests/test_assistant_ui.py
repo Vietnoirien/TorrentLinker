@@ -35,7 +35,12 @@ def provider(request):
 
 
 def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QApplication
+
     from torrentlinker.gui.assistant import AssistantTab
+    from torrentlinker.gui.theme import apply_theme
+
+    apply_theme(QApplication.instance(), "light")
 
     app = create_app(
         tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
@@ -87,6 +92,7 @@ def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkey
         assert len(browser.get("/api/assistant/conversations").json()) == 2
         widget.conversations.setCurrentItem(widget.conversations.topLevelItem(0).child(1))
         assert "Help me build a Plan." in widget.transcript.toPlainText()
+        qtbot.wait(250)
         widget.grab().save(str(tmp_path / "assistant-desktop.png"))
         from PySide6.QtWidgets import QMessageBox
 

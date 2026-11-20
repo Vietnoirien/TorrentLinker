@@ -219,6 +219,7 @@ window.addEventListener("message", async (event) => {
     if (action === "layout") {
       if (region !== "navigation" || innerWidth < 650)
         frame.style.height = `${Math.max(28, Math.min(600, Number(values.height) || 28))}px`;
+      if (region === "band") document.documentElement.style.setProperty("--shell-band-height", frame.style.height);
     } else {
       if (!shellActions[region].has(action))
         throw Error("Unknown shell action.");

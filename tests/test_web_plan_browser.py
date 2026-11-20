@@ -287,6 +287,11 @@ def test_review_sort_send_and_resume_plan_in_browser(tmp_path):
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(panel.locator("#plan-summary")).to_contain_text("amorti")
             page.set_viewport_size({"width": 390, "height": 844})
+            panel.locator("#plan-min-count").focus()
+            panel.locator("#plan-min-count").press("Tab")
+            expect(panel.locator("#plan-min-seeders")).to_be_focused()
+            expect(panel.locator("#plan-min-seeders")).to_be_in_viewport()
+            expect(panel.locator("#plan-min-count")).to_have_value("2")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             if destination := os.getenv("TL_WEB_SCREENSHOTS"):
                 page.screenshot(

@@ -639,8 +639,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             upload.locator(".item").first.focus()
             upload.locator(".item").first.press("Enter")
             upload.locator("[data-action=edit]").click()
-            if upload.locator("[data-action=drawer-close]").is_visible():
-                upload.locator("[data-action=drawer-close]").click()
+            expect(upload.locator(".inspector.open")).to_have_count(0)
             upload.locator("[data-step='4']").click()
             expect(upload.locator(".editor pre").first).to_contain_text("A small cable holder")
             expect(upload.locator("#reviewed")).to_be_disabled()
@@ -669,7 +668,13 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             expect(upload.locator("#prep-description-preview")).to_contain_text(
                 "Reviewed cable holder description"
             )
+            expect(page.locator("#upload-frame")).to_have_class(re.compile("has-open-dialog"))
             expect(upload.locator("[data-prep=save]")).to_be_in_viewport()
+            if folder := os.getenv("TL_POLISH_SCREENSHOTS"):
+                Path(folder).mkdir(parents=True, exist_ok=True)
+                page.screenshot(
+                    path=str(Path(folder) / f"upload-save-{viewport[0]}x{viewport[1]}.png")
+                )
             upload.locator("[data-prep=save]").click()
             expect(upload.locator("#prep-status")).to_contain_text("Saved")
             upload.locator("[data-prep=close]").last.click()

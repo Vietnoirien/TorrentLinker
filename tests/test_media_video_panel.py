@@ -86,6 +86,7 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
         wait_js(qtbot, panel, "document.querySelector('#media-details')?.open")
         assert "A Journey" in js(qtbot, panel, "document.querySelector('#media-details').innerText")
         if os.getenv("QT_QPA_PLATFORM") == "wayland":
+            qtbot.wait(250)
             panel.grab().save("/tmp/media108-wayland.png")
         js(
             qtbot,

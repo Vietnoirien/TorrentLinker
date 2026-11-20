@@ -11,7 +11,7 @@ let uploadNavigation = null;
 function uploadEnvironment(section) {
   if (typeof section === "string") uploadNavigation = {tab: section, id: (uploadNavigation?.id || 0) + 1};
   if (!$("view-upload").hidden)
-    uploadFrame.style.height = `${Math.max(240, innerHeight - uploadFrame.getBoundingClientRect().top - 40)}px`;
+    uploadFrame.style.height = `${Math.max(240, innerHeight - uploadFrame.getBoundingClientRect().top - $("shell-band-host").getBoundingClientRect().height - 16)}px`;
   uploadFrame.contentWindow?.postMessage(
     {
       type: "upload-environment",
@@ -83,3 +83,5 @@ new MutationObserver(uploadEnvironment).observe(document.documentElement, {
 });
 
 document.addEventListener("tl-language-changed", uploadEnvironment);
+
+new ResizeObserver(uploadEnvironment).observe($("shell-band-host"));

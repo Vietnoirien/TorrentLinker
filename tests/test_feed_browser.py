@@ -317,13 +317,24 @@ def test_rss_category_legend_and_rich_editor_roundtrip(tmp_path):
                         ).select_option(theme)
                         editor.locator(".criterion-help").scroll_into_view_if_needed()
                         page.screenshot(path=str(Path(folder) / f"rss-web-{lang}-{theme}.png"))
-                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
-                    "en"
-                )
-                page.set_viewport_size({"width": 390, "height": 844})
-                assert panel.locator("body").evaluate("el => el.scrollWidth <= innerWidth")
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert panel.locator("body").evaluate("el => el.scrollWidth <= innerWidth")
+            editor.get_by_label("Name", exact=True).focus()
+            reached_save = False
+            for _ in range(150):
+                page.keyboard.press("Tab")
+                focused = panel.locator(":focus")
+                expect(focused).to_be_in_viewport()
+                if editor.get_by_role("button", name="Save", exact=True).evaluate(
+                    "el => el === document.activeElement"
+                ):
+                    reached_save = True
+                    break
+            assert reached_save, "The RSS save action must be reachable by Tab"
+            if folder:
                 page.screenshot(path=str(Path(folder) / "rss-web-narrow.png"))
-                page.set_viewport_size({"width": 1280, "height": 900})
+            page.set_viewport_size({"width": 1280, "height": 900})
 
             editor.get_by_role("radio", name=re.compile("Download automatically")).check()
             expect(editor.locator(".feed-limits")).to_be_visible()
