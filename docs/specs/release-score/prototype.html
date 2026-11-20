@@ -1,0 +1,2165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ReleaseScore · design preview #117</title>
+    <style>
+      /* Shared palette for Qt, the Web shell and bundled panels.
+   Keep these two token blocks literal: gui/theme.py reads their declarations.
+   Approved panel-specific light overrides remain in each panel's view.css. */
+      :root {
+        color-scheme: dark;
+        --bg: #161d23;
+        --panel: #202932;
+        --raised: #26323c;
+        --line: #33404b;
+        --text: #e2e9ed;
+        --muted: #98aab7;
+        --accent: #80bdb6;
+        --accent-text: #102a2b;
+        --tint: #263e43;
+        --hover: #263e43;
+        --danger: #ff9c9c;
+        --warning: #edbf73;
+        --success: #4ad394;
+        --link: #64c9c0;
+        --shadow: none;
+        --ink: var(--text);
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f3f6fa;
+        --panel: #ffffff;
+        --raised: #f7f9fc;
+        --line: #d5dfe9;
+        --text: #203047;
+        --muted: #5c6c80;
+        --accent: #087f76;
+        --accent-text: #ffffff;
+        --tint: #d8eeeb;
+        --hover: #e8f3f2;
+        --danger: #b42332;
+        --warning: #8a5800;
+        --success: #1f9d63;
+        --link: #087f76;
+        --shadow: 0 16px 60px #172b3e12;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          14px system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        color: inherit;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 13px;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      button.primary {
+        background: var(--accent);
+        color: var(--accent-text);
+        font-weight: 650;
+      }
+      button.on {
+        background: var(--tint);
+        border-color: var(--accent);
+      }
+      input[type="checkbox"],
+      input[type="radio"] {
+        accent-color: var(--accent);
+      }
+      h1 {
+        font-size: 25px;
+        margin: 0 0 10px;
+      }
+      h2 {
+        font-size: 19px;
+      }
+      p {
+        line-height: 1.6;
+      }
+      .muted,
+      small {
+        color: var(--muted);
+      }
+      small {
+        display: block;
+        margin-top: 5px;
+      }
+      .row,
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .between {
+        justify-content: space-between;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .chip {
+        padding: 7px 11px;
+        font-size: 12px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .queue-table {
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 13px;
+      }
+      th {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      td,
+      th {
+        padding: 15px 13px;
+        border-bottom: 1px solid var(--line);
+      }
+      td:first-child {
+        width: 40px;
+      }
+      tr.selected {
+        background: var(--tint);
+      }
+      td.name {
+        min-width: 230px;
+      }
+      td.folder {
+        max-width: 180px;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+      }
+      td.details {
+        min-width: 170px;
+        max-width: 240px;
+        color: var(--muted);
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 5px;
+        background: var(--raised);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .badge.sent {
+        color: var(--success);
+      }
+      .badge.failed,
+      .badge.uncertain {
+        color: var(--warning);
+      }
+      .badge.sending {
+        color: var(--accent);
+      }
+      .queue-foot {
+        margin-top: 16px;
+      }
+      .selection-bar {
+        margin-top: 16px;
+      }
+      .notice {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 16px;
+        background: var(--raised);
+      }
+      .folder-option {
+        display: flex;
+        gap: 10px;
+        margin: 18px 0;
+      }
+      .folder-option strong {
+        display: block;
+      }
+      .path {
+        width: 100%;
+        min-width: 0;
+      }
+      .path-row {
+        display: flex;
+        gap: 8px;
+      }
+      .path-row input {
+        flex: 1;
+      }
+      .dialog-foot {
+        border-top: 1px solid var(--line);
+        margin-top: 22px;
+        padding-top: 18px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+      dialog {
+        width: min(600px, calc(100vw - 32px));
+        max-height: calc(100dvh - 60px);
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 24px;
+      }
+      dialog::backdrop {
+        background: #080d13b8;
+      }
+      dialog h2 {
+        margin-top: 0;
+      }
+      .browser-row {
+        display: block;
+        width: 100%;
+        text-align: left;
+        margin: 8px 0;
+      }
+      .context {
+        position: fixed;
+        z-index: 10;
+        width: 210px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 6px;
+        box-shadow: 0 12px 40px #0005;
+      }
+      .context button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+      }
+      .search-head {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 10px;
+      }
+      .search-tools {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .search-bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 6px 6px 6px 14px;
+        margin-bottom: 12px;
+      }
+      .search-bar:focus-within {
+        border-color: var(--accent);
+      }
+      .search-bar input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        font-size: 1.05em;
+        padding: 8px 0;
+      }
+      .search-bar input:focus-visible {
+        outline: none;
+      }
+      .search-pills,
+      .search-facets,
+      .search-row,
+      .search-pages {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .search-row select.chip {
+        max-width: 260px;
+        padding-right: 8px;
+      }
+      .fdrop {
+        position: relative;
+      }
+      .fdrop > summary {
+        list-style: none;
+        cursor: pointer;
+        user-select: none;
+        display: inline-block;
+        border: 1px solid var(--line);
+      }
+      .fdrop > summary::-webkit-details-marker {
+        display: none;
+      }
+      .fdrop > summary::before {
+        content: "▾ ";
+        color: var(--muted);
+      }
+      .fdrop > summary:hover {
+        border-color: var(--accent);
+      }
+      .fdrop-panel {
+        position: absolute;
+        z-index: 20;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 240px;
+        max-width: 320px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        box-shadow: 0 12px 40px #00000033;
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+      }
+      .fdrop-panel input[type="search"],
+      .fdrop-panel input:not([type]),
+      .fdrop-panel input[type="number"] {
+        width: 100%;
+      }
+      .fdrop-list {
+        max-height: 240px;
+        overflow: auto;
+        display: grid;
+        gap: 2px;
+      }
+      .fdrop-item {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 4px 6px;
+        border-radius: 6px;
+        margin: 0;
+        cursor: pointer;
+      }
+      .fdrop-item:hover {
+        background: var(--tint);
+      }
+      .fdrop-item input {
+        width: auto;
+      }
+      .chip.page {
+        min-width: 34px;
+        border-radius: 8px;
+      }
+      .chip.page[aria-pressed="true"] {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-text);
+        font-weight: 650;
+      }
+      .results-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        margin: 4px 0 12px;
+        overflow: hidden;
+      }
+      .results-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        padding: 12px 16px 2px;
+      }
+      .results-head h2 {
+        margin: 0;
+        font-size: 1.1em;
+      }
+      .results-sort {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 4px 12px 10px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .search-sort {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .chip.sort {
+        background: transparent;
+        border-color: transparent;
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 3px 9px;
+      }
+      .chip.sort:hover {
+        background: var(--tint);
+        color: var(--ink);
+      }
+      .chip.sort[aria-pressed="true"] {
+        background: var(--tint);
+        border-color: var(--accent);
+        color: var(--ink);
+      }
+      .search-results {
+        overflow-x: auto;
+      }
+      .search-results .empty {
+        margin: 0;
+        padding: 60px 20px;
+        text-align: center;
+        color: var(--muted);
+      }
+      .search-results.compact table {
+        margin: 0;
+      }
+      .sr-row {
+        display: grid;
+        grid-template-columns: 24px 52px minmax(0, 1fr) 120px 120px 150px 44px;
+        gap: 14px;
+        align-items: center;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .sr-row:last-child {
+        border-bottom: 0;
+      }
+      .sr-row.selected {
+        background: var(--tint);
+      }
+      .sr-row input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        padding: 0;
+      }
+      .cover {
+        position: relative;
+        width: 52px;
+        height: 64px;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid var(--cover, var(--line));
+        background: color-mix(in srgb, var(--cover, #64748b) 16%, transparent);
+        display: grid;
+        place-items: center;
+      }
+      .cover-letters {
+        color: var(--cover, var(--muted));
+        font-weight: 650;
+        font-size: 0.9em;
+      }
+      .cover img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .sr-main {
+        min-width: 0;
+        display: grid;
+        gap: 5px;
+      }
+      .sr-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+      }
+      .sr-title {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        font-weight: 650;
+        font-size: 1.02em;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+      }
+      .sr-title:hover {
+        background: transparent;
+        text-decoration: underline;
+      }
+      .sr-release {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.85em;
+        color: var(--accent);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .tag {
+        --tag: #94a3b8;
+        display: inline-block;
+        border-radius: 5px;
+        padding: 1px 7px;
+        font-size: 0.8em;
+        line-height: 1.6;
+        color: color-mix(in srgb, var(--tag) 70%, var(--ink));
+        background: color-mix(in srgb, var(--tag) 16%, transparent);
+        white-space: nowrap;
+      }
+      .tag-lang {
+        --tag: #10b981;
+      }
+      .tag-resolution {
+        --tag: #3b82f6;
+      }
+      .tag-source {
+        --tag: #06b6d4;
+      }
+      .tag-audio {
+        --tag: #f59e0b;
+      }
+      .tag-codec {
+        --tag: #94a3b8;
+      }
+      .tag-hdr {
+        --tag: #a855f7;
+      }
+      .tag-zen {
+        --tag: #14b8a6;
+      }
+      .tag.rating {
+        --tag: #f5b301;
+      }
+      .tag.kind {
+        --tag: #3b82f6;
+      }
+      .tag.mark-client {
+        --tag: #22b573;
+      }
+      .tag.mark-queued {
+        --tag: #f5b301;
+      }
+      .mark-revival {
+        color: #ef4444;
+      }
+      .mark-exclusive {
+        color: #f5b301;
+      }
+      .sr-stats {
+        display: grid;
+        gap: 4px;
+      }
+      .sr-size {
+        color: #1f9d63;
+      }
+      :root[data-theme="dark"] .sr-size {
+        color: #4ad394;
+      }
+      .sr-peers {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.92em;
+      }
+      .sr-peers .up {
+        color: #1f9d63;
+      }
+      .sr-peers .down {
+        color: #e0443e;
+      }
+      .seedbar {
+        height: 5px;
+        border-radius: 3px;
+        background: linear-gradient(
+          to right,
+          #22b573 var(--seeds, 0%),
+          #ef4444 var(--seeds, 0%)
+        );
+      }
+      .seedbar.no-peers {
+        background: var(--line);
+      }
+      .sr-age {
+        display: grid;
+        justify-items: end;
+        gap: 2px;
+        font-size: 0.92em;
+      }
+      .sr-uploader {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sr-zen {
+        display: grid;
+        justify-items: center;
+        gap: 4px;
+        text-align: center;
+      }
+      .dl-button {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        color: var(--accent);
+      }
+      .selection-bar {
+        position: sticky;
+        bottom: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px 12px;
+        box-shadow: var(--shadow);
+      }
+      .compact-title {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .link {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        text-align: left;
+        font-weight: 500;
+      }
+      @media (max-width: 900px) {
+        .sr-row {
+          grid-template-columns: 24px 52px minmax(0, 1fr) auto;
+        }
+        .sr-stats,
+        .sr-age,
+        .sr-zen {
+          grid-column: 3;
+        }
+        .sr-age {
+          justify-items: start;
+        }
+        .sr-zen {
+          justify-items: start;
+          text-align: left;
+        }
+        .dl-button {
+          grid-column: 4;
+          grid-row: 1;
+        }
+      }
+
+      /* Compact results, like c411's table */
+      .type-badge {
+        --tag: #3b82f6;
+        display: inline-block;
+        min-width: 88px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 0.75em;
+        padding: 7px 8px;
+        border-radius: 6px;
+        color: color-mix(in srgb, var(--tag) 75%, var(--ink));
+        background: color-mix(in srgb, var(--tag) 22%, transparent);
+        white-space: nowrap;
+      }
+      .compact-name {
+        display: grid;
+        gap: 4px;
+        min-width: 260px;
+      }
+      .compact-name .sr-release {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        font-weight: 400;
+      }
+      .tag.kind-exclusive {
+        --tag: #f5b301;
+      }
+      .search-results.compact td .up {
+        color: #1f9d63;
+      }
+      .search-results.compact td .down {
+        color: #e0443e;
+      }
+      .header-sort {
+        padding: 0;
+        font-weight: 650;
+        color: inherit;
+      }
+      .hover-card {
+        position: fixed;
+        z-index: 50;
+        width: 360px;
+        background: #0a181c;
+        color: #d7e4e6;
+        border: 1px solid #1f4a4d;
+        border-radius: 12px;
+        box-shadow: 0 18px 50px #000a;
+        overflow: hidden;
+        pointer-events: none;
+        padding-bottom: 12px;
+      }
+      .hc-head {
+        position: relative;
+        height: 128px;
+        background: #233c46;
+      }
+      .hc-backdrop {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .hc-head::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to bottom, #0003, #0a181c);
+      }
+      .hc-kind,
+      .hc-rating {
+        position: absolute;
+        top: 12px;
+        z-index: 1;
+        background: #0009;
+        border-radius: 7px;
+        padding: 3px 9px;
+        font-size: 0.75em;
+        font-weight: 700;
+      }
+      .hc-kind {
+        left: 14px;
+      }
+      .hc-rating {
+        right: 14px;
+        color: #f5b301;
+      }
+      .hc-lead {
+        display: flex;
+        gap: 12px;
+        padding: 0 14px;
+        margin-top: -72px;
+        position: relative;
+        z-index: 2;
+        align-items: flex-end;
+      }
+      .hc-poster {
+        width: 88px;
+        height: 132px;
+        object-fit: cover;
+        border-radius: 6px;
+        flex: none;
+        background: #173238;
+      }
+      .hc-names {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        padding-bottom: 4px;
+      }
+      .hc-title {
+        overflow-wrap: anywhere;
+        font-size: 1.02em;
+        color: #fff;
+      }
+      .hc-names .muted {
+        color: #9fb3b6;
+        font-size: 0.85em;
+      }
+      .hc-body {
+        padding: 10px 14px 0;
+        display: grid;
+        gap: 8px;
+      }
+      .hc-body p {
+        margin: 0;
+        font-size: 0.92em;
+        line-height: 1.45;
+      }
+      .hc-genre {
+        background: #12343a;
+        border: 1px solid #1f6a64;
+        border-radius: 9px;
+        padding: 1px 9px;
+        color: #7fe3d3;
+        font-size: 0.85em;
+      }
+      .hc-cast {
+        font-size: 0.9em;
+      }
+      @media (hover: none) {
+        .hover-card {
+          display: none;
+        }
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+      html {
+        scrollbar-gutter: stable;
+      }
+      body {
+        padding: 8px 12px 20px 8px;
+      }
+      main {
+        min-width: 0;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .quiet {
+        background: transparent;
+      }
+      .dt-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      #toast {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        max-width: 440px;
+        background: var(--raised);
+        padding: 14px 20px;
+        border: 1px solid var(--accent);
+        border-radius: 10px;
+        z-index: 60;
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--tint);
+        border-color: var(--accent);
+      }
+      td.name {
+        overflow-wrap: anywhere;
+      }
+      .queue-table td:nth-child(6) {
+        max-width: 220px;
+        overflow-wrap: anywhere;
+      }
+      .queue-table td:nth-child(8) {
+        max-width: 260px;
+      }
+      .selection-bar {
+        flex-wrap: wrap;
+      }
+      input[type="checkbox"] {
+        width: auto;
+      }
+      .context {
+        z-index: 70;
+      }
+
+      .chip {
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-weight: 500;
+        background: var(--panel);
+      }
+      .chip[aria-pressed="true"],
+      .chip.active {
+        background: var(--tint);
+        border-color: var(--accent);
+      }
+      .chip.pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 14px;
+      }
+      .chip.pill[aria-pressed="true"] {
+        font-weight: 650;
+      }
+      .chip .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .chip .pill-count {
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 0.92em;
+      }
+
+      .settings-layout {
+        align-items: start;
+        display: grid;
+        grid-template-columns: 190px minmax(0, 1fr);
+        gap: 24px;
+      }
+      #settings-navigation {
+        display: grid;
+        align-content: start;
+        gap: 6px;
+      }
+      #settings-navigation button {
+        text-align: left;
+        justify-content: flex-start;
+      }
+      #settings-navigation [aria-current="page"] {
+        border-color: var(--accent);
+        background: var(--tint);
+      }
+      main,
+      .settings-layout > * {
+        min-width: 0;
+      }
+      .settings-form {
+        align-content: start;
+        display: grid;
+        gap: 16px;
+      }
+      .settings-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .settings-field {
+        display: grid;
+        align-content: start;
+        gap: 6px;
+        min-width: 0;
+      }
+      .settings-field input,
+      .settings-field select,
+      .settings-field textarea {
+        width: 100%;
+      }
+      .settings-field input[type="checkbox"] {
+        width: auto;
+      }
+      .settings-form fieldset {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px;
+      }
+      .settings-form legend {
+        padding: 0 6px;
+        font-weight: 600;
+      }
+      .settings-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .client-card {
+        border: 1px solid var(--line);
+        padding: 18px;
+        border-radius: 10px;
+        background: var(--panel);
+      }
+      .client-card h3 {
+        margin: 0;
+      }
+      #settings-error {
+        color: var(--danger);
+        white-space: pre-wrap;
+      }
+      #settings-error:empty,
+      #settings-status:empty {
+        display: none;
+      }
+      @media (max-width: 720px) {
+        .settings-layout,
+        .settings-fields {
+          grid-template-columns: 1fr;
+        }
+        #settings-navigation {
+          display: flex;
+          overflow: auto;
+          padding: 3px 0 8px;
+        }
+        #settings-navigation button {
+          flex: 0 0 auto;
+          white-space: nowrap;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 20px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+      }
+      h1 {
+        font-size: 26px;
+        margin: 0 0 22px;
+      }
+      h2 {
+        font-size: 20px;
+        margin: 0;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        color: inherit;
+        font: inherit;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 9px 12px;
+        min-width: 0;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--raised);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button:focus-visible,
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-text);
+      }
+      small,
+      .muted {
+        color: var(--muted);
+      }
+
+      .settings-form h3 {
+        margin-top: 0;
+        overflow-wrap: anywhere;
+      }
+      .settings-form .card {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px;
+        margin: 16px 0;
+        background: var(--panel);
+      }
+      .assistant-dialog {
+        width: min(720px, 94vw);
+        max-height: 90vh;
+        overflow: auto;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 22px;
+      }
+      .assistant-dialog form,
+      .assistant-dialog label {
+        display: grid;
+        gap: 8px;
+      }
+      .assistant-dialog form {
+        gap: 16px;
+      }
+      .assistant-dialog input[type="checkbox"] {
+        justify-self: start;
+      }
+      .assistant-dialog::backdrop {
+        background: #0008;
+      }
+      .settings-form .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 12px 0;
+      }
+
+      .settings-card {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px;
+        background: var(--panel);
+      }
+      .settings-card h3 {
+        margin: 0 0 16px;
+      }
+      .settings-fields > button {
+        align-self: end;
+      }
+      .settings-check {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .settings-check input[type="checkbox"] {
+        width: auto;
+        flex: 0 0 auto;
+      }
+      .settings-check textarea {
+        flex-basis: 100%;
+      }
+      .settings-form > .settings-actions:last-child {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+        background: var(--bg);
+      }
+      .file-access-status {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .file-access-address {
+        overflow-wrap: anywhere;
+      }
+      .file-access-capabilities {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .file-access-capabilities th,
+      .file-access-capabilities td {
+        text-align: left;
+        vertical-align: top;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .file-access-capabilities th {
+        width: 35%;
+        font-weight: 500;
+      }
+      .file-access-capabilities td {
+        padding-left: 20px;
+      }
+      .file-access-note {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--raised);
+        padding: 12px;
+      }
+      .settings-error {
+        color: var(--danger);
+      }
+      .file-access-confirm {
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        width: min(560px, 90vw);
+        padding: 24px;
+      }
+
+      body {
+        display: flex;
+        min-height: 100vh;
+        padding-bottom: 80px;
+      }
+      #shell {
+        width: 190px;
+        flex-shrink: 0;
+        border-right: 1px solid var(--line);
+        padding: 22px 14px;
+        position: sticky;
+        top: 0;
+        height: calc(100vh - 75px);
+        display: flex;
+        flex-direction: column;
+        background: var(--panel);
+      }
+      .brand {
+        color: var(--accent);
+        font-size: 18px;
+        margin-bottom: 30px;
+      }
+      #main-nav {
+        display: grid;
+        gap: 8px;
+      }
+      #main-nav button {
+        text-align: left;
+        border-color: transparent;
+        background: transparent;
+      }
+      #main-nav button.active {
+        background: var(--tint);
+        border-color: var(--accent);
+      }
+      .shell-bottom {
+        margin-top: auto;
+        display: grid;
+        gap: 8px;
+      }
+      .app {
+        padding: 28px;
+        min-width: 0;
+        flex: 1;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 24px;
+      }
+      header p {
+        margin-top: 8px;
+      }
+      .profile-strip,
+      .toolbar,
+      .score-legend {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .profile-strip {
+        padding: 12px 0 18px;
+      }
+      .profile-strip label {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .profile-strip .muted {
+        font-size: 12px;
+      }
+      .score-legend {
+        font-size: 12px;
+        margin: 16px 0;
+      }
+      .release-score {
+        display: inline-flex;
+        align-items: center;
+        align-self: flex-start;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        margin-top: 3px;
+        width: auto;
+        min-height: 0;
+        font-size: 12px;
+        line-height: 1.3;
+        font-weight: 600;
+        white-space: nowrap;
+        background: color-mix(in srgb, currentColor 8%, transparent);
+      }
+      .green {
+        color: var(--success);
+      }
+      .yellow {
+        color: var(--warning);
+      }
+      .red {
+        color: var(--danger);
+      }
+      .grey {
+        color: var(--muted);
+      }
+      .release-score.green {
+        border-color: var(--success);
+      }
+      .release-score.yellow {
+        border-color: var(--warning);
+      }
+      .release-score.red {
+        border-color: var(--danger);
+      }
+      .release-score.grey {
+        border-color: var(--line);
+      }
+      .sr-zen {
+        gap: 3px;
+      }
+      .sr-age {
+        display: grid;
+        gap: 5px;
+      }
+      .compact small {
+        display: block;
+      }
+      .settings-layout {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        gap: 20px;
+      }
+      .settings-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .settings-nav button {
+        text-align: left;
+      }
+      .settings-body {
+        display: grid;
+        align-content: start;
+        gap: 16px;
+      }
+      .settings-body > h2 {
+        margin: 0;
+      }
+      .settings-card {
+        padding: 20px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin: 0;
+      }
+      .settings-card h3 {
+        margin: 0 0 10px;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin: 16px 0;
+      }
+      .field {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+        font-size: 13px;
+      }
+      .field input,
+      .field select {
+        width: 100%;
+        min-width: 0;
+      }
+      .profile-editor {
+        margin-top: 20px;
+      }
+      .toolbar {
+        margin-top: 12px;
+      }
+      .info-box {
+        padding: 12px 16px;
+        background: var(--tint);
+        border-left: 3px solid var(--accent);
+        border-radius: 6px;
+        margin: 16px 0;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .prototype-bar {
+        position: fixed;
+        z-index: 100;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 10px 18px;
+        background: var(--raised);
+        border-top: 1px solid var(--accent);
+        font-size: 12px;
+      }
+      .prototype-bar details pre {
+        position: absolute;
+        bottom: 54px;
+        right: 10px;
+        max-width: 85vw;
+        max-height: 65vh;
+        overflow: auto;
+        background: var(--panel);
+        padding: 16px;
+        border: 1px solid var(--line);
+      }
+      dialog {
+        width: min(720px, calc(100vw - 32px));
+        max-height: calc(100vh - 100px);
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 24px;
+        overflow: auto;
+      }
+      dialog::backdrop {
+        background: #0009;
+      }
+      .dialog-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .dialog-head h2 {
+        margin: 0;
+      }
+      .dialog-head .sr-release {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+      .detail-tabs {
+        display: flex;
+        gap: 8px;
+        margin: 18px 0;
+      }
+      .score-detail {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        margin: 22px 0;
+      }
+      .score-detail > strong {
+        font-size: 30px;
+        white-space: nowrap;
+      }
+      .score-detail h3 {
+        margin: 0 0 8px;
+      }
+      .breakdown {
+        display: grid;
+        gap: 0;
+      }
+      .breakdown > div {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+        padding: 12px 0;
+      }
+      .breakdown dd {
+        text-align: right;
+        margin: 0;
+      }
+      .link {
+        background: transparent;
+        border: 0;
+        color: var(--accent);
+        padding: 0;
+        text-align: left;
+      }
+      a {
+        color: var(--accent);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 1000px) {
+        #shell {
+          width: 155px;
+        }
+        .app {
+          padding: 18px;
+        }
+        .settings-layout {
+          grid-template-columns: 140px minmax(0, 1fr);
+        }
+        .sr-row {
+          grid-template-columns: 24px 40px minmax(180px, 1fr) 90px 120px 36px;
+        }
+        .sr-age {
+          display: none;
+        }
+        .sr-zen {
+          min-width: 100px;
+        }
+      }
+      @media (max-width: 650px) {
+        #shell {
+          display: none;
+        }
+        .app {
+          padding: 14px;
+        }
+        header {
+          margin-bottom: 14px;
+        }
+        .settings-layout {
+          display: block;
+        }
+        .settings-nav {
+          flex-direction: row;
+          overflow: auto;
+          margin-bottom: 16px;
+        }
+        .settings-nav button {
+          flex-shrink: 0;
+        }
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+        .sr-row {
+          grid-template-columns: 22px minmax(0, 1fr) 105px;
+          gap: 10px;
+        }
+        .sr-row > .cover,
+        .sr-row > .sr-age,
+        .sr-row > button {
+          display: none;
+        }
+        .sr-main {
+          grid-column: 2;
+        }
+        .sr-stats {
+          grid-column: 2;
+          grid-row: auto;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+        .sr-zen {
+          grid-column: 3;
+          grid-row: 1 / 3;
+        }
+        .sr-stats .seedbar {
+          display: none;
+        }
+        .search-bar label {
+          display: none;
+        }
+        .prototype-bar {
+          gap: 8px;
+          flex-wrap: wrap;
+          padding: 8px;
+        }
+        .prototype-bar > span {
+          display: none;
+        }
+        .score-detail {
+          align-items: start;
+          gap: 12px;
+        }
+        .score-detail > strong {
+          font-size: 24px;
+        }
+        .breakdown > div {
+          flex-wrap: wrap;
+        }
+        .breakdown dd {
+          text-align: left;
+        }
+        .settings-card {
+          padding: 16px;
+        }
+        .profile-strip select {
+          max-width: 200px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside id="shell">
+      <strong class="brand">TL · TorrentLinker</strong>
+      <nav id="main-nav"></nav>
+      <div class="shell-bottom">
+        <label id="theme-label"></label
+        ><select id="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option></select
+        ><select id="language">
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+        </select>
+      </div>
+    </aside>
+    <div class="app">
+      <header>
+        <div>
+          <h1 id="page-title">Search</h1>
+          <p class="muted" id="page-description"></p>
+        </div>
+        <span class="muted" id="mode-label"></span>
+      </header>
+      <div id="content"></div>
+    </div>
+    <dialog id="detail"></dialog>
+    <div class="prototype-bar">
+      <strong>Prototype #117</strong><span id="prototype-notice"></span
+      ><button id="mode-toggle"></button>
+      <details>
+        <summary id="state-label"></summary>
+        <pre id="state"></pre>
+      </details>
+    </div>
+    <script>
+      // Throwaway design preview. All scores are illustrative fixtures, not the scoring engine.
+      const $ = (id) => document.getElementById(id),
+        params = new URLSearchParams(location.search);
+      let lang = params.get("lang") || "en",
+        mode = params.get("mode") || "desktop",
+        area = params.get("area") || "search",
+        density = "comfortable",
+        active = "HDLight 1080p",
+        editing = active,
+        selectedDetail = 0,
+        measured = false;
+      const say = (en, fr) => (lang === "fr" ? fr : en),
+        esc = (s) =>
+          String(s).replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      const base = {
+        res: "1080",
+        basse: "penal",
+        hdr: "sdr-pref",
+        dv: "auto",
+        avi: "auto",
+        codec: "pref",
+        langue: "vff",
+        st: "indiff",
+        audio: "correct",
+        poidsAudio: 15,
+        cible: 2,
+        plafond: 2.5,
+      };
+      const builtins = {
+        "HDLight 1080p": { ...base },
+        "1080p Haute qualité": {
+          ...base,
+          audio: "bon",
+          poidsAudio: 20,
+          cible: 4,
+          plafond: 6,
+        },
+        "4KLight": {
+          ...base,
+          res: "2160",
+          hdr: "indiff",
+          audio: "bon",
+          poidsAudio: 20,
+          cible: 5,
+          plafond: 6,
+        },
+        "4K HDR cinéma": {
+          ...base,
+          res: "2160",
+          hdr: "requis",
+          codec: "indiff",
+          audio: "sansperte",
+          poidsAudio: 35,
+          cible: 20,
+          plafond: 40,
+        },
+        "Petit fichier": {
+          ...base,
+          basse: "ok",
+          langue: "vf",
+          poidsAudio: 10,
+          cible: 1,
+          plafond: 1.5,
+        },
+        "Qualité maximale": {
+          ...base,
+          res: "2160",
+          hdr: "indiff",
+          codec: "indiff",
+          audio: "sansperte",
+          poidsAudio: 30,
+          cible: 0,
+          plafond: 0,
+        },
+      };
+      let profiles = structuredClone(builtins),
+        equipment = {},
+        notice = "";
+      const releases = [
+        {
+          name: "Orbit.2025.MULTI.1080p.WEB.H265-GROUP",
+          resolution: "1080p",
+          audio: "DDP 5.1",
+          codec: "H.265",
+          hdr: "SDR",
+          size: "3.8 GB",
+          seeds: 184,
+          score: 92,
+          color: "green",
+          title: "Orbit",
+          year: 2025,
+          runtime: "122 min",
+          reason: ["Fits your profile", "Correspond à votre profil"],
+        },
+        {
+          name: "Orbit.2025.VOSTFR.1080p.WEB.H264-TEAM",
+          resolution: "1080p",
+          audio: "AAC 2.0",
+          codec: "H.264",
+          hdr: "SDR",
+          size: "2.1 GB",
+          seeds: 97,
+          score: 74,
+          color: "yellow",
+          title: "Orbit",
+          year: 2025,
+          runtime: "122 min",
+          reason: ["French audio missing", "Audio français absent"],
+        },
+        {
+          name: "Orbit.2025.MULTI.2160p.UHD.REMUX.HEVC-GROUP",
+          resolution: "2160p",
+          audio: "TrueHD 7.1",
+          codec: "HEVC",
+          hdr: "HDR10",
+          size: "58 GB",
+          seeds: 52,
+          score: 88,
+          color: "red",
+          title: "Orbit",
+          year: 2025,
+          runtime: "122 min",
+          reason: ["Above your size cap", "Dépasse votre taille plafond"],
+        },
+        {
+          name: "Orbit.2025.VO.720p.WEB.H264-TEAM",
+          resolution: "720p",
+          audio: "AAC 2.0",
+          codec: "H.264",
+          hdr: "SDR",
+          size: "1.2 GB",
+          seeds: 46,
+          score: 48,
+          color: "grey",
+          title: "Orbit",
+          year: 2025,
+          runtime: "122 min",
+          reason: [
+            "Resolution and language do not fit",
+            "Résolution et langue ne conviennent pas",
+          ],
+        },
+        {
+          name: "Orbit.Behind.The.Scenes.2025.1080p.WEB.H265",
+          resolution: "1080p",
+          audio: "DDP 2.0",
+          codec: "H.265",
+          hdr: "SDR",
+          size: "1.4 GB",
+          seeds: 24,
+          score: null,
+          color: "grey",
+          title: "Orbit · Behind the scenes",
+          year: 2025,
+          runtime: null,
+          reason: ["Runtime unavailable", "Durée indisponible"],
+        },
+        {
+          name: "Orbit.S01.COMPLETE.MULTI.1080p.WEB.H265",
+          resolution: "1080p",
+          audio: "DDP 5.1",
+          codec: "H.265",
+          hdr: "SDR",
+          size: "14 GB",
+          seeds: 39,
+          score: null,
+          color: "grey",
+          title: "Orbit · Season 1",
+          year: 2025,
+          runtime: null,
+          reason: [
+            "Season episode count unavailable",
+            "Nombre d’épisodes de la saison indisponible",
+          ],
+        },
+      ];
+      function score(row, i) {
+        if (row.score === null) return { value: null, color: "grey" };
+        if (profiles[active].res === "2160")
+          return {
+            value: [65, 51, 96, 28][i],
+            color: ["yellow", "grey", "green", "grey"][i],
+          };
+        if (active === "Petit fichier")
+          return {
+            value: [86, 84, 72, 63][i],
+            color: ["red", "yellow", "red", "grey"][i],
+          };
+        return { value: row.score, color: row.color };
+      }
+      function badge(row, i) {
+        const s = score(row, i),
+          best =
+            s.color === "green" &&
+            (profiles[active].res === "2160" ? i === 2 : i === 0);
+        const description = `ReleaseScore · ${s.value === null ? say("Unknown", "Inconnu") : s.value + "/100 · " + say("Estimated", "Estimé")} · ${say("Why this score", "Pourquoi cette note")}`;
+        return `<button class="release-score ${s.color}" onclick="showDetail(${i})" title="${esc(description)}" aria-label="${esc(description)}">${s.value === null ? "?" : "≈ " + s.value}${best ? " ⭐" : ""}</button>`;
+      }
+      function options(values, value) {
+        return values
+          .map(
+            (v) =>
+              `<option ${v === value ? "selected" : ""}>${esc(v)}</option>`,
+          )
+          .join("");
+      }
+      function syncState() {
+        $("state").textContent = JSON.stringify(
+          {
+            page: area,
+            mode,
+            activeProfile: active,
+            profile: profiles[active],
+            equipment,
+            scoring: "illustrative fixtures",
+            persistence: "memory only",
+          },
+          null,
+          2,
+        );
+      }
+      function go(next) {
+        area = next;
+        params.set("area", area);
+        history.replaceState(null, "", "?" + params);
+        render();
+      }
+      function render() {
+        document.documentElement.lang = lang;
+        $("language").value = lang;
+        $("page-title").textContent =
+          area === "search"
+            ? say("Search", "Recherche")
+            : say("Settings", "Paramètres");
+        $("page-description").textContent =
+          area === "search"
+            ? say(
+                "Find a release, compare its versions and add it to your queue.",
+                "Trouvez une release, comparez ses versions et ajoutez-la à la file.",
+              )
+            : say(
+                "Search preferences and ReleaseScore profiles.",
+                "Préférences de recherche et profils ReleaseScore.",
+              );
+        $("mode-label").textContent =
+          mode === "desktop"
+            ? say("Desktop · qBittorrent", "Bureau · qBittorrent")
+            : "Web · qBittorrent";
+        $("prototype-notice").textContent = say(
+          "Sample scores · memory only",
+          "Notes d’exemple · en mémoire",
+        );
+        $("state-label").textContent = say("Preview state", "État de l’aperçu");
+        $("mode-toggle").textContent = mode === "desktop" ? "Web" : "Desktop";
+        $("theme-label").textContent = say("Theme", "Thème");
+        $("main-nav").innerHTML = [
+          "Zen",
+          "Library",
+          "Upload",
+          "Search",
+          "RSS",
+          "Torrents",
+          "Assistant",
+          "Media",
+          "Settings",
+        ]
+          .map(
+            (n) =>
+              `<button ${n.toLowerCase() === area ? 'class="active"' : ""} onclick="${["Search", "Settings"].includes(n) ? `go('${n.toLowerCase()}')` : `previewNotice()`}">${n === "Search" ? say("Search", "Recherche") : n === "Settings" ? say("Settings", "Paramètres") : n}</button>`,
+          )
+          .join("");
+        $("content").innerHTML =
+          area === "search" ? searchPage() : settingsPage();
+        if (area === "settings") bindSettings();
+        syncState();
+      }
+      function previewNotice() {
+        notice = say(
+          "This preview covers Search and its Settings only.",
+          "Cet aperçu couvre la Recherche et ses paramètres.",
+        );
+        alert(notice);
+      }
+      function searchPage() {
+        return `<div class="search-head"><span class="search-tools"><button onclick="density='compact';render()" aria-pressed="${density === "compact"}">${say("Compact", "Compact")}</button><button onclick="density='comfortable';render()" aria-pressed="${density === "comfortable"}">${say("Comfortable", "Confortable")}</button><button>${say("Download queue", "File de téléchargement")} · 3</button></span></div><div class="search-bar"><input aria-label="${say("Search", "Recherche")}" value="Orbit"><label><input type="checkbox"> ${say("Cast & crew", "Équipe et distribution")}</label><button class="primary" onclick="render()">${say("Search", "Rechercher")}</button></div><div class="search-pills"><button>${say("All", "Tout")}</button><button class="on">${say("Films & Videos", "Films & Vidéos")} · 6</button><button>${say("Books", "Livres")}</button><button>Audio</button><button>${say("Games", "Jeux")}</button></div><div class="search-facets">${[say("Subcategory", "Sous-catégorie"), say("Resolution", "Résolution"), "Source", "HDR", "Audio", "Codec", say("Language", "Langue"), say("Year", "Année")].map((x) => `<button class="chip">${x} ▾</button>`).join("")}</div><div class="profile-strip"><label>ReleaseScore <select id="quick-profile" onchange="active=this.value;editing=active;render()">${options(Object.keys(profiles), active)}</select></label><button onclick="editing=active;go('settings')">${say("Edit profiles & equipment", "Profils et équipement")}</button><span class="muted">${say("Estimated from the listing. No extra tracker requests.", "Estimé depuis la liste. Aucune requête supplémentaire au tracker.")}</span></div><section class="results-card"><div class="results-head"><h2>6 torrents</h2><span class="muted">1 / 1</span></div><div class="results-sort">${[say("Age", "Âge"), "Seeders", say("Size", "Taille"), say("Name", "Nom")].map((x, i) => `<button class="chip sort" aria-pressed="${i === 1}">${x}${i === 1 ? " ↓" : ""}</button>`).join("")}</div><div class="search-results ${density}">${density === "compact" ? compactRows() : releases.map(richRow).join("")}</div></section><div class="score-legend"><span class="green">● ${say("Fits", "Convient")}</span><span class="yellow">● ${say("One missing criterion", "Un critère manquant")}</span><span class="red">● ${say("Above size cap", "Taille plafond dépassée")}</span><span class="grey">● ${say("Two or more missing criteria", "Au moins deux critères manquants")}</span><span>⭐ ${say("Best matching release", "Meilleure release compatible")}</span></div><p class="muted">${say("A missing runtime or season episode count stays unknown. Estimates can change after reading MediaInfo.", "Une durée ou un nombre d’épisodes manquant reste inconnu. Les estimations peuvent changer après lecture du MediaInfo.")}</p>`;
+      }
+      function richRow(r, i) {
+        return `<article class="sr-row"><input type="checkbox" aria-label="${esc(r.name)}"><div class="cover"><span class="cover-letters">OR</span></div><div class="sr-main"><div class="sr-line"><span class="tag kind">${i === 5 ? say("Season", "Saison") : say("Film", "Film")}</span><button class="sr-title link" onclick="showDetail(${i})">${esc(r.title)}</button><span class="muted">${r.year}</span><span class="tag rating">★ 7.8</span></div><div class="sr-release">${esc(r.name)}</div><div class="sr-line">${["MULTI", r.resolution, "WEB", r.audio, r.codec, r.hdr].map((x, n) => `<span class="tag tag-${["lang", "resolution", "source", "audio", "codec", "hdr"][n]}">${x}</span>`).join("")}</div></div><div class="sr-stats"><strong>${r.size}</strong><span class="sr-peers"><span class="up">↑ ${r.seeds}</span><span class="down">↓ 4</span></span><div class="seedbar" style="--seeds:90%"></div></div><div class="sr-age"><span>2 ${say("days", "jours")}</span><small class="muted">1,240 compl.</small><small class="muted">Studio</small></div><div class="sr-zen"><span class="tag tag-zen">≈ 0.08 Zen/${say("day", "j")}</span><small class="muted">≈ 1.4 Note</small>${badge(r, i)}</div><button title="${say("Add to queue", "Ajouter à la file")}" onclick="alert('${say("Preview only: nothing was queued.", "Aperçu : aucun ajout à la file.")}')">＋</button></article>`;
+      }
+      function compactRows() {
+        return `<table><thead><tr><th></th><th>${say("Release", "Release")}</th><th>${say("Size", "Taille")}</th><th>Seeders</th><th>Zen/${say("day", "j")}</th><th>ReleaseScore</th></tr></thead><tbody>${releases.map((r, i) => `<tr><td><input type="checkbox" aria-label="${esc(r.name)}"></td><td><button class="link" onclick="showDetail(${i})">${esc(r.name)}</button><small class="muted">${r.resolution} · ${r.codec} · ${r.audio}</small></td><td>${r.size}</td><td>${r.seeds}</td><td>≈ 0.08</td><td>${badge(r, i)}</td></tr>`).join("")}</tbody></table>`;
+      }
+      function showDetail(i) {
+        selectedDetail = i;
+        measured = false;
+        detailContent();
+        $("detail").showModal();
+      }
+      function detailContent() {
+        const r = releases[selectedDetail],
+          s = score(r, selectedDetail),
+          known = s.value !== null,
+          value = known ? s.value + (measured ? 3 : 0) : null;
+        $("detail").innerHTML =
+          `<div class="dialog-head"><div><h2>${esc(r.title)}</h2><p class="sr-release">${esc(r.name)}</p></div><button onclick="$(&quot;detail&quot;).close()" aria-label="${say("Close", "Fermer")}">✕</button></div><nav class="detail-tabs"><button>${say("Overview", "Résumé")}</button><button class="on">ReleaseScore</button><button>MediaInfo</button></nav><div class="score-detail ${s.color}"><strong>${value === null ? "?" : (measured ? "" : "≈ ") + Math.min(100, value) + " / 100"}</strong><div><h3>ReleaseScore · ${esc(active)}</h3><span>${known ? (measured ? say("Measured · from MediaInfo", "Mesuré · issu du MediaInfo") : say("Estimated · from listing facts", "Estimé · issu des informations de la liste")) : say(r.reason[0], r.reason[1])}</span></div></div><div class="info-box">${known ? say("The score describes this release under your profile. The colour describes whether it fits. Estimated facts may differ from MediaInfo.", "La note décrit cette release selon votre profil. La couleur indique sa compatibilité. Les faits estimés peuvent différer du MediaInfo.") : say("No guessed episode count or runtime. The score stays unknown until the facts are available.", "Aucun nombre d’épisodes ni durée inventé. La note reste inconnue jusqu’à disponibilité des faits.")}</div><h3>${say("Why this score", "Pourquoi cette note")}</h3><dl class="breakdown"><div><dt>${say("Video", "Vidéo")}</dt><dd>${known ? `${measured ? "83" : "≈ 80"} / 100 · ${r.resolution} · ${r.codec}` : "?"}</dd></div><div><dt>Audio</dt><dd>${known ? `${measured ? "90" : "≈ 86"} / 100 · ${r.audio}` : "?"}</dd></div><div><dt>${say("Audio weight", "Poids de l’audio")}</dt><dd>${profiles[active].poidsAudio}%</dd></div><div><dt>${say("Runtime", "Durée")}</dt><dd>${r.runtime || say("Unknown", "Inconnue")}</dd></div><div><dt>${say("Profile match", "Compatibilité du profil")}</dt><dd>${say(r.reason[0], r.reason[1])}</dd></div><div><dt>${say("Encoder effort / unknown facts", "Effort d’encodage / faits inconnus")}</dt><dd>${say("Neutral", "Neutre")}</dd></div></dl><p class="muted">${say("Design sample: these numbers illustrate the explanation, not the final formula.", "Exemple de design : ces nombres illustrent l’explication, pas la formule finale.")}</p><div class="toolbar"><button ${!known ? "disabled" : ""} onclick="measured=!measured;detailContent()">${measured ? say("Show estimated sample", "Afficher l’exemple estimé") : say("Show MediaInfo sample", "Afficher l’exemple MediaInfo")}</button><button onclick="$(&quot;detail&quot;).close();go('settings')">${say("Edit profile", "Modifier le profil")}</button></div>`;
+      }
+      const fields = [
+        ["res", "Ideal resolution", "Résolution idéale", ["1080", "2160"]],
+        ["basse", "Lower resolution", "Résolution inférieure", ["penal", "ok"]],
+        [
+          "hdr",
+          "HDR",
+          "HDR",
+          ["sdr-req", "sdr-pref", "indiff", "pref", "requis"],
+        ],
+        [
+          "dv",
+          "Dolby Vision without HDR10",
+          "Dolby Vision sans HDR10",
+          ["auto", "refuse", "deconseille", "ok"],
+        ],
+        [
+          "avi",
+          "AVI files",
+          "Fichiers AVI",
+          ["auto", "refuse", "deconseille", "ok"],
+        ],
+        ["codec", "H.265 / AV1", "H.265 / AV1", ["requis", "pref", "indiff"]],
+        ["langue", "Language", "Langue", ["vff", "vf", "vo", "indiff"]],
+        [
+          "st",
+          "French subtitles",
+          "Sous-titres français",
+          ["indiff", "pref", "requis"],
+        ],
+        [
+          "audio",
+          "Ideal audio",
+          "Audio idéal",
+          ["correct", "bon", "sansperte"],
+        ],
+        ["poidsAudio", "Audio weight (%)", "Poids de l’audio (%)", null],
+        ["cible", "Target GB per hour", "Cible en Go par heure", null],
+        ["plafond", "Maximum GB per hour", "Plafond en Go par heure", null],
+      ];
+      const labels = () => ({
+        1080: "1080p",
+        2160: "4K (2160p)",
+        penal: say("Penalized", "Pénalisée"),
+        ok: say("Accepted", "Accepté"),
+        auto: say("According to equipment", "Selon l’équipement"),
+        refuse: say("Rejected", "Refusé"),
+        deconseille: say("Discouraged", "Déconseillé"),
+        indiff: say("No preference", "Indifférent"),
+        pref: say("Preferred", "Préféré"),
+        requis: say("Required", "Requis"),
+        "sdr-req": say("SDR required", "SDR requis"),
+        "sdr-pref": say("SDR preferred", "SDR préféré"),
+        vff: "VFF",
+        vf: "VF (VFF / VFQ)",
+        vo: "VO",
+        correct: "AC3 5.1",
+        bon: "E-AC3 Atmos",
+        sansperte: say("Lossless", "Sans perte"),
+      });
+      function settingsPage() {
+        const p = profiles[editing] || profiles[active];
+        return `<div class="settings-layout"><nav class="settings-nav">${["Connections", "Clients", "Companion", "Agent access", "Assistant", "Search", "Media", "General", "Storage", "Matching", "Zen"].map((n) => `<button class="${n === "Search" ? "on" : ""}" onclick="${n === "Search" ? "" : "previewNotice()"}">${n === "Search" ? say("Search", "Recherche") : n}</button>`).join("")}</nav><section class="settings-body"><h2>${say("Search", "Recherche")}</h2><div class="settings-card"><h3>${say("Result display", "Affichage des résultats")}</h3><label><input type="checkbox" checked> ${say("Show covers in comfortable rows", "Afficher les affiches en mode confortable")}</label></div><div class="settings-card"><div class="toolbar"><h3>ReleaseScore</h3><span class="muted">${say("Quick scoring", "Évaluation rapide")}</span></div><p class="muted">${say("Choose how Search compares releases. Changes update the open results immediately.", "Choisissez comment la Recherche compare les releases. Les changements actualisent immédiatement les résultats ouverts.")}</p><label class="field">${say("Active profile", "Profil actif")}<select id="active-profile">${options(Object.keys(profiles), active)}</select></label><div class="profile-editor"><div class="toolbar"><label class="field">${say("Edit profile", "Modifier le profil")}<select id="edit-profile">${options(Object.keys(profiles), editing)}</select></label><button id="duplicate">${say("Duplicate", "Dupliquer")}</button><button id="create">${say("New profile", "Nouveau profil")}</button></div><label class="field">${say("Profile name", "Nom du profil")}<input id="profile-name" value="${esc(editing)}" ${builtins[editing] ? "readonly" : ""}></label><div class="form-grid">${fields.map(([key, en, fr, choices]) => `<label class="field">${say(en, fr)}${choices ? `<select data-field="${key}">${choices.map((v) => `<option value="${v}" ${p[key] === v ? "selected" : ""}>${labels()[v]}</option>`).join("")}</select>` : `<input type="number" min="0" max="${key === "poidsAudio" ? 60 : 80}" step="${key === "poidsAudio" ? 5 : 0.5}" data-field="${key}" value="${p[key]}">`}</label>`).join("")}</div><div class="info-box">${say("0 GB/hour means no size limit. Unknown facts stay neutral. Scores in this preview are samples.", "0 Go/heure signifie aucune limite de taille. Les faits inconnus restent neutres. Les notes de cet aperçu sont des exemples.")}</div><div class="toolbar"><button id="save-profile" class="primary">${say("Apply profile changes", "Appliquer les changements")}</button><button id="rename" ${builtins[editing] ? "disabled" : ""}>${say("Rename", "Renommer")}</button><button id="delete" ${builtins[editing] ? "disabled" : ""}>${say("Delete", "Supprimer")}</button><button id="reset" ${!builtins[editing] ? "disabled" : ""}>${say("Reset built-in", "Réinitialiser")}</button></div><p role="status">${esc(notice)}</p></div></div>${equipmentCard()}<p class="muted">ReleaseScore 0.3.0 · Pila33 · MIT · <a href="https://github.com/Pilaleur/releasescore" target="_blank" rel="noopener">${say("Source & credits", "Source et crédits")}</a></p><button onclick="go('search')">← ${say("Back to Search", "Retour à la Recherche")}</button></section></div>`;
+      }
+      function equipmentCard() {
+        const choices = [
+          [
+            "def",
+            "Screen resolution",
+            "Résolution de l’écran",
+            ["1080p", "4K"],
+          ],
+          ["hdr", "HDR support", "Prise en charge HDR", null],
+          ["dv", "Dolby Vision support", "Prise en charge Dolby Vision", null],
+          ["av1", "AV1 playback", "Lecture AV1", null],
+          ["dts", "DTS playback", "Lecture DTS", null],
+          ["avi", "AVI playback", "Lecture AVI", null],
+          [
+            "sound",
+            "Sound system",
+            "Système audio",
+            ["TV", "Soundbar", "5.1", "Atmos"],
+          ],
+          [
+            "priority",
+            "Priority",
+            "Priorité",
+            [
+              say("Save space", "Économiser l’espace"),
+              say("Balance", "Équilibre"),
+              say("Quality", "Qualité"),
+            ],
+          ],
+        ];
+        return `<details class="settings-card" open><summary><strong>${say("Your equipment", "Votre équipement")}</strong></summary><p class="muted">${say("Used by “According to equipment” choices. Leave answers unknown when you are unsure.", "Utilisé par les choix « Selon l’équipement ». Laissez les réponses inconnues si vous hésitez.")}</p><div class="form-grid">${[
+          ["screen", "Screen model", "Modèle d’écran"],
+          ["player", "Playback device", "Appareil de lecture"],
+          ["size", "Screen size (inches)", "Diagonale (pouces)"],
+          [
+            "distance",
+            "Viewing distance (metres)",
+            "Distance de visionnage (mètres)",
+          ],
+        ]
+          .map(
+            ([key, en, fr]) =>
+              `<label class="field">${say(en, fr)}<input data-eq="${key}" value="${esc(equipment[key] || "")}" ${["size", "distance"].includes(key) ? 'type="number" min="0" step="0.1"' : ""}></label>`,
+          )
+          .join(
+            "",
+          )}${choices.map(([key, en, fr, values]) => `<label class="field">${say(en, fr)}<select data-eq="${key}">${options([say("Unknown", "Inconnu"), ...(values || [say("Yes", "Oui"), say("No", "Non")])], equipment[key] || say("Unknown", "Inconnu"))}</select></label>`).join("")}</div><div class="info-box">${say("Equipment criteria affect every profile. A recommended profile is applied only when you choose it. Advanced “Poussée” scoring is planned for later.", "Les critères d’équipement affectent tous les profils. Un profil conseillé n’est activé que si vous le choisissez. L’évaluation « Poussée » viendra plus tard.")}</div><div class="toolbar"><button id="save-equipment" class="primary">${say("Save equipment", "Enregistrer l’équipement")}</button><button id="use-equipment">${say("Create a profile for this equipment", "Créer un profil pour cet équipement")}</button></div></details>`;
+      }
+      function bindSettings() {
+        $("active-profile").onchange = (e) => {
+          active = e.target.value;
+          render();
+        };
+        $("edit-profile").onchange = (e) => {
+          editing = e.target.value;
+          notice = "";
+          render();
+        };
+        $("duplicate").onclick = () => {
+          const name = uniqueName(editing + say(" copy", " copie"));
+          profiles[name] = { ...profiles[editing] };
+          editing = name;
+          render();
+        };
+        $("create").onclick = () => {
+          editing = uniqueName(say("My profile", "Mon profil"));
+          profiles[editing] = { ...base };
+          render();
+        };
+        $("save-profile").onclick = () => {
+          document
+            .querySelectorAll("[data-field]")
+            .forEach(
+              (n) =>
+                (profiles[editing][n.dataset.field] =
+                  n.type === "number" ? Number(n.value) : n.value),
+            );
+          notice = say(
+            "Profile updated. Return to Search to compare.",
+            "Profil actualisé. Retournez à la Recherche pour comparer.",
+          );
+          render();
+        };
+        $("rename").onclick = () => {
+          const name = $("profile-name").value.trim();
+          if (name && name !== editing && !profiles[name]) {
+            profiles[name] = profiles[editing];
+            delete profiles[editing];
+            if (active === editing) active = name;
+            editing = name;
+            render();
+          }
+        };
+        $("delete").onclick = () => {
+          if (
+            confirm(
+              say(
+                "Delete this custom profile?",
+                "Supprimer ce profil personnel ?",
+              ),
+            )
+          ) {
+            delete profiles[editing];
+            if (active === editing) active = "HDLight 1080p";
+            editing = active;
+            render();
+          }
+        };
+        $("reset").onclick = () => {
+          profiles[editing] = { ...builtins[editing] };
+          notice = say(
+            "Built-in profile reset.",
+            "Profil prédéfini réinitialisé.",
+          );
+          render();
+        };
+        const saveEquipment = () => {
+          document
+            .querySelectorAll("[data-eq]")
+            .forEach((n) => (equipment[n.dataset.eq] = n.value));
+          notice = say(
+            "Equipment saved in this preview.",
+            "Équipement enregistré dans cet aperçu.",
+          );
+        };
+        $("save-equipment").onclick = () => {
+          saveEquipment();
+          render();
+        };
+        $("use-equipment").onclick = () => {
+          saveEquipment();
+          const name = uniqueName(say("My equipment", "Mon équipement"));
+          profiles[name] = {
+            ...(equipment.def === "4K" ? builtins["4KLight"] : base),
+          };
+          active = editing = name;
+          notice = say(
+            "Illustrative equipment profile selected. Final recommendations will follow ReleaseScore.",
+            "Profil d’équipement illustratif activé. Les recommandations finales suivront ReleaseScore.",
+          );
+          render();
+        };
+      }
+      function uniqueName(base) {
+        let n = base,
+          i = 2;
+        while (profiles[n]) n = base + " " + i++;
+        return n;
+      }
+      $("theme").onchange = (e) =>
+        (document.documentElement.dataset.theme = e.target.value);
+      $("language").onchange = (e) => {
+        lang = e.target.value;
+        params.set("lang", lang);
+        history.replaceState(null, "", "?" + params);
+        render();
+      };
+      $("mode-toggle").onclick = () => {
+        mode = mode === "desktop" ? "web" : "desktop";
+        params.set("mode", mode);
+        history.replaceState(null, "", "?" + params);
+        render();
+      };
+      document.documentElement.dataset.theme = params.get("theme") || "dark";
+      $("theme").value = document.documentElement.dataset.theme;
+      render();
+    </script>
+  </body>
+</html>
