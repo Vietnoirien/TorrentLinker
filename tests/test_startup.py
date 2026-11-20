@@ -1,7 +1,8 @@
+import threading
 from copy import deepcopy
 from types import SimpleNamespace
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QMessageBox
 
 from torrentlinker.config import Settings
@@ -348,3 +349,44 @@ def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypa
         wait_js(qtbot, panel, "document.body.dataset.blocked === 'yes'")
         assert js(qtbot, panel, "document.title") != "unbundled script executed"
         assert window.windowHandle() is native and not destroyed, panel
+
+
+def test_settings_open_during_background_work_and_keep_both_saves(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtCore import QRunnable, QThreadPool
+    from PySide6.QtWidgets import QApplication
+
+    from torrentlinker.gui.settings_view import SettingsDialog
+
+    window, _, _ = setup_window(qtbot, tmp_path, monkeypatch)
+    window._startup_complete = True
+    release = threading.Event()
+
+    class Busy(QRunnable):
+        def run(self):
+            release.wait(10)
+
+    QThreadPool.globalInstance().start(Busy())  # a Catalogue update still running
+    qtbot.waitUntil(lambda: QThreadPool.globalInstance().activeThreadCount() > 0)
+    opened = []
+
+    def while_open():
+        dialog = next(w for w in QApplication.topLevelWidgets() if isinstance(w, SettingsDialog))
+        opened.append(dialog)
+        # The owner saves a section in Settings...
+        dialog.view.workspace.save(
+            "general", {**dialog.view.workspace.snapshot()["general"], "theme": "light"}
+        )
+        dialog.saved = True
+        # ...then a background task finishes and records what it measured.
+        window._speed_measured(42.0)
+        dialog.reject()
+
+    QTimer.singleShot(0, while_open)
+    try:
+        window._edit_settings(assistant=False, agents=False)
+    finally:
+        release.set()
+    assert opened, "Settings must open at the first click, even during background work"
+    saved = Settings.load(window.settings_path)
+    assert (saved.theme, saved.download_speed) == ("light", 42.0)
+    assert (window.settings.theme, window.settings.download_speed) == ("light", 42.0)

@@ -462,6 +462,7 @@ class MainWindow(QMainWindow):
         self.seeding_timer.setInterval(30_000)
         self.seeding_timer.timeout.connect(self._refresh_seeding_quietly)
         self._seeding_held = False
+        self._settings_dialog: SettingsDialog | None = None  # while Settings is open
         # Checks often, fetches only once the whole Catalogue is REFRESH_INTERVAL old.
         self.catalogue_refresh_timer = QTimer(self)
         self.catalogue_refresh_timer.setInterval(10 * 60_000)
@@ -897,8 +898,7 @@ class MainWindow(QMainWindow):
         self.band.show_profile(profile)
         filled = profile.apply(self.settings.zen)
         if filled != self.settings.zen:
-            self.settings.zen = filled
-            self.settings.save(self.settings_path)
+            self._update_settings(zen=filled)
             log.info("Zen Profile filled from c411: %s", filled)
             self.zen_tab.seeding_view.reload()
 
@@ -1289,9 +1289,10 @@ class MainWindow(QMainWindow):
         run_in_background(measure_download_speed, self._speed_measured, self._speed_failed)
 
     def _speed_measured(self, speed: float) -> None:
-        self.settings.download_speed = speed
-        self.settings.download_speed_tested = datetime.now().isoformat(timespec="minutes")
-        self.settings.save(self.settings_path)
+        self._update_settings(
+            download_speed=speed,
+            download_speed_tested=datetime.now().isoformat(timespec="minutes"),
+        )
         log.info("Download speed tested: %.0f Mbit/s", speed * 8 / 1e6)
         view = self.zen_tab.plan_view
         view.set_speed(speed, self.settings.download_speed_tested)
@@ -1469,9 +1470,8 @@ class MainWindow(QMainWindow):
         def done(categories: dict[int, IndexerCategory]) -> None:
             if categories and categories != self.settings.indexer_categories:
                 log.info("Indexer categories updated: %d", len(categories))
-                self.settings.indexer_categories = categories
+                self._update_settings(indexer_categories=categories)
                 self.search_tab.refresh_categories()
-                self.settings.save(self.settings_path)
                 self.offer_plan_categories()
             if then is not None:
                 then()
@@ -1913,9 +1913,23 @@ class MainWindow(QMainWindow):
         return work
 
     def _uploads_changed(self, uploads: int) -> None:
-        self.settings.uploads = uploads
         if self.settings_path.exists():
-            self.settings.save(self.settings_path)
+            self._update_settings(uploads=uploads)
+        else:
+            self.settings.uploads = uploads
+
+    def _update_settings(self, **fields: object) -> None:
+        """Record what a background task learned. Settings may be open meanwhile: it edits
+        its own copy and saves it as the owner goes, so both copies take the new values and
+        the newest one is written. Without this, closing Settings dropped the update, and
+        the update had overwritten what Settings had just saved."""
+        targets = [self.settings]
+        if self._settings_dialog is not None:
+            targets.append(self._settings_dialog.setup.settings)
+        for target in targets:
+            for name, value in fields.items():
+                setattr(target, name, value)
+        targets[-1].save(self.settings_path)
 
     def default_query(self, entry: LibraryEntry) -> str:
         kind = entry.folder.kind
@@ -2221,15 +2235,11 @@ class MainWindow(QMainWindow):
     def _edit_settings(
         self, *, assistant: bool, agents: bool, section: str = "connections"
     ) -> None:
-        from PySide6.QtCore import QThreadPool
-
-        if self._startup_complete and QThreadPool.globalInstance().activeThreadCount():
-            self.statusBar().showMessage(
-                self.tr("Wait for the current operation before changing settings."), 5000
-            )
-            return
         if self.agent_runtime and self.agent_runtime.busy():
-            self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
+            # Said in a box: the status bar is redrawn by running updates, which hid this.
+            QMessageBox.information(
+                self, self.tr("Settings"), self.tr("Wait for agent jobs before changing settings.")
+            )
             return
         folders = list(self.settings.library_folders)
         dialog = SettingsDialog(
@@ -2244,9 +2254,11 @@ class MainWindow(QMainWindow):
         ]
         for timer in timers:
             timer.stop()
+        self._settings_dialog = dialog  # background updates reach its copy too
         try:
             dialog.exec()
         finally:
+            self._settings_dialog = None
             for timer in timers:
                 timer.start()
         dialog.deleteLater()
