@@ -65,7 +65,7 @@ async function applyEnvironment(){
   try {
     const preferences=await panelRequest("preferences",{});
     if(version!==environmentVersion)return;
-    media.layout=preferences.layout||"cinematic";
+    media.layout=mediaLayoutValue(preferences.layout);media.horizon=mediaHorizonValue(preferences.horizon);
     if(mediaViewsByKind[env.kind]&&(env.kind!==media.kind||env.view)){media.kind=env.kind;media.view=mediaViewsByKind[env.kind].includes(env.view)||env.view==="adult"&&state.setup.adult_content?env.view:mediaViewsByKind[env.kind][0]}
     translate();mediaViews();$("view-media").inert=false;
     await loadMedia();

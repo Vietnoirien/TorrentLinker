@@ -214,7 +214,7 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     video_js(qtbot, tab, "document.querySelector('#media-show-queue').click()")
     qtbot.waitUntil(lambda: tab.queue_open)
     source = tab.player.source()
-    for layout in ("focus", "collection", "cinematic"):
+    for layout in ("focus", "horizon", "cinematic"):
         tab.set_media_layout(layout)
         assert tab.media_layout == layout
         assert tab.player.source() == source
@@ -759,7 +759,7 @@ def test_native_media_layout_shortcut_emits_only_user_changes(qtbot):
     assert tab.media_layout == "cinematic"
     changes = []
     tab.layout_changed.connect(changes.append)
-    tab.set_media_layout("collection")
+    tab.set_media_layout("horizon")
     assert changes == []
     tab._browser_action("layout", {"layout": "focus"})
     assert changes == ["focus"]

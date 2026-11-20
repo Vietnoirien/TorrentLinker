@@ -1,6 +1,10 @@
 "use strict";
 /* Helpers shared by the Media browsing view and the Web player host. */
-const mediaLayouts = ["cinematic", "focus", "collection"];
+const mediaLayouts = ["cinematic", "focus", "horizon"];
+const mediaHorizonViews = ["home", "showcase", "wall"];
+// Horizon replaced Collection; a saved Collection choice opens Horizon.
+const mediaLayoutValue = value => value === "collection" ? "horizon" : mediaLayouts.includes(value) ? value : "cinematic";
+const mediaHorizonValue = value => mediaHorizonViews.includes(value) ? value : "home";
 const mediaClient = () => state.clientId === "all" ? state.setup?.default_client_id || "default" : state.clientId || "default";
 const mediaQuery = values => new URLSearchParams({client_id: mediaClient(), ...values}).toString();
 function mediaOption(select, value, label) { const option = element("option", label); option.value = value; select.append(option); }

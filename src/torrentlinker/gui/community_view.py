@@ -170,6 +170,7 @@ class BundledView(QWidget):
                             "base.css",
                             "transport.js",
                             "i18n.js",
+                            "media-flags.js",
                             "torrent-list.css",
                             "torrent-filters.js",
                             "file-access.js",

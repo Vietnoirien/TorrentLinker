@@ -34,12 +34,18 @@ const mediaURL = (id, suffix = "stream") => `api/media/items/${encodeURIComponen
 const mediaPlayer = () => $("media-audio").hidden ? $("media-video") : $("media-audio");
 function mediaStatus(text) { if (text) toast(text); }
 function mediaSetLayout(value) {
-  media.layout = mediaLayouts.includes(value) ? value : "cinematic";
+  media.layout = mediaLayoutValue(value);
   try { localStorage.setItem("tl-media-layout", media.layout); } catch {}
   $("view-media").dataset.layout = media.layout;
   if (typeof mediaRefreshView === "function") mediaRefreshView();
 }
-try { media.layout = localStorage.getItem("tl-media-layout"); } catch {}
+// Horizon's view is chosen in Settings; like the layout, each browser keeps its own.
+function mediaSetHorizon(value) {
+  media.horizon = mediaHorizonValue(value);
+  try { localStorage.setItem("tl-media-horizon", media.horizon); } catch {}
+  if (typeof mediaRefreshView === "function") mediaRefreshView();
+}
+try { media.layout = mediaLayoutValue(localStorage.getItem("tl-media-layout")); media.horizon = mediaHorizonValue(localStorage.getItem("tl-media-horizon")); } catch {}
 // In Video, a music track keeps its bar only while it plays, so it can still be paused.
 function mediaMusicBar() {
   const shell = $("media-player-shell");

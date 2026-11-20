@@ -46,7 +46,7 @@ window.addEventListener("message",async event=>{
         media.layout=message.body.layout;try{localStorage.setItem("tl-media-layout",media.layout)}catch{}
         $("view-media").dataset.layout=media.layout;
       }
-      value={layout:mediaLayouts.includes(media.layout)?media.layout:"cinematic"};
+      value={layout:mediaLayoutValue(media.layout),horizon:mediaHorizonValue(media.horizon)};
     }else{
       if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress)$|\/artwork\?)|\/playlists(?:$|\?|\/[^/?]+\?))|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
       let client=mediaClient();

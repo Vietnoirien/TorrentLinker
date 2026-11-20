@@ -503,7 +503,7 @@ function preferences(form, group) {
       ["light", say("Light", "Clair")],
       ["dark", say("Dark", "Sombre")],
     ]);
-    field(
+    const layout = field(
       fields,
       say("Media interface", "Interface multimédia"),
       data,
@@ -512,9 +512,26 @@ function preferences(form, group) {
       [
         ["cinematic", say("Cinematic home", "Accueil cinéma")],
         ["focus", "Focus"],
-        ["collection", "Collection"],
+        ["horizon", "Horizon"],
       ],
     );
+    const horizon = field(
+      fields,
+      say("Horizon view", "Vue Horizon"),
+      data,
+      "media_horizon",
+      "",
+      [
+        ["home", say("Home", "Accueil")],
+        ["showcase", "Showcase"],
+        ["wall", say("Wall", "Mur")],
+      ],
+    );
+    // Horizon's own choice shows only while Horizon is the interface.
+    const showHorizon = () =>
+      (horizon.parentElement.hidden = layout.value !== "horizon");
+    layout.addEventListener("input", showHorizon);
+    showHorizon();
     field(
       fields,
       say("Show XXX content", "Afficher le contenu XXX"),

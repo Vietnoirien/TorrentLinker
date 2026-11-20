@@ -61,7 +61,7 @@ from torrentlinker.catalogue_sync import (
 )
 from torrentlinker.catalogue_workspace import catalogue_cards
 from torrentlinker.category_tags import sync_category_tags
-from torrentlinker.config import Settings
+from torrentlinker.config import MEDIA_LAYOUTS, Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.downloads import IndexerCategory
@@ -340,6 +340,7 @@ class MainWindow(QMainWindow):
             self.add_library_folder,
         )
         self.media_tab.set_media_layout(settings.media_layout)
+        self.media_tab.set_media_horizon(settings.media_horizon)
         self.media_tab.set_adult(settings.adult_content)
         self.media_tab.refresh_on_first_open = True
         self.media_tab.layout_changed.connect(self._save_media_layout)
@@ -2043,7 +2044,7 @@ class MainWindow(QMainWindow):
             super().keyPressEvent(event)
 
     def _save_media_layout(self, value: str) -> None:
-        if value not in ("cinematic", "focus", "collection"):
+        if value not in MEDIA_LAYOUTS:
             return
         self.settings.media_layout = value
         self.settings.save(self.settings_path)
@@ -2133,6 +2134,7 @@ class MainWindow(QMainWindow):
             replacement.media_tab.discussion_requested.connect(replacement.open_media_discussion)
             replacement.media_tab.set_center_mode(False)
             replacement.media_tab.set_media_layout(settings.media_layout)
+            replacement.media_tab.set_media_horizon(settings.media_horizon)
             replacement.media_tab.set_adult(settings.adult_content)
             replacement.tabs.insertTab(media_index, self.media_tab, self.tr("Media"))
         else:
@@ -2272,6 +2274,7 @@ class MainWindow(QMainWindow):
             self.apply_proxy()
             set_theme(self.settings.theme)
             self.media_tab.set_media_layout(self.settings.media_layout)
+            self.media_tab.set_media_horizon(self.settings.media_horizon)
             self.media_tab.set_adult(self.settings.adult_content)
             self.search_tab.refresh_categories()
             self.offer_plan_categories()

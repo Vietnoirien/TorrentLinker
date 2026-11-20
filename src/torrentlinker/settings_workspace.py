@@ -29,7 +29,8 @@ class General(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     language: Literal["auto", "en", "fr"] = "auto"
     theme: Literal["auto", "dark", "light"] = "auto"
-    media_layout: Literal["cinematic", "focus", "collection"] = "cinematic"
+    media_layout: Literal["cinematic", "focus", "horizon"] = "cinematic"
+    media_horizon: Literal["home", "showcase", "wall"] = "home"
     ui_scale: float = Field(default=1, ge=0.75, le=2)
     adult_content: bool = False
     sequential_video: bool = True

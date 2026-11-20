@@ -185,3 +185,229 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   font-size: 18px;
   line-height: 1;
 }
+
+/* Horizon, inspired by Kodi's Aeon Nox: the featured title's artwork, blurred, fills the
+   screen behind frosted panels. Settings choose its view: home, showcase or wall. */
+.media-clock {
+  display:none}
+#view-media[data-layout="horizon"][data-kind="video"] {
+  background:#05080b}
+#view-media[data-layout="horizon"] .media-clock {
+  display:block;
+  font-size:24px;
+  font-weight:300;
+  letter-spacing:.02em;
+  color:#eef3f6;
+  font-variant-numeric:tabular-nums}
+#view-media[data-layout="horizon"][data-kind="video"] .media-topbar {
+  background:linear-gradient(#05080bd9,transparent)}
+#view-media[data-layout="horizon"][data-kind="video"] .media-browse-nav {
+  gap:clamp(14px,2.6vw,38px)}
+#view-media[data-layout="horizon"][data-kind="video"] .media-browse-nav button {
+  font-size:12px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#7f909c!important}
+#view-media[data-layout="horizon"][data-kind="video"] .media-browse-nav button.active {
+  color:#f4f7f9!important;
+  text-shadow:0 0 16px #80d6c580}
+/* The backdrop belongs to the page, behind everything: the Wall's band can then stay above
+   the posters without its artwork covering them. browser.js sets --horizon-art. */
+#view-media[data-layout="horizon"][data-kind="video"] {
+  isolation:isolate}
+#view-media[data-layout="horizon"][data-kind="video"]::before,#view-media[data-layout="horizon"][data-kind="video"]::after {
+  content:"";
+  position:fixed;
+  z-index:-1;
+  pointer-events:none}
+#view-media[data-layout="horizon"][data-kind="video"]::before {
+  inset:-60px;
+  background:var(--horizon-art,none) center 30%/cover no-repeat,#05080b;
+  filter:blur(24px) saturate(1.15) brightness(.5)}
+#view-media[data-layout="horizon"][data-kind="video"]::after {
+  inset:0;
+  background:linear-gradient(90deg,#05080be0 0,#05080b59 60%,#05080b26 100%),linear-gradient(0deg,#05080bf2 0,transparent 55%)}
+#view-media[data-layout="horizon"][data-kind="video"] .media-feature {
+  background:transparent}
+/* The feature keeps its artwork element only to load the image for the backdrop. */
+#view-media[data-layout="horizon"][data-kind="video"] .media-feature-art {
+  opacity:0;
+  pointer-events:none}
+#view-media[data-layout="horizon"][data-kind="video"] .media-feature::before {
+  display:none}
+/* Panels stay readable on any artwork. */
+#view-media[data-layout="horizon"][data-kind="video"] .media-feature-copy {
+  background:#0d151cb8;
+  backdrop-filter:blur(14px);
+  border:1px solid #ffffff1f;
+  border-radius:12px}
+#view-media[data-layout="horizon"][data-kind="video"] .media-feature h2 {
+  text-transform:uppercase;
+  letter-spacing:-.5px}
+.media-feature-flags {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin:12px 0 0;
+  padding:0;
+  list-style:none}
+.media-feature-flags li {
+  padding:3px 6px;
+  border:1px solid #ffffff2e;
+  border-radius:4px;
+  background:#ffffff14;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.06em}
+.media-feature-flags li.strong {
+  color:#05080b;
+  background:#80d6c5;
+  border-color:#80d6c5}
+
+/* Home: a large banner over the rows; the chosen poster grows within its row. */
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature {
+  min-height:56vh;
+  display:flex;
+  align-items:flex-end}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-copy {
+  margin:0 36px 26px;
+  padding:24px 28px;
+  max-width:780px}
+#view-media[data-layout="horizon"][data-horizon="home"] .media-feature-copy.has-poster {
+  grid-template-columns:150px minmax(0,1fr)}
+#view-media[data-layout="horizon"][data-horizon="home"] .media-feature-copy.has-poster > .media-feature-poster {
+  width:150px}
+#view-media[data-layout="horizon"][data-horizon="home"] .media-feature h2 {
+  font-size:clamp(32px,4vw,60px)}
+#view-media[data-layout="horizon"][data-horizon="home"] .media-feature-description {
+  -webkit-line-clamp:3;
+  margin:14px 0 18px}
+#view-media[data-layout="horizon"] .media-home-row-header h2,#view-media[data-layout="horizon"] .media-continue > h2 {
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#a3b2bd}
+#view-media[data-layout="horizon"] .media-row-track {
+  align-items:flex-end;
+  padding:14px 4px 8px}
+#view-media[data-layout="horizon"] .media-row-card {
+  flex:0 0 132px;
+  transition:flex-basis .22s ease}
+#view-media[data-layout="horizon"] .media-row-card .media-art {
+  width:100%;
+  transition:outline-color .15s,box-shadow .22s}
+#view-media[data-layout="horizon"] .media-row-card[aria-pressed="true"] {
+  flex-basis:184px}
+#view-media[data-layout="horizon"] .media-row-card[aria-pressed="true"] .media-art {
+  outline-color:#5fd0c3;
+  box-shadow:0 14px 34px #000c}
+
+/* Showcase: the whole screen for one title; the carousel grows the chosen poster. */
+/* The panel on top, the carousel at the foot: stacked, so neither covers the other. */
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-feature {
+  min-height:calc(100vh - 70px);
+  display:flex;
+  flex-direction:column}
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-feature-copy {
+  margin:24px 36px 0;
+  padding:24px 28px;
+  max-width:560px}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-feature-copy.has-poster {
+  display:block}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-feature-copy.has-poster > .media-feature-poster {
+  display:none}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-feature h2 {
+  font-size:clamp(28px,3.4vw,52px)}
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-focus-strip {
+  display:flex;
+  align-items:flex-end;
+  gap:16px;
+  margin-top:auto;
+  padding:24px 36px 20px;
+  overflow-x:auto;
+  scrollbar-width:none}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice {
+  flex:0 0 108px;
+  width:auto;
+  min-width:0;
+  transition:flex-basis .22s ease}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice .media-art {
+  height:auto;
+  aspect-ratio:2/3}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice > span {
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice[aria-pressed="true"] {
+  flex-basis:168px}
+#view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice[aria-pressed="true"] .media-art {
+  outline-color:#5fd0c3;
+  box-shadow:0 14px 34px #000c}
+#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"][data-empty="false"] .media-library-layout,#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] #media-continue {
+  display:none}
+
+/* Wall: Collection's density. A poster selects its title into the band, which stays in
+   view while the wall scrolls; the chosen poster grows in place. */
+#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-feature {
+  position:sticky;
+  top:0;
+  z-index:3;
+  min-height:0}
+#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-feature-copy {
+  margin:8px 36px 14px;
+  padding:14px 18px;
+  max-width:none}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-feature-copy.has-poster {
+  grid-template-columns:84px minmax(0,1fr);
+  column-gap:20px;
+  max-width:none}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-feature-copy.has-poster > .media-feature-poster {
+  width:84px}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-feature h2 {
+  font-size:clamp(20px,2.2vw,30px);
+  margin:0 0 6px}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-feature .media-eyebrow,#view-media[data-layout="horizon"][data-horizon="wall"] .media-metadata-source,#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] #media-continue {
+  display:none}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-feature-description {
+  -webkit-line-clamp:2;
+  max-width:90ch;
+  margin:8px 0 10px}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-feature-actions button {
+  padding:6px 14px}
+#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-grid {
+  grid-template-columns:repeat(auto-fill,minmax(118px,1fr));
+  gap:22px 14px}
+#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-card-actions,#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-card-source,#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-poster-badge {
+  display:none}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-poster-button {
+  transition:transform .22s ease}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-poster-button[aria-pressed="true"] {
+  transform:scale(1.1);
+  z-index:2}
+#view-media[data-layout="horizon"][data-horizon="wall"] .media-poster-button[aria-pressed="true"] .media-art {
+  outline:2px solid #5fd0c3;
+  outline-offset:2px;
+  box-shadow:0 14px 34px #000c}
+@media (max-width:850px) {
+  #view-media[data-layout="horizon"][data-kind="video"] .media-feature-copy,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-copy,#view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-feature-copy,#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-feature-copy {
+    margin-left:16px;
+    margin-right:16px;
+    padding:16px}
+  #view-media[data-layout="horizon"][data-horizon="showcase"][data-kind="video"] .media-focus-strip {
+    padding:16px}
+  #view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice {
+    flex-basis:84px!important;
+    width:auto!important}
+  #view-media[data-layout="horizon"][data-horizon="showcase"] .media-focus-choice[aria-pressed="true"] {
+    flex-basis:124px!important}
+  #view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-grid {
+    grid-template-columns:repeat(3,minmax(0,1fr))}
+  /* A phone has no room to keep the band in view; it scrolls with the wall. */
+  #view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"] .media-feature {
+    position:relative}
+  #view-media[data-layout="horizon"] .media-clock {
+    display:none}}
+/* What scrolls into view, by keyboard or link, stays clear of the Wall's band. */
+html:has(#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="video"]) {
+  scroll-padding-top:190px}

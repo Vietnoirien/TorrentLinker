@@ -571,7 +571,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.wait_for_function("() => document.fullscreenElement !== null")
             page.keyboard.press("Escape")
             page.wait_for_function("() => document.fullscreenElement === null", timeout=3000)
-            for layout in ("focus", "collection", "cinematic"):
+            for layout in ("focus", "horizon", "cinematic"):
                 choose_layout(layout)
                 expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", layout)
                 player_action(page, "#media-fullscreen")
@@ -583,10 +583,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 )
                 player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement === null")
-                if layout == "collection":
-                    expect(media_locator(page, "#media-feature")).to_be_hidden()
-                else:
-                    expect(media_locator(page, "#media-feature")).to_be_visible()
+                expect(media_locator(page, "#media-feature")).to_be_visible()
                 assert video.get_attribute("src") == source
                 if layout == "focus":
                     media_locator(page, "#media-focus-strip").get_by_role(
@@ -610,14 +607,19 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
             settings.get_by_role("button", name="General", exact=True).click()
-            settings.get_by_label("Media interface", exact=True).select_option("collection")
+            settings.get_by_label("Media interface", exact=True).select_option("horizon")
+            settings.get_by_label("Horizon view", exact=True).select_option("wall")
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(settings.locator("#settings-status")).to_contain_text("Settings saved")
             page.reload()
             shell_navigate(page, "media")
-            expect(media_locator(page, "#view-media")).to_have_attribute(
-                "data-layout", "collection"
-            )
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", "horizon")
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-horizon", "wall")
+            # In the Wall, a poster selects its title into the band instead of opening details.
+            poster = media_locator(page, "#media-results .media-poster-button").first
+            poster.click()
+            expect(media_locator(page, "#media-details")).not_to_be_visible()
+            expect(poster).to_have_attribute("aria-pressed", "true")
             choose_layout("cinematic")
             expect(video).to_have_attribute("src", source)
 
@@ -689,7 +691,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             )
             assert video.evaluate("node => node.paused") is True
             if screenshots:
-                for layout in ("cinematic", "focus", "collection"):
+                for layout in ("cinematic", "focus", "horizon"):
                     choose_layout(layout)
                     page.evaluate("window.scrollTo(0, 0)")
                     page.screenshot(

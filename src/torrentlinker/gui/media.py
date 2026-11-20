@@ -58,6 +58,7 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from torrentlinker import i18n
+from torrentlinker.config import MEDIA_HORIZON_VIEWS, media_layout
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.media_audio import create_audio_output
 from torrentlinker.gui.media_browser import MediaBrowserPanel
@@ -452,6 +453,7 @@ class MediaTab(QWidget):
 
     def _build_presentation(self, add_folder) -> None:
         self.media_layout = "cinematic"
+        self.media_horizon = "home"
         self.adult = False  # the XXX tab, once adult content is enabled in Settings
         self.video_playing = False
         # The app refreshes the library the first time Media opens after it starts.
@@ -624,10 +626,17 @@ class MediaTab(QWidget):
             self.browser.activate()
 
     def set_media_layout(self, value: str) -> None:
-        value = value if value in {"cinematic", "focus", "collection"} else "cinematic"
+        value = media_layout({"media_layout": value})
         self.media_layout = value
         if self.browser is not None:
             self.browser.layout_value = value
+            self.browser.activate()
+
+    def set_media_horizon(self, value: str) -> None:
+        value = value if value in MEDIA_HORIZON_VIEWS else "home"
+        self.media_horizon = value
+        if self.browser is not None:
+            self.browser.horizon_value = value
             self.browser.activate()
 
     def set_center_mode(self, enabled: bool) -> None:
@@ -1062,6 +1071,7 @@ class MediaTab(QWidget):
             lambda: self.get_service().agent, lambda: self.client_id(), self
         )
         self.browser.layout_value = self.media_layout
+        self.browser.horizon_value = self.media_horizon
         self.browser.hostRequested.connect(self._browser_action)
         self.media_column_layout.insertWidget(1, self.browser, 1)
         self._publish_queue()

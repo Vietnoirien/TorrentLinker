@@ -104,7 +104,7 @@ def test_media_interface_choice_survives_settings_reopen_and_cancel(tmp_path, qt
     path = tmp_path / "settings.json"
     path.write_text("{}")
     assert Settings.load(path).media_layout == "cinematic"
-    for choice in ("focus", "collection", "cinematic"):
+    for choice in ("focus", "horizon", "cinematic"):
         dialog = settings_dialog(qtbot, tmp_path, Settings.load(path), section="general")
         edit_field(qtbot, dialog.view, "Media interface", choice)
         save_group(qtbot, dialog)
@@ -123,12 +123,18 @@ def test_media_interface_choice_survives_settings_reopen_and_cancel(tmp_path, qt
             qtbot,
             reopened.view,
             "Media interface",
-            "collection" if choice != "collection" else "focus",
+            "horizon" if choice != "horizon" else "focus",
         )
         reopened.reject()
         assert Settings.load(path).media_layout == choice
     path.write_text('{"media_layout": "removed-experimental-layout"}')
     assert Settings.load(path).media_layout == "cinematic"
+    # Horizon replaced Collection: its users keep a dense grid, Horizon's Wall.
+    path.write_text('{"media_layout": "collection"}')
+    migrated = Settings.load(path)
+    assert (migrated.media_layout, migrated.media_horizon) == ("horizon", "wall")
+    path.write_text('{"media_layout": "horizon", "media_horizon": "unknown"}')
+    assert Settings.load(path).media_horizon == "home"
 
 
 @pytest.mark.parametrize(

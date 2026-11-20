@@ -136,6 +136,7 @@ window.addEventListener("message", async (event) => {
       });
       if (body.group === "general" && _client === state.clientId) {
         mediaSetLayout(value.general.media_layout);
+        mediaSetHorizon(value.general.media_horizon);
         theme(value.general.theme);
         language =
           value.general.language === "auto"

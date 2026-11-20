@@ -2,9 +2,11 @@
 const media = {kind: "video", view: "recent", animeFilters: {}, rows: [], homeRows: [], gridMode: false, selected: null, featureId: null, continueRows: [], next: null, scan: "", request: 0};
 const mediaItems = new Map();
 const mediaPreferences = window.mediaHostPreferences || localStorage;
-media.layout = mediaLayouts.includes(mediaPreferences.getItem("tl-media-layout")) ? mediaPreferences.getItem("tl-media-layout") : "cinematic";
+media.layout = mediaLayoutValue(mediaPreferences.getItem("tl-media-layout"));
+media.horizon = "home"; // Horizon's view, chosen in Settings
+const mediaHorizon = view => media.layout === "horizon" && media.horizon === view;
 function mediaSetLayout(value) {
-  media.layout = mediaLayouts.includes(value) ? value : "cinematic";
+  media.layout = mediaLayoutValue(value);
   mediaPreferences.setItem("tl-media-layout", media.layout);
   $("view-media").dataset.layout = media.layout;
   $("media-layout-switch").value = media.layout;
@@ -84,7 +86,11 @@ function mediaCanPreview(row) {
 function mediaPreviewAction(row, className = "") {
   return button(say("Preview downloaded portion", "Prévisualiser la partie téléchargée"), () => mediaPreview(row.id), className);
 }
-function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); mediaRenderEpisodes(row).catch(() => {}); }
+function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); mediaMarkSelected(); mediaRenderEpisodes(row).catch(() => {}); }
+// Every card of the featured title is pressed, wherever it is, so that Horizon can grow it.
+function mediaMarkSelected() {
+  for (const card of document.querySelectorAll(".media-row-card[data-id], .media-poster-button[data-id]")) card.setAttribute("aria-pressed", String(card.dataset.id === media.featureId));
+}
 // A chosen series unfolds under its description: one tab per season, then its episodes.
 async function mediaRenderEpisodes(row) {
   const root = $("media-episodes");
@@ -139,14 +145,24 @@ function mediaRenderFeature() {
   media.featureId = row.id; media.selected = row;
   if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(row);
   const scroll = root.querySelector(".media-focus-strip")?.scrollLeft || 0;
+  const focused = document.activeElement?.closest?.(".media-focus-choice")?.dataset.id;
   root.replaceChildren();
   const art = mediaArt(row, "media-feature-art"); root.append(art);
+  // Horizon draws the featured artwork, blurred, behind the whole page.
+  const backdrop = art.querySelector("img"), page = $("view-media");
+  if (!backdrop) page.style.removeProperty("--horizon-art");
+  else backdrop.addEventListener("load", () => { if (media.featureId === row.id) page.style.setProperty("--horizon-art", `url("${backdrop.src}")`); }, {once: true});
   const copy = element("div", undefined, "media-feature-copy");
   // The poster sits left of the title and description, over the same artwork backdrop.
   if (row.artwork_url) { copy.classList.add("has-poster"); copy.append(mediaArt(row, "media-feature-poster")); }
   copy.append(element("p", say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
   const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language, row.rating ? `★ ${row.rating}` : ""].filter(Boolean);
   copy.append(element("p", facts.join(" · "), "media-feature-meta"));
+  if (media.layout === "horizon" && typeof mediaFlags === "function") {
+    const flags = element("ul", undefined, "media-feature-flags");
+    for (const [text, strong] of mediaFlags(row)) flags.append(element("li", text, strong ? "strong" : ""));
+    if (flags.childElementCount) copy.append(flags);
+  }
   if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
   const actions = element("div", undefined, "media-feature-actions");
@@ -158,10 +174,14 @@ function mediaRenderFeature() {
   const strip = element("div", undefined, "media-focus-strip"); strip.id = "media-focus-strip"; strip.setAttribute("aria-label", say("Select a featured title", "Choisir le titre mis en avant"));
   for (const item of media.rows) {
     const choice = button("", () => mediaSelectFeature(item), "media-focus-choice");
-    choice.setAttribute("aria-label", item.title); choice.setAttribute("aria-pressed", String(item.id === row.id));
+    choice.dataset.id = item.id; choice.setAttribute("aria-label", item.title); choice.setAttribute("aria-pressed", String(item.id === row.id));
+    choice.ondblclick = () => guard(() => mediaStart([item.id]));
     choice.append(mediaArt(item), element("span", item.title)); strip.append(choice);
   }
   root.append(strip); strip.scrollLeft = scroll;
+  if (focused) strip.querySelector(`[data-id="${CSS.escape(focused)}"]`)?.focus({preventScroll: true});
+  // Horizon's Showcase keeps the chosen poster in view as the carousel grows it.
+  if (mediaHorizon("showcase")) strip.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center"});
 }
 function mediaRenderContinue() {
   const root = $("media-continue-items"); root.replaceChildren();
@@ -185,7 +205,7 @@ function mediaRenderContinue() {
 }
 // The video home shows rows (genres, series…); each row's "See all" opens the grid with its filters.
 function mediaHomeActive() {
-  return media.kind === "video" && ["recent", "films", "series", "anime", "adult"].includes(media.view) && !media.gridMode && media.layout === "cinematic" && !$("media-search").value.trim()
+  return media.kind === "video" && ["recent", "films", "series", "anime", "adult"].includes(media.view) && !media.gridMode && (media.layout === "cinematic" || mediaHorizon("home")) && !$("media-search").value.trim()
     && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);
 }
 function mediaRenderHome() {
@@ -245,7 +265,9 @@ async function mediaSeeAll(filters) {
   window.scrollTo({top: 0});
 }
 function mediaRender() {
-  $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout;
+  $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout; $("view-media").dataset.horizon = media.horizon;
+  // Horizon is a cinema skin: dark whatever the app's theme, like Kodi's.
+  document.documentElement.dataset.theme = media.layout === "horizon" ? "dark" : environment.theme || "dark";
   $("view-media").dataset.musicView = media.view;
   $("view-media").dataset.empty = String(media.rows.length === 0);
   for (const item of document.querySelectorAll("[data-media-view]")) { item.classList.toggle("active", item.dataset.mediaView === media.view); item.setAttribute("aria-current", item.dataset.mediaView === media.view ? "page" : "false"); }
@@ -265,7 +287,9 @@ function mediaRender() {
     const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
     const title = media.kind === "music" && media.view === "albums" ? row.album || say("Unknown album", "Album inconnu") : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : row.title;
     // A series card unfolds its episodes; any other card opens its details.
-    const artwork = button("", () => row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", `${say("Details", "Détails")}: ${title}`);
+    const wall = media.kind === "video" && mediaHorizon("wall");
+    const artwork = button("", () => wall ? mediaSelectFeature(row) : row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", wall ? title : `${say("Details", "Détails")}: ${title}`);
+    if (wall) { artwork.dataset.id = row.id; artwork.setAttribute("aria-pressed", String(row.id === media.featureId)); artwork.ondblclick = () => guard(() => mediaDetails(row.id)); }
     if (media.kind === "music" && media.view === "artists") {
       const initials = title.split(/\s+/).slice(0, 2).map(part => [...part][0]).join("");
       const portrait = element("div", undefined, "media-artist-art"); portrait.append(element("span", initials)); artwork.append(portrait); card.classList.add("media-artist-card");
@@ -387,3 +411,22 @@ async function mediaDetails(id) {
     root.append(list);
   }
 }
+// Horizon follows the focus, as with a remote: a poster reached with the keyboard becomes the featured title.
+let mediaFocusTimer;
+document.addEventListener("focusin", event => {
+  const card = event.target.closest?.(".media-row-card[data-id], .media-focus-choice[data-id], .media-poster-button[data-id]");
+  if (media.layout !== "horizon" || !card || card.dataset.id === media.featureId || !card.matches(":focus-visible")) return;
+  clearTimeout(mediaFocusTimer);
+  mediaFocusTimer = setTimeout(() => {
+    const row = mediaItems.get(card.dataset.id);
+    if (row && document.activeElement === card) mediaSelectFeature(row);
+  }, 180);
+});
+// Horizon's clock, as on a living-room screen.
+function mediaClock() {
+  const clock = $("media-clock"); if (!clock) return;
+  const now = new Date();
+  clock.textContent = now.toLocaleTimeString(language === "fr" ? "fr-FR" : "en-GB", {hour: "2-digit", minute: "2-digit"});
+  clock.dateTime = now.toISOString();
+}
+mediaClock(); setInterval(mediaClock, 15000);

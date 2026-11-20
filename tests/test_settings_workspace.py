@@ -87,6 +87,7 @@ def test_general_matching_and_zen_are_shared_without_overwriting_client_paths(tm
             "language": "fr",
             "theme": "light",
             "media_layout": "focus",
+            "media_horizon": "showcase",
             "ui_scale": 1.25,
             "adult_content": True,
         },
@@ -116,6 +117,7 @@ def test_general_matching_and_zen_are_shared_without_overwriting_client_paths(tm
         workspace.save("general", {"language": "fr", "theme": "unknown"})
     saved = Settings.load(setup.path)
     assert (saved.language, saved.theme, saved.media_layout) == ("fr", "light", "focus")
+    assert saved.media_horizon == "showcase"
     assert saved.kind_categories[ContentKind.EBOOK] == [7000, 7010]
     assert saved.matching.ignore_patterns == ["*.nfo"]
     assert saved.zen.seed_hours == 12

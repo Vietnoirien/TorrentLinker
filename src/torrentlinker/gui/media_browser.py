@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from PySide6.QtCore import Signal, Slot
 from shiboken6 import isValid
 
+from torrentlinker.config import MEDIA_LAYOUTS
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.media_browser import MediaBrowserService
@@ -42,12 +43,19 @@ class MediaBrowserBridge(ViewBridge):
                 self.response.emit(identifier, '{"data":null}')
                 return
             if path == "preferences":
-                if body.get("layout") in {"cinematic", "focus", "collection"}:
+                if body.get("layout") in MEDIA_LAYOUTS:
                     self.panel.layout_value = body["layout"]
                     self.panel.hostRequested.emit("layout", {"layout": body["layout"]})
                 self.response.emit(
                     identifier,
-                    json.dumps({"data": {"layout": self.panel.layout_value}}),
+                    json.dumps(
+                        {
+                            "data": {
+                                "layout": self.panel.layout_value,
+                                "horizon": self.panel.horizon_value,
+                            }
+                        }
+                    ),
                 )
                 return
             service = self.panel.get_service()
@@ -97,6 +105,7 @@ class MediaBrowserPanel(BundledView):
     def __init__(self, get_service, client_id, parent=None):
         self.get_service, self.client_id = get_service, client_id
         self.layout_value = "cinematic"
+        self.horizon_value = "home"  # Horizon's view, chosen in Settings
         self.center_mode = False
         self.chat_open = False
         self.revision = 0

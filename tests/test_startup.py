@@ -59,8 +59,8 @@ def test_media_layout_shortcut_is_restored_when_the_app_reopens(qtbot, tmp_path,
     reopened = main_window.MainWindow(saved, window.settings_path, window.store)
     qtbot.addWidget(reopened)
     assert reopened.media_tab.media_layout == "focus"
-    reopened.media_tab._browser_action("layout", {"layout": "collection"})
-    assert Settings.load(window.settings_path).media_layout == "collection"
+    reopened.media_tab._browser_action("layout", {"layout": "horizon"})
+    assert Settings.load(window.settings_path).media_layout == "horizon"
     assert not calls
 
 

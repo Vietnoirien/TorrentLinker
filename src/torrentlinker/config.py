@@ -39,6 +39,25 @@ def ui_scale(value: object) -> float:
     return min(max(scale, UI_SCALES[0]), UI_SCALES[-1])
 
 
+MEDIA_LAYOUTS = ("cinematic", "focus", "horizon")
+MEDIA_HORIZON_VIEWS = ("home", "showcase", "wall")
+
+
+def media_layout(data: dict) -> str:
+    """The saved Media interface. Horizon replaced Collection, whose users keep a grid."""
+    value = data.get("media_layout")
+    if value == "collection":
+        return "horizon"
+    return value if value in MEDIA_LAYOUTS else "cinematic"
+
+
+def media_horizon(data: dict) -> str:
+    value = data.get("media_horizon")
+    if value in MEDIA_HORIZON_VIEWS:
+        return value
+    return "wall" if data.get("media_layout") == "collection" else "home"
+
+
 @dataclass
 class QbitSettings:
     host: str = "http://localhost:8080"
@@ -154,7 +173,8 @@ class Settings:
     language: str = "auto"  # auto | en | fr
     theme: str = "auto"  # auto | light | dark
     ui_scale: float = 1.0  # desktop interface size, on top of the system's scaling
-    media_layout: str = "cinematic"  # cinematic | focus | collection
+    media_layout: str = "cinematic"  # cinematic | focus | horizon
+    media_horizon: str = "home"  # Horizon's view: home | showcase | wall
     # XXX (c411's adult category, Torznab 6000-6999): hidden unless the user opts in.
     adult_content: bool = False
 
@@ -288,6 +308,7 @@ class Settings:
             "theme": self.theme,
             "ui_scale": self.ui_scale,
             "media_layout": self.media_layout,
+            "media_horizon": self.media_horizon,
             "adult_content": self.adult_content,
             "library_folders": [_folder_to_json(f) for f in self.library_folders],
             "path_mappings": [asdict(m) for m in self.path_mappings],
@@ -332,11 +353,8 @@ class Settings:
             language=str(data.get("language", "auto")),
             theme=str(data.get("theme", "auto")),
             ui_scale=ui_scale(data.get("ui_scale", 1.0)),
-            media_layout=(
-                data["media_layout"]
-                if data.get("media_layout") in ("cinematic", "focus", "collection")
-                else "cinematic"
-            ),
+            media_layout=media_layout(data),
+            media_horizon=media_horizon(data),
             adult_content=data.get("adult_content", False) is True,
             kind_categories={
                 ContentKind(k): [int(c) for c in v]
