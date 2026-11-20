@@ -1025,6 +1025,16 @@ class Store:
             ).fetchall()
         return [CatalogueRow(*r) for r in rows]
 
+    def catalogue_films(self, limit: int = 3000, least_seeders: int = 5) -> list[CatalogueRow]:
+        """The best seeded film torrents (Torznab 2000-2999), for Media's tracker rows."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM catalogue WHERE category BETWEEN 2000 AND 2999 AND seeders >= ? "
+                "ORDER BY seeders DESC LIMIT ?",
+                (least_seeders, limit),
+            ).fetchall()
+        return [CatalogueRow(*r) for r in rows]
+
     def update_catalogue_seeders(self, counts: dict[str, int]) -> None:
         """Apply swarm observations without claiming size/category metadata was refreshed."""
         with self._lock, self._db:

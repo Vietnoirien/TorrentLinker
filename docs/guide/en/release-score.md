@@ -6,10 +6,12 @@ Colour expresses profile fit, independently of the number: green fits, yellow mi
 
 ## Choose a profile for your equipment
 
-1. Open **Settings → Search & Matching** and find the **ReleaseScore** card.
+1. Open **Settings → ReleaseScore**.
 2. Expand **Your equipment**. Enter your screen size and viewing distance, then choose the screen definition and sound system.
 3. Set HDR, Dolby Vision, AV1, DTS and AVI support according to the device you actually use for playback. Leave an unknown capability as **Unknown**.
 4. Choose your priority: saving space, balance or quality.
+
+**Media suggests releases from** sets the score Media's tracker rows require (90 by default); see the Media guide.
 5. Click **Save equipment and use its recommendation**. This creates and selects a profile based on those answers.
 6. Return to Search and compare a few familiar releases. Open a result to read the score explanation before choosing it.
 

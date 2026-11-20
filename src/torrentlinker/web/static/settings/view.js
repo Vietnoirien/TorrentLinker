@@ -27,6 +27,7 @@ const sections = () => ({
   downloads: say("Download Folders", "Dossiers de téléchargement"),
   paths: say("Client Paths", "Chemins du client"),
   matching: say("Search & Matching", "Recherche et correspondance"),
+  release_score: "ReleaseScore",
   zen: "Zen",
 });
 function element(tag, text, className) {
@@ -1150,7 +1151,8 @@ function render() {
       }),
     );
     form.append(actions);
-    if (section === "matching") settingsReleaseScore(form);
+  } else if (section === "release_score") {
+    settingsReleaseScore(form);
   } else if (section === "agents") {
     const root = element("div");
     form.append(root);

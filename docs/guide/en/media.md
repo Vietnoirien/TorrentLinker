@@ -48,6 +48,10 @@ The desktop player uses the codecs available to QtMultimedia. Its audio and subt
 
 Configure a model connection in Assistant settings before sending a message. You can open the panel and browse your library without a model connection.
 
+## Films on the tracker
+
+With a c411 key, the Home and Films views add two rows of films only. **Available on the tracker** lists films your library does not have whose best c411 release reaches your ReleaseScore threshold. **Better versions on the tracker** lists films you already have with a release that scores at least 5 points more than your file. Choose the threshold in **Settings → ReleaseScore** (90 by default). Each refresh of the library looks up about twenty films in the background, your own films first, then the best seeded films of the Catalogue; a film is looked up again after a week. A tracker film's panel shows its best release, its score, size and publication date; **Add to download queue** queues it like Search does and starts nothing until you send the queue. The release's category needs a Download Folder. Series and season packs are not suggested.
+
 ## Preview a video while it downloads
 
 See the [client compatibility table](clients.md#client-compatibility) for the supported features.

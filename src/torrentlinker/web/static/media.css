@@ -194,6 +194,14 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 #media-center-mode { flex-shrink: 0; }
 /* More titles load as the grid scrolls; the button stays only to mark where. */
 #media-more:not([hidden]) { display: block; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; overflow: hidden; }
+/* A tracker film: its best c411 release, scored. */
+.media-tracker-release { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 16px; font-size: 12px; color: inherit; }
+.media-tracker-name { font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; opacity: .85; }
+.media-tracker-facts { opacity: .7; }
+.media-score { border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 11px; border: 1px solid; }
+.media-score.score-green { color: #19613a; background: #e0f4e6; border-color: #7bbd91; }
+.media-score.score-yellow { color: #725100; background: #fff2c8; border-color: #cdb154; }
+.media-score.score-red { color: #962d34; background: #ffe5e7; border-color: #d89398; }
 #media-client { width: auto; max-width: 160px; padding: 8px 10px; font-size: 11px; flex-shrink: 0; }
 #view-media[data-kind="music"] .media-layout-control { display: none; }
 #view-media[data-kind="music"] .media-shelves { padding-top: 28px; padding-bottom: 250px; }

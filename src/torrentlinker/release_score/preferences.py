@@ -92,6 +92,8 @@ class Preferences(BaseModel):
         default_factory=lambda: {n: Profile(**p) for n, p in PROFILES.items()}, max_length=100
     )
     equipment: Equipment = Field(default_factory=Equipment)
+    # Media suggests c411 releases scoring at least this much.
+    threshold: int = Field(default=90, ge=0, le=100)
 
     @model_validator(mode="after")
     def valid_profiles(self):

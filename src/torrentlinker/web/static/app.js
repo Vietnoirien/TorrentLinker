@@ -394,7 +394,7 @@ const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
-  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "zen", "interface", "companion", "assistant", "agents"],
+  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents"],
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {

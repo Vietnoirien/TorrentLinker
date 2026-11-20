@@ -520,7 +520,7 @@ def test_release_score_profiles_details_and_equipment(tmp_path, monkeypatch):
             details_count = len([r for r in seen if r.url.path.startswith("/api/torrents/")])
             shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
-            settings.get_by_role("button", name="Search & Matching", exact=True).click()
+            settings.get_by_role("button", name="ReleaseScore", exact=True).click()
             settings.get_by_label("Profile name", exact=True).fill("Cinema")
             settings.get_by_role("button", name="Duplicate", exact=True).click()
             settings.get_by_role("button", name="Save ReleaseScore", exact=True).click()

@@ -102,6 +102,16 @@ def media_routes(app, agent, assistant):
     ):
         return media.home_rows(client(client_id), kind="video", limit=limit, scope=scope)
 
+    @app.post("/api/media/tracker/{infohash}/enqueue")
+    def tracker_enqueue(infohash: str, body: MediaClient):
+        from torrentlinker.media_browser import tracker_hash
+
+        target = client(body.client_id)
+        try:
+            return media.tracker_enqueue(target, media.setup(target), tracker_hash(infohash))
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
     @app.post("/api/media/scan", status_code=202)
     def scan(body: MediaClient):
         target = client(body.client_id)

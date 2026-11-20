@@ -162,7 +162,7 @@ function mediaRenderFeature() {
   const copy = element("div", undefined, "media-feature-copy");
   // The poster sits left of the title and description, over the same artwork backdrop.
   if (row.artwork_url) { copy.classList.add("has-poster"); copy.append(mediaArt(row, "media-feature-poster")); }
-  copy.append(element("p", say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
+  copy.append(element("p", row.tracker ? say("On the tracker", "Sur le tracker") : say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
   const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language, row.rating ? `★ ${row.rating}` : ""].filter(Boolean);
   copy.append(element("p", facts.join(" · "), "media-feature-meta"));
   if (media.layout === "horizon" && typeof mediaFlags === "function") {
@@ -173,6 +173,19 @@ function mediaRenderFeature() {
   if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
   const actions = element("div", undefined, "media-feature-actions");
+  if (row.tracker) {
+    // A film on c411, not in the library: its best release, and a way to queue it.
+    copy.append(mediaTrackerRelease(row.tracker));
+    const queue = button(say("Add to download queue", "Ajouter à la file de téléchargement"), () => guard(async () => {
+      queue.disabled = true;
+      try {
+        const result = await api(`media/tracker/${encodeURIComponent(row.tracker.hash)}/enqueue`, {});
+        toast(result.queued ? say("Added to the download queue.", "Ajouté à la file de téléchargement.") : say("Already in the download queue.", "Déjà dans la file de téléchargement."));
+      } finally { queue.disabled = false; }
+    }), "media-primary");
+    actions.append(queue); copy.append(actions); root.append(copy);
+    return;
+  }
   const play = mediaCanPreview(row) ? mediaPreviewAction(row, "media-primary") : button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false && !mediaCanPreview(row);
   actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"));
   copy.append(actions);
@@ -193,6 +206,24 @@ function mediaRenderFeature() {
   if (mediaHorizon("showcase") && media.next && !media.loadingMore && media.rows.findIndex(item => item.id === row.id) >= media.rows.length - 8) {
     media.loadingMore = true; guard(() => loadMedia(true)).finally(() => { media.loadingMore = false; });
   }
+}
+// "2 days ago", from a Unix time in seconds; empty when c411 gave no date.
+function mediaAge(seconds) {
+  if (!seconds) return "";
+  const days = (seconds * 1000 - Date.now()) / 86400000, format = new Intl.RelativeTimeFormat(language === "fr" ? "fr" : "en", {numeric: "auto"});
+  if (days > -1) return format.format(Math.round(days * 24), "hour");
+  if (days > -30) return format.format(Math.round(days), "day");
+  if (days > -365) return format.format(Math.round(days / 30.4), "month");
+  return format.format(Math.round(days / 365), "year");
+}
+function mediaTrackerRelease(release) {
+  const box = element("div", undefined, "media-tracker-release");
+  const pill = element("span", String(release.score), `media-score score-${release.color || "green"}`);
+  pill.title = "ReleaseScore";
+  const size = release.size >= 1e9 ? `${(release.size / 1e9).toFixed(1)} ${say("GB", "Go")}` : `${Math.round(release.size / 1e6)} ${say("MB", "Mo")}`;
+  box.append(pill, element("span", release.name, "media-tracker-name"), element("span", [size, say(`${release.seeders} seeders`, `${release.seeders} sources`), mediaAge(release.published_at)].filter(Boolean).join(" · "), "media-tracker-facts"));
+  if (release.own_score !== undefined) box.append(element("span", say(`Your file scores ${release.own_score}`, `Votre fichier obtient ${release.own_score}`), "media-tracker-facts"));
+  return box;
 }
 function mediaRenderContinue() {
   const root = $("media-continue-items"); root.replaceChildren();
@@ -219,7 +250,7 @@ function mediaHomeActive() {
   return media.kind === "video" && ["recent", "films", "series", "anime", "adult"].includes(media.view) && !media.gridMode && (media.layout === "cinematic" || mediaHorizon("home")) && !$("media-search").value.trim()
     && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);
 }
-const mediaRowTitle = row => row.key === "genre" ? row.title : ({recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")})[row.key] || row.title;
+const mediaRowTitle = row => row.key === "genre" ? row.title : ({recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus"), tracker: say("Available on the tracker", "Disponible sur le tracker"), upgrades: say("Better versions on the tracker", "Meilleures versions sur le tracker")})[row.key] || row.title;
 const mediaRowKey = row => `${row.key}:${row.title}`;
 // Horizon's Home shows one category at a time, chosen from its title.
 const mediaHorizonRow = () => media.homeRows.find(row => mediaRowKey(row) === media.horizonRow) || media.homeRows[0];
@@ -251,7 +282,8 @@ function mediaRenderHome() {
         root.querySelector(".media-row-category")?.focus();
       };
     }
-    header.append(heading, element("span", say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward, all);
+    header.append(heading, element("span", say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward);
+    if (!row.filters?.tracker) header.append(all);
     for (const item of row.rows) track.append(mediaRowCard(item, row, track));
     section.append(header, track); root.append(section);
     if (horizon) requestAnimationFrame(() => track.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center"}));
@@ -275,7 +307,7 @@ function mediaRowCard(item, row, track) {
   }, "media-row-card");
   card.dataset.id = item.id;
   card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
-  card.ondblclick = () => guard(() => mediaStart([item.id]));
+  if (!item.tracker) card.ondblclick = () => guard(() => mediaStart([item.id]));
   card.append(mediaArt(item), element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
   return card;
 }

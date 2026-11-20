@@ -74,13 +74,13 @@ def main():
                     nav.locator("#language").select_option("en")
                     nav.locator("#theme").select_option("dark")
                     panel = page.frame_locator("#settings-frame")
-                    expect(panel.locator("#settings-navigation button")).to_have_count(11)
+                    expect(panel.locator("#settings-navigation button")).to_have_count(12)
                     for section in (
                         "Connections",
                         "Clients",
                         "Download Folders",
                         "Client Paths",
-                        "Search & Matching",
+                        "ReleaseScore",
                     ):
                         panel.get_by_role("button", name=section, exact=True).click()
                         expect(panel.locator(".settings-form")).to_be_visible()
@@ -95,9 +95,9 @@ def main():
                             "Clients": "settings-clients",
                             "Download Folders": "settings-downloads",
                             "Client Paths": "settings-paths",
-                            "Search & Matching": "settings-search",
+                            "ReleaseScore": "settings-search",
                         }[section]
-                        if section == "Search & Matching":
+                        if section == "ReleaseScore":
                             panel.locator(".settings-card").filter(
                                 has=panel.get_by_role("heading", name="ReleaseScore", exact=True)
                             ).screenshot(path=str(output / "settings-search.png"))

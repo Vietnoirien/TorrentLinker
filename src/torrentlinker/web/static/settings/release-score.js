@@ -25,6 +25,18 @@ function settingsReleaseScore(form) {
       data.active = profile.value;
       if (await save()) render();
     });
+  const threshold = field(
+    fields,
+    say("Media suggests releases from", "Médias propose les releases à partir de"),
+    data,
+    "threshold",
+    "number",
+  );
+  Object.assign(threshold, { min: 0, max: 100, step: 1, required: true });
+  threshold.title = say(
+    "Media's tracker rows show films whose best c411 release scores at least this much.",
+    "Les rangées du tracker dans Médias montrent les films dont la meilleure release c411 atteint ce score.",
+  );
   const edit = field(
     fields,
     say("Edit profile", "Modifier le profil"),

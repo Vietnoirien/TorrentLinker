@@ -46,7 +46,7 @@ Use the section’s **Save** button after editing. ReleaseScore has its own **Sa
 | Find existing files | Library Folders | The folder is readable by the app or server |
 | Choose where new files go | Download Folders | The destination is writable and belongs to the intended client |
 | Translate a host path into a Docker/NAS path | Client Paths | Both paths refer to the same files |
-| Tune video preferences and equipment | Search & Matching | Save ReleaseScore separately from matching settings |
+| Tune video preferences and equipment | ReleaseScore | Profiles, equipment and the score Media's tracker rows require |
 | Set seed hours, disk reserve and Zen assumptions | Zen | These are estimates used by Plans, not tracker account changes |
 | Set up a model for chat | Assistant | Test the selected provider before starting a conversation |
 | Pair the browser extension | Companion | The paired status appears after following the connection steps |

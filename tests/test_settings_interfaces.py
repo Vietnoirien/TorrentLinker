@@ -215,7 +215,7 @@ def test_desktop_release_score_editor_persists_custom_profile(qtbot, tmp_path):
         qtbot,
         view,
         "[...document.querySelectorAll('#settings-navigation button')].fin"
-        "d(b=>b.textContent==='Search & Matching').click()",
+        "d(b=>b.textContent==='ReleaseScore').click()",
     )
     wait_js(qtbot, view, "Boolean(document.querySelector('[aria-label=\"Edit profile\"]'))")
     js(

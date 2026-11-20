@@ -4,7 +4,7 @@ ReleaseScore compare les caractéristiques vidéo et audio d’une release avec 
 
 La couleur indique le respect du profil, indépendamment du nombre : vert si les critères sont respectés, jaune si un critère manque, gris si plusieurs manquent, rouge si le plafond de taille est dépassé. L’étoile désigne le meilleur résultat vert de la page. Ouvrez une fiche pour voir le calcul MediaInfo et son explication, quand le MediaInfo est disponible. Une note ne garantit ni la qualité subjective ni la compatibilité de lecture.
 
-Dans Paramètres → Recherche et correspondance, choisissez le profil actif, modifiez ou réinitialisez un profil intégré, créez, dupliquez, renommez ou supprimez vos profils. Le questionnaire d’équipement propose un profil appliqué uniquement sur votre demande. Les capacités Dolby Vision, AVI, AV1 et DTS influencent tous les profils. Les résultats et fiches ouverts sont recalculés localement. La notation Poussée reste prévue pour plus tard.
+Le champ **Médias propose les releases à partir de** fixe le score exigé par les rangées du tracker dans Médias (90 par défaut). Dans Paramètres → ReleaseScore, choisissez le profil actif, modifiez ou réinitialisez un profil intégré, créez, dupliquez, renommez ou supprimez vos profils. Le questionnaire d’équipement propose un profil appliqué uniquement sur votre demande. Les capacités Dolby Vision, AVI, AV1 et DTS influencent tous les profils. Les résultats et fiches ouverts sont recalculés localement. La notation Poussée reste prévue pour plus tard.
 
 ## Crédits et licence
 

@@ -4,6 +4,13 @@ import base64
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
+def tracker_hash(value: str) -> str:
+    value = value.lower()
+    if len(value) != 40 or any(ch not in "0123456789abcdef" for ch in value):
+        raise ValueError("Unknown tracker release")
+    return value
+
+
 class MediaBrowserService:
     def __init__(self, agent):
         self.agent = agent
@@ -81,6 +88,13 @@ class MediaBrowserService:
                 return {"ok": True}
             if len(parts) == 4 and parts[3] == "watched" and method == "POST":
                 return media.watched(client, identifier, bool(body["watched"]))
+        if (
+            len(parts) == 4
+            and parts[:2] == ["media", "tracker"]
+            and parts[3] == "enqueue"
+            and method == "POST"
+        ):
+            return media.tracker_enqueue(client, media.setup(client), tracker_hash(parts[2]))
         if parts == ["media", "playlists"] and method == "GET":
             return media.playlists(client)
         if parts == ["media", "playlists"] and method == "POST":

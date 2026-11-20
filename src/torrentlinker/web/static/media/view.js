@@ -6,7 +6,7 @@ const mediaToggleChat=async()=>{await mediaSelectionChanged(media.selected);retu
 function mediaSelectionChanged(row){
   return guard(async()=>{
     await host("context",{kind:media.kind,view:media.view,q:$("media-search").value,...Object.fromEntries(["genre","year","language","availability"].map(key=>[key,$(`media-${key}`).value]))});
-    await host("selection",{selected_ids:row?[row.id]:[]});
+    await host("selection",{selected_ids:row&&!row.tracker?[row.id]:[]}); // a tracker film is not in the library
   });
 }
 async function mediaKind(kind){

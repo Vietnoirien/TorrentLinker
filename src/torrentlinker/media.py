@@ -20,6 +20,7 @@ from guessit import guessit
 
 from torrentlinker import media_tracks
 from torrentlinker.domain import ContentKind
+from torrentlinker.media_tracker import TrackerRows
 
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
 AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wma", ".wv"}
@@ -119,7 +120,7 @@ class UnfinishedMedia(ValueError):
     """A registered file belongs to a download or verification still in progress."""
 
 
-class MediaLibrary:
+class MediaLibrary(TrackerRows):
     def __init__(self, agent):
         self.agent = agent
         self.lock = threading.RLock()
@@ -441,6 +442,8 @@ class MediaLibrary:
         details = self.enrich(client_id, setup, stop, progress, target.observed)
         if stop.is_set():
             return {"cancelled": True}
+        if details not in {"limit", "rejected"}:
+            self.tracker_refresh(client_id, setup, stop)
         if details in {"limit", "unavailable", "rejected"}:
             # The library is complete; the remaining descriptions come with a later refresh.
             note = {
@@ -1164,6 +1167,9 @@ class MediaLibrary:
             add("recent", "", view="recent")
         else:
             add("recent", "", view=base, **apart)
+        if scope in {"home", "films"} and kind == "video":
+            # Films on c411 whose best release scores well, from cached lookups.
+            rows.extend(self.tracker_rows(client_id, self.setup(client_id)))
         # Libraries hold far fewer series than films.
         genre_rows(base, least=2 if base == "series" else 3, **apart)
         if scope == "home":
@@ -1227,6 +1233,8 @@ class MediaLibrary:
         return "asset:" + key
 
     def artwork(self, client_id, identifier):
+        if identifier.startswith("tracker-"):
+            return self.tracker_artwork(client_id, identifier[8:])
         row = self.record(client_id, identifier)
         image = json.loads(row["body"]).get("artwork")
         if not image:
