@@ -7,6 +7,7 @@ no browser session, arbitrary URL, filesystem or general API is exposed to JS.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import QFileDialog, QVBoxLayout, QWidget
 from torrentlinker import i18n
 from torrentlinker.community import message_library
 from torrentlinker.profile_workspace import ProfileWorkspace
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -184,12 +187,20 @@ class BundledView(QWidget):
                     and url.isLocalFile()
                     and Path(url.toLocalFile()).resolve() == assets.parent / "media.css"
                 )
+                if not allowed:
+                    # A blocked page or script leaves the view blank: say which one.
+                    log.warning("%s view blocked %s", self_view.channel_name, url.toString()[:200])
                 info.block(not allowed)
 
         channel_name = self.channel_name
         host_view = self
 
         class LocalPage(QWebEnginePage):
+            def javaScriptConsoleMessage(self, level, message, line, source):
+                if level == QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel:
+                    name = source.rsplit("/", 2)[-2:]
+                    log.warning("%s view: %s (%s:%s)", channel_name, message, "/".join(name), line)
+
             def createWindow(self, window_type):
                 if channel_name != "upload":
                     return None
@@ -262,6 +273,12 @@ class BundledView(QWidget):
         self.channel.registerObject(self.channel_name, self.bridge)
         page.setWebChannel(self.channel)
         self.web.loadFinished.connect(self.refresh)
+        self.web.loadFinished.connect(self._load_failed)
+        page.renderProcessTerminated.connect(
+            lambda status, code: log.warning(
+                "%s view lost its render process: %s (%s)", self.channel_name, status, code
+            )
+        )
         self._layout.addWidget(self.web)
         self.web.setUrl(QUrl.fromLocalFile(str(assets / "view.html")))
 
@@ -280,6 +297,10 @@ class BundledView(QWidget):
         if self.web is None:
             self._load_view()
         self.refresh()
+
+    def _load_failed(self, ok: bool) -> None:
+        if not ok:
+            log.warning("%s view failed to load", self.channel_name)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         # pytest and shutdown can stop the event loop before deferred widget
