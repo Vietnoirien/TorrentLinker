@@ -828,6 +828,10 @@ textarea {
   gap: 20px;
 }
 .prep-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--panel);
   border-top: 1px solid var(--line);
   display: flex;
   justify-content: space-between;

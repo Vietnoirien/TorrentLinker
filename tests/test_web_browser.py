@@ -540,7 +540,8 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
         thread.join(timeout=10)
 
 
-def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch, qapp):
+@pytest.mark.parametrize("viewport", [(1000, 780), (1280, 600), (390, 844)])
+def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch, qapp, viewport):
     import httpx
     import uvicorn
     from fastapi.testclient import TestClient
@@ -622,7 +623,9 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             time.sleep(0.02)
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            page = browser.new_page(viewport={"width": 1000, "height": 780}, locale="en-US")
+            page = browser.new_page(
+                viewport={"width": viewport[0], "height": viewport[1]}, locale="en-US"
+            )
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(f"http://127.0.0.1:{port}/")
@@ -633,9 +636,11 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             upload = page.frame_locator("#upload-frame")
             upload.locator("[data-tab=drafts]").click()
             expect(upload.locator(".item")).to_contain_text("Cable.Holder.NOTAG.STL")
-            upload.locator(".item").first.click()
+            upload.locator(".item").first.focus()
+            upload.locator(".item").first.press("Enter")
             upload.locator("[data-action=edit]").click()
-            upload.locator("[data-action=drawer-close]").click()
+            if upload.locator("[data-action=drawer-close]").is_visible():
+                upload.locator("[data-action=drawer-close]").click()
             upload.locator("[data-step='4']").click()
             expect(upload.locator(".editor pre").first).to_contain_text("A small cable holder")
             expect(upload.locator("#reviewed")).to_be_disabled()
@@ -664,6 +669,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             expect(upload.locator("#prep-description-preview")).to_contain_text(
                 "Reviewed cable holder description"
             )
+            expect(upload.locator("[data-prep=save]")).to_be_in_viewport()
             upload.locator("[data-prep=save]").click()
             expect(upload.locator("#prep-status")).to_contain_text("Saved")
             upload.locator("[data-prep=close]").last.click()

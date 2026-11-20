@@ -390,6 +390,7 @@ async function act(action) {
     }
   }
   if (action === "edit") {
+    drawer = false;
     tab = i.tracking ? "tracking" : "drafts";
     step = i.stage || 1;
     if (!i.sent)
