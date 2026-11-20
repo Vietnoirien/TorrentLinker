@@ -1,6 +1,7 @@
-"""Media's tracker rows: well scored c411 films, apart from the library and as upgrades."""
+"""Media's tracker rows: c411's latest films, and better versions of library films."""
 
 import contextlib
+import json
 import threading
 from types import SimpleNamespace
 
@@ -24,37 +25,37 @@ class FakeIndexer:
 
 
 class FakeStore:
-    def __init__(self, titles):
+    """The Catalogue: every release's name and size, no runtime."""
+
+    def __init__(self, rows=()):
         self.rows = [
-            CatalogueRow(f"{n:040x}", title, 20 * GB, 100 - n, 2030, "", "", 0.0, "indexer", 1)
-            for n, title in enumerate(titles)
+            CatalogueRow(f"{n:040x}", name, size, 30, 2030, "", "", 0.0, "indexer", 1)
+            for n, (name, size) in enumerate(rows)
         ]
 
-    def catalogue_films(self, limit=3000, least_seeders=5):
-        return self.rows
+    def catalogue_titled(self, words, limit=200):
+        return [r for r in self.rows if all(w in r.title.lower() for w in words)][:limit]
 
 
-def listing_page(title, year, *, size=20 * GB, resolution="2160p"):
-    """One c411 release of the film, with the facts ReleaseScore needs."""
-    h = format(abs(hash((title, year))), "040x")[-40:]
-    release = f"{title.replace(' ', '.')}.{year}.MULTi.{resolution}.BluRay.x265-TEAM"
-    return SimpleNamespace(
-        rows=[
-            Candidate(release, size, "https://c411.org/dl", 50, h, "", (2030,), published_at=1.7e9)
-        ],
-        details={
-            h: ListingRow(
+def latest_page(*films, page=1, more=False):
+    """A c411 listing page: each film's releases, with the facts ReleaseScore needs."""
+    rows, details = [], {}
+    for n, (title, year, releases) in enumerate(films):
+        for m, (name, size) in enumerate(releases):
+            h = f"{page:02d}{n:02d}{m:02d}".ljust(40, "a")
+            rows.append(
+                Candidate(name, size, "", 50 - m, h, "", (2030,), published_at=1.7e9 + n * 3600)
+            )
+            details[h] = ListingRow(
                 title=title,
                 year=year,
                 kind="movie",
                 runtime=120,
-                tags=(("resolution", resolution), ("codec", "x265"), ("source", "BluRay")),
                 genres=("Drame",),
                 overview="Un film.",
                 poster_url="https://image.tmdb.org/t/p/w500/poster.jpg",
             )
-        },
-    )
+    return SimpleNamespace(rows=rows, details=details, has_more=more)
 
 
 @pytest.fixture
@@ -76,99 +77,123 @@ def library(tmp_path):
     )
     media = app.state.assistant.agent.media
     media.scan("default", threading.Event(), lambda _p: None)
+    with media.lock, media.db:
+        # The scan read no real video: give the film the duration a real file reports.
+        row = media.db.execute("SELECT id, body FROM media_items").fetchone()
+        body = json.loads(row["body"]) | {"duration": 156 * 60}
+        media.db.execute(
+            "UPDATE media_items SET body=?, size=? WHERE id=?",
+            (json.dumps(body), int(1.2 * GB), row["id"]),
+        )
+        # The scan's own refresh found nothing to ask; let the tests refresh now.
+        media.db.execute("DELETE FROM media_options WHERE key LIKE 'tracker%'")
     return media
 
 
-def setup_with(store, threshold=0, folder=None):
+def setup_with(store=None, threshold=0, folder=None, profile="HDLight 1080p"):
     from torrentlinker.config import Settings
 
     settings = Settings()
-    settings.release_score = {"threshold": threshold}
+    settings.release_score = {"threshold": threshold, "active": profile}
     return SimpleNamespace(
         settings=settings,
-        store=store,
+        store=store or FakeStore(),
         indexer=FakeIndexer,
         download_folder=lambda category: folder,
         verified_download_folder=lambda category: folder,
     )
 
 
-def test_tracker_rows_split_new_films_from_better_versions_of_library_films(library, monkeypatch):
-    calls = []
+OPPENHEIMER = (
+    "Oppenheimer",
+    2023,
+    [
+        ("Oppenheimer.2023.MULTi.2160p.BluRay.x265-TEAM", 40 * GB),
+        ("Oppenheimer.2023.MULTi.1080p.WEB.x264-TEAM", 4 * GB),
+    ],
+)
+REVENANT_RELEASES = [
+    ("The.Revenant.2015.MULTi.1080p.WEB.x264-TEAM", 4 * GB),
+    ("The.Revenant.2015.MULTi.2160p.BluRay.x265-TEAM", 40 * GB),
+]
+
+
+def test_latest_films_and_better_versions_use_two_requests_and_the_catalogue(library, monkeypatch):
+    pages = []
 
     def search(indexer, params, page=1):
-        calls.append(params["name"])
-        return listing_page(params["name"], int(params["year"]))
+        pages.append((params, page))
+        latest = [OPPENHEIMER, ("The Revenant", 2015, [REVENANT_RELEASES[0]])]
+        return latest_page(*latest, page=page, more=True)
 
     monkeypatch.setattr("torrentlinker.torrent_search.native_search", search)
-    setup = setup_with(FakeStore(["Oppenheimer.2023.MULTi.2160p.WEB.x265-TEAM"]))
+    setup = setup_with(FakeStore(REVENANT_RELEASES))
     assert library.tracker_refresh("default", setup, threading.Event()) == "complete"
-    # The library's own film is looked up first, then the Catalogue's.
-    assert calls == ["The Revenant", "Oppenheimer"]
-    rows = {row["key"]: row for row in library.tracker_rows("default", setup)}
+    # Two listing pages of the latest films; the library's films cost no request.
+    assert [page for _, page in pages] == [1, 2]
+    assert pages[0][0]["sortBy"] == "createdAt" and pages[0][0]["category"] == "1"
+    rows = library.tracker_rows("default", setup)
+    # A film the library holds is never "available"; it can only be a better version.
     assert [item["title"] for item in rows["tracker"]["rows"]] == ["Oppenheimer"]
+    assert rows["tracker"]["rows"][0]["tracker"]["published_at"]
     upgrade = rows["upgrades"]["rows"][0]
     assert upgrade["title"] == "The Revenant"
-    assert upgrade["tracker"]["score"] > upgrade["tracker"]["own_score"]
-    assert upgrade["id"].startswith("tracker-") and upgrade["artwork_url"]
-    assert upgrade["tracker"]["published_at"] == 1.7e9
-    # A refresh within ten minutes looks nothing up again.
+    assert upgrade["tracker"]["score"] >= upgrade["tracker"]["own_score"] + 5
+    # A refresh within ten minutes asks nothing.
     assert library.tracker_refresh("default", setup, threading.Event()) == "waiting"
-    assert len(calls) == 2
-    # The threshold, from ReleaseScore's settings, hides releases below it.
-    assert library.tracker_rows("default", setup_with(setup.store, threshold=100)) == []
+    assert len(pages) == 2
 
 
-def test_tracker_refresh_looks_up_twenty_films_and_stops_when_c411_asks_to_wait(
-    library, monkeypatch
-):
-    titles = [f"Film.Numero.{n:02d}.{1980 + n}.1080p.WEB.x264-TEAM" for n in range(30)]
-    calls = []
+def test_changing_the_profile_or_threshold_changes_the_suggestions_at_once(library, monkeypatch):
+    monkeypatch.setattr(
+        "torrentlinker.torrent_search.native_search",
+        lambda indexer, params, page=1: latest_page(OPPENHEIMER),
+    )
+    library.tracker_refresh("default", setup_with(), threading.Event())
 
-    def search(indexer, params, page=1):
-        calls.append(params["name"])
-        return listing_page(params["name"], int(params["year"]))
+    def best(**options):
+        rows = library.tracker_rows("default", setup_with(**options))
+        return rows["tracker"]["rows"][0]["tracker"]["name"] if "tracker" in rows else None
 
-    monkeypatch.setattr("torrentlinker.torrent_search.native_search", search)
-    setup = setup_with(FakeStore(titles))
-    library.tracker_refresh("default", setup, threading.Event())
-    assert len(calls) == 20
+    assert best(profile="HDLight 1080p") == "Oppenheimer.2023.MULTi.1080p.WEB.x264-TEAM"
+    assert best(profile="Qualité maximale") == "Oppenheimer.2023.MULTi.2160p.BluRay.x265-TEAM"
+    assert best(threshold=100) is None
 
+
+def test_better_versions_are_found_when_c411_asks_to_wait(library, monkeypatch):
     def limited(indexer, params, page=1):
         raise RateLimited(60)
 
     monkeypatch.setattr("torrentlinker.torrent_search.native_search", limited)
-    monkeypatch.setattr("torrentlinker.media_tracker.RUN_INTERVAL", 0)
+    setup = setup_with(FakeStore(REVENANT_RELEASES))
     assert library.tracker_refresh("default", setup, threading.Event()) == "limit"
-    # What was found before stays suggested.
-    assert library.tracker_rows("default", setup)
+    rows = library.tracker_rows("default", setup)
+    assert "tracker" not in rows and rows["upgrades"]["rows"][0]["title"] == "The Revenant"
 
 
 def test_queueing_a_tracker_film_needs_its_download_folder(library, monkeypatch, tmp_path):
     monkeypatch.setattr(
         "torrentlinker.torrent_search.native_search",
-        lambda indexer, params, page=1: listing_page(params["name"], int(params["year"])),
+        lambda indexer, params, page=1: latest_page(OPPENHEIMER),
     )
-    store = FakeStore(["Oppenheimer.2023.MULTi.2160p.WEB.x265-TEAM"])
-    library.tracker_refresh("default", setup_with(store), threading.Event())
-    item = next(
-        row for row in library.tracker_rows("default", setup_with(store)) if row["key"] == "tracker"
-    )["rows"][0]
+    library.tracker_refresh("default", setup_with(), threading.Event())
+    item = library.tracker_rows("default", setup_with())["tracker"]["rows"][0]
     infohash = item["tracker"]["hash"]
     with pytest.raises(ValueError, match="Download Folder"):
-        library.tracker_enqueue("default", setup_with(store), infohash)
+        library.tracker_enqueue("default", setup_with(), infohash)
     queued = []
     monkeypatch.setattr(
         "torrentlinker.download_queue.enqueue",
         lambda store, indexer, candidate, folder: queued.append((candidate, folder)) or True,
     )
-    result = library.tracker_enqueue("default", setup_with(store, folder=tmp_path), infohash)
+    result = library.tracker_enqueue("default", setup_with(folder=tmp_path), infohash)
     assert result["queued"] and queued[0][0].infohash == infohash and queued[0][1] == tmp_path
+    assert queued[0][0].title == item["tracker"]["name"]
     with pytest.raises(ValueError, match="no longer suggested"):
-        library.tracker_enqueue("default", setup_with(store, folder=tmp_path), "0" * 40)
+        library.tracker_enqueue("default", setup_with(folder=tmp_path), "0" * 40)
 
 
-def test_desktop_media_service_queues_a_tracker_release_by_its_hash(monkeypatch):
+def test_desktop_media_service_queues_a_tracker_release_by_its_hash():
     from torrentlinker.media_browser import MediaBrowserService
 
     calls = []
@@ -180,8 +205,7 @@ def test_desktop_media_service_queues_a_tracker_release_by_its_hash(monkeypatch)
         media=media, setup=SimpleNamespace(settings=SimpleNamespace(default_client_id="default"))
     )
     service = MediaBrowserService(agent)
-    infohash = "A" * 40
-    assert service.request(f"media/tracker/{infohash}/enqueue", {}, "POST") == {"ok": 1}
+    assert service.request(f"media/tracker/{'A' * 40}/enqueue", {}, "POST") == {"ok": 1}
     assert calls == [("default", "setup", "a" * 40)]
     with pytest.raises(ValueError, match="Unknown tracker release"):
         service.request("media/tracker/../enqueue", {}, "POST")

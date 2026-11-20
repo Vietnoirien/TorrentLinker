@@ -1167,15 +1167,23 @@ class MediaLibrary(TrackerRows):
             add("recent", "", view="recent")
         else:
             add("recent", "", view=base, **apart)
-        if scope in {"home", "films"} and kind == "video":
-            # Films on c411 whose best release scores well, from cached lookups.
-            rows.extend(self.tracker_rows(client_id, self.setup(client_id)))
+        # Films on c411 whose release scores well: the newest right after the library's,
+        # better versions of library films last.
+        tracker = (
+            self.tracker_rows(client_id, self.setup(client_id))
+            if scope in {"home", "films"} and kind == "video"
+            else {}
+        )
+        if "tracker" in tracker:
+            rows.append(tracker["tracker"])
         # Libraries hold far fewer series than films.
         genre_rows(base, least=2 if base == "series" else 3, **apart)
         if scope == "home":
             add("series", "", view="series")
             add("rated", "", view="rated")
             add("unwatched", "", view="unwatched")
+        if "upgrades" in tracker:
+            rows.append(tracker["upgrades"])
         return {"rows": rows}
 
     def detail(self, client_id, identifier, *, episodes_offset=0, releases_offset=0, limit=200):
