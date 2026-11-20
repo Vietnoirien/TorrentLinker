@@ -217,6 +217,7 @@ def test_incomplete_torrent_paths_are_mapped_before_playback_check(tmp_path):
         ]
         item = browser.get("/api/media?client_id=default").json()["rows"][0]
         assert item["available"] is False
+        assert item["availability"] == "unfinished"
         assert (
             browser.get(f"/api/media/items/{item['id']}/stream?client_id=default").status_code
             == 409

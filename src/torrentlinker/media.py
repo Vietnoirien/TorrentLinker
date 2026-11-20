@@ -115,6 +115,10 @@ def bounded_number(value, maximum=8640000):
     return number
 
 
+class UnfinishedMedia(ValueError):
+    """A registered file belongs to a download or verification still in progress."""
+
+
 class MediaLibrary:
     def __init__(self, agent):
         self.agent = agent
@@ -183,12 +187,12 @@ class MediaLibrary:
         row = self.record(client_id, identifier)
         body = json.loads(row["body"])
         if body.get("incomplete"):
-            raise ValueError("This file is still downloading or awaiting Verification.")
+            raise UnfinishedMedia("This file is still downloading or awaiting Verification.")
         path = self.checked_path(client_id, row["path"], row["folder"])
         if not path.is_file() or path.stat().st_size != row["size"] or row["size"] <= 0:
             raise ValueError("This file is missing or has changed. Refresh the media library.")
         if any(path.is_relative_to(p) for p in self.incomplete_paths(client_id)):
-            raise ValueError("This file is still downloading or awaiting Verification.")
+            raise UnfinishedMedia("This file is still downloading or awaiting Verification.")
         return path
 
     def incomplete_paths(self, client_id):
@@ -916,7 +920,9 @@ class MediaLibrary:
             # Do not expose paths, which low-level filesystem exceptions can contain.
             public.update(
                 available=False,
-                availability="unfinished" if body.get("incomplete") else "unavailable",
+                availability="unfinished"
+                if body.get("incomplete") or isinstance(error, UnfinishedMedia)
+                else "unavailable",
                 reason=reason
                 if isinstance(error, ValueError)
                 and not isinstance(error, OSError)
