@@ -271,6 +271,7 @@ async function mediaSeeAll(filters) {
 }
 function mediaRender() {
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout; $("view-media").dataset.horizon = media.horizon;
+  $("media-layout-switch").value = media.layout; // the saved layout, also when the view loads
   $("media-horizon-control").hidden = media.layout !== "horizon"; $("media-horizon-switch").value = media.horizon;
   // Horizon is a cinema skin: dark whatever the app's theme, like Kodi's.
   document.documentElement.dataset.theme = media.layout === "horizon" ? "dark" : environment.theme || "dark";

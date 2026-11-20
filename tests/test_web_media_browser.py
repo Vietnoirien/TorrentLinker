@@ -627,6 +627,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             shell_navigate(page, "media")
             expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", "horizon")
             expect(media_locator(page, "#view-media")).to_have_attribute("data-horizon", "wall")
+            expect(media_locator(page, "#media-layout-switch")).to_have_value("horizon")
             # In the Wall, a poster selects its title into the band instead of opening details.
             poster = media_locator(page, "#media-results .media-poster-button").first
             poster.click()

@@ -200,6 +200,7 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   color:#eef3f6;
   font-variant-numeric:tabular-nums}
 #view-media[data-layout="horizon"][data-kind="video"] .media-topbar {
+  z-index:5; /* its Options panel opens over the Wall's band */
   background:linear-gradient(#05080bd9,transparent)}
 #view-media[data-layout="horizon"][data-kind="video"] .media-browse-nav {
   gap:clamp(14px,2.6vw,38px)}
