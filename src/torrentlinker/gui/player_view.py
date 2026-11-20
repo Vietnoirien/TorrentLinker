@@ -38,8 +38,19 @@ class PlayerBridge(ViewBridge):
                 value = None
             elif path == "layout":
                 self.view.menu_open = bool(body.get("menu_open"))
-                self.view.setFixedHeight(max(72, min(380, int(body["height"]))))
+                # Horizon's pause screen covers the picture; the page never asks for more.
+                self.view.setFixedHeight(max(72, min(2000, int(body["height"]))))
                 value = None
+            elif path == "artwork":
+                current = self.view.snapshot()
+                if body.get("media_id") != current.get("media_id") or not current.get("item"):
+                    raise ValueError("Player source changed.")
+                self.view.artwork(
+                    current["media_id"],
+                    lambda value: self._respond(identifier, {"data": value}),
+                    lambda error: self._respond(identifier, {"error": str(error)}),
+                )
+                return
             elif path == "command":
                 current = self.view.snapshot()
                 for key in ("client_id", "media_id", "source_token"):
@@ -84,13 +95,18 @@ class PlayerBridge(ViewBridge):
         except (ValueError, TypeError, KeyError, OverflowError, OSError) as error:
             self.response.emit(identifier, json.dumps({"error": str(error)}))
 
+    def _respond(self, identifier: int, result: dict) -> None:
+        if isValid(self):
+            self.response.emit(identifier, json.dumps(result))
+
 
 class PlayerView(BundledView):
     interacted = Signal()
 
-    def __init__(self, snapshot, command):
+    def __init__(self, snapshot, command, artwork=None):
         self.snapshot = snapshot
         self.command = command
+        self.artwork = artwork  # Horizon's bar shows the poster
         self.menu_open = False
         self.keyboard_focus = False
         self.connected = False
@@ -147,7 +163,8 @@ class PlayerDetailsBridge(ViewBridge):
             if not isinstance(body, dict):
                 raise ValueError("Invalid details operation.")
             if path == "layout":
-                self.view.setFixedHeight(max(0, min(600, int(body["height"]))))
+                self.view.wanted = max(0, int(body["height"]))
+                self.view.setFixedHeight(min(self.view.wanted, self.view.max_height))
                 self.view.height_changed.emit()
             elif path == "artwork":
                 current = self.view.snapshot()
@@ -189,6 +206,8 @@ class PlayerDetailsView(BundledView):
         self.command = command
         self.artwork = artwork
         self.published = ""
+        self.wanted = 200  # the page's own height
+        self.max_height = 600  # the host keeps the picture first; beyond this the page scrolls
         super().__init__(
             PlayerDetailsBridge(self),
             Path(__file__).parents[1] / "web" / "static" / "player-details",

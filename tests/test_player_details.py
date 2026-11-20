@@ -81,4 +81,19 @@ def test_desktop_video_shows_its_details_under_the_picture(qtbot, tmp_path, requ
     if screenshot := os.getenv("TL_PLAYER_DETAILS_SCREENSHOT"):
         qtbot.wait(300)
         tab.grab().save(screenshot)
+    # Horizon moves the details onto the picture: a bar while playing, a panel on pause.
+    tab.set_media_layout("horizon")
+    assert not tab.player_heading.isVisible()
+    controls = tab.video_controls
+    wait_js(qtbot, controls, "document.body.dataset.skin==='horizon'")
+    wait_js(
+        qtbot, controls, "document.querySelector('#horizon-title').textContent==='Validation Film'"
+    )
+    wait_js(qtbot, controls, "document.querySelector('#horizon-poster img')?.naturalWidth===200")
+    tab.toggle_pause()
+    wait_js(qtbot, controls, "!document.querySelector('#horizon-pause').hidden")
+    assert "MULTI" in js(qtbot, controls, "document.querySelector('#horizon-pause').innerText")
+    tab.set_media_layout("cinematic")
+    assert tab.player_heading.isVisible()
+    wait_js(qtbot, controls, "document.body.dataset.skin===''")
     tab.stop()

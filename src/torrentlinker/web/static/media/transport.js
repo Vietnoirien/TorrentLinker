@@ -13,7 +13,7 @@ const navigate=()=>host("settings");
 function rememberTab(){}
 const mediaViewsByKind={video:["recent","continue","films","series","anime","rated","unwatched","all"],music:["albums","artists","tracks"]};
 const prefs=new Map();
-window.mediaHostPreferences={getItem:key=>prefs.get(key),setItem:(key,value)=>{prefs.set(key,value);if(panelRequest)guard(()=>panelRequest("preferences",{layout:value}))}};
+window.mediaHostPreferences={getItem:key=>prefs.get(key),setItem:(key,value)=>{prefs.set(key,value);if(panelRequest)guard(()=>panelRequest("preferences",key==="tl-media-horizon"?{horizon:value}:{layout:value}))}};
 const artCache=new Map();
 const artPending=[];let artActive=0;
 function mediaImage(image,row){

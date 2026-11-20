@@ -188,3 +188,145 @@ body[data-kind="video"] .transport button {
     font-size: 11px;
   }
 }
+
+/* Horizon, inspired by Kodi's Aeon Nox: a frosted bar names what is playing; on pause the
+   film's details cover the picture above it. */
+#horizon-osd,
+#horizon-pause {
+  display: none;
+}
+body[data-skin="horizon"] {
+  display: flex;
+  flex-direction: column;
+}
+body[data-skin="horizon"] #horizon-osd:not([hidden]) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 6px;
+}
+body[data-skin="horizon"] #player-controls {
+  margin: auto 18px 16px;
+  padding: 14px 18px 8px;
+  border: 1px solid #ffffff1f;
+  border-radius: 10px;
+  background: #0d151cc7;
+  backdrop-filter: blur(14px);
+}
+#horizon-poster {
+  position: relative;
+  width: 70px;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #2a4a4d, #0d151c);
+  box-shadow: 0 8px 24px #000a;
+}
+#horizon-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+#horizon-poster span {
+  position: absolute;
+  inset: auto 6px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+#horizon-poster.has-art span {
+  display: none;
+}
+.horizon-copy {
+  min-width: 0;
+}
+.horizon-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin: 0 0 6px;
+}
+#horizon-title {
+  font-size: 20px;
+}
+.horizon-meta {
+  color: #a3b2bd;
+  font-size: 13px;
+}
+.horizon-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.horizon-flags li {
+  padding: 2px 6px;
+  border: 1px solid #ffffff2e;
+  border-radius: 4px;
+  background: #ffffff14;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.horizon-flags li.strong {
+  color: #05080b;
+  background: #80d6c5;
+  border-color: #80d6c5;
+}
+body[data-skin="horizon"] #horizon-pause:not([hidden]) {
+  display: block;
+  margin: 70px 40px 0;
+  width: min(560px, calc(100% - 80px));
+  padding: 22px 24px;
+  border: 1px solid #ffffff1f;
+  border-radius: 12px;
+  background: #0d151cc7;
+  backdrop-filter: blur(14px);
+  color: #eef3f6;
+}
+#horizon-pause h1 {
+  margin: 0 0 10px;
+  font-size: clamp(26px, 3.4vw, 48px);
+  font-weight: 900;
+  line-height: 0.98;
+  text-transform: uppercase;
+}
+#horizon-pause-plot {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #d3dde3;
+}
+#horizon-pause .horizon-flags {
+  margin: 10px 0 0;
+}
+.horizon-tag {
+  float: right;
+  margin: 0 0 0 12px;
+  padding: 4px 10px;
+  border: 1px solid #ffffff1f;
+  border-radius: 6px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #a3b2bd;
+}
+@media (max-width: 640px) {
+  body[data-skin="horizon"] #horizon-pause:not([hidden]) {
+    margin: 12px;
+    width: auto;
+    padding: 14px;
+  }
+  #horizon-poster {
+    display: none;
+  }
+  body[data-skin="horizon"] #horizon-osd:not([hidden]) {
+    grid-template-columns: 1fr;
+  }
+}

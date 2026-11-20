@@ -54,13 +54,14 @@ function chips(root, rows, kind) {
   root.replaceChildren(...buttons);
 }
 
+// Hosts number tracks and repeat their language; a chip keeps the words that tell them apart.
 function trackText(row, index, fallback) {
-  return [
-    row.label || `${fallback} ${index + 1}`,
-    row.language && row.language !== row.label ? row.language : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const parts = String(row.label || "")
+    .split(" · ")
+    .filter((part) => !/^(audio|subtitle|sous-titre|embedded subtitle|sous-titre intégré) \d+$/i.test(part))
+    .filter((part) => part.toLowerCase() !== String(row.language || "").toLowerCase());
+  const unique = parts.filter((part, i) => parts.findIndex((other) => other.toLowerCase() === part.toLowerCase()) === i);
+  return unique.join(" · ") || row.language || `${fallback} ${index + 1}`;
 }
 
 async function artwork(item) {
@@ -119,6 +120,8 @@ function render() {
   $("tagline").textContent = item.tagline || "";
   $("tagline").hidden = !item.tagline;
   $("plot").textContent = item.description || "";
+  $("plot").title = say("Show the whole plot", "Afficher tout le résumé");
+  $("plot").onclick = () => $("plot").classList.toggle("open");
   $("plot").hidden = !item.description;
   const people = [
     [say("Director", "Réalisation"), item.director],

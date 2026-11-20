@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="view.css" />
     <script defer src="../panel/i18n.js"></script>
     <script defer src="../panel/transport.js"></script>
+    <script defer src="../panel/media-flags.js"></script>
     <script defer src="view.js"></script>
   </head>
   <body>
@@ -52,7 +53,27 @@
       </details>
     </section>
     <p id="player-error" role="alert" hidden></p>
+    <!-- Horizon's pause screen: the film's details over the picture. -->
+    <section id="horizon-pause" hidden>
+      <p id="horizon-paused" class="horizon-tag"></p>
+      <h1 id="horizon-pause-title"></h1>
+      <p id="horizon-pause-meta" class="horizon-meta"></p>
+      <ul id="horizon-pause-flags" class="horizon-flags"></ul>
+      <p id="horizon-pause-plot"></p>
+      <p id="horizon-pause-people" class="horizon-meta"></p>
+    </section>
     <div id="player-controls">
+      <!-- Horizon's bar: what is playing, above the transport. -->
+      <div id="horizon-osd" hidden>
+        <div id="horizon-poster"><span id="horizon-poster-title"></span></div>
+        <div class="horizon-copy">
+          <p class="horizon-heading">
+            <strong id="horizon-title"></strong
+            ><span id="horizon-meta" class="horizon-meta"></span>
+          </p>
+          <ul id="horizon-flags" class="horizon-flags"></ul>
+        </div>
+      </div>
       <input
         id="player-seek"
         type="range"

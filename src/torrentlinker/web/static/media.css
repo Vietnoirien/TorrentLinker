@@ -275,6 +275,8 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 #media-player-shell[data-kind="video"] > .media-player-heading { display: none; }
 #player-details-frame { order: 2; display: block; width: 100%; height: 0; margin-top: 8px; border: 0; background: transparent; }
 #player-details-frame[hidden] { display: none; }
+/* Horizon shows the film's details on the picture itself, in its bar and pause screen. */
+.media-view:has(#view-media[data-layout="horizon"]) #player-details-frame { display: none; }
 #media-player-shell[data-kind="video"] > #media-preview-state, #media-player-shell[data-kind="video"] > #media-codec-error, #media-player-shell[data-kind="video"] > #media-track-request-error { order: 3; margin: 6px 14px 12px; }
 .media-view #media-player-shell[data-kind="video"] #media-video { border-radius: 10px 10px 0 0; object-fit: contain; max-height: 260px; }
 .media-view #media-player-shell[data-kind="video"].media-player-expanded { width: min(900px,calc(100vw - 260px)); }

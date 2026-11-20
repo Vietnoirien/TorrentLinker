@@ -55,6 +55,7 @@ function setMenu(open) {
   $("player-menu").hidden = !open;
   $("player-options").setAttribute("aria-expanded", String(open));
   if (open) $("player-menu-close").focus();
+  horizon(); // the menu replaces Horizon's pause details
 }
 function tracks(id, rows, selected, disabled, off = false) {
   const select = $(id);
@@ -258,6 +259,84 @@ function render() {
   $("player-playlist-load").disabled = $("player-playlist-delete").disabled =
     !playlists.options.length;
 }
+// Horizon: the playing film's facts in the bar, and its details over the picture on pause.
+let horizonPosterFor = "";
+function horizonFacts(item) {
+  const minutes = Math.round((Number(item.duration) || 0) / 60),
+    rating = Number(item.rating);
+  return [
+    item.year,
+    minutes
+      ? say(
+          `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`,
+          `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")}`,
+        )
+      : "",
+    item.genre,
+    rating > 0
+      ? `★ ${rating.toLocaleString(state.language === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 1 })}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+function horizonFlags(root, item) {
+  root.replaceChildren(
+    ...mediaFlags(item).map(([text, strong]) => {
+      const flag = document.createElement("li");
+      flag.textContent = text;
+      if (strong) flag.className = "strong";
+      return flag;
+    }),
+  );
+}
+function horizon() {
+  const item = state.item,
+    on = state.skin === "horizon" && state.kind !== "music" && !!item;
+  document.body.dataset.skin = on ? "horizon" : "";
+  $("horizon-osd").hidden = !on;
+  const paused = on && !state.playing && !!state.media_id && !menuOpen;
+  $("horizon-pause").hidden = !paused;
+  // Paused, the view covers the picture: details on top, the bar at the foot.
+  document.body.style.minHeight = paused
+    ? `${Math.max(180, state.available_height || 0)}px`
+    : "";
+  if (!on) return;
+  const facts = horizonFacts(item);
+  $("horizon-title").textContent = item.title || "";
+  $("horizon-meta").textContent = facts;
+  $("horizon-poster-title").textContent = item.title || "";
+  horizonFlags($("horizon-flags"), item);
+  $("horizon-paused").textContent = say("Paused", "En pause");
+  $("horizon-pause-title").textContent = item.title || "";
+  $("horizon-pause-meta").textContent = facts;
+  horizonFlags($("horizon-pause-flags"), item);
+  $("horizon-pause-plot").textContent = item.description || "";
+  $("horizon-pause-plot").hidden = !item.description;
+  $("horizon-pause-people").textContent = [
+    item.director ? `${say("Director", "Réalisation")} · ${item.director}` : "",
+    item.actors ? `${say("Starring", "Avec")} · ${item.actors}` : "",
+  ]
+    .filter(Boolean)
+    .join("  —  ");
+  const key = `${state.client_id}/${state.media_id}`;
+  if (horizonPosterFor === key) return;
+  horizonPosterFor = key;
+  const poster = $("horizon-poster");
+  poster.classList.remove("has-art");
+  poster.querySelector("img")?.remove();
+  if (!item.artwork) return;
+  request("artwork", { media_id: state.media_id })
+    .then((result) => {
+      if (horizonPosterFor !== key || !result?.data_url) return;
+      const image = document.createElement("img");
+      image.alt = "";
+      image.src = result.data_url;
+      poster.prepend(image);
+      poster.classList.add("has-art");
+    })
+    .catch(() => {});
+}
 window.addEventListener("player-environment", (event) => {
   if (
     state.source_token !== event.detail.source_token ||
@@ -268,6 +347,7 @@ window.addEventListener("player-environment", (event) => {
   }
   state = event.detail;
   render();
+  horizon();
 });
 window.addEventListener("message", (event) => {
   if (

@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from PySide6.QtCore import Signal, Slot
 from shiboken6 import isValid
 
-from torrentlinker.config import MEDIA_LAYOUTS
+from torrentlinker.config import MEDIA_HORIZON_VIEWS, MEDIA_LAYOUTS
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.media_browser import MediaBrowserService
@@ -46,6 +46,9 @@ class MediaBrowserBridge(ViewBridge):
                 if body.get("layout") in MEDIA_LAYOUTS:
                     self.panel.layout_value = body["layout"]
                     self.panel.hostRequested.emit("layout", {"layout": body["layout"]})
+                if body.get("horizon") in MEDIA_HORIZON_VIEWS:
+                    self.panel.horizon_value = body["horizon"]
+                    self.panel.hostRequested.emit("horizon", {"horizon": body["horizon"]})
                 self.response.emit(
                     identifier,
                     json.dumps(

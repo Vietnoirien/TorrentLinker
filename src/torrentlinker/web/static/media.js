@@ -38,6 +38,7 @@ function mediaSetLayout(value) {
   try { localStorage.setItem("tl-media-layout", media.layout); } catch {}
   $("view-media").dataset.layout = media.layout;
   if (typeof mediaRefreshView === "function") mediaRefreshView();
+  if (typeof mediaPlayerEnvironment === "function") mediaPlayerEnvironment(); // Horizon's player
 }
 // Horizon's view is chosen in Settings; like the layout, each browser keeps its own.
 function mediaSetHorizon(value) {

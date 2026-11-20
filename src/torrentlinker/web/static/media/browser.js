@@ -10,7 +10,12 @@ function mediaSetLayout(value) {
   mediaPreferences.setItem("tl-media-layout", media.layout);
   $("view-media").dataset.layout = media.layout;
   $("media-layout-switch").value = media.layout;
-  mediaRender();
+  guard(loadMedia); // Horizon's Home draws rows the other views do not
+}
+function mediaSetHorizon(value) {
+  media.horizon = mediaHorizonValue(value);
+  mediaPreferences.setItem("tl-media-horizon", media.horizon);
+  guard(loadMedia);
 }
 function mediaStatus(text) { $("media-status").textContent = text; }
 function mediaViews() {
@@ -266,6 +271,7 @@ async function mediaSeeAll(filters) {
 }
 function mediaRender() {
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout; $("view-media").dataset.horizon = media.horizon;
+  $("media-horizon-control").hidden = media.layout !== "horizon"; $("media-horizon-switch").value = media.horizon;
   // Horizon is a cinema skin: dark whatever the app's theme, like Kodi's.
   document.documentElement.dataset.theme = media.layout === "horizon" ? "dark" : environment.theme || "dark";
   $("view-media").dataset.musicView = media.view;

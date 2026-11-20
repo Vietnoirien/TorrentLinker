@@ -44,8 +44,9 @@ window.addEventListener("message",async event=>{
     }else if(message.path==="preferences"){
       if(mediaLayouts.includes(message.body.layout)){
         media.layout=message.body.layout;try{localStorage.setItem("tl-media-layout",media.layout)}catch{}
-        $("view-media").dataset.layout=media.layout;
+        $("view-media").dataset.layout=media.layout;mediaPlayerEnvironment();
       }
+      if(mediaHorizonViews.includes(message.body.horizon)){media.horizon=message.body.horizon;try{localStorage.setItem("tl-media-horizon",media.horizon)}catch{}}
       value={layout:mediaLayoutValue(media.layout),horizon:mediaHorizonValue(media.horizon)};
     }else{
       if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress)$|\/artwork\?)|\/playlists(?:$|\?|\/[^/?]+\?))|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");

@@ -381,6 +381,7 @@ class MediaTab(QWidget):
     # or the frame thread misses frames.
     video_playing_changed = Signal(bool)
     layout_changed = Signal(str)
+    horizon_changed = Signal(str)  # Horizon's view, chosen in the shared view's options
     center_mode_requested = Signal(bool)
     connections_requested = Signal()
     discussion_requested = Signal(str)
@@ -569,7 +570,9 @@ class MediaTab(QWidget):
         self.playing_details.height_changed.connect(self._arrange_player)
         self.player_heading_box.addWidget(self.playing_details)
         player_box.addWidget(self.player_heading)
-        self.video_controls = PlayerView(self._player_snapshot, self._player_control)
+        self.video_controls = PlayerView(
+            self._player_snapshot, self._player_control, self._details_artwork
+        )
         self.video_controls.interacted.connect(self._show_video_controls)
         self.video_overlay_box.addWidget(self.video_controls)
         self.music_controls_home = QVBoxLayout()
@@ -631,6 +634,9 @@ class MediaTab(QWidget):
         if self.browser is not None:
             self.browser.layout_value = value
             self.browser.activate()
+        if self._player_video_mode:
+            self._arrange_player()
+            self._refresh_player_views()
 
     def set_media_horizon(self, value: str) -> None:
         value = value if value in MEDIA_HORIZON_VIEWS else "home"
@@ -750,8 +756,19 @@ class MediaTab(QWidget):
                 self.music_controls_home.addWidget(self.video_controls)
             self.now_playing.setStyleSheet("color: #e7eeeb;")
             self.now_playing.show()
-        self.player_heading.setVisible(active_video and not self.fullscreen_dialog.isVisible())
-        if active_video and not self.fullscreen_dialog.isVisible():
+        # Horizon shows the film's details on the picture itself, in its bar and pause screen.
+        horizon = self.media_layout == "horizon"
+        self.player_heading.setVisible(
+            active_video and not horizon and not self.fullscreen_dialog.isVisible()
+        )
+        if active_video and horizon and not self.fullscreen_dialog.isVisible():
+            self.video.setFixedHeight(max(300, self.media_column.height() - 20))
+        elif active_video and not self.fullscreen_dialog.isVisible():
+            # The details never take more than a third of the column: the picture comes first.
+            self.playing_details.max_height = max(150, self.media_column.height() // 3)
+            self.playing_details.setFixedHeight(
+                min(self.playing_details.wanted, self.playing_details.max_height)
+            )
             self.video.setFixedHeight(
                 min(
                     max(300, self.media_column.height() - self.playing_details.height() - 40),
@@ -1106,6 +1123,9 @@ class MediaTab(QWidget):
         elif action == "layout":
             self.set_media_layout(values["layout"])
             self.layout_changed.emit(values["layout"])
+        elif action == "horizon":
+            self.media_horizon = values["horizon"]  # the view already shows it
+            self.horizon_changed.emit(values["horizon"])
         elif action == "kind" and values.get("kind") in {"video", "music"}:
             self._leave_video_for_navigation()
             self.browse_kind = values["kind"]
@@ -1515,6 +1535,9 @@ class MediaTab(QWidget):
             "available_height": max(180, self.video.overlay.height() - self.caption.height() - 10)
             if self._player_video_mode
             else 380,
+            # Horizon draws its own bar and pause screen from the playing film's facts.
+            "skin": self.media_layout if self.media_layout == "horizon" else "",
+            "item": self._playing_item(),
         }
 
     def _refresh_player_views(self) -> None:
@@ -1522,9 +1545,17 @@ class MediaTab(QWidget):
         if self._player_video_mode:
             self.playing_details.refresh()
 
+    def _playing_item(self) -> dict[str, Any] | None:
+        """The playing video's facts, for its details and Horizon's bar."""
+        if not self._player_video_mode:
+            return None
+        row = self.current_row
+        keys: tuple[str, ...] = ("title", "original_title", "year", "duration", "genre")
+        keys += ("rating", "tagline", "description", "director", "actors", "release", "codec")
+        return {key: row.get(key) for key in keys} | {"artwork": bool(row.get("artwork_url"))}
+
     def _details_snapshot(self) -> dict[str, Any]:
         # Only what the details show, so that an unchanged film publishes nothing.
-        row = self.current_row
         video = self._player_video_mode
         return {
             "language": self._player_language(),
@@ -1532,26 +1563,7 @@ class MediaTab(QWidget):
             "client_id": self.session_client,
             "media_id": self.last_source,
             "source_token": self.track_source_token,
-            "item": {
-                key: row.get(key)
-                for key in (
-                    "title",
-                    "original_title",
-                    "year",
-                    "duration",
-                    "genre",
-                    "rating",
-                    "tagline",
-                    "description",
-                    "director",
-                    "actors",
-                    "release",
-                    "codec",
-                )
-            }
-            | {"artwork": bool(row.get("artwork_url"))}
-            if video
-            else None,
+            "item": self._playing_item(),
             "tracks": self._track_state() if video else {},
         }
 

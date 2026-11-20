@@ -584,6 +584,18 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement === null")
                 expect(media_locator(page, "#media-feature")).to_be_visible()
+                if layout == "horizon":
+                    # Horizon's player names the film on the picture; no details frame below.
+                    expect(player_locator(page, "body")).to_have_attribute("data-skin", "horizon")
+                    expect(page.locator("#player-details-frame")).to_be_hidden()
+                    # The Media options switch Horizon's view.
+                    media_locator(page, "#media-library-options summary").click()
+                    media_locator(page, "#media-horizon-switch").select_option("showcase")
+                    expect(media_locator(page, "#view-media")).to_have_attribute(
+                        "data-horizon", "showcase"
+                    )
+                    media_locator(page, "#media-horizon-switch").select_option("home")
+                    media_locator(page, "#media-library-options summary").click()
                 assert video.get_attribute("src") == source
                 if layout == "focus":
                     media_locator(page, "#media-focus-strip").get_by_role(

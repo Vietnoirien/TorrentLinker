@@ -61,7 +61,7 @@ from torrentlinker.catalogue_sync import (
 )
 from torrentlinker.catalogue_workspace import catalogue_cards
 from torrentlinker.category_tags import sync_category_tags
-from torrentlinker.config import MEDIA_LAYOUTS, Settings
+from torrentlinker.config import MEDIA_HORIZON_VIEWS, MEDIA_LAYOUTS, Settings
 from torrentlinker.credentials import get_secret
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.downloads import IndexerCategory
@@ -344,6 +344,7 @@ class MainWindow(QMainWindow):
         self.media_tab.set_adult(settings.adult_content)
         self.media_tab.refresh_on_first_open = True
         self.media_tab.layout_changed.connect(self._save_media_layout)
+        self.media_tab.horizon_changed.connect(self._save_media_horizon)
         self.media_tab.center_mode_requested.connect(self.set_media_center)
         self.media_tab.video_playing_changed.connect(self._video_playing_changed)
         self.media_tab.connections_requested.connect(self.open_assistant_connections)
@@ -2043,6 +2044,12 @@ class MainWindow(QMainWindow):
         else:
             super().keyPressEvent(event)
 
+    def _save_media_horizon(self, value: str) -> None:
+        if value not in MEDIA_HORIZON_VIEWS:
+            return
+        self.settings.media_horizon = value
+        self.settings.save(self.settings_path)
+
     def _save_media_layout(self, value: str) -> None:
         if value not in MEDIA_LAYOUTS:
             return
@@ -2120,12 +2127,14 @@ class MainWindow(QMainWindow):
             with QSignalBlocker(self.tabs):
                 self.tabs.removeTab(self.tabs.indexOf(self.media_tab))
             self.media_tab.layout_changed.disconnect(self._save_media_layout)
+            self.media_tab.horizon_changed.disconnect(self._save_media_horizon)
             self.media_tab.center_mode_requested.disconnect(self.set_media_center)
             self.media_tab.video_playing_changed.disconnect(self._video_playing_changed)
             self.media_tab.connections_requested.disconnect(self.open_assistant_connections)
             self.media_tab.discussion_requested.disconnect(self.open_media_discussion)
             replacement.media_tab = self.media_tab
             replacement.media_tab.layout_changed.connect(replacement._save_media_layout)
+            replacement.media_tab.horizon_changed.connect(replacement._save_media_horizon)
             replacement.media_tab.center_mode_requested.connect(replacement.set_media_center)
             replacement.media_tab.video_playing_changed.connect(replacement._video_playing_changed)
             replacement.media_tab.connections_requested.connect(

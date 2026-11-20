@@ -264,24 +264,88 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
   background:#80d6c5;
   border-color:#80d6c5}
 
-/* Home: a large banner over the rows; the chosen poster grows within its row. */
+/* Home, as Kodi's Aeon Nox home: one screen, no scrolling. The title sits on the artwork,
+   a row of posters above the main menu, which runs across the foot of the screen. */
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] {
+  height:100vh;
+  overflow:hidden}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature {
-  min-height:56vh;
-  display:flex;
-  align-items:flex-end}
+  position:absolute;
+  left:40px;
+  top:86px;
+  width:min(640px,52%);
+  min-height:0}
 #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-copy {
-  margin:0 36px 26px;
-  padding:24px 28px;
-  max-width:780px}
-#view-media[data-layout="horizon"][data-horizon="home"] .media-feature-copy.has-poster {
-  grid-template-columns:150px minmax(0,1fr)}
-#view-media[data-layout="horizon"][data-horizon="home"] .media-feature-copy.has-poster > .media-feature-poster {
-  width:150px}
-#view-media[data-layout="horizon"][data-horizon="home"] .media-feature h2 {
-  font-size:clamp(32px,4vw,60px)}
-#view-media[data-layout="horizon"][data-horizon="home"] .media-feature-description {
+  padding:0;
+  margin:0;
+  max-width:none;
+  background:none;
+  backdrop-filter:none;
+  border:0;
+  text-shadow:0 2px 14px #000c}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-copy.has-poster {
+  display:block}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-copy.has-poster > .media-feature-poster,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature .media-eyebrow,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-metadata-source {
+  display:none}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature h2 {
+  font-size:clamp(30px,4vw,58px);
+  line-height:.98;
+  margin:0 0 12px}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-description {
   -webkit-line-clamp:3;
-  margin:14px 0 18px}
+  color:#d3dde3;
+  margin:12px 0 16px}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-shelves {
+  position:absolute;
+  left:40px;
+  right:40px;
+  bottom:84px;
+  padding:0}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] #media-status,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] #media-continue,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-home-row:not(:first-child) {
+  display:none}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-home-rows {
+  margin:0}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-browse-nav {
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:18px;
+  z-index:4;
+  justify-content:center;
+  gap:clamp(18px,4vw,54px);
+  padding:14px 20px;
+  background:linear-gradient(90deg,transparent,#0d151cd9 15%,#0d151cd9 85%,transparent);
+  border-top:1px solid #ffffff1f;
+  border-bottom:1px solid #ffffff1f}
+#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-browse-nav button {
+  font-size:clamp(14px,1.5vw,20px)}
+/* A short screen keeps the title, flags and posters; the plot is in Details. */
+@media (max-height:760px) {
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature {
+    top:70px}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature h2 {
+    font-size:clamp(26px,3.2vw,44px)}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-description,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card strong,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card span {
+    display:none}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature-flags {
+    margin-bottom:14px}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card {
+    flex-basis:88px}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-row-card[aria-pressed="true"] {
+    flex-basis:120px}}
+/* A phone keeps the same order in a page that scrolls. */
+@media (max-width:850px) {
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] {
+    height:auto;
+    overflow:visible}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-feature,#view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-shelves {
+    position:static;
+    width:auto;
+    margin:16px}
+  #view-media[data-layout="horizon"][data-horizon="home"][data-kind="video"] .media-browse-nav {
+    position:static;
+    justify-content:flex-start;
+    overflow-x:auto}}
 #view-media[data-layout="horizon"] .media-home-row-header h2,#view-media[data-layout="horizon"] .media-continue > h2 {
   font-size:12px;
   font-weight:600;

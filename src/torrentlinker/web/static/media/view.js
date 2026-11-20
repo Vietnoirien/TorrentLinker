@@ -46,6 +46,7 @@ $("media-toolbar-chat").title=say("Assistant","Assistant");
 $("media-center-mode").onclick=()=>guard(()=>host("center"));
 $("media-center-mode").title=say("Media Center mode","Mode Media Center");
 $("media-layout-switch").onchange=event=>mediaSetLayout(event.target.value);
+$("media-horizon-switch").onchange=event=>mediaSetHorizon(event.target.value);
 for(const node of document.querySelectorAll("[data-view=setup]"))node.onclick=()=>guard(navigate);
 for(const node of document.querySelectorAll("[data-media-view]"))node.onclick=()=>guard(async()=>{
   media.gridMode=false;media.animeFilters={};

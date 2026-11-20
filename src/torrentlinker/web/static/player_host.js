@@ -52,6 +52,9 @@ function mediaPlayerSnapshot() {
       shell.dataset.kind === "video"
         ? Math.max(180, $("media-video-stage").clientHeight)
         : 380,
+    // Horizon draws its own bar and pause screen from the playing film's facts.
+    skin: media.layout === "horizon" ? "horizon" : "",
+    item: mediaPlayerDetailsSnapshot().item,
   };
 }
 function mediaPlayerEnvironment() {
@@ -218,7 +221,8 @@ window.addEventListener("message", async (event) => {
       throw Error("Invalid player request.");
     if (message.path === "command") await mediaPlayerControl(body);
     else if (message.path === "layout") {
-      frame.style.height = `${Math.max(72, Math.min(380, Number(body.height) || 80))}px`;
+      // Horizon's pause screen covers the picture; the page never asks for more.
+      frame.style.height = `${Math.max(72, Math.min(2000, Number(body.height) || 80))}px`;
       const opened = !playerMenuOpen && !!body.menu_open;
       playerMenuOpen = !!body.menu_open;
       $("media-video-stage").dataset.menuOpen = String(playerMenuOpen);
@@ -228,6 +232,25 @@ window.addEventListener("message", async (event) => {
       }
     } else if (message.path === "interaction")
       mediaRevealControls(!!body.keyboard);
+    else if (message.path === "artwork") {
+      const current = mediaPlayerDetailsSnapshot();
+      if (body.media_id !== current.media_id || !current.item?.artwork)
+        throw Error("Player source changed.");
+      const url = new URL(
+        `api/media/items/${encodeURIComponent(current.media_id)}/artwork`,
+        document.baseURI,
+      );
+      url.searchParams.set("client_id", current.client_id);
+      frame.contentWindow?.postMessage(
+        {
+          type: "player-response",
+          id: message.id,
+          value: { data_url: await mediaArtworkDataURL(url) },
+        },
+        location.origin,
+      );
+      return;
+    }
     else throw Error("Unknown player operation.");
     frame.contentWindow?.postMessage(
       { type: "player-response", id: message.id, value: null },
