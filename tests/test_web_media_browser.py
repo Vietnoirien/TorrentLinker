@@ -523,7 +523,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.wait_for_function("() => document.fullscreenElement !== null")
             page.keyboard.press("Escape")
             page.wait_for_function("() => document.fullscreenElement === null")
-            expect(page.locator("main > header")).to_be_visible()
+            expect(page.locator("#app-sidebar")).to_be_visible()
+            # Media has its own menu: the page header stays hidden on it.
+            expect(page.locator("main > header")).to_be_hidden()
             media_locator(page, "#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === document.documentElement")
             player_action(page, "#media-fullscreen")
@@ -868,9 +870,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "Restored listening"
             )
             # A saved queue belongs to its playback client even while browsing another.
-            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
-                "other"
-            )
+            media_locator(page, "#media-client").select_option("other")
             expect(media_locator(page, "#media-music-tab")).to_be_visible()
             media_locator(page, "#media-music-tab").click()
             media_locator(page, "#media-playlist-name").fill("Original client queue")
@@ -891,9 +891,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 ).json()
                 == []
             )
-            page.frame_locator("#shell-header-frame").locator("#target-client").select_option(
-                "default"
-            )
+            media_locator(page, "#media-client").select_option("default")
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             media_locator(page, "#media-video-tab").click()
@@ -1258,6 +1256,27 @@ def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(
                     "document.querySelector('#media-feature').getBoundingClientRect().top"
                 )
                 == 0
+            )
+            # One wheel-up on the title brings the menu back above it without moving the page;
+            # scrolling down hides it again.
+            bottom = frame.evaluate("scrollY")
+            # (No hover(): Playwright would scroll the pinned title "into view" first.)
+            box = media_locator(page, "#media-feature").bounding_box()
+            page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            page.mouse.wheel(0, -100)
+            page.wait_for_timeout(300)
+            assert frame.evaluate("scrollY") == bottom
+            assert frame.evaluate("""() => {
+                const bar = document.querySelector('.media-topbar').getBoundingClientRect();
+                const title = document.querySelector('#media-feature').getBoundingClientRect();
+                return bar.top === 0 && title.top === bar.bottom;
+            }""")
+            frame.evaluate("window.scrollBy(0, -50)")
+            page.wait_for_timeout(100)
+            frame.evaluate("window.scrollBy(0, 50)")
+            page.wait_for_timeout(200)
+            assert frame.evaluate(
+                "document.querySelector('.media-topbar').getBoundingClientRect().bottom <= 0"
             )
             # Choosing another film keeps the page where it is.
             scrolled = frame.evaluate("scrollY")

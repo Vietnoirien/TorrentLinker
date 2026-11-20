@@ -15,7 +15,7 @@ function mediaEnvironment(){
   if(active)mediaFrame.style.height=`${Math.max(300,innerHeight-mediaFrame.getBoundingClientRect().top-20)}px`;
   // Restored queues can contain uncached tracks; the server validates every saved item.
   const music=media.queue.every(id=>{const row=mediaItems.get(id);return !row||row.kind==="music"});
-  mediaFrame.contentWindow?.postMessage({type:"media-environment",value:{mode:"web",active,kind:media.kind,view:media.view,queue:[...media.queue],queue_client:media.playerClient||mediaClient(),queue_music:music,player_clearance:$("media-player-shell").hidden?0:$("media-player-shell").getBoundingClientRect().height,chat_open:media.chat,center_mode:document.body.classList.contains("media-center-mode"),revision:mediaRevision,language,theme:document.documentElement.dataset.theme||"dark",client_id:mediaClient(),adult_content:state.setup?.adult_content}},location.origin);
+  mediaFrame.contentWindow?.postMessage({type:"media-environment",value:{mode:"web",active,kind:media.kind,view:media.view,queue:[...media.queue],queue_client:media.playerClient||mediaClient(),queue_music:music,player_clearance:$("media-player-shell").hidden?0:$("media-player-shell").getBoundingClientRect().height,chat_open:media.chat,center_mode:document.body.classList.contains("media-center-mode"),clients:(state.setup?.clients||[]).filter(row=>row.enabled).map(row=>({id:row.id,name:row.name})),client_busy:!!shellState.clientBusy,revision:mediaRevision,language,theme:document.documentElement.dataset.theme||"dark",client_id:mediaClient(),adult_content:state.setup?.adult_content}},location.origin);
 }
 window.addEventListener("message",async event=>{
   if(event.source!==mediaFrame.contentWindow||event.origin!==location.origin)return;
@@ -39,6 +39,7 @@ window.addEventListener("message",async event=>{
       else if(action==="selection")media.selected=values.selected_ids?.[0]?{id:values.selected_ids[0]}:null;
       else if(action==="chat")await mediaToggleChat();
       else if(action==="center")await mediaToggleCenter();
+      else if(action==="client")await shellSelectClient(values.client_id);
       else if(action==="settings")await navigate("setup");
       else throw Error("Unknown Media action");
     }else if(message.path==="preferences"){

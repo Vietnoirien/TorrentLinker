@@ -346,6 +346,7 @@ class MainWindow(QMainWindow):
         self.media_tab.layout_changed.connect(self._save_media_layout)
         self.media_tab.horizon_changed.connect(self._save_media_horizon)
         self.media_tab.center_mode_requested.connect(self.set_media_center)
+        self.media_tab.client_requested.connect(self._media_client_requested)
         self.media_tab.video_playing_changed.connect(self._video_playing_changed)
         self.media_tab.connections_requested.connect(self.open_assistant_connections)
         self.media_tab.discussion_requested.connect(self.open_media_discussion)
@@ -600,6 +601,7 @@ class MainWindow(QMainWindow):
             and self.tabs.widget(index) is not self.media_tab
         ):
             self.set_media_center(False)
+        self._sync_app_header()
         self._sync_workspace_scrolling()
         self.workspace_scroll.horizontalScrollBar().setValue(0)
         if self.tabs.widget(index) is self.zen_tab:  # opening on the Catalogue page
@@ -2027,6 +2029,24 @@ class MainWindow(QMainWindow):
         self.shell_host.refresh()
         return True
 
+    def _media_client_requested(self, identifier: str) -> None:
+        # The same switch as the page header's, which Media hides.
+        try:
+            self.shell_host.command("client", {"client_id": identifier})
+        except ValueError as error:
+            self.media_tab._set_notice(str(error))
+
+    def _sync_app_header(self) -> None:
+        # Media has its own menu: the page header and the space above it would only take
+        # room from the films.
+        center = getattr(self, "media_center_active", False)
+        media = self.tabs.currentWidget() is self.media_tab
+        self.app_header.setVisible(not center and not media)
+        self.content_layout.setContentsMargins(
+            *((0, 0, 0, 0) if center else (24, 0 if media else 20, 24, 12))
+        )
+        self.content_layout.setSpacing(0 if center else 16)
+
     def set_media_center(self, enabled: bool) -> None:
         if enabled == self.media_center_active:
             return
@@ -2038,10 +2058,8 @@ class MainWindow(QMainWindow):
         self.media_center_active = enabled
         self.media_tab.set_center_mode(enabled)
         self.sidebar.setVisible(not enabled)
-        self.app_header.setVisible(not enabled)
+        self._sync_app_header()
         self.statusBar().setVisible(not enabled and self._media_status_visible)
-        self.content_layout.setContentsMargins(*((0, 0, 0, 0) if enabled else (24, 20, 24, 12)))
-        self.content_layout.setSpacing(0 if enabled else 16)
         if enabled:
             self.showFullScreen()
         else:
@@ -2149,6 +2167,7 @@ class MainWindow(QMainWindow):
             self.media_tab.layout_changed.disconnect(self._save_media_layout)
             self.media_tab.horizon_changed.disconnect(self._save_media_horizon)
             self.media_tab.center_mode_requested.disconnect(self.set_media_center)
+            self.media_tab.client_requested.disconnect(self._media_client_requested)
             self.media_tab.video_playing_changed.disconnect(self._video_playing_changed)
             self.media_tab.connections_requested.disconnect(self.open_assistant_connections)
             self.media_tab.discussion_requested.disconnect(self.open_media_discussion)
@@ -2156,6 +2175,7 @@ class MainWindow(QMainWindow):
             replacement.media_tab.layout_changed.connect(replacement._save_media_layout)
             replacement.media_tab.horizon_changed.connect(replacement._save_media_horizon)
             replacement.media_tab.center_mode_requested.connect(replacement.set_media_center)
+            replacement.media_tab.client_requested.connect(replacement._media_client_requested)
             replacement.media_tab.video_playing_changed.connect(replacement._video_playing_changed)
             replacement.media_tab.connections_requested.connect(
                 replacement.open_assistant_connections

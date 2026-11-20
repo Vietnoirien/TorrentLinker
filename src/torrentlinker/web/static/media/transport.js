@@ -56,6 +56,10 @@ async function applyEnvironment(){
   center.title=env.center_mode?say("Return to TorrentLinker","Revenir à TorrentLinker"):say("Media Center mode","Mode Media Center");
   center.setAttribute("aria-label",center.title);
   $("media-toolbar-chat").setAttribute("aria-pressed",String(!!env.chat_open));
+  // The target client lives here since Media hides the page header.
+  const client=$("media-client"),clients=env.clients||[];
+  if(client.dataset.signature!==JSON.stringify(clients)){client.replaceChildren(...clients.map(row=>new Option(row.name,row.id)));client.dataset.signature=JSON.stringify(clients)}
+  client.value=env.client_id||"";client.disabled=!!env.client_busy;client.hidden=!clients.length;
   mediaQueueLabel();
   if(!env.active)return;
   const key=JSON.stringify([env.client_id,env.language,env.adult_content,env.revision]);

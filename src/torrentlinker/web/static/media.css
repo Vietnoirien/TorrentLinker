@@ -6,6 +6,8 @@
 .media-view main > header label { margin: 0 0 0 auto; font-size: 10px; }
 .media-view main > header select { padding: 6px 10px; max-width: 200px; font-size: 12px; }
 .media-view main > header #navigation-toggle { padding: 7px 10px; font-size: 11px; }
+/* Media has its own menu; the page header returns only where it holds the navigation button. */
+@media (min-width: 651px) { .media-view main > header { display: none; } }
 #view-media { --media-muted: #9da9ad; color: #f2f3ef; background: #101416; min-height: calc(100dvh - 78px); }
 #view-media button, #view-media input, #view-media select, #media-details button { color: inherit; background: #ffffff08; border-color: #ffffff23; }
 /* The media view recolors the shared roles for its dark surface; it keeps their shapes. */
@@ -13,7 +15,7 @@
 #view-media .icon-button:hover, #view-media .quiet:hover, #media-chat-panel .icon-button:hover { background: #ffffff1a; border-color: transparent; }
 #view-media .icon-button[aria-pressed="true"] { background: #203d39; border-color: #79d3c5; color: #93dfce; }
 #view-media button:hover, #media-details button:hover { color: #80d6c5; background: #80d6c511; border-color: #80d6c570; }
-.media-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 20px 36px 12px; position: relative; z-index: 2; }
+.media-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; padding: 12px 36px; position: relative; z-index: 2; }
 .media-tabs { display: flex; gap: 14px; flex-shrink: 0; }
 .media-tabs button { border: 0; border-radius: 0; padding: 7px 0; font-size: 12px; background: none !important; color: #a9b4b7 !important; }
 .media-tabs [aria-selected="true"] { color: #80d6c5 !important; border-bottom: 2px solid #80d6c5 !important; }
@@ -190,6 +192,7 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 .media-options-panel .media-filters { display: grid; grid-template-columns: 1fr 1fr; margin: 12px 0 0; padding-bottom: 0; }
 .media-options-panel select { width: 100%; max-width: none; }
 #media-center-mode { flex-shrink: 0; }
+#media-client { width: auto; max-width: 160px; padding: 8px 10px; font-size: 11px; flex-shrink: 0; }
 #view-media[data-kind="music"] .media-layout-control { display: none; }
 #view-media[data-kind="music"] .media-shelves { padding-top: 28px; padding-bottom: 250px; }
 #view-media[data-kind="music"] .media-inventory-status { margin: 0 0 12px; }
@@ -296,7 +299,13 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 .media-home-rows { display: grid; gap: 30px; margin-top: 8px; }
 /* The cinematic home keeps the selected title in view while the rows scroll beneath; the menu scrolls away. */
 #view-media[data-home="true"][data-layout="cinematic"] .media-feature { position: sticky; top: 0; z-index: 5; }
+/* A lower title leaves more of the screen to the rows. */
+#view-media[data-layout="cinematic"] .media-feature { min-height: 400px; }
+#view-media[data-layout="cinematic"] .media-feature-copy { padding-top: 56px; padding-bottom: 52px; }
+#view-media[data-layout="cinematic"] .media-feature h2 { font-size: clamp(38px,4.4vw,64px); }
 #view-media[data-home="true"][data-layout="cinematic"] .media-topbar { z-index: 6; } /* its Options panel opens over the title */
+#view-media[data-home="true"][data-layout="cinematic"][data-menu="shown"] .media-topbar { position: sticky; top: 0; background: var(--bg); }
+#view-media[data-home="true"][data-layout="cinematic"][data-menu="shown"] .media-feature { top: var(--media-topbar-height, 0px); }
 html:has(#view-media[data-home="true"][data-layout="cinematic"]) { scroll-padding-top: var(--media-feature-height, 0px); }
 .media-home-row { min-width: 0; }
 .media-home-row-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }

@@ -81,7 +81,8 @@ def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monk
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     assert not window.isFullScreen()
     assert window.navigation.isVisible()
-    assert window.app_header.isVisible()
+    # Media has its own menu: the page header stays hidden there, and returns elsewhere.
+    assert not window.app_header.isVisible()
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     qtbot.keyClick(window.media_tab.center_button, Qt.Key_Escape)
     qtbot.waitUntil(lambda: not window.isFullScreen())
@@ -93,6 +94,7 @@ def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monk
     qtbot.mouseClick(window.media_tab.center_button, Qt.LeftButton)
     window.tabs.setCurrentIndex(0)
     assert not window.media_center_active
+    assert window.app_header.isVisible()
     assert not window.isFullScreen()
     assert window.navigation.isVisible()
 

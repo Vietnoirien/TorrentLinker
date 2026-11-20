@@ -34,6 +34,7 @@ class MediaBrowserBridge(ViewBridge):
                     "kind",
                     "chat",
                     "center",
+                    "client",
                     "settings",
                     "selection",
                     "context",
@@ -148,6 +149,11 @@ class MediaBrowserPanel(BundledView):
                 "queue": self.queue,
                 "queue_music": self.queue_music,
                 "client_id": self.client_id(),
+                "clients": [
+                    {"id": row.id, "name": row.name}
+                    for row in service.setup.settings.client_profiles
+                    if row.enabled
+                ],
                 "language": self.language,
                 "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
                 "adult_content": service.setup.settings.adult_content,

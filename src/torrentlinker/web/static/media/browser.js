@@ -219,9 +219,18 @@ function mediaRenderHome() {
   $("view-media").dataset.home = String(active);
   root.replaceChildren();
   if (!active) return;
-  // Whatever scrolls into view lands below the pinned title.
-  mediaPinnedObserver ||= new ResizeObserver(() => document.documentElement.style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`));
-  mediaPinnedObserver.observe($("media-feature"));
+  // Whatever scrolls into view lands below the pinned title; a recalled menu sits right above it.
+  if (!mediaPinnedObserver) {
+    mediaPinnedObserver = new ResizeObserver(() => {
+      const style = document.documentElement.style;
+      style.setProperty("--media-topbar-height", `${document.querySelector(".media-topbar").offsetHeight}px`);
+      style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
+    });
+    mediaPinnedObserver.observe(document.querySelector(".media-topbar")); mediaPinnedObserver.observe($("media-feature"));
+    $("media-feature").addEventListener("wheel", mediaFeatureWheel, {passive: false});
+    let lastScroll = scrollY;
+    addEventListener("scroll", () => { if (scrollY > lastScroll) delete $("view-media").dataset.menu; lastScroll = scrollY; }, {passive: true});
+  }
   const titles = {recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")};
   for (const row of media.homeRows) {
     const section = element("section", undefined, "media-home-row"), header = element("div", undefined, "media-home-row-header");
@@ -255,6 +264,12 @@ function mediaRenderHome() {
   for (const track of root.querySelectorAll(".media-row-track")) mediaRowObserver.observe(track);
 }
 let mediaRowObserver = null, mediaPinnedObserver = null;
+// Scrolled down, one wheel-up on the pinned title brings the menu back above it; scrolling down hides it.
+function mediaFeatureWheel(event) {
+  const view = $("view-media");
+  if (view.dataset.home !== "true" || view.dataset.layout !== "cinematic" || event.ctrlKey || event.deltaY >= 0) return;
+  if (scrollY > 0 && view.dataset.menu !== "shown") { event.preventDefault(); view.dataset.menu = "shown"; }
+}
 // The wheel over a row only ever scrolls that row, even at its ends: the page scrolls from the
 // pinned title instead, so it never moves under the pointer.
 function mediaRowWheel(track, event) {

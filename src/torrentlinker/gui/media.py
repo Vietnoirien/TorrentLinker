@@ -387,6 +387,7 @@ class MediaTab(QWidget):
     layout_changed = Signal(str)
     horizon_changed = Signal(str)  # Horizon's view, chosen in the shared view's options
     center_mode_requested = Signal(bool)
+    client_requested = Signal(str)  # the Media menu's target client
     connections_requested = Signal()
     discussion_requested = Signal(str)
 
@@ -1152,6 +1153,8 @@ class MediaTab(QWidget):
             self.toggle_chat(not self.chat.isChecked())
         elif action == "center":
             self.center_mode_requested.emit(not self.center_button.isChecked())
+        elif action == "client":
+            self.client_requested.emit(str(values.get("client_id") or ""))
         elif action == "settings":
             self.folder_button.click()
 
