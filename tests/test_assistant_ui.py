@@ -35,12 +35,7 @@ def provider(request):
 
 
 def test_desktop_discussion_keeps_the_composer_available(qtbot, tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QApplication
-
     from torrentlinker.gui.assistant import AssistantTab
-    from torrentlinker.gui.theme import apply_theme
-
-    apply_theme(QApplication.instance(), "light")
 
     app = create_app(
         tmp_path, password="test-password-long", assistant_transport=httpx.MockTransport(provider)
