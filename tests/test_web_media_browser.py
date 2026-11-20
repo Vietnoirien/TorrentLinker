@@ -1233,15 +1233,32 @@ def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(
             page.wait_for_timeout(400)
             assert track.evaluate("node => node.scrollLeft") > 0
             assert frame.evaluate("scrollY") == before
-            # Scrolled down, the menu and the selected title stay at the top.
+            # At either end the wheel stays with the row; the page scrolls from the title.
+            page.mouse.wheel(0, 20000)
+            page.wait_for_timeout(400)
+            page.mouse.wheel(0, 300)
+            page.wait_for_timeout(400)
+            assert frame.evaluate("scrollY") == before
+            media_locator(page, "#media-feature").hover()
+            page.mouse.wheel(0, 300)
+            page.wait_for_timeout(400)
+            assert frame.evaluate("scrollY") > before
+            # Scrolled down, the menu scrolls away and the selected title stays at the top.
             frame.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             page.wait_for_timeout(200)
             assert frame.evaluate("scrollY") > 0
-            bar = media_locator(page, ".media-topbar").bounding_box()
-            feature = media_locator(page, "#media-feature").bounding_box()
-            frame_top = page.locator("#media-frame").bounding_box()["y"]
-            assert abs(bar["y"] - frame_top) <= 1
-            assert abs(feature["y"] - (bar["y"] + bar["height"])) <= 1
+            assert (
+                frame.evaluate(
+                    "document.querySelector('.media-topbar').getBoundingClientRect().bottom"
+                )
+                <= 0
+            )
+            assert (
+                frame.evaluate(
+                    "document.querySelector('#media-feature').getBoundingClientRect().top"
+                )
+                == 0
+            )
             # Choosing another film keeps the page where it is.
             scrolled = frame.evaluate("scrollY")
             # (A script click: Playwright would first scroll the card out from under the banner.)

@@ -219,13 +219,9 @@ function mediaRenderHome() {
   $("view-media").dataset.home = String(active);
   root.replaceChildren();
   if (!active) return;
-  // The pinned title sits right under the pinned menu, and whatever scrolls into view lands below both.
-  mediaPinnedObserver ||= new ResizeObserver(() => {
-    const style = document.documentElement.style;
-    style.setProperty("--media-topbar-height", `${document.querySelector(".media-topbar").offsetHeight}px`);
-    style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
-  });
-  mediaPinnedObserver.observe(document.querySelector(".media-topbar")); mediaPinnedObserver.observe($("media-feature"));
+  // Whatever scrolls into view lands below the pinned title.
+  mediaPinnedObserver ||= new ResizeObserver(() => document.documentElement.style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`));
+  mediaPinnedObserver.observe($("media-feature"));
   const titles = {recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")};
   for (const row of media.homeRows) {
     const section = element("section", undefined, "media-home-row"), header = element("div", undefined, "media-home-row-header");
@@ -259,13 +255,12 @@ function mediaRenderHome() {
   for (const track of root.querySelectorAll(".media-row-track")) mediaRowObserver.observe(track);
 }
 let mediaRowObserver = null, mediaPinnedObserver = null;
-// The wheel scrolls a row sideways; at either end it scrolls the page again.
+// The wheel over a row only ever scrolls that row, even at its ends: the page scrolls from the
+// pinned title instead, so it never moves under the pointer.
 function mediaRowWheel(track, event) {
   if (event.shiftKey || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
-  const delta = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? track.clientWidth : 1);
-  const end = track.scrollWidth - track.clientWidth;
-  if (end <= 2 || (delta < 0 && track.scrollLeft <= 0) || (delta > 0 && track.scrollLeft >= end - 1)) return;
   event.preventDefault();
+  const delta = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? track.clientWidth : 1);
   // Snapping would pull small wheel steps back to the same card; it returns once the wheel rests.
   track.style.scrollSnapType = "none";
   track.scrollLeft += delta;
