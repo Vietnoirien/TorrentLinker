@@ -1815,12 +1815,31 @@
           };
         return { value: row.score, color: row.color };
       }
+      function matchReason(row, i) {
+        const { color, value } = score(row, i);
+        if (value === null) return say(...row.reason);
+        if (color === "red")
+          return say("Above your size cap", "Dépasse votre taille plafond");
+        if (color === "green")
+          return say("Fits your profile", "Correspond à votre profil");
+        if (profiles[active].res === "2160")
+          return color === "yellow"
+            ? say(
+                "Below the preferred 4K resolution",
+                "Résolution inférieure à la 4K souhaitée",
+              )
+            : say(
+                "Resolution and language do not fit",
+                "Résolution et langue ne conviennent pas",
+              );
+        return say(...row.reason);
+      }
       function badge(row, i) {
         const s = score(row, i),
           best =
             s.color === "green" &&
             (profiles[active].res === "2160" ? i === 2 : i === 0);
-        const description = `ReleaseScore · ${s.value === null ? say("Unknown", "Inconnu") : s.value + "/100 · " + say("Estimated", "Estimé")} · ${say("Why this score", "Pourquoi cette note")}`;
+        const description = `ReleaseScore · ${s.value === null ? say("Unknown", "Inconnu") : s.value + "/100 · " + say("Estimated", "Estimé")} · ${matchReason(row, i)} · ${say("Why this score", "Pourquoi cette note")}`;
         return `<button class="release-score ${s.color}" onclick="showDetail(${i})" title="${esc(description)}" aria-label="${esc(description)}">${s.value === null ? "?" : "≈ " + s.value}${best ? " ⭐" : ""}</button>`;
       }
       function options(values, value) {
@@ -1929,7 +1948,7 @@
           known = s.value !== null,
           value = known ? s.value + (measured ? 3 : 0) : null;
         $("detail").innerHTML =
-          `<div class="dialog-head"><div><h2>${esc(r.title)}</h2><p class="sr-release">${esc(r.name)}</p></div><button onclick="$(&quot;detail&quot;).close()" aria-label="${say("Close", "Fermer")}">✕</button></div><nav class="detail-tabs"><button>${say("Overview", "Résumé")}</button><button class="on">ReleaseScore</button><button>MediaInfo</button></nav><div class="score-detail ${s.color}"><strong>${value === null ? "?" : (measured ? "" : "≈ ") + Math.min(100, value) + " / 100"}</strong><div><h3>ReleaseScore · ${esc(active)}</h3><span>${known ? (measured ? say("Measured · from MediaInfo", "Mesuré · issu du MediaInfo") : say("Estimated · from listing facts", "Estimé · issu des informations de la liste")) : say(r.reason[0], r.reason[1])}</span></div></div><div class="info-box">${known ? say("The score describes this release under your profile. The colour describes whether it fits. Estimated facts may differ from MediaInfo.", "La note décrit cette release selon votre profil. La couleur indique sa compatibilité. Les faits estimés peuvent différer du MediaInfo.") : say("No guessed episode count or runtime. The score stays unknown until the facts are available.", "Aucun nombre d’épisodes ni durée inventé. La note reste inconnue jusqu’à disponibilité des faits.")}</div><h3>${say("Why this score", "Pourquoi cette note")}</h3><dl class="breakdown"><div><dt>${say("Video", "Vidéo")}</dt><dd>${known ? `${measured ? "83" : "≈ 80"} / 100 · ${r.resolution} · ${r.codec}` : "?"}</dd></div><div><dt>Audio</dt><dd>${known ? `${measured ? "90" : "≈ 86"} / 100 · ${r.audio}` : "?"}</dd></div><div><dt>${say("Audio weight", "Poids de l’audio")}</dt><dd>${profiles[active].poidsAudio}%</dd></div><div><dt>${say("Runtime", "Durée")}</dt><dd>${r.runtime || say("Unknown", "Inconnue")}</dd></div><div><dt>${say("Profile match", "Compatibilité du profil")}</dt><dd>${say(r.reason[0], r.reason[1])}</dd></div><div><dt>${say("Encoder effort / unknown facts", "Effort d’encodage / faits inconnus")}</dt><dd>${say("Neutral", "Neutre")}</dd></div></dl><p class="muted">${say("Design sample: these numbers illustrate the explanation, not the final formula.", "Exemple de design : ces nombres illustrent l’explication, pas la formule finale.")}</p><div class="toolbar"><button ${!known ? "disabled" : ""} onclick="measured=!measured;detailContent()">${measured ? say("Show estimated sample", "Afficher l’exemple estimé") : say("Show MediaInfo sample", "Afficher l’exemple MediaInfo")}</button><button onclick="$(&quot;detail&quot;).close();go('settings')">${say("Edit profile", "Modifier le profil")}</button></div>`;
+          `<div class="dialog-head"><div><h2>${esc(r.title)}</h2><p class="sr-release">${esc(r.name)}</p></div><button onclick="$(&quot;detail&quot;).close()" aria-label="${say("Close", "Fermer")}">✕</button></div><nav class="detail-tabs"><button>${say("Overview", "Résumé")}</button><button class="on">ReleaseScore</button><button>MediaInfo</button></nav><div class="score-detail ${s.color}"><strong>${value === null ? "?" : (measured ? "" : "≈ ") + Math.min(100, value) + " / 100"}</strong><div><h3>ReleaseScore · ${esc(active)}</h3><span>${known ? (measured ? say("Measured · from MediaInfo", "Mesuré · issu du MediaInfo") : say("Estimated · from listing facts", "Estimé · issu des informations de la liste")) : say(r.reason[0], r.reason[1])}</span></div></div><div class="info-box">${known ? say("The score describes this release under your profile. The colour describes whether it fits. Estimated facts may differ from MediaInfo.", "La note décrit cette release selon votre profil. La couleur indique sa compatibilité. Les faits estimés peuvent différer du MediaInfo.") : say("No guessed episode count or runtime. The score stays unknown until the facts are available.", "Aucun nombre d’épisodes ni durée inventé. La note reste inconnue jusqu’à disponibilité des faits.")}</div><h3>${say("Why this score", "Pourquoi cette note")}</h3><dl class="breakdown"><div><dt>${say("Video", "Vidéo")}</dt><dd>${known ? `${measured ? "83" : "≈ 80"} / 100 · ${r.resolution} · ${r.codec}` : "?"}</dd></div><div><dt>Audio</dt><dd>${known ? `${measured ? "90" : "≈ 86"} / 100 · ${r.audio}` : "?"}</dd></div><div><dt>${say("Audio weight", "Poids de l’audio")}</dt><dd>${profiles[active].poidsAudio}%</dd></div><div><dt>${say("Runtime", "Durée")}</dt><dd>${r.runtime || say("Unknown", "Inconnue")}</dd></div><div><dt>${say("Profile match", "Compatibilité du profil")}</dt><dd>${matchReason(r, selectedDetail)}</dd></div><div><dt>${say("Encoder effort / unknown facts", "Effort d’encodage / faits inconnus")}</dt><dd>${say("Neutral", "Neutre")}</dd></div></dl><p class="muted">${say("Design sample: these numbers illustrate the explanation, not the final formula.", "Exemple de design : ces nombres illustrent l’explication, pas la formule finale.")}</p><div class="toolbar"><button ${!known ? "disabled" : ""} onclick="measured=!measured;detailContent()">${measured ? say("Show estimated sample", "Afficher l’exemple estimé") : say("Show MediaInfo sample", "Afficher l’exemple MediaInfo")}</button><button onclick="$(&quot;detail&quot;).close();go('settings')">${say("Edit profile", "Modifier le profil")}</button></div>`;
       }
       const fields = [
         ["res", "Ideal resolution", "Résolution idéale", ["1080", "2160"]],
