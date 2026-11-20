@@ -73,6 +73,10 @@ PREVIEW_WAIT_AHEAD = 64 * 1024 * 1024  # how far past the downloaded part a read
 AUTO_REFRESH_MS = 60_000  # Media rescans the Library Folders this often while open
 
 
+class _SourceGone(Exception):
+    """The playing file can no longer be resolved."""
+
+
 class DownloadingFileDevice(QIODevice):
     """A read-only, seekable view of a file qBittorrent is downloading, like qBittorrent's own
     preview: the player sees the whole file, but only verified pieces are ever read.
@@ -401,6 +405,7 @@ class MediaTab(QWidget):
         self.token = ""
         self.session_client = ""
         self.command_ack = 0
+        self.report_pending = False  # a heartbeat report is being saved
         self.credentials: QSettings | None = None
         self.state: dict[str, Any] = {
             "current_id": "",
@@ -600,7 +605,7 @@ class MediaTab(QWidget):
         self.chat.clicked.connect(self.toggle_chat)
         self.heartbeat = QTimer(self)
         self.heartbeat.setInterval(1000)
-        self.heartbeat.timeout.connect(self.report)
+        self.heartbeat.timeout.connect(self._heartbeat)
         # New films and episodes appear on their own while Media is open.
         self.auto_refresh = QTimer(self)
         self.auto_refresh.setInterval(AUTO_REFRESH_MS)
@@ -1452,48 +1457,96 @@ class MediaTab(QWidget):
             self.queue_rows.clear()
 
     def report(self) -> None:
+        """Save the player's state now: user actions rely on it being saved on return."""
         if not self.library:
             return
+        current = self.state["current_id"]
         try:
-            if self.preview_id:
-                self._check_preview()
-            elif self.state["current_id"]:
-                try:
-                    self.library.resolve(self.session_client, self.state["current_id"])
-                except (OSError, ValueError):
-                    self.player.stop()
-                    self.player.setSource(QUrl())
-                    self.state["current_id"] = ""
-                    self.last_source = ""
-                    raise
-            # Until the saved resume point is applied, the player reports 0; keep the saved one.
-            position = self.player.position() if self.pending_seek is None else self.pending_seek
-            self.state.update(
-                position=position / 1000,
-                duration=self.player.duration() / 1000,
-                paused=self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState,
-                volume=self.audio.volume(),
-            )
-            result = self.library.session(
-                self.session_id,
-                self.token,
-                report={
-                    **self.state,
-                    "command_ack": self.command_ack,
-                    "track_state": self._track_state(),
-                    **({"track_result": self.track_result} if self.track_result else {}),
-                },
-                context=self._context(),
-            )
-            self.apply_player_commands(result.get("commands", []))
-            request = result.get("state", {}).get("track_request", {})
-            if request.get("status") == "failed":
-                failure = (str(request.get("source_token") or ""), str(request.get("error") or ""))
-                if failure != self.last_track_failure:
-                    self.last_track_failure = failure
-                    self._set_notice(failure[1])
+            self._report_saved(self._report_work()())
         except Exception as error:
-            self._set_notice(str(error))
+            self._report_failed(current, error)
+
+    def _heartbeat(self) -> None:
+        # Each report writes media.sqlite. On the GUI thread a slow disk sync dropped
+        # video frames every few seconds, so the periodic one runs on a worker.
+        if not self.library or self.report_pending:
+            return
+        current = self.state["current_id"]
+        try:
+            work = self._report_work()
+        except Exception as error:
+            self._report_failed(current, error)
+            return
+        self.report_pending = True
+
+        def done(result: dict[str, Any]) -> None:
+            if isValid(self):
+                self.report_pending = False
+                try:
+                    self._report_saved(result)
+                except Exception as error:
+                    self._set_notice(str(error))
+
+        def failed(error: Exception) -> None:
+            if isValid(self):
+                self.report_pending = False
+                self._report_failed(current, error)
+
+        run_in_background(work, done, failed, coordinate=False)
+
+    def _report_work(self) -> Callable[[], dict[str, Any]]:
+        """Read the player now; the returned call saves that state from any thread."""
+        if self.preview_id:
+            self._check_preview()
+        # Until the saved resume point is applied, the player reports 0; keep the saved one.
+        position = self.player.position() if self.pending_seek is None else self.pending_seek
+        self.state.update(
+            position=position / 1000,
+            duration=self.player.duration() / 1000,
+            paused=self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState,
+            volume=self.audio.volume(),
+        )
+        library, client, identifier, token = (
+            self.library,
+            self.session_client,
+            self.session_id,
+            self.token,
+        )
+        current = "" if self.preview_id else self.state["current_id"]
+        report = {
+            **self.state,
+            "command_ack": self.command_ack,
+            "track_state": self._track_state(),
+            **({"track_result": self.track_result} if self.track_result else {}),
+        }
+        context = self._context()
+
+        def work() -> dict[str, Any]:
+            if current:
+                try:
+                    library.resolve(client, current)
+                except (OSError, ValueError) as error:
+                    raise _SourceGone(str(error)) from error
+            return library.session(identifier, token, report=report, context=context)
+
+        return work
+
+    def _report_saved(self, result: dict[str, Any]) -> None:
+        self.apply_player_commands(result.get("commands", []))
+        request = result.get("state", {}).get("track_request", {})
+        if request.get("status") == "failed":
+            failure = (str(request.get("source_token") or ""), str(request.get("error") or ""))
+            if failure != self.last_track_failure:
+                self.last_track_failure = failure
+                self._set_notice(failure[1])
+
+    def _report_failed(self, current: str, error: Exception) -> None:
+        if isinstance(error, _SourceGone) and current == self.state["current_id"]:
+            self.player.stop()
+            self.player.setSource(QUrl())
+            self.state["current_id"] = ""
+            self.last_source = ""
+        self._set_notice(str(error))
 
     def _player_language(self) -> str:
         app = QApplication.instance()

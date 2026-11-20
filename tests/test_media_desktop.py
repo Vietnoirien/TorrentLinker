@@ -292,6 +292,24 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     tab.pending_seek = 9000
     tab.report()
     assert service.agent.media.detail("default", tab.state["current_id"])["position"] == 9
+    # The periodic heartbeat saves from a worker: a slow disk sync must not drop frames.
+    import threading
+
+    library, threads = service.agent.media, []
+    original = library.session
+
+    def recorded(*args, **kwargs):
+        threads.append(threading.current_thread())
+        return original(*args, **kwargs)
+
+    library.session = recorded
+    tab.pending_seek = 11000
+    tab._heartbeat()
+    assert tab.report_pending
+    qtbot.waitUntil(lambda: not tab.report_pending)
+    library.session = original
+    assert threads and all(thread is not threading.main_thread() for thread in threads)
+    assert library.detail("default", tab.state["current_id"])["position"] == 11
     tab.pending_seek = None
     tab.command("shuffle", shuffle=True)
     tab.command("repeat", repeat="all")

@@ -125,6 +125,11 @@ class MediaLibrary:
         self.lock = threading.RLock()
         self.db = sqlite3.connect(agent.setup.path.parent / "media.sqlite", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        # The player saves its position every second: without WAL each save waited for
+        # several disk syncs. NORMAL keeps the database intact; a power cut may lose the
+        # last few position updates.
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=NORMAL")
         self.scanning: set[str] = set()
         self.previews: dict[str, dict[str, Any]] = {}
         self.observations: dict[str, tuple[object, set[str]]] = {}
