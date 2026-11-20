@@ -236,6 +236,11 @@ def media_routes(app, agent, assistant):
         except (OSError, ValueError) as error:
             raise HTTPException(404, "Subtitle unavailable.") from error
 
+    @app.post("/api/media/items/{identifier}/forget-progress")
+    def forget_progress(identifier: str, body: MediaClient):
+        media.forget_progress(client(body.client_id), identifier)
+        return {"ok": True}
+
     @app.post("/api/media/items/{identifier}/watched")
     def watched(identifier: str, body: Watched):
         return media.watched(client(body.client_id), identifier, body.watched)

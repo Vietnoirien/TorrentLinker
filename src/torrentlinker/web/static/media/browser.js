@@ -161,7 +161,18 @@ function mediaRenderContinue() {
   for (const row of media.continueRows) {
     const choice = button("", () => mediaStart([row.id]), "media-resume-card"); choice.setAttribute("aria-label", `${say("Resume", "Reprendre")} ${row.title}`);
     const art = mediaArt(row); const progress = element("progress"); progress.max = row.duration || Math.max(row.position, 1); progress.value = row.position || 0;
-    choice.append(art, progress, element("strong", row.title), element("span", mediaTime(row.position), "media-resume-position")); root.append(choice);
+    choice.append(art, progress, element("strong", row.title), element("span", mediaTime(row.position), "media-resume-position"));
+    const card = element("div", undefined, "media-resume-item");
+    const remove = button("×", async () => {
+      remove.disabled = true;
+      try {
+        await api(`media/items/${encodeURIComponent(row.id)}/forget-progress`, {});
+        await loadMedia();
+      } finally { remove.disabled = false; }
+    }, "media-resume-remove");
+    remove.title = say("Remove from Continue watching", "Retirer de la reprise");
+    remove.setAttribute("aria-label", remove.title);
+    card.append(choice, remove); root.append(card);
   }
 }
 // The video home shows rows (genres, series…); each row's "See all" opens the grid with its filters.

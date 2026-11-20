@@ -37,6 +37,19 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
         login(browser)
         scan(browser)
         item = browser.get("/api/media?client_id=default&kind=video").json()["rows"][0]
+        library = app.state.agent_service.media
+        session = library.open_session("default", "desktop")
+        library.session(
+            session["id"],
+            session["token"],
+            report={
+                "current_id": item["id"],
+                "queue": [item["id"]],
+                "position": 589,
+                "duration": 7200,
+                "paused": True,
+            },
+        )
         actions = []
         tab = MediaTab(lambda: app.state.assistant, lambda: "default", lambda: None)
         qtbot.addWidget(tab)
@@ -53,6 +66,11 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
         wait_js(
             qtbot, panel, "document.querySelector('.media-feature-poster img')?.naturalWidth===200"
         )
+        wait_js(qtbot, panel, "document.querySelector('.media-resume-remove')?.textContent==='×'")
+        js(qtbot, panel, "document.querySelector('.media-resume-remove').click()")
+        wait_js(qtbot, panel, "document.querySelector('#media-continue').hidden")
+        assert library.detail("default", item["id"])["position"] == 0
+        assert not any(action == "play" for action, _ in actions)
         assert js(
             qtbot,
             panel,
@@ -108,6 +126,20 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
     for name in ("A Journey.2024.mp4", "Show.S01E01.mkv", "Show.S02E01.mkv"):
         (root / name).write_bytes(b"\0" * 64)
     app.state.agent_service.media.scan("default", threading.Event(), lambda _: None)
+    library = app.state.agent_service.media
+    video = library.listing("default", kind="video")["rows"][0]
+    session = library.open_session("default", "web")
+    library.session(
+        session["id"],
+        session["token"],
+        report={
+            "current_id": video["id"],
+            "queue": [video["id"]],
+            "position": 589,
+            "duration": 7200,
+            "paused": True,
+        },
+    )
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen()
@@ -131,6 +163,14 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             shell_navigate(page, "media")
             panel = page.frame_locator("#media-frame")
             expect(panel.locator("#media-feature")).to_contain_text("A Journey")
+            remove = panel.get_by_role("button", name="Remove from Continue watching", exact=True)
+            expect(remove).to_be_visible()
+            expect(remove).to_have_text("×")
+            panel.locator("#media-continue").screenshot(path="/tmp/media-resume-cross.png")
+            remove.click()
+            expect(panel.locator("#media-continue")).to_be_hidden()
+            assert library.detail("default", video["id"])["position"] == 0
+            assert (root / "A Journey.2024.mp4").exists()
             panel.get_by_role("button", name="Details", exact=True).first.click()
             expect(panel.locator("#media-details")).to_be_visible()
             panel.get_by_role("button", name="Mark watched", exact=True).click()
@@ -156,6 +196,14 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             panel.locator("#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(panel.locator("#media-home-rows")).to_contain_text("Show")
+            # Media navigation uses the same readable size as the shared panels.
+            for selector in ("#media-video-tab", '[data-media-view="films"]'):
+                assert (
+                    panel.locator(selector).evaluate(
+                        "node => parseFloat(getComputedStyle(node).fontSize)"
+                    )
+                    >= 14
+                )
             assert not errors, errors
             browser.close()
     finally:

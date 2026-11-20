@@ -76,6 +76,9 @@ class MediaBrowserService:
                     raise ValueError("Artwork too large")
                 mime = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
                 return {"data_url": f"data:{mime};base64," + base64.b64encode(data).decode()}
+            if len(parts) == 4 and parts[3] == "forget-progress" and method == "POST":
+                media.forget_progress(client, identifier)
+                return {"ok": True}
             if len(parts) == 4 and parts[3] == "watched" and method == "POST":
                 return media.watched(client, identifier, bool(body["watched"]))
         if parts == ["media", "playlists"] and method == "GET":

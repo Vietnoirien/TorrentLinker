@@ -48,7 +48,7 @@ window.addEventListener("message",async event=>{
       }
       value={layout:mediaLayouts.includes(media.layout)?media.layout:"cinematic"};
     }else{
-      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/watched$|\/artwork\?)|\/playlists(?:$|\?|\/[^/?]+\?))|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
+      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress)$|\/artwork\?)|\/playlists(?:$|\?|\/[^/?]+\?))|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
       let client=mediaClient();
       if(message.path==="media/playlists" && message.body.method==="POST"){
         const owner=media.playerClient||client;

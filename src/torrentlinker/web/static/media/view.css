@@ -155,3 +155,33 @@ html[data-theme] #view-media .media-feature-meta, html[data-theme] #view-media .
    }
 
 #view-media .media-shelves { padding-bottom:calc(100px + var(--media-player-clearance,0px)); }
+
+/* Keep navigation at the shared panel text size, including on narrow windows. */
+#view-media .media-tabs button,
+#view-media .media-browse-nav button,
+#view-media .media-music-nav button {
+  font-size: 14px;
+  min-height: 40px;
+  padding: 9px 4px;
+}
+#view-media .media-browse-nav {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.media-resume-item { position: relative; min-width: 0; }
+#view-media .media-resume-card { width: 100%; }
+#view-media .media-resume-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+}
