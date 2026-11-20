@@ -593,7 +593,19 @@ def test_native_explicit_preview_decodes_h264_without_reading_missing_pieces(qtb
         tab.show()
         tab.activate()
         video_details(qtbot, tab, "Downloading")
-        video_action(qtbot, tab, "Preview downloaded portion")
+        video_js(qtbot, tab, "document.querySelector('#media-details').close()")
+        video_wait(
+            qtbot,
+            tab,
+            "[...document.querySelectorAll('#media-feature button')]"
+            ".some(b=>b.textContent==='Preview downloaded portion'&&!b.disabled)",
+        )
+        video_js(
+            qtbot,
+            tab,
+            "[...document.querySelectorAll('#media-feature button')]"
+            ".find(b=>b.textContent==='Preview downloaded portion').click()",
+        )
         qtbot.waitUntil(lambda: tab.preview_device is not None, timeout=10000)
         qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=15000)
         assert tab.player.sourceDevice().size() == total  # the whole file, read as it downloads

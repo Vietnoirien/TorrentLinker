@@ -78,6 +78,12 @@ async function loadMedia(append = false) {
   if(version!==media.request)return;
   if (media.kind === "music") await mediaPlaylists();
 }
+function mediaCanPreview(row) {
+  return row.kind === "video" && row.availability === "unfinished" && row.preview_supported === true;
+}
+function mediaPreviewAction(row, className = "") {
+  return button(say("Preview downloaded portion", "Prévisualiser la partie téléchargée"), () => mediaPreview(row.id), className);
+}
 function mediaSelectFeature(row) { media.featureId = row.id; media.selected = row; mediaRenderFeature(); mediaRenderEpisodes(row).catch(() => {}); }
 // A chosen series unfolds under its description: one tab per season, then its episodes.
 async function mediaRenderEpisodes(row) {
@@ -98,7 +104,8 @@ async function mediaRenderEpisodes(row) {
     list.replaceChildren();
     episodes.forEach((episode, index) => {
       if (season !== undefined && episode.season !== season) return;
-      const card = button("", () => mediaStart(episodes.map(e => e.id), index), "media-episode-card");
+      const preview = mediaCanPreview(episode);
+      const card = button("", () => preview ? mediaPreview(episode.id) : mediaStart(episodes.map(e => e.id), index), "media-episode-card");
       const number = episode.episode ?? null;
       const name = episode.episode_title ? `${number !== null ? `${number}. ` : ""}${episode.episode_title}` : number !== null ? say(`Episode ${number}`, `Épisode ${number}`) : episode.release || episode.title;
       const facts = [episode.duration ? mediaTime(episode.duration) : "", episode.watched ? say("watched", "vu") : episode.position ? say(`resume at ${mediaTime(episode.position)}`, `reprendre à ${mediaTime(episode.position)}`) : "", episode.available === false ? say("unavailable", "indisponible") : ""].filter(Boolean).join(" · ");
@@ -107,7 +114,8 @@ async function mediaRenderEpisodes(row) {
         const progress = element("progress"); progress.max = episode.duration; progress.value = episode.position; still.append(progress);
       }
       card.append(still, element("strong", name), element("span", facts));
-      card.setAttribute("aria-label", name); card.disabled = episode.available === false;
+      if (preview) card.append(element("span", say("Preview downloaded portion", "Prévisualiser la partie téléchargée")));
+      card.setAttribute("aria-label", preview ? `${say("Preview", "Prévisualiser")}: ${name}` : name); card.disabled = episode.available === false && !preview;
       list.append(card);
     });
   };
@@ -142,7 +150,7 @@ function mediaRenderFeature() {
   if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
   const actions = element("div", undefined, "media-feature-actions");
-  const play = button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false;
+  const play = mediaCanPreview(row) ? mediaPreviewAction(row, "media-primary") : button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false && !mediaCanPreview(row);
   actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"), Object.assign(button(say("Assistant", "Assistant"), async () => { media.selected = row; await mediaToggleChat(); }, "media-secondary"), {id: "media-feature-chat"}));
   copy.append(actions);
   if (row.available === false) copy.append(element("p", row.reason || say("Unavailable", "Indisponible"), "media-availability-note"));
@@ -270,7 +278,7 @@ function mediaRender() {
     if (row.identity_source === "filename") card.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-card-source"));
     if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""}`, "media-card-meta"));
     const actions = element("div", undefined, "media-card-actions");
-    const play = button(say("Play", "Lire"), () => mediaStart(mediaGroupIds(rows))); play.disabled = row.available === false;
+    const play = mediaCanPreview(row) ? mediaPreviewAction(row) : button(say("Play", "Lire"), () => mediaStart(mediaGroupIds(rows))); play.disabled = row.available === false && !mediaCanPreview(row);
     actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id)));
     if (media.kind === "music") actions.append(button(say("Add to queue", "Ajouter à la file"), async () => mediaEnqueue(await mediaGroupIds(rows))));
     card.append(actions); root.append(card);
@@ -339,7 +347,7 @@ async function mediaDetails(id) {
       external.href = typeof mediaExternalURL === "function" ? mediaExternalURL(id) : `api/media/items/${encodeURIComponent(id)}/stream?${mediaQuery({})}`; external.target = "_blank"; external.rel = "noopener"; external.download = ""; root.append(external);
     }
   }
-  if (row.kind === "video" && row.availability === "unfinished") {
+  if (mediaCanPreview(row)) {
     root.append(element("p", say("Preview is optional. Only a verified downloaded prefix from a sequential qBittorrent single-file download can play. Some formats require the missing end of the file.", "L’aperçu est facultatif. Seul le début vérifié d’un téléchargement séquentiel qBittorrent à fichier unique peut être lu. Certains formats exigent la fin du fichier."), "muted"));
     root.append(button(say("Preview downloaded portion", "Prévisualiser la partie téléchargée"), () => { root.close(); return mediaPreview(id); }));
   }
@@ -351,8 +359,9 @@ async function mediaDetails(id) {
     group.append(element("h3", label), list); root.append(group);
     const append = items => {
       for (const item of items) {
-        const choice = button(item.release || item.title, () => { root.close(); return mediaStart([item.id]); });
-        choice.disabled = item.available === false; choice.title = item.reason || ""; list.append(choice);
+        const preview = mediaCanPreview(item), title = item.release || item.title;
+        const choice = button(preview ? `${say("Preview", "Prévisualiser")}: ${title}` : title, () => { root.close(); return preview ? mediaPreview(item.id) : mediaStart([item.id]); });
+        choice.disabled = item.available === false && !preview; choice.title = item.reason || ""; list.append(choice);
       }
     };
     append(row[key]);

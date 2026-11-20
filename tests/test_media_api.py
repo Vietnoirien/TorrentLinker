@@ -453,3 +453,23 @@ def test_refresh_removes_moved_files_from_available_folder(tmp_path):
         page = browser.get("/api/media?client_id=default&kind=music").json()
         assert page["total"] == 0
         assert page["rows"] == []
+
+
+@pytest.mark.parametrize(
+    "kind", ["qbittorrent", "transmission", "deluge", "rtorrent", "utorrent", "bittorrent"]
+)
+def test_partial_preview_capability_follows_selected_client(tmp_path, kind):
+    app, root = media_app(tmp_path)
+    (root / "Downloading.mp4.!qB").write_bytes(b"incomplete fixture")
+    settings = app.state.agent_service.setup.settings
+    settings.client = kind
+    settings.capture_client()
+    with TestClient(app) as browser:
+        login(browser)
+        scan(browser)
+        rows = browser.get("/api/media?client_id=default&kind=video").json()["rows"]
+        assert len(rows) == 1
+        assert rows[0]["availability"] == "unfinished"
+        assert rows[0]["preview_supported"] is (kind == "qbittorrent")
+        detail = browser.get(f"/api/media/items/{rows[0]['id']}?client_id=default").json()
+        assert detail["preview_supported"] is (kind == "qbittorrent")

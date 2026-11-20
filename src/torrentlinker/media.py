@@ -866,6 +866,12 @@ class MediaLibrary:
                 "remote_artwork",
             }
         }
+        # Capability only: starting a preview still validates the live torrent,
+        # sequential mode, single-file layout and verified piece map.
+        public["preview_supported"] = (
+            body.get("kind") == "video"
+            and self.setup(record["client"]).settings.client == "qbittorrent"
+        )
         public["subtitles"] = [
             {"id": s["id"], "label": s["label"]} for s in body.get("subtitles", [])
         ]

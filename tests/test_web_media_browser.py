@@ -808,6 +808,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("#media-frame")).to_be_visible()
             expect(page.locator("#media-player-shell")).to_be_visible()
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
+            expect(media_locator(page, ".media-track-row")).to_have_count(3)
             if screenshots:
                 page.screenshot(path=str(Path(screenshots) / "media-music-tracks.png"))
                 page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
@@ -1013,14 +1014,16 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             open_films_grid(page)
             card = media_locator(page, ".media-card").filter(has_text="Preview Film")
             expect(card).to_be_visible(timeout=15000)
-            expect(card.get_by_role("button", name="Play", exact=True)).to_be_disabled()
+            expect(
+                card.get_by_role("button", name="Preview downloaded portion", exact=True)
+            ).to_be_enabled()
+
+            if folder := os.getenv("TL_MEDIA_SCREENSHOT_DIR"):
+                Path(folder).mkdir(parents=True, exist_ok=True)
+                card.screenshot(path=str(Path(folder) / "media-preview-action.png"))
 
             def start_preview():
-                if not media_locator(page, "#media-details").is_visible():
-                    card.get_by_role("button", name="Details", exact=True).click()
-                media_browse(page).get_by_role(
-                    "button", name="Preview downloaded portion", exact=True
-                ).click()
+                card.get_by_role("button", name="Preview downloaded portion", exact=True).click()
 
             start_preview()
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > .1")
