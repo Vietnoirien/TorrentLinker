@@ -1,6 +1,7 @@
 """Shared torrent panel acceptance with simulated clients only."""
 
 import os
+import re
 import socket
 import threading
 import time
@@ -175,12 +176,28 @@ window.dispatchEvent(new MessageEvent('message', {
                 panel.locator('[data-export="json"]').click()
             assert "deleted" in Path(download.value.path()).read_text()
             panel.locator("#audit-close").click()
-            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            expect(page.locator("#page-jobs")).to_contain_text("Refresh client")
+            pending_polls = []
+            page.route("**/api/jobs", lambda route: pending_polls.append(route))
+            try:
+                page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
+                    "fr"
+                )
+                expect(page.locator("#page-jobs")).to_contain_text("Actualiser le client")
+                expect(page.locator("#page-jobs")).not_to_contain_text("Refresh client")
+            finally:
+                page.unroute("**/api/jobs")
+                for route in pending_polls:
+                    route.continue_()
             expect(panel.locator("#columns")).to_have_text("Colonnes")
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             page.set_viewport_size({"width": 390, "height": 844})
             expect(panel.locator("#columns")).to_be_visible()
+            expect(page.locator("#shell-navigation-frame")).to_have_css(
+                "height", re.compile(r"(?:[12]\d\d|\d{1,2})(?:\.\d+)?px")
+            )
+            page.locator("#torrents-frame").scroll_into_view_if_needed()
             if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
                 Path(folder).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(folder) / "torrents-mobile.png"))

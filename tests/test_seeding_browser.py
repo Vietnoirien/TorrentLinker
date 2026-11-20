@@ -95,6 +95,9 @@ def test_ten_thousand_torrents_have_bounded_rows_and_global_search(tmp_path, roo
                 )
                 page.set_viewport_size({"width": 390, "height": 844})
                 expect(panel.locator("html")).to_have_attribute("lang", "fr")
+                expect(panel.locator("#seeding-query")).to_have_attribute(
+                    "placeholder", "Rechercher un torrent…"
+                )
                 assert panel.locator("html").evaluate("node=>node.scrollWidth<=innerWidth")
                 if output:
                     page.screenshot(path=str(Path(output) / "web-10001-mobile-fr-light.png"))
@@ -228,6 +231,9 @@ def test_seeding_hierarchy_sort_filter_owner_memory_and_client_switch(
                     "light"
                 )
                 expect(panel.locator("html")).to_have_attribute("lang", "fr")
+                expect(panel.locator("#seeding-query")).to_have_attribute(
+                    "placeholder", "Rechercher un torrent…"
+                )
                 expect(panel.locator("html")).to_have_attribute("data-theme", "light")
                 if output := os.getenv("TL_SEEDING_SCREENSHOTS"):
                     Path(output).mkdir(parents=True, exist_ok=True)

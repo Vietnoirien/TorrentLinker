@@ -90,27 +90,29 @@ def test_folder_explorer_and_candidate_review(tmp_path):
                 "The Time Machine.epub", timeout=15000
             )
             frame.locator(".torrent").filter(has_text="The Time Machine.epub").click()
-            frame.get_by_role("button", name="Review files and repairs", exact=True).click()
-            expect(page.locator("#candidate-table")).to_contain_text("Full Match", timeout=15000)
-            page.locator("[data-candidate-tab=files]").click()
-            expect(page.locator("#candidate-files")).to_contain_text("matched")
+            frame.get_by_role("button", name="Check Candidate", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text("Full Match", timeout=15000)
+            frame.get_by_role("tab", name="Files", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text("Present")
             destination = os.getenv("TL_WEB_SCREENSHOTS")
             if destination:
                 Path(destination).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(destination) / "library-web.png"), full_page=True)
-            page.locator("[data-candidate-tab=evidence]").click()
-            page.locator("#inspect-evidence").click()
-            expect(page.locator("#evidence-report")).to_contain_text(
-                "No inconsistencies", timeout=15000
+            frame.get_by_role("tab", name="Evidence", exact=True).click()
+            frame.locator("[data-review-action=evidence]").click()
+            expect(frame.locator(".review-content")).to_contain_text(
+                "No measurable discrepancy", timeout=15000
             )
-            page.locator("#import-provenance").set_input_files(
+            frame.locator("#provenance-file").set_input_files(
                 {
                     "name": "original.torrent",
                     "mimeType": "application/x-bittorrent",
                     "buffer": make_torrent(local),
                 }
             )
-            expect(page.locator("#evidence-report")).to_contain_text("Hash verified", timeout=15000)
+            expect(frame.locator(".review-content")).to_contain_text(
+                "Verified association", timeout=15000
+            )
             if destination:
                 page.screenshot(
                     path=str(Path(destination) / "library-features-web.png"), full_page=True
@@ -118,9 +120,9 @@ def test_folder_explorer_and_candidate_review(tmp_path):
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     "fr"
                 )
-                page.locator("#inspect-evidence").click()
-                expect(page.locator("#evidence-report")).to_contain_text(
-                    "Hashes vérifiés", timeout=15000
+                frame.locator("[data-review-action=evidence]").click()
+                expect(frame.locator(".review-content")).to_contain_text(
+                    "Association vérifiée", timeout=15000
                 )
                 page.screenshot(
                     path=str(Path(destination) / "library-features-web-fr.png"), full_page=True
@@ -128,13 +130,11 @@ def test_folder_explorer_and_candidate_review(tmp_path):
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     "en"
                 )
-            page.locator("[data-candidate-tab=files]").click()
-            expect(page.locator("#candidate-files")).to_contain_text("The Time Machine.epub")
-            page.locator("#candidate-actions").get_by_role(
-                "button", name="Reject Candidate", exact=True
-            ).click()
-            expect(page.locator("#candidate-table")).to_contain_text("No Candidates", timeout=15000)
-            page.locator("#candidate-expand").click()
+            frame.get_by_role("tab", name="Files", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text("The Time Machine.epub")
+            page.on("dialog", lambda dialog: dialog.accept())
+            frame.get_by_role("button", name="Reject", exact=True).click()
+            expect(frame.locator(".review-content")).to_contain_text("No Candidates", timeout=15000)
             frame.get_by_role("button", name="Folders", exact=True).click()
             if destination:
                 page.screenshot(

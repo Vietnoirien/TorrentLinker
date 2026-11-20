@@ -488,6 +488,7 @@ function workStatus(en, fr) {
 const locallyTrackedJobs = new Set();
 let pollingJobs = false;
 let observedJobs = new Map();
+let displayedJobs = [];
 const pendingJob = row => ["queued", "running"].includes(row.status);
 function jobPage(kind) {
   if (/^(scan|check|reseed|search-library|library-|candidate-inspector|unpack|preview-unpack|refresh-unpack|find-compatible|combine-library|.*repair)/.test(kind)) return "library";
@@ -518,6 +519,7 @@ function jobSubject(row) {
   return s.path || s.draft_id || s.repair_id || s.plan_id || s.feed_id || (s.paths?.length ? s.paths.slice(0, 2).join(" · ") + (s.paths.length > 2 ? ` (+${s.paths.length - 2})` : "") : s.hashes?.slice(0, 2).join(" · ")) || "";
 }
 function renderPageJobs(rows) {
+  displayedJobs = rows;
   const host = $("page-jobs");
   const relevant = rows.filter(r => [state.clientId, "all"].includes(r.client_id) && jobPage(r.kind) === state.view);
   const shown = [...relevant.filter(pendingJob), ...relevant.filter(r => !pendingJob(r)).slice(0, 1)];
@@ -587,6 +589,7 @@ async function loadJobs() {
   renderJobs(await api("jobs"));
 }
 function renderJobs(rows) {
+  displayedJobs = rows;
   const clientName = id => state.setup?.clients?.find(p => p.id === id)?.name || id;
   $("job-list").replaceChildren(
     ...rows.map((r) => {
@@ -716,7 +719,7 @@ $("login-form").onsubmit = (e) => {
 async function logout() {
   document.dispatchEvent(new Event("tl-logout"));
   await api("logout", {});
-  state.jobs.clear(); observedJobs.clear(); locallyTrackedJobs.clear(); $("page-jobs").replaceChildren(); $("page-jobs").hidden = true; clearAgentToken();
+  state.jobs.clear(); observedJobs.clear(); displayedJobs = []; locallyTrackedJobs.clear(); $("page-jobs").replaceChildren(); $("page-jobs").hidden = true; clearAgentToken();
   $("workspace").hidden = true; $("login-screen").hidden = false;
 }
 let themeChoice = localStorage.getItem("tl-theme") || "auto";
@@ -733,6 +736,8 @@ function changeLanguage(value) {
   language = value;
   localStorage.setItem("tl-language", language);
   translate(); document.dispatchEvent(new Event("tl-language-changed"));
+  renderPageJobs(displayedJobs);
+  if (state.view === "jobs") renderJobs(displayedJobs);
   if (state.view === "zen") { guard(loadZenSeeding); planEnvironment(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
   if (state.view === "upload") uploadEnvironment();
