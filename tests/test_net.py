@@ -171,13 +171,13 @@ def test_no_proxy_means_a_direct_connection(target: int) -> None:
 
 
 def test_settings_keep_the_proxy_and_its_password_in_the_keyring(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
     from torrentlinker.config import Settings
     from torrentlinker.credentials import get_secret
     from torrentlinker.gui.settings_common import PROXY_PASSWORD
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Proxy address", "socks5h://proxy.lan:1080")
     edit_field(qtbot, dialog.view, "Proxy username", "me")
     edit_field(qtbot, dialog.view, "Proxy password", "pw")
@@ -198,10 +198,10 @@ def test_settings_keep_the_proxy_and_its_password_in_the_keyring(qtbot, tmp_path
 
 
 def test_an_unusable_proxy_address_is_not_saved(qtbot, tmp_path):
-    from tests.settings_support import edit_field, settings_dialog
+    from tests.settings_support import edit_field, settings_page
     from tests.test_community_interfaces import js, wait_js
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Proxy address", "ftp://proxy:21")
     js(
         qtbot,

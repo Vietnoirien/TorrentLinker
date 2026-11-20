@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
-
 from torrentlinker.domain import ContentKind, ItemState, LibraryFolder
 from torrentlinker.library import LibraryEntry
 from torrentlinker.scan import scan_item
@@ -42,9 +40,7 @@ def test_the_library_offers_an_upload_once_searched_without_a_match(qtbot, tmp_p
 
 
 def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from copy import deepcopy
     from dataclasses import replace
-    from types import SimpleNamespace
 
     from torrentlinker.config import Settings
     from torrentlinker.gui import main_window
@@ -62,24 +58,20 @@ def test_changing_library_folders_scans_again(qtbot, tmp_path: Path, monkeypatch
     window._startup_complete = True
     monkeypatch.setattr(window, "_has_indexer_key", lambda: True)
 
-    class Dialog(QObject):
-        diagnostics_requested = Signal()
-        agent_approvals = ()
+    from tests.test_startup import SettingsPageDouble
 
+    class Page(SettingsPageDouble):
         def __init__(self, parent, *, section) -> None:
-            super().__init__(parent)
-            self.settings = deepcopy(parent.settings)
-            self.setup = SimpleNamespace(settings=self.settings)
-            self.saved = True
+            super().__init__(parent, saved=True)
+            folders = [replace(folder, kind=ContentKind.MODEL_3D)]
+            self.setup.settings.library_folders = folders
 
-        def exec(self) -> bool:
-            self.settings.library_folders = [replace(folder, kind=ContentKind.MODEL_3D)]
-            return True
-
-    monkeypatch.setattr(main_window, "SettingsDialog", Dialog)
+    monkeypatch.setattr(main_window, "SettingsPage", Page)
     window.open_settings()
+    window.close_settings()
     assert scans == [False]
     window.open_settings()  # nothing changed this time
+    window.close_settings()
     assert scans == [False]
 
 

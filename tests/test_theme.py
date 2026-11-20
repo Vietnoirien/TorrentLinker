@@ -83,14 +83,14 @@ def test_frozen_theme_probe_and_monitor_use_host_libraries(qapp, monkeypatch, or
 
 
 def test_theme_setting_is_saved_and_old_settings_default_to_auto(tmp_path, qtbot):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
 
     path = tmp_path / "settings.json"
     path.write_text("{}")
     settings = Settings.load(path)
     assert settings.theme == "auto"
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="general")
+    dialog = settings_page(qtbot, tmp_path, settings, section="general")
     assert js(qtbot, dialog.view, 'document.querySelector("[aria-label=Theme]").value') == "auto"
     edit_field(qtbot, dialog.view, "Theme", "dark")
     save_group(qtbot, dialog)
@@ -98,19 +98,19 @@ def test_theme_setting_is_saved_and_old_settings_default_to_auto(tmp_path, qtbot
 
 
 def test_media_interface_choice_survives_settings_reopen_and_cancel(tmp_path, qtbot):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
 
     path = tmp_path / "settings.json"
     path.write_text("{}")
     assert Settings.load(path).media_layout == "cinematic"
     for choice in ("focus", "horizon", "cinematic"):
-        dialog = settings_dialog(qtbot, tmp_path, Settings.load(path), section="general")
+        dialog = settings_page(qtbot, tmp_path, Settings.load(path), section="general")
         edit_field(qtbot, dialog.view, "Media interface", choice)
         save_group(qtbot, dialog)
         dialog.close()
         settings = Settings.load(path)
-        reopened = settings_dialog(qtbot, tmp_path, settings, section="general")
+        reopened = settings_page(qtbot, tmp_path, settings, section="general")
         assert (
             js(
                 qtbot,
@@ -125,7 +125,7 @@ def test_media_interface_choice_survives_settings_reopen_and_cancel(tmp_path, qt
             "Media interface",
             "horizon" if choice != "horizon" else "focus",
         )
-        reopened.reject()
+        reopened.close()  # leave without saving
         assert Settings.load(path).media_layout == choice
     path.write_text('{"media_layout": "removed-experimental-layout"}')
     assert Settings.load(path).media_layout == "cinematic"

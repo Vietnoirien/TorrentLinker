@@ -318,7 +318,7 @@ def test_main_window_settings_stay_available_after_mcp_port_failure(qtbot, tmp_p
     opened = []
 
     def inspect(dialog):
-        dialog.show()
+        dialog.window().show()
         if dialog.view.section == "agents":
             wait_js(
                 qtbot, dialog.view, "Boolean(document.querySelector('#settings-error').textContent)"
@@ -333,10 +333,17 @@ def test_main_window_settings_stay_available_after_mcp_port_failure(qtbot, tmp_p
                 "Boolean(document.querySelector('[aria-label=\"Client name\"]'))",
             )
             opened.append("connections")
-        dialog.reject()
-        return 0
 
-    monkeypatch.setattr(main_window.SettingsDialog, "exec", inspect)
+    # Settings is a page: inspect it once opened, then leave it, which applies it.
+    original_open = main_window.MainWindow.open_settings
+
+    def open_then_inspect(self, **kwargs):
+        original_open(self, **kwargs)
+        if self._settings_page is not None:
+            inspect(self._settings_page)
+            self.close_settings()
+
+    monkeypatch.setattr(main_window.MainWindow, "open_settings", open_then_inspect)
     with socket.socket() as occupied:
         occupied.bind(("127.0.0.1", 0))
         occupied.listen()
@@ -421,17 +428,24 @@ def test_agent_access_reports_non_port_startup_failure(qtbot, tmp_path, monkeypa
     messages = []
 
     def inspect(dialog):
-        dialog.show()
+        dialog.window().show()
         wait_js(
             qtbot, dialog.view, "Boolean(document.querySelector('#settings-error').textContent)"
         )
         messages.append(
             js(qtbot, dialog.view, "document.querySelector('#settings-error').textContent")
         )
-        dialog.reject()
-        return 0
 
-    monkeypatch.setattr(main_window.SettingsDialog, "exec", inspect)
+    # Settings is a page: inspect it once opened, then leave it, which applies it.
+    original_open = main_window.MainWindow.open_settings
+
+    def open_then_inspect(self, **kwargs):
+        original_open(self, **kwargs)
+        if self._settings_page is not None:
+            inspect(self._settings_page)
+            self.close_settings()
+
+    monkeypatch.setattr(main_window.MainWindow, "open_settings", open_then_inspect)
     window.open_agent_access()
     assert window.agent_runtime.app is None
     assert "file is not a database" in messages[0]
@@ -605,14 +619,21 @@ def test_agent_runtime_started_in_settings_stays_suspended(qtbot, tmp_path, monk
     def inspect(dialog):
         from tests.test_community_interfaces import wait_js
 
-        dialog.show()
+        dialog.window().show()
         wait_js(qtbot, dialog.view, "Boolean(document.querySelector('#agent-clients input'))")
         assert window.agent_runtime.service.suspended
         assert window.agent_runtime.settings_edit_depth == 1
-        dialog.reject()
-        return 0
 
-    monkeypatch.setattr(main_window.SettingsDialog, "exec", inspect)
+    # Settings is a page: inspect it once opened, then leave it, which applies it.
+    original_open = main_window.MainWindow.open_settings
+
+    def open_then_inspect(self, **kwargs):
+        original_open(self, **kwargs)
+        if self._settings_page is not None:
+            inspect(self._settings_page)
+            self.close_settings()
+
+    monkeypatch.setattr(main_window.MainWindow, "open_settings", open_then_inspect)
     try:
         window.open_settings(agents=True)
         assert not window.agent_runtime.service.suspended
@@ -629,9 +650,9 @@ def test_agent_token_can_be_saved_privately(qtbot, tmp_path, monkeypatch):
 
     from PySide6.QtWidgets import QFileDialog
 
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     destination = tmp_path / "token.txt"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args: (str(destination), ""))
     dialog.view.bridge.requestAsync(

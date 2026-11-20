@@ -210,13 +210,13 @@ def test_windows_mapping_roundtrip_ignores_drive_case(qtbot):
 
 
 def test_settings_import_requires_save_and_uses_saved_mappings(qtbot, tmp_path):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
 
     local = tmp_path / "local"
     (local / "books").mkdir(parents=True)
     settings = Settings(language="en", path_mappings=[PathMapping(str(local), "/remote")])
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="downloads")
+    dialog = settings_page(qtbot, tmp_path, settings, section="downloads")
     dialog.setup.connector = lambda *a, **kw: SimpleNamespace(
         folder_settings=lambda: [ClientFolder("", "/remote/books", "default")]
     )
@@ -245,7 +245,7 @@ def test_settings_import_requires_save_and_uses_saved_mappings(qtbot, tmp_path):
     ) == str(local / "books")
     assert dialog.setup.settings.download_folders.default == ""
     assert not dialog.setup.path.exists()
-    dialog.reject()
+    dialog.close()  # leave without saving
     assert settings.download_folders.default == ""
 
 
@@ -253,7 +253,7 @@ def test_settings_import_requires_save_and_uses_saved_mappings(qtbot, tmp_path):
 def test_settings_import_ignores_stale_results_and_recovers_from_errors(qtbot, tmp_path, finish):
     import threading
 
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
 
     started, release = threading.Event(), threading.Event()
@@ -265,7 +265,7 @@ def test_settings_import_ignores_stale_results_and_recovers_from_errors(qtbot, t
             raise RuntimeError("Connection failed")
         return [ClientFolder("", "/download", "default")]
 
-    dialog = settings_dialog(qtbot, tmp_path, section="downloads")
+    dialog = settings_page(qtbot, tmp_path, section="downloads")
     dialog.setup.connector = lambda *a, **kw: SimpleNamespace(folder_settings=folders)
     try:
         js(

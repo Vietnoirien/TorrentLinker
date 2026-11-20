@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from PySide6.QtCore import QCoreApplication, Signal, Slot
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QVBoxLayout
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 from shiboken6 import isValid
 
 from torrentlinker.gui.community_view import BundledView, ViewBridge
@@ -246,17 +246,16 @@ class SettingsView(BundledView):
         self.bridge.ready()
 
 
-class SettingsDialog(QDialog):
-    """Desktop shell around the shared Settings document."""
+class SettingsPage(QWidget):
+    """Settings as a page of the main window, around the shared Settings document. A
+    separate window stayed white on Wayland; the main window's pages draw reliably."""
 
     def __init__(self, owner, *, section="connections"):
         from torrentlinker.agent.desktop import DesktopSetup
 
-        super().__init__(owner)
-        dialog = self
-        dialog.setWindowTitle(self.tr("Settings"))
-        available = dialog.screen().availableGeometry()
-        dialog.resize(min(1200, available.width() - 40), min(850, available.height() - 60))
+        super().__init__()
+        page = self
+        self.setProperty("ownsScrolling", True)
         setup = DesktopSetup(owner.settings, owner.settings_path, owner.store)
 
         def service():
@@ -295,26 +294,16 @@ class SettingsDialog(QDialog):
             agent_service=agents,
             companion_action=companion,
         )
-        view.diagnostics_requested.connect(lambda: owner._export_diagnostics(dialog))
+        view.diagnostics_requested.connect(lambda: owner._export_diagnostics(page))
         self.view = view
         self.setup = setup
         self.agent_approvals = view.agent_approvals
         self.saved = False
-        self.finished.connect(view.close)
-        view.changed.connect(lambda: setattr(dialog, "saved", True))
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(0, 0, 0, 12)
+        view.changed.connect(lambda: setattr(page, "saved", True))
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(view)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
 
-    def reject(self):
-        if self.view.pending:
-            QMessageBox.information(
-                self,
-                self.tr("Settings"),
-                self.tr("Wait for the current Settings operation to finish."),
-            )
-            return
-        super().reject()
+    def show_section(self, section: str) -> None:
+        self.view.section = section
+        self.view.refresh()

@@ -8,10 +8,10 @@ from qbittorrentapi import LoginFailed
     "error", [LoginFailed(), TimeoutError(), RuntimeError("connection refused")]
 )
 def test_connection_warning_always_explains_failure(qtbot, tmp_path, monkeypatch, error):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
 
     def fail():
         raise error

@@ -5,14 +5,14 @@ from torrentlinker.config import Settings, ui_scale
 
 
 def test_the_interface_size_is_saved_and_old_settings_keep_the_system_size(tmp_path, qtbot):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
 
     path = tmp_path / "settings.json"
     path.write_text("{}")
     settings = Settings.load(path)
     assert settings.ui_scale == 1.0
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="general")
+    dialog = settings_page(qtbot, tmp_path, settings, section="general")
     assert "Restart TorrentLinker" in js(qtbot, dialog.view, "document.body.textContent")
     edit_field(qtbot, dialog.view, "Interface size", "1.25")
     save_group(qtbot, dialog)

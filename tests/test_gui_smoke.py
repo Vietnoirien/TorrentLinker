@@ -16,10 +16,10 @@ def test_main_window_opens(qtbot, tmp_path: Path) -> None:  # type: ignore[no-un
 
 
 def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot, tmp_path):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     assert (
         js(qtbot, dialog.view, "document.querySelector('.settings-form h2').textContent")
         == "Connections"
@@ -33,13 +33,13 @@ def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot, tmp_path):
 
 
 def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from torrentlinker.credentials import get_secret
     from torrentlinker.deluge import DelugeApi
     from torrentlinker.domain import TorrentClient
     from torrentlinker.qbit import QbitApi
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Client type", "deluge")
     edit_field(qtbot, dialog.view, "Address", "http://nas:8112")
     edit_field(qtbot, dialog.view, "Password", "secret")
@@ -56,13 +56,13 @@ def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(qtbot, tmp
 
 
 def test_choosing_transmission_saves_it_and_the_app_connects_through_it(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from torrentlinker.credentials import get_secret
     from torrentlinker.domain import TorrentClient
     from torrentlinker.qbit import QbitApi
     from torrentlinker.transmission import TransmissionApi
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Client type", "transmission")
     edit_field(qtbot, dialog.view, "Address", "http://nas:9091")
     edit_field(qtbot, dialog.view, "Username", "me")
@@ -107,12 +107,12 @@ def test_part_names_are_turned_off_only_if_the_user_agrees_then_the_action_runs_
 
 
 def test_content_kind_chosen_in_settings_comes_back_as_a_content_kind(qtbot, tmp_path):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
     from torrentlinker.domain import ContentKind, LibraryFolder
 
     settings = Settings(library_folders=[LibraryFolder(tmp_path, 1, ContentKind.MODEL_3D)])
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="library")
+    dialog = settings_page(qtbot, tmp_path, settings, section="library")
     js(
         qtbot,
         dialog.view,
@@ -151,12 +151,12 @@ def test_library_exposes_seed_states_to_the_shared_view(qtbot, tmp_path: Path) -
 
 
 def test_a_typed_folder_path_is_added_to_the_library_folders(qtbot, tmp_path):
-    from tests.settings_support import edit_field, settings_dialog
+    from tests.settings_support import edit_field, settings_page
     from tests.test_community_interfaces import js
 
     folder = tmp_path / "library"
     folder.mkdir()
-    dialog = settings_dialog(qtbot, tmp_path, section="library")
+    dialog = settings_page(qtbot, tmp_path, section="library")
     edit_field(qtbot, dialog.view, "Folder on the TorrentLinker host", str(folder))
     js(
         qtbot,
@@ -168,12 +168,12 @@ def test_a_typed_folder_path_is_added_to_the_library_folders(qtbot, tmp_path):
 
 
 def test_zen_profile_entered_in_settings_comes_back(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
     from torrentlinker.zen import ZenClass, ZenProfile
 
     settings = Settings(zen=ZenProfile(ZenClass.SWARM_KEEPER, 0.02, 20, 300))
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="zen")
+    dialog = settings_page(qtbot, tmp_path, settings, section="zen")
     assert (
         js(
             qtbot,
@@ -262,7 +262,7 @@ def test_periodic_qbit_refresh_updates_estimates_after_a_tracker_response(
 
 
 def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot, tmp_path):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js
     from torrentlinker.downloads import DownloadFolders, IndexerCategory
 
@@ -273,7 +273,7 @@ def test_download_folders_tab_flags_categories_left_without_a_folder(qtbot, tmp_
         7000: IndexerCategory("Ebook"),
     }
     settings.download_folders = DownloadFolders({2000: "/dl/films"})
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="downloads")
+    dialog = settings_page(qtbot, tmp_path, settings, section="downloads")
     text = js(qtbot, dialog.view, "document.querySelector('.settings-form').textContent")
     assert "Films › VO" in text
     assert text.count("/dl/films") >= 2
@@ -1218,7 +1218,7 @@ def test_stopping_a_send_keeps_the_rest_of_the_plan_and_finishing_clears_it(
 
 def test_detect_adds_the_docker_path_and_check_counts_its_torrents(qtbot, tmp_path):
     from tests.fake_qbit import FakeQbit
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
     from torrentlinker.domain import LibraryFolder, PathMapping, Torrent
     from torrentlinker.downloads import DownloadFolders
@@ -1231,7 +1231,7 @@ def test_detect_adds_the_docker_path_and_check_counts_its_torrents(qtbot, tmp_pa
     settings = Settings(language="en")
     settings.library_folders = [LibraryFolder(nas / "ebooks")]
     settings.download_folders = DownloadFolders({}, str(tmp_path / "elsewhere"))
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="paths")
+    dialog = settings_page(qtbot, tmp_path, settings, section="paths")
     dialog.setup.connector = lambda *args, **kwargs: client
     js(
         qtbot,
@@ -1431,10 +1431,10 @@ def test_after_a_verified_unpack_the_archive_can_go_to_the_trash(
 
 
 def test_shop_badges_go_past_the_tree_bonus_limit(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
 
-    dialog = settings_dialog(qtbot, tmp_path, section="zen")
+    dialog = settings_page(qtbot, tmp_path, section="zen")
     assert (
         js(
             qtbot,
@@ -1452,11 +1452,11 @@ def test_shop_badges_go_past_the_tree_bonus_limit(qtbot, tmp_path):
 
 
 def test_extra_api_keys_are_saved_and_each_gets_its_own_queues(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from tests.test_community_interfaces import js
     from torrentlinker.credentials import get_secret
 
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Indexer API key", "main")
     js(
         qtbot,

@@ -1,5 +1,3 @@
-from PySide6.QtWidgets import QDialogButtonBox
-
 from tests.test_community_interfaces import js, wait_js
 from torrentlinker.gui.zen_view import PlanView
 
@@ -43,51 +41,21 @@ def test_scrolling_over_focused_plan_size_does_not_change_value(qtbot):
     )
 
 
-def test_settings_save_fits_available_screen(qtbot, tmp_path, request):
+def test_settings_save_stays_visible_on_a_short_page(qtbot, tmp_path, request):
+    # Settings is a page of the main window: its Save actions stay within the page,
+    # even above a taskbar that leaves a short work area.
     from tests.webengine_support import isolated_webengine_render
 
     if isolated_webengine_render(request):
         return
 
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
 
-    dialog = settings_dialog(qtbot, tmp_path)
-    available = dialog.screen().availableGeometry()
-    assert available.contains(dialog.frameGeometry())
-    close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
-    assert available.contains(close.mapToGlobal(close.rect().bottomRight()))
+    page = settings_page(qtbot, tmp_path)
+    page.window().resize(1366, 580)
     wait_js(
         qtbot,
-        dialog.view,
-        "document.querySelector('.settings-form > .settings-actions').g"
-        "etBoundingClientRect().bottom <= innerHeight",
-    )
-
-
-def test_settings_uses_short_work_area_above_taskbar(qtbot, tmp_path, monkeypatch, request):
-    from tests.webengine_support import isolated_webengine_render
-
-    if isolated_webengine_render(request):
-        return
-
-    from types import SimpleNamespace
-
-    from PySide6.QtCore import QRect
-
-    from tests.settings_support import settings_dialog
-    from torrentlinker.gui.settings_view import SettingsDialog
-
-    area = QRect(0, 0, 1366, 640)
-    monkeypatch.setattr(
-        SettingsDialog, "screen", lambda self: SimpleNamespace(availableGeometry=lambda: area)
-    )
-    dialog = settings_dialog(qtbot, tmp_path)
-    assert dialog.height() <= area.height() - 60
-    close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
-    assert dialog.rect().contains(close.mapTo(dialog, close.rect().bottomRight()))
-    wait_js(
-        qtbot,
-        dialog.view,
+        page.view,
         "document.querySelector('.settings-form > .settings-actions').g"
         "etBoundingClientRect().bottom <= innerHeight",
     )

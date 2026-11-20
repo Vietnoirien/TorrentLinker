@@ -162,10 +162,10 @@ def test_desktop_export_respects_file_choice(qtbot, tmp_path, monkeypatch, actio
 
 
 def test_settings_export_button_is_translated_and_emits_request(qtbot, tmp_path):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js
 
-    dialog = settings_dialog(qtbot, tmp_path, Settings(language="fr"), section="general")
+    dialog = settings_page(qtbot, tmp_path, Settings(language="fr"), section="general")
     with qtbot.waitSignal(dialog.view.diagnostics_requested):
         js(
             qtbot,

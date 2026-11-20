@@ -685,7 +685,6 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
 
     from tests.settings_support import edit_field, save_group
     from tests.test_community_interfaces import js, wait_js
-    from torrentlinker.gui.settings_view import SettingsDialog
     from torrentlinker.web.app import create_app
 
     config = tmp_path / "config"
@@ -717,7 +716,6 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
     assert window.media_center_active
 
     def save_editor(dialog):
-        dialog.show()
         wait_js(qtbot, dialog.view, "Boolean(document.querySelector('.settings-form h2'))")
         js(
             qtbot,
@@ -727,10 +725,17 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
         )
         edit_field(qtbot, dialog.view, "Client name", "Media client")
         save_group(qtbot, dialog)
-        dialog.reject()
-        return 0
 
-    monkeypatch.setattr(SettingsDialog, "exec", save_editor)
+    # Settings is a page: edit it once opened, then leave it, which applies it.
+    original_open = MainWindow.open_settings
+
+    def open_then_edit(self, **kwargs):
+        original_open(self, **kwargs)
+        if self._settings_page is not None:
+            save_editor(self._settings_page)
+            self.close_settings()
+
+    monkeypatch.setattr(MainWindow, "open_settings", open_then_edit)
     window.open_client_profiles()
     replacement = window
     assert replacement.settings.profile().name == "Media client"

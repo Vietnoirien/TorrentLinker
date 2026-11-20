@@ -198,14 +198,14 @@ def test_desktop_switch_rebuilds_scoped_views_without_moving_the_queue(
 
 
 def test_client_manager_cancel_keeps_existing_credentials(qtbot, tmp_path):
-    from tests.settings_support import edit_field, settings_dialog
+    from tests.settings_support import edit_field, settings_page
     from torrentlinker.credentials import get_secret, set_secret
 
     set_secret("qbit-password", "original")
-    dialog = settings_dialog(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Password", "replacement")
     assert get_secret("qbit-password") == "original"
-    dialog.reject()
+    dialog.close()  # leave without saving
     assert get_secret("qbit-password") == "original"
     assert not dialog.setup.path.exists()
 

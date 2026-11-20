@@ -27,7 +27,7 @@ def categories():
 
 
 def test_desktop_checks_empty_mapping_and_shows_category_branches(qtbot, tmp_path, monkeypatch):
-    from tests.settings_support import settings_dialog
+    from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
 
     root = tmp_path / "media"
@@ -37,7 +37,7 @@ def test_desktop_checks_empty_mapping_and_shows_category_branches(qtbot, tmp_pat
     settings = Settings(language="en")
     settings.path_mappings = [PathMapping(str(root), "/downloads")]
     settings.indexer_categories = categories()
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="paths")
+    dialog = settings_page(qtbot, tmp_path, settings, section="paths")
     dialog.setup.connector = lambda *a, **kw: client
     js(
         qtbot,

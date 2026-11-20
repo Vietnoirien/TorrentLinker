@@ -81,7 +81,7 @@ def test_native_settings_service_sections_use_shared_controls(qtbot, tmp_path):
     )
 
 
-def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path, request):
+def test_settings_page_fits_work_area_and_renders_both_themes(qtbot, tmp_path, request):
     from tests.webengine_support import isolated_webengine_render
 
     if isolated_webengine_render(request):
@@ -90,10 +90,10 @@ def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path,
     import os
     from pathlib import Path
 
-    from PySide6.QtWidgets import QDialogButtonBox, QWidget
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
 
     from torrentlinker.config import Settings
-    from torrentlinker.gui.settings_view import SettingsDialog
+    from torrentlinker.gui.settings_view import SettingsPage
     from torrentlinker.store import Store
 
     class Host(QWidget):
@@ -108,15 +108,12 @@ def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path,
 
     owner = Host()
     qtbot.addWidget(owner)
-    dialog = SettingsDialog(owner)
-    qtbot.addWidget(dialog)
-    dialog.show()
+    dialog = SettingsPage(owner)
+    QVBoxLayout(owner).addWidget(dialog)
+    owner.resize(1200, 850)
+    owner.show()
     view = dialog.view
     wait_js(qtbot, view, "Boolean(document.querySelector('[aria-label=\"Client name\"]'))")
-    available = dialog.screen().availableGeometry()
-    close = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Close)
-    assert available.contains(close.mapToGlobal(close.rect().bottomRight()))
-    assert dialog.height() <= available.height() - 60
     wait_js(
         qtbot,
         view,
@@ -143,14 +140,14 @@ def test_settings_dialog_fits_work_area_and_renders_both_themes(qtbot, tmp_path,
 
 
 def test_automatic_library_grouping_survives_editing_another_field(qtbot, tmp_path):
-    from tests.settings_support import edit_field, settings_dialog
+    from tests.settings_support import edit_field, settings_page
     from torrentlinker.config import Settings
     from torrentlinker.domain import LibraryFolder
 
     folder = tmp_path / "library"
     folder.mkdir()
     settings = Settings(language="en", library_folders=[LibraryFolder(folder, None)])
-    dialog = settings_dialog(qtbot, tmp_path, settings, section="library")
+    dialog = settings_page(qtbot, tmp_path, settings, section="library")
     js(
         qtbot,
         dialog.view,

@@ -2,8 +2,8 @@ import threading
 from copy import deepcopy
 from types import SimpleNamespace
 
-from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from torrentlinker.config import Settings
 from torrentlinker.gui import main_window
@@ -97,6 +97,20 @@ def test_media_center_hides_app_chrome_and_restores_window(qtbot, tmp_path, monk
     assert window.navigation.isVisible()
 
 
+class SettingsPageDouble(QWidget):
+    """Stands for the Settings page: its saved copy and nothing in flight."""
+
+    def __init__(self, parent, *, saved):
+        super().__init__()
+        self.setup = SimpleNamespace(settings=deepcopy(parent.settings))
+        self.saved = saved
+        self.agent_approvals = ()
+        self.view = SimpleNamespace(pending=0, close=lambda: None)
+
+    def show_section(self, section):
+        pass
+
+
 def setup_window(qtbot, tmp_path, monkeypatch, *, saved=True, key=""):
     from torrentlinker.domain import LibraryFolder
 
@@ -147,27 +161,14 @@ def test_configured_startup_loads_once_without_welcome(qtbot, tmp_path, monkeypa
 def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypatch):
     window, calls, secret = setup_window(qtbot, tmp_path, monkeypatch)
     messages, opened = [], []
-    save = [False]
     monkeypatch.setattr(QMessageBox, "information", lambda *args: messages.append(args[1]))
 
-    class Dialog(QObject):
-        diagnostics_requested = Signal()
-        agent_approvals = ()
-
+    class Page(SettingsPageDouble):
         def __init__(self, parent, *, section):
-            super().__init__(parent)
+            super().__init__(parent, saved=False)
             opened.append(True)
-            self.setup = SimpleNamespace(settings=deepcopy(parent.settings))
-            self.saved = False
 
-        def exec(self):
-            if save[0]:
-                secret["key"] = "test-key"
-                self.saved = True
-                return True
-            return False
-
-    monkeypatch.setattr(main_window, "SettingsDialog", Dialog)
+    monkeypatch.setattr(main_window, "SettingsPage", Page)
     window.startup()
     qtbot.wait(20)
     assert messages == ["Welcome to TorrentLinker"]
@@ -178,8 +179,13 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
     assert window.tabs.isEnabled()
     assert window.tabs.isTabEnabled(window.tabs.indexOf(window.media_tab))
     assert not window.tabs.isTabEnabled(window.tabs.indexOf(window.search_tab))
-    save[0] = True
+    # The owner leaves Settings without a key, opens it again later and saves one.
+    window.close_settings()
+    assert window.setup_needed
     window.open_settings()
+    secret["key"] = "test-key"
+    window._settings_page.saved = True
+    window.close_settings()
     qtbot.waitUntil(lambda: len(calls) == 6)
     assert window.tabs.isEnabled()
     assert not window.setup_needed
@@ -189,27 +195,21 @@ def test_cancelled_welcome_can_resume_after_saving_key(qtbot, tmp_path, monkeypa
 def test_first_launch_save_without_key_keeps_loading_paused(qtbot, tmp_path, monkeypatch):
     window, calls, secret = setup_window(qtbot, tmp_path, monkeypatch, saved=False, key="  ")
 
-    class Dialog(QObject):
-        diagnostics_requested = Signal()
-        agent_approvals = ()
-
+    class Page(SettingsPageDouble):
         def __init__(self, parent, *, section):
-            super().__init__(parent)
-            self.setup = SimpleNamespace(settings=deepcopy(parent.settings))
-            self.saved = True
+            super().__init__(parent, saved=True)
 
-        def exec(self):
-            return True
-
-    monkeypatch.setattr(main_window, "SettingsDialog", Dialog)
+    monkeypatch.setattr(main_window, "SettingsPage", Page)
     window.startup()
     qtbot.wait(20)
+    window.close_settings()  # saved, but still without an indexer key
     assert window.settings_path.exists()
     assert not calls
     assert not window.seeding_timer.isActive()
     assert window.setup_needed
     secret["key"] = "test-key"
     window.open_settings()
+    window.close_settings()
     qtbot.waitUntil(lambda: len(calls) == 6)
     assert window._startup_complete
 
@@ -353,9 +353,6 @@ def test_first_web_panel_visit_keeps_the_native_window(qtbot, tmp_path, monkeypa
 
 def test_settings_open_during_background_work_and_keep_both_saves(qtbot, tmp_path, monkeypatch):
     from PySide6.QtCore import QRunnable, QThreadPool
-    from PySide6.QtWidgets import QApplication
-
-    from torrentlinker.gui.settings_view import SettingsDialog
 
     window, _, _ = setup_window(qtbot, tmp_path, monkeypatch)
     window._startup_complete = True
@@ -367,26 +364,23 @@ def test_settings_open_during_background_work_and_keep_both_saves(qtbot, tmp_pat
 
     QThreadPool.globalInstance().start(Busy())  # a Catalogue update still running
     qtbot.waitUntil(lambda: QThreadPool.globalInstance().activeThreadCount() > 0)
-    opened = []
-
-    def while_open():
-        dialog = next(w for w in QApplication.topLevelWidgets() if isinstance(w, SettingsDialog))
-        opened.append(dialog)
+    try:
+        window.open_settings()  # the first click opens it, background work or not
+        page = window._settings_page
+        assert page is not None and window.tabs.currentWidget() is page
+        assert window.shell_host.page() == "setup"
         # The owner saves a section in Settings...
-        dialog.view.workspace.save(
-            "general", {**dialog.view.workspace.snapshot()["general"], "theme": "light"}
+        page.view.workspace.save(
+            "general", {**page.view.workspace.snapshot()["general"], "theme": "light"}
         )
-        dialog.saved = True
+        page.saved = True
         # ...then a background task finishes and records what it measured.
         window._speed_measured(42.0)
-        dialog.reject()
-
-    QTimer.singleShot(0, while_open)
-    try:
-        window._edit_settings(assistant=False, agents=False)
+        window.close_settings()
     finally:
         release.set()
-    assert opened, "Settings must open at the first click, even during background work"
+    assert window._settings_page is None
+    assert window.tabs.indexOf(page) == -1  # leaving removes the page
     saved = Settings.load(window.settings_path)
     assert (saved.theme, saved.download_speed) == ("light", 42.0)
     assert (window.settings.theme, window.settings.download_speed) == ("light", 42.0)

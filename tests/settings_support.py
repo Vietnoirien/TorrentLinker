@@ -1,14 +1,16 @@
 """Temporary desktop owner for shared Settings integration tests."""
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from tests.test_community_interfaces import js, wait_js
 from torrentlinker.config import Settings
-from torrentlinker.gui.settings_view import SettingsDialog
+from torrentlinker.gui.settings_view import SettingsPage
 from torrentlinker.store import Store
 
 
-def settings_dialog(qtbot, tmp_path, settings=None, *, section="connections", show=True):
+def settings_page(qtbot, tmp_path, settings=None, *, section="connections", show=True):
+    """The Settings page in a window of its own, as the main window shows it."""
+
     class Owner(QWidget):
         def __init__(self):
             super().__init__()
@@ -22,12 +24,13 @@ def settings_dialog(qtbot, tmp_path, settings=None, *, section="connections", sh
 
     owner = Owner()
     qtbot.addWidget(owner)
-    dialog = SettingsDialog(owner, section=section)
-    qtbot.addWidget(dialog)
+    page = SettingsPage(owner, section=section)
+    QVBoxLayout(owner).addWidget(page)
+    owner.resize(1200, 850)
     if show:
-        dialog.show()
-        wait_js(qtbot, dialog.view, "Boolean(document.querySelector('.settings-form h2'))")
-    return dialog
+        owner.show()
+        wait_js(qtbot, page.view, "Boolean(document.querySelector('.settings-form h2'))")
+    return page
 
 
 def edit_field(qtbot, view, label, value):

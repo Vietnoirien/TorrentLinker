@@ -18,6 +18,8 @@ class ShellHost:
     def page(self):
         owner = self.owner
         index = owner.tabs.currentIndex()
+        if owner.tabs.currentWidget() is getattr(owner, "_settings_page", None):
+            return "setup"
         if 0 <= index < len(WORKSPACES):
             return WORKSPACES[index]
         if (

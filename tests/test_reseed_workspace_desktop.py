@@ -49,14 +49,14 @@ def test_native_board_runs_the_shared_workflow(qtbot, tmp_path, monkeypatch):
 
 
 def test_link_folder_is_edited_in_client_settings_without_leaking_between_clients(qtbot, tmp_path):
-    from tests.settings_support import edit_field, save_group, settings_dialog
+    from tests.settings_support import edit_field, save_group, settings_page
     from torrentlinker.config import Settings
 
     settings = Settings(language="en")
     original = settings.active_client_id
     other = settings.add_client("NAS")
     settings.select_client(other.id)
-    dialog = settings_dialog(qtbot, tmp_path, settings)
+    dialog = settings_page(qtbot, tmp_path, settings)
     edit_field(qtbot, dialog.view, "Reseed link folder", "/media/nas-links")
     save_group(qtbot, dialog)
     saved = Settings.load(dialog.setup.path)
@@ -64,9 +64,9 @@ def test_link_folder_is_edited_in_client_settings_without_leaking_between_client
     dialog.close()
     saved.select_client(original)
     assert saved.profile().reseed_link_root == ""
-    cancelled = settings_dialog(qtbot, tmp_path, saved)
+    cancelled = settings_page(qtbot, tmp_path, saved)
     edit_field(qtbot, cancelled.view, "Reseed link folder", "/do-not-save")
-    cancelled.reject()
+    cancelled.close()  # leave without saving
     assert saved.profile().reseed_link_root == ""
     assert Settings.load(dialog.setup.path).profile().reseed_link_root == "/media/nas-links"
 

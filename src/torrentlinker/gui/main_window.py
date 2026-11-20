@@ -85,7 +85,7 @@ from torrentlinker.gui.settings_common import (
     choose_directory,
     extra_indexer_keys,
 )
-from torrentlinker.gui.settings_view import SettingsDialog
+from torrentlinker.gui.settings_view import SettingsPage
 from torrentlinker.gui.shell_host import ShellHost
 from torrentlinker.gui.shell_view import WORKSPACES, ShellView
 from torrentlinker.gui.tasks import run_in_background, run_with_progress
@@ -398,6 +398,7 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self.workspace_scroll, 1)
         shell.addWidget(content, 1)
         self.tabs.currentChanged.connect(self._workspace_changed)
+        self.tabs.currentChanged.connect(self._settings_navigation)
         self._workspace_changed(0)
         self.setCentralWidget(central)
         self.media_center_active = False
@@ -462,7 +463,12 @@ class MainWindow(QMainWindow):
         self.seeding_timer.setInterval(30_000)
         self.seeding_timer.timeout.connect(self._refresh_seeding_quietly)
         self._seeding_held = False
-        self._settings_dialog: SettingsDialog | None = None  # while Settings is open
+        self._settings_page: SettingsPage | None = None  # while Settings is open
+        self._settings_stack: ExitStack | None = None
+        self._settings_timers: list[QTimer] = []
+        self._settings_folders: list = []
+        self._settings_return = 0
+        self._settings_from_media_center = False
         # Checks often, fetches only once the whole Catalogue is REFRESH_INTERVAL old.
         self.catalogue_refresh_timer = QTimer(self)
         self.catalogue_refresh_timer.setInterval(10 * 60_000)
@@ -1924,8 +1930,8 @@ class MainWindow(QMainWindow):
         the newest one is written. Without this, closing Settings dropped the update, and
         the update had overwritten what Settings had just saved."""
         targets = [self.settings]
-        if self._settings_dialog is not None:
-            targets.append(self._settings_dialog.setup.settings)
+        if self._settings_page is not None:
+            targets.append(self._settings_page.setup.settings)
         for target in targets:
             for name, value in fields.items():
                 setattr(target, name, value)
@@ -2194,15 +2200,18 @@ class MainWindow(QMainWindow):
 
     @agent_settings_change
     def open_client_profiles(self) -> None:
-        if self.agent_runtime and self.agent_runtime.busy():
-            self.statusBar().showMessage(self.tr("Wait for agent jobs before changing settings."))
-            return
         from PySide6.QtCore import QThreadPool
 
-        if QThreadPool.globalInstance().activeThreadCount():
-            self.statusBar().showMessage(
-                self.tr("Wait for the current operation before changing client."), 5000
-            )
+        # Said in a box: running updates redraw the status bar, which hid these refusals.
+        if self.agent_runtime and self.agent_runtime.busy():
+            message = self.tr("Wait for agent jobs before changing settings.")
+        elif QThreadPool.globalInstance().activeThreadCount():
+            # Clients are replaced, not edited: work in progress still uses the current one.
+            message = self.tr("Wait for the current operation before changing client.")
+        else:
+            message = ""
+        if message:
+            QMessageBox.information(self, self.tr("Settings"), message)
             return
         self.open_settings(section="clients")
 
@@ -2214,16 +2223,83 @@ class MainWindow(QMainWindow):
     def open_assistant_connections(self) -> None:
         self.open_settings(assistant=True)
 
-    @agent_settings_change
     def open_settings(
         self, *, assistant: bool = False, agents: bool = False, section: str = "connections"
     ) -> None:
-        with ExitStack() as stack:
-            self._settings_stack: ExitStack | None = stack
-            try:
-                self._edit_settings(assistant=assistant, agents=agents, section=section)
-            finally:
-                self._settings_stack = None
+        """Settings is a page of this window; leaving it applies what was saved."""
+        section = "assistant" if assistant else "agents" if agents else section
+        if self._settings_page is not None:
+            self._settings_page.show_section(section)
+            self.tabs.setCurrentWidget(self._settings_page)
+            return
+        # Agents may not submit work while the settings they run under are being edited.
+        stack = ExitStack()
+        runtime = self.agent_runtime
+        try:
+            if runtime is not None and runtime.app is not None:
+                runtime.sync(self.settings)
+                stack.enter_context(runtime.editing_settings())
+        except ValueError as error:
+            stack.close()
+            self.shell_host.refresh()
+            QMessageBox.information(self, self.tr("Settings"), self.tr(str(error)))
+            return
+        self._settings_stack = stack
+        self._settings_folders = list(self.settings.library_folders)
+        # Settings saves each group immediately. Keep periodic desktop workers
+        # from writing an older Settings snapshot while the page is open.
+        self._settings_timers = [
+            timer
+            for timer in self.findChildren(QTimer)
+            if timer.parent() is self and timer.isActive()
+        ]
+        for timer in self._settings_timers:
+            timer.stop()
+        self._settings_return = self.tabs.currentIndex()
+        # Media Center hides the sidebar Settings needs; coming back to Media restores it.
+        self._settings_from_media_center = self.media_center_active
+        page = SettingsPage(self, section=section)
+        self._settings_page = page
+        self.tabs.addTab(page, self.tr("Settings"))
+        self.tabs.setCurrentWidget(page)
+        self.shell_host.refresh()
+
+    def close_settings(self) -> None:
+        """Back to the page Settings was opened from."""
+        page = self._settings_page
+        if page is None:
+            return
+        index = self._settings_return
+        if self.tabs.widget(index) in (None, page) or not self.tabs.isTabEnabled(index):
+            index = self.tabs.indexOf(self.media_tab)
+        self.tabs.setCurrentIndex(index)
+
+    def _settings_navigation(self, index: int) -> None:
+        page = getattr(self, "_settings_page", None)  # pages are added before it exists
+        if page is not None and self.tabs.widget(index) is not page:
+            self._leave_settings()
+
+    def _leave_settings(self) -> None:
+        page = self._settings_page
+        if page is None or self.tabs.currentWidget() is page:
+            return  # the owner came back
+        if page.view.pending:
+            # A save is on its way: apply once it has landed.
+            QTimer.singleShot(100, self._leave_settings)
+            return
+        self._settings_page = None
+        self.tabs.removeTab(self.tabs.indexOf(page))
+        page.view.close()
+        page.deleteLater()
+        for timer in self._settings_timers:
+            timer.start()
+        self._settings_timers = []
+        stack, self._settings_stack = self._settings_stack, None
+        if stack is not None:
+            stack.close()
+        if self._settings_from_media_center and self.tabs.currentWidget() is self.media_tab:
+            self.set_media_center(True)
+        self._settings_applied(page, self._settings_folders)
 
     def _export_diagnostics(self, parent: QWidget) -> None:
         from torrentlinker.diagnostics import build_report
@@ -2232,44 +2308,15 @@ class MainWindow(QMainWindow):
         jobs = self.agent_runtime.service.jobs if self.agent_runtime else None
         export_report(parent, lambda: build_report(self.settings, self.store, jobs))
 
-    def _edit_settings(
-        self, *, assistant: bool, agents: bool, section: str = "connections"
-    ) -> None:
-        if self.agent_runtime and self.agent_runtime.busy():
-            # Said in a box: the status bar is redrawn by running updates, which hid this.
-            QMessageBox.information(
-                self, self.tr("Settings"), self.tr("Wait for agent jobs before changing settings.")
-            )
-            return
-        folders = list(self.settings.library_folders)
-        dialog = SettingsDialog(
-            self, section="assistant" if assistant else "agents" if agents else section
-        )
-        # Settings saves each group immediately. Keep periodic desktop workers
-        # from writing an older Settings snapshot while this editor is open.
-        timers = [
-            timer
-            for timer in self.findChildren(QTimer)
-            if timer.parent() is self and timer.isActive()
-        ]
-        for timer in timers:
-            timer.stop()
-        self._settings_dialog = dialog  # background updates reach its copy too
-        try:
-            dialog.exec()
-        finally:
-            self._settings_dialog = None
-            for timer in timers:
-                timer.start()
-        dialog.deleteLater()
-        accepted = dialog.saved
-        if accepted and dialog.setup.settings.active_client_id != self.settings.active_client_id:
-            self._replace_workspace(dialog.setup.settings)
+    def _settings_applied(self, page: SettingsPage, folders: list) -> None:
+        accepted = page.saved
+        if accepted and page.setup.settings.active_client_id != self.settings.active_client_id:
+            self._replace_workspace(page.setup.settings)
             return
         if accepted:
             # Keep the Settings object used by existing workspaces authoritative.
-            self.settings.__dict__.update(dialog.setup.settings.__dict__)
-        for identifier in dialog.agent_approvals:
+            self.settings.__dict__.update(page.setup.settings.__dict__)
+        for identifier in page.agent_approvals:
             # Run only after the settings transaction has released its suspension.
             # execute() still checks the reviewed proposal's settings fingerprint.
             QTimer.singleShot(
@@ -2315,7 +2362,7 @@ class MainWindow(QMainWindow):
                 if self.settings.library_folders != folders:
                     self.scan()  # a new folder, depth or Content Kind changes every entry
         else:
-            log.info("settings dialog cancelled")
+            log.info("settings left without changes")
 
     def _execute_agent_approval(self, identifier: str) -> None:
         if self.agent_runtime is None:

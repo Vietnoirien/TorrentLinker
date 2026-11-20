@@ -150,11 +150,8 @@ def test_desktop_connect_opens_handoff_and_receiver_returns_after_restart(
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         window.account_workspace.remember_receiver(listener.getsockname()[1])
-    from torrentlinker.gui.settings_view import SettingsDialog
-
-    dialog = SettingsDialog(window, section="companion")
-    qtbot.addWidget(dialog)
-    dialog.show()
+    window.open_settings(section="companion")
+    dialog = window._settings_page
     wait_js(
         qtbot,
         dialog.view,
@@ -168,7 +165,7 @@ def test_desktop_connect_opens_handoff_and_receiver_returns_after_restart(
     )
     qtbot.waitUntil(lambda: bool(opened))
     qtbot.waitUntil(lambda: dialog.view.pending == 0)
-    dialog.close()
+    window.close_settings()
     assert len(opened) == 1
     payload = json.loads(unquote(urlsplit(opened[0]).fragment))
     address = payload["target"]
