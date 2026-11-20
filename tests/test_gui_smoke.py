@@ -1608,3 +1608,20 @@ def test_seeding_and_catalogue_refreshes_wait_while_a_video_plays(qtbot, tmp_pat
     assert refreshed == [True]  # once, when the video stops
     window.media_tab.video_playing_changed.emit(False)
     assert refreshed == [True]
+
+
+def test_profile_poll_waits_while_a_video_plays(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    window = MainWindow(Settings(), tmp_path / "settings.json", Store(tmp_path / "s.db"))
+    qtbot.addWidget(window)
+    shown = []
+    window.show_account_profile = lambda: shown.append(True)  # type: ignore[method-assign]
+    window.refresh_profile = lambda: None  # type: ignore[method-assign]
+    window.media_tab.video_playing = True
+    window._poll_account_profile()
+    window._poll_account_profile()
+    assert shown == []  # its keyring read and view refresh would drop frames
+    window.media_tab.video_playing = False
+    window.media_tab.video_playing_changed.emit(False)
+    assert shown == [True]  # once, when the video stops
+    window.media_tab.video_playing_changed.emit(False)
+    assert shown == [True]

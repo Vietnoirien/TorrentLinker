@@ -296,6 +296,7 @@ class MainWindow(QMainWindow):
         self.profile_timer = QTimer(self)
         self.profile_timer.setInterval(3000)
         self.profile_timer.timeout.connect(self._poll_account_profile)
+        self._profile_held = False
         self.profile_timer.start()
         self.show_account_profile()
         self.zen_tab.seeding_view.uploads_changed.connect(self._uploads_changed)
@@ -770,6 +771,11 @@ class MainWindow(QMainWindow):
                     )
 
     def _poll_account_profile(self) -> None:
+        """The 3-second Profile poll. Its keyring read and view refresh take 40 to 85 ms on
+        the GUI thread, a dropped frame each time, so it waits for a video to stop."""
+        if self.media_tab.video_playing:
+            self._profile_held = True
+            return
         self.show_account_profile()
         if time.time() >= self.account_workspace.state()["refresh_after"]:
             self.refresh_profile()
@@ -1519,6 +1525,9 @@ class MainWindow(QMainWindow):
         if not playing and self._seeding_held:
             self._seeding_held = False
             self._refresh_seeding_quietly()
+        if not playing and self._profile_held:
+            self._profile_held = False
+            self._poll_account_profile()
 
     def refresh_whole_catalogue(self) -> bool:
         """Every few hours, the newest torrents of every category (timer). Waits for any
