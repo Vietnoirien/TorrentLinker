@@ -32,6 +32,7 @@ class LockedKeyring(KeyringBackend):
 @pytest.fixture
 def locked() -> Iterator[LockedKeyring]:
     previous = keyring.get_keyring()
+    credentials._declined_unlock = False  # an earlier test may have met a locked keyring
     backend = LockedKeyring()
     keyring.set_keyring(backend)
     yield backend
