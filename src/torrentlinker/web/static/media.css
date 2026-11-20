@@ -294,6 +294,10 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 
 /* Video home rows: a title, a count, scroll arrows, "See all", then cards side by side. */
 .media-home-rows { display: grid; gap: 30px; margin-top: 8px; }
+/* The cinematic home keeps its menu and the selected title in view while the rows scroll beneath. */
+#view-media[data-home="true"][data-layout="cinematic"] .media-topbar { position: sticky; top: 0; z-index: 6; background: var(--bg); }
+#view-media[data-home="true"][data-layout="cinematic"] .media-feature { position: sticky; top: var(--media-topbar-height, 0px); z-index: 5; }
+html:has(#view-media[data-home="true"][data-layout="cinematic"]) { scroll-padding-top: calc(var(--media-topbar-height, 0px) + var(--media-feature-height, 0px)); }
 .media-home-row { min-width: 0; }
 .media-home-row-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }
 .media-home-row-header h2 { margin: 0; font-size: 20px; }

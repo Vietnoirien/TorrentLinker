@@ -216,8 +216,16 @@ function mediaHomeActive() {
 function mediaRenderHome() {
   const root = $("media-home-rows"), active = mediaHomeActive() && media.homeRows.length > 0;
   root.hidden = !active; document.querySelector(".media-library-layout").hidden = active;
+  $("view-media").dataset.home = String(active);
   root.replaceChildren();
   if (!active) return;
+  // The pinned title sits right under the pinned menu, and whatever scrolls into view lands below both.
+  mediaPinnedObserver ||= new ResizeObserver(() => {
+    const style = document.documentElement.style;
+    style.setProperty("--media-topbar-height", `${document.querySelector(".media-topbar").offsetHeight}px`);
+    style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
+  });
+  mediaPinnedObserver.observe(document.querySelector(".media-topbar")); mediaPinnedObserver.observe($("media-feature"));
   const titles = {recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus")};
   for (const row of media.homeRows) {
     const section = element("section", undefined, "media-home-row"), header = element("div", undefined, "media-home-row-header");
@@ -225,6 +233,7 @@ function mediaRenderHome() {
     section.setAttribute("aria-label", title);
     const track = element("div", undefined, "media-row-track");
     const step = direction => track.scrollBy({left: direction * Math.max(180, track.clientWidth - 180), behavior: "smooth"});
+    track.addEventListener("wheel", event => mediaRowWheel(track, event), {passive: false});
     const back = button("‹", () => step(-1), "icon-button"), forward = button("›", () => step(1), "icon-button");
     back.setAttribute("aria-label", say("Scroll left", "Défiler à gauche")); forward.setAttribute("aria-label", say("Scroll right", "Défiler à droite"));
     const all = button(say("See all", "Voir tout"), () => guard(() => mediaSeeAll(row.filters)), "quiet");
@@ -233,7 +242,8 @@ function mediaRenderHome() {
       const card = button("", () => {
         mediaSelectFeature(item);
         for (const other of root.querySelectorAll(".media-row-card")) other.setAttribute("aria-pressed", String(other.dataset.id === item.id));
-        $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
+        // A pinned title is already in view; scrolling to it would move the page.
+        if (getComputedStyle($("media-feature")).position !== "sticky") $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
       }, "media-row-card");
       card.dataset.id = item.id;
       card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
@@ -248,7 +258,20 @@ function mediaRenderHome() {
   mediaRowObserver.disconnect();
   for (const track of root.querySelectorAll(".media-row-track")) mediaRowObserver.observe(track);
 }
-let mediaRowObserver = null;
+let mediaRowObserver = null, mediaPinnedObserver = null;
+// The wheel scrolls a row sideways; at either end it scrolls the page again.
+function mediaRowWheel(track, event) {
+  if (event.shiftKey || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+  const delta = event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? track.clientWidth : 1);
+  const end = track.scrollWidth - track.clientWidth;
+  if (end <= 2 || (delta < 0 && track.scrollLeft <= 0) || (delta > 0 && track.scrollLeft >= end - 1)) return;
+  event.preventDefault();
+  // Snapping would pull small wheel steps back to the same card; it returns once the wheel rests.
+  track.style.scrollSnapType = "none";
+  track.scrollLeft += delta;
+  clearTimeout(track.wheelRest);
+  track.wheelRest = setTimeout(() => { track.style.scrollSnapType = ""; }, 250);
+}
 function mediaRowArrows() {
   // The arrows appear only when a row is wider than the page.
   for (const section of document.querySelectorAll(".media-home-row")) {

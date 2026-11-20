@@ -34,8 +34,9 @@ def open_films_grid(page):
     more = media_locator(page, "#media-home-rows .media-home-row").first.get_by_role(
         "button", name="See all", exact=True
     )
-    more.evaluate("node => node.scrollIntoView({block:'start'})")
-    more.click()
+    # The cinematic home pins its title; a playing mini-player may cover the row header below.
+    more.focus()
+    more.press("Enter")
     expect(media_locator(page, "#media-results")).to_be_visible()
 
 
@@ -1178,3 +1179,76 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
     finally:
         server.should_exit = True
         thread.join(10)
+
+
+def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.web.app import create_app
+
+    root = tmp_path / "media"
+    root.mkdir()
+    for number in range(30):
+        (root / f"Pinned.Film.{number:02d}.20{number:02d}.mp4").write_bytes(b"not a real video")
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings(language="en")
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", log_config=None))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.02)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+            page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "media")
+            media_locator(page, "#media-toolbar-refresh").click()
+            expect(media_locator(page, "#media-home-rows")).to_contain_text("Pinned", timeout=15000)
+            frame = page.frame(name="media-frame") or next(
+                f for f in page.frames if f.url.endswith("/media/view.html") or "media" in f.url
+            )
+            track = media_locator(page, ".media-row-track").first
+            assert track.evaluate("node => node.scrollWidth > node.clientWidth")
+            # The wheel over a row scrolls the row, not the page.
+            track.hover()
+            before = frame.evaluate("scrollY")
+            page.mouse.wheel(0, 300)
+            page.wait_for_timeout(400)
+            assert track.evaluate("node => node.scrollLeft") > 0
+            assert frame.evaluate("scrollY") == before
+            # Scrolled down, the menu and the selected title stay at the top.
+            frame.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            page.wait_for_timeout(200)
+            assert frame.evaluate("scrollY") > 0
+            bar = media_locator(page, ".media-topbar").bounding_box()
+            feature = media_locator(page, "#media-feature").bounding_box()
+            frame_top = page.locator("#media-frame").bounding_box()["y"]
+            assert abs(bar["y"] - frame_top) <= 1
+            assert abs(feature["y"] - (bar["y"] + bar["height"])) <= 1
+            # Choosing another film keeps the page where it is.
+            scrolled = frame.evaluate("scrollY")
+            # (A script click: Playwright would first scroll the card out from under the banner.)
+            media_locator(page, ".media-row-card").last.evaluate("node => node.click()")
+            page.wait_for_timeout(400)
+            assert frame.evaluate("scrollY") == scrolled
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
