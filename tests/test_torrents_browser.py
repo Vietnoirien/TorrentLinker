@@ -225,3 +225,97 @@ window.dispatchEvent(new MessageEvent('message', {
     finally:
         server.should_exit = True
         thread.join(10)
+
+
+def test_tracker_preview_apply_and_dialog_cleanup(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.fake_qbit import FakeQbit
+    from tests.test_tracker_updates import OLD, SAVED, URL, Announce
+    from torrentlinker.domain import Torrent
+    from torrentlinker.web.app import create_app
+
+    class Client(FakeQbit):
+        def check(self):
+            return "fixture"
+
+        def folder_settings(self):
+            return []
+
+        def announce_entries(self, hash):
+            return list(self.trackers)
+
+        def apply_announces(self, hash, before, after):
+            self.trackers = list(after)
+
+        def reannounce(self, hash):
+            self.announced.append(hash)
+
+    fake = Client(
+        by_hash={
+            "a" * 40: Torrent(
+                "a" * 40, "External c411 torrent", Path("/data"), tracker=URL, trackers=(URL,)
+            )
+        }
+    )
+    fake.trackers, fake.announced = [Announce(URL)], []
+    app = create_app(
+        tmp_path / "config", password="test-password-long", connector=lambda *args: fake
+    )
+    app.state.agent_service.setup.secrets.update({"announce-url": SAVED})
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1450, "height": 1000})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.on("dialog", lambda dialog: dialog.accept())
+            page.goto(f"http://127.0.0.1:{port}")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            expect(page.locator("#workspace")).to_be_visible()
+            assert page.request.post(
+                f"http://127.0.0.1:{port}/api/setup/client",
+                data={"client": "qbittorrent", "host": "http://fake"},
+                headers={"X-TorrentLinker": "1"},
+            ).ok
+            page.reload()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "torrents")
+            panel = page.frame_locator("#torrents-frame")
+            panel.locator("#tracker-updates").click()
+            panel.locator("#tracker-preview").click()
+            expect(panel.locator("#tracker-apply")).to_be_enabled(timeout=15000)
+            expect(panel.locator("#tracker-report")).to_contain_text("c411.org")
+            assert OLD not in panel.locator("#dialog").inner_text()
+            page.screenshot(path="/tmp/tl120-tracker-preview.png")
+            panel.locator("#tracker-apply").click()
+            expect(panel.locator("#tracker-report")).to_contain_text(
+                "Updated and reannounced", timeout=15000
+            )
+            assert fake.announced == ["a" * 40]
+            panel.locator("#tracker-preview").click()
+            expect(panel.locator("#tracker-report")).to_contain_text(
+                "Current or unselected group", timeout=15000
+            )
+            expect(panel.locator("#tracker-apply")).to_be_disabled()
+            panel.locator("#tracker-close").click()
+            panel.locator("#columns").click()
+            # The reused dialog must not retain tracker form callbacks.
+            panel.locator("#dialog input[type=checkbox]").first.click()
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(10)

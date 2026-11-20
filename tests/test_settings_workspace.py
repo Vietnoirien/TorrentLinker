@@ -32,6 +32,7 @@ def test_connections_keep_unchanged_secrets_and_validate_the_whole_group(tmp_pat
         "indexer": {"url": setup.settings.indexer.url},
         "proxy": {"address": "http://proxy.invalid:1080", "username": "owner"},
         "tmdb_api_key": "replacement-tmdb-key",
+        "announce_hosts": ["NEXT.C411.ORG", "tk.c411.tw", "tk.c411.tw"],
     }
     with pytest.raises(ValueError):
         workspace.save("connections", {**body, "proxy": {"address": "invalid"}})
@@ -43,6 +44,10 @@ def test_connections_keep_unchanged_secrets_and_validate_the_whole_group(tmp_pat
     assert setup.secrets.get("indexer-api-key") == "test-key"
     assert setup.secrets.get("tmdb-api-key") == "replacement-tmdb-key"
     assert setup.settings.proxy.username == "owner"
+    from torrentlinker.config import Settings
+
+    assert setup.settings.announce_hosts == ["next.c411.org", "tk.c411.tw"]
+    assert Settings.load(setup.path).announce_hosts == setup.settings.announce_hosts
 
 
 def test_client_management_keeps_one_client_and_refuses_pending_work(tmp_path):

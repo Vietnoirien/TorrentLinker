@@ -130,6 +130,31 @@ class TransmissionApi:
     def _session_get(self, *fields: str) -> dict[str, Any]:
         return self._call("session-get", fields=list(fields))
 
+    def tracker_updates_supported(self) -> bool:
+        return int(self._session_get("rpc-version").get("rpc-version", 0)) >= 17
+
+    def announce_entries(self, hash: str):
+        from torrentlinker.tracker_updates import Announce
+
+        rows = self._call("torrent-get", ids=[hash], fields=["trackers"])["torrents"]
+        if not rows:
+            raise ValueError("Torrent no longer exists.")
+        return [Announce(str(r["announce"]), int(r["tier"])) for r in rows[0]["trackers"]]
+
+    def apply_announces(self, hash: str, before, after) -> None:
+        # trackerList preserves tiers and unrelated URLs on Transmission 4.x.
+        tiers: dict[int, list[str]] = {}
+        for entry in after:
+            tiers.setdefault(entry.tier, []).append(entry.url)
+        self._call(
+            "torrent-set",
+            ids=[hash],
+            trackerList="\n\n".join("\n".join(tiers[tier]) for tier in sorted(tiers)),
+        )
+
+    def reannounce(self, hash: str) -> None:
+        self._call("torrent-reannounce", ids=[hash])
+
     def check(self) -> str:
         """Return Transmission's version; refused while it would rename files to .part."""
         version = str(self._session_get("version")["version"])

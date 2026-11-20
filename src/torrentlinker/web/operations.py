@@ -55,6 +55,8 @@ class JobRequest(BaseModel):
     client_budgets: dict[str, int] = Field(default_factory=dict, max_length=32)
     kind: Literal[
         "manage",
+        "tracker-preview",
+        "tracker-update",
         "feed-action",
         "refresh",
         "select-torrents",
@@ -112,6 +114,11 @@ class JobRequest(BaseModel):
     feed_id: str = ""
     feed_selection_id: str = ""
     feed_mark: Literal["read", "unread", "save", "unsave", "dismiss", "restore"] = "read"
+    tracker_action: Literal["replace-host", "add-backup", "update-passkey"] = "add-backup"
+    tracker_source_host: str = Field(default="", max_length=253)
+    tracker_target_host: str = Field(default="tk.c411.tw", max_length=253)
+    tracker_groups: list[str] = Field(default_factory=list, max_length=1000)
+    tracker_preview_id: str = Field(default="", max_length=64)
     action: Literal["pause", "resume", "recheck", "remove", "delete"] = "pause"
     hashes: list[str] = Field(default_factory=list, max_length=1000)
     selection_name: str = Field(default="", max_length=200)
@@ -172,6 +179,22 @@ class JobRequest(BaseModel):
     indexer_search: bool = False
     search_exclude_seeded: bool = False
     search_listing: bool = False  # also return the listing's display fields, for the Search page
+
+    @field_validator("tracker_source_host", "tracker_target_host")
+    @classmethod
+    def valid_tracker_host(cls, value):
+        from torrentlinker.tracker_updates import host_name
+
+        return host_name(value) if value else ""
+
+    @field_validator("tracker_groups")
+    @classmethod
+    def valid_tracker_groups(cls, groups):
+        if any(
+            len(group) != 16 or any(c not in "0123456789abcdef" for c in group) for group in groups
+        ):
+            raise ValueError("Choose passkey fingerprints from the preview.")
+        return list(dict.fromkeys(groups))
 
     @field_validator("hashes", "plan_selection")
     @classmethod
@@ -532,6 +555,31 @@ class Operations:
 
     def _run(self, request, stop, progress, *, interactive=False):
         library = self.library.snapshot() if interactive else self.library
+        if request.kind in {"tracker-preview", "tracker-update"}:
+            from torrentlinker.tracker_updates import tracker_updates
+
+            service = tracker_updates(self.setup)
+            clients = request.client_ids or [self.setup.settings.active_client_id]
+            if request.kind == "tracker-preview":
+                return service.preview(
+                    clients,
+                    request.tracker_action,
+                    request.tracker_source_host,
+                    request.tracker_target_host,
+                    request.tracker_groups,
+                    stop,
+                    progress,
+                )
+            return service.apply(
+                request.tracker_preview_id,
+                clients,
+                request.tracker_action,
+                stop,
+                progress,
+                request.tracker_source_host,
+                request.tracker_target_host,
+                request.tracker_groups,
+            )
         if request.kind == "reseed-workspace":
             return self.reseed_workspace.run(
                 request.paths,

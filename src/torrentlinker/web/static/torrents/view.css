@@ -611,3 +611,35 @@ dialog .torrent-list .name {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* Tracker actions share the panel's form and dialog spacing. */
+dialog[data-tracker-dialog] {
+  width: min(680px, calc(100vw - 48px));
+}
+[data-tracker-dialog] .tracker-field {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+[data-tracker-dialog] .tracker-field[hidden] {
+  display: none;
+}
+[data-tracker-dialog] fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 12px;
+}
+[data-tracker-dialog] fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+[data-tracker-dialog] small {
+  display: block;
+  margin-top: 8px;
+}
+[data-tracker-dialog] [data-rows] {
+  overflow-wrap: anywhere;
+}

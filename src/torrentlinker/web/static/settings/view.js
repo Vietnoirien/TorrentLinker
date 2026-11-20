@@ -329,6 +329,21 @@ function connections(form) {
     "announce_url",
     saved.announce_url,
   );
+  const hostsLabel = element(
+    "label",
+    say(
+      "c411 announce hosts · current first, then backups",
+      "Hôtes d’annonce c411 · actuel puis secours",
+    ),
+    "settings-field",
+  );
+  const hosts = element("textarea");
+  hosts.value = (data.announce_hosts || []).join("\n");
+  hosts.oninput = () => {
+    data.announce_hosts = hosts.value.split(/\s+/).filter(Boolean);
+  };
+  hostsLabel.append(hosts);
+  indexer.append(hostsLabel);
   const extras = element(
     "label",
     say(

@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from torrentlinker.client_profiles import pending_work
 from torrentlinker.config import CLIENT_FIELDS, MatchingSettings, ProxySettings
@@ -52,6 +52,15 @@ class Connections(BaseModel):
     proxy: ProxySetup
     tmdb_api_key: str | None = Field(default=None, max_length=4096)
     announce_url: str | None = Field(default=None, max_length=4096)
+    announce_hosts: list[str] | None = Field(default=None, max_length=16)
+
+    @field_validator("announce_hosts")
+    @classmethod
+    def valid_announce_hosts(cls, value):
+        from torrentlinker.tracker_updates import host_name
+
+        return list(dict.fromkeys(host_name(host) for host in value)) if value is not None else None
+
     reseed_link_root: str = Field(default="", max_length=4096)
     reseed_layout: Literal["auto", "client", "links"] = "auto"
 
@@ -59,6 +68,11 @@ class Connections(BaseModel):
 class SettingsWorkspace:
     def __init__(self, setup: Setup):
         self.setup = setup
+
+    def announce_hosts(self):
+        from torrentlinker.tracker_updates import announce_hosts
+
+        return announce_hosts(self.setup)
 
     def test_connection(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -293,6 +307,7 @@ class SettingsWorkspace:
                         "username": getattr(config, "username", ""),
                     },
                     "indexer": {"url": settings.indexer.url},
+                    "announce_hosts": self.announce_hosts(),
                     "proxy": asdict(settings.proxy),
                     "reseed_link_root": profile.reseed_link_root,
                     "reseed_layout": profile.reseed_layout,
@@ -412,6 +427,8 @@ class SettingsWorkspace:
                 draft.download_folders.default = ""
                 draft.download_folders.by_category.clear()
             draft.indexer.url = value.indexer.url
+            if value.announce_hosts is not None:
+                draft.announce_hosts = value.announce_hosts
             draft.proxy = ProxySettings(
                 value.proxy.address, value.proxy.username, value.proxy.torrent_client
             )

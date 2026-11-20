@@ -162,6 +162,22 @@ class DelugeApi:
             raise DelugeError(str(error.get("message", error)))
         return reply.get("result")
 
+    def announce_entries(self, hash: str):
+        from torrentlinker.tracker_updates import Announce
+
+        row = self._call("core.get_torrent_status", hash, ["trackers"])
+        return [Announce(str(r["url"]), int(r["tier"])) for r in row["trackers"]]
+
+    def apply_announces(self, hash: str, before, after) -> None:
+        self._call(
+            "core.set_torrent_trackers",
+            hash,
+            [{"url": entry.url, "tier": entry.tier} for entry in after],
+        )
+
+    def reannounce(self, hash: str) -> None:
+        self._call("core.force_reannounce", [hash])
+
     def check(self) -> str:
         """Log in, connect to the daemon and return Deluge's version.
 

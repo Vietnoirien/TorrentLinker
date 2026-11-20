@@ -171,6 +171,29 @@ class QbitApi:
 
     management_controls = ("reannounce", "limits", "category", "location")
 
+    def announce_entries(self, hash: str):
+        from torrentlinker.tracker_updates import Announce
+
+        return [
+            Announce(str(r["url"]), int(r["tier"]))
+            for r in self._client.torrents_trackers(hash)
+            if int(r.get("tier", -1)) >= 0
+        ]
+
+    def apply_announces(self, hash: str, before, after) -> None:
+        for old, new in zip(before, after, strict=False):
+            if old.url != new.url:
+                self._client.torrents_edit_tracker(
+                    torrent_hash=hash, original_url=old.url, new_url=new.url
+                )
+        for added in after[len(before) :]:
+            self._client.torrents_add_trackers(
+                torrent_hash=hash, urls="\n" * added.tier + added.url
+            )
+
+    def reannounce(self, hash: str) -> None:
+        self._client.torrents_reannounce(torrent_hashes=hash)
+
     def manage_control(self, hash: str, action: str, values: dict) -> None:
         """Explicit owner controls. Paths are already in the client's namespace."""
         if action == "reannounce":

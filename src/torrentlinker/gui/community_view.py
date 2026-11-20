@@ -145,6 +145,7 @@ class BundledView(QWidget):
                             "view.js",
                             "transfers.js",
                             "audit.js",
+                            "tracker-updates.js",
                             "transport.js",
                             "inspector.js",
                             "recovery.js",

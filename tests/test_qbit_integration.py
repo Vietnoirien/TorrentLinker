@@ -319,3 +319,9 @@ def test_uploads_seed_from_the_local_files_under_their_own_names(
     tmp_path: Path, qbit: QbitApi
 ) -> None:
     check_uploads_seed_from_the_local_files(qbit, tmp_path)
+
+
+def test_tracker_updates_keep_tiers_and_private_keys(qbit, tmp_path):
+    from tests.tracker_support import check_tracker_updates
+
+    check_tracker_updates(qbit, tmp_path)

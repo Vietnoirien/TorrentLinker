@@ -101,6 +101,33 @@ class MappedQbit:
         self._mapper = mapper
         self.sequential_video = sequential_video  # films and episodes download in order
 
+    def tracker_updates_supported(self) -> bool:
+        if not all(
+            hasattr(self._inner, name)
+            for name in ("announce_entries", "apply_announces", "reannounce")
+        ):
+            return False
+        check = getattr(self._inner, "tracker_updates_supported", None)
+        return check() if check else True
+
+    def announce_entries(self, hash: str):
+        read = getattr(self._inner, "announce_entries", None)
+        if read is None:
+            raise ValueError("Tracker updates are unsupported by this client.")
+        return read(hash)
+
+    def apply_announces(self, hash: str, before, after) -> None:
+        apply = getattr(self._inner, "apply_announces", None)
+        if apply is None:
+            raise ValueError("Tracker updates are unsupported by this client.")
+        apply(hash, before, after)
+
+    def reannounce(self, hash: str) -> None:
+        announce = getattr(self._inner, "reannounce", None)
+        if announce is None:
+            raise ValueError("Tracker updates are unsupported by this client.")
+        announce(hash)
+
     @property
     def supports_category_tags(self) -> bool:
         return self._inner.supports_category_tags

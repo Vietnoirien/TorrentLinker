@@ -84,8 +84,9 @@ class TorrentAction(BaseModel):
 
 
 class TorrentWorkspace:
-    def __init__(self, setup, for_client):
+    def __init__(self, setup, for_client, jobs=None):
         self.setup, self.for_client = setup, for_client
+        self.jobs = jobs
         self.lock = threading.RLock()
         self.updated: dict[str, float] = {}
         self.observed_at: dict[str, float] = {}
@@ -141,6 +142,11 @@ class TorrentWorkspace:
         from torrentlinker.agent.coordination import coordinator
         from torrentlinker.agent.desktop import DesktopSetup
 
+        # Job polling only reads Jobs' synchronized state. It must stay available
+        # while a desktop worker holds the application coordinator.
+        if action == "tracker-job":
+            return self.tracker_request(action, body)
+
         # Acquire application access before our own lock. Desktop refresh must not
         # nest DesktopOperations' agent context while this request holds it.
         access = (
@@ -149,6 +155,8 @@ class TorrentWorkspace:
             else nullcontext()
         )
         with access, self.lock:
+            if action.startswith("tracker-"):
+                return self.tracker_request(action, body)
             if action.startswith("audit-"):
                 return self.audit_request(action, body)
             if action.startswith("transfer-"):
@@ -170,6 +178,41 @@ class TorrentWorkspace:
                     ]
                 }
             raise ValueError("Unknown torrent operation.")
+
+    def tracker_request(self, action, body):
+        if self.jobs is None:
+            raise ValueError("Tracker jobs are unavailable in this workspace.")
+        if action == "tracker-job":
+            job = self.jobs.get(body.get("id", ""))
+            if job["kind"] not in {"tracker-preview", "tracker-update"}:
+                raise ValueError("Unknown tracker job.")
+            return job
+        if action == "tracker-settings":
+            from torrentlinker.tracker_updates import announce_hosts
+
+            return {
+                "hosts": announce_hosts(self.setup),
+                "clients": [
+                    {"id": p.id, "name": p.name}
+                    for p in self.setup.settings.client_profiles
+                    if p.enabled
+                ],
+            }
+        if action not in {"tracker-preview", "tracker-update"}:
+            raise ValueError("Unknown tracker action.")
+        request = JobRequest.model_validate({**body, "kind": action})
+        identifiers = request.client_ids or [request.client_id]
+        for identifier in identifiers:
+            self.target(identifier)
+        target = self.target(identifiers[0])
+        return {
+            "id": self.jobs.submit(
+                action,
+                lambda stop, report: target.run(request, stop, report),
+                client_id=identifiers[0],
+                parameters=request.model_dump(),
+            )
+        }
 
     def audit_collect(self, identifier):
         from torrentlinker.agent.coordination import coordinator

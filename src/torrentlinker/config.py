@@ -146,6 +146,7 @@ class Settings:
     rtorrent: RtorrentSettings = field(default_factory=RtorrentSettings)
     indexer: IndexerSettings = field(default_factory=IndexerSettings)
     proxy: ProxySettings = field(default_factory=ProxySettings)
+    announce_hosts: list[str] = field(default_factory=list)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
     # Torznab categories searched for each Content Kind; none listed = all categories.
     kind_categories: dict[ContentKind, list[int]] = field(default_factory=dict)
@@ -278,6 +279,7 @@ class Settings:
             "rtorrent": asdict(self.rtorrent),
             "indexer": asdict(self.indexer),
             "proxy": asdict(self.proxy),
+            "announce_hosts": self.announce_hosts,
             "matching": asdict(self.matching),
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
             "language": self.language,
@@ -322,6 +324,7 @@ class Settings:
             rtorrent=RtorrentSettings(**data.get("rtorrent", {})),
             indexer=IndexerSettings(**data.get("indexer", {})),
             proxy=ProxySettings(**data.get("proxy", {})),
+            announce_hosts=list(data.get("announce_hosts", [])),
             matching=MatchingSettings(**data.get("matching", {})),
             language=str(data.get("language", "auto")),
             theme=str(data.get("theme", "auto")),
