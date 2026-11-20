@@ -162,6 +162,7 @@ class SearchBoard(BundledView):
                 "indexer": self.owner.settings.indexer.url,
                 "language": self.language,
                 "client": self.owner.settings.active_client_id,
+                "adult": self.owner.settings.adult_content,
                 "active": self.isVisible(),
                 "page": self.page,
                 "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",

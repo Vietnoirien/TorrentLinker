@@ -922,19 +922,19 @@ function loadSearchOptions(then) {
   );
 }
 
+/* The pills pick the root; this select only narrows to one of its sub-categories. */
 function fillCategorySelect() {
   const select = $("search-category");
+  const root = searchRoot(SS.category);
+  const children = root
+    ? Object.entries(SS.categories).filter(([, v]) => String(v.parent) === root)
+    : [];
+  select.hidden = !children.length;
+  select.ariaLabel = say("Sub-category", "Sous-catégorie");
   select.replaceChildren(
-    new Option(say("All categories", "Toutes les catégories"), ""),
+    new Option(say("All sub-categories", "Toutes les sous-catégories"), root),
+    ...children.map(([child, v]) => new Option(v.name, child)),
   );
-  const roots = searchRoots();
-  for (const [id, c] of roots) {
-    select.append(new Option(c.name, id));
-    for (const [child, v] of Object.entries(SS.categories).filter(
-      ([, v]) => String(v.parent) === id,
-    ))
-      select.append(new Option(`　↳ ${v.name}`, child));
-  }
   select.value = SS.category;
 }
 

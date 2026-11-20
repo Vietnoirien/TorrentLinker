@@ -22,6 +22,7 @@ function searchEnvironment() {
         indexer: state.setup?.indexer_url,
         language,
         client: state.clientId,
+        adult: !!state.setup?.adult_content,
         active,
         page: state.view === "queue" ? "queue" : "search",
         theme: document.documentElement.dataset.theme || "dark",

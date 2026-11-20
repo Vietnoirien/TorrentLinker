@@ -381,7 +381,8 @@ window.addEventListener("search-environment", (event) => {
   const next = event.detail,
     changed = env.client !== next.client,
     langChanged = language !== (next.language?.startsWith("fr") ? "fr" : "en"),
-    pageChanged = env.page !== next.page;
+    pageChanged = env.page !== next.page,
+    adultChanged = "adult" in env && env.adult !== next.adult;
   if (changed) {
     generation++;
     clearDetailTabs();
@@ -408,6 +409,16 @@ window.addEventListener("search-environment", (event) => {
   if (next.standalone) {
     if (next.active && next.row) guard(() => openDetail(next.row));
     return;
+  }
+  // Adult content adds or removes the XXX root: read the category tree again now, since
+  // coming back to Search does not reload it.
+  if (adultChanged && !changed && SS.loaded) {
+    const reset = !next.adult && SS.category !== "";
+    if (reset) {
+      SS.category = "";
+      SS.chosen.clear();
+    }
+    guard(() => loadSearchOptions(reset ? () => guard(() => runSearch(1)) : undefined));
   }
   if (changed || langChanged) searchRetranslate();
   if (next.active)

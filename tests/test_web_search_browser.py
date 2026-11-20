@@ -121,10 +121,21 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             panel.locator("#search-sort").get_by_role("button", name="Seeders").click()
             expect(panel.locator("#search-sort [aria-pressed=true]")).to_contain_text("↑")
             until(lambda: listing()[-1]["sortOrder"] == "asc")
-            # A pill picks the category and searches at once.
+            # A pill picks the category and searches at once; only then can a sub-category
+            # of that root be chosen.
+            subcategory = panel.locator("#search-category")
+            expect(subcategory).to_be_hidden()
             pills.get_by_role("button", name="Films & Vidéos").click()
             expect(pills.locator("[aria-pressed=true]")).to_contain_text("Films & Vidéos")
             until(lambda: listing()[-1].get("category") == "1")
+            expect(subcategory.locator("option")).to_have_text(
+                ["All sub-categories", "Animation", "Film", "Série TV"]
+            )
+            subcategory.select_option(label="Film")
+            until(lambda: listing()[-1].get("subcat") == "6")
+            expect(pills.locator("[aria-pressed=true]")).to_contain_text("Films & Vidéos")
+            subcategory.select_option(label="All sub-categories")
+            until(lambda: "subcat" not in listing()[-1])
             # A filter dropdown searches by itself after a pause.
             panel.locator("#search-facets summary", has_text="Resolution").click()
             panel.locator("#search-facets .fdrop[open] label", has_text="1080p").locator(
@@ -554,6 +565,44 @@ def test_release_score_profiles_details_and_equipment(tmp_path, monkeypatch):
                 )
             ).to_have_count(0)
             assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+
+
+def test_adult_content_adds_and_removes_the_xxx_pill(tmp_path, monkeypatch):
+    from playwright.sync_api import expect, sync_playwright
+
+    import tests.test_web_search as web_search
+
+    xxx = {"id": 8, "name": "XXX", "slug": "xxx", "subcategories": [{"id": 42, "name": "Vidéos"}]}
+    monkeypatch.setattr(web_search, "TREE", {"data": [*web_search.TREE["data"], xxx]})
+    fake_net(monkeypatch, [])
+    server, base = serve(tmp_path)
+
+    def adult(enabled):
+        with httpx.Client(base_url=base, headers={"X-TorrentLinker": "1"}) as client:
+            client.post("/api/login", json={"password": "test-password-long"})
+            saved = client.post("/api/setup/adult-content", json={"enabled": enabled})
+            assert saved.status_code == 200, saved.text
+        shell_navigate(page, "setup")
+        page.evaluate("refreshSetup()")
+        shell_navigate(page, "search")
+
+    try:
+        with sync_playwright() as playwright:
+            browser, page, errors = open_search(playwright, base)
+            pills = page.frame_locator("#search-frame").locator("#search-pills")
+            expect(pills.get_by_role("button", name="Ebook")).to_be_visible()
+            expect(pills.get_by_role("button", name="XXX")).to_have_count(0)
+            adult(True)
+            expect(pills.get_by_role("button", name="XXX")).to_be_visible()
+            pills.get_by_role("button", name="XXX").click()
+            expect(pills.locator("[aria-pressed=true]")).to_contain_text("XXX")
+            adult(False)
+            expect(pills.get_by_role("button", name="XXX")).to_have_count(0)
+            expect(pills.locator("[aria-pressed=true]")).to_contain_text("All")
+            assert errors == []
             browser.close()
     finally:
         server.should_exit = True
