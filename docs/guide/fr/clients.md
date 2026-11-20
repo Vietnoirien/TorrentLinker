@@ -53,3 +53,19 @@ Limites à prévoir :
 - Un montage FTP ne peut pas indiquer l'espace libre de la seedbox : rclone affiche une taille inventée. Fixez le budget de ce client dans **Destinations du Plan** au lieu de zéro. SFTP indique l'espace libre si l'hébergeur le permet.
 - Un montage en lecture seule ne peut pas être vérifié avec un fichier temporaire. La vérification utilise alors un fichier d'un torrent existant : gardez au moins un torrent dans le dossier relié.
 - Si le montage s'arrête, son dossier devient vide ou indisponible, et une analyse n'y trouve alors rien. Vérifiez que le montage tourne avant d'analyser.
+
+
+## Compatibilité des clients
+
+Ce tableau décrit les fonctions accessibles dans TorrentLinker. L’accès aux fichiers et les correspondances de chemins restent nécessaires pour les opérations sur les données.
+
+| Client | Gestion / téléchargements / Plans | Reseed complet | Reseed partiel | Vidéo séquentielle | Aperçu pendant le téléchargement |
+| --- | --- | --- | --- | --- | --- |
+| qBittorrent | Oui | Oui | Oui | Oui | Oui, vidéo unique et pièces vérifiées |
+| Transmission | Oui | Selon disposition et réglage `.part` | Selon disposition | 4.1+ | Non |
+| Deluge | Oui | Oui | Oui | Demandée dans les options | Non |
+| rTorrent | Oui ; retrait sans suppression des fichiers | Dossier de liens requis | Non | Non | Non |
+| µTorrent Classic | Expérimental ; dossier par défaut et sous-dossiers | Dossier de liens et réglages compatibles requis | Non | Non via cette API | Non |
+| BitTorrent Classic | Même adaptateur expérimental que µTorrent | Dossier de liens et réglages compatibles requis | Non | Non via cette API | Non |
+
+Le tableau de reseed exige une correspondance complète pour tous les clients ; la colonne partielle concerne les parcours proposant des correspondances partielles. Le dossier de liens doit rester hors des dossiers de bibliothèque et être conservé tant que les torrents l’utilisent. La lecture de fichiers complets dépend de l’accès aux fichiers et des codecs du lecteur, pas du client torrent. Voir aussi le [tableau détaillé en anglais](../en/clients.md#client-compatibility).

@@ -27,3 +27,10 @@ Le lecteur de bureau utilise les codecs de QtMultimedia. Les sélecteurs audio e
 Configurez une connexion à un modèle dans les paramètres d'Assistant avant d'envoyer un message. Le panneau et la bibliothèque restent accessibles sans connexion à un modèle.
 
 Pour un **torrent qBittorrent à un seul fichier, en téléchargement séquentiel**, ouvrez ses détails et choisissez l'aperçu de la portion téléchargée. Sur desktop, il lit le fichier pendant son téléchargement, comme l'aperçu de qBittorrent : seuls les morceaux vérifiés sont lus, et quand la lecture rattrape le téléchargement, elle attend les morceaux suivants puis reprend. Dans le lecteur web, la portion reste fixe jusqu'à l'actualisation de l'aperçu. Les films et séries envoyés par TorrentLinker se téléchargent dans l'ordre, premiers et derniers morceaux d'abord. Décochez **Paramètres → Dossiers de téléchargement → Télécharger films et séries dans l’ordre** pour l'éviter. Les autres clients torrent et les torrents à plusieurs fichiers ne disposent pas encore d'un calcul de position suffisamment sûr. Les fichiers portant le suffixe qBittorrent `.!qB` sont inclus. Un format qui exige la fin manquante du fichier peut rester illisible tant que le téléchargement n'a pas avancé. L'aperçu ne transcode pas et ne lit aucun morceau manquant.
+
+
+## Prévisualiser un téléchargement
+
+Pour un téléchargement qBittorrent à fichier vidéo unique en mode séquentiel, le bouton **Prévisualiser la partie téléchargée** est directement accessible sur la carte, la fiche principale et les choix d’épisodes ou de versions. Il reste disponible dans les détails. Les autres clients ne proposent pas cette action : le téléchargement séquentiel ne suffit pas à garantir une prévisualisation sûre.
+
+Le lecteur vérifie les pièces disponibles avant de lire. Sur le bureau, il attend les nouvelles pièces ; sur le web, utilisez **Actualiser l’aperçu** pour étendre la portion accessible. Une vérification de hash en cours, un début de fichier non téléchargé ou un torrent multifichier peuvent empêcher l’aperçu. Consultez le [tableau des clients](clients.md#compatibilité-des-clients).
