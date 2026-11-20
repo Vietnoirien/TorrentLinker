@@ -54,7 +54,12 @@ class TrackerRows:
             ).fetchall()
         return {row[0][len(prefix) :]: json.loads(row[1]) for row in rows}
 
+    def tracker_saves(self) -> int:
+        """Grows with every saved suggestion, so a quiet scan knows to redraw the rows."""
+        return getattr(self, "_tracker_saved", 0)
+
     def _tracker_save(self, client_id, kind: str, key: str, entry: dict[str, Any]) -> None:
+        self._tracker_saved = self.tracker_saves() + 1
         entry["cache_key"] = f"{kind}:{client_id}:{key}"
         with self.lock, self.db:
             self.db.execute(
@@ -262,21 +267,31 @@ class TrackerRows:
         return best
 
     def tracker_rows(self, client_id, setup) -> dict[str, dict[str, Any]]:
-        """The two rows by key, drawn from the cache and scored with the current profile."""
+        """The two rows by key, drawn from the cache and scored with the current profile.
+
+        With c411 as Indexer both rows always show: "loading" until a refresh has filled
+        the cache, "empty" when no release reaches the threshold.
+        """
+        from urllib.parse import urlsplit
+
         from torrentlinker.release_score.preferences import Preferences
 
+        if urlsplit(setup.settings.indexer.url).hostname != "c411.org":
+            return {}
         preferences = setup.settings.release_score
         threshold = Preferences.model_validate(preferences).threshold
         library = self._library_films(client_id)
+        latest = self._tracker_cache(client_id, "tracker-new")
+        known = self._tracker_cache(client_id, "tracker-upgrade")
         available = []
-        for key, entry in self._tracker_cache(client_id, "tracker-new").items():
+        for key, entry in latest.items():
             best = None if key in library else self._best(preferences, entry)
             if best and best["score"] >= threshold:
                 available.append(self._tracker_item(entry, best))
         # The newest first, as in a "recently added" row.
         available.sort(key=lambda item: -(item["tracker"]["published_at"] or 0))
         upgrades = []
-        for key, entry in self._tracker_cache(client_id, "tracker-upgrade").items():
+        for key, entry in known.items():
             best = self._best(preferences, entry) if key in library else None
             if not best or best["score"] < threshold:
                 continue
@@ -293,15 +308,16 @@ class TrackerRows:
                 upgrades.append(item)
         upgrades.sort(key=lambda item: -item["tracker"]["score"])
         rows = {}
-        for key, items in (("tracker", available), ("upgrades", upgrades)):
-            if items:
-                rows[key] = {
-                    "key": key,
-                    "title": "",
-                    "filters": {"tracker": key},
-                    "total": min(len(items), ROW_LIMIT),
-                    "rows": items[:ROW_LIMIT],
-                }
+        for key, items, cached in (("tracker", available, latest), ("upgrades", upgrades, known)):
+            rows[key] = {
+                "key": key,
+                "title": "",
+                "filters": {"tracker": key},
+                "total": min(len(items), ROW_LIMIT),
+                "rows": items[:ROW_LIMIT],
+                "state": "ready" if items else "empty" if cached else "loading",
+                "threshold": threshold,
+            }
         return rows
 
     @staticmethod

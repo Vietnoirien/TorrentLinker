@@ -230,11 +230,14 @@ class MediaLibrary(TrackerRows):
                 raise ValueError("A media refresh is already running for this client.")
             self.scanning.add(client_id)
         try:
-            before = self.revision(client_id)
+            before, saves = self.revision(client_id), self.tracker_saves()
             result = self._scan(client_id, setup, stop, progress)
             if not result.get("cancelled"):
-                # Lets an automatic refresh reload the screen only when something changed.
-                result["changed"] = self.revision(client_id) != before
+                # Lets an automatic refresh reload the screen only when something changed,
+                # in the library or in the tracker's suggestions.
+                result["changed"] = (
+                    self.revision(client_id) != before or self.tracker_saves() != saves
+                )
             return result
         finally:
             with self.lock:

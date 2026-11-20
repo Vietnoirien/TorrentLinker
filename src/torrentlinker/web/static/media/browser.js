@@ -282,9 +282,10 @@ function mediaRenderHome() {
         root.querySelector(".media-row-category")?.focus();
       };
     }
-    header.append(heading, element("span", say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward);
+    header.append(heading, element("span", row.state && row.state !== "ready" ? "" : say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward);
     if (!row.filters?.tracker) header.append(all);
     for (const item of row.rows) track.append(mediaRowCard(item, row, track));
+    if (!row.rows.length && row.state) track.append(...mediaRowPlaceholder(row));
     section.append(header, track); root.append(section);
     if (horizon) requestAnimationFrame(() => track.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center"}));
   }
@@ -292,6 +293,13 @@ function mediaRenderHome() {
   mediaRowObserver ||= new ResizeObserver(mediaRowArrows);
   mediaRowObserver.disconnect();
   for (const track of root.querySelectorAll(".media-row-track")) mediaRowObserver.observe(track);
+}
+// A tracker row shows before its first answer: pulsing cards, or why it is empty.
+function mediaRowPlaceholder(row) {
+  if (row.state === "empty") return [element("p", say(`No release reaches ${row.threshold} with this ReleaseScore profile.`, `Aucune release n’atteint ${row.threshold} avec ce profil ReleaseScore.`), "media-row-note")];
+  const note = element("p", row.key === "upgrades" ? say("Comparing your films with the Catalogue…", "Comparaison de vos films avec le Catalogue…") : say("Reading the tracker's latest releases…", "Lecture des dernières releases du tracker…"), "media-row-note");
+  const cards = Array.from({length: 6}, () => { const card = element("div", undefined, "media-row-skeleton"); card.setAttribute("aria-hidden", "true"); return card; });
+  return [note, ...cards];
 }
 function mediaRowCard(item, row, track) {
   const card = button("", () => {

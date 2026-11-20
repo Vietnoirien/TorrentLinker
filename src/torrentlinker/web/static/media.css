@@ -194,6 +194,12 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 #media-center-mode { flex-shrink: 0; }
 /* More titles load as the grid scrolls; the button stays only to mark where. */
 #media-more:not([hidden]) { display: block; height: 1px; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; overflow: hidden; }
+/* A tracker row before its first answer. */
+.media-row-skeleton { flex: 0 0 150px; aspect-ratio: 2 / 3; border-radius: 8px; background: linear-gradient(100deg, color-mix(in srgb, currentColor 6%, transparent) 30%, color-mix(in srgb, currentColor 14%, transparent) 50%, color-mix(in srgb, currentColor 6%, transparent) 70%) 0 0 / 300% 100%; animation: media-skeleton 1.4s ease-in-out infinite; }
+#view-media[data-layout="horizon"] .media-row-skeleton { flex-basis: var(--poster, 132px); }
+.media-row-note { flex: 0 0 auto; align-self: center; max-width: 220px; margin: 0 8px 0 0; color: var(--muted); font-size: 12px; }
+@keyframes media-skeleton { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .media-row-skeleton { animation: none; } }
 /* A tracker film: its best c411 release, scored. */
 .media-tracker-release { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 16px; font-size: 12px; color: inherit; }
 .media-tracker-name { font-family: ui-monospace, monospace; font-size: 11px; overflow-wrap: anywhere; opacity: .85; }

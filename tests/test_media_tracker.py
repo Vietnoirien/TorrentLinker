@@ -153,11 +153,13 @@ def test_changing_the_profile_or_threshold_changes_the_suggestions_at_once(libra
 
     def best(**options):
         rows = library.tracker_rows("default", setup_with(**options))
-        return rows["tracker"]["rows"][0]["tracker"]["name"] if "tracker" in rows else None
+        return rows["tracker"]["rows"][0]["tracker"]["name"] if rows["tracker"]["rows"] else None
 
     assert best(profile="HDLight 1080p") == "Oppenheimer.2023.MULTi.1080p.WEB.x264-TEAM"
     assert best(profile="Qualité maximale") == "Oppenheimer.2023.MULTi.2160p.BluRay.x265-TEAM"
     assert best(threshold=100) is None
+    # Answers exist but none reaches the threshold: the row says so.
+    assert library.tracker_rows("default", setup_with(threshold=100))["tracker"]["state"] == "empty"
 
 
 def test_better_versions_are_found_when_c411_asks_to_wait(library, monkeypatch):
@@ -168,7 +170,9 @@ def test_better_versions_are_found_when_c411_asks_to_wait(library, monkeypatch):
     setup = setup_with(FakeStore(REVENANT_RELEASES))
     assert library.tracker_refresh("default", setup, threading.Event()) == "limit"
     rows = library.tracker_rows("default", setup)
-    assert "tracker" not in rows and rows["upgrades"]["rows"][0]["title"] == "The Revenant"
+    # The latest releases are still to come; the row shows that it is loading.
+    assert rows["tracker"]["state"] == "loading" and not rows["tracker"]["rows"]
+    assert rows["upgrades"]["rows"][0]["title"] == "The Revenant"
 
 
 def test_queueing_a_tracker_film_needs_its_download_folder(library, monkeypatch, tmp_path):
@@ -223,3 +227,28 @@ def test_a_cancelled_refresh_is_retried_at_the_next_scan(library, monkeypatch):
     # Nothing finished, so nothing to wait for: the next scan refreshes.
     assert library.tracker_refresh("default", setup, threading.Event()) == "complete"
     assert set(library.tracker_rows("default", setup)) == {"tracker", "upgrades"}
+
+
+def test_new_suggestions_make_a_quiet_scan_redraw_the_rows(library, monkeypatch):
+    monkeypatch.setattr(
+        "torrentlinker.torrent_search.native_search",
+        lambda indexer, params, page=1: latest_page(OPPENHEIMER),
+    )
+    real = library.setup("default")
+
+    class Setup:
+        """The library's own setup, answering through the fake c411."""
+
+        def __getattr__(self, name):
+            return FakeIndexer if name == "indexer" else getattr(real, name)
+
+    monkeypatch.setattr(library, "setup", lambda client: Setup())
+    first = library.scan("default", threading.Event(), lambda _p: None)
+    assert first["changed"]  # the first suggestions arrived
+    with library.lock, library.db:
+        library.db.execute("DELETE FROM media_options WHERE key LIKE 'tracker-run%'")
+    monkeypatch.setattr(
+        "torrentlinker.torrent_search.native_search",
+        lambda indexer, params, page=1: (_ for _ in ()).throw(RateLimited(60)),
+    )
+    assert not library.scan("default", threading.Event(), lambda _p: None)["changed"]
