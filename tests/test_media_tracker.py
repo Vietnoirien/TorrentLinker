@@ -209,3 +209,17 @@ def test_desktop_media_service_queues_a_tracker_release_by_its_hash():
     assert calls == [("default", "setup", "a" * 40)]
     with pytest.raises(ValueError, match="Unknown tracker release"):
         service.request("media/tracker/../enqueue", {}, "POST")
+
+
+def test_a_cancelled_refresh_is_retried_at_the_next_scan(library, monkeypatch):
+    monkeypatch.setattr(
+        "torrentlinker.torrent_search.native_search",
+        lambda indexer, params, page=1: latest_page(OPPENHEIMER),
+    )
+    setup = setup_with(FakeStore(REVENANT_RELEASES))
+    stopped = threading.Event()
+    stopped.set()
+    assert library.tracker_refresh("default", setup, stopped) == "cancelled"
+    # Nothing finished, so nothing to wait for: the next scan refreshes.
+    assert library.tracker_refresh("default", setup, threading.Event()) == "complete"
+    assert set(library.tracker_rows("default", setup)) == {"tracker", "upgrades"}

@@ -185,9 +185,11 @@ class TrackerRows:
         return entry
 
     def tracker_refresh(self, client_id, setup, stop: threading.Event) -> str:
-        """Read c411's latest releases and score library films against the Catalogue."""
-        from torrentlinker.indexer import KeyRefused, RateLimited
+        """Read c411's latest releases, then score library films against the Catalogue.
 
+        The refresh waits ten minutes only after one has finished: a cancelled scan leaves
+        nothing to wait for, and the local pass resumes with the films it had not reached.
+        """
         gate = "tracker-run:" + client_id
         with self.lock:
             saved = self.db.execute(
@@ -195,10 +197,9 @@ class TrackerRows:
             ).fetchone()
         if saved and time.time() - json.loads(saved[0]) < RUN_INTERVAL:
             return "waiting"
-        with self.lock, self.db:
-            self.db.execute(
-                "INSERT OR REPLACE INTO media_options VALUES (?,?)", (gate, json.dumps(time.time()))
-            )
+        status = self._refresh_latest(client_id, setup, stop)
+        if stop.is_set():
+            return "cancelled"
         # Upgrades: local only, every film whose answer is a day old or missing.
         library = self._library_films(client_id)
         upgrades = self._tracker_cache(client_id, "tracker-upgrade")
@@ -207,7 +208,16 @@ class TrackerRows:
                 return "cancelled"
             if time.time() - upgrades.get(key, {}).get("at", 0) > UPGRADES_RECHECK:
                 self._tracker_save(client_id, "tracker-upgrade", key, self._upgrade(setup, film))
-        # Available: c411's latest film releases, a couple of listing requests.
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)", (gate, json.dumps(time.time()))
+            )
+        return status
+
+    def _refresh_latest(self, client_id, setup, stop: threading.Event) -> str:
+        """Available: c411's latest film releases, a couple of listing requests."""
+        from torrentlinker.indexer import KeyRefused, RateLimited
+
         try:
             indexer = setup.indexer()
         except Exception:
