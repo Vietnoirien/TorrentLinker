@@ -395,7 +395,7 @@ const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
-  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users"],
+  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users", "account"],
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {
@@ -415,7 +415,8 @@ function resolveRoute(fragment) {
   // Incomplete setup selects the landing page; it does not block explicit routes
   // such as configuring the Assistant or reviewing saved Upload drafts.
   if (!fragment.startsWith("#/") || !Object.hasOwn(viewTabs, view)) return fallback;
-  const tabs = viewTabs[view];
+  // A Member's Settings: "Mon compte", and Utilisateurs for a manager.
+  const tabs = member && view === "setup" ? state.sections || [] : viewTabs[view];
   const validDetail = view === "setup" && tab === "agents" && agentTabs.includes(detail) ||
     view === "media" && mediaViewsByKind[tab]?.includes(detail) &&
       (detail !== "adult" || state.setup?.adult_content);
@@ -742,8 +743,11 @@ async function reseedAllMatches() {
 }
 async function enter() {
   const shell = await api("shell");
+  // A Shared Screen asks who watches first (profiles.js).
+  if (shell.actor?.screen?.picking) return whoWatches();
   state.actor = shell.actor;
   state.pages = shell.pages || null;
+  state.sections = shell.sections || null;
   shellState.release = shell.release;
   if (shell.setup) {
     state.setup = shell.setup;
@@ -764,7 +768,8 @@ $("login-form").onsubmit = async (e) => {
   e.preventDefault();
   $("login-error").textContent = "";
   try {
-    await api("login", { login: $("login-name").value.trim(), password: $("login-password").value });
+    const screen = $("login-shared").checked ? $("login-screen-name").value.trim() : "";
+    await api("login", { login: $("login-name").value.trim(), password: $("login-password").value, screen });
     $("login-password").value = "";
     await enter();
   } catch (error) {
@@ -797,7 +802,7 @@ loginMode();
 async function logout() {
   document.dispatchEvent(new Event("tl-logout"));
   await api("logout", {});
-  state.actor = null; state.pages = null; state.clientId = "";
+  state.actor = null; state.pages = null; state.sections = null; state.clientId = "";
   state.jobs.clear(); observedJobs.clear(); displayedJobs = []; locallyTrackedJobs.clear(); $("page-jobs").replaceChildren(); $("page-jobs").hidden = true; clearAgentToken();
   $("workspace").hidden = true; $("login-screen").hidden = false;
 }

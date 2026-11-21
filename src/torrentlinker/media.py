@@ -1514,6 +1514,23 @@ class MediaLibrary(TrackerRows, AgeRatings):
             for table in ("media_progress", "media_playlists", "media_sessions"):
                 self.db.execute(f"DELETE FROM {table} WHERE account=?", (account,))
 
+    def forget_viewer(self, account, viewer):
+        """Erase a removed Viewer's progress, playlists and Media sessions."""
+        with self.lock, self.db:
+            for table in ("media_progress", "media_playlists", "media_sessions"):
+                self.db.execute(
+                    f"DELETE FROM {table} WHERE account=? AND viewer=?", (account, viewer)
+                )
+
+    def move_viewer(self, account, viewer, member):
+        """A Viewer promoted to Member keeps their history under their new account."""
+        with self.lock, self.db:
+            for table in ("media_progress", "media_playlists", "media_sessions"):
+                self.db.execute(
+                    f"UPDATE {table} SET account=?, viewer='' WHERE account=? AND viewer=?",
+                    (member, account, viewer),
+                )
+
     def forget_progress(self, client_id, identifier, *, account=OWNER, viewer=""):
         """Reset playback progress so the title leaves Continue watching."""
         self.record(client_id, identifier)

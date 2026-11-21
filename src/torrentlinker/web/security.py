@@ -101,8 +101,11 @@ class Sessions:
     def hash(self, password: str) -> bytes:
         return hashlib.scrypt(password.encode(), salt=self.salt, n=16384, r=8, p=1)
 
+    def verify(self, password: str) -> bool:
+        return secrets.compare_digest(self.hash(password), self.digest)
+
     def login(self, password: str) -> str:
-        if not secrets.compare_digest(self.hash(password), self.digest):
+        if not self.verify(password):
             raise PermissionError("Incorrect password.")
         return self.open(OWNER)
 

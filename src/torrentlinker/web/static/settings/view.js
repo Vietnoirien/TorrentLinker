@@ -16,7 +16,17 @@ function clearAgentToken() {
   if ($("agent-token")) $("agent-token").value = "";
   if ($("agent-token-box")) $("agent-token-box").hidden = true;
 }
-const sections = () => ({
+// A Member's Settings hold only their account, and Utilisateurs for a manager (#135).
+const sections = () =>
+  environment.member
+    ? Object.fromEntries(
+        [
+          ["account", say("My account", "Mon compte")],
+          ["users", say("Users", "Utilisateurs")],
+        ].filter(([key]) => (environment.sections || []).includes(key)),
+      )
+    : ownerSections();
+const ownerSections = () => ({
   connections: say("Connections", "Connexions"),
   clients: "Clients",
   companion: "Companion",
@@ -30,7 +40,9 @@ const sections = () => ({
   release_score: "ReleaseScore",
   zen: "Zen",
   // Members share only a Web or Docker server; the desktop stays the Owner's.
-  ...(environment.mode === "web" ? { users: say("Users", "Utilisateurs") } : {}),
+  ...(environment.mode === "web"
+    ? { users: say("Users", "Utilisateurs"), account: say("My account", "Mon compte") }
+    : {}),
 });
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -1140,7 +1152,7 @@ function render() {
   );
   if (!snapshot) return;
   const form = element(
-    ["agents", "assistant", "companion", "users"].includes(section)
+    ["agents", "assistant", "companion", "users", "account"].includes(section)
       ? "section"
       : "form",
     undefined,
@@ -1179,6 +1191,10 @@ function render() {
     const root = element("div");
     form.append(root);
     queueMicrotask(() => guard(() => settingsMembers(root)));
+  } else if (section === "account") {
+    const root = element("div");
+    form.append(root);
+    queueMicrotask(() => guard(() => settingsAccount(root)));
   } else if (section === "assistant") {
     const root = element("div");
     root.id = "assistant-connections-body";
@@ -1209,6 +1225,8 @@ async function applyEnvironment(value) {
   )
     section = value.section;
   environment = value;
+  if (!Object.hasOwn(sections(), section))
+    section = Object.hasOwn(sections(), value.section) ? value.section : Object.keys(sections())[0];
   language = value.language || "en";
   document.documentElement.lang = language;
   document.documentElement.dataset.theme = value.theme || "dark";

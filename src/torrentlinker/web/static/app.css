@@ -1011,3 +1011,109 @@ iframe.has-open-dialog { position: relative; z-index: 3; }
 }
 
 #page-jobs small { overflow-wrap: anywhere; min-width: 0; }
+/* "Cet écran est partagé" and "Qui regarde ?" on a Shared Screen (docs/specs/members-signin, layout C). */
+.welcome .login-shared {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.welcome .login-shared input {
+  width: auto;
+  margin: 0;
+}
+.welcome.tv {
+  max-width: 1100px;
+  text-align: center;
+}
+.welcome.tv .brandmark {
+  margin: auto;
+}
+.who-profiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
+  justify-content: center;
+  gap: 26px;
+  margin-top: 20px;
+}
+.welcome .who-profile {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px 10px;
+  margin: 0;
+  width: auto;
+  font-size: 20px;
+}
+.welcome .who-profile:focus-visible {
+  outline: 4px solid var(--accent);
+  outline-offset: 6px;
+  transform: scale(1.04);
+}
+.who-face {
+  width: 160px;
+  height: 160px;
+  border-radius: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 64px;
+  font-weight: 700;
+  color: #102a2b;
+}
+.who-lock {
+  font-size: 12px;
+  color: var(--muted);
+}
+.who-pin {
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 24px;
+  width: min(380px, 92vw);
+  text-align: center;
+}
+.who-pin::backdrop {
+  background: #0009;
+}
+.who-pin .who-face {
+  width: 88px;
+  height: 88px;
+  border-radius: 22px;
+  font-size: 34px;
+  margin: auto;
+}
+.who-dots {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 16px 0;
+}
+.who-dots i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+.who-dots i.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.who-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.who-keys button {
+  height: 56px;
+  font-size: 20px;
+}
+@media (max-width: 650px) {
+  .who-face {
+    width: 96px;
+    height: 96px;
+    font-size: 40px;
+  }
+}

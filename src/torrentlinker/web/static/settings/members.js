@@ -491,11 +491,18 @@ function memberEditor(root, draft) {
   preset.append(choice);
   fields.append(preset);
   account.append(fields);
-  if (!data.proxy && !draft.invited) {
+  if (!draft.invited && draft.id) {
     const links = element("div", undefined, "settings-actions");
+    if (!data.proxy)
+      links.append(
+        button(say("Send a password link", "Envoyer un lien de mot de passe"), () =>
+          linkDialog(root, draft),
+        ),
+      );
+    // The people who watch under this account, and its Shared Screens (account.js).
     links.append(
-      button(say("Send a password link", "Envoyer un lien de mot de passe"), () =>
-        linkDialog(root, draft),
+      button(say("Profiles and Shared Screens", "Profils et écrans partagés"), () =>
+        memberHousehold(draft),
       ),
     );
     account.append(links);

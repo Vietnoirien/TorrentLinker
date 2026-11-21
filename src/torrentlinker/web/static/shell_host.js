@@ -54,6 +54,7 @@ function shellSnapshot(region) {
     client_busy: shellState.clientBusy,
     compact: innerWidth < 650,
     can_logout: state.setup?.web_auth !== "proxy",
+    shared_screen: !!state.actor?.screen,
     setup_needed: !signedInMember() && !state.setup?.indexer_configured,
     release: shellState.release,
     band: {
@@ -191,7 +192,7 @@ async function shellSelectClient(identifier) {
   }
 }
 const shellActions = {
-  navigation: new Set(["navigate", "theme", "language", "shortcuts", "logout"]),
+  navigation: new Set(["navigate", "theme", "language", "shortcuts", "profile", "logout"]),
   header: new Set(["navigate", "client"]),
   band: new Set(["refresh-profile"]),
   update: new Set(["release", "dismiss"]),
@@ -236,6 +237,9 @@ window.addEventListener("message", async (event) => {
         if (!["en", "fr"].includes(values.value))
           throw Error("Unknown language.");
         changeLanguage(values.value);
+      } else if (action === "profile") {
+        if (!state.actor?.screen) throw Error("This browser is not a Shared Screen.");
+        await whoWatches();
       } else if (action === "logout") {
         if (state.setup?.web_auth === "proxy")
           throw Error("Authentication is managed by the proxy.");

@@ -177,6 +177,22 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/requests/seen",
         "/api/requests/{identifier}/cancel",
         "/api/wishes",
+        # Viewers, PINs and Shared Screens, and Mon compte (#135).
+        "/api/screen",
+        "/api/screen/choose",
+        "/api/account",
+        "/api/account/password",
+        "/api/account/pin",
+        "/api/account/viewers/new",
+        "/api/account/viewers/{viewer}",
+        "/api/account/viewers/{viewer}/delete",
+        "/api/account/screens/{screen}/forget",
+        "/api/members/{account}/profiles",
+        "/api/members/{account}/viewers/new",
+        "/api/members/{account}/viewers/{viewer}",
+        "/api/members/{account}/viewers/{viewer}/delete",
+        "/api/members/{account}/screens/{screen}/forget",
+        "/api/members/{account}/viewers/{viewer}/promote",
     }
 
 

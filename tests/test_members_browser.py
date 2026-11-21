@@ -246,7 +246,10 @@ def test_a_member_has_medias_without_the_owners_tools(tmp_path):
                 other.locator("#login-form button.primary").click()
                 other.wait_for_url("**#/media/video")
                 navigation = other.frame_locator("#shell-navigation-frame")
-                expect(navigation.locator("#pages button")).to_have_text(["Media", "Documentation"])
+                # Settings hold only "My account" for a Member (#135).
+                expect(navigation.locator("#pages button")).to_have_text(
+                    ["Media", "Documentation", "Settings"]
+                )
                 frame = other.frame_locator("#media-frame")
                 expect(frame.locator("#media-center-mode")).to_be_visible()
                 expect(frame.locator("#media-toolbar-refresh")).to_be_hidden()
@@ -349,6 +352,96 @@ def test_a_member_asks_for_a_tracker_film_and_follows_it_in_the_bell(tmp_path):
                 expect(frame.locator("#media-requests-bell b")).to_be_hidden()
                 drawer.get_by_role("button", name="Cancel the Request").click()
                 expect(drawer.get_by_text("Cancelled")).to_be_visible()
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)
+
+
+def test_who_watches_on_a_shared_screen_and_mon_compte(tmp_path):
+    """Members 8 (#135): "Cet écran est partagé", "Qui regarde ?" with a PIN, Mon compte."""
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.accounts import Permission
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    accounts = app.state.accounts
+    lea = accounts.create(
+        "Léa", "lea", {Permission.FILMS, Permission.ANIME}, password="lea-password-long"
+    )
+    accounts.set_pin(lea, "", "2468")
+    accounts.add_viewer(lea, "Hugo", {Permission.FILMS}, 1)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_label("Sign-in name").fill("lea")
+                page.get_by_label("Password", exact=True).fill("lea-password-long")
+                page.get_by_label("This screen is shared").check()
+                page.get_by_label("Name of this screen").fill("Living room TV")
+                page.locator("#login-form button.primary").click()
+
+                picker = page.locator("#who-screen")
+                expect(picker.get_by_role("heading", name="Who's watching?")).to_be_visible()
+                expect(picker.get_by_text("Living room TV")).to_be_visible()
+                expect(picker.get_by_role("button", name="Léa, PIN needed")).to_be_focused()
+                page.keyboard.press("ArrowRight")
+                expect(picker.get_by_role("button", name="Hugo")).to_be_focused()
+                page.keyboard.press("Enter")
+                expect(picker.get_by_role("heading", name="Enjoy, Hugo")).to_be_visible()
+                picker.get_by_role("button", name="Open Media").click()
+                page.wait_for_url("**#/media/video")
+                navigation = page.frame_locator("#shell-navigation-frame")
+                expect(navigation.locator("#pages button")).to_have_text(["Media", "Documentation"])
+
+                navigation.get_by_role("button", name="Change profile").click()
+                picker.get_by_role("button", name="Léa, PIN needed").click()
+                pad = page.locator("#who-pin")
+                for digit in "1111":
+                    pad.get_by_role("button", name=digit, exact=True).click()
+                pad.get_by_role("button", name="OK").click()
+                expect(pad.get_by_text("Incorrect PIN.")).to_be_visible()
+                page.keyboard.type("2468")
+                page.keyboard.press("Enter")
+                expect(picker.get_by_role("heading", name="Enjoy, Léa")).to_be_visible()
+                picker.get_by_role("button", name="Open Media").click()
+                expect(navigation.locator("#pages button")).to_have_text(
+                    ["Media", "Documentation", "Settings"]
+                )
+                shell_navigate(page, "setup")
+                panel = page.frame_locator("#settings-frame")
+                expect(panel.locator("#settings-navigation button")).to_have_text(["My account"])
+                expect(panel.get_by_text("Living room TV")).to_be_visible()
+                expect(panel.get_by_role("heading", name="Hugo")).to_be_visible()
+                panel.get_by_role("button", name="Add a profile").click()
+                form = panel.locator(".household-form")
+                form.get_by_label("Name").fill("Mamie")
+                # As broad as Léa, she would need a PIN of her own: Hugo is narrower.
+                form.get_by_role("button", name="Save").click()
+                expect(panel.locator("#settings-error")).to_contain_text("PIN for Mamie")
+                form.get_by_label("Anime").uncheck()
+                form.get_by_label("Age limit").select_option(label="Under 10")
+                form.get_by_role("button", name="Save").click()
+                expect(panel.get_by_role("heading", name="Mamie")).to_be_visible()
+                assert [p["name"] for p in accounts.profiles(lea)] == ["Léa", "Hugo", "Mamie"]
                 assert not errors
                 browser.close()
         finally:

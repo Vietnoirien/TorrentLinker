@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="static/reseed.css" />
     <script src="static/app.js" defer></script>
     <script src="static/shell_host.js" defer></script>
+    <script src="static/who.js" defer></script>
     <script src="static/categories.js" defer></script>
     <script src="static/documentation.js" defer></script>
     <script src="static/library.js" defer></script>
@@ -50,6 +51,9 @@
           autocomplete="current-password"
           required
         />
+        <label class="login-shared"><input type="checkbox" id="login-shared" /> <span data-en="This screen is shared" data-fr="Cet écran est partagé">This screen is shared</span></label>
+        <label for="login-screen-name" id="login-screen-name-label" data-en="Name of this screen" data-fr="Nom de cet écran" hidden>Name of this screen</label><input id="login-screen-name" maxlength="60" hidden />
+        <small id="login-screen-help" class="muted" hidden data-en="It asks who watches, and stays signed in for 90 days of disuse. You can forget it from your account." data-fr="On y demandera qui regarde ; il reste connecté 90 jours sans usage. Vous pourrez l’oublier depuis votre compte.">It asks who watches, and stays signed in for 90 days of disuse. You can forget it from your account.</small>
         <p id="login-error" class="field-error" role="alert"></p>
         <button class="primary" data-i18n="signIn">Sign in</button>
         <p class="muted" id="login-help" data-en="Forgot your password? Ask the owner for a new link." data-fr="Mot de passe oublié ? Demandez un nouveau lien au propriétaire.">
@@ -58,6 +62,8 @@
       </form>
       <button type="button" class="linkish" id="login-owner" data-en="I am the owner" data-fr="Je suis le propriétaire">I am the owner</button>
     </section>
+    <section id="who-screen" class="welcome who" aria-live="polite" hidden></section>
+    <dialog id="who-pin" class="who-pin"></dialog>
     <div id="workspace" hidden>
       <aside class="sidebar" id="app-sidebar"><iframe id="shell-navigation-frame" title="Navigation" src="static/shell/view.html"></iframe></aside>
       <main>

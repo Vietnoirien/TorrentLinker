@@ -47,9 +47,9 @@ the path values allowed (`action={...}`). The middleware checks it on `/api/*` a
 A row below is declared by the issue that makes its handler answer for the actor (#131 Media
 with visibility and per-person progress, #133 and #134 Requests, #137 Search, queue and
 torrents, #138 the Assistant); until then the route stays Owner-only. Today the "nothing",
-"signed in", `/api/members*`, Media rows and the Member's Requests rows (#133: listing their
-own, sending, cancelling, Wishes) are declared (the Media chat waits for #138). In
-code (#131) a Member's age limit and Library Folders live in `media_limits` in
+"signed in", `/api/members*`, `/api/account*` (#135), Media rows and the Member's Requests
+rows (#133: listing their own, sending, cancelling, Wishes) are declared (the Media chat
+waits for #138). In code (#131) a Member's age limit and Library Folders live in `media_limits` in
 `accounts.sqlite` (no row: no limit, every folder); the limit applies to videos, music having
 no Age Rating. Tracker rows are unrated films: a Member sees them with the Films Permission
 and no limit. A Member's shell reads `/api/shell` instead of the Owner's setup snapshot.
@@ -130,6 +130,17 @@ The Owner has no display name, so the button reads "Demander au propriétaire".
   its own throttling; a forgotten PIN is reset with the account's password.
 - The existing `X-TorrentLinker` header check, request size limits and security headers
   apply to every actor.
+
+In code (#135) Viewers are `viewers` in `accounts.sqlite`, the account holder's own PIN
+`holder_pins`, and Shared Screens `screens`, whose `viewer` is NULL until "Qui regarde ?"
+is answered: until then the actor is a picker with no Permission (`/api/screen`,
+`/api/screen/choose`). "Changer de profil" shows the picker while the current profile keeps
+watching, so going down asks no PIN. A profile more restricted than another makes the
+broader one need a PIN, refused until it has one; a profile with a PIN asks for it from the
+picker, and from another profile only when stepping up. The Owner may also mark a screen
+shared and have Viewers. Behind a proxy there are no Shared Screens. "Mon compte" is the
+Settings section of every account holder; a Member's Settings hold only it and, for a
+manager, Utilisateurs.
 
 ## Data
 

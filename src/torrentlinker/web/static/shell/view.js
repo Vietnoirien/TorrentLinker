@@ -153,6 +153,9 @@ function render() {
     );
     $("language").value = state.language || "en";
     text("shortcuts", "Keyboard shortcuts", "Raccourcis clavier");
+    // On a Shared Screen: back to "Qui regarde ?".
+    text("switch-profile", "Change profile", "Changer de profil");
+    $("switch-profile").hidden = state.mode !== "web" || !state.shared_screen;
     text("logout", "Sign out", "Se déconnecter");
     $("logout").hidden = state.mode !== "web" || !state.can_logout;
   }
@@ -297,6 +300,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     send("language", { value: $("language").value });
   for (const [id, action] of [
     ["shortcuts", "shortcuts"],
+    ["switch-profile", "profile"],
     ["logout", "logout"],
     ["release", "release"],
     ["dismiss", "dismiss"],

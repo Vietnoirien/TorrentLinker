@@ -25,6 +25,8 @@ from torrentlinker import documentation
 from torrentlinker.accounts import (
     OWNER,
     OWNER_ACTOR,
+    PICKING,
+    SCREEN_IDLE,
     SESSION_IDLE,
     WATCH,
     Accounts,
@@ -44,6 +46,7 @@ from torrentlinker.web.member_requests import request_routes
 from torrentlinker.web.members import member_routes
 from torrentlinker.web.operations import DownloadFolderRequired, JobRequest, Operations
 from torrentlinker.web.permissions import Audience, allowed, needs, public
+from torrentlinker.web.profiles import household_routes
 from torrentlinker.web.security import (
     PROXY_USER_HEADER,
     ServerSecrets,
@@ -86,6 +89,7 @@ class SequentialVideo(BaseModel):
 class Login(BaseModel):
     password: str = Field(max_length=1024)
     login: str = Field(default="", max_length=100)  # empty: the Owner's startup password
+    screen: str = Field(default="", max_length=60)  # "Cet écran est partagé": its name
 
 
 def create_app(
@@ -131,11 +135,17 @@ def create_app(
             if account := sessions.account(token):
                 return accounts.actor(account)
             member = accounts.session(token)
-            if member is None:
+            if member is not None:
+                if member[1]:
+                    request.state.renew_session = (token, SESSION_IDLE)
+                return accounts.actor(member[0])
+            # A Shared Screen: whoever was chosen watches, until the picker asks again.
+            shared = accounts.screen(token)
+            if shared is None:
                 return None
-            if member[1]:
-                request.state.renew_session = token
-            return accounts.actor(member[0])
+            if shared[1]:
+                request.state.renew_session = (token, SCREEN_IDLE)
+            return shared[0]
 
     def sign_in_required(request: Request) -> JSONResponse:
         if sessions is None:
@@ -352,6 +362,14 @@ def create_app(
         requests=requests,
     )
     request_routes(app, requests, agent_service.media)
+    household_routes(
+        app,
+        accounts,
+        agent_service.media,
+        proxy=sessions is None,
+        owner_password=lambda password: sessions is not None and sessions.verify(password),
+        signed_in=signed_in,
+    )
     app.state.requests = requests
     app.state.reset_clients = reset_clients
     app.state.accounts = accounts
@@ -410,10 +428,11 @@ def create_app(
         except Exception as error:
             # Do not let ASGI log a raw HTTP exception containing private URLs.
             response = JSONResponse({"detail": error_message(error)}, status_code=502)
-        renewed = getattr(request.state, "renew_session", "")
+        renewed = getattr(request.state, "renew_session", None)
         if renewed and route != "/api/logout":
-            # A Member's session lasts 30 days of disuse: each use restarts the cookie's too.
-            session_cookie(response, renewed, SESSION_IDLE)
+            # A Member's session lasts 30 days of disuse, a Shared Screen 90: each use
+            # restarts the cookie's too.
+            session_cookie(response, *renewed)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -484,16 +503,11 @@ def create_app(
             return JSONResponse(
                 {"detail": f"Too many attempts. Try again in {minutes} min."}, status_code=429
             )
-        token = ""
         if name:
-            if account := accounts.verify(name, body.password):
-                token = accounts.open_session(account)
+            account = accounts.verify(name, body.password) or ""
         else:
-            try:
-                token = sessions.login(body.password)
-            except PermissionError:
-                pass
-        if not token:
+            account = OWNER if sessions.verify(body.password) else ""
+        if not account:
             if throttle.failed(*keys):
                 # Shown to the Owner by the notifications of #136; logged until then.
                 logger.warning("Sign-in locked after repeated failures: %s", " ".join(keys))
@@ -501,7 +515,17 @@ def create_app(
             return JSONResponse({"detail": detail}, status_code=401)
         throttle.succeeded(*keys)
         response = JSONResponse({"ok": True})
-        session_cookie(response, token, SESSION_IDLE if name else 43200)
+        if body.screen.strip():
+            # "Cet écran est partagé": it asks who watches and lasts 90 days of disuse.
+            try:
+                token = accounts.open_screen(account, body.screen)
+            except ValueError as error:
+                return JSONResponse({"detail": str(error)}, status_code=400)
+            session_cookie(response, token, SCREEN_IDLE)
+        elif name:
+            session_cookie(response, accounts.open_session(account), SESSION_IDLE)
+        else:
+            session_cookie(response, sessions.open(OWNER), 43200)
         return response
 
     @app.post("/api/logout")
@@ -510,6 +534,7 @@ def create_app(
         if sessions is not None:
             sessions.logout(request.cookies.get("tl_session", ""))
             accounts.end_session(request.cookies.get("tl_session", ""))
+            accounts.end_screen(request.cookies.get("tl_session", ""))
         response = JSONResponse({"ok": True})
         response.delete_cookie("tl_session")
         return response
@@ -1012,19 +1037,42 @@ def create_app(
     @needs(Audience.SIGNED_IN)
     def shell_state(request: Request) -> dict:
         actor: Actor = request.state.actor
+        # On a Shared Screen, "Qui regarde ?" comes first; then whoever was chosen.
+        screen = (
+            {"name": accounts.screen_name(actor.screen), "picking": actor.viewer == PICKING}
+            if actor.screen
+            else None
+        )
         if not actor.owner:
-            # A Member's shell: Médias without the Owner's tools, and the guides. The setup
-            # snapshot is the Owner's; the shell reads only these few values instead.
-            pages = [*(["media"] if any(actor.holds(p) for p in WATCH) else []), "documentation"]
+            # A Member's or a Viewer's shell: Médias without the Owner's tools, the guides,
+            # and for an account holder their settings ("Mon compte", Utilisateurs for a
+            # manager). The setup snapshot is the Owner's; the shell reads these values instead.
+            holder = not actor.viewer
+            pages = [
+                *(["media"] if any(actor.holds(p) for p in WATCH) else []),
+                "documentation",
+                *(["setup"] if holder else []),
+            ]
+            viewer = actor.viewer not in ("", PICKING)
             return {
                 "version": app_version,
                 "release": None,
                 "actor": {
                     "owner": False,
-                    "name": accounts.display_name(actor.account),
+                    "viewer": bool(actor.viewer),
+                    "name": accounts.viewer(actor.account, actor.viewer)["name"]
+                    if viewer
+                    else accounts.display_name(actor.account),
                     "permissions": sorted(actor.permissions),
+                    "screen": screen,
                 },
-                "pages": pages,
+                "pages": [] if actor.viewer == PICKING else pages,
+                "sections": [
+                    "account",
+                    *(["users"] if actor.holds(Permission.MANAGE_MEMBERS) else []),
+                ]
+                if holder
+                else [],
                 "setup": {
                     "configured": True,
                     "adult_content": service.settings.adult_content
@@ -1040,7 +1088,13 @@ def create_app(
         return {
             "version": app_version,
             "release": {"tag": release.tag, "url": release.url} if release else None,
-            "actor": {"owner": True, "name": "", "permissions": sorted(Permission)},
+            "actor": {
+                "owner": True,
+                "viewer": False,
+                "name": "",
+                "permissions": sorted(Permission),
+                "screen": screen,
+            },
         }
 
     @app.get("/api/zen/catalogue")

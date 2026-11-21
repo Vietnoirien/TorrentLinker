@@ -21,6 +21,9 @@ function settingsEnvironment() {
         client_id: state.clientId,
         section: state.settingsSection || "connections",
         agent_endpoint: new URL("mcp/", location.href).href,
+        // A Member's Settings: their account, and Utilisateurs for a manager.
+        member: signedInMember(),
+        sections: state.sections || [],
       },
     },
     location.origin,
@@ -51,7 +54,10 @@ window.addEventListener("message", async (event) => {
       throw Error("The target client changed. Reopen Settings.");
     let value;
     if (message.path === "snapshot")
-      value = await api(`settings?client_id=${encodeURIComponent(_client)}`);
+      // The Owner's settings snapshot; a Member's Settings read their own routes instead.
+      value = signedInMember()
+        ? { client_id: _client }
+        : await api(`settings?client_id=${encodeURIComponent(_client)}`);
     else if (message.path === "file-access") {
       if (
         !["snapshot", "discover", "save", "check", "browse", "remove"].includes(
@@ -88,8 +94,12 @@ window.addEventListener("message", async (event) => {
         throw Error("Unknown Agent access operation.");
       value = await api(body.path, body.body, body.method);
     } else if (message.path === "members") {
-      if (!/^members(?:\/[a-zA-Z0-9_-]+){0,2}$/.test(body.path))
+      if (!/^members(?:\/[a-zA-Z0-9_-]+){0,4}$/.test(body.path))
         throw Error("Unknown Users operation.");
+      value = await api(body.path, body.body, body.method);
+    } else if (message.path === "account") {
+      if (!/^account(?:\/[a-zA-Z0-9_-]+){0,3}$/.test(body.path))
+        throw Error("Unknown account operation.");
       value = await api(body.path, body.body, body.method);
     } else if (message.path === "companion") {
       if (body.action === "state") value = await api("zen/profile");

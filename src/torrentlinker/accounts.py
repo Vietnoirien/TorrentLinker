@@ -12,7 +12,7 @@ import sqlite3
 import threading
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
@@ -21,6 +21,8 @@ from torrentlinker import age_ratings
 
 OWNER = "owner"  # the fixed account of the Owner; never restricted, edited or deleted
 SESSION_IDLE = 30 * 86400  # a Member's session ends after 30 days of disuse
+SCREEN_IDLE = 90 * 86400  # a Shared Screen's after 90 days of disuse
+PICKING = "?"  # the Viewer of a Shared Screen until someone chooses who watches
 LINK_DAYS = (1, 3, 7)  # an invitation or password link is valid 24 h, 3 or 7 days
 
 
@@ -60,6 +62,7 @@ class Actor:
     # Library Folders by path (None: every folder, those added later included).
     age_limit: int | None = None
     folders: frozenset[str] | None = None
+    screen: str = ""  # the Shared Screen this actor watches on, if any
 
     @property
     def owner(self) -> bool:
@@ -112,6 +115,21 @@ class Accounts:
                     digest TEXT PRIMARY KEY,
                     account TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
                     created REAL NOT NULL, used REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS viewers (
+                    id TEXT PRIMARY KEY,
+                    account TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL, permissions TEXT NOT NULL, age_limit INTEGER,
+                    pin TEXT NOT NULL DEFAULT '', created REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS holder_pins (
+                    account TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+                    pin TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS screens (
+                    id TEXT PRIMARY KEY, digest TEXT NOT NULL UNIQUE,
+                    account TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL, viewer TEXT, created REAL NOT NULL, used REAL NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS links (
                     digest TEXT PRIMARY KEY,
@@ -291,7 +309,12 @@ class Accounts:
             if self._invited(account):
                 raise ValueError("This Member chooses a sign-in name with their invitation first.")
             self._password(account, password)
-            self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
+            self._sign_out(account)
+
+    def _sign_out(self, account: str) -> None:
+        """End every session and Shared Screen of the account."""
+        self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
+        self.db.execute("DELETE FROM screens WHERE account=?", (account,))
 
     def _password(self, account: str, password: str) -> None:
         if not 12 <= len(password) <= 1024:
@@ -299,6 +322,14 @@ class Accounts:
         salt = secrets.token_bytes(16)
         stored = f"scrypt${salt.hex()}${scrypt(password, salt).hex()}"
         self.db.execute("UPDATE accounts SET password=? WHERE id=?", (stored, account))
+
+    def check_password(self, account: str, password: str) -> bool:
+        """Whether this is the Member's password, to reset a PIN or change the password."""
+        with self.lock:
+            row = self.db.execute(
+                "SELECT login FROM accounts WHERE id=? AND id<>?", (account, OWNER)
+            ).fetchone()
+        return bool(row and row["login"]) and self.verify(row["login"], password) == account
 
     def verify(self, login: str, password: str) -> str | None:
         """The enabled Member signing in with this name and password, or None."""
@@ -352,7 +383,7 @@ class Accounts:
         with self.lock, self.db:
             self._member(account)
             self.db.execute("UPDATE accounts SET disabled=? WHERE id=?", (disabled, account))
-            self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
+            self._sign_out(account)
 
     def delete(self, account: str) -> None:
         """Erase a disabled Member with their Permissions, caps and sessions."""
@@ -582,9 +613,289 @@ class Accounts:
                 ).fetchone()
                 self._identify(account, name.strip() or current["name"], login, "")
             self._password(account, password)
-            self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
+            self._sign_out(account)
             self.db.execute("UPDATE links SET used=? WHERE digest=?", (time.time(), digest(token)))
         return account
+
+    # Viewers (#135): people without credentials who watch under an account holder, with
+    # only Media Permissions, never broader than the account's.
+
+    def profiles(self, account: str) -> list[dict]:
+        """Who may watch under the account: the holder first, then their Viewers."""
+        with self.lock:
+            holder = self.db.execute(
+                "SELECT accounts.name, holder_pins.pin FROM accounts LEFT JOIN holder_pins "
+                "ON holder_pins.account=accounts.id WHERE accounts.id=?",
+                (account,),
+            ).fetchone()
+            rows = self.db.execute(
+                "SELECT * FROM viewers WHERE account=? ORDER BY created", (account,)
+            ).fetchall()
+        if holder is None:
+            raise ValueError("This Member no longer exists.")
+        base = self.actor(account) or Actor(account, frozenset())
+        found = [
+            {
+                "id": "",
+                "name": self.display_name(account),
+                "holder": True,
+                "permissions": sorted(p.value for p in base.permissions if p in MEDIA),
+                "age_limit": base.age_limit,
+                "pin": bool(holder["pin"]),
+            }
+        ]
+        for row in rows:
+            permissions = {p for p in json.loads(row["permissions"]) if p in MEDIA}
+            found.append(
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "holder": False,
+                    "permissions": sorted(permissions & {p.value for p in base.permissions}),
+                    "age_limit": narrowest(base.age_limit, row["age_limit"]),
+                    "pin": bool(row["pin"]),
+                }
+            )
+        for profile in found:
+            profile["needs_pin"] = any(narrower(other, profile) for other in found)
+        return found
+
+    def viewer(self, account: str, viewer: str) -> dict:
+        found = next((p for p in self.profiles(account) if p["id"] == viewer), None)
+        if found is None:
+            raise ValueError("This profile no longer exists.")
+        return found
+
+    def add_viewer(
+        self, account: str, name: str, permissions: Iterable[Permission], age_limit: int | None
+    ) -> str:
+        identifier = uuid4().hex
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT INTO viewers (id, account, name, permissions, created) VALUES (?,?,'',?,?)",
+                (identifier, account, "[]", time.time()),
+            )
+            self._viewer(account, identifier, name, permissions, age_limit)
+        return identifier
+
+    def update_viewer(
+        self,
+        account: str,
+        viewer: str,
+        name: str,
+        permissions: Iterable[Permission],
+        age_limit: int | None,
+    ) -> None:
+        with self.lock, self.db:
+            if not self.db.execute(
+                "SELECT 1 FROM viewers WHERE id=? AND account=?", (viewer, account)
+            ).fetchone():
+                raise ValueError("This profile no longer exists.")
+            self._viewer(account, viewer, name, permissions, age_limit)
+
+    def _viewer(
+        self,
+        account: str,
+        viewer: str,
+        name: str,
+        permissions: Iterable[Permission],
+        age_limit: int | None,
+    ) -> None:
+        base = self.actor(account)
+        if base is None:
+            raise ValueError("This Member no longer exists.")
+        name = name.strip()
+        if not name or len(name) > 100:
+            raise ValueError("Give the profile a name.")
+        if age_limit is not None and not 0 <= age_limit < len(age_ratings.SCALE):
+            raise ValueError("Choose Tous publics, −10, −12, −16 or −18.")
+        if base.age_limit is not None and (age_limit is None or age_limit > base.age_limit):
+            raise ValueError("A profile cannot see a higher Age Rating than its account.")
+        granted = {Permission(p) for p in permissions}
+        if not granted <= MEDIA or not all(base.holds(p) for p in granted):
+            raise ValueError("A profile has only Media Permissions its account holds.")
+        if not adult_allowed(age_limit):
+            granted.discard(Permission.ADULT)
+        self.db.execute(
+            "UPDATE viewers SET name=?, permissions=?, age_limit=? WHERE id=?",
+            (name, json.dumps(sorted(p.value for p in granted)), age_limit, viewer),
+        )
+        self._pins_needed(account)
+
+    def _pins_needed(self, account: str) -> None:
+        """Once a profile is more restricted than another, the broader one needs a PIN, so a
+        child cannot step up to a parent."""
+        for profile in self.profiles(account):
+            if profile["needs_pin"] and not profile["pin"]:
+                raise ValueError(
+                    f"Choose a PIN for {profile['name'] or 'the owner'} first: "
+                    "a more restricted profile exists."
+                )
+
+    def remove_viewer(self, account: str, viewer: str) -> None:
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM viewers WHERE id=? AND account=?", (viewer, account))
+            self.db.execute(
+                "UPDATE screens SET viewer=NULL WHERE account=? AND viewer=?", (account, viewer)
+            )
+
+    def set_pin(self, account: str, viewer: str, pin: str) -> None:
+        """Set a profile's PIN (4 to 8 digits), or remove it with an empty one."""
+        if pin and not (pin.isdigit() and pin.isascii() and 4 <= len(pin) <= 8):
+            raise ValueError("A PIN has 4 to 8 digits.")
+        stored = ""
+        if pin:
+            salt = secrets.token_bytes(16)
+            stored = f"scrypt${salt.hex()}${scrypt(pin, salt).hex()}"
+        with self.lock, self.db:
+            self.viewer(account, viewer)
+            if viewer:
+                self.db.execute(
+                    "UPDATE viewers SET pin=? WHERE id=? AND account=?", (stored, viewer, account)
+                )
+            elif stored:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO holder_pins VALUES (?,?)", (account, stored)
+                )
+            else:
+                self.db.execute("DELETE FROM holder_pins WHERE account=?", (account,))
+            self._pins_needed(account)
+
+    def check_pin(self, account: str, viewer: str, pin: str) -> bool:
+        with self.lock:
+            row = (
+                self.db.execute(
+                    "SELECT pin FROM viewers WHERE id=? AND account=?", (viewer, account)
+                ).fetchone()
+                if viewer
+                else self.db.execute(
+                    "SELECT pin FROM holder_pins WHERE account=?", (account,)
+                ).fetchone()
+            )
+        stored = row["pin"] if row else ""
+        _, salt, expected = stored.split("$") if stored.count("$") == 2 else ("", "00" * 16, "")
+        return secrets.compare_digest(scrypt(pin, bytes.fromhex(salt)).hex(), expected)
+
+    def needs_pin(self, account: str, viewer: str, current: str | None) -> bool:
+        """Whether opening this profile asks for its PIN: from the picker, whenever it has
+        one (one is required once a more restricted profile exists); from another profile,
+        only when stepping up. Going down never asks."""
+        profiles = {p["id"]: p for p in self.profiles(account)}
+        target = profiles[viewer]
+        if not target["pin"]:
+            return False
+        if current is None or current not in profiles:
+            return True
+        return not narrower(target, profiles[current], strict=False)
+
+    def viewer_actor(self, account: str, viewer: str, screen: str = "") -> Actor | None:
+        """The actor of a Viewer: the account's Permissions narrowed by the Viewer's own."""
+        base = self.actor(account)
+        if base is None:
+            return None
+        if viewer == "":
+            return replace(base, screen=screen)
+        if viewer == PICKING:
+            return Actor(account, frozenset(), viewer=PICKING, screen=screen)
+        try:
+            found = self.viewer(account, viewer)
+        except ValueError:
+            return None
+        return Actor(
+            account,
+            frozenset(Permission(p) for p in found["permissions"]),
+            viewer=viewer,
+            age_limit=found["age_limit"],
+            folders=base.folders,
+            screen=screen,
+        )
+
+    def promote(self, account: str, viewer: str, *, days: int, inviter: str) -> tuple[str, str]:
+        """Invite a Viewer as a Member with the same Permissions; the caller moves their
+        history to the new account."""
+        found = self.viewer(account, viewer)
+        if found["holder"]:
+            raise ValueError("Choose a profile, not the account holder.")
+        member, token = self.invite(
+            found["name"],
+            [Permission(p) for p in found["permissions"]],
+            Caps(),
+            days=days,
+            inviter=inviter,
+        )
+        age_limit = found["age_limit"]
+        _, folders = self.media_limits(account)
+        self.set_media_limits(
+            member, None if age_limit is None else age_ratings.SCALE[age_limit], folders
+        )
+        self.remove_viewer(account, viewer)
+        return member, token
+
+    # Shared Screens: a browser the account holder marks as shared when signing in. It asks
+    # who watches, and stays signed in for 90 days of disuse.
+
+    def open_screen(self, account: str, name: str) -> str:
+        name = name.strip()
+        if not name or len(name) > 60:
+            raise ValueError("Name this screen, such as “Living room TV”.")
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM screens WHERE used<?", (now - SCREEN_IDLE,))
+            self.db.execute(
+                "INSERT INTO screens VALUES (?,?,?,?,NULL,?,?)",
+                (uuid4().hex, digest(token), account, name, now, now),
+            )
+        return token
+
+    def screen(self, token: str) -> tuple[Actor, bool] | None:
+        """The actor watching on this Shared Screen, and whether its 90 days just started
+        again. Until someone chooses who watches, the actor is the picker."""
+        if not token:
+            return None
+        now = time.time()
+        with self.lock, self.db:
+            row = self.db.execute(
+                "SELECT * FROM screens WHERE digest=?", (digest(token),)
+            ).fetchone()
+            if row is None:
+                return None
+            if row["used"] < now - SCREEN_IDLE:
+                self.db.execute("DELETE FROM screens WHERE id=?", (row["id"],))
+                return None
+            renewed = row["used"] < now - 3600
+            if renewed:
+                self.db.execute("UPDATE screens SET used=? WHERE id=?", (now, row["id"]))
+        viewer = PICKING if row["viewer"] is None else row["viewer"]
+        actor = self.viewer_actor(row["account"], viewer, row["id"])
+        return (actor, renewed) if actor else None
+
+    def choose(self, screen: str, viewer: str | None) -> None:
+        """Who watches on this screen now; None goes back to the picker."""
+        with self.lock, self.db:
+            self.db.execute("UPDATE screens SET viewer=? WHERE id=?", (viewer, screen))
+
+    def screens(self, account: str) -> list[dict]:
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT * FROM screens WHERE account=? AND used>=? ORDER BY used DESC",
+                (account, time.time() - SCREEN_IDLE),
+            ).fetchall()
+        return [{"id": r["id"], "name": r["name"], "used": r["used"]} for r in rows]
+
+    def screen_name(self, screen: str) -> str:
+        with self.lock:
+            row = self.db.execute("SELECT name FROM screens WHERE id=?", (screen,)).fetchone()
+        return row["name"] if row else ""
+
+    def forget_screen(self, account: str, screen: str) -> None:
+        """Forget a Shared Screen: it is signed out at once."""
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM screens WHERE id=? AND account=?", (screen, account))
+
+    def end_screen(self, token: str) -> None:
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM screens WHERE digest=?", (digest(token),))
 
     def _invited(self, account: str) -> bool:
         row = self.db.execute(
@@ -597,6 +908,23 @@ class Accounts:
             raise PermissionError("The Owner's account cannot be restricted.")
         if not self.db.execute("SELECT 1 FROM accounts WHERE id=?", (account,)).fetchone():
             raise ValueError("This Member no longer exists.")
+
+
+def narrowest(*limits: int | None) -> int | None:
+    """The strictest of these Age Rating limits; None is no limit."""
+    known = [limit for limit in limits if limit is not None]
+    return min(known) if known else None
+
+
+def narrower(profile: dict, other: dict, *, strict: bool = True) -> bool:
+    """Whether a profile sees no more than another (and, strictly, less)."""
+    unlimited = len(age_ratings.SCALE)
+    age = unlimited if profile["age_limit"] is None else profile["age_limit"]
+    others = unlimited if other["age_limit"] is None else other["age_limit"]
+    within = set(profile["permissions"]) <= set(other["permissions"]) and age <= others
+    return within and not (
+        strict and set(profile["permissions"]) == set(other["permissions"]) and age == others
+    )
 
 
 def adult_allowed(age_limit: int | None) -> bool:
