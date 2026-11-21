@@ -1,7 +1,7 @@
 # Demandes page design preview, #127
 
 Status: layout **A** (list and inspector) chosen by the owner on 2026-11-21, for the
-Requests and Wishes of ADR-0022. Not implemented yet.
+Requests and Wishes of ADR-0022. Implemented in the Web UI Requests page.
 
 Built only from approved components: the shared palette (`panel/base.css`) and the
 Community page's stylesheet, embedded in `requests-prototype.html` so it opens anywhere.
@@ -30,3 +30,5 @@ Review paths:
 - Resolve Léa's Wish ("le dernier Miyazaki") by picking the film, then accept it.
 - With "Marge serrée" (60 Go), choose Dune's 71 Go remux: quota and margin alerts.
 - History tab: accepted, downloading and refused Requests with their timelines.
+
+The implementation uses tracker release search, the checked download queue and its send receipts. Failed or interrupted sends require Retry; a torrent already present in the client is not added again. Status refresh marks a completed download available once it appears in Médias. Tests use fake tracker and client responses.

@@ -76,6 +76,18 @@ class Requests:
                 );
             """)
 
+    def recover_sends(self) -> None:
+        """A restart cannot prove whether a claimed send reached the client; require Retry."""
+        with self.lock:
+            rows = self.db.execute("SELECT id FROM requests WHERE state='accepted'").fetchall()
+            for row in rows:
+                self.move(
+                    row["id"],
+                    "send_failed",
+                    "",
+                    "Server restarted during send. Check the client and retry.",
+                )
+
     def quota(self, account: str, now: float | None = None) -> dict:
         """What the account may still ask for this week; None where it has no cap."""
         now = time.time() if now is None else now
@@ -235,17 +247,124 @@ class Requests:
                 (identifier, now, state, actor, note),
             )
 
+    def review(self) -> list[dict]:
+        """Approvers see all Requests, their requester, quotas and event history."""
+        self.expire()
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT * FROM requests ORDER BY created DESC LIMIT 500"
+            ).fetchall()
+            return [
+                {
+                    **self._public(row),
+                    "account": row["account"],
+                    "requester": self.accounts.display_name(row["account"]),
+                    "quota": self.quota(row["account"]),
+                    "approval_limits": self.approval_limits(row["account"], row["id"]),
+                    "events": [
+                        dict(event)
+                        for event in self.db.execute(
+                            "SELECT at,state,actor,note FROM request_events "
+                            "WHERE request=? ORDER BY at",
+                            (row["id"],),
+                        )
+                    ],
+                }
+                for row in rows
+            ]
+
+    def approval_limits(self, account: str, identifier: str) -> dict:
+        caps = self.accounts.caps(account) if account != OWNER else Caps()
+        start, _ = week(time.time())
+        with self.lock:
+            used = self.db.execute(
+                "SELECT COUNT(*),COALESCE(SUM(size),0) FROM requests "
+                "WHERE account=? AND accepted>=? AND id<>?",
+                (account, start, identifier),
+            ).fetchone()
+        return {
+            "count_left": None
+            if caps.requests_per_week is None
+            else max(0, caps.requests_per_week - used[0]),
+            "bytes_left": None
+            if caps.bytes_per_week is None
+            else max(0, caps.bytes_per_week - used[1]),
+        }
+
+    def answer(
+        self,
+        identifier: str,
+        actor: str,
+        *,
+        release: Release | None = None,
+        note: str = "",
+        retry: bool = False,
+        refuse: bool = False,
+    ) -> dict:
+        """Atomically claim a pending answer or failed send before any external action."""
+        self.expire()
+        with self.lock, self.db:
+            row = self.db.execute("SELECT * FROM requests WHERE id=?", (identifier,)).fetchone()
+            if row is None:
+                raise KeyError(identifier)
+            expected = "send_failed" if retry else "pending"
+            if row["state"] != expected:
+                raise ValueError("This Request has already been answered or is being sent.")
+            if refuse:
+                self.move(identifier, "refused", actor, note)
+            else:
+                if release is None:
+                    if not row["infohash"]:
+                        raise ValueError("Choose a release for this Wish first.")
+                    release = Release(
+                        row["infohash"], row["release"], row["size"], row["title"], row["year"]
+                    )
+                # The pending Request already reserves its original count and size.
+                caps = self.accounts.caps(row["account"]) if row["account"] != OWNER else Caps()
+                start, _ = week(time.time())
+                used = self.db.execute(
+                    "SELECT COUNT(*),COALESCE(SUM(size),0) FROM requests "
+                    "WHERE account=? AND accepted>=? AND id<>?",
+                    (row["account"], start, identifier),
+                ).fetchone()
+                over = (
+                    caps.requests_per_week is not None
+                    and used[0] + 1 > caps.requests_per_week
+                    or caps.bytes_per_week is not None
+                    and used[1] + release.size > caps.bytes_per_week
+                )
+                if over:
+                    note = (note + "\nAccepted beyond the Member's weekly quota.").strip()
+                self.db.execute(
+                    "UPDATE requests SET kind='request',infohash=?,release=?,size=?,title=?,year=? "
+                    "WHERE id=?",
+                    (
+                        release.infohash,
+                        release.name,
+                        release.size,
+                        release.title,
+                        release.year,
+                        identifier,
+                    ),
+                )
+                self.move(identifier, "accepted", actor, note)
+            self.db.execute(
+                "UPDATE requests SET answered_by=?,answer=?,seen=0 WHERE id=?",
+                (actor, note, identifier),
+            )
+        return self.get(identifier)
+
     def cancel(self, account: str, identifier: str) -> dict:
         """The Member cancels their own Request or Wish while it is pending."""
         with self.lock:
             row = self.db.execute(
                 "SELECT state FROM requests WHERE id=? AND account=?", (identifier, account)
             ).fetchone()
-        if row is None:
-            raise KeyError(identifier)
-        if row["state"] != "pending":
-            raise ValueError("Only a pending Request can be cancelled.")
-        self.move(identifier, "cancelled", account)
+            if row is None:
+                raise KeyError(identifier)
+            if row["state"] != "pending":
+                raise ValueError("Only a pending Request can be cancelled.")
+            self.move(identifier, "cancelled", account)
         return self.get(identifier)
 
     def cancel_pending(self, account: str) -> None:
@@ -254,8 +373,8 @@ class Requests:
             rows = self.db.execute(
                 "SELECT id FROM requests WHERE account=? AND state='pending'", (account,)
             ).fetchall()
-        for row in rows:
-            self.move(row["id"], "cancelled", account)
+            for row in rows:
+                self.move(row["id"], "cancelled", account)
 
     def expire(self, now: float | None = None) -> None:
         """Pending for 14 days: expired, and new to the Member."""
@@ -264,8 +383,8 @@ class Requests:
             rows = self.db.execute(
                 "SELECT id FROM requests WHERE state='pending' AND created<?", (now - EXPIRY,)
             ).fetchall()
-        for row in rows:
-            self.move(row["id"], "expired", "", now=now)
+            for row in rows:
+                self.move(row["id"], "expired", "", now=now)
 
     def get(self, identifier: str) -> dict:
         with self.lock:

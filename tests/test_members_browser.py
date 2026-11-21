@@ -505,3 +505,64 @@ def test_single_user_server_hides_members_controls(tmp_path):
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_approver_accepts_a_request_and_sees_it_in_history(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.accounts import Permission
+    from torrentlinker.member_requests import Release
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
+    )
+    lea = app.state.accounts.create("Lea", "lea", {Permission.REQUEST})
+    app.state.requests.ask(
+        lea, Release("a" * 40, "Example.2025.1080p", 2 * 1024**3, "Example", "2025")
+    )
+    app.state.request_approval.send = lambda _hash: None
+    app.state.request_approval.release = lambda _hash: Release(
+        "a" * 40, "Example.2025.1080p", 2 * 1024**3, "Example", "2025"
+    )
+    app.state.request_approval.refresh = lambda _requests: None
+    app.state.request_approval.margin = lambda pending: {
+        "capacity": 20 * 1024**3,
+        "downloading": 0,
+        "pending": pending,
+        "stale": False,
+    }
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1440, "height": 1000})
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_role("button", name="I am the owner").click()
+                page.get_by_label("Server password").fill("test-password-long")
+                page.locator("#login-form button.primary").click()
+                shell_navigate(page, "requests")
+                expect(page.locator(".request-inspector h3").first).to_have_text("Example 2025")
+                page.screenshot(path="/tmp/tl-requests-approval.png", full_page=True)
+                page.get_by_role("button", name="Accept", exact=True).click()
+                expect(page.get_by_text("No Requests here.")).to_be_visible()
+                page.get_by_role("button", name="History", exact=True).click()
+                expect(page.locator(".request-inspector")).to_contain_text("Sent")
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

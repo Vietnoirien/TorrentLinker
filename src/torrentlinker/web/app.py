@@ -361,6 +361,7 @@ def create_app(
 
     requests = Requests(accounts)
     if members_enabled:
+        requests.recover_sends()
         member_routes(
             app,
             accounts,
@@ -1080,6 +1081,7 @@ def create_app(
             pages = [
                 *(["media"] if any(actor.holds(p) for p in WATCH) else []),
                 "documentation",
+                *(["requests"] if actor.holds(Permission.APPROVE) else []),
                 *(["setup"] if holder else []),
             ]
             viewer = actor.viewer not in ("", PICKING)

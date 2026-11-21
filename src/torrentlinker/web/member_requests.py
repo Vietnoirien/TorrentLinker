@@ -7,11 +7,12 @@ are checked at sending; a reached cap refuses with its reason and the next reset
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from torrentlinker.accounts import Actor, Permission
 from torrentlinker.member_requests import CapReached, Release, Requests
+from torrentlinker.request_approval import RequestApproval
 from torrentlinker.web.permissions import Audience, needs
 
 NOT_FOUND = "This Request no longer exists."
@@ -27,7 +28,15 @@ class Wish(BaseModel):
     note: str = Field(default="", max_length=500)
 
 
+class Answer(BaseModel):
+    infohash: str = Field(default="", pattern="^([0-9a-fA-F]{40})?$")
+    note: str = Field(default="", max_length=500)
+
+
 def request_routes(app: FastAPI, requests: Requests, media) -> None:
+    approval = RequestApproval(media)
+    app.state.request_approval = approval
+
     def actor(request: Request) -> Actor:
         return request.state.actor
 
@@ -37,6 +46,7 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
         )
 
     def mine(account: str) -> dict:
+        approval.refresh(requests)
         rows = requests.mine(account)
         return {
             "requests": rows,
@@ -101,3 +111,92 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
             raise HTTPException(404, NOT_FOUND) from None
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
+
+    @app.get("/api/requests/review")
+    @needs(Permission.APPROVE)
+    def review() -> dict:
+        approval.refresh(requests)
+        rows = requests.review()
+        for row in rows:
+            row["score"] = None
+            if row["infohash"]:
+                try:
+                    entry = media.tracker_entry(approval.client_id, row["infohash"])
+                    row["score"] = media._score(
+                        media.agent.setup.settings.release_score,
+                        row["release"],
+                        row["size"],
+                        entry.get("facts") or {},
+                    ).get("score")
+                except ValueError:
+                    pass
+        return {
+            "requests": rows,
+            "margin": approval.margin(sum(r["size"] or 0 for r in rows if r["state"] == "pending")),
+        }
+
+    @app.get("/api/requests/releases")
+    @needs(Permission.APPROVE)
+    def releases(q: str = "") -> dict:
+        return {"releases": approval.choices(q[:200])}
+
+    def answer(identifier: str, body: Answer, request: Request, action: str) -> dict:
+        try:
+            release = approval.release(body.infohash.lower()) if body.infohash else None
+            row = requests.answer(
+                identifier,
+                actor(request).account,
+                release=release,
+                note=body.note,
+                retry=action == "retry",
+                refuse=action == "refuse",
+            )
+        except KeyError:
+            raise HTTPException(404, NOT_FOUND) from None
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        if action != "refuse":
+            try:
+                approval.send(row["infohash"])
+            except Exception:
+                # Provider errors can contain URLs, credentials or local paths. Keep those
+                # out of the Request seen by a Member, including the shared timeline.
+                requests.move(
+                    identifier, "send_failed", "", "Sending failed. Check the client and retry."
+                )
+            else:
+                requests.move(identifier, "sent", "")
+        return requests.get(identifier)
+
+    @app.post("/api/requests/{identifier}/accept")
+    @needs(Permission.APPROVE)
+    def accept(identifier: str, body: Answer, request: Request) -> dict:
+        return answer(identifier, body, request, "accept")
+
+    @app.post("/api/requests/{identifier}/resolve")
+    @needs(Permission.APPROVE)
+    def resolve(identifier: str, body: Answer, request: Request) -> dict:
+        return answer(identifier, body, request, "accept")
+
+    @app.post("/api/requests/{identifier}/retry")
+    @needs(Permission.APPROVE)
+    def retry(identifier: str, body: Answer, request: Request) -> dict:
+        return answer(identifier, body, request, "retry")
+
+    @app.post("/api/requests/{identifier}/refuse")
+    @needs(Permission.APPROVE)
+    def refuse(identifier: str, body: Answer, request: Request) -> dict:
+        return answer(identifier, body, request, "refuse")
+
+    @app.get("/api/requests/artwork/{infohash}")
+    @needs(Permission.APPROVE)
+    def artwork(infohash: str) -> FileResponse:
+        if len(infohash) != 40 or any(c not in "0123456789abcdef" for c in infohash):
+            raise HTTPException(404, "Artwork unavailable.")
+        try:
+            path = media.tracker_artwork(approval.client_id, infohash)
+        except (ValueError, OSError):
+            path = None
+        if path is None or not path.is_file():
+            raise HTTPException(404, "Artwork unavailable.")
+        return FileResponse(path)

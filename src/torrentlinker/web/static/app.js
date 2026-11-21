@@ -394,7 +394,7 @@ async function settingsSection(section, detail) {
 const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
-  upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
+  upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [], requests: [],
   setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users", "account"],
 };
 const agentTabs = ["connections", "new", "activity"];
@@ -487,6 +487,7 @@ async function navigate(view, section, detail) {
   }
   if (view !== "setup") clearAgentToken();
   if (view === "documentation") await loadGuides();
+  if (view === "requests") await loadRequests();
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
   if (view === "feeds") await loadFeeds();

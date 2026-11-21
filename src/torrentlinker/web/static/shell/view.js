@@ -52,6 +52,7 @@ const pages = {
     "Play videos and music from your Library Folders.",
     "Lisez les vidéos et la musique de vos dossiers de bibliothèque.",
   ],
+  requests: ["Requests", "Demandes", "Review and answer Members’ Requests.", "Examinez les demandes des membres."],
   queue: [
     "Download queue",
     "File de téléchargement",
