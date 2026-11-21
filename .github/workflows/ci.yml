@@ -2,7 +2,18 @@ name: CI
 
 on:
   push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
+  workflow_dispatch:
+
+# Branches are checked through their PR; tags use the release workflow.
+# Stop obsolete runs when a newer revision arrives on the same PR or branch.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
