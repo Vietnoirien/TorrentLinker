@@ -316,6 +316,12 @@ chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (sender.url !== chrome.runtime.getURL("companion.html")) return false;
   serial(async () => {
+    if (message.action === "creation") {
+      const { connection } = await chrome.storage.local.get("connection");
+      if (!connection || connection.paused) throw new Error("Connect and resume the companion first.");
+      if (!["prepare", "publish", "cancel"].includes(message.operation)) throw new Error("Unknown creation action.");
+      return request(connection, "creation", {accountId:connection.accountId,operation:message.operation,value:message.value});
+    }
     if (message.action === "disconnect") {
       const { connection } = await chrome.storage.local.get("connection");
       const {communityReceipts, communityRetry} = await chrome.storage.local.get(["communityReceipts", "communityRetry"]);

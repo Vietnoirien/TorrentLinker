@@ -12082,4 +12082,54 @@ c411 refuse un upload dont l’uploader ne partage pas : ne le publiez pas avant
         <translation>Enregistrer le jeton</translation>
     </message>
 </context>
+<context>
+    <name>CrashReport</name>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/crash_reports.py" line="15" />
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/app.py" line="190" />
+        <source>Report the problem</source>
+        <translation>Signaler le problème</translation>
+    </message>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/crash_reports.py" line="20" />
+        <source>Review the sanitized draft. Nothing is sent automatically.</source>
+        <translation>Vérifiez le brouillon anonymisé. Rien n’est envoyé automatiquement.</translation>
+    </message>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/crash_reports.py" line="30" />
+        <source>Open GitHub draft</source>
+        <translation>Ouvrir le brouillon GitHub</translation>
+    </message>
+</context>
+<context>
+    <name>MediaTab</name>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/media.py" line="1161" />
+        <source>Save Studio export</source>
+        <translation>Enregistrer l’export Studio</translation>
+    </message>
+</context>
+<context>
+    <name>PrerollPlayer</name>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/prerolls.py" line="18" />
+        <source>Before your film</source>
+        <translation>Avant votre film</translation>
+    </message>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/prerolls.py" line="36" />
+        <source>Play</source>
+        <translation>Lire</translation>
+    </message>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/prerolls.py" line="37" />
+        <source>Skip clip</source>
+        <translation>Passer ce clip</translation>
+    </message>
+    <message>
+        <location filename="../home/viet/git-perso/TorrentLinker/src/torrentlinker/gui/prerolls.py" line="38" />
+        <source>Skip all / start film</source>
+        <translation>Tout passer / lancer le film</translation>
+    </message>
+</context>
 </TS>

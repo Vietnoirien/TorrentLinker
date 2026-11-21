@@ -16,6 +16,7 @@ SECTIONS = (
     "connections",
     "clients",
     "companion",
+    "community_site",
     "agents",
     "assistant",
     "general",
@@ -64,7 +65,7 @@ def test_settings_native_keyboard_and_zoom(qtbot, tmp_path, language, theme, zoo
     view.resize(1100, 800)
     view.show()
     view.web.setZoomFactor(zoom)
-    wait_js(qtbot, view, "document.querySelectorAll('#settings-navigation button').length===12")
+    wait_js(qtbot, view, "document.querySelectorAll('#settings-navigation button').length===13")
     for index, section in enumerate(SECTIONS):
         js(
             qtbot,
@@ -136,7 +137,7 @@ def test_settings_web_keyboard_and_zoom(tmp_path, language, theme, zoom):
                 nav.locator("#language").select_option(language)
                 nav.locator("#theme").select_option(theme)
                 panel = page.frame_locator("#settings-frame")
-                expect(panel.locator("#settings-navigation button")).to_have_count(12)
+                expect(panel.locator("#settings-navigation button")).to_have_count(len(SECTIONS))
                 # Match browser zoom: fewer CSS pixels with the same physical screenshot size.
                 for index, section in enumerate(SECTIONS):
                     button = panel.locator("#settings-navigation button").nth(index)

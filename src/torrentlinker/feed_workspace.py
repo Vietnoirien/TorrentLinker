@@ -49,6 +49,10 @@ class FeedWorkspace:
         parts = url.path.split("/")
         query = parse_qs(url.query)
         body = body or {}
+        if parts[0] == "community-items" and len(parts) == 2:
+            from torrentlinker.community_site import community_site
+
+            return community_site(service.setup).request("items-" + parts[1], body)
         if path == "feed-options" and method == "GET":
             return {
                 "categories": {

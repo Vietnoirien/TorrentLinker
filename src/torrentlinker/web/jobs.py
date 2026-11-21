@@ -40,6 +40,7 @@ class Jobs:
         # request bodies that may contain paths, confirmation tokens or credentials.
         self._request_keys: dict[str, str] = {}
         self.closed = False
+        self.reports: dict[str, dict[str, str]] = {}
         with self.db:
             self.db.execute(
                 "CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, kind TEXT, "
@@ -163,6 +164,13 @@ class Jobs:
         try:
             result = work(stop, report)
         except Exception as error:
+            from torrentlinker.crash_reports import exception_draft, unexpected
+
+            if unexpected(error) and not stop.is_set():
+                with self.lock:
+                    self.reports[identifier] = exception_draft(error)
+                    while len(self.reports) > 20:
+                        self.reports.pop(next(iter(self.reports)))
             # Never persist raw network exception text, which may include credentials.
             self._update(
                 identifier,
@@ -202,6 +210,9 @@ class Jobs:
         result = dict(row)
         for key in ("progress", "result", "subject"):
             result[key] = json.loads(result[key])
+        with self.lock:
+            if identifier in self.reports:
+                result["report"] = self.reports[identifier]
         return result
 
     def diagnostic_rows(self) -> list[dict[str, Any]]:

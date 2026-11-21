@@ -182,9 +182,19 @@ def show_unexpected_errors() -> None:
     def hook(kind: type[BaseException], error: BaseException, tb: TracebackType | None) -> None:
         details = "".join(traceback.format_exception(kind, error, tb))
         logging.getLogger("torrentlinker").error("unexpected error\n%s", details)
+        if "--smoke-test" in sys.argv:
+            return
         box = QMessageBox(QMessageBox.Icon.Critical, "TorrentLinker", f"{kind.__name__}: {error}")
         box.setDetailedText(details)
+        report = box.addButton(
+            QCoreApplication.translate("CrashReport", "Report the problem"),
+            QMessageBox.ButtonRole.ActionRole,
+        )
         box.exec()
+        if box.clickedButton() is report:
+            from torrentlinker.gui.crash_reports import offer_report
+
+            offer_report(error)
 
     sys.excepthook = hook
 

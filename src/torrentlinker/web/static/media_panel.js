@@ -28,6 +28,9 @@ window.addEventListener("message",async event=>{
     if(message.path==="host"){
       const {action,values={}}=message.body;
       if(action==="play")await mediaStart(values.media_ids,values.index||0);
+      else if(action==="preroll-preview"&&!signedInMember())await previewPreroll(values.clip);
+      else if(action==="studio-preview"&&!signedInMember()){if(!/^[a-f0-9]{32}\.mp4$/.test(values.file))throw Error("Unknown export");await playPrerolls({steps:[{kind:"clip",title:"Studio",url:`api/studio/exports/${values.file}`}]})}
+      else if(action==="studio-export"&&!signedInMember()){if(!/^[a-f0-9]{32}\.(mp4|tlstudio)$/.test(values.file))throw Error("Unknown export");const link=document.createElement("a");link.href=`api/studio/exports/${values.file}`;link.download=values.file;link.click()}
       else if(action==="preview")await mediaPreview(values.media_id);
       else if(action==="enqueue")await mediaEnqueue(values.media_ids||[]);
       else if(action==="queue")mediaShowQueue();
@@ -50,7 +53,7 @@ window.addEventListener("message",async event=>{
       if(mediaHorizonViews.includes(message.body.horizon)){media.horizon=message.body.horizon;try{localStorage.setItem("tl-media-horizon",media.horizon)}catch{}}
       value={layout:mediaLayoutValue(media.layout),horizon:mediaHorizonValue(media.horizon)};
     }else{
-      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|requests(?:\?|\/seen$|\/[0-9a-f]{32}\/cancel$|$)|wishes$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
+      if(!/^(prerolls(?:\/[a-z-]+)?$|media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|requests(?:\?|\/seen$|\/[0-9a-f]{32}\/cancel$|$)|wishes$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
       let client=mediaClient();
       if(message.path==="media/playlists" && message.body.method==="POST"){
         const owner=media.playerClient||client;

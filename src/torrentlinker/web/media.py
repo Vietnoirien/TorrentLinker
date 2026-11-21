@@ -122,6 +122,85 @@ def media_routes(app, agent, assistant):
             "name": request.app.state.accounts.display_name(actor.account),
         }
 
+    @app.get("/api/prerolls")
+    def preroll_state():
+        from torrentlinker.preroll_workspace import PrerollWorkspace
+
+        state = PrerollWorkspace(agent.setup, media=media).request("state")
+        accounts = app.state.accounts
+        state["accounts"] = [{"id": "owner", "name": "Owner"}] + [
+            {"id": row["id"], "name": row["name"]} for row in accounts.members()
+        ]
+        state["viewers"] = [
+            {"id": row["id"], "name": row["name"]}
+            for account in state["accounts"]
+            for row in accounts.profiles(account["id"])
+            if row["id"]
+        ]
+        return state
+
+    @app.post("/api/prerolls/{operation}")
+    def preroll_operation(operation: str, body: dict):
+        from torrentlinker.preroll_workspace import PrerollWorkspace
+
+        return PrerollWorkspace(agent.setup, media=media).request(operation, body)
+
+    @app.get("/api/studio/exports/{filename}")
+    def studio_export(filename: str):
+        from pathlib import Path
+
+        from torrentlinker.studio import studio
+
+        suffix = Path(filename).suffix
+        if suffix not in {".mp4", ".tlstudio"}:
+            raise HTTPException(404, "Export unavailable.")
+        path = studio(agent.setup).path("exports", Path(filename).stem, suffix)
+        if not path.is_file():
+            raise HTTPException(404, "Export unavailable.")
+        return FileResponse(
+            path,
+            filename=filename,
+            media_type="video/mp4" if suffix == ".mp4" else "application/zip",
+        )
+
+    @app.get("/api/prerolls/clips/{identifier}")
+    def preview_preroll(identifier: str):
+        from torrentlinker.prerolls import prerolls
+
+        return FileResponse(prerolls(agent.setup).file(identifier), media_type="video/mp4")
+
+    @app.get("/api/media/items/{identifier}/prerolls")
+    @needs(*WATCH)
+    def preroll_plan(identifier: str, request: Request, client_id: str = ""):
+        from urllib.parse import quote
+
+        from torrentlinker.prerolls import prerolls
+
+        chosen = item(request, client_id, identifier)
+        feature = media.detail(chosen, identifier, actor=actor(request))
+        plan = prerolls(agent.setup).plan(feature, actor(request))
+        for step in plan["steps"]:
+            if step["kind"] == "clip":
+                step["url"] = (
+                    f"api/media/items/{quote(identifier, safe='')}/prerolls/"
+                    f"{step['clip']}/stream?client_id={quote(chosen, safe='')}"
+                )
+        return plan
+
+    @app.get("/api/media/items/{identifier}/prerolls/{clip_id}/stream")
+    @needs(*WATCH)
+    def preroll_stream(identifier: str, clip_id: str, request: Request, client_id: str = ""):
+        from torrentlinker.prerolls import prerolls
+
+        chosen = item(request, client_id, identifier)
+        library = prerolls(agent.setup)
+        clip = library.clip(clip_id)
+        if not library.allowed(
+            clip, media.detail(chosen, identifier, actor=actor(request)), actor(request)
+        ):
+            raise HTTPException(404, "Pre-roll unavailable.")
+        return FileResponse(library.file(clip_id), media_type="video/mp4")
+
     @app.post("/api/media/items/{identifier}/rating")
     @needs(Permission.EDIT_RATINGS)
     def rate(identifier: str, body: AgeRating, request: Request):

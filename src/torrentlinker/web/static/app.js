@@ -229,6 +229,7 @@ async function guard(fn) {
     await fn();
   } catch (error) {
     toast(error.message);
+    if ((error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) && typeof reportBrowserCrash === "function") reportBrowserCrash(error);
   }
 }
 async function api(path, body, method) {
@@ -254,6 +255,7 @@ async function api(path, body, method) {
       $("workspace").hidden = true;
       $("login-screen").hidden = false;
     }
+    if (result.report && typeof offerCrashReport === "function") offerCrashReport(result.report);
     // An `action` tells the page what it may offer, such as fixing a client option.
     throw Object.assign(Error(result.detail || "Request failed"), {action: result.action});
   }
@@ -396,7 +398,7 @@ const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [], requests: [],
-  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users", "account", "notifications"],
+  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users", "account", "notifications", "community_site"],
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {
@@ -623,6 +625,7 @@ async function pollJobsOnce() {
       } else {
         if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
         if (pending.failed && (pending.body.client_id === state.clientId || ["configure-download-folder", "catalogue"].includes(pending.body.kind))) await pending.failed(full.error, full.result);
+        if (full.report) offerCrashReport(full.report);
         toast(full.error || say("Job cancelled", "Tâche annulée"));
       }
     }
@@ -671,6 +674,7 @@ function renderJobs(rows) {
                 JSON.stringify(full.result || full.error, null, 2),
               ),
             );
+            if (full.report) $("dialog-content").append(button(say("Report the problem", "Signaler le problème"), () => offerCrashReport(full.report)));
             $("dialog").showModal();
           }),
         );

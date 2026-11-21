@@ -1123,6 +1123,44 @@ class MediaTab(QWidget):
             )
         elif action == "queue":
             self._open_queue()
+        elif action == "preroll-preview":
+            from torrentlinker.gui.prerolls import preview
+
+            preview(self.service.agent.setup, values["clip"], self)
+        elif action == "studio-preview":
+            from pathlib import Path
+            from types import SimpleNamespace
+
+            from torrentlinker.gui.prerolls import PrerollPlayer
+            from torrentlinker.studio import studio
+
+            filename = str(values["file"])
+            if Path(filename).suffix != ".mp4":
+                raise ValueError("Choose a rendered MP4.")
+            path = studio(self.service.agent.setup).path("exports", Path(filename).stem, ".mp4")
+            dialog = PrerollPlayer(
+                SimpleNamespace(file=lambda _: path),
+                {"steps": [{"kind": "clip", "clip": "preview", "title": "Studio"}]},
+                self,
+            )
+            dialog.exec()
+            dialog.deleteLater()
+        elif action == "studio-export":
+            import shutil
+            from pathlib import Path
+
+            from PySide6.QtWidgets import QFileDialog
+
+            from torrentlinker.studio import studio
+
+            filename = str(values["file"])
+            suffix = Path(filename).suffix
+            if suffix not in {".mp4", ".tlstudio"}:
+                raise ValueError("Unknown Studio export.")
+            source = studio(self.service.agent.setup).path("exports", Path(filename).stem, suffix)
+            target, _ = QFileDialog.getSaveFileName(self, self.tr("Save Studio export"), filename)
+            if target:
+                shutil.copyfile(source, target)
         elif action == "preview":
             self.browse_selection = [values["media_id"]]
             self.start_preview()
@@ -1387,6 +1425,22 @@ class MediaTab(QWidget):
             self._invalidate_preview_request()
             path = self.library.resolve(self.session_client, identifier)
             row = self.library.detail(self.session_client, identifier)
+            if play and row["kind"] == "video" and not row.get("position"):
+                from torrentlinker.gui.prerolls import PrerollPlayer
+                from torrentlinker.prerolls import prerolls
+
+                library = prerolls(self.service.agent.setup)
+                plan = library.plan(row)
+                if plan["steps"]:
+                    self.player.pause()
+                    dialog = PrerollPlayer(library, plan, self)
+                    dialog.exec()
+                    dialog.deleteLater()
+                    if (
+                        not self.state["queue"]
+                        or self.state["queue"][self.state["index"]] != identifier
+                    ):
+                        return
             self._close_preview()
             self.last_source = identifier
             self.current_row = row

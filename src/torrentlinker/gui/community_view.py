@@ -165,12 +165,23 @@ class BundledView(QWidget):
                             "companion.js",
                             "agents.js",
                             "file-access.js",
+                            "members.js",
+                            "account.js",
+                            "notifications.js",
+                            "community-site.js",
+                            "prerolls.js",
+                            "prerolls.css",
+                            "studio.js",
+                            "ratings.js",
+                            "requests.js",
                         )
                     }
                     | {
                         assets.parent / "panel" / name
                         for name in (
                             "base.css",
+                            "community-items.js",
+                            "community-items.css",
                             "transport.js",
                             "i18n.js",
                             "media-flags.js",

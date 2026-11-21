@@ -29,6 +29,9 @@ class MediaBrowserBridge(ViewBridge):
                 if action not in {
                     "play",
                     "preview",
+                    "preroll-preview",
+                    "studio-export",
+                    "studio-preview",
                     "enqueue",
                     "queue",
                     "kind",

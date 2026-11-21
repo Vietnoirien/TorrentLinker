@@ -26,6 +26,11 @@ class MediaBrowserService:
             or self.agent.setup.settings.default_client_id
         )
         media = self.agent.media
+        if parts[0] == "prerolls":
+            from torrentlinker.preroll_workspace import PrerollWorkspace
+
+            action = "state" if len(parts) == 1 and method == "GET" else parts[-1]
+            return PrerollWorkspace(self.agent.setup, media=media).request(action, body)
         if parts == ["media"] and method == "GET":
             allowed = {
                 "kind",

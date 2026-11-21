@@ -422,3 +422,4 @@ html[data-theme="light"] .media-ratings-done { color: #146254; }
 html[data-theme="light"] .media-requests-drawer { background: #f4f7f3; color: #162c2b; border-color: #c4d4cc; }
 html[data-theme="light"] .media-request small, html[data-theme="light"] .media-request-note, html[data-theme="light"] .media-requests-drawer .media-quota { color: #3e5b5d; }
 html[data-theme="light"] .media-requests-drawer .media-quota.full { color: #8a5a00; }
+.preroll-playback{width:min(90vw,1000px);background:var(--panel,#101827);color:var(--text,#e5edf7);border:1px solid var(--line,#405066);border-radius:16px;padding:24px}.preroll-playback::backdrop{background:#000c}.preroll-playback video,.preroll-playback iframe{width:100%;aspect-ratio:16/9;max-height:70vh;border:0}.preroll-playback button{margin:12px 12px 0 0}

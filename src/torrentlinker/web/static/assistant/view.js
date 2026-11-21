@@ -306,6 +306,8 @@ async function loadAssistant() {
   }, "quiet assistant-chip");
   modeChip.id = "assistant-mode"; modeChip.title = at("Switch the discussion mode", "Changer le mode de la discussion");
   chips.append(model, modeChip);
+  chips.append(button(at("Share prompt", "Partager le prompt"),()=>communityShareDialog("prompt",{}, {prompt:prompt.value})),button(at("Community prompts", "Prompts communautaires"),()=>communityBrowseDialog("prompt",async result=>{prompt.value=result.data.prompt;assistantDrafts.set(renderedConversation,prompt.value);prompt.focus()})));
+
   form.append(field, chips);
   if (!current) {
     const welcome = element("div", undefined, "assistant-welcome");

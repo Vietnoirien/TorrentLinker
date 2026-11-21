@@ -31,6 +31,7 @@ const ownerSections = () => ({
   connections: say("Connections", "Connexions"),
   clients: "Clients",
   companion: "Companion",
+  community_site: say("Join the community", "Rejoindre la communauté"),
   agents: say("Agent access", "Accès agent"),
   assistant: "Assistant",
   general: say("General", "Général"),
@@ -1153,7 +1154,7 @@ function render() {
   );
   if (!snapshot) return;
   const form = element(
-    ["agents", "assistant", "companion", "users", "account", "notifications"].includes(section)
+    ["agents", "assistant", "companion", "users", "account", "notifications", "community_site"].includes(section)
       ? "section"
       : "form",
     undefined,
@@ -1192,6 +1193,10 @@ function render() {
     const root = element("div");
     form.append(root);
     queueMicrotask(() => guard(() => settingsMembers(root)));
+  } else if (section === "community_site") {
+    const root = element("section", undefined, "settings-card");
+    form.append(root);
+    queueMicrotask(() => guard(() => communitySiteSettings(root)));
   } else if (section === "notifications") {
     const root = element("div"); form.append(root);
     queueMicrotask(() => guard(() => settingsNotifications(root)));

@@ -72,6 +72,13 @@ def run_in_background(
         def handler(value: Any) -> None:
             _alive.discard(job)
             cb(value)
+            if cb is on_error:
+                from torrentlinker.crash_reports import unexpected
+
+                if not _closing and unexpected(value):
+                    from torrentlinker.gui.crash_reports import offer_report
+
+                    offer_report(value, modal=False)
 
         return handler
 
@@ -104,6 +111,13 @@ def run_with_progress(
         def handler(value: Any) -> None:
             _alive.discard(job)
             cb(value)
+            if cb is on_error:
+                from torrentlinker.crash_reports import unexpected
+
+                if not _closing and unexpected(value):
+                    from torrentlinker.gui.crash_reports import offer_report
+
+                    offer_report(value, modal=False)
 
         return handler
 

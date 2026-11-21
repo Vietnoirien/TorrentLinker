@@ -49,6 +49,7 @@ function settingsReleaseScore(form) {
   const name = field(fields, say("Profile name", "Nom du profil"), {}, "name");
   name.maxLength = 120;
   const actions = element("div", undefined, "settings-actions");
+  actions.append(button(say("Share profile","Partager le profil"),()=>communityShareDialog("release-score",{},data.profiles[editing])),button(say("Community profiles","Profils communautaires"),()=>communityBrowseDialog("release-score",async result=>{let name=result.metadata.title.slice(0,100),suffix=1;while(Object.hasOwn(data.profiles,name))name=`${result.metadata.title.slice(0,95)} ${suffix++}`;data.profiles[name]=result.data;selectEditing(name)})));
   const builtin = Object.hasOwn(snapshot.score_defaults, editing);
   const validName = () => {
     const n = name.value.trim();

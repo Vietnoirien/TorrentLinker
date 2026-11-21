@@ -76,3 +76,37 @@ def test_extension_bundle_is_installable_and_contains_only_packaged_assets():
         assert json.loads(bundle.read("torrentlinker-companion/receiver.json")) == {
             "webTarget": "https://nas.example/torrentlinker"
         }
+
+
+def test_creation_capability_checks_pair_account_and_allowed_operations(tmp_path, monkeypatch):
+    import pytest
+
+    _, setup = prepared(tmp_path, monkeypatch)
+    workspace = setup.profile_workspace()
+    workspace.refresh(setup.settings.indexer.url, "fake-key")
+    paired = workspace.receive(
+        "/api/companion/pair", ORIGIN, "", {"code": workspace.pairing()["code"], "accountId": "42"}
+    )
+    calls = []
+    workspace.creation_handler = lambda action, value: (
+        calls.append((action, value)) or {"review": "local-review"}
+    )
+    auth = "Bearer " + paired["token"]
+    body = {
+        "accountId": "42",
+        "operation": "prepare",
+        "value": {"kind": "prompt", "data": {"prompt": "Find a family film"}},
+    }
+    assert workspace.receive("/api/companion/creation", ORIGIN, auth, body) == {
+        "review": "local-review"
+    }
+    assert calls[0][0] == "items-prepare"
+    with pytest.raises(PermissionError):
+        workspace.receive("/api/companion/creation", ORIGIN, "Bearer wrong", body)
+    with pytest.raises(PermissionError):
+        workspace.receive("/api/companion/creation", ORIGIN, auth, {**body, "accountId": "other"})
+    with pytest.raises(ValueError):
+        workspace.receive(
+            "/api/companion/creation", ORIGIN, auth, {**body, "value": {"kind": "studio"}}
+        )
+    assert len(calls) == 1

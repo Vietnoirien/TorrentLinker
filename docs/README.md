@@ -9,6 +9,7 @@ Follow [Install and configure](guide/en/getting-started.md) for a first connecti
 | Choose a compatible client, NAS or seedbox | [Client feature table and paths](guide/en/clients.md#client-compatibility) |
 | Reuse files you already have | [Library and reseeding](guide/en/library.md) |
 | Find a release and review it before downloading | [Search and queue](guide/en/search.md) |
+| Create pre-rolls, edit Studio projects and share creations | [Pre-rolls and Studio](specs/prerolls/USER-GUIDE.md) |
 | Set video preferences for your equipment | [ReleaseScore](guide/en/release-score.md) |
 | Plan new downloads with count, seeder and disk limits | [Zen and Plans](guide/en/zen.md) |
 | Watch for new releases | [RSS subscriptions](guide/en/rss.md) |

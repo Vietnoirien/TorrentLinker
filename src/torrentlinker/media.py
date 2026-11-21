@@ -956,6 +956,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 body.update(
                     duration=facts.duration,
                     codec=facts.video_codec,
+                    audio_codecs=sorted({a.codec for a in facts.audio if a.codec}),
                     language=", ".join(sorted({a.language for a in facts.audio if a.language})),
                     embedded_subtitles=[
                         {"label": s.language or "Unknown language", "format": s.format}

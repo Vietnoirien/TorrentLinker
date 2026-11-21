@@ -208,6 +208,13 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   const old = mediaPlayer(); old.pause();
   await mediaReleasePreview();
   if (!mediaRequestCurrent(request)) { if (preview) await mediaClosePreviewHandle(preview, request.client); return false; }
+  if (!preview && !paused && row.kind === "video" && !(position ?? row.position ?? 0)) {
+    try {
+      const plan = await api(`media/items/${encodeURIComponent(id)}/prerolls?${new URLSearchParams({client_id:request.client})}`);
+      if (mediaRequestCurrent(request)) await playPrerolls(plan,()=>mediaRequestCurrent(request));
+    } catch { /* An unavailable pre-roll must not prevent the feature from playing. */ }
+    if (!mediaRequestCurrent(request)) return false;
+  }
   media.preview = preview;
   if (preview) { media.queue = [id]; media.index = 0; }
   else if (request.queue) { media.queue = request.queue; media.index = request.index; }

@@ -241,6 +241,13 @@ class DesktopServer:
         self.setup = DesktopSetup(settings, path, store)
         if workspace is not None:
             self.setup._profile_workspace = workspace
+
+        def creation(action, values):
+            from torrentlinker.community_site import community_site
+
+            return community_site(self.setup).request(action, values)
+
+        self.setup._profile_workspace.creation_handler = creation
         self.directory = path.parent
         self.server: Any = None
         self.thread: threading.Thread | None = None

@@ -12,7 +12,7 @@ from functools import partial
 from html import escape
 from ipaddress import IPv4Network, IPv6Network
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -333,6 +333,21 @@ def create_app(
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
+    def crash_response(request: Request, error: Exception) -> dict[str, Any]:
+        from torrentlinker.crash_reports import exception_draft, unexpected
+
+        actor = getattr(request.state, "actor", None)
+        body: dict[str, Any] = {"detail": error_message(error), "kind": type(error).__name__}
+        if unexpected(error) and actor is not None and actor.owner:
+            body["report"] = exception_draft(error)
+        return body
+
+    @app.post("/api/crash-report")
+    def browser_crash(body: dict):
+        from torrentlinker.crash_reports import browser_draft
+
+        return browser_draft(str(body.get("stack", ""))[:20000])
+
     from torrentlinker.agent.access import Access
     from torrentlinker.agent.routes import owner_routes
 
@@ -446,7 +461,17 @@ def create_app(
         if route.startswith(("/api/", "/documentation/")):
             if route.startswith("/api/"):
                 length = request.headers.get("content-length", "0")
-                limit = 12_000_000 if route in {"/api/jobs", "/api/zen/plan/review"} else 256_000
+                limit = (
+                    12_000_000
+                    if route
+                    in {
+                        "/api/jobs",
+                        "/api/zen/plan/review",
+                        "/api/prerolls/studio-save",
+                        "/api/prerolls/studio-preview",
+                    }
+                    else 256_000
+                )
                 if not length.isdigit() or int(length) > limit:
                     return JSONResponse({"detail": "Request too large."}, status_code=413)
                 if request.method != "GET" and request.headers.get("X-TorrentLinker") != "1":
@@ -467,7 +492,7 @@ def create_app(
             response = await call_next(request)
         except Exception as error:
             # Do not let ASGI log a raw HTTP exception containing private URLs.
-            response = JSONResponse({"detail": error_message(error)}, status_code=502)
+            response = JSONResponse(crash_response(request, error), status_code=502)
         renewed = getattr(request.state, "renew_session", None)
         if renewed and route != "/api/logout":
             # A Member's session lasts 30 days of disuse, a Shared Screen 90: each use
@@ -477,7 +502,8 @@ def create_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; "
+            "style-src 'self'; frame-src 'self' https://www.youtube-nocookie.com; "
             "img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         )
         if route in {
@@ -737,10 +763,7 @@ def create_app(
     async def failed(request: Request, error: Exception) -> JSONResponse:
         # Adapter exceptions can contain private URLs and passwords.
         return JSONResponse(
-            {
-                "detail": error_message(error),
-                "kind": type(error).__name__,
-            },
+            crash_response(request, error),
             status_code=502,
         )
 
@@ -1486,6 +1509,10 @@ def create_app(
         except KeyError:
             raise HTTPException(404, "Job not found.") from None
         return {"ok": True}
+
+    from torrentlinker.web.community_site import community_site_routes
+
+    community_site_routes(app, service)
 
     assets = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=assets), name="static")

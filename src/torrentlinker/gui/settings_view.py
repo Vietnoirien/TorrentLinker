@@ -114,6 +114,25 @@ class SettingsBridge(ViewBridge):
                     return AgentSettingsService(service, view.queue_approval).request(
                         body["path"], body.get("body"), body.get("method", "GET")
                     )
+            elif action == "community-site":
+                from torrentlinker.community_site import SITE_URL, community_site
+
+                if body.get("action") == "open":
+                    from PySide6.QtCore import QUrl
+                    from PySide6.QtGui import QDesktopServices
+
+                    page = body.get("value", {}).get("page")
+                    if page not in {"link", "account"}:
+                        raise ValueError("Unknown community page.")
+                    language = pick_language(workspace.setup.settings.language)
+                    QDesktopServices.openUrl(QUrl(f"{SITE_URL}/{language}/{page}"))
+                    done(None)
+                    return
+
+                def work():
+                    return community_site(workspace.setup).request(
+                        body.get("action", "state"), body.get("value", {})
+                    )
             elif action == "companion":
                 if view.companion_action is None:
                     raise ValueError("Companion controls are unavailable.")

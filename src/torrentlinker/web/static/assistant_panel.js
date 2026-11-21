@@ -54,7 +54,7 @@ window.addEventListener("message",async event=>{
       const blob=await response.blob();
       value={data_url:await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})};
     }else{
-      if(!/^(setup(?:\/assistant(?:\/|$)|$)|assistant\/|agents\/proposals\/|jobs\/)/.test(message.path))throw Error("Unknown Assistant panel operation");
+      if(!/^(community-site\/items-[a-z-]+$|setup(?:\/assistant(?:\/|$)|$)|assistant\/|agents\/proposals\/|jobs\/)/.test(message.path))throw Error("Unknown Assistant panel operation");
       value=await api(message.path,message.body.body,message.body.method);
     }
     frame.contentWindow?.postMessage({type:"assistant-response",id:message.id,value},location.origin);

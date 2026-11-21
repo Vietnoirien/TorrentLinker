@@ -185,6 +185,13 @@ class Setup:
     def profile_workspace(self) -> ProfileWorkspace:
         root = self._root or self
         root._profile_workspace.bind(root.settings.indexer.url, root.secrets.get("indexer-api-key"))
+
+        def creation(action, values):
+            from torrentlinker.community_site import community_site
+
+            return community_site(root).request(action, values)
+
+        root._profile_workspace.creation_handler = creation
         return root._profile_workspace
 
     def for_client(self, identifier: str) -> Setup:

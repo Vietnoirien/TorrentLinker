@@ -105,6 +105,11 @@ window.addEventListener("message", async (event) => {
       if (!/^account(?:\/[a-zA-Z0-9_-]+){0,3}$/.test(body.path))
         throw Error("Unknown account operation.");
       value = await api(body.path, body.body, body.method);
+    } else if (message.path === "community-site") {
+      if (!["state", "start", "poll", "check", "disconnect"].includes(body.action) && !/^items-(browse|prepare|download|history|updates|cancel|publish|apply)$/.test(body.action))
+        throw Error("Unknown community operation.");
+      value = body.action === "state" ? await api("community-site")
+        : await api(`community-site/${body.action}`, body.value || {});
     } else if (message.path === "companion") {
       if (body.action === "state") value = await api("zen/profile");
       else if (body.action === "disconnect")

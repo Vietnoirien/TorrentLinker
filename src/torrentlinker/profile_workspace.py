@@ -41,6 +41,7 @@ COMPANION_ROUTES = {
         "commands",
         "result",
         "actions-demand",
+        "creation",
         "actions-observe",
         "actions-claim",
         "actions-receipt",
@@ -217,6 +218,7 @@ class ProfileWorkspace:
         self.history = history
         self.downloads = CompanionDownloads(lambda: self.clock())
         self.community = CommunityActions(directory, lambda: self.clock())
+        self.creation_handler: Callable[[str, dict], dict] | None = None
         self.lock = threading.RLock()
         self.data: dict[str, Any] = {}
         try:
@@ -416,6 +418,32 @@ class ProfileWorkspace:
     def receive(
         self, route: str, origin: str, authorization: str, body: dict[str, Any]
     ) -> dict[str, Any]:
+        if route == "/api/companion/creation":
+            with self.lock:
+                digest = hashlib.sha256(authorization.encode()).hexdigest()
+                account = (self.data.get("api") or {}).get("account_id")
+                if (
+                    not extension_origin(origin)
+                    or not self._pair
+                    or origin != self._pair[1]
+                    or not hmac.compare_digest(digest, self._pair[0])
+                    or body.get("accountId") != account
+                ):
+                    raise PermissionError("Pair again from the Profile tab.")
+                handler = getattr(self, "creation_handler", None)
+                if handler is None:
+                    raise ValueError("Open Community linking in TorrentLinker first.")
+                action, value = body.get("operation"), body.get("value", {})
+                if action not in {"prepare", "publish", "cancel"}:
+                    raise ValueError("Unknown creation operation.")
+                if action == "prepare" and value.get("kind") not in {
+                    "rss",
+                    "release-score",
+                    "prompt",
+                }:
+                    raise ValueError("Use Studio or the pre-roll library for media sharing.")
+            # Site I/O must not hold the tracker-profile lock.
+            return handler("items-" + action, value)
         with self.lock:
             if not extension_origin(origin):
                 raise PermissionError("Use the paired browser extension.")
