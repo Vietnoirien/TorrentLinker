@@ -21,6 +21,7 @@ from guessit import guessit
 from torrentlinker import media_tracks
 from torrentlinker.accounts import OWNER
 from torrentlinker.domain import ContentKind
+from torrentlinker.media_ratings import AgeRatings
 from torrentlinker.media_tracker import TrackerRows
 
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
@@ -121,7 +122,7 @@ class UnfinishedMedia(ValueError):
     """A registered file belongs to a download or verification still in progress."""
 
 
-class MediaLibrary(TrackerRows):
+class MediaLibrary(TrackerRows, AgeRatings):
     def __init__(self, agent):
         self.agent = agent
         self.lock = threading.RLock()
@@ -157,6 +158,7 @@ class MediaLibrary(TrackerRows):
                     (id TEXT PRIMARY KEY, actor TEXT, client TEXT, items TEXT);
             """)
         self.migrate_to_actors()
+        self.create_ratings()
 
     def migrate_to_actors(self):
         """Give progress, playlists and sessions an actor (ADR-0022); old rows are the Owner's.
@@ -423,6 +425,9 @@ class MediaLibrary(TrackerRows):
                             ):
                                 # Classified as a series by the older filename rule: read again.
                                 body = self.inspect(path, extension, client_id, base)
+                            elif body.get("kind") == "video" and "certification" not in body:
+                                # Read before Age Ratings: only the NFO's rating is new.
+                                body.update(self.nfo_age_rating(client_id, path, base))
                         else:
                             body = self.inspect(path, extension, client_id, base)
                         known = enrichment.get(str(path))
@@ -489,6 +494,7 @@ class MediaLibrary(TrackerRows):
         details = self.enrich(client_id, setup, stop, progress, target.observed)
         if stop.is_set():
             return {"cancelled": True}
+        self.apply_age_ratings(client_id, setup, stop)
         if details not in {"limit", "rejected"}:
             self.tracker_refresh(client_id, setup, stop)
         if details in {"limit", "unavailable", "rejected"}:
@@ -719,9 +725,36 @@ class MediaLibrary(TrackerRows):
         if not body.get("artwork") and not body.get("remote_artwork"):
             body["remote_artwork"] = text("posterUrl", 2000)
         content = text("id", 40)
+        if content.isdigit() and not body.get("tmdb_id"):
+            body["tmdb_id"] = content  # a film's, or a series' (for Age Ratings)
         if content and body.get("identity_source") == "filename" and not body.get("series"):
             body["content_id"] = identity("tmdb:movie:" + content)
             body["identity_source"] = "c411 release description"
+
+    def nfo_age_rating(self, client_id, path, folder) -> dict:
+        """The Age Rating and TMDb id of a video's NFO, without reading the video again."""
+        found: dict[str, str] = {"certification": ""}
+        for nfo in (
+            path.with_suffix(".nfo"),
+            path.parent / "movie.nfo",
+            path.parent / "tvshow.nfo",
+        ):
+            try:
+                metadata = ElementTree.fromstring(self.sidecar(client_id, nfo, folder))
+            except (OSError, ValueError, ElementTree.ParseError):
+                continue
+            if metadata.tag not in {"movie", "tvshow", "episodedetails"}:
+                continue
+            found["certification"] = " / ".join(
+                text.strip()
+                for tag in ("certification", "mpaa")
+                if (text := metadata.findtext(tag)) and text.strip()
+            )[:200]
+            for unique in metadata.findall("uniqueid"):
+                if unique.get("type") == "tmdb" and (unique.text or "").strip().isdigit():
+                    found["tmdb_id"] = unique.text.strip()  # type: ignore[union-attr]
+            break
+        return found
 
     def sidecar(self, client_id, path, folder, maximum=262144):
         checked = self.checked_path(client_id, str(path), folder)
@@ -751,6 +784,8 @@ class MediaLibrary(TrackerRows):
             "subtitles": [],
             "artwork": "",
         }
+        if kind == "video":
+            body["certification"] = ""  # read: an NFO's Age Rating, when it has one
         if kind == "music":
             from torrentlinker.audio_tags import read_tags
 
@@ -868,8 +903,18 @@ class MediaLibrary(TrackerRows):
                     ):
                         if text := metadata.findtext(tag):
                             body[field] = text[:16000]
+                    # Age Ratings: "FR:12", "Rated R"… (Kodi writes both tags).
+                    certification = " / ".join(
+                        text.strip()
+                        for tag in ("certification", "mpaa")
+                        if (text := metadata.findtext(tag)) and text.strip()
+                    )
+                    if certification:
+                        body["certification"] = certification[:200]
                     for unique in metadata.findall("uniqueid"):
                         provider = unique.get("type", "")
+                        if provider == "tmdb" and unique.text and unique.text.strip().isdigit():
+                            body["tmdb_id"] = unique.text.strip()
                         if provider in {"tmdb", "imdb"} and unique.text:
                             episode_key = (
                                 f":{body['season']}:{body['episode']}"
@@ -942,6 +987,7 @@ class MediaLibrary(TrackerRows):
         public.update(
             id=record["id"],
             added=record["added"],
+            age_rating=self.age_rating(record["client"], record["id"]),
             anime=is_anime(body, record["path"]),
             oav=bool(body.get("oav")),
             position=saved["position"] if saved else 0,

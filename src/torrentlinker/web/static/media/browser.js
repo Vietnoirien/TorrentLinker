@@ -67,6 +67,7 @@ async function loadMedia(append = false) {
     result.rows.push(...page.rows);result.has_more=page.has_more;result.next_offset=page.next_offset;
   }
   media.queryKey=queryKey;
+  if (!append) { media.editRatings = !!result.edit_ratings; media.unrated = result.unrated || 0; if (typeof mediaRatingsNav === "function") mediaRatingsNav(); }
   media.continueRows = continuing.rows;
   if (!append) media.homeRows = rows.rows.filter(row => row.key !== "continue");
   for (const row of [...result.rows, ...continuing.rows, ...media.homeRows.flatMap(r => r.rows)]) mediaItems.set(row.id, row);
@@ -164,7 +165,9 @@ function mediaRenderFeature() {
   if (row.artwork_url) { copy.classList.add("has-poster"); copy.append(mediaArt(row, "media-feature-poster")); }
   copy.append(element("p", row.tracker ? say("On the tracker", "Sur le tracker") : say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
   const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language, row.rating ? `★ ${row.rating}` : ""].filter(Boolean);
-  copy.append(element("p", facts.join(" · "), "media-feature-meta"));
+  const meta = element("p", facts.join(" · "), "media-feature-meta");
+  if (typeof mediaRatingBadge === "function") mediaRatingBadge(row, meta);
+  copy.append(meta);
   if (media.layout === "horizon" && typeof mediaFlags === "function") {
     const flags = element("ul", undefined, "media-feature-flags");
     for (const [text, strong] of mediaFlags(row)) flags.append(element("li", text, strong ? "strong" : ""));
@@ -172,6 +175,7 @@ function mediaRenderFeature() {
   }
   if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
   copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
+  if (typeof mediaRatingEditor === "function") mediaRatingEditor(row, copy);
   const actions = element("div", undefined, "media-feature-actions");
   if (row.tracker) {
     // A film on c411, not in the library: its best release, and a way to queue it.

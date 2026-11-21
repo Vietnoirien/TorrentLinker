@@ -256,6 +256,14 @@ class Accounts:
             for r in rows
         ]
 
+    def display_name(self, account: str) -> str:
+        """A Member's display name; empty for the Owner, whom the screens call the owner."""
+        if account == OWNER:
+            return ""
+        with self.lock:
+            row = self.db.execute("SELECT name FROM accounts WHERE id=?", (account,)).fetchone()
+        return row["name"] if row else ""
+
     def owner_proxy_user(self) -> str:
         with self.lock:
             row = self.db.execute("SELECT proxy_user FROM accounts WHERE id=?", (OWNER,)).fetchone()

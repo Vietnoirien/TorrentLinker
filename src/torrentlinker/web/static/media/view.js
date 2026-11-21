@@ -10,7 +10,7 @@ function mediaSelectionChanged(row){
   });
 }
 async function mediaKind(kind){
-  media.kind=kind;media.view=mediaViewsByKind[kind][0];media.gridMode=false;media.animeFilters={};
+  media.kind=kind;media.view=mediaViewsByKind[kind][0];media.ratingsPage=false;media.gridMode=false;media.animeFilters={};
   for(const key of ["genre","year","language","availability"])$(`media-${key}`).value="";
   mediaViews();await host("kind",{kind});await loadMedia();
 }
@@ -50,7 +50,7 @@ $("media-layout-switch").onchange=event=>mediaSetLayout(event.target.value);
 $("media-horizon-switch").onchange=event=>mediaSetHorizon(event.target.value);
 for(const node of document.querySelectorAll("[data-view=setup]"))node.onclick=()=>guard(navigate);
 for(const node of document.querySelectorAll("[data-media-view]"))node.onclick=()=>guard(async()=>{
-  media.gridMode=false;media.animeFilters={};
+  media.gridMode=false;media.ratingsPage=false;media.animeFilters={};
   for(const key of ["genre","year","language","availability"])$(`media-${key}`).value="";
   media.view=node.dataset.mediaView;$("media-view").value=media.view;await loadMedia();
 });

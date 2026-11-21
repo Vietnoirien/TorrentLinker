@@ -127,7 +127,10 @@ accepted Request) or refuses it.
 - `media_progress`, `media_playlists` and Media sessions gain the actor (account and
   optional Viewer). Migration gives all existing rows to `owner`, once, in a transaction.
 - Age Ratings live with the Media item, with their source (NFO, TMDb, or the person who set
-  it).
+  it). In code (#132) they are `media_ratings` in `media.sqlite`, one row per item
+  with its `rank` on the CNC scale (0 Tous publics to 4 −18, indexed), so a limit is one join;
+  a series is rated as a whole, and a scan never replaces a person's rating. The page reads
+  `GET /api/media/ratings` and `POST /api/media/ratings/confirm`, both Modifier classements.
 
 ## Assistant for Members
 

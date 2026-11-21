@@ -8,6 +8,9 @@ from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from torrentlinker.accounts import Permission
+from torrentlinker.web.permissions import needs
+
 
 class MediaClient(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -46,6 +49,10 @@ class Watched(MediaClient):
     watched: bool
 
 
+class AgeRating(MediaClient):
+    rating: Literal["TP", "10", "12", "16", "18"]
+
+
 class MediaChat(BaseModel):
     token: str = Field(max_length=100)
     conversation_id: str = Field(default="", max_length=64)
@@ -58,8 +65,42 @@ def media_routes(app, agent, assistant):
     def client(value):
         return value or agent.setup.settings.default_client_id
 
+    def edits_ratings(request: Request) -> bool:
+        actor = getattr(request.state, "actor", None)
+        return actor is not None and actor.holds(Permission.EDIT_RATINGS)
+
+    def setter(request: Request) -> dict:
+        actor = request.state.actor
+        return {
+            "setter": actor.account,
+            "name": request.app.state.accounts.display_name(actor.account),
+        }
+
+    @app.post("/api/media/items/{identifier}/rating")
+    @needs(Permission.EDIT_RATINGS)
+    def rate(identifier: str, body: AgeRating, request: Request):
+        try:
+            return media.rate(client(body.client_id), identifier, body.rating, **setter(request))
+        except KeyError:
+            raise HTTPException(404, "Media item not found.") from None
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @app.get("/api/media/ratings")
+    @needs(Permission.EDIT_RATINGS)
+    def unrated(client_id: str = ""):
+        """The "Sans classification" page: every unrated film and series."""
+        rows = media.unrated(client(client_id))
+        return {"rows": rows, "suggestions": sum(1 for r in rows if r["suggestion"])}
+
+    @app.post("/api/media/ratings/confirm")
+    @needs(Permission.EDIT_RATINGS)
+    def confirm_ratings(body: MediaClient, request: Request):
+        return {"confirmed": media.confirm_suggestions(client(body.client_id), **setter(request))}
+
     @app.get("/api/media")
     def listing(
+        request: Request,
         client_id: str = "",
         kind: str = "",
         q: str = "",
@@ -76,7 +117,7 @@ def media_routes(app, agent, assistant):
         anime: bool | None = None,
         oav: bool | None = None,
     ):
-        return media.listing(
+        result = media.listing(
             client(client_id),
             kind=kind,
             q=q,
@@ -93,6 +134,14 @@ def media_routes(app, agent, assistant):
             anime=anime,
             oav=oav,
         )
+        if edits_ratings(request) and kind != "music" and offset == 0 and view != "continue":
+            # The "Sans classification (n)" entry of the Media menu, for editors only.
+            result = {
+                **result,
+                "edit_ratings": True,
+                "unrated": len(media.unrated(client(client_id))),
+            }
+        return result
 
     @app.get("/api/media/home")
     def home(

@@ -369,3 +369,29 @@ html:has(#view-media[data-home="true"][data-layout="cinematic"]) { scroll-paddin
 #media-audio { display:none; }
 @media (prefers-reduced-motion:reduce) { #player-frame { transition:none; } }
 #media-video::cue { color:#fff; background:#000b; }
+
+/* Age Ratings (docs/specs/members-ratings, layout A): the rating before the year, its source
+   and editing on the title panel, and the "Unrated" page of the Media menu. */
+.media-age-rating { display: inline-grid; place-items: center; min-width: 26px; height: 18px; padding: 0 5px; margin-right: 6px; border: 1px solid currentColor; border-radius: 4px; font-size: 11px; font-weight: 650; vertical-align: 1px; }
+.media-age-rating.none, .media-rating-suggest { color: #f4dca0; }
+.media-rating-line { font-size: 12px; color: inherit; opacity: .85; margin: 10px 0 0; }
+.media-rating-line button { padding: 2px 6px; margin-left: 6px; }
+.media-rating-suggest { font-size: 12px; margin: 10px 0 0; }
+.media-rating-suggest button { margin-left: 8px; padding: 3px 10px !important; font-size: 12px; }
+.media-rating-pick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+#view-media .media-rating-pick button { min-width: 44px; padding: 5px 10px; border-radius: 6px; font-size: 12px; }
+#view-media .media-rating-pick button[aria-pressed="true"] { border-color: #80d6c5; color: #80d6c5; background: #80d6c51f; }
+#view-media[data-page="ratings"] #media-feature, #view-media[data-page="ratings"] .media-shelves { display: none !important; }
+.media-ratings-page { padding: 24px 36px 110px; max-width: 1100px; }
+.media-ratings-page h1 { font-size: 26px; margin: 0 0 6px; }
+.media-ratings-page .lead { color: #9da9ad; margin: 0 0 18px; max-width: 720px; }
+.media-unrated { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid #ffffff14; }
+.media-unrated .media-art { width: 54px; }
+.media-unrated strong, .media-unrated small { display: block; }
+.media-unrated small { color: #9da9ad; }
+.media-ratings-done { color: #80d6c5; }
+html[data-theme="light"] .media-ratings-page .lead, html[data-theme="light"] .media-unrated small { color: #3e5b5d; }
+html[data-theme="light"] .media-unrated { border-color: #c4d4cc; }
+html[data-theme="light"] #view-media .media-rating-suggest, html[data-theme="light"] #view-media .media-age-rating.none { color: #8a5a00; }
+html[data-theme="light"] .media-ratings-done { color: #146254; }
+@media (max-width: 720px) { .media-ratings-page { padding: 18px 16px 110px; } .media-unrated { grid-template-columns: 54px minmax(0, 1fr); } .media-unrated > div:last-child { grid-column: 1 / -1; } }

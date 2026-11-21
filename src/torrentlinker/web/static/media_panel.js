@@ -50,7 +50,7 @@ window.addEventListener("message",async event=>{
       if(mediaHorizonViews.includes(message.body.horizon)){media.horizon=message.body.horizon;try{localStorage.setItem("tl-media-horizon",media.horizon)}catch{}}
       value={layout:mediaLayoutValue(media.layout),horizon:mediaHorizonValue(media.horizon)};
     }else{
-      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress)$|\/artwork\?)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
+      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
       let client=mediaClient();
       if(message.path==="media/playlists" && message.body.method==="POST"){
         const owner=media.playerClient||client;

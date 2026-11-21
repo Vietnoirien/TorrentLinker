@@ -405,6 +405,16 @@ function connections(form) {
     "tmdb_api_key",
     saved.tmdb_api_key,
   );
+  tmdb.append(
+    element(
+      "small",
+      say(
+        "Also gives films and series their French Age Rating when their NFO has none.",
+        "Donne aussi aux films et séries leur classification française quand leur NFO n’en a pas.",
+      ),
+      "muted",
+    ),
+  );
   const proxy = box(form, "Proxy");
   field(proxy, say("Proxy address", "Adresse du proxy"), data.proxy, "address");
   field(

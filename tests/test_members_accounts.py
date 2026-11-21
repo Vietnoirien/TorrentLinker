@@ -153,6 +153,9 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/members/{account}/cancel-link",
         "/api/links/inspect",
         "/api/links/redeem",
+        "/api/media/items/{identifier}/rating",
+        "/api/media/ratings",
+        "/api/media/ratings/confirm",
     }
 
 
