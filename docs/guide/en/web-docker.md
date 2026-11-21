@@ -186,3 +186,9 @@ Open **Settings** to revisit setup. At the storage step, import client folders a
 ![Storage setup in the browser](../images/web/storage-en.png)
 
 **Documentation**, above **Settings**, opens these guides inside the Web UI. Choose a guide from the selector; the arrow returns to the previous guide. The sidebar language selector also changes the guides’ language. **GitHub** opens their online version.
+
+### Optional Members
+
+Members are off by default. Set `TL_WEB_MEMBERS=on` or pass `--members on` to enable personal accounts, invitations, Shared Screens and Requests. Restart the server after changing this setting.
+
+With Members off, the startup password or a trusted proxy still signs in as the Owner. Proxy user headers are ignored, including headers sent by Authelia or Authentik. Member routes return 404 and the Members controls are hidden. Disabling Members revokes existing invitation/password links, Member sessions and Shared Screen tokens. Accounts and their history remain, but users must sign in again after re-enabling Members.

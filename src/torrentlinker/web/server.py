@@ -41,6 +41,9 @@ def argument_parser() -> argparse.ArgumentParser:
         choices=("password", "proxy"),
         default=os.getenv("TL_WEB_AUTH", "password"),
     )
+    parser.add_argument(
+        "--members", choices=("on", "off"), default=os.getenv("TL_WEB_MEMBERS", "off")
+    )
     parser.add_argument("--trusted-proxy", action="append", default=[])
     parser.add_argument("--root", action="append", type=Path, default=[])
     parser.add_argument(
@@ -126,6 +129,7 @@ def main() -> int:
                 roots=roots,
                 secret_files=secret_files,
                 secure_cookie=args.secure_cookie,
+                members_enabled=args.members == "on",
             )
         except (ValueError, OSError) as error:
             parser.error(f"Cannot initialize server: {error}")

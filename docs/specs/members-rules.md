@@ -5,6 +5,14 @@ the design previews in `members-settings/`, `members-invite/`, `members-signin/`
 `members-media/`, `members-requests/`, `members-notices/` and `members-ratings/`. Terms are
 those of `CONTEXT.md`.
 
+## Server opt-in
+
+Members are off by default. `TL_WEB_MEMBERS=on` or `--members on` enables them after a restart.
+With Members off, trusted proxies always act as the Owner and their user headers are ignored.
+Member routes, invitations, Shared Screens and Requests return 404; their UI is hidden.
+Disabling Members revokes links and sessions while preserving accounts and history.
+The identity rules below apply when Members are enabled.
+
 ## Who makes a request
 
 Every Web request resolves to one **actor**: the Owner, a Member, or a Viewer under an

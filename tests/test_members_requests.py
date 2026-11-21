@@ -105,7 +105,9 @@ def test_an_answer_is_unread_with_the_approvers_note(store):
 
 @pytest.fixture
 def server(tmp_path):
-    app = create_app(tmp_path, password="test-password-long", monitor_verifications=False)
+    app = create_app(
+        tmp_path, members_enabled=True, password="test-password-long", monitor_verifications=False
+    )
     library = app.state.agent_service.media
 
     def entry(client_id, infohash):

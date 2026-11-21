@@ -192,3 +192,9 @@ Une fois l’assistant terminé, **Torrents** affiche le client connecté. Filtr
 ![Configuration du stockage dans le navigateur](../images/web/storage-fr.png)
 
 **Documentation**, au-dessus des **Paramètres**, ouvre ces mêmes guides sans quitter l’interface. Choisissez un guide dans le sélecteur ; la flèche revient au guide précédent. Le sélecteur de langue de la barre latérale change aussi la langue des guides. Le lien **GitHub** ouvre leur version en ligne.
+
+### Membres facultatifs
+
+Les membres sont désactivés par défaut. Définissez `TL_WEB_MEMBERS=on` ou passez `--members on` pour activer les comptes personnels, invitations, écrans partagés et demandes. Redémarrez le serveur après modification.
+
+Lorsque les membres sont désactivés, le mot de passe du serveur ou un proxy de confiance connecte toujours le propriétaire. Les en-têtes d'identité du proxy sont ignorés, y compris ceux d'Authelia ou Authentik. Les routes des membres répondent 404 et leurs commandes sont masquées. La désactivation révoque les liens d'invitation et de mot de passe, les sessions des membres et les jetons des écrans partagés. Les comptes et leur historique sont conservés, mais une nouvelle connexion est nécessaire après réactivation.

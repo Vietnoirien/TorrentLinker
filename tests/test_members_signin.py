@@ -17,7 +17,12 @@ PROXY = ("10.0.0.0/8",)
 
 @pytest.fixture
 def server(tmp_path):
-    app = create_app(tmp_path, password="test-password-long", connector=lambda *args: Client())
+    app = create_app(
+        tmp_path,
+        members_enabled=True,
+        password="test-password-long",
+        connector=lambda *args: Client(),
+    )
     with TestClient(app) as browser:
         browser.headers["X-TorrentLinker"] = "1"
         yield app, browser
@@ -222,7 +227,7 @@ def test_the_proxy_user_header_names_a_member_only_from_a_trusted_proxy(tmp_path
     from ipaddress import ip_network
 
     networks = tuple(ip_network(n) for n in PROXY)
-    app = create_app(tmp_path, password=None, trusted_proxies=networks)
+    app = create_app(tmp_path, members_enabled=True, password=None, trusted_proxies=networks)
     proxy = TestClient(app, client=("10.0.0.2", 1))
     outsider = TestClient(app, client=("192.168.1.5", 1))
     with proxy:

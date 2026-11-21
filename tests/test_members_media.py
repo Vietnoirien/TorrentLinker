@@ -42,6 +42,7 @@ def server(tmp_path):
     settings.save(config / "settings.json")
     app = create_app(
         config,
+        members_enabled=True,
         password="test-password-long",
         roots=(films, cartoons, adult),
         monitor_verifications=False,

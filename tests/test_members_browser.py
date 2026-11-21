@@ -20,7 +20,11 @@ def test_the_owner_creates_edits_and_disables_a_member_who_signs_in_by_name(tmp_
 
     config, setup, _, _ = prepared(tmp_path)
     app = create_app(
-        config, password="test-password-long", service_override=setup, monitor_verifications=False
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
     )
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -113,7 +117,11 @@ def test_an_invitation_link_with_its_qr_code_lets_the_person_join(tmp_path):
 
     config, setup, _, _ = prepared(tmp_path)
     app = create_app(
-        config, password="test-password-long", service_override=setup, monitor_verifications=False
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
     )
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -199,7 +207,11 @@ def test_a_member_has_medias_without_the_owners_tools(tmp_path):
 
     config, setup, _, _ = prepared(tmp_path)
     app = create_app(
-        config, password="test-password-long", service_override=setup, monitor_verifications=False
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
     )
     app.state.accounts.create(
         "Léa", "lea", {Permission.FILMS, Permission.ADULT}, password="lea-password-long"
@@ -273,7 +285,11 @@ def test_a_member_asks_for_a_tracker_film_and_follows_it_in_the_bell(tmp_path):
 
     config, setup, _, _ = prepared(tmp_path)
     app = create_app(
-        config, password="test-password-long", service_override=setup, monitor_verifications=False
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
     )
     lea = app.state.accounts.create(
         "Léa",
@@ -368,7 +384,11 @@ def test_who_watches_on_a_shared_screen_and_mon_compte(tmp_path):
 
     config, setup, _, _ = prepared(tmp_path)
     app = create_app(
-        config, password="test-password-long", service_override=setup, monitor_verifications=False
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
     )
     accounts = app.state.accounts
     lea = accounts.create(
@@ -443,6 +463,44 @@ def test_who_watches_on_a_shared_screen_and_mon_compte(tmp_path):
                 expect(panel.get_by_role("heading", name="Mamie")).to_be_visible()
                 assert [p["name"] for p in accounts.profiles(lea)] == ["Léa", "Hugo", "Mamie"]
                 assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)
+
+
+def test_single_user_server_hides_members_controls(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page()
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                expect(page.get_by_label("Sign-in name")).to_be_hidden()
+                expect(page.locator("#login-owner")).to_be_hidden()
+                expect(page.locator("#login-shared")).to_be_hidden()
+                page.get_by_label("Server password").fill("test-password-long")
+                page.locator("#login-form button.primary").click()
+                shell_navigate(page, "setup")
+                panel = page.frame_locator("#settings-frame")
+                expect(panel.get_by_role("button", name="Users", exact=True)).to_have_count(0)
+                expect(panel.get_by_role("button", name="My account", exact=True)).to_have_count(0)
                 browser.close()
         finally:
             server.should_exit = True

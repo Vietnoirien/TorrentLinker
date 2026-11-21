@@ -40,7 +40,7 @@ const ownerSections = () => ({
   release_score: "ReleaseScore",
   zen: "Zen",
   // Members share only a Web or Docker server; the desktop stays the Owner's.
-  ...(environment.mode === "web"
+  ...(environment.mode === "web" && environment.members_enabled
     ? { users: say("Users", "Utilisateurs"), account: say("My account", "Mon compte") }
     : {}),
 });

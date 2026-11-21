@@ -23,6 +23,7 @@ function settingsEnvironment() {
         agent_endpoint: new URL("mcp/", location.href).href,
         // A Member's Settings: their account, and Utilisateurs for a manager.
         member: signedInMember(),
+        members_enabled: state.setup?.members_enabled === true,
         sections: state.sections || [],
       },
     },

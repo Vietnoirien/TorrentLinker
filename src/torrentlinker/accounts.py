@@ -345,6 +345,13 @@ class Accounts:
         matches = secrets.compare_digest(scrypt(password, bytes.fromhex(salt)).hex(), digest)
         return row["id"] if row and matches and not row["disabled"] else None
 
+    def revoke_member_access(self) -> None:
+        """Disabling Members invalidates links and sessions, including after re-enabling."""
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM sessions")
+            self.db.execute("DELETE FROM screens")
+            self.db.execute("DELETE FROM links")
+
     def open_session(self, account: str) -> str:
         token = secrets.token_urlsafe(32)
         now = time.time()

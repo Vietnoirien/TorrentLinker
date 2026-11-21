@@ -416,7 +416,8 @@ function resolveRoute(fragment) {
   // such as configuring the Assistant or reviewing saved Upload drafts.
   if (!fragment.startsWith("#/") || !Object.hasOwn(viewTabs, view)) return fallback;
   // A Member's Settings: "Mon compte", and Utilisateurs for a manager.
-  const tabs = member && view === "setup" ? state.sections || [] : viewTabs[view];
+  const tabs = member && view === "setup" ? state.sections || [] : viewTabs[view].filter(tab =>
+    view !== "setup" || state.setup?.members_enabled || !["users", "account"].includes(tab));
   const validDetail = view === "setup" && tab === "agents" && agentTabs.includes(detail) ||
     view === "media" && mediaViewsByKind[tab]?.includes(detail) &&
       (detail !== "adult" || state.setup?.adult_content);
@@ -785,6 +786,11 @@ $("login-form").onsubmit = async (e) => {
 };
 // A Member signs in with a name; the Owner with the startup password and no name.
 function loginMode(owner = localStorage.getItem("tl-sign-in") === "owner") {
+  const enabled = document.documentElement.dataset.members === "true";
+  if (!enabled) owner = true;
+  $("login-owner").hidden = !enabled;
+  $("login-shared").closest("label").hidden = !enabled;
+  if (!enabled) $("login-shared").checked = false;
   localStorage.setItem("tl-sign-in", owner ? "owner" : "member");
   $("login-name").hidden = $("login-name-label").hidden = owner;
   if (owner) $("login-name").value = "";

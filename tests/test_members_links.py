@@ -169,7 +169,9 @@ def test_password_links_follow_the_managers_rules(server):  # noqa: F811
 def test_behind_a_proxy_links_are_not_used(tmp_path):
     from ipaddress import ip_network
 
-    app = create_app(tmp_path, password=None, trusted_proxies=(ip_network("10.0.0.0/8"),))
+    app = create_app(
+        tmp_path, members_enabled=True, password=None, trusted_proxies=(ip_network("10.0.0.0/8"),)
+    )
     with TestClient(app, client=("10.0.0.2", 1)) as proxy:
         proxy.headers["X-TorrentLinker"] = "1"
         refused = proxy.post("/api/members/invite", json={"name": "K", "base": BASE})

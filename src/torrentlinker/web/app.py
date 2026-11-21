@@ -105,6 +105,7 @@ def create_app(
     operation_factory=Operations,
     monitor_verifications: bool = True,
     assistant_transport=None,
+    members_enabled: bool = False,
 ) -> FastAPI:
     app_version = escape(installed_version())
     directory.mkdir(parents=True, exist_ok=True)
@@ -113,6 +114,8 @@ def create_app(
         raise ValueError("Set a Web UI password or trusted proxies, not both.")
     sessions = Sessions(password) if password is not None else None
     accounts = Accounts(directory)
+    if not members_enabled:
+        accounts.revoke_member_access()
     throttle = Throttle()
     if sessions is None:
         proxies = TrustedProxies(trusted_proxies)
@@ -122,6 +125,8 @@ def create_app(
             # account has a proxy name, it is the Owner; an unknown name is refused (ADR-0022).
             if not proxies.allows(request.client.host if request.client else None):
                 return None
+            if not members_enabled:
+                return OWNER_ACTOR
             name = request.headers.get(PROXY_USER_HEADER, "").strip()
             if not name or not accounts.proxy_users():
                 return OWNER_ACTOR
@@ -134,6 +139,8 @@ def create_app(
             token = request.cookies.get("tl_session", "")
             if account := sessions.account(token):
                 return accounts.actor(account)
+            if not members_enabled:
+                return None
             member = accounts.session(token)
             if member is not None:
                 if member[1]:
@@ -353,23 +360,24 @@ def create_app(
         return response
 
     requests = Requests(accounts)
-    member_routes(
-        app,
-        accounts,
-        agent_service.media,
-        proxy=sessions is None,
-        signed_in=signed_in,
-        requests=requests,
-    )
-    request_routes(app, requests, agent_service.media)
-    household_routes(
-        app,
-        accounts,
-        agent_service.media,
-        proxy=sessions is None,
-        owner_password=lambda password: sessions is not None and sessions.verify(password),
-        signed_in=signed_in,
-    )
+    if members_enabled:
+        member_routes(
+            app,
+            accounts,
+            agent_service.media,
+            proxy=sessions is None,
+            signed_in=signed_in,
+            requests=requests,
+        )
+        request_routes(app, requests, agent_service.media)
+        household_routes(
+            app,
+            accounts,
+            agent_service.media,
+            proxy=sessions is None,
+            owner_password=lambda password: sessions is not None and sessions.verify(password),
+            signed_in=signed_in,
+        )
     app.state.requests = requests
     app.state.reset_clients = reset_clients
     app.state.accounts = accounts
@@ -401,6 +409,21 @@ def create_app(
         prefix = request.scope.get("root_path", "")
         if prefix and route.startswith(prefix + "/"):
             route = route[len(prefix) :]
+        if not members_enabled and (
+            route == "/join"
+            or any(
+                route == p or route.startswith(p + "/")
+                for p in (
+                    "/api/members",
+                    "/api/account",
+                    "/api/screen",
+                    "/api/links",
+                    "/api/requests",
+                    "/api/wishes",
+                )
+            )
+        ):
+            return JSONResponse({"detail": "Not found."}, status_code=404)
         if route in COMPANION_ROUTES:
             return await companion_request(request, route, service)
         if route.startswith(("/api/", "/documentation/")):
@@ -493,6 +516,8 @@ def create_app(
     def login(body: Login, request: Request) -> JSONResponse:
         if sessions is None:
             return JSONResponse({"detail": "The reverse proxy signs users in."}, status_code=404)
+        if not members_enabled and (body.login.strip() or body.screen.strip()):
+            return JSONResponse({"detail": "Not found."}, status_code=404)
         name = body.login.strip()
         keys = (
             f"address:{request.client.host if request.client else ''}",
@@ -583,7 +608,11 @@ def create_app(
     @app.get("/api/setup")
     def setup(client_id: str = "") -> dict:
         snapshot = for_client(client_id).setup.snapshot()
-        return {**snapshot, "web_auth": "password" if sessions is not None else "proxy"}
+        return {
+            **snapshot,
+            "web_auth": "password" if sessions is not None else "proxy",
+            "members_enabled": members_enabled,
+        }
 
     @app.get("/api/settings")
     def settings_snapshot(client_id: str = "") -> dict:
@@ -1075,6 +1104,7 @@ def create_app(
                 else [],
                 "setup": {
                     "configured": True,
+                    "members_enabled": members_enabled,
                     "adult_content": service.settings.adult_content
                     and actor.holds(Permission.ADULT),
                     "client_id": service.settings.default_client_id,
@@ -1443,12 +1473,20 @@ def create_app(
     def join() -> HTMLResponse:
         # An invitation or password link, outside the app; its token stays in the fragment.
         html = (assets / "join.html").read_text(encoding="utf-8")
-        return HTMLResponse(html.replace("{{ app_version }}", app_version))
+        return HTMLResponse(
+            html.replace("{{ app_version }}", app_version).replace(
+                "{{ members_enabled }}", str(members_enabled).lower()
+            )
+        )
 
     @app.get("/")
     @needs(Audience.PUBLIC)
     def shell() -> HTMLResponse:
         html = (assets / "index.html").read_text(encoding="utf-8")
-        return HTMLResponse(html.replace("{{ app_version }}", app_version))
+        return HTMLResponse(
+            html.replace("{{ app_version }}", app_version).replace(
+                "{{ members_enabled }}", str(members_enabled).lower()
+            )
+        )
 
     return app

@@ -92,7 +92,9 @@ def test_shared_screens_last_90_days_and_end_with_the_password(accounts, monkeyp
 
 @pytest.fixture
 def server(tmp_path):
-    app = create_app(tmp_path, password="test-password-long", monitor_verifications=False)
+    app = create_app(
+        tmp_path, members_enabled=True, password="test-password-long", monitor_verifications=False
+    )
     with TestClient(app) as browser:
         browser.headers["X-TorrentLinker"] = "1"
         yield app, browser

@@ -81,7 +81,12 @@ def test_a_viewer_is_never_the_owner_nor_an_account_holder():
 
 @pytest.fixture
 def server(tmp_path):
-    app = create_app(tmp_path, password="test-password-long", connector=lambda *args: Client())
+    app = create_app(
+        tmp_path,
+        members_enabled=True,
+        password="test-password-long",
+        connector=lambda *args: Client(),
+    )
 
     @app.get("/api/test/declared")
     @needs(Permission.SEARCH)
@@ -197,7 +202,12 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
 
 
 def test_a_disabled_member_has_no_actor(tmp_path):
-    app = create_app(tmp_path, password="test-password-long", connector=lambda *args: Client())
+    app = create_app(
+        tmp_path,
+        members_enabled=True,
+        password="test-password-long",
+        connector=lambda *args: Client(),
+    )
     with TestClient(app) as browser:
         as_member(app, browser)
         assert browser.get("/api/shell").status_code == 200
