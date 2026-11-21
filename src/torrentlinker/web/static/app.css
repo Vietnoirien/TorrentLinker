@@ -198,6 +198,25 @@ a {
   width: 100%;
   margin-top: 12px;
 }
+.welcome label[hidden],
+.welcome input[hidden] {
+  display: none;
+}
+.field-error {
+  color: var(--danger);
+  font-size: 13px;
+  min-height: 1em;
+  margin: 4px 0 0;
+}
+.welcome .linkish {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  padding: 4px 0;
+  width: auto;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;

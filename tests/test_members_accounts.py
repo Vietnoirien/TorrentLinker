@@ -101,7 +101,7 @@ def as_member(app, browser, *permissions):
         f"Léa {len(permissions)}", f"lea{len(permissions)}", set(permissions)
     )
     browser.cookies.clear()
-    browser.cookies.set("tl_session", app.state.sessions.open(member))
+    browser.cookies.set("tl_session", app.state.accounts.open_session(member))
 
 
 def test_an_undeclared_route_refuses_a_member_and_a_declared_one_checks_the_permission(server):
@@ -144,6 +144,9 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/documentation/page/{name:path}",
         "/api/documentation/file/{name:path}",
         "/documentation/{name:path}",
+        "/api/members",
+        "/api/members/{account}",
+        "/api/members/{account}/{action}",
     }
 
 

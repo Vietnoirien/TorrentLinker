@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import Counter
@@ -21,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from torrentlinker import documentation
-from torrentlinker.accounts import OWNER_ACTOR, Accounts, Actor
+from torrentlinker.accounts import OWNER, OWNER_ACTOR, SESSION_IDLE, Accounts, Actor
 from torrentlinker.clients import connect
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
@@ -30,9 +31,16 @@ from torrentlinker.updates import check_for_update, installed_version
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
+from torrentlinker.web.members import member_routes
 from torrentlinker.web.operations import DownloadFolderRequired, JobRequest, Operations
 from torrentlinker.web.permissions import Audience, allowed, needs
-from torrentlinker.web.security import ServerSecrets, Sessions, TrustedProxies
+from torrentlinker.web.security import (
+    PROXY_USER_HEADER,
+    ServerSecrets,
+    Sessions,
+    Throttle,
+    TrustedProxies,
+)
 from torrentlinker.web.setup import (
     Connection,
     Connector,
@@ -44,6 +52,8 @@ from torrentlinker.web.setup import (
     Setup,
 )
 from torrentlinker.web.zen_preferences import ZenPreferences
+
+logger = logging.getLogger(__name__)
 
 
 class ClientSelection(BaseModel):
@@ -65,6 +75,7 @@ class SequentialVideo(BaseModel):
 
 class Login(BaseModel):
     password: str = Field(max_length=1024)
+    login: str = Field(default="", max_length=100)  # empty: the Owner's startup password
 
 
 def create_app(
@@ -88,26 +99,55 @@ def create_app(
         raise ValueError("Set a Web UI password or trusted proxies, not both.")
     sessions = Sessions(password) if password is not None else None
     accounts = Accounts(directory)
+    throttle = Throttle()
     if sessions is None:
         proxies = TrustedProxies(trusted_proxies)
 
         def actor_of(request: Request) -> Actor | None:
-            # The proxy with no user header is the Owner; Member headers come with #129.
-            allowed = proxies.allows(request.client.host if request.client else None)
-            return OWNER_ACTOR if allowed else None
+            # Only the proxy's own address counts. Without a user header, or before any
+            # account has a proxy name, it is the Owner; an unknown name is refused (ADR-0022).
+            if not proxies.allows(request.client.host if request.client else None):
+                return None
+            name = request.headers.get(PROXY_USER_HEADER, "").strip()
+            if not name or not accounts.proxy_users():
+                return OWNER_ACTOR
+            account = accounts.by_proxy_user(name)
+            return accounts.actor(account) if account else None
 
     else:
 
         def actor_of(request: Request) -> Actor | None:
-            account = sessions.account(request.cookies.get("tl_session", ""))
-            return accounts.actor(account) if account else None
+            token = request.cookies.get("tl_session", "")
+            if account := sessions.account(token):
+                return accounts.actor(account)
+            member = accounts.session(token)
+            if member is None:
+                return None
+            if member[1]:
+                request.state.renew_session = token
+            return accounts.actor(member[0])
 
-    def sign_in_required() -> JSONResponse:
+    def sign_in_required(request: Request) -> JSONResponse:
         if sessions is None:
+            if request.headers.get(PROXY_USER_HEADER, "").strip():
+                return JSONResponse(
+                    {"detail": "Your reverse proxy's user is not a Member of this server."},
+                    status_code=403,
+                )
             return JSONResponse(
                 {"detail": "Open TorrentLinker through its reverse proxy."}, status_code=403
             )
         return JSONResponse({"detail": "Sign in to TorrentLinker."}, status_code=401)
+
+    def session_cookie(response: JSONResponse, token: str, max_age: int) -> None:
+        response.set_cookie(
+            "tl_session",
+            token,
+            httponly=True,
+            samesite="strict",
+            max_age=max_age,
+            secure=secure_cookie,
+        )
 
     service = service_override or Setup(
         directory, roots, ServerSecrets(directory, secret_files), connector
@@ -286,6 +326,7 @@ def create_app(
     from torrentlinker.web.media import media_routes
 
     media_routes(app, agent_service, assistant)
+    member_routes(app, accounts, agent_service.media, proxy=sessions is None)
     app.state.reset_clients = reset_clients
     app.state.accounts = accounts
     app.state.sessions = sessions
@@ -331,7 +372,7 @@ def create_app(
             if route != "/api/login":
                 actor = actor_of(request)
                 if actor is None:
-                    return sign_in_required()
+                    return sign_in_required(request)
                 if not allowed(app.router.routes, request.scope, actor):
                     return JSONResponse(
                         {"detail": "Your account does not have the Permission for this."},
@@ -343,6 +384,10 @@ def create_app(
         except Exception as error:
             # Do not let ASGI log a raw HTTP exception containing private URLs.
             response = JSONResponse({"detail": error_message(error)}, status_code=502)
+        renewed = getattr(request.state, "renew_session", "")
+        if renewed and route != "/api/logout":
+            # A Member's session lasts 30 days of disuse: each use restarts the cookie's too.
+            session_cookie(response, renewed, SESSION_IDLE)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -400,24 +445,37 @@ def create_app(
 
     @app.post("/api/login")
     @needs(Audience.PUBLIC)
-    def login(body: Login) -> JSONResponse:
+    def login(body: Login, request: Request) -> JSONResponse:
         if sessions is None:
             return JSONResponse({"detail": "The reverse proxy signs users in."}, status_code=404)
-        try:
-            token = sessions.login(body.password)
-        except PermissionError as error:
-            return JSONResponse({"detail": str(error)}, status_code=401)
-        except ValueError as error:
-            return JSONResponse({"detail": str(error)}, status_code=429)
-        response = JSONResponse({"ok": True})
-        response.set_cookie(
-            "tl_session",
-            token,
-            httponly=True,
-            samesite="strict",
-            max_age=43200,
-            secure=secure_cookie,
+        name = body.login.strip()
+        keys = (
+            f"address:{request.client.host if request.client else ''}",
+            f"account:{name.casefold() if name else OWNER}",
         )
+        if wait := throttle.wait(*keys):
+            minutes = max(1, round(wait / 60))
+            return JSONResponse(
+                {"detail": f"Too many attempts. Try again in {minutes} min."}, status_code=429
+            )
+        token = ""
+        if name:
+            if account := accounts.verify(name, body.password):
+                token = accounts.open_session(account)
+        else:
+            try:
+                token = sessions.login(body.password)
+            except PermissionError:
+                pass
+        if not token:
+            if throttle.failed(*keys):
+                # Shown to the Owner by the notifications of #136; logged until then.
+                logger.warning("Sign-in locked after repeated failures: %s", " ".join(keys))
+            detail = "Incorrect sign-in name or password." if name else "Incorrect password."
+            return JSONResponse({"detail": detail}, status_code=401)
+        throttle.succeeded(*keys)
+        response = JSONResponse({"ok": True})
+        session_cookie(response, token, SESSION_IDLE if name else 43200)
         return response
 
     @app.post("/api/logout")
@@ -425,6 +483,7 @@ def create_app(
     def logout(request: Request) -> JSONResponse:
         if sessions is not None:
             sessions.logout(request.cookies.get("tl_session", ""))
+            accounts.end_session(request.cookies.get("tl_session", ""))
         response = JSONResponse({"ok": True})
         response.delete_cookie("tl_session")
         return response

@@ -1357,6 +1357,12 @@ class MediaLibrary(TrackerRows):
             (client_id, identifier, position, duration, bool(watched), account, viewer),
         )
 
+    def forget_account(self, account):
+        """Erase a deleted Member's progress, playlists and Media sessions, Viewers' included."""
+        with self.lock, self.db:
+            for table in ("media_progress", "media_playlists", "media_sessions"):
+                self.db.execute(f"DELETE FROM {table} WHERE account=?", (account,))
+
     def forget_progress(self, client_id, identifier, *, account=OWNER, viewer=""):
         """Reset playback progress so the title leaves Continue watching."""
         self.record(client_id, identifier)

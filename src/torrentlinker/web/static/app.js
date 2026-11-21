@@ -110,9 +110,7 @@ const french = {
   removeClient: "Retirer ce client", clientName: "Nom du client", planDestinations: "Destinations du Plan",
   planDestinationHelp: "Choisissez un client ou répartissez entre plusieurs clients. Budget 0 : espace disponible.",
   welcome: "Vos torrents, où qu’ils soient.",
-  webPassword: "Mot de passe de l’interface web",
   signIn: "Se connecter",
-  passwordHelp: "Utilisez le mot de passe choisi au démarrage du serveur.",
   torrents: "Torrents",
   search: "Recherche",
   queue: "File de téléchargement",
@@ -394,7 +392,7 @@ const viewTabs = {
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [],
-  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents"],
+  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users"],
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {
@@ -747,14 +745,40 @@ async function enter() {
   if (state.setup.configured) await job({ kind: "refresh" }, loadTorrents);
   await pollJobs();
 }
-$("login-form").onsubmit = (e) => {
+$("login-form").onsubmit = async (e) => {
   e.preventDefault();
-  guard(async () => {
-    await api("login", { password: $("login-password").value });
+  $("login-error").textContent = "";
+  try {
+    await api("login", { login: $("login-name").value.trim(), password: $("login-password").value });
     $("login-password").value = "";
     await enter();
-  });
+  } catch (error) {
+    const wait = /Try again in (\d+) min/.exec(error.message);
+    $("login-error").textContent = wait
+      ? say(`Too many attempts. Try again in ${wait[1]} min.`, `Trop d’essais. Réessayez dans ${wait[1]} min.`)
+      : error.message === "Incorrect sign-in name or password."
+        ? say(error.message, "Identifiant ou mot de passe incorrect.")
+        : error.message === "Incorrect password."
+          ? say(error.message, "Mot de passe incorrect.")
+          : error.message;
+  }
 };
+// A Member signs in with a name; the Owner with the startup password and no name.
+function loginMode(owner = localStorage.getItem("tl-sign-in") === "owner") {
+  localStorage.setItem("tl-sign-in", owner ? "owner" : "member");
+  $("login-name").hidden = $("login-name-label").hidden = owner;
+  if (owner) $("login-name").value = "";
+  const text = (node, en, fr) => Object.assign(node.dataset, { en, fr });
+  text($("login-password-label"), ...(owner ? ["Server password", "Mot de passe du serveur"] : ["Password", "Mot de passe"]));
+  text($("login-help"), ...(owner
+    ? ["The password chosen when starting the server.", "Le mot de passe choisi au démarrage du serveur."]
+    : ["Forgot your password? Ask the owner for a new link.", "Mot de passe oublié ? Demandez un nouveau lien au propriétaire."]));
+  text($("login-owner"), ...(owner ? ["I am a member", "Je suis membre"] : ["I am the owner", "Je suis le propriétaire"]));
+  $("login-error").textContent = "";
+  translate();
+}
+$("login-owner").onclick = () => loginMode($("login-name").hidden === false);
+loginMode();
 async function logout() {
   document.dispatchEvent(new Event("tl-logout"));
   await api("logout", {});

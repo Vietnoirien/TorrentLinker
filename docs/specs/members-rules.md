@@ -13,7 +13,9 @@ account holder (the Owner or a Member).
 - The startup password, or a trusted proxy with no user header, signs in the Owner.
 - A Member's sign-in name and password, or a trusted proxy's user header (only from an
   address in `TL_TRUSTED_PROXIES`) that names a Member, signs in that Member. An unknown
-  header name is refused, never mapped to the Owner.
+  header name is refused, never mapped to the Owner. The header is `Remote-User`. It is read
+  only once an account has a proxy name, so an existing proxy that already sends one keeps
+  signing the Owner in; the Owner may give their own name too, on their card in Utilisateurs.
 - On a Shared Screen, the chosen Viewer is carried by the session; the actor is that Viewer,
   with the account holder's Permissions narrowed by the Viewer's own.
 - A disabled Member has no actor: every session ends at once.
@@ -44,8 +46,8 @@ the path values allowed (`action={...}`). The middleware checks it on `/api/*` a
 `/documentation/*`; `/`, `/healthz` and `/static/*` serve no data and stay open as before.
 A row below is declared by the issue that makes its handler answer for the actor (#131 Media
 with visibility and per-person progress, #133 and #134 Requests, #137 Search, queue and
-torrents, #138 the Assistant); until then the route stays Owner-only. Today only the
-"nothing" and "signed in" rows are declared.
+torrents, #138 the Assistant); until then the route stays Owner-only. Today the "nothing",
+"signed in" and `/api/members*` rows are declared.
 
 | Routes | Needs |
 | --- | --- |
@@ -106,8 +108,9 @@ accepted Request) or refuses it.
 - Changing a password, disabling or deleting the account ends every session and Shared
   Screen of that account.
 - Sign-in throttling is per account and per address: after 5 failures, a 1-minute lock that
-  doubles on repeat, up to 15 minutes; the Owner is alerted. The error never says which
-  field was wrong.
+  doubles on repeat, up to 15 minutes; the Owner is alerted (logged until the notifications
+  of #136). The error never says which field was wrong. A success clears both counts. The
+  Owner signs in with no sign-in name and the startup password, under the same throttling.
 - Invitation links are single-use random tokens, stored hashed, valid 24 h, 3 or 7 days.
   Password links work the same way. A Viewer's PIN is 4 to 8 digits, stored hashed, with
   its own throttling; a forgotten PIN is reset with the account's password.

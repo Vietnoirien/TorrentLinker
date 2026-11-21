@@ -29,6 +29,8 @@ const sections = () => ({
   matching: say("Search & Matching", "Recherche et correspondance"),
   release_score: "ReleaseScore",
   zen: "Zen",
+  // Members share only a Web or Docker server; the desktop stays the Owner's.
+  ...(environment.mode === "web" ? { users: say("Users", "Utilisateurs") } : {}),
 });
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -1128,7 +1130,9 @@ function render() {
   );
   if (!snapshot) return;
   const form = element(
-    ["agents", "assistant", "companion"].includes(section) ? "section" : "form",
+    ["agents", "assistant", "companion", "users"].includes(section)
+      ? "section"
+      : "form",
     undefined,
     "settings-form",
   );
@@ -1161,6 +1165,10 @@ function render() {
     const root = element("section", undefined, "settings-card");
     form.append(root);
     queueMicrotask(() => guard(() => loadSettingsCompanion(root)));
+  } else if (section === "users") {
+    const root = element("div");
+    form.append(root);
+    queueMicrotask(() => guard(() => settingsMembers(root)));
   } else if (section === "assistant") {
     const root = element("div");
     root.id = "assistant-connections-body";

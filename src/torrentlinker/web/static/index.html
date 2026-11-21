@@ -39,18 +39,24 @@
       <h1>TorrentLinker</h1>
       <p data-i18n="welcome">Your torrents, wherever they live.</p>
       <form id="login-form" class="card">
-        <label for="login-password" data-i18n="webPassword"
-          >Web UI password</label
+        <label for="login-name" id="login-name-label" data-en="Sign-in name" data-fr="Identifiant"
+          >Sign-in name</label
+        ><input id="login-name" autocomplete="username" maxlength="100" />
+        <label for="login-password" id="login-password-label" data-en="Password" data-fr="Mot de passe"
+          >Password</label
         ><input
           id="login-password"
           type="password"
           autocomplete="current-password"
           required
-        /><button class="primary" data-i18n="signIn">Sign in</button>
-        <p class="muted" data-i18n="passwordHelp">
-          Use the password chosen when starting the server.
+        />
+        <p id="login-error" class="field-error" role="alert"></p>
+        <button class="primary" data-i18n="signIn">Sign in</button>
+        <p class="muted" id="login-help" data-en="Forgot your password? Ask the owner for a new link." data-fr="Mot de passe oublié ? Demandez un nouveau lien au propriétaire.">
+          Forgot your password? Ask the owner for a new link.
         </p>
       </form>
+      <button type="button" class="linkish" id="login-owner" data-en="I am the owner" data-fr="Je suis le propriétaire">I am the owner</button>
     </section>
     <div id="workspace" hidden>
       <aside class="sidebar" id="app-sidebar"><iframe id="shell-navigation-frame" title="Navigation" src="static/shell/view.html"></iframe></aside>

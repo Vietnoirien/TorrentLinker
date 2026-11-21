@@ -268,3 +268,51 @@ small,
   width: min(560px, 90vw);
   padding: 24px;
 }
+/* Paramètres → Utilisateurs: member cards, their Permission tags and the locked Owner. */
+.member-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.member-head p {
+  margin: 4px 0 0;
+}
+.member-tags {
+  margin-top: 10px;
+}
+.member-tag {
+  display: inline-block;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin: 0 6px 4px 0;
+  color: var(--muted);
+}
+.member-tag.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.member-locked {
+  opacity: 0.7;
+}
+.member-locked input {
+  cursor: not-allowed;
+}
+.member-editor {
+  margin-top: 16px;
+}
+.member-kinds {
+  padding-left: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+.member-cap input[type="number"] {
+  width: 90px;
+}
+.member-danger {
+  color: var(--danger);
+}

@@ -87,6 +87,10 @@ window.addEventListener("message", async (event) => {
       )
         throw Error("Unknown Agent access operation.");
       value = await api(body.path, body.body, body.method);
+    } else if (message.path === "members") {
+      if (!/^members(?:\/[a-zA-Z0-9_-]+){0,2}$/.test(body.path))
+        throw Error("Unknown Users operation.");
+      value = await api(body.path, body.body, body.method);
     } else if (message.path === "companion") {
       if (body.action === "state") value = await api("zen/profile");
       else if (body.action === "disconnect")

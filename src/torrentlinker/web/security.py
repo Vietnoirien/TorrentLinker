@@ -88,7 +88,7 @@ class ServerSecrets:
 
 
 class Sessions:
-    """Signed-in browsers. The startup password opens the Owner's; Members' come with #129."""
+    """The Owner's browsers, signed in with the startup password; Members' are in Accounts."""
 
     def __init__(self, password: str):
         if len(password) < 12:
@@ -96,21 +96,14 @@ class Sessions:
         self.salt = secrets.token_bytes(16)
         self.digest = self.hash(password)
         self.tokens: dict[str, tuple[float, str]] = {}
-        self.attempts: list[float] = []
         self.lock = threading.Lock()
 
     def hash(self, password: str) -> bytes:
         return hashlib.scrypt(password.encode(), salt=self.salt, n=16384, r=8, p=1)
 
     def login(self, password: str) -> str:
-        with self.lock:
-            now = time.monotonic()
-            self.attempts = [t for t in self.attempts if now - t < 60]
-            if len(self.attempts) >= 10:
-                raise ValueError("Too many attempts. Wait one minute.")
-            if not secrets.compare_digest(self.hash(password), self.digest):
-                self.attempts.append(now)
-                raise PermissionError("Incorrect password.")
+        if not secrets.compare_digest(self.hash(password), self.digest):
+            raise PermissionError("Incorrect password.")
         return self.open(OWNER)
 
     def open(self, account: str) -> str:
@@ -136,8 +129,49 @@ class Sessions:
             self.tokens.pop(token, None)
 
 
+class Throttle:
+    """Sign-in failures per account and per address: after 5, a lock of one minute that
+    doubles on each repeat, up to 15 minutes. A success starts its keys over."""
+
+    def __init__(self, failures: int = 5, first: float = 60, longest: float = 900):
+        self.failures, self.first, self.longest = failures, first, longest
+        self.state: dict[str, tuple[int, int, float]] = {}  # failures, locks, locked until
+        self.lock = threading.Lock()
+
+    def wait(self, *keys: str) -> float:
+        """Seconds left before any of these keys may try again."""
+        now = time.monotonic()
+        with self.lock:
+            return max([0.0, *(self.state.get(k, (0, 0, 0.0))[2] - now for k in keys)])
+
+    def failed(self, *keys: str) -> bool:
+        """Count a failure; True when it starts a lock."""
+        locked = False
+        with self.lock:
+            if len(self.state) > 10_000:
+                now = time.monotonic()
+                self.state = {k: v for k, v in self.state.items() if v[2] > now}
+            for key in keys:
+                failures, locks, until = self.state.get(key, (0, 0, 0.0))
+                failures += 1
+                if failures >= self.failures:
+                    until = time.monotonic() + min(self.first * 2**locks, self.longest)
+                    failures, locks, locked = 0, locks + 1, True
+                self.state[key] = (failures, locks, until)
+        return locked
+
+    def succeeded(self, *keys: str) -> None:
+        with self.lock:
+            for key in keys:
+                self.state.pop(key, None)
+
+
+# Read only from a trusted proxy's own address; names a Member (ADR-0016, amended by ADR-0022).
+PROXY_USER_HEADER = "Remote-User"
+
+
 class TrustedProxies:
-    """Let the reverse proxy that signs users in stand for the owner, and nobody else."""
+    """Let the reverse proxy that signs users in stand for them, and nobody else."""
 
     def __init__(self, networks: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]):
         if not networks:
