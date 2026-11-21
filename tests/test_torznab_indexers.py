@@ -121,3 +121,87 @@ def test_owner_adds_tests_disables_and_removes_an_indexer(tmp_path: Path, monkey
         assert web.post(f"/api/indexers/{identifier}/remove").status_code == 200
         assert len(web.get("/api/indexers").json()["indexers"]) == 1
         assert "good" not in (tmp_path / "settings.json").read_text()
+
+
+def hub_handler(listing: list[dict], seen: list[httpx.Request] | None = None):  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(request)
+        if request.url.path == "/api/v1/indexer":
+            if request.headers.get("X-Api-Key") != "hubkey":
+                return httpx.Response(401)
+            return httpx.Response(200, json=listing)
+        if request.url.params.get("apikey") == "hubkey":
+            return httpx.Response(200, text=CAPS_XML)
+        return httpx.Response(401)
+
+    return handler
+
+
+def test_owner_imports_and_resyncs_prowlarr_indexers(tmp_path: Path, monkeypatch) -> None:
+    listing = [
+        {"id": 1, "name": "Nebula", "protocol": "torrent", "enable": True},
+        {"id": 2, "name": "Orion", "protocol": "torrent", "enable": True},
+        {"id": 3, "name": "Usenet", "protocol": "usenet", "enable": True},
+    ]
+    seen: list[httpx.Request] = []
+    monkeypatch.setattr(
+        net,
+        "client",
+        lambda **kwargs: httpx.Client(transport=httpx.MockTransport(hub_handler(listing, seen))),
+    )
+    with TestClient(create_app(tmp_path, password="test-password-long")) as web:
+        web.headers["X-TorrentLinker"] = "1"
+        assert web.post("/api/login", json={"password": "test-password-long"}).status_code == 200
+        entry = {"service": "prowlarr", "url": "http://prowlarr.example:9696/", "api_key": "bad"}
+        assert web.post("/api/indexers/hub", json=entry).status_code == 400
+        connected = web.post("/api/indexers/hub", json={**entry, "api_key": "hubkey"})
+        assert connected.status_code == 200, connected.text
+        assert [a["name"] for a in connected.json()["available"]] == ["Nebula", "Orion"]
+        assert web.get("/api/indexers/hub").json()["has_key"]
+
+        done = web.post("/api/indexers/hub/import", json={"ids": ["1"]})
+        assert done.json()["added"] == ["Nebula"]
+        again = web.post("/api/indexers/hub/import", json={"ids": ["1"]})
+        assert again.json()["added"] == []
+        rows = web.get("/api/indexers").json()["indexers"]
+        assert [(r["name"], r["source"]) for r in rows] == [("c411", ""), ("Nebula", "prowlarr")]
+        assert rows[1]["url"] == "http://prowlarr.example:9696/1/api" and rows[1]["has_key"]
+        assert "hubkey" not in json.dumps(rows) + (tmp_path / "settings.json").read_text()
+
+        listing[:] = [{"id": 2, "name": "Orion", "protocol": "torrent"}] + [
+            {"id": 1, "name": "Nebula 2", "protocol": "torrent"}
+        ][:0]
+        synced = web.post("/api/indexers/hub/sync").json()
+        assert synced["removed"] == ["Nebula"] and synced["new"] == ["Orion"]
+        assert web.get("/api/indexers").json()["indexers"][1]["missing"]
+        listing.append({"id": 1, "name": "Nebula 2", "protocol": "torrent"})
+        synced = web.post("/api/indexers/hub/sync").json()
+        assert synced["renamed"] == ["Nebula 2"] and synced["removed"] == []
+        row = web.get("/api/indexers").json()["indexers"][1]
+        assert row["name"] == "Nebula 2" and not row["missing"]
+        assert web.post("/api/indexers/hub/disconnect").status_code == 200
+        assert web.get("/api/indexers").json()["indexers"][1]["source"] == ""
+
+
+def test_owner_imports_jackett_indexers(tmp_path: Path, monkeypatch) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v2.0/indexers":
+            assert request.url.params["configured"] == "true"
+            return httpx.Response(200, json=[{"id": "lyra", "name": "Lyra", "configured": True}])
+        return httpx.Response(200, text=CAPS_XML)
+
+    monkeypatch.setattr(
+        net, "client", lambda **kwargs: httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with TestClient(create_app(tmp_path, password="test-password-long")) as web:
+        web.headers["X-TorrentLinker"] = "1"
+        assert web.post("/api/login", json={"password": "test-password-long"}).status_code == 200
+        entry = {"service": "jackett", "url": "http://jackett.example:9117", "api_key": "k"}
+        assert web.post("/api/indexers/hub", json=entry).status_code == 200
+        assert web.post("/api/indexers/hub/import", json={"ids": ["lyra"]}).json()["added"] == [
+            "Lyra"
+        ]
+        row = web.get("/api/indexers").json()["indexers"][1]
+        assert row["source"] == "jackett"
+        assert row["url"] == "http://jackett.example:9117/api/v2.0/indexers/lyra/results/torznab/"

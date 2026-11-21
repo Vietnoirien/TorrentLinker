@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import os
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict
@@ -14,9 +15,9 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from torrentlinker import net
+from torrentlinker import indexer_hub, net
 from torrentlinker.clients import connect
-from torrentlinker.config import C411_ID, IndexerSettings, ProxySettings, Settings
+from torrentlinker.config import C411_ID, HUB_SECRET, IndexerSettings, ProxySettings, Settings
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, TorrentClient
 from torrentlinker.indexer import Caps, Indexer
 from torrentlinker.library import known_files
@@ -123,6 +124,20 @@ class IndexerEntry(BaseModel):
     enabled: bool | None = None
 
     _url = field_validator("url")(lambda value: http_url(value) if value else value)
+
+
+class IndexerHubEntry(BaseModel):
+    """A Prowlarr or Jackett instance: its address and API key (kept as a secret)."""
+
+    service: Literal["prowlarr", "jackett"]
+    url: str
+    api_key: str | None = Field(default=None, max_length=4096)
+
+    _url = field_validator("url")(http_url)
+
+
+class IndexerHubImport(BaseModel):
+    ids: list[str] = Field(max_length=1000)
 
 
 def mode_names(caps: Caps) -> dict[str, list[str]]:
@@ -512,6 +527,8 @@ class Setup:
                     "modes": entry.modes,
                     "searchable_ids": entry.searchable_ids,
                     "c411": entry.id == C411_ID,
+                    "source": entry.source,
+                    "missing": entry.missing,
                     "next_request_in": 0.0,
                 }
                 held = self._torznab.get(entry.id)
@@ -595,6 +612,144 @@ class Setup:
             self.secrets.update({Settings.indexer_secret(identifier): ""})
             self._torznab.pop(identifier, None)
             self.save()
+
+    def hub_state(self) -> dict[str, Any]:
+        with self.lock:
+            hub = self.settings.indexer_hub
+            return {
+                "service": hub.service,
+                "url": hub.url,
+                "has_key": bool(self.secrets.get(HUB_SECRET)),
+                "last_sync": hub.last_sync,
+                "imported": sum(1 for i in self.settings.indexers if i.source),
+            }
+
+    def _hub_listing(self) -> list[indexer_hub.HubIndexer]:
+        hub = self.settings.indexer_hub
+        key = self.secrets.get(HUB_SECRET)
+        if not hub.service or not key:
+            raise ValueError("Connect Prowlarr or Jackett first.")
+        try:
+            return indexer_hub.list_indexers(hub.service, hub.url, key)
+        except Exception as error:
+            raise ValueError(indexer_hub.refused(error)) from None
+
+    def _hub_rows(self, listing: list[indexer_hub.HubIndexer]) -> list[dict[str, Any]]:
+        service = self.settings.indexer_hub.service
+        known = {i.source_id for i in self.settings.indexers if i.source == service}
+        return [
+            {
+                "id": h.source_id,
+                "name": h.name,
+                "enabled": h.enabled,
+                "imported": h.source_id in known,
+            }
+            for h in listing
+        ]
+
+    def connect_hub(self, body: IndexerHubEntry) -> dict[str, Any]:
+        """Save the instance once it answers, and list its indexers."""
+        with self.lock:
+            key = body.api_key or self.secrets.get(HUB_SECRET)
+            if not key:
+                raise ValueError("Enter the API key.")
+            try:
+                listing = indexer_hub.list_indexers(body.service, body.url, key)
+            except Exception as error:
+                raise ValueError(indexer_hub.refused(error)) from None
+            hub = self.settings.indexer_hub
+            if body.service != hub.service:  # another service: its imports are no longer synced
+                for entry in self.settings.indexers:
+                    entry.source = entry.source_id = ""
+                    entry.missing = False
+            hub.service, hub.url = body.service, body.url.rstrip("/")
+            if body.api_key:
+                self.secrets.update({HUB_SECRET: body.api_key})
+            self.save()
+            return {"ok": True, "available": self._hub_rows(listing)}
+
+    def hub_available(self) -> dict[str, Any]:
+        with self.lock:
+            return {"available": self._hub_rows(self._hub_listing())}
+
+    def disconnect_hub(self) -> None:
+        """Forget the instance; imported Indexers stay, as added by hand."""
+        with self.lock:
+            for entry in self.settings.indexers:
+                entry.source = entry.source_id = ""
+                entry.missing = False
+            self.settings.indexer_hub = type(self.settings.indexer_hub)()
+            self.secrets.update({HUB_SECRET: ""})
+            self.save()
+
+    def _hub_name(self, name: str, taken: set[str]) -> str:
+        if name.casefold() in taken:
+            name = f"{name} ({self.settings.indexer_hub.service.title()})"
+        return name
+
+    def import_hub(self, body: IndexerHubImport) -> dict[str, Any]:
+        """Import the chosen indexers in one step; each one's caps are read on the way."""
+        with self.lock:
+            hub = self.settings.indexer_hub
+            key = self.secrets.get(HUB_SECRET)
+            wanted = {h.source_id: h for h in self._hub_listing() if h.source_id in set(body.ids)}
+            known = {i.source_id for i in self.settings.indexers if i.source == hub.service}
+            taken = {i.name.casefold() for i in self.settings.indexers}
+            added, failed = [], []
+            for source_id, found in wanted.items():
+                if source_id in known:
+                    continue
+                name = self._hub_name(found.name, taken)
+                try:
+                    caps = self._probe(found.url, key, name)
+                except ValueError:
+                    failed.append(found.name)
+                    continue
+                entry = IndexerSettings(
+                    url=found.url,
+                    id=uuid.uuid4().hex[:8],
+                    name=name,
+                    enabled=found.enabled,
+                    modes=mode_names(caps),
+                    source=hub.service,
+                    source_id=source_id,
+                )
+                taken.add(name.casefold())
+                self.secrets.update({Settings.indexer_secret(entry.id): key})
+                self.settings.indexers.append(entry)
+                added.append(entry.name)
+            self.save()
+            return {"ok": True, "added": added, "failed": failed}
+
+    def sync_hub(self) -> dict[str, Any]:
+        """Re-sync: renamed ones follow, vanished ones are flagged (kept), new ones listed."""
+        with self.lock:
+            hub = self.settings.indexer_hub
+            key = self.secrets.get(HUB_SECRET)
+            listing = {h.source_id: h for h in self._hub_listing()}
+            imported = [i for i in self.settings.indexers if i.source == hub.service]
+            renamed, removed = [], []
+            for entry in imported:
+                found = listing.get(entry.source_id)
+                entry.missing = found is None
+                if found is None:
+                    removed.append(entry.name)
+                    continue
+                others = {i.name.casefold() for i in self.settings.indexers if i is not entry}
+                name = self._hub_name(found.name, others)
+                if name != entry.name:
+                    renamed.append(name)
+                    entry.name = name
+                if found.url != entry.url:
+                    entry.url = found.url
+                if self.secrets.get(Settings.indexer_secret(entry.id)) != key:
+                    self.secrets.update({Settings.indexer_secret(entry.id): key})
+            self._torznab.clear()
+            hub.last_sync = time.time()
+            self.save()
+            known = {i.source_id for i in imported}
+            new = [h.name for sid, h in listing.items() if sid not in known]
+            return {"ok": True, "renamed": renamed, "removed": removed, "new": new}
 
     def suggest_mappings(self) -> dict[str, Any]:
         from torrentlinker.paths import detect_mappings

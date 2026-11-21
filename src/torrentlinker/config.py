@@ -89,6 +89,7 @@ class RtorrentSettings:
 
 C411_ID = "c411"
 C411_URL = "https://c411.org/api/torznab"
+HUB_SECRET = "indexer-hub-key"  # the Prowlarr or Jackett API key
 
 
 @dataclass
@@ -103,11 +104,23 @@ class IndexerSettings:
     name: str = "c411"
     enabled: bool = True
     modes: dict[str, list[str]] = field(default_factory=dict)
+    source: str = ""  # "", "prowlarr" or "jackett": where an imported Indexer comes from
+    source_id: str = ""  # its id in that service
+    missing: bool = False  # the service no longer lists it (flagged by a re-sync, kept)
 
     @property
     def searchable_ids(self) -> list[str]:
         """The ids a search by id may carry on this Indexer (imdbid, tmdbid, tvdbid...)."""
         return sorted({p for params in self.modes.values() for p in params if p.endswith("id")})
+
+
+@dataclass
+class IndexerHubSettings:
+    """The Prowlarr or Jackett instance Indexers are imported from; its key is a secret."""
+
+    service: str = ""  # "prowlarr" | "jackett" | "" when none is connected
+    url: str = ""
+    last_sync: float = 0.0
 
 
 def indexers_from(data: dict) -> list[IndexerSettings]:
@@ -191,6 +204,7 @@ class Settings:
     utorrent: UtorrentSettings = field(default_factory=UtorrentSettings)
     rtorrent: RtorrentSettings = field(default_factory=RtorrentSettings)
     indexers: list[IndexerSettings] = field(default_factory=lambda: [IndexerSettings()])
+    indexer_hub: IndexerHubSettings = field(default_factory=IndexerHubSettings)
     proxy: ProxySettings = field(default_factory=ProxySettings)
     announce_hosts: list[str] = field(default_factory=list)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
@@ -342,6 +356,7 @@ class Settings:
             "utorrent": asdict(self.utorrent),
             "rtorrent": asdict(self.rtorrent),
             "indexers": [asdict(i) for i in self.indexers],
+            "indexer_hub": asdict(self.indexer_hub),
             "proxy": asdict(self.proxy),
             "announce_hosts": self.announce_hosts,
             "matching": asdict(self.matching),
@@ -389,6 +404,7 @@ class Settings:
             utorrent=UtorrentSettings(**data.get("utorrent", {})),
             rtorrent=RtorrentSettings(**data.get("rtorrent", {})),
             indexers=indexers_from(data),
+            indexer_hub=IndexerHubSettings(**data.get("indexer_hub", {})),
             proxy=ProxySettings(**data.get("proxy", {})),
             announce_hosts=list(data.get("announce_hosts", [])),
             matching=MatchingSettings(**data.get("matching", {})),

@@ -61,6 +61,8 @@ from torrentlinker.web.setup import (
     FolderSetup,
     IndexerConnection,
     IndexerEntry,
+    IndexerHubEntry,
+    IndexerHubImport,
     PartialNamesRefused,
     ProxySetup,
     Setup,
@@ -850,6 +852,40 @@ def create_app(
     @app.get("/api/indexers")
     def list_indexers() -> dict:
         return {"indexers": service.indexer_rows()}
+
+    # Prowlarr or Jackett as a source of Indexers; declared before `{identifier}` routes.
+    @app.get("/api/indexers/hub")
+    def indexer_hub_state() -> dict:
+        return service.hub_state()
+
+    @app.get("/api/indexers/hub/available")
+    def indexer_hub_available() -> dict:
+        return service.hub_available()
+
+    @app.post("/api/indexers/hub")
+    def connect_indexer_hub(body: IndexerHubEntry) -> dict:
+        with jobs.lock:
+            idle()
+            return service.connect_hub(body)
+
+    @app.post("/api/indexers/hub/import")
+    def import_indexer_hub(body: IndexerHubImport) -> dict:
+        with jobs.lock:
+            idle()
+            return service.import_hub(body)
+
+    @app.post("/api/indexers/hub/sync")
+    def sync_indexer_hub() -> dict:
+        with jobs.lock:
+            idle()
+            return service.sync_hub()
+
+    @app.post("/api/indexers/hub/disconnect")
+    def disconnect_indexer_hub() -> dict:
+        with jobs.lock:
+            idle()
+            service.disconnect_hub()
+            return {"ok": True}
 
     @app.post("/api/indexers")
     def add_indexer(body: IndexerEntry) -> dict:
