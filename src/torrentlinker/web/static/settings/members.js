@@ -632,6 +632,11 @@ function memberEditor(root, draft) {
     }
     form.append(group);
   }
+  const assistantLimit = element("label", say("Assistant messages per day", "Messages Assistant par jour"), "settings-field");
+  const daily = element("input"); daily.type = "number"; daily.min = "0"; daily.max = "10000";
+  daily.value = String(draft.caps.assistant_per_day ?? 20); daily.disabled = mine;
+  daily.oninput = () => { draft.caps.assistant_per_day = Number(daily.value); };
+  assistantLimit.append(daily); form.append(assistantLimit);
   const locked = element("fieldset", undefined, "member-locked");
   locked.append(
     element("legend", say("The owner's alone", "Réservé au propriétaire")),

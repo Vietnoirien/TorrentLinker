@@ -52,6 +52,7 @@ const pages = {
     "Play videos and music from your Library Folders.",
     "Lisez les vidéos et la musique de vos dossiers de bibliothèque.",
   ],
+  "member-assistant": ["Assistant", "Assistant", "Your private discussions and permitted tools.", "Vos discussions privées et vos outils autorisés."],
   "member-search": ["Search", "Recherche", "Search the tracker and request a film.", "Consultez le tracker et demandez un film."],
   "member-queue": ["My queue", "Ma file", "Your accepted Requests.", "Vos demandes acceptées."],
   "member-torrents": ["My downloads", "Mes téléchargements", "Downloads from your accepted Requests.", "Les téléchargements de vos demandes acceptées."],

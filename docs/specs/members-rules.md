@@ -183,3 +183,12 @@ stay in the history as "ancien membre". Pending Requests are cancelled first.
 
 - The real measure of the Assistant's cap for Members.
 - Members on the desktop application.
+
+In code (#138), `/api/member-assistant` owns account-scoped conversations and daily message
+usage in `accounts.sqlite`. The Member selects no provider and sees no provider settings.
+The configured Owner chat provider receives only that Member's recent conversation and a
+fixed tool list: visible Media, permitted tracker film search, and Requests. Permissions
+are rechecked before each tool call; downloads never go directly to a Torrent Client.
+The cap reserves a message atomically and resets by the server's local calendar date.
+Deleting the account cascades to its Assistant history and usage. The Owner's Assistant
+routes, schedules, MCP tools and conversation store remain Owner-only.

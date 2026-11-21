@@ -632,3 +632,56 @@ def test_member_search_can_request_but_cannot_download_directly(tmp_path):
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_member_assistant_shows_private_chat_and_daily_limit(tmp_path, monkeypatch):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_members_assistant import configured
+    from torrentlinker.accounts import Caps, Permission
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
+    )
+    lea = app.state.accounts.create(
+        "Lea", "lea", {Permission.ASSISTANT}, password="lea-password-long"
+    )
+    app.state.accounts.set_caps(lea, Caps(assistant_per_day=1))
+    configured(app, monkeypatch)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page()
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_label("Sign-in name").fill("lea")
+                page.get_by_label("Password", exact=True).fill("lea-password-long")
+                page.locator("#login-form button.primary").click()
+                shell_navigate(page, "member-assistant")
+                page.get_by_label("Message", exact=True).fill("Hello")
+                page.get_by_role("button", name="Send", exact=True).click()
+                expect(page.get_by_text("Hello Member", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="Send", exact=True)).to_be_disabled()
+                expect(
+                    page.get_by_text("0 of 1 messages left today. Resets at server midnight.")
+                ).to_be_visible()
+                expect(page.get_by_role("button", name="Providers", exact=True)).to_have_count(0)
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

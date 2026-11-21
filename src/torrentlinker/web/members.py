@@ -24,6 +24,7 @@ from torrentlinker.web.permissions import Audience, needs
 
 
 class MemberCaps(BaseModel):
+    assistant_per_day: int = Field(default=20, ge=0, le=10_000)
     requests_per_week: int | None = Field(default=None, ge=0, le=10_000)
     bytes_per_week: int | None = Field(default=None, ge=0, le=10**15)
     pending: int | None = Field(default=None, ge=0, le=10_000)
@@ -148,10 +149,10 @@ def member_routes(
             raise PermissionError("You cannot show a Library Folder you do not see.")
 
     def caps(body: Member, account: str) -> Caps:
-        kept = accounts.caps(account).assistant_per_day
+        kept = body.caps.assistant_per_day
         if Permission.REQUEST not in body.permissions:
             return Caps(assistant_per_day=kept)  # caps need the Request Permission
-        return Caps(**body.caps.model_dump(), assistant_per_day=kept)
+        return Caps(**body.caps.model_dump())
 
     @app.get("/api/members")
     @needs(Permission.MANAGE_MEMBERS)
