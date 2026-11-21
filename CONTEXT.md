@@ -191,3 +191,25 @@ _Avoid_: Admin, moderator
 **Age Rating**:
 The minimum viewing age of a film or series on the French scale (Tous publics, −10, −12, −16, −18), from its metadata or set by the Owner or a Member allowed to edit it; a rating from another country is mapped to this scale. A Member's or Viewer's limit hides what is rated above it, and what has no rating yet.
 _Avoid_: Certification, PEGI, parental rating
+
+### Community Site
+
+**Community Site**:
+The project's own site on `torrentlinker.fr`, run by the project's maintainer: a public showcase that never names the tracker, and, for Site Accounts, Community Items and a forum.
+_Avoid_: Community (the tracker's community page in the app), website, portal
+
+**Site Account**:
+A person's account on the Community Site, created only from a Linked App that is signed in to the tracker; one per tracker account.
+_Avoid_: Member (a person on one TorrentLinker server), user
+
+**Linked App**:
+A TorrentLinker installation its Owner linked to their Site Account with a device code; it shares and imports Community Items and vouches for tracker membership.
+_Avoid_: Paired app (the companion extension pairs), client
+
+**Community Item**:
+Something a Site Account shares for others to import: a Pre-roll, an RSS preset, a ReleaseScore profile or an Assistant prompt; reviewed before publishing, versioned, rated and commented.
+_Avoid_: Upload (a tracker Upload), plugin, asset
+
+**Pre-roll**:
+A short video Médias plays before a film or episode, chosen from local and community clips by sequences, schedules and rules.
+_Avoid_: Intro (a film's own opening), trailer (one kind of Pre-roll)
