@@ -18,7 +18,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from torrentlinker import age_ratings
-from torrentlinker.accounts import MEDIA, OWNER, PICKING, Accounts, Actor, Permission
+from torrentlinker.accounts import (
+    MEDIA,
+    OWNER,
+    PICKING,
+    Accounts,
+    Actor,
+    Permission,
+    narrowest,
+)
 from torrentlinker.web.members import NewLink, shared_link
 from torrentlinker.web.permissions import Audience, needs
 from torrentlinker.web.security import Throttle
@@ -176,6 +184,34 @@ def household_routes(
         # Every session and Shared Screen ended; this browser stays signed in.
         return signed_in(found.account)
 
+    def may_view(
+        editor: Actor, holder: str, before: dict | None, body: Viewer, *, own: bool
+    ) -> None:
+        """A manager never gives a Viewer more than they see themselves: no Permission they
+        lack, no Age Rating above their limit, no Library Folder they do not see."""
+        if own or editor.owner:
+            return
+        was = set(before["permissions"]) if before else set()
+        if any(not editor.holds(Permission(p)) for p in set(body.permissions) - was):
+            raise PermissionError("You cannot grant or remove a Permission you do not hold.")
+        base, folders = accounts.media_limits(holder)
+        wanted = narrowest(base, rank(body.age_limit))
+        widened_age = before is None or (
+            before["age_limit"] is not None and (wanted is None or wanted > before["age_limit"])
+        )
+        if (
+            editor.age_limit is not None
+            and widened_age
+            and (wanted is None or wanted > editor.age_limit)
+        ):
+            raise PermissionError("You cannot allow a higher Age Rating than your own.")
+        if (
+            (widened_age or bool(set(body.permissions) - was))
+            and editor.folders is not None
+            and (folders is None or not set(folders) <= editor.folders)
+        ):
+            raise PermissionError("You cannot show a Library Folder you do not see.")
+
     def viewer_routes(prefix: str, holder: Callable[[Request, str], str]) -> None:
         """The same Viewer routes for one's own account and, for a manager, another's."""
 
@@ -183,6 +219,9 @@ def household_routes(
         @needs(Audience.ACCOUNT_HOLDER if prefix == "/api/account" else Permission.MANAGE_MEMBERS)
         def add(body: Viewer, request: Request, account: str = "") -> dict:
             owner_of = holder(request, account)
+            answer(
+                lambda: may_view(actor(request), owner_of, None, body, own=prefix == "/api/account")
+            )
             answer(
                 lambda: accounts.add_viewer(
                     owner_of, body.name, body.permissions, rank(body.age_limit)
@@ -194,6 +233,15 @@ def household_routes(
         @needs(Audience.ACCOUNT_HOLDER if prefix == "/api/account" else Permission.MANAGE_MEMBERS)
         def edit(viewer: str, body: Viewer, request: Request, account: str = "") -> dict:
             owner_of = holder(request, account)
+            answer(
+                lambda: may_view(
+                    actor(request),
+                    owner_of,
+                    answer(lambda: accounts.viewer(owner_of, viewer)),
+                    body,
+                    own=prefix == "/api/account",
+                )
+            )
             answer(
                 lambda: accounts.update_viewer(
                     owner_of, viewer, body.name, body.permissions, rank(body.age_limit)

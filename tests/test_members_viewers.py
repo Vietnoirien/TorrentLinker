@@ -223,3 +223,33 @@ def test_a_manager_reaches_members_but_not_the_owners_profiles(server):
         ).status_code
         == 403
     )
+
+
+def test_a_manager_cannot_widen_a_viewer_past_their_own_limits(server):
+    app, browser = server
+    accounts = app.state.accounts
+    manager = member(app, "manager", Permission.MANAGE_MEMBERS, *FAMILY)
+    lea = member(app, "lea", *FAMILY)
+    accounts.set_media_limits(manager, "12", ["/films"])
+    accounts.set_media_limits(lea, None, ["/films"])
+    accounts.set_pin(lea, "", "1234")
+    browser.post("/api/login", json={"login": "manager", "password": PASSWORD})
+    prefix = f"/api/members/{lea}/viewers"
+    body = {"name": "Child", "permissions": ["films"], "age_limit": "16"}
+    assert browser.post(prefix + "/new", json=body).status_code == 403
+    body["age_limit"] = "12"
+    assert browser.post(prefix + "/new", json=body).status_code == 200
+    viewer = next(p for p in accounts.profiles(lea) if not p["holder"])["id"]
+    body["age_limit"] = None
+    assert browser.post(prefix + f"/{viewer}", json=body).status_code == 403
+    body["age_limit"] = "12"
+    body["permissions"] = ["films", "music"]
+    assert browser.post(prefix + f"/{viewer}", json=body).status_code == 403
+    # A different folder scope must also prevent widening an existing Viewer.
+    accounts.set_media_limits(lea, None, ["/private"])
+    body["permissions"] = ["films", "series"]
+    assert browser.post(prefix + f"/{viewer}", json=body).status_code == 403
+    body["permissions"] = ["films"]
+    body["age_limit"] = "10"
+    assert browser.post(prefix + f"/{viewer}", json=body).status_code == 200
+    assert browser.post(prefix + "/new", json=body).status_code == 403
