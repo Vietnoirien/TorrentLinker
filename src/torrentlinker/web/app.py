@@ -34,11 +34,13 @@ from torrentlinker.accounts import (
 from torrentlinker.clients import connect
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
+from torrentlinker.member_requests import Requests
 from torrentlinker.torrent_management import peer_count_order, tracker_group
 from torrentlinker.updates import check_for_update, installed_version
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
+from torrentlinker.web.member_requests import request_routes
 from torrentlinker.web.members import member_routes
 from torrentlinker.web.operations import DownloadFolderRequired, JobRequest, Operations
 from torrentlinker.web.permissions import Audience, allowed, needs, public
@@ -340,7 +342,17 @@ def create_app(
         session_cookie(response, accounts.open_session(account), SESSION_IDLE)
         return response
 
-    member_routes(app, accounts, agent_service.media, proxy=sessions is None, signed_in=signed_in)
+    requests = Requests(accounts)
+    member_routes(
+        app,
+        accounts,
+        agent_service.media,
+        proxy=sessions is None,
+        signed_in=signed_in,
+        requests=requests,
+    )
+    request_routes(app, requests, agent_service.media)
+    app.state.requests = requests
     app.state.reset_clients = reset_clients
     app.state.accounts = accounts
     app.state.sessions = sessions

@@ -47,7 +47,8 @@ the path values allowed (`action={...}`). The middleware checks it on `/api/*` a
 A row below is declared by the issue that makes its handler answer for the actor (#131 Media
 with visibility and per-person progress, #133 and #134 Requests, #137 Search, queue and
 torrents, #138 the Assistant); until then the route stays Owner-only. Today the "nothing",
-"signed in", `/api/members*` and Media rows are declared (the Media chat waits for #138). In
+"signed in", `/api/members*`, Media rows and the Member's Requests rows (#133: listing their
+own, sending, cancelling, Wishes) are declared (the Media chat waits for #138). In
 code (#131) a Member's age limit and Library Folders live in `media_limits` in
 `accounts.sqlite` (no row: no limit, every folder); the limit applies to videos, music having
 no Age Rating. Tracker rows are unrated films: a Member sees them with the Films Permission
@@ -101,6 +102,13 @@ accepted Request) or refuses it.
 - **Cancelling.** The Member may cancel while pending.
 - **Available.** When the release's item appears in Médias, the Request becomes
   `available` and the Member is told.
+
+In code (#133) Requests and Wishes are `requests`, with their timeline in `request_events`, in
+`accounts.sqlite` (`torrentlinker/member_requests.py`), with no foreign key so they outlive
+their Member. A cap refusal answers 409 with the `cap` reached (`count`, `size`, `pending`)
+and the `reset`; a pending Wish counts toward the week and the pending cap, with no size. An
+answer the Member has not seen is `unread` until the drawer opens (`POST /api/requests/seen`).
+The Owner has no display name, so the button reads "Demander au propriétaire".
 
 ## Sessions and sign-in
 

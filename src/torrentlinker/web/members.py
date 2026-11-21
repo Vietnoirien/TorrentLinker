@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from torrentlinker import age_ratings
 from torrentlinker.accounts import OWNER, Accounts, Actor, Caps, Permission
+from torrentlinker.member_requests import Requests
 from torrentlinker.web.permissions import Audience, needs
 
 
@@ -91,6 +92,7 @@ def member_routes(
     *,
     proxy: bool,
     signed_in: Callable[[str], JSONResponse],
+    requests: Requests,
 ) -> None:
     def actor(request: Request) -> Actor:
         return request.state.actor
@@ -328,6 +330,10 @@ def member_routes(
             raise HTTPException(403, "Ask another manager to disable or delete your account.")
         current(account)
         if action == "delete":
+            if not current(account)["disabled"]:
+                raise HTTPException(400, "Disable the Member before deleting them.")
+            # Their Requests stay in the history as "ancien membre"; pending ones end first.
+            requests.cancel_pending(account)
             answer(lambda: accounts.delete(account))
             media.forget_account(account)
             return {"ok": True}

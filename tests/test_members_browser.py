@@ -259,3 +259,98 @@ def test_a_member_has_medias_without_the_owners_tools(tmp_path):
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_a_member_asks_for_a_tracker_film_and_follows_it_in_the_bell(tmp_path):
+    """Members 6 (#133): "Ask the owner" on a tracker film, a Wish, and the bell's drawer."""
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.accounts import Caps, Permission
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    lea = app.state.accounts.create(
+        "Léa",
+        "lea",
+        {Permission.FILMS, Permission.REQUEST, Permission.WISH},
+        password="lea-password-long",
+    )
+    app.state.accounts.set_caps(lea, Caps(requests_per_week=3, bytes_per_week=100 * 10**9))
+    dune = "d" * 40
+    best = {"hash": dune, "name": "Dune.Part.Two.2024.1080p", "size": 7 * 10**9, "seeders": 80}
+    item = {
+        "id": "tracker-" + dune,
+        "kind": "video",
+        "title": "Dune",
+        "year": "2024",
+        "artwork_url": "",
+        "available": True,
+        "tracker": {**best, "score": 81, "color": "green", "published_at": None},
+    }
+    library = app.state.agent_service.media
+    library.tracker_rows = lambda *_: {
+        "tracker": {
+            "key": "tracker",
+            "title": "",
+            "filters": {"tracker": "tracker"},
+            "total": 1,
+            "rows": [item],
+            "state": "ready",
+        }
+    }
+    library.tracker_entry = lambda *_: {"facts": {"title": "Dune", "year": 2024}, "release": best}
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_label("Sign-in name").fill("lea")
+                page.get_by_label("Password", exact=True).fill("lea-password-long")
+                page.locator("#login-form button.primary").click()
+                page.wait_for_url("**#/media/video")
+                frame = page.frame_locator("#media-frame")
+                feature = frame.locator("#media-feature")
+                expect(feature.get_by_text("You have 3 Requests and 100 GB left")).to_be_visible()
+                feature.get_by_role("button", name="Ask the owner").click()
+                expect(feature.get_by_text("Pending", exact=True)).to_be_visible()
+                [asked] = app.state.requests.mine(lea)
+                assert asked["state"] == "pending" and asked["size"] == 7 * 10**9
+
+                frame.get_by_role("button", name="Make a wish").first.click()
+                dialog = frame.locator("#media-wish")
+                dialog.get_by_label("Title").fill("Ponyo")
+                dialog.get_by_role("button", name="Send the wish").click()
+                expect(dialog).to_be_hidden()
+
+                app.state.requests.move(asked["id"], "refused", "owner", "Already in 4K")
+                frame.locator("#media-requests-bell").evaluate(
+                    "bell => bell.ownerDocument.defaultView.requestsLoad()"
+                )
+                expect(frame.locator("#media-requests-bell b")).to_have_text("1")
+                frame.locator("#media-requests-bell").click()
+                drawer = frame.locator("#media-requests")
+                expect(drawer.get_by_text("« Already in 4K »")).to_be_visible()
+                expect(drawer.get_by_text("Wish · pending")).to_be_visible()
+                expect(frame.locator("#media-requests-bell b")).to_be_hidden()
+                drawer.get_by_role("button", name="Cancel the Request").click()
+                expect(drawer.get_by_text("Cancelled")).to_be_visible()
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

@@ -180,7 +180,8 @@ function mediaRenderFeature() {
   if (row.tracker) {
     // A film on c411, not in the library: its best release, and a way to queue it.
     copy.append(mediaTrackerRelease(row.tracker));
-    if (state.setup?.owner === false) { copy.append(actions); root.append(copy); return; }
+    // A Member asks instead (requests.js).
+    if (state.setup?.owner === false) { mediaRequestActions(row, copy, actions); root.append(copy); return; }
     const queue = button(say("Download", "Télécharger"), () => guard(async () => {
       queue.disabled = true;
       try {
@@ -289,6 +290,7 @@ function mediaRenderHome() {
     }
     header.append(heading, element("span", row.state && row.state !== "ready" ? "" : say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward);
     if (!row.filters?.tracker) header.append(all);
+    else if (row.key === "tracker" && typeof requestPermission === "function" && requestPermission("wish")) header.append(button(say("Make a wish", "Faire un vœu"), requestWishDialog, "quiet"));
     for (const item of row.rows) track.append(mediaRowCard(item, row, track));
     if (!row.rows.length && row.state) track.append(...mediaRowPlaceholder(row));
     section.append(header, track); root.append(section);
@@ -321,7 +323,8 @@ function mediaRowCard(item, row, track) {
   card.dataset.id = item.id;
   card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
   if (!item.tracker) card.ondblclick = () => guard(() => mediaStart([item.id]));
-  card.append(mediaArt(item), element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
+  const art = mediaArt(item); if (typeof mediaRequestBadge === "function") mediaRequestBadge(item, art);
+  card.append(art, element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
   return card;
 }
 async function mediaRowMore(row, track) {

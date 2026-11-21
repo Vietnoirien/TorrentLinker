@@ -172,6 +172,11 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/media/playlists/{identifier}",
         "/api/media/sessions",
         "/api/media/sessions/{identifier}",
+        # Requests and Wishes, the Member's side (#133).
+        "/api/requests",
+        "/api/requests/seen",
+        "/api/requests/{identifier}/cancel",
+        "/api/wishes",
     }
 
 

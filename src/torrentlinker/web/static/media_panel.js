@@ -15,7 +15,7 @@ function mediaEnvironment(){
   if(active)mediaFrame.style.height=`${Math.max(300,innerHeight-mediaFrame.getBoundingClientRect().top-20)}px`;
   // Restored queues can contain uncached tracks; the server validates every saved item.
   const music=media.queue.every(id=>{const row=mediaItems.get(id);return !row||row.kind==="music"});
-  mediaFrame.contentWindow?.postMessage({type:"media-environment",value:{mode:"web",active,kind:media.kind,view:media.view,queue:[...media.queue],queue_client:media.playerClient||mediaClient(),queue_music:music,player_clearance:$("media-player-shell").hidden?0:$("media-player-shell").getBoundingClientRect().height,chat_open:media.chat,center_mode:document.body.classList.contains("media-center-mode"),clients:(state.setup?.clients||[]).filter(row=>row.enabled).map(row=>({id:row.id,name:row.name})),client_busy:!!shellState.clientBusy,revision:mediaRevision,language,theme:document.documentElement.dataset.theme||"dark",client_id:mediaClient(),adult_content:state.setup?.adult_content,owner:!signedInMember()}},location.origin);
+  mediaFrame.contentWindow?.postMessage({type:"media-environment",value:{mode:"web",active,kind:media.kind,view:media.view,queue:[...media.queue],queue_client:media.playerClient||mediaClient(),queue_music:music,player_clearance:$("media-player-shell").hidden?0:$("media-player-shell").getBoundingClientRect().height,chat_open:media.chat,center_mode:document.body.classList.contains("media-center-mode"),clients:(state.setup?.clients||[]).filter(row=>row.enabled).map(row=>({id:row.id,name:row.name})),client_busy:!!shellState.clientBusy,revision:mediaRevision,language,theme:document.documentElement.dataset.theme||"dark",client_id:mediaClient(),adult_content:state.setup?.adult_content,owner:!signedInMember(),permissions:state.actor?.permissions||[]}},location.origin);
 }
 window.addEventListener("message",async event=>{
   if(event.source!==mediaFrame.contentWindow||event.origin!==location.origin)return;
@@ -50,7 +50,7 @@ window.addEventListener("message",async event=>{
       if(mediaHorizonViews.includes(message.body.horizon)){media.horizon=message.body.horizon;try{localStorage.setItem("tl-media-horizon",media.horizon)}catch{}}
       value={layout:mediaLayoutValue(media.layout),horizon:mediaHorizonValue(media.horizon)};
     }else{
-      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
+      if(!/^(media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|requests(?:\?|\/seen$|\/[0-9a-f]{32}\/cancel$|$)|wishes$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
       let client=mediaClient();
       if(message.path==="media/playlists" && message.body.method==="POST"){
         const owner=media.playerClient||client;
