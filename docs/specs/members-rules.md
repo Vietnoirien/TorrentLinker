@@ -112,7 +112,9 @@ accepted Request) or refuses it.
   of #136). The error never says which field was wrong. A success clears both counts. The
   Owner signs in with no sign-in name and the startup password, under the same throttling.
 - Invitation links are single-use random tokens, stored hashed, valid 24 h, 3 or 7 days.
-  Password links work the same way. A Viewer's PIN is 4 to 8 digits, stored hashed, with
+  Password links work the same way. In code (#130) a token is derived from `accounts.key`, a
+  random key kept outside the database, so "Voir le lien" can show it again; it travels in
+  the URL's fragment (`join#…`) and never reaches a server log. Behind a proxy there are none. A Viewer's PIN is 4 to 8 digits, stored hashed, with
   its own throttling; a forgotten PIN is reset with the account's password.
 - The existing `X-TorrentLinker` header check, request size limits and security headers
   apply to every actor.

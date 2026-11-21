@@ -208,6 +208,59 @@ a {
   min-height: 1em;
   margin: 4px 0 0;
 }
+/* An invitation or password link: the form beside what is shared (join.html). */
+.welcome.wide {
+  max-width: 860px;
+}
+.join-form {
+  display: grid;
+  gap: 6px;
+}
+.join-form h2,
+.join-split h2 {
+  margin-top: 0;
+}
+.join-form label {
+  margin-top: 8px;
+}
+.join-form input {
+  width: 100%;
+}
+.join-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.join-split ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.join-split li {
+  margin: 4px 0;
+}
+.join-note {
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+  margin: 10px 0;
+}
+.join-strength {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.join-strength i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+}
+@media (max-width: 760px) {
+  .join-split {
+    grid-template-columns: 1fr;
+  }
+}
 .welcome .linkish {
   background: none;
   border: 0;

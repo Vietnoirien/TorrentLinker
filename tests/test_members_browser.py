@@ -105,3 +105,86 @@ def test_the_owner_creates_edits_and_disables_a_member_who_signs_in_by_name(tmp_
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_an_invitation_link_with_its_qr_code_lets_the_person_join(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_role("button", name="I am the owner").click()
+                page.get_by_label("Server password").fill("test-password-long")
+                page.locator("#login-form button.primary").click()
+                shell_navigate(page, "setup")
+                panel = page.frame_locator("#settings-frame")
+                panel.get_by_role("button", name="Users", exact=True).click()
+                panel.get_by_role("button", name="Invite someone").click()
+                dialog = panel.locator("dialog[open]")
+                dialog.get_by_label("Display name").fill("Karim")
+                dialog.get_by_label("Preset").select_option(label="Family")
+                dialog.get_by_label("Message (optional)").fill("Voici les films")
+                dialog.get_by_label("Link valid for").select_option(label="7 days")
+                dialog.get_by_role("button", name="Create the link").click()
+                expect(dialog.get_by_role("heading", name="Invitation for Karim")).to_be_visible()
+                expect(dialog.get_by_role("img", name="QR code of the link")).to_be_visible()
+                url = dialog.get_by_label("Invitation link").input_value()
+                assert "/join#" in url
+                dialog.get_by_role("button", name="Close").click()
+                card = panel.locator(".client-card", has=panel.get_by_role("heading", name="Karim"))
+                expect(card.get_by_text("Invitation sent, expires in 7 d · Family")).to_be_visible()
+                card.get_by_role("button", name="Show the link").click()
+                expect(panel.locator("dialog[open]").get_by_label("Invitation link")).to_have_value(
+                    url
+                )
+                panel.locator("dialog[open]").get_by_role("button", name="Close").click()
+
+                other = browser.new_context(locale="fr-FR").new_page()
+                other.on("pageerror", lambda error: errors.append(str(error)))
+                other.goto(url)
+                expect(
+                    other.get_by_role("heading", name="Le propriétaire vous invite")
+                ).to_be_visible()
+                expect(other.get_by_text("« Voici les films »")).to_be_visible()
+                expect(
+                    other.get_by_text("Demander des films, jusqu’à 5 par semaine")
+                ).to_be_visible()
+                join = other.get_by_role("button", name="Rejoindre")
+                other.get_by_label("Identifiant de connexion").fill("karim")
+                other.get_by_label("Mot de passe", exact=True).fill("karim-password")
+                other.get_by_label("Confirmer le mot de passe").fill("karim-passwor")
+                expect(other.get_by_text("Les deux mots de passe diffèrent.")).to_be_visible()
+                expect(join).to_be_disabled()
+                other.get_by_label("Confirmer le mot de passe").fill("karim-password")
+                join.click()
+                expect(other.get_by_role("heading", name="Bienvenue, Karim")).to_be_visible()
+                assert other.evaluate("fetch('api/shell').then(r => r.status)") == 200
+
+                other.goto("about:blank")
+                other.goto(url)
+                expect(other.get_by_role("heading", name="Ce lien a déjà servi")).to_be_visible()
+                assert app.state.accounts.verify("karim", "karim-password")
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

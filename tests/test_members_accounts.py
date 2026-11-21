@@ -147,6 +147,12 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/members",
         "/api/members/{account}",
         "/api/members/{account}/{action}",
+        "/api/members/invite",
+        "/api/members/{account}/link",
+        "/api/members/{account}/show-link",
+        "/api/members/{account}/cancel-link",
+        "/api/links/inspect",
+        "/api/links/redeem",
     }
 
 

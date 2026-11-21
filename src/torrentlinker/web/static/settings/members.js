@@ -167,6 +167,14 @@ function drawMembers(root) {
     ),
   );
   const actions = element("div", undefined, "settings-actions");
+  if (!data.proxy)
+    actions.append(
+      button(
+        say("Invite someone", "Inviter quelqu’un"),
+        () => linkDialog(root),
+        "primary",
+      ),
+    );
   actions.append(
     button(
       data.proxy
@@ -176,7 +184,7 @@ function drawMembers(root) {
             "Créer un compte avec mot de passe",
           ),
       () => createMember(root),
-      "primary",
+      data.proxy ? "primary" : "",
     ),
   );
   intro.append(actions);
@@ -253,13 +261,42 @@ function memberCard(root, member) {
     element("h3", member.name),
     element(
       "p",
-      `${member.disabled ? say("Disabled", "Désactivé") : say("Active", "Actif")} · ${memberPreset(member.permissions)}`,
+      `${memberStatus(member)} · ${memberPreset(member.permissions)}`,
       "muted",
     ),
   );
   const actions = element("div", undefined, "settings-actions");
   const mine = member.id === memberState.data.you;
-  if (!mine)
+  const open = member.link && !member.link.expired;
+  if (member.invited) {
+    actions.append(
+      button(
+        open
+          ? say("Show the link", "Voir le lien")
+          : say("New link", "Nouveau lien"),
+        () => (open ? showLink(member) : linkDialog(root, member)),
+      ),
+      button(
+        say("Cancel the invitation", "Annuler l’invitation"),
+        async () => {
+          if (
+            !confirm(
+              say(
+                `Cancel ${member.name}'s invitation? The link will stop working.`,
+                `Annuler l’invitation de ${member.name} ? Le lien ne fonctionnera plus.`,
+              ),
+            )
+          )
+            return;
+          await memberApi(`members/${member.id}/cancel-link`, {});
+          if (memberState.editing === member.id) memberState.editing = "";
+          toast(say("Invitation cancelled", "Invitation annulée"));
+          await settingsMembers(root);
+        },
+      ),
+    );
+  }
+  if (!mine && !member.invited)
     actions.append(
       button(
         member.disabled
@@ -360,12 +397,17 @@ function memberEditor(root, draft) {
     draft.name,
     (v) => (draft.name = v),
   );
-  memberField(
+  const login = memberField(
     fields,
     say("Sign-in name", "Identifiant de connexion"),
     draft.login,
     (v) => (draft.login = v),
   );
+  if (draft.invited)
+    login.placeholder = say(
+      "chosen with the invitation",
+      "choisi à l’invitation",
+    );
   memberField(
     fields,
     say(
@@ -378,7 +420,7 @@ function memberEditor(root, draft) {
     "Remote-User, e.g. lea@family",
     "Remote-User, ex. lea@famille",
   );
-  if (!data.proxy)
+  if (!data.proxy && !draft.invited)
     memberField(
       fields,
       say("New password (optional)", "Nouveau mot de passe (facultatif)"),
@@ -418,6 +460,15 @@ function memberEditor(root, draft) {
   preset.append(choice);
   fields.append(preset);
   account.append(fields);
+  if (!data.proxy && !draft.invited) {
+    const links = element("div", undefined, "settings-actions");
+    links.append(
+      button(say("Send a password link", "Envoyer un lien de mot de passe"), () =>
+        linkDialog(root, draft),
+      ),
+    );
+    account.append(links);
+  }
   form.append(account);
 
   const [media, ...others] = memberGroups();
@@ -630,4 +681,267 @@ function createMember(root) {
   dialog.onclose = () => dialog.remove();
   document.body.append(dialog);
   dialog.showModal();
+}
+
+function memberStatus(member) {
+  if (member.disabled) return say("Disabled", "Désactivé");
+  if (!member.invited) return say("Active", "Actif");
+  if (!member.link || member.link.expired)
+    return say("Invitation expired", "Invitation expirée");
+  const days = Math.max(
+    1,
+    Math.round((member.link.expires * 1000 - Date.now()) / 86400e3),
+  );
+  return say(
+    `Invitation sent, expires in ${days} d`,
+    `Invitation envoyée, expire dans ${days} j`,
+  );
+}
+// The address the Web UI is opened at: this panel lives under static/settings/.
+const memberBase = () => new URL("../../", location.href).href;
+function memberDialog() {
+  const dialog = element("dialog", undefined, "assistant-dialog");
+  dialog.onclose = () => dialog.remove();
+  document.body.append(dialog);
+  return dialog;
+}
+// "Inviter quelqu'un", a new invitation for `member`, or a password link for them.
+function linkDialog(root, member) {
+  const data = memberState.data;
+  const dialog = memberDialog();
+  const form = element("form");
+  form.method = "dialog";
+  const value = { name: "", note: "", preset: "viewer", days: "3" };
+  const invite = !member;
+  form.append(
+    element(
+      "h2",
+      invite
+        ? say("Invite someone", "Inviter quelqu’un")
+        : member.invited
+          ? say(`New invitation for ${member.name}`, `Nouvelle invitation pour ${member.name}`)
+          : say(`Password link for ${member.name}`, `Lien de mot de passe pour ${member.name}`),
+    ),
+  );
+  if (invite) {
+    memberField(
+      form,
+      say("Display name", "Nom affiché"),
+      "",
+      (v) => (value.name = v),
+    ).required = true;
+    const preset = element(
+      "label",
+      say("Preset", "Préréglage"),
+      "settings-field",
+    );
+    const choice = element("select");
+    for (const [key, [label, granted]] of Object.entries(memberPresets())) {
+      if (granted.some((p) => !data.grantable.includes(p))) continue;
+      const option = element("option", label);
+      option.value = key;
+      choice.append(option);
+    }
+    value.preset = choice.value;
+    choice.onchange = () => (value.preset = choice.value);
+    preset.append(choice);
+    form.append(preset);
+    memberField(
+      form,
+      say("Message (optional)", "Message (facultatif)"),
+      "",
+      (v) => (value.note = v),
+    ).maxLength = 500;
+  }
+  const validity = element(
+    "label",
+    say("Link valid for", "Validité du lien"),
+    "settings-field",
+  );
+  const days = element("select");
+  for (const [amount, label] of [
+    ["3", say("3 days", "3 jours")],
+    ["7", say("7 days", "7 jours")],
+    ["1", say("24 hours", "24 heures")],
+  ]) {
+    const option = element("option", label);
+    option.value = amount;
+    days.append(option);
+  }
+  days.onchange = () => (value.days = days.value);
+  validity.append(days);
+  form.append(
+    validity,
+    element(
+      "p",
+      invite || member.invited
+        ? say(
+            "The link and its QR code show once created; the person chooses their password.",
+            "Le lien et son QR code s’affichent après création ; la personne choisit son mot de passe.",
+          )
+        : say(
+            "Their current password keeps working until the link is used; then their sessions end.",
+            "Son mot de passe actuel reste valable jusqu’à l’utilisation du lien ; ses sessions se terminent alors.",
+          ),
+      "muted",
+    ),
+  );
+  const actions = element("div", undefined, "settings-actions");
+  const create = element(
+    "button",
+    say("Create the link", "Créer le lien"),
+    "primary",
+  );
+  create.type = "submit";
+  const cancel = element("button", say("Cancel", "Annuler"));
+  cancel.type = "button";
+  cancel.onclick = () => dialog.close();
+  actions.append(create, cancel);
+  form.append(actions);
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    guard(async () => {
+      const base = memberBase();
+      let answer;
+      if (invite) {
+        const [, permissions, caps] = memberPresets()[value.preset] || [, [], {}];
+        answer = await memberApi("members/invite", {
+          name: value.name,
+          note: value.note,
+          permissions,
+          caps,
+          days: Number(value.days),
+          base,
+        });
+      } else
+        answer = await memberApi(`members/${member.id}/link`, {
+          days: Number(value.days),
+          base,
+        });
+      await settingsMembers(root);
+      linkResult(dialog, answer.member, answer.link);
+    });
+  };
+  dialog.append(form);
+  dialog.showModal();
+}
+async function showLink(member) {
+  const answer = await memberApi(`members/${member.id}/show-link`, {
+    base: memberBase(),
+  });
+  const dialog = memberDialog();
+  linkResult(dialog, member, answer.link);
+  dialog.showModal();
+}
+// The QR code the server encoded, one row of modules per string, drawn as one SVG path.
+function memberQr(rows) {
+  const svg = "http://www.w3.org/2000/svg";
+  const size = rows.length;
+  const picture = document.createElementNS(svg, "svg");
+  picture.setAttribute("viewBox", `-4 -4 ${size + 8} ${size + 8}`);
+  picture.setAttribute("role", "img");
+  picture.setAttribute("aria-label", say("QR code of the link", "QR code du lien"));
+  picture.classList.add("member-qr");
+  const path = document.createElementNS(svg, "path");
+  path.setAttribute(
+    "d",
+    rows
+      .flatMap((row, y) =>
+        [...row].flatMap((on, x) => (on === "1" ? [`M${x} ${y}h1v1h-1z`] : [])),
+      )
+      .join(""),
+  );
+  picture.append(path);
+  return picture;
+}
+function linkResult(dialog, member, link) {
+  const invite = link.kind === "invite";
+  const form = element("form");
+  form.method = "dialog";
+  form.append(
+    element(
+      "h2",
+      invite
+        ? say(`Invitation for ${member.name}`, `Invitation pour ${member.name}`)
+        : say(`Password link for ${member.name}`, `Lien de mot de passe pour ${member.name}`),
+    ),
+    element(
+      "p",
+      invite
+        ? say(
+            `Send this link, or scan the QR code from a phone or a TV. It works once; ${member.name} chooses a sign-in name and password there.`,
+            `Envoyez ce lien, ou faites scanner le QR code depuis un téléphone ou une télé. Il ne sert qu’une fois ; ${member.name} y choisit son identifiant et son mot de passe.`,
+          )
+        : say(
+            `Send this link, or scan the QR code. It works once; ${member.name} chooses a new password there.`,
+            `Envoyez ce lien, ou faites scanner le QR code. Il ne sert qu’une fois ; ${member.name} y choisit un nouveau mot de passe.`,
+          ),
+      "muted",
+    ),
+  );
+  const row = element("div", undefined, "member-link");
+  const side = element("div", undefined, "member-link-side");
+  const label = element(
+    "label",
+    invite ? say("Invitation link", "Lien d’invitation") : say("Password link", "Lien de mot de passe"),
+    "settings-field",
+  );
+  const url = element("input");
+  url.readOnly = true;
+  url.value = link.url;
+  label.append(url);
+  const copy = element("button", say("Copy the link", "Copier le lien"), "primary");
+  copy.type = "button";
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(link.url);
+    } catch {
+      url.select();
+      document.execCommand("copy");
+    }
+    copy.textContent = say("Copied", "Copié");
+    toast(say("Link copied", "Lien copié"));
+  };
+  const copying = element("div", undefined, "settings-actions");
+  copying.append(copy);
+  const until = new Date(link.expires * 1000).toLocaleString(
+    say("en-GB", "fr-FR"),
+    { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" },
+  );
+  side.append(
+    label,
+    copying,
+    element(
+      "small",
+      `${say("Valid until", "Valable jusqu’au")} ${until} · ${say("preset", "préréglage")} ${memberPreset(member.permissions)}`,
+    ),
+  );
+  row.append(memberQr(link.qr), side);
+  form.append(row);
+  const mail = element("div", undefined, "file-access-note");
+  const email = element(
+    "label",
+    say("Send by email", "Envoyer par e-mail"),
+    "settings-field",
+  );
+  const address = element("input");
+  address.type = "email";
+  address.disabled = true;
+  email.append(address);
+  mail.append(
+    email,
+    element(
+      "small",
+      say(
+        "Set up email sending first in Settings → Notifications (SMTP or OVHcloud MX Plan).",
+        "Configurez d’abord l’envoi d’e-mails dans Paramètres → Notifications (SMTP ou MX Plan d’OVHcloud).",
+      ),
+    ),
+  );
+  const actions = element("div", undefined, "settings-actions");
+  const close = element("button", say("Close", "Fermer"));
+  close.value = "close";
+  actions.append(close);
+  form.append(mail, actions);
+  dialog.replaceChildren(form);
 }

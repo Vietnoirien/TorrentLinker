@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
+import os
 import secrets
 import sqlite3
 import threading
@@ -15,6 +18,7 @@ from uuid import uuid4
 
 OWNER = "owner"  # the fixed account of the Owner; never restricted, edited or deleted
 SESSION_IDLE = 30 * 86400  # a Member's session ends after 30 days of disuse
+LINK_DAYS = (1, 3, 7)  # an invitation or password link is valid 24 h, 3 or 7 days
 
 
 class Permission(StrEnum):
@@ -98,11 +102,18 @@ class Accounts:
                     account TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
                     created REAL NOT NULL, used REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS links (
+                    digest TEXT PRIMARY KEY,
+                    account TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL, inviter TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+                    created REAL NOT NULL, expires REAL NOT NULL, used REAL
+                );
             """)
             self.db.execute(
                 "INSERT OR IGNORE INTO accounts (id, name, created) VALUES (?, 'Owner', ?)",
                 (OWNER, time.time()),
             )
+        self.link_key = private_key(directory / "accounts.key")
 
     def close(self) -> None:
         self.db.close()
@@ -134,6 +145,8 @@ class Accounts:
         proxy_user: str = "",
     ) -> str:
         """Add a Member with these Permissions, signing in with this password or proxy name."""
+        if not login.strip():
+            raise ValueError("Give the Member a display name and a sign-in name.")
         identifier = uuid4().hex
         with self.lock, self.db:
             self.db.execute(
@@ -155,13 +168,19 @@ class Accounts:
 
     def _identify(self, account: str, name: str, login: str, proxy_user: str) -> None:
         name, login = name.strip(), login.strip()
-        if not name or not login or len(name) > 100 or len(login) > 100:
+        if not login and self._invited(account):
+            login = ""  # the invited person chooses it with their link
+        elif not login:
+            raise ValueError("Give the Member a display name and a sign-in name.")
+        if not name or len(name) > 100 or len(login) > 100:
             raise ValueError("Give the Member a display name and a sign-in name.")
         if self.db.execute(
             "SELECT 1 FROM accounts WHERE login=? COLLATE NOCASE AND id<>?", (login, account)
         ).fetchone():
             raise ValueError("This sign-in name is already used.")
-        self.db.execute("UPDATE accounts SET name=?, login=? WHERE id=?", (name, login, account))
+        self.db.execute(
+            "UPDATE accounts SET name=?, login=? WHERE id=?", (name, login or None, account)
+        )
         self._proxy_user(account, proxy_user)
 
     def set_proxy_user(self, account: str, proxy_user: str) -> None:
@@ -207,6 +226,7 @@ class Accounts:
                 "SELECT * FROM accounts WHERE id<>? ORDER BY name COLLATE NOCASE", (OWNER,)
             ).fetchall()
             granted = self.db.execute("SELECT * FROM permissions").fetchall()
+            links = {r["account"]: r for r in self._open_links()}
         known = {p.value for p in Permission}
         return [
             {
@@ -222,6 +242,16 @@ class Accounts:
                     if g["account"] == r["id"] and g["permission"] in known
                 ),
                 "caps": vars(self.caps(r["id"])),
+                "invited": not r["login"] and not r["password"],
+                "link": (
+                    {
+                        "kind": links[r["id"]]["kind"],
+                        "expires": links[r["id"]]["expires"],
+                        "expired": links[r["id"]]["expires"] < time.time(),
+                    }
+                    if r["id"] in links
+                    else None
+                ),
             }
             for r in rows
         ]
@@ -235,6 +265,8 @@ class Accounts:
         """Change a Member's password; every session of the account ends."""
         with self.lock, self.db:
             self._member(account)
+            if self._invited(account):
+                raise ValueError("This Member chooses a sign-in name with their invitation first.")
             self._password(account, password)
             self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
 
@@ -345,6 +377,156 @@ class Accounts:
                 (account, *values, caps.assistant_per_day),
             )
 
+    def invite(
+        self,
+        name: str,
+        permissions: Iterable[Permission],
+        caps: Caps,
+        *,
+        days: int,
+        inviter: str,
+        note: str = "",
+    ) -> tuple[str, str]:
+        """Add a Member who chooses their sign-in name and password with a one-time link."""
+        identifier = uuid4().hex
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT INTO accounts (id, name, created) VALUES (?,'',?)",
+                (identifier, time.time()),
+            )
+            self._identify(identifier, name, "", "")
+            self.db.execute("INSERT INTO caps (account) VALUES (?)", (identifier,))
+            self._grant(identifier, permissions)
+            token = self._link(identifier, "invite", days, inviter, note)
+        self.set_caps(identifier, caps)
+        return identifier, token
+
+    def password_link(self, account: str, *, days: int, inviter: str) -> str:
+        """A one-time link to choose a new password; an invited Member gets a new invitation."""
+        with self.lock, self.db:
+            self._member(account)
+            kind = "invite" if self._invited(account) else "password"
+            note = self.db.execute(
+                "SELECT note FROM links WHERE account=? ORDER BY created DESC", (account,)
+            ).fetchone()
+            return self._link(account, kind, days, inviter, note["note"] if note else "")
+
+    def _link(self, account: str, kind: str, days: int, inviter: str, note: str) -> str:
+        if days not in LINK_DAYS:
+            raise ValueError("A link is valid 24 hours, 3 or 7 days.")
+        if len(note) > 500:
+            raise ValueError("Keep the message under 500 characters.")
+        # One open link per account: a new one replaces the one before.
+        self.db.execute("DELETE FROM links WHERE account=? AND used IS NULL", (account,))
+        created = time.time()
+        token = self._token(account, kind, created)
+        self.db.execute(
+            "INSERT INTO links VALUES (?,?,?,?,?,?,?,NULL)",
+            (digest(token), account, kind, inviter, note.strip(), created, created + days * 86400),
+        )
+        return token
+
+    def _token(self, account: str, kind: str, created: float) -> str:
+        """Derived from a key kept outside the database, which stores only its hash, so the
+        open link can be shown again ("Voir le lien") and a copied database opens none."""
+        mac = hmac.new(self.link_key, f"{account}|{kind}|{created!r}".encode(), "sha256")
+        return base64.urlsafe_b64encode(mac.digest()).rstrip(b"=").decode()
+
+    def _open_links(self) -> list[sqlite3.Row]:
+        return self.db.execute("SELECT * FROM links WHERE used IS NULL").fetchall()
+
+    def open_link(self, account: str) -> tuple[str, dict] | None:
+        """The account's open link again, with its kind and expiry, while it is valid."""
+        with self.lock:
+            self._member(account)
+            row = self.db.execute(
+                "SELECT * FROM links WHERE account=? AND used IS NULL AND expires>?",
+                (account, time.time()),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._token(account, row["kind"], row["created"]), {
+            "kind": row["kind"],
+            "expires": row["expires"],
+        }
+
+    def cancel_link(self, account: str) -> bool:
+        """Close the account's open link; an invited Member who never joined goes with it.
+        True when the account was removed."""
+        with self.lock, self.db:
+            self._member(account)
+            self.db.execute("DELETE FROM links WHERE account=? AND used IS NULL", (account,))
+            if self._invited(account):
+                self.db.execute("DELETE FROM accounts WHERE id=?", (account,))
+                return True
+        return False
+
+    def link(self, token: str) -> dict | None:
+        """What a link opens: its kind and state (valid, expired or used), and for a valid one
+        the account and what it is shared."""
+        with self.lock:
+            row = self.db.execute(
+                "SELECT links.*, accounts.name, accounts.login, accounts.disabled "
+                "FROM links JOIN accounts ON accounts.id=links.account WHERE digest=?",
+                (digest(token),),
+            ).fetchone()
+            if row is None:
+                return None
+            inviter = self.db.execute(
+                "SELECT name FROM accounts WHERE id=? AND id<>?", (row["inviter"], OWNER)
+            ).fetchone()
+        state = (
+            "used"
+            if row["used"] is not None
+            else "expired"
+            if row["expires"] < time.time() or row["disabled"]
+            else "valid"
+        )
+        found: dict = {"kind": row["kind"], "state": state}
+        if state == "valid":
+            actor = self.actor(row["account"])
+            found |= {
+                "name": row["name"],
+                "login": row["login"] or "",
+                "inviter": inviter["name"] if inviter else "",
+                "note": row["note"],
+                "expires": row["expires"],
+                "permissions": sorted(actor.permissions) if actor else [],
+                "caps": vars(self.caps(row["account"])),
+            }
+        return found
+
+    def redeem(self, token: str, password: str, *, name: str = "", login: str = "") -> str:
+        """Use a valid link once: an invitation sets the sign-in name and password, a password
+        link the password, ending every session. The account, to sign in."""
+        with self.lock, self.db:
+            row = self.db.execute(
+                "SELECT links.account, links.kind FROM links "
+                "JOIN accounts ON accounts.id=links.account "
+                "WHERE digest=? AND used IS NULL AND expires>? AND disabled=0",
+                (digest(token), time.time()),
+            ).fetchone()
+            if row is None:
+                raise PermissionError("This link is no longer valid.")
+            account = row["account"]
+            if row["kind"] == "invite":
+                if not login.strip():
+                    raise ValueError("Choose a sign-in name.")
+                current = self.db.execute(
+                    "SELECT name FROM accounts WHERE id=?", (account,)
+                ).fetchone()
+                self._identify(account, name.strip() or current["name"], login, "")
+            self._password(account, password)
+            self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
+            self.db.execute("UPDATE links SET used=? WHERE digest=?", (time.time(), digest(token)))
+        return account
+
+    def _invited(self, account: str) -> bool:
+        row = self.db.execute(
+            "SELECT login, password FROM accounts WHERE id=?", (account,)
+        ).fetchone()
+        return row is not None and not row["login"] and not row["password"]
+
     def _member(self, account: str) -> None:
         if account == OWNER:
             raise PermissionError("The Owner's account cannot be restricted.")
@@ -354,6 +536,15 @@ class Accounts:
 
 def scrypt(password: str, salt: bytes) -> bytes:
     return hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
+
+
+def private_key(path: Path) -> bytes:
+    """A random key readable only by the server, created on first use."""
+    if not path.exists():
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as output:
+            output.write(secrets.token_bytes(32))
+    return path.read_bytes()
 
 
 def digest(token: str) -> str:

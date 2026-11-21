@@ -33,7 +33,7 @@ from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
 from torrentlinker.web.members import member_routes
 from torrentlinker.web.operations import DownloadFolderRequired, JobRequest, Operations
-from torrentlinker.web.permissions import Audience, allowed, needs
+from torrentlinker.web.permissions import Audience, allowed, needs, public
 from torrentlinker.web.security import (
     PROXY_USER_HEADER,
     ServerSecrets,
@@ -326,7 +326,13 @@ def create_app(
     from torrentlinker.web.media import media_routes
 
     media_routes(app, agent_service, assistant)
-    member_routes(app, accounts, agent_service.media, proxy=sessions is None)
+
+    def signed_in(account: str) -> JSONResponse:
+        response = JSONResponse({"ok": True})
+        session_cookie(response, accounts.open_session(account), SESSION_IDLE)
+        return response
+
+    member_routes(app, accounts, agent_service.media, proxy=sessions is None, signed_in=signed_in)
     app.state.reset_clients = reset_clients
     app.state.accounts = accounts
     app.state.sessions = sessions
@@ -369,7 +375,7 @@ def create_app(
                     return JSONResponse(
                         {"detail": "Browser request header required."}, status_code=403
                     )
-            if route != "/api/login":
+            if not public(app.router.routes, request.scope):
                 actor = actor_of(request)
                 if actor is None:
                     return sign_in_required(request)
@@ -1331,6 +1337,13 @@ def create_app(
     @needs(Audience.PUBLIC)
     def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/join")
+    @needs(Audience.PUBLIC)
+    def join() -> HTMLResponse:
+        # An invitation or password link, outside the app; its token stays in the fragment.
+        html = (assets / "join.html").read_text(encoding="utf-8")
+        return HTMLResponse(html.replace("{{ app_version }}", app_version))
 
     @app.get("/")
     @needs(Audience.PUBLIC)

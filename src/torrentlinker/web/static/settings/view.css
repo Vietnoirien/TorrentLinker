@@ -316,3 +316,25 @@ small,
 .member-danger {
   color: var(--danger);
 }
+
+/* An invitation or password link: its QR code beside the link to copy. */
+.member-link {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.member-link-side {
+  flex: 1;
+  min-width: 240px;
+  display: grid;
+  gap: 8px;
+}
+.member-qr {
+  width: 168px;
+  height: 168px;
+  background: #fff;
+  fill: #102a2b;
+  border-radius: 8px;
+}

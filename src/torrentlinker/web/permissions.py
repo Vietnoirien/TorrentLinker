@@ -82,3 +82,9 @@ def allowed(routes: Iterable[BaseRoute], scope: MutableMapping[str, Any], actor:
         return True
     need, path_params = declared(routes, scope)
     return need is not None and need.admits(actor, path_params)
+
+
+def public(routes: Iterable[BaseRoute], scope: MutableMapping[str, Any]) -> bool:
+    """Whether the route this request reaches answers without any sign-in."""
+    need, _ = declared(routes, scope)
+    return need is not None and Audience.PUBLIC in need.any_of
