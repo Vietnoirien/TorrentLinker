@@ -39,7 +39,7 @@ A Local Item that no Indexer torrent in the Torrent Client covers, even if a tor
 _Avoid_: Missing, unseeded
 
 **Indexer**:
-A Torznab endpoint (URL + API key) where Candidates are searched; c411 is the first one.
+A Torznab endpoint (URL + API key) where Candidates are searched, added by hand or imported from Prowlarr or Jackett; c411 is one of them.
 _Avoid_: Tracker (when meaning the search API), site
 
 **Candidate**:
@@ -63,7 +63,11 @@ _Avoid_: Client (alone, when the Indexer's API client could be meant), qBit (out
 **Reseed**:
 Adding a Match to the Torrent Client pointed at existing data, then verifying by hash check before seeding. The board and Local Items share a per-client layout choice: rename paths inside the torrent where supported, or preserve torrent paths with a persistent Link Folder. Clients that would rename original files on disk require links. Existing prepared layouts retain their choice (ADR-0021).
 The board requires every torrent file and verifies locally before the client's own check. Original files remain at their existing names and paths.
-_Avoid_: Inject, cross-seed, relink
+_Avoid_: Inject, relink
+
+**Cross-seed**:
+A Reseed of a torrent's data, or a Library Item's, onto another Indexer, found and added automatically: Full Matches and Partial Matches above a coverage threshold go in after Verification, the rest waits for review. Tagged `cross-seed` and the Indexer's name; independent of the original torrent.
+_Avoid_: Inject, hardlink seeding
 
 **Link Folder**:
 A dedicated folder outside Library Folders holding persistent symlink layouts for Reseeds. Each link points to an original file using the Torrent Client's path namespace. Keep these layouts for as long as their torrents remain in use; they are not temporary verification files.
