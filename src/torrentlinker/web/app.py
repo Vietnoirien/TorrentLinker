@@ -371,6 +371,9 @@ def create_app(
             requests=requests,
         )
         request_routes(app, requests, agent_service.media)
+        from torrentlinker.web.member_workspace import member_workspace_routes
+
+        member_workspace_routes(app, requests, app.state.request_approval, agent_service.media)
         household_routes(
             app,
             accounts,
@@ -421,6 +424,7 @@ def create_app(
                     "/api/links",
                     "/api/requests",
                     "/api/wishes",
+                    "/api/member-workspace",
                 )
             )
         ):
@@ -1082,6 +1086,9 @@ def create_app(
                 *(["media"] if any(actor.holds(p) for p in WATCH) else []),
                 "documentation",
                 *(["requests"] if actor.holds(Permission.APPROVE) else []),
+                *(["member-search"] if actor.holds(Permission.SEARCH) else []),
+                *(["member-queue"] if actor.holds(Permission.QUEUE) else []),
+                *(["member-torrents"] if actor.holds(Permission.TORRENTS) else []),
                 *(["setup"] if holder else []),
             ]
             viewer = actor.viewer not in ("", PICKING)

@@ -8,7 +8,7 @@ function requestNode(tag, text, cls) {
 }
 function requestBytes(value) { return value == null ? "?" : `${(value / 1024 ** 3).toFixed(1)} Go`; }
 function requestState(value) {
-  return ({pending: say("Pending", "En attente"), accepted: say("Sending", "Envoi"),
+  return ({complete: say("Complete", "Terminé"), pending: say("Pending", "En attente"), accepted: say("Sending", "Envoi"),
     sent: say("Sent", "Envoyée"), downloading: say("Downloading", "Téléchargement"),
     available: say("Available", "Disponible"), refused: say("Refused", "Refusée"),
     send_failed: say("Waiting to send", "En attente d’envoi"), cancelled: say("Cancelled", "Annulée"),

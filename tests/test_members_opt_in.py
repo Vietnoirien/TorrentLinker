@@ -58,6 +58,7 @@ def test_default_hides_routes_and_rejects_member_login(tmp_path):
                 "/api/links/inspect",
                 "/api/requests",
                 "/api/wishes",
+                "/api/member-workspace/search",
                 "/join",
             ):
                 assert browser.get(path).status_code == 404, path

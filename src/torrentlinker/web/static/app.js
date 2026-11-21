@@ -392,6 +392,7 @@ async function settingsSection(section, detail) {
 
 // Only workspace locations belong in the fragment. Form state and filters stay local.
 const viewTabs = {
+  "member-search": [], "member-queue": [], "member-torrents": [],
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [], requests: [],
@@ -488,6 +489,7 @@ async function navigate(view, section, detail) {
   if (view !== "setup") clearAgentToken();
   if (view === "documentation") await loadGuides();
   if (view === "requests") await loadRequests();
+  if (["member-search", "member-queue", "member-torrents"].includes(view)) await loadMemberWorkspace(view);
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
   if (view === "feeds") await loadFeeds();
@@ -831,6 +833,8 @@ function changeLanguage(value) {
   if (state.view === "jobs") renderJobs(displayedJobs);
   if (state.view === "zen") { guard(loadZenSeeding); planEnvironment(); if (profileState) showZenProfile(profileState); }
   if (state.view === "search") searchRetranslate();
+  if (state.view === "requests") renderRequests();
+  if (state.view?.startsWith("member-")) guard(() => loadMemberWorkspace(state.view));
   if (state.view === "upload") uploadEnvironment();
   if (state.view === "torrents") guard(loadTorrents);
   if (state.view === "media") { guard(loadMedia); mediaQueueRender(); }

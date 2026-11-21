@@ -566,3 +566,69 @@ def test_approver_accepts_a_request_and_sees_it_in_history(tmp_path):
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_member_search_can_request_but_cannot_download_directly(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.accounts import Permission
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
+    )
+    app.state.accounts.create(
+        "Lea",
+        "lea",
+        {Permission.FILMS, Permission.SEARCH, Permission.REQUEST, Permission.QUEUE},
+        password="lea-password-long",
+    )
+    app.state.request_approval.choices = lambda q: [
+        {"hash": "a" * 40, "name": "Example.2025", "size": 100, "score": 80}
+    ]
+    app.state.agent_service.media.tracker_entry = lambda client, infohash: {
+        "title": "Example",
+        "year": "2025",
+        "release": {"hash": "a" * 40, "name": "Example.2025", "size": 100},
+    }
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page()
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_label("Sign-in name").fill("lea")
+                page.get_by_label("Password", exact=True).fill("lea-password-long")
+                page.locator("#login-form button.primary").click()
+                shell_navigate(page, "member-search")
+                page.get_by_label("Film title").fill("Example")
+                page.locator("#view-member-search").get_by_role(
+                    "button", name="Search", exact=True
+                ).click()
+                expect(page.get_by_text("Example.2025", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="Download", exact=True)).to_have_count(0)
+                page.get_by_role("button", name="Request", exact=True).click()
+                expect(page.get_by_role("button", name="Requested", exact=True)).to_be_disabled()
+                assert len(app.state.requests.review()) == 1
+                shell_navigate(page, "member-queue")
+                expect(
+                    page.get_by_text("No matching items within your Permissions.")
+                ).to_be_visible()
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)
