@@ -1,6 +1,6 @@
 # Members: the rules behind the screens, #127
 
-Status: decided by the owner on 2026-11-21. Not implemented yet. Complements ADR-0022 and
+Status: decided by the owner on 2026-11-21. Being implemented (#128 to #138). Complements ADR-0022 and
 the design previews in `members-settings/`, `members-invite/`, `members-signin/`,
 `members-media/`, `members-requests/`, `members-notices/` and `members-ratings/`. Terms are
 those of `CONTEXT.md`.
@@ -36,6 +36,16 @@ inside Médias and the tracker rows are filtered the same way. A Member never ch
 Torrent Client: `client_id` is ignored and the server uses the client that holds the item.
 
 ## Route table
+
+In code (#128) a route declares its need on its handler with `@needs(...)` from
+`torrentlinker/web/permissions.py`: Permissions from `torrentlinker/accounts.py` (any one of
+them), `Audience.PUBLIC`, `Audience.SIGNED_IN` or `Audience.ACCOUNT_HOLDER`, and optionally
+the path values allowed (`action={...}`). The middleware checks it on `/api/*` and
+`/documentation/*`; `/`, `/healthz` and `/static/*` serve no data and stay open as before.
+A row below is declared by the issue that makes its handler answer for the actor (#131 Media
+with visibility and per-person progress, #133 and #134 Requests, #137 Search, queue and
+torrents, #138 the Assistant); until then the route stays Owner-only. Today only the
+"nothing" and "signed in" rows are declared.
 
 | Routes | Needs |
 | --- | --- |

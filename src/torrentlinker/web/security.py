@@ -1,4 +1,4 @@
-"""Single-owner sessions and encrypted server credentials, independent of desktop keyring."""
+"""Sessions and encrypted server credentials, independent of desktop keyring."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+
+from torrentlinker.accounts import OWNER
 
 
 def atomic_private(path: Path, data: bytes) -> None:
@@ -86,12 +88,14 @@ class ServerSecrets:
 
 
 class Sessions:
+    """Signed-in browsers. The startup password opens the Owner's; Members' come with #129."""
+
     def __init__(self, password: str):
         if len(password) < 12:
             raise ValueError("Set a Web UI password of at least 12 characters.")
         self.salt = secrets.token_bytes(16)
         self.digest = self.hash(password)
-        self.tokens: dict[str, float] = {}
+        self.tokens: dict[str, tuple[float, str]] = {}
         self.attempts: list[float] = []
         self.lock = threading.Lock()
 
@@ -107,16 +111,25 @@ class Sessions:
             if not secrets.compare_digest(self.hash(password), self.digest):
                 self.attempts.append(now)
                 raise PermissionError("Incorrect password.")
-            self.tokens = {k: v for k, v in self.tokens.items() if v > now}
+        return self.open(OWNER)
+
+    def open(self, account: str) -> str:
+        with self.lock:
+            now = time.monotonic()
+            self.tokens = {k: v for k, v in self.tokens.items() if v[0] > now}
             if len(self.tokens) >= 32:
                 del self.tokens[next(iter(self.tokens))]
             token = secrets.token_urlsafe(32)
-            self.tokens[token] = now + 12 * 3600
+            self.tokens[token] = (now + 12 * 3600, account)
             return token
 
-    def valid(self, token: str) -> bool:
+    def account(self, token: str) -> str | None:
         with self.lock:
-            return self.tokens.get(token, 0) > time.monotonic()
+            expiry, account = self.tokens.get(token, (0.0, ""))
+            return account if expiry > time.monotonic() else None
+
+    def valid(self, token: str) -> bool:
+        return self.account(token) is not None
 
     def logout(self, token: str) -> None:
         with self.lock:

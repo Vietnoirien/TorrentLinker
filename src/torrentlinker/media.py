@@ -19,6 +19,7 @@ from xml.etree import ElementTree
 from guessit import guessit
 
 from torrentlinker import media_tracks
+from torrentlinker.accounts import OWNER
 from torrentlinker.domain import ContentKind
 from torrentlinker.media_tracker import TrackerRows
 
@@ -141,17 +142,60 @@ class MediaLibrary(TrackerRows):
                     modified INTEGER, added REAL, body TEXT, PRIMARY KEY(client,id));
                 CREATE TABLE IF NOT EXISTS media_progress
                     (client TEXT, item TEXT, position REAL, duration REAL, watched INTEGER,
-                    PRIMARY KEY(client,item));
+                    account TEXT NOT NULL DEFAULT 'owner', viewer TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY(client,item,account,viewer));
                 CREATE TABLE IF NOT EXISTS media_options (key TEXT PRIMARY KEY, body TEXT);
                 CREATE TABLE IF NOT EXISTS media_sessions
                     (id TEXT PRIMARY KEY, token TEXT, client TEXT, platform TEXT,
                     updated REAL, body TEXT, commands TEXT, actor TEXT DEFAULT '',
-                    conversation TEXT DEFAULT '');
+                    conversation TEXT DEFAULT '', account TEXT NOT NULL DEFAULT 'owner',
+                    viewer TEXT NOT NULL DEFAULT '');
                 CREATE TABLE IF NOT EXISTS media_playlists
-                    (id TEXT PRIMARY KEY, client TEXT, name TEXT, items TEXT);
+                    (id TEXT PRIMARY KEY, client TEXT, name TEXT, items TEXT,
+                    account TEXT NOT NULL DEFAULT 'owner', viewer TEXT NOT NULL DEFAULT '');
                 CREATE TABLE IF NOT EXISTS media_selections
                     (id TEXT PRIMARY KEY, actor TEXT, client TEXT, items TEXT);
             """)
+        self.migrate_to_actors()
+
+    def migrate_to_actors(self):
+        """Give progress, playlists and sessions an actor (ADR-0022); old rows are the Owner's.
+
+        Runs once, in one transaction: an interrupted migration leaves the old tables intact.
+        The account column's default is only for the old rows; new rows always name theirs.
+        """
+
+        def missing(table):
+            return "account" not in {r[1] for r in self.db.execute(f"PRAGMA table_info({table})")}
+
+        script = ""
+        if missing("media_progress"):
+            script += """
+                ALTER TABLE media_progress RENAME TO media_progress_old;
+                CREATE TABLE media_progress
+                    (client TEXT, item TEXT, position REAL, duration REAL, watched INTEGER,
+                    account TEXT NOT NULL DEFAULT 'owner', viewer TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY(client,item,account,viewer));
+                INSERT INTO media_progress (client, item, position, duration, watched)
+                    SELECT client, item, position, duration, watched FROM media_progress_old;
+                DROP TABLE media_progress_old;
+            """
+        for table in ("media_playlists", "media_sessions"):
+            if missing(table):
+                script += f"""
+                    ALTER TABLE {table} ADD COLUMN account TEXT NOT NULL DEFAULT 'owner';
+                    ALTER TABLE {table} ADD COLUMN viewer TEXT NOT NULL DEFAULT '';
+                """
+        if not script:
+            return
+        with self.lock:
+            try:
+                # executescript commits first, so the script holds its own transaction.
+                self.db.executescript("BEGIN IMMEDIATE;" + script + "COMMIT;")
+            except BaseException:
+                if self.db.in_transaction:
+                    self.db.rollback()
+                raise
 
     def setup(self, client_id):
         client_id = client_id or self.agent.setup.settings.default_client_id
@@ -866,7 +910,7 @@ class MediaLibrary(TrackerRows):
                 continue
         return body
 
-    def row(self, record, *, check=True):
+    def row(self, record, *, check=True, account=OWNER, viewer=""):
         body = json.loads(record["body"])
         public = {
             k: v
@@ -892,8 +936,8 @@ class MediaLibrary(TrackerRows):
         ]
         with self.lock:
             saved = self.db.execute(
-                "SELECT * FROM media_progress WHERE client=? AND item=?",
-                (record["client"], record["id"]),
+                "SELECT * FROM media_progress WHERE client=? AND item=? AND account=? AND viewer=?",
+                (record["client"], record["id"], account, viewer),
             ).fetchone()
         public.update(
             id=record["id"],
@@ -1297,59 +1341,72 @@ class MediaLibrary(TrackerRows):
             text = "WEBVTT\n\n" + re.sub(r"(\d\d:\d\d:\d\d),(\d{3})", r"\1.\2", text)
         return text.encode(), "text/vtt; charset=utf-8"
 
-    def watched(self, client_id, identifier, watched):
-        item = self.row(self.record(client_id, identifier))
+    def watched(self, client_id, identifier, watched, *, account=OWNER, viewer=""):
+        who = {"account": account, "viewer": viewer}
+        item = self.row(self.record(client_id, identifier), **who)
         with self.lock, self.db:
-            self.db.execute(
-                "INSERT OR REPLACE INTO media_progress VALUES (?,?,?,?,?)",
-                (client_id, identifier, item["position"], item["duration"], bool(watched)),
+            self.save_progress(
+                client_id, identifier, item["position"], item["duration"], watched, **who
             )
-        return self.row(self.record(client_id, identifier))
+        return self.row(self.record(client_id, identifier), **who)
 
-    def forget_progress(self, client_id, identifier):
+    def save_progress(self, client_id, identifier, position, duration, watched, *, account, viewer):
+        self.db.execute(
+            "INSERT OR REPLACE INTO media_progress "
+            "(client, item, position, duration, watched, account, viewer) VALUES (?,?,?,?,?,?,?)",
+            (client_id, identifier, position, duration, bool(watched), account, viewer),
+        )
+
+    def forget_progress(self, client_id, identifier, *, account=OWNER, viewer=""):
         """Reset playback progress so the title leaves Continue watching."""
         self.record(client_id, identifier)
         with self.lock, self.db:
             self.db.execute(
-                "DELETE FROM media_progress WHERE client=? AND item=?", (client_id, identifier)
+                "DELETE FROM media_progress WHERE client=? AND item=? AND account=? AND viewer=?",
+                (client_id, identifier, account, viewer),
             )
 
-    def playlists(self, client_id):
+    def playlists(self, client_id, *, account=OWNER, viewer=""):
         self.setup(client_id)
         with self.lock:
             rows = self.db.execute(
-                "SELECT * FROM media_playlists WHERE client=? ORDER BY name", (client_id,)
+                "SELECT * FROM media_playlists WHERE client=? AND account=? AND viewer=? "
+                "ORDER BY name",
+                (client_id, account, viewer),
             ).fetchall()
         return [
             {"id": r["id"], "name": r["name"], "media_ids": json.loads(r["items"])} for r in rows
         ]
 
-    def save_playlist(self, client_id, name, media_ids, identifier=""):
+    def save_playlist(self, client_id, name, media_ids, identifier="", *, account=OWNER, viewer=""):
         if not name.strip() or len(name) > 100 or len(media_ids) > 1000:
             raise ValueError("Use a playlist name and at most 1,000 tracks.")
         for media_id in media_ids:
             row = self.record(client_id, media_id)
             if json.loads(row["body"])["kind"] != "music":
                 raise ValueError("Music playlists accept tracks only.")
-        if identifier and not any(p["id"] == identifier for p in self.playlists(client_id)):
+        owned = self.playlists(client_id, account=account, viewer=viewer)
+        if identifier and not any(p["id"] == identifier for p in owned):
             raise ValueError("Playlist unavailable for this client.")
         identifier = identifier or uuid4().hex
         with self.lock, self.db:
             self.db.execute(
-                "INSERT OR REPLACE INTO media_playlists VALUES (?,?,?,?)",
-                (identifier, client_id, name.strip(), json.dumps(media_ids)),
+                "INSERT OR REPLACE INTO media_playlists "
+                "(id, client, name, items, account, viewer) VALUES (?,?,?,?,?,?)",
+                (identifier, client_id, name.strip(), json.dumps(media_ids), account, viewer),
             )
         return {"id": identifier, "name": name.strip(), "media_ids": media_ids}
 
-    def delete_playlist(self, client_id, identifier):
+    def delete_playlist(self, client_id, identifier, *, account=OWNER, viewer=""):
         self.setup(client_id)
         with self.lock, self.db:
             self.db.execute(
-                "DELETE FROM media_playlists WHERE client=? AND id=?", (client_id, identifier)
+                "DELETE FROM media_playlists WHERE client=? AND id=? AND account=? AND viewer=?",
+                (client_id, identifier, account, viewer),
             )
         return {"ok": True}
 
-    def open_session(self, client_id, platform="web"):
+    def open_session(self, client_id, platform="web", *, account=OWNER, viewer=""):
         self.setup(client_id)
         identifier, token = uuid4().hex, secrets.token_urlsafe(32)
         state = {
@@ -1367,7 +1424,8 @@ class MediaLibrary(TrackerRows):
         }
         with self.lock, self.db:
             self.db.execute(
-                "INSERT INTO media_sessions VALUES (?,?,?,?,?,?,?,'','')",
+                "INSERT INTO media_sessions (id, token, client, platform, updated, body, commands, "
+                "account, viewer) VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     identifier,
                     identity(token),
@@ -1376,6 +1434,8 @@ class MediaLibrary(TrackerRows):
                     time.time(),
                     json.dumps(state),
                     "[]",
+                    account,
+                    viewer,
                 ),
             )
         return {"id": identifier, "token": token, "state": state, "commands": []}
@@ -1479,8 +1539,9 @@ class MediaLibrary(TrackerRows):
                 state["command_ack"] = max(state.get("command_ack", 0), ack)
                 if current:
                     previous = self.db.execute(
-                        "SELECT watched FROM media_progress WHERE client=? AND item=?",
-                        (row["client"], current),
+                        "SELECT watched FROM media_progress "
+                        "WHERE client=? AND item=? AND account=? AND viewer=?",
+                        (row["client"], current, row["account"], row["viewer"]),
                     ).fetchone()
                     watched = bool(previous[0]) if previous else False
                     browsing = context or state.get("context", {})
@@ -1495,9 +1556,14 @@ class MediaLibrary(TrackerRows):
                             watched = True
                         except (ValueError, OSError):
                             pass
-                    self.db.execute(
-                        "INSERT OR REPLACE INTO media_progress VALUES (?,?,?,?,?)",
-                        (row["client"], current, state["position"], state["duration"], watched),
+                    self.save_progress(
+                        row["client"],
+                        current,
+                        state["position"],
+                        state["duration"],
+                        watched,
+                        account=row["account"],
+                        viewer=row["viewer"],
                     )
             if command_ack is not None:
                 state["command_ack"] = max(state.get("command_ack", 0), int(command_ack))

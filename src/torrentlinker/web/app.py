@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from torrentlinker import documentation
+from torrentlinker.accounts import OWNER_ACTOR, Accounts, Actor
 from torrentlinker.clients import connect
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
@@ -30,6 +31,7 @@ from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
 from torrentlinker.web.operations import DownloadFolderRequired, JobRequest, Operations
+from torrentlinker.web.permissions import Audience, allowed, needs
 from torrentlinker.web.security import ServerSecrets, Sessions, TrustedProxies
 from torrentlinker.web.setup import (
     Connection,
@@ -85,16 +87,20 @@ def create_app(
     if (password is None) == (not trusted_proxies):
         raise ValueError("Set a Web UI password or trusted proxies, not both.")
     sessions = Sessions(password) if password is not None else None
+    accounts = Accounts(directory)
     if sessions is None:
         proxies = TrustedProxies(trusted_proxies)
 
-        def signed_in(request: Request) -> bool:
-            return proxies.allows(request.client.host if request.client else None)
+        def actor_of(request: Request) -> Actor | None:
+            # The proxy with no user header is the Owner; Member headers come with #129.
+            allowed = proxies.allows(request.client.host if request.client else None)
+            return OWNER_ACTOR if allowed else None
 
     else:
 
-        def signed_in(request: Request) -> bool:
-            return sessions.valid(request.cookies.get("tl_session", ""))
+        def actor_of(request: Request) -> Actor | None:
+            account = sessions.account(request.cookies.get("tl_session", ""))
+            return accounts.actor(account) if account else None
 
     def sign_in_required() -> JSONResponse:
         if sessions is None:
@@ -252,6 +258,7 @@ def create_app(
             jobs.close()
             agent_service.media.close()
             agent_service.torrents_workspace.close()
+            accounts.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
@@ -280,6 +287,8 @@ def create_app(
 
     media_routes(app, agent_service, assistant)
     app.state.reset_clients = reset_clients
+    app.state.accounts = accounts
+    app.state.sessions = sessions
     from torrentlinker.profile_workspace import COMPANION_ROUTES
     from torrentlinker.web.profile import companion_request, profile_routes
 
@@ -309,17 +318,26 @@ def create_app(
             route = route[len(prefix) :]
         if route in COMPANION_ROUTES:
             return await companion_request(request, route, service)
-        if route.startswith("/documentation/") and not signed_in(request):
-            return sign_in_required()
-        if route.startswith("/api/"):
-            length = request.headers.get("content-length", "0")
-            limit = 12_000_000 if route in {"/api/jobs", "/api/zen/plan/review"} else 256_000
-            if not length.isdigit() or int(length) > limit:
-                return JSONResponse({"detail": "Request too large."}, status_code=413)
-            if request.method != "GET" and request.headers.get("X-TorrentLinker") != "1":
-                return JSONResponse({"detail": "Browser request header required."}, status_code=403)
-            if route != "/api/login" and not signed_in(request):
-                return sign_in_required()
+        if route.startswith(("/api/", "/documentation/")):
+            if route.startswith("/api/"):
+                length = request.headers.get("content-length", "0")
+                limit = 12_000_000 if route in {"/api/jobs", "/api/zen/plan/review"} else 256_000
+                if not length.isdigit() or int(length) > limit:
+                    return JSONResponse({"detail": "Request too large."}, status_code=413)
+                if request.method != "GET" and request.headers.get("X-TorrentLinker") != "1":
+                    return JSONResponse(
+                        {"detail": "Browser request header required."}, status_code=403
+                    )
+            if route != "/api/login":
+                actor = actor_of(request)
+                if actor is None:
+                    return sign_in_required()
+                if not allowed(app.router.routes, request.scope, actor):
+                    return JSONResponse(
+                        {"detail": "Your account does not have the Permission for this."},
+                        status_code=403,
+                    )
+                request.state.actor = actor
         try:
             response = await call_next(request)
         except Exception as error:
@@ -381,6 +399,7 @@ def create_app(
         )
 
     @app.post("/api/login")
+    @needs(Audience.PUBLIC)
     def login(body: Login) -> JSONResponse:
         if sessions is None:
             return JSONResponse({"detail": "The reverse proxy signs users in."}, status_code=404)
@@ -402,6 +421,7 @@ def create_app(
         return response
 
     @app.post("/api/logout")
+    @needs(Audience.SIGNED_IN)
     def logout(request: Request) -> JSONResponse:
         if sessions is not None:
             sessions.logout(request.cookies.get("tl_session", ""))
@@ -410,10 +430,12 @@ def create_app(
         return response
 
     @app.get("/api/documentation")
+    @needs(Audience.SIGNED_IN)
     def documentation_index(language: str = "en") -> list[dict[str, str]]:
         return documentation.guides(language)
 
     @app.get("/documentation/{name:path}", response_class=HTMLResponse)
+    @needs(Audience.SIGNED_IN)
     def documentation_reference(name: str, request: Request) -> HTMLResponse:
         if name not in {
             g["path"] for language in ("en", "fr") for g in documentation.guides(language)
@@ -430,6 +452,7 @@ def create_app(
         )
 
     @app.get("/api/documentation/page/{name:path}")
+    @needs(Audience.SIGNED_IN)
     def documentation_page(name: str) -> dict[str, str]:
         try:
             return {"html": render(name)}
@@ -437,6 +460,7 @@ def create_app(
             raise HTTPException(404, "Guide unavailable.") from error
 
     @app.get("/api/documentation/file/{name:path}")
+    @needs(Audience.SIGNED_IN)
     def documentation_file(name: str) -> FileResponse:
         try:
             path = documentation.document_path(name)
@@ -900,6 +924,7 @@ def create_app(
         return {"ok": True}
 
     @app.get("/api/shell")
+    @needs(Audience.SIGNED_IN)
     def shell_state() -> dict:
         release = check_for_update(directory / "release-check.json", current=app_version)
         return {
@@ -1244,10 +1269,12 @@ def create_app(
     app.mount("/static", StaticFiles(directory=assets), name="static")
 
     @app.get("/healthz")
+    @needs(Audience.PUBLIC)
     def health() -> dict:
         return {"status": "ok"}
 
     @app.get("/")
+    @needs(Audience.PUBLIC)
     def shell() -> HTMLResponse:
         html = (assets / "index.html").read_text(encoding="utf-8")
         return HTMLResponse(html.replace("{{ app_version }}", app_version))
