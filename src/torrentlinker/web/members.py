@@ -65,6 +65,10 @@ class Invitation(NewLink, MediaLimits):
     caps: MemberCaps = Field(default_factory=MemberCaps)
 
 
+class EmailLink(BaseModel):
+    email: str = Field(max_length=254)
+
+
 class LinkToken(BaseModel):
     token: str = Field(max_length=100)
 
@@ -187,7 +191,9 @@ def member_routes(
             may_edit(editor, "", set(), {p.value for p in body.permissions})
             may_limit(editor, "", {}, body)
             caps = (
-                Caps(**body.caps.model_dump()) if Permission.REQUEST in body.permissions else Caps()
+                Caps(**body.caps.model_dump())
+                if Permission.REQUEST in body.permissions
+                else Caps(assistant_per_day=body.caps.assistant_per_day)
             )
             account, token = accounts.invite(
                 body.name,
@@ -237,6 +243,31 @@ def member_routes(
             raise HTTPException(404, "This link has expired or was used. Create a new one.")
         return {"link": shared_link(body.base, *opened)}
 
+    @app.post("/api/members/{account}/email-link")
+    @needs(Permission.MANAGE_MEMBERS)
+    def email_link(account: str, body: EmailLink, request: Request) -> dict:
+        from torrentlinker.member_notifications import address
+
+        no_links()
+        linkable(actor(request), account)
+        opened = accounts.open_link(account)
+        if opened is None:
+            raise HTTPException(404, "This link has expired or was used.")
+        notices = app.state.notifications
+        recipient = answer(lambda: address(body.email))
+        try:
+            notices.send_email(
+                recipient,
+                "TorrentLinker",
+                opened[1]["kind"],
+                notices.settings().app_url + "/join#" + opened[0],
+            )
+        except Exception:
+            raise HTTPException(
+                502, "Email delivery failed. Check Notifications settings."
+            ) from None
+        return {"ok": True}
+
     @app.post("/api/members/{account}/cancel-link")
     @needs(Permission.MANAGE_MEMBERS)
     def cancel_link(account: str, request: Request) -> dict:
@@ -259,9 +290,14 @@ def member_routes(
     @needs(Audience.PUBLIC)
     def redeem_link(body: LinkUse) -> JSONResponse:
         no_links()
+        invitation = accounts.link(body.token)
         account = answer(
             lambda: accounts.redeem(body.token, body.password, name=body.name, login=body.login)
         )
+        if invitation and invitation["kind"] == "invite":
+            app.state.notifications.owner(
+                "invitation", accounts.display_name(account), "Invitation accepted"
+            )
         return signed_in(account)
 
     @app.post("/api/members")

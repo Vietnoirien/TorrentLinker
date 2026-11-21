@@ -56,6 +56,7 @@ const pages = {
   "member-search": ["Search", "Recherche", "Search the tracker and request a film.", "Consultez le tracker et demandez un film."],
   "member-queue": ["My queue", "Ma file", "Your accepted Requests.", "Vos demandes acceptées."],
   "member-torrents": ["My downloads", "Mes téléchargements", "Downloads from your accepted Requests.", "Les téléchargements de vos demandes acceptées."],
+  notifications: ["Notifications", "Notifications", "Updates for your account.", "Les nouvelles de votre compte."],
   requests: ["Requests", "Demandes", "Review and answer Members’ Requests.", "Examinez les demandes des membres."],
   queue: [
     "Download queue",

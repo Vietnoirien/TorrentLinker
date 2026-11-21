@@ -34,6 +34,7 @@
     <script src="static/requests.js" defer></script>
     <script src="static/member-workspace.js" defer></script>
     <script src="static/member-assistant.js" defer></script>
+    <script src="static/notifications.js" defer></script>
     <link rel="stylesheet" href="static/requests.css" />
     <script src="static/media_panel.js" defer></script>
     <script src="static/upload-workspace.js" defer></script>
@@ -71,7 +72,7 @@
     <div id="workspace" hidden>
       <aside class="sidebar" id="app-sidebar"><iframe id="shell-navigation-frame" title="Navigation" src="static/shell/view.html"></iframe></aside>
       <main>
-        <header><button id="navigation-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" data-i18n="navigation">Navigation</button><iframe id="shell-header-frame" title="Workspace" src="static/shell/view.html"></iframe><button id="work-status" class="badge" type="button" aria-label="Jobs" aria-live="polite"></button></header>
+        <header><button id="navigation-toggle" type="button" aria-controls="app-sidebar" aria-expanded="true" data-i18n="navigation">Navigation</button><iframe id="shell-header-frame" title="Workspace" src="static/shell/view.html"></iframe><button id="notice-count" type="button" hidden>Notifications</button><button id="work-status" class="badge" type="button" aria-label="Jobs" aria-live="polite"></button></header>
         <div id="shell-update-host" hidden><iframe id="shell-update-frame" title="Update notice" src="static/shell/view.html"></iframe></div>
         <section id="media-player-shell" aria-label="Media player" hidden>
           <div class="toolbar media-player-heading"><h2 id="media-now-playing">Now playing</h2></div>
@@ -82,6 +83,7 @@
         </section>
         <section id="page-jobs" class="card" hidden aria-label="Page jobs"></section>
         <section id="view-media" class="view" data-layout="cinematic" data-kind="video" hidden></section>
+        <section id="view-notifications" class="view" hidden></section>
         <section id="view-member-assistant" class="view" hidden></section>
         <section id="view-member-search" class="view" hidden></section>
         <section id="view-member-queue" class="view" hidden></section>

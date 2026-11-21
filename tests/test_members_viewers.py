@@ -145,7 +145,7 @@ def test_the_holder_manages_viewers_pins_and_screens_in_mon_compte(server):
     account = browser.get("/api/account").json()
     assert account["name"] == "Lea" and [s["name"] for s in account["screens"]] == ["Télé"]
     shell = browser.get("/api/shell").json()
-    assert "setup" in shell["pages"] and shell["sections"] == ["account"]
+    assert "setup" in shell["pages"] and shell["sections"] == ["account", "notifications"]
     refused = browser.post(
         "/api/account/viewers/new",
         json={"name": "Hugo", "permissions": ["films"], "age_limit": "10"},
@@ -214,7 +214,7 @@ def test_a_manager_reaches_members_but_not_the_owners_profiles(server):
     browser.cookies.clear()
     browser.post("/api/login", json={"login": "maman", "password": PASSWORD})
     shell = browser.get("/api/shell").json()
-    assert shell["sections"] == ["account", "users"]
+    assert shell["sections"] == ["account", "notifications", "users"]
     assert browser.get(f"/api/members/{lea}/profiles").status_code == 200
     assert browser.get("/api/members/owner/profiles").status_code == 403
     assert (

@@ -98,6 +98,9 @@ window.addEventListener("message", async (event) => {
       if (!/^members(?:\/[a-zA-Z0-9_-]+){0,4}$/.test(body.path))
         throw Error("Unknown Users operation.");
       value = await api(body.path, body.body, body.method);
+    } else if (message.path === "notifications") {
+      if (!/^notifications(?:\/[a-z-]+)?$/.test(body.path)) throw Error("Unknown notification operation.");
+      value = await api(body.path, body.body, body.method);
     } else if (message.path === "account") {
       if (!/^account(?:\/[a-zA-Z0-9_-]+){0,3}$/.test(body.path))
         throw Error("Unknown account operation.");

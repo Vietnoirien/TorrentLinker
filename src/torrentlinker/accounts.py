@@ -315,6 +315,10 @@ class Accounts:
         """End every session and Shared Screen of the account."""
         self.db.execute("DELETE FROM sessions WHERE account=?", (account,))
         self.db.execute("DELETE FROM screens WHERE account=?", (account,))
+        if self.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='notice_subscriptions'"
+        ).fetchone():
+            self.db.execute("DELETE FROM notice_subscriptions WHERE account=?", (account,))
 
     def _password(self, account: str, password: str) -> None:
         if not 12 <= len(password) <= 1024:
@@ -351,6 +355,10 @@ class Accounts:
             self.db.execute("DELETE FROM sessions")
             self.db.execute("DELETE FROM screens")
             self.db.execute("DELETE FROM links")
+            if self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='notice_subscriptions'"
+            ).fetchone():
+                self.db.execute("DELETE FROM notice_subscriptions")
 
     def open_session(self, account: str) -> str:
         token = secrets.token_urlsafe(32)

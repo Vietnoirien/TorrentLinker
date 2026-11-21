@@ -198,3 +198,11 @@ Une fois l’assistant terminé, **Torrents** affiche le client connecté. Filtr
 Les membres sont désactivés par défaut. Définissez `TL_WEB_MEMBERS=on` ou passez `--members on` pour activer les comptes personnels, invitations, écrans partagés et demandes. Redémarrez le serveur après modification.
 
 Lorsque les membres sont désactivés, le mot de passe du serveur ou un proxy de confiance connecte toujours le propriétaire. Les en-têtes d'identité du proxy sont ignorés, y compris ceux d'Authelia ou Authentik. Les routes des membres répondent 404 et leurs commandes sont masquées. La désactivation révoque les liens d'invitation et de mot de passe, les sessions des membres et les jetons des écrans partagés. Les comptes et leur historique sont conservés, mais une nouvelle connexion est nécessaire après réactivation.
+
+### Notifications des membres
+
+Lorsque les membres sont activés, Notifications affiche les événements de votre compte et un compteur de notifications non lues. Les approbateurs reçoivent les nouvelles demandes et les souhaits ; les demandeurs reçoivent les décisions et les annonces de disponibilité. Le propriétaire reçoit aussi les événements d’invitation, d’écran partagé, de blocage de connexion et de marge de téléchargement configurée.
+
+Dans Paramètres → Notifications, le propriétaire active les e-mails SMTP et les notifications du navigateur, définit les choix par défaut et renseigne l’adresse publique de l’application. Le préréglage OVHcloud MX Plan utilise `ssl0.ovh.net`, le port 465 et SSL/TLS. L’identifiant est l’adresse e-mail complète. Chaque compte choisit ensuite ses préférences. Les e-mails et notifications du navigateur sont désactivés au départ ; les notifications dans l’application restent disponibles. Les e-mails contiennent le titre, l’état et le lien vers l’application. Les notes de refus restent dans l’application.
+
+Les notifications du navigateur nécessitent HTTPS et une autorisation dans ce navigateur. La déconnexion supprime son abonnement. Un envoi échoué est retenté jusqu’à cinq tentatives. Les identifiants SMTP et les clés du navigateur utilisent le stockage des secrets configuré. Les liens d’invitation et de mot de passe peuvent aussi être envoyés depuis Utilisateurs après configuration SMTP.

@@ -311,6 +311,8 @@ def create_app(
         threading.Thread(target=history_loop, daemon=True, name="profile-history").start()
         if monitor_verifications:
             threading.Thread(target=catalogue_loop, daemon=True, name="catalogue-refresh").start()
+        if members_enabled:
+            app.state.notifications.start()
         assistant.start_scheduler()
         agent_service.feed_control.start()
         try:
@@ -321,6 +323,8 @@ def create_app(
             if monitor_verifications:
                 monitor.join(timeout=2)
             agent_service.feed_control.close()
+            if members_enabled:
+                app.state.notifications.close()
             assistant.close()
             jobs.close()
             agent_service.media.close()
@@ -377,6 +381,9 @@ def create_app(
         from torrentlinker.web.member_assistant import member_assistant_routes
 
         member_assistant_routes(app, accounts, assistant, app.state.member_workspace)
+        from torrentlinker.web.member_notifications import notification_routes
+
+        notification_routes(app, accounts, service.secrets, requests, app.state.request_approval)
         household_routes(
             app,
             accounts,
@@ -417,7 +424,7 @@ def create_app(
         if prefix and route.startswith(prefix + "/"):
             route = route[len(prefix) :]
         if not members_enabled and (
-            route == "/join"
+            route in {"/join", "/notifications-worker.js"}
             or any(
                 route == p or route.startswith(p + "/")
                 for p in (
@@ -429,6 +436,7 @@ def create_app(
                     "/api/wishes",
                     "/api/member-workspace",
                     "/api/member-assistant",
+                    "/api/notifications",
                 )
             )
         ):
@@ -543,8 +551,10 @@ def create_app(
             account = OWNER if sessions.verify(body.password) else ""
         if not account:
             if throttle.failed(*keys):
-                # Shown to the Owner by the notifications of #136; logged until then.
+                # The Owner receives a notice when Members are enabled.
                 logger.warning("Sign-in locked after repeated failures: %s", " ".join(keys))
+                if members_enabled:
+                    app.state.notifications.owner("locked", name or "Owner", "Sign-in locked")
             detail = "Incorrect sign-in name or password." if name else "Incorrect password."
             return JSONResponse({"detail": detail}, status_code=401)
         throttle.succeeded(*keys)
@@ -553,6 +563,7 @@ def create_app(
             # "Cet écran est partagé": it asks who watches and lasts 90 days of disuse.
             try:
                 token = accounts.open_screen(account, body.screen)
+                app.state.notifications.owner("screen", body.screen, "New Shared Screen")
             except ValueError as error:
                 return JSONResponse({"detail": str(error)}, status_code=400)
             session_cookie(response, token, SCREEN_IDLE)
@@ -1089,6 +1100,7 @@ def create_app(
             pages = [
                 *(["media"] if any(actor.holds(p) for p in WATCH) else []),
                 "documentation",
+                *(["notifications"] if holder else []),
                 *(["requests"] if actor.holds(Permission.APPROVE) else []),
                 *(["member-assistant"] if actor.holds(Permission.ASSISTANT) else []),
                 *(["member-search"] if actor.holds(Permission.SEARCH) else []),
@@ -1112,6 +1124,7 @@ def create_app(
                 "pages": [] if actor.viewer == PICKING else pages,
                 "sections": [
                     "account",
+                    "notifications",
                     *(["users"] if actor.holds(Permission.MANAGE_MEMBERS) else []),
                 ]
                 if holder
@@ -1476,6 +1489,11 @@ def create_app(
 
     assets = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=assets), name="static")
+
+    @app.get("/notifications-worker.js")
+    @needs(Audience.PUBLIC)
+    def notifications_worker() -> FileResponse:
+        return FileResponse(assets / "notifications-worker.js", media_type="text/javascript")
 
     @app.get("/healthz")
     @needs(Audience.PUBLIC)

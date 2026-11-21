@@ -192,3 +192,11 @@ Open **Settings** to revisit setup. At the storage step, import client folders a
 Members are off by default. Set `TL_WEB_MEMBERS=on` or pass `--members on` to enable personal accounts, invitations, Shared Screens and Requests. Restart the server after changing this setting.
 
 With Members off, the startup password or a trusted proxy still signs in as the Owner. Proxy user headers are ignored, including headers sent by Authelia or Authentik. Member routes return 404 and the Members controls are hidden. Disabling Members revokes existing invitation/password links, Member sessions and Shared Screen tokens. Accounts and their history remain, but users must sign in again after re-enabling Members.
+
+### Member notifications
+
+With Members enabled, Notifications lists events for your account and shows an unread badge. Approvers receive new Requests and Wishes; requesters receive decisions and availability updates. The Owner also receives invitation, Shared Screen, sign-in lockout and configured download-margin alerts.
+
+In Settings → Notifications, the Owner can enable SMTP email and browser push, choose event defaults, and set the public app address. The OVHcloud MX Plan preset uses `ssl0.ovh.net`, port 465 and SSL/TLS. Use your full email address as the login. Each account chooses its own delivery preferences. Email and browser delivery start disabled; in-app notices remain available. Emails contain the title, state and app link. Refusal notes stay in the app.
+
+Browser delivery requires HTTPS and permission in that browser. Signing out removes its subscription. Failed delivery retries up to five times. SMTP credentials and browser signing keys use the configured secret store. Invitation and password links can also be sent from Users after SMTP is configured.

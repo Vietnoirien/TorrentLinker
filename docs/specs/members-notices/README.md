@@ -1,7 +1,8 @@
 # Notifications settings design preview, #127
 
 Status: layout **A** (sections) chosen by the owner on 2026-11-21 for Paramètres →
-Notifications (ADR-0022). Not implemented yet.
+Notifications (ADR-0022). Implemented in the Web server for #136; this file preserves
+the design preview.
 
 Built only from approved components: the shared palette (`panel/base.css`) and the Settings
 page's stylesheet (`settings/view.css`), embedded in `notices-prototype.html` so it opens

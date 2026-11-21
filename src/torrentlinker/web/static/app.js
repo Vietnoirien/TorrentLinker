@@ -392,11 +392,11 @@ async function settingsSection(section, detail) {
 
 // Only workspace locations belong in the fragment. Form state and filters stay local.
 const viewTabs = {
-  "member-assistant": [], "member-search": [], "member-queue": [], "member-torrents": [],
+  notifications: [], "member-assistant": [], "member-search": [], "member-queue": [], "member-torrents": [],
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
   feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [], requests: [],
-  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users", "account"],
+  setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "zen", "interface", "companion", "assistant", "agents", "users", "account", "notifications"],
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {
@@ -418,7 +418,7 @@ function resolveRoute(fragment) {
   if (!fragment.startsWith("#/") || !Object.hasOwn(viewTabs, view)) return fallback;
   // A Member's Settings: "Mon compte", and Utilisateurs for a manager.
   const tabs = member && view === "setup" ? state.sections || [] : viewTabs[view].filter(tab =>
-    view !== "setup" || state.setup?.members_enabled || !["users", "account"].includes(tab));
+    view !== "setup" || state.setup?.members_enabled || !["users", "account", "notifications"].includes(tab));
   const validDetail = view === "setup" && tab === "agents" && agentTabs.includes(detail) ||
     view === "media" && mediaViewsByKind[tab]?.includes(detail) &&
       (detail !== "adult" || state.setup?.adult_content);
@@ -489,6 +489,7 @@ async function navigate(view, section, detail) {
   if (view !== "setup") clearAgentToken();
   if (view === "documentation") await loadGuides();
   if (view === "requests") await loadRequests();
+  if (view === "notifications") await loadNotifications();
   if (view === "member-assistant") await loadMemberAssistant();
   if (["member-search", "member-queue", "member-torrents"].includes(view)) await loadMemberWorkspace(view);
   if (view === "torrents") await loadTorrents();
@@ -762,6 +763,7 @@ async function enter() {
   shellEnvironment();
   $("login-screen").hidden = true;
   $("workspace").hidden = false;
+  guard(refreshNotices);
   const parts = resolveRoute(location.hash);
   writeRoute(parts, true);
   await navigate(...parts);
@@ -810,6 +812,7 @@ function loginMode(owner = localStorage.getItem("tl-sign-in") === "owner") {
 $("login-owner").onclick = () => loginMode($("login-name").hidden === false);
 loginMode();
 async function logout() {
+  await notificationsLogout();
   document.dispatchEvent(new Event("tl-logout"));
   await api("logout", {});
   state.actor = null; state.pages = null; state.sections = null; state.clientId = "";

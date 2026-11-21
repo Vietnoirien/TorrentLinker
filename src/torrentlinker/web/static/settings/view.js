@@ -22,6 +22,7 @@ const sections = () =>
     ? Object.fromEntries(
         [
           ["account", say("My account", "Mon compte")],
+          ["notifications", say("Notifications", "Notifications")],
           ["users", say("Users", "Utilisateurs")],
         ].filter(([key]) => (environment.sections || []).includes(key)),
       )
@@ -41,7 +42,7 @@ const ownerSections = () => ({
   zen: "Zen",
   // Members share only a Web or Docker server; the desktop stays the Owner's.
   ...(environment.mode === "web" && environment.members_enabled
-    ? { users: say("Users", "Utilisateurs"), account: say("My account", "Mon compte") }
+    ? { users: say("Users", "Utilisateurs"), account: say("My account", "Mon compte"), notifications: "Notifications" }
     : {}),
 });
 function element(tag, text, className) {
@@ -1152,7 +1153,7 @@ function render() {
   );
   if (!snapshot) return;
   const form = element(
-    ["agents", "assistant", "companion", "users", "account"].includes(section)
+    ["agents", "assistant", "companion", "users", "account", "notifications"].includes(section)
       ? "section"
       : "form",
     undefined,
@@ -1191,6 +1192,9 @@ function render() {
     const root = element("div");
     form.append(root);
     queueMicrotask(() => guard(() => settingsMembers(root)));
+  } else if (section === "notifications") {
+    const root = element("div"); form.append(root);
+    queueMicrotask(() => guard(() => settingsNotifications(root)));
   } else if (section === "account") {
     const root = element("div");
     form.append(root);

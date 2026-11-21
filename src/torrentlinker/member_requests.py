@@ -76,6 +76,15 @@ class Requests:
                 );
             """)
 
+        with self.lock, self.db:
+            if "origin_kind" not in {
+                row[1] for row in self.db.execute("PRAGMA table_info(requests)")
+            }:
+                self.db.execute(
+                    "ALTER TABLE requests ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'request'"
+                )
+                self.db.execute("UPDATE requests SET origin_kind=kind")
+
     def recover_sends(self) -> None:
         """A restart cannot prove whether a claimed send reached the client; require Retry."""
         with self.lock:
@@ -205,6 +214,7 @@ class Requests:
                 now,
             ),
         )
+        self.db.execute("UPDATE requests SET origin_kind=? WHERE id=?", (kind, identifier))
         self.db.execute(
             "INSERT INTO request_events VALUES (?,?,'pending',?,?)",
             (identifier, now, account, note),

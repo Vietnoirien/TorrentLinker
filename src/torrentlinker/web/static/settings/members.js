@@ -1017,7 +1017,7 @@ function linkResult(dialog, member, link) {
   );
   const address = element("input");
   address.type = "email";
-  address.disabled = true;
+  address.disabled = false;
   email.append(address);
   mail.append(
     email,
@@ -1029,6 +1029,11 @@ function linkResult(dialog, member, link) {
       ),
     ),
   );
+  mail.append(button(say("Send link", "Envoyer le lien"), async () => {
+    if (!address.reportValidity() || !address.value) return;
+    await memberApi(`members/${member.id}/email-link`, {email: address.value});
+    toast(say("Email sent", "E-mail envoyé"));
+  }));
   const actions = element("div", undefined, "settings-actions");
   const close = element("button", say("Close", "Fermer"));
   close.value = "close";
