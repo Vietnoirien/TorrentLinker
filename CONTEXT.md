@@ -153,3 +153,37 @@ _Avoid_: Portfolio, selection
 **Download Folder**:
 Where a Plan's torrents are downloaded, set per Indexer category or subcategory (falling back to the category's, then a default); it may lie inside a Library Folder.
 _Avoid_: Save path (qBittorrent's term), download location (Deluge's), destination
+
+### Sharing
+
+**Owner**:
+The person whose c411 account, passkey and Torrent Clients TorrentLinker works for; they hold every Permission and cannot be restricted.
+_Avoid_: Admin, main user, user (when this person is meant)
+
+**Member**:
+A person the Owner gives access to, with an account of their own and only the Permissions granted to them.
+_Avoid_: User, guest, friend, family account
+
+**Permission**:
+One thing a Member may see or do, granted per Member: a feature, a Library Folder, a Content Kind, adult content, making or accepting Requests, managing Members.
+_Avoid_: Role, right, access level
+
+**Viewer**:
+A person's place on a shared screen inside an account, with their own watch progress and playlists, possibly narrower Permissions, and an optional PIN.
+_Avoid_: Profile (Zen Profile and ReleaseScore profiles), home user
+
+**Request**:
+A Member's ask to download a tracker release, waiting for an Approver; once accepted it is sent to the Torrent Client at once.
+_Avoid_: Proposal (an agent's), order, download request
+
+**Wish**:
+A Request for a title with no release chosen yet; the Approver picks the release.
+_Avoid_: Free-text request, suggestion
+
+**Approver**:
+The Owner, or a Member holding the Permission to accept or refuse Requests.
+_Avoid_: Admin, moderator
+
+**Age Rating**:
+The minimum viewing age of a film or series, from its metadata or set by the Owner or a Member allowed to edit it; a Member's limit hides what is rated above it.
+_Avoid_: Certification, PEGI, parental rating
