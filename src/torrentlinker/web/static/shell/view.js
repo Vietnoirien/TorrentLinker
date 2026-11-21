@@ -178,6 +178,8 @@ function render() {
       state.client_id,
     );
     $("target-client").disabled = !!state.client_busy;
+    // A Member never chooses the Torrent Client.
+    $("client-label").hidden = !state.allow_all && !(state.clients || []).length;
     $("setup-notice").hidden = !state.setup_needed;
     text(
       "setup-message",

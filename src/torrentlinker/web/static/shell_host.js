@@ -47,14 +47,14 @@ function shellSnapshot(region) {
     theme: document.documentElement.dataset.theme || "dark",
     theme_choice: themeChoice,
     page: state.view,
-    pages: shellPages,
+    pages: state.pages || shellPages,
     client_id: state.clientId,
     allow_all: state.view === "torrents",
     clients: (state.setup?.clients || []).filter((row) => row.enabled),
     client_busy: shellState.clientBusy,
     compact: innerWidth < 650,
     can_logout: state.setup?.web_auth !== "proxy",
-    setup_needed: !state.setup?.indexer_configured,
+    setup_needed: !signedInMember() && !state.setup?.indexer_configured,
     release: shellState.release,
     band: {
       balance:
@@ -224,7 +224,7 @@ window.addEventListener("message", async (event) => {
       if (!shellActions[region].has(action))
         throw Error("Unknown shell action.");
       if (action === "navigate") {
-        if (!shellPages.includes(values.view))
+        if (!(state.pages || shellPages).includes(values.view))
           throw Error("Unknown workspace.");
         await navigate(values.view);
       } else if (action === "client") await shellSelectClient(values.client_id);

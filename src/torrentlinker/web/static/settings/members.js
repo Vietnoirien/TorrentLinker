@@ -86,6 +86,14 @@ const memberOwnerOnly = () => [
   say("Agent access", "Accès agents"),
   say("The Assistant's providers", "Fournisseurs de l'Assistant"),
 ];
+const memberAges = () => [
+  ["", say("No limit", "Aucune limite")],
+  ["18", say("Under 18", "-18 ans")],
+  ["16", say("Under 16", "-16 ans")],
+  ["12", say("Under 12", "-12 ans")],
+  ["10", say("Under 10", "-10 ans")],
+  ["TP", say("All audiences", "Tous publics")],
+];
 const WATCHING = ["films", "series", "anime", "music", "media-center"];
 // Presets only pre-tick Permissions; nothing remembers which one was used.
 const memberPresets = () => ({
@@ -95,7 +103,12 @@ const memberPresets = () => ({
     [...WATCHING, "request", "wish", "search"],
     { requests_per_week: 5, bytes_per_week: 100e9, pending: 3 },
   ],
-  child: [say("Child", "Enfant"), ["films", "anime", "media-center"], {}],
+  child: [
+    say("Child", "Enfant"),
+    ["films", "anime", "media-center"],
+    {},
+    { age_limit: "10" },
+  ],
   admin: [
     say("Administrator", "Administrateur"),
     [
@@ -371,6 +384,22 @@ function memberCard(root, member) {
     tags.append(
       element("span", names[permission] || permission, "member-tag on"),
     );
+  if (member.age_limit)
+    tags.append(
+      element(
+        "span",
+        `${say("Limit", "Limite")} ${memberAges().find(([r]) => r === member.age_limit)[1]}`,
+        "member-tag",
+      ),
+    );
+  if (member.folders)
+    tags.append(
+      element(
+        "span",
+        `${say("Folders", "Dossiers")} ${member.folders.length} / ${memberState.data.library_folders.length}`,
+        "member-tag",
+      ),
+    );
   card.append(head, tags);
   if (editing) card.append(memberEditor(root, memberState.draft));
   return card;
@@ -442,7 +471,9 @@ function memberEditor(root, draft) {
   }
   choice.disabled = mine;
   choice.onchange = () => {
-    const [, granted, caps] = memberPresets()[choice.value];
+    const [, granted, caps, limits = { age_limit: null }] =
+      memberPresets()[choice.value];
+    if (!mine) draft.age_limit = limits.age_limit;
     // A manager's preset keeps what they cannot grant as it was.
     draft.permissions = [
       ...granted.filter((p) => !fixed(p)),
@@ -498,8 +529,54 @@ function memberEditor(root, draft) {
       },
     );
   watch.append(kindRow);
+  // Adult content goes with no age limit or −18 only; the server drops it under any other.
+  const adultAllowed = [null, "18"].includes(draft.age_limit ?? null);
   for (const [k, label] of media[1])
-    memberCheck(watch, label, held.has(k), fixed(k), (on) => set(k, on));
+    memberCheck(
+      watch,
+      label,
+      held.has(k) && (k !== "adult" || adultAllowed),
+      fixed(k) || (k === "adult" && !adultAllowed),
+      (on) => set(k, on),
+    );
+  const limits = element("div", undefined, "settings-fields");
+  const age = element("label", say("Age limit", "Limite d’âge"), "settings-field");
+  const ages = element("select");
+  for (const [rating, label] of memberAges()) {
+    const option = element("option", label);
+    option.value = rating;
+    ages.append(option);
+  }
+  ages.value = draft.age_limit ?? "";
+  ages.disabled = mine;
+  ages.onchange = () => {
+    draft.age_limit = ages.value || null;
+    if (![null, "18"].includes(draft.age_limit)) set("adult", false);
+    redraw();
+  };
+  age.append(
+    ages,
+    element(
+      "small",
+      say(
+        "An unrated title is hidden under a limit; rate it from its details.",
+        "Un titre sans classement est caché sous une limite ; ajoutez-lui un classement dans sa fiche.",
+      ),
+    ),
+  );
+  const folders = element("div", say("Visible folders", "Dossiers visibles"), "settings-field");
+  const all = data.library_folders.map((f) => f.path);
+  const shown = new Set(draft.folders ?? all);
+  for (const folder of data.library_folders)
+    memberCheck(folders, folder.name, shown.has(folder.path), mine, (on) => {
+      on ? shown.add(folder.path) : shown.delete(folder.path);
+      // Every folder ticked keeps the folders added later visible too.
+      draft.folders = all.every((path) => shown.has(path)) ? null : [...shown].sort();
+    });
+  if (!data.library_folders.length)
+    folders.append(element("small", say("No Library Folder yet.", "Aucun dossier de bibliothèque.")));
+  limits.append(age, folders);
+  watch.append(limits);
   form.append(watch);
 
   for (const [legend, items] of others) {
@@ -656,7 +733,7 @@ function createMember(root) {
   form.onsubmit = (event) => {
     event.preventDefault();
     guard(async () => {
-      const [, permissions, caps] = memberPresets()[value.preset] || [, [], {}];
+      const [, permissions, caps, limits = {}] = memberPresets()[value.preset] || [, [], {}];
       const created = await memberApi("members", {
         name: value.name,
         login: value.login,
@@ -664,6 +741,7 @@ function createMember(root) {
         proxy_user: value.proxy_user,
         permissions,
         caps,
+        ...limits,
       });
       dialog.close();
       memberState.editing = created.id;
@@ -804,12 +882,13 @@ function linkDialog(root, member) {
       const base = memberBase();
       let answer;
       if (invite) {
-        const [, permissions, caps] = memberPresets()[value.preset] || [, [], {}];
+        const [, permissions, caps, limits = {}] = memberPresets()[value.preset] || [, [], {}];
         answer = await memberApi("members/invite", {
           name: value.name,
           note: value.note,
           permissions,
           caps,
+          ...limits,
           days: Number(value.days),
           base,
         });

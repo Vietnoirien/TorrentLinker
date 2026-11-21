@@ -180,6 +180,7 @@ function mediaRenderFeature() {
   if (row.tracker) {
     // A film on c411, not in the library: its best release, and a way to queue it.
     copy.append(mediaTrackerRelease(row.tracker));
+    if (state.setup?.owner === false) { copy.append(actions); root.append(copy); return; }
     const queue = button(say("Download", "Télécharger"), () => guard(async () => {
       queue.disabled = true;
       try {

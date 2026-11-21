@@ -1,4 +1,9 @@
-"""Authenticated media adapters. Playback bytes remain under existing storage roots."""
+"""Authenticated media adapters. Playback bytes remain under existing storage roots.
+
+A Member sees only what is visible to them (ADR-0022): every route naming an item answers
+404 for a hidden one, as for a missing one, and their `client_id` is ignored: the server
+reads the client that holds the item. Progress, playlists and sessions are the actor's.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +13,10 @@ from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from torrentlinker.accounts import Permission
+from torrentlinker.accounts import OWNER_ACTOR, WATCH, Actor, Permission
 from torrentlinker.web.permissions import needs
+
+NOT_FOUND = "Media item not found."
 
 
 class MediaClient(BaseModel):
@@ -65,6 +72,45 @@ def media_routes(app, agent, assistant):
     def client(value):
         return value or agent.setup.settings.default_client_id
 
+    def actor(request: Request) -> Actor:
+        return getattr(request.state, "actor", OWNER_ACTOR)
+
+    def who(request: Request) -> dict:
+        found = actor(request)
+        return {"account": found.account, "viewer": found.viewer}
+
+    def target(request: Request, value: str, identifier: str = "") -> str:
+        """The Owner's chosen client; for a Member, the one holding the item, else the
+        default one."""
+        if actor(request).owner:
+            return client(value)
+        held = media.holder(identifier) if identifier else None
+        return held or agent.setup.settings.default_client_id
+
+    def item(request: Request, value: str, identifier: str) -> str:
+        """The client of an item the actor sees. A hidden item is missing to them."""
+        found, chosen = actor(request), target(request, value, identifier)
+        if not found.owner:
+            try:
+                media.visible(chosen, identifier, found)
+            except KeyError:
+                raise HTTPException(404, NOT_FOUND) from None
+        return chosen
+
+    def preview(request: Request, value: str, preview_id: str) -> str:
+        """The client of a preview: a Member reaches only their own, of an item they see."""
+        found = actor(request)
+        if found.owner:
+            return client(value)
+        opened = media.preview_owner(preview_id)
+        if opened is None or opened[2] != found.account:
+            raise HTTPException(404, "Preview expired. Select Preview downloaded portion again.")
+        return item(request, opened[0], opened[1])
+
+    def watchable(request: Request, media_ids) -> None:
+        for identifier in media_ids or ():
+            item(request, "", str(identifier))
+
     def edits_ratings(request: Request) -> bool:
         actor = getattr(request.state, "actor", None)
         return actor is not None and actor.holds(Permission.EDIT_RATINGS)
@@ -99,6 +145,7 @@ def media_routes(app, agent, assistant):
         return {"confirmed": media.confirm_suggestions(client(body.client_id), **setter(request))}
 
     @app.get("/api/media")
+    @needs(*WATCH)
     def listing(
         request: Request,
         client_id: str = "",
@@ -117,8 +164,9 @@ def media_routes(app, agent, assistant):
         anime: bool | None = None,
         oav: bool | None = None,
     ):
+        client_id = target(request, client_id)
         result = media.listing(
-            client(client_id),
+            client_id,
             kind=kind,
             q=q,
             view=view,
@@ -133,6 +181,7 @@ def media_routes(app, agent, assistant):
             adult=adult,
             anime=anime,
             oav=oav,
+            actor=actor(request),
         )
         if edits_ratings(request) and kind != "music" and offset == 0 and view != "continue":
             # The "Sans classification (n)" entry of the Media menu, for editors only.
@@ -144,12 +193,20 @@ def media_routes(app, agent, assistant):
         return result
 
     @app.get("/api/media/home")
+    @needs(*WATCH)
     def home(
+        request: Request,
         client_id: str = "",
         limit: int = Query(20, ge=1, le=50),
         scope: str = Query("home", pattern="^(home|films|series|anime|adult)$"),
     ):
-        return media.home_rows(client(client_id), kind="video", limit=limit, scope=scope)
+        return media.home_rows(
+            target(request, client_id),
+            kind="video",
+            limit=limit,
+            scope=scope,
+            actor=actor(request),
+        )
 
     @app.post("/api/media/tracker/{infohash}/download")
     def tracker_download(infohash: str, body: MediaClient):
@@ -174,25 +231,30 @@ def media_routes(app, agent, assistant):
         }
 
     @app.get("/api/media/items/{identifier}")
+    @needs(*WATCH)
     def detail(
         identifier: str,
+        request: Request,
         client_id: str = "",
         episodes_offset: int = Query(0, ge=0),
         releases_offset: int = Query(0, ge=0),
         limit: int = Query(200, ge=1, le=200),
     ):
         return media.detail(
-            client(client_id),
+            item(request, client_id, identifier),
             identifier,
             episodes_offset=episodes_offset,
             releases_offset=releases_offset,
             limit=limit,
+            actor=actor(request),
         )
 
     @app.api_route("/api/media/items/{identifier}/stream", methods=["GET", "HEAD"])
+    @needs(*WATCH)
     def stream(identifier: str, request: Request, client_id: str = ""):
+        chosen = item(request, client_id, identifier)
         try:
-            path = media.resolve(client(client_id), identifier)
+            path = media.resolve(chosen, identifier)
         except (ValueError, OSError) as error:
             raise HTTPException(
                 409, "Media is unavailable or unfinished. Refresh its details."
@@ -207,20 +269,28 @@ def media_routes(app, agent, assistant):
         )
 
     @app.post("/api/media/items/{identifier}/preview")
-    def create_preview(identifier: str, body: MediaClient):
-        return media.create_preview(client(body.client_id), identifier)
+    @needs(*WATCH)
+    def create_preview(identifier: str, body: MediaClient, request: Request):
+        return media.create_preview(
+            item(request, body.client_id, identifier),
+            identifier,
+            account=actor(request).account,
+        )
 
     @app.delete("/api/media/previews/{preview_id}")
-    def close_preview(preview_id: str, client_id: str = ""):
-        return media.close_preview(client(client_id), preview_id)
+    @needs(*WATCH)
+    def close_preview(preview_id: str, request: Request, client_id: str = ""):
+        return media.close_preview(preview(request, client_id, preview_id), preview_id)
 
     @app.api_route("/api/media/previews/{preview_id}/stream", methods=["GET", "HEAD"])
+    @needs(*WATCH)
     def preview_stream(preview_id: str, request: Request, client_id: str = ""):
         import mimetypes
         import re
 
+        chosen = preview(request, client_id, preview_id)
         try:
-            path, size = media.preview_source(client(client_id), preview_id)
+            path, size = media.preview_source(chosen, preview_id)
         except (ValueError, OSError) as error:
             raise HTTPException(
                 409, str(error) if isinstance(error, ValueError) else "Preview source unavailable."
@@ -278,9 +348,16 @@ def media_routes(app, agent, assistant):
         )
 
     @app.get("/api/media/items/{identifier}/artwork")
-    def artwork(identifier: str, client_id: str = ""):
+    @needs(*WATCH)
+    def artwork(identifier: str, request: Request, client_id: str = ""):
+        if not identifier.startswith("tracker-"):
+            client_id = item(request, client_id, identifier)
+        elif not media.sees_tracker(actor(request)):
+            raise HTTPException(404, "Artwork unavailable.")
+        else:
+            client_id = target(request, client_id)
         try:
-            path = media.artwork(client(client_id), identifier)
+            path = media.artwork(client_id, identifier)
             if path is None:
                 raise ValueError("Artwork unavailable.")
             return FileResponse(path)
@@ -288,40 +365,72 @@ def media_routes(app, agent, assistant):
             raise HTTPException(404, "Artwork unavailable.") from error
 
     @app.get("/api/media/items/{identifier}/subtitles/{subtitle_id}")
-    def subtitles(identifier: str, subtitle_id: str, client_id: str = ""):
+    @needs(*WATCH)
+    def subtitles(identifier: str, subtitle_id: str, request: Request, client_id: str = ""):
+        chosen = item(request, client_id, identifier)
         try:
-            data, mime = media.subtitle(client(client_id), identifier, subtitle_id)
+            data, mime = media.subtitle(chosen, identifier, subtitle_id)
             return Response(data, media_type=mime)
         except (OSError, ValueError) as error:
             raise HTTPException(404, "Subtitle unavailable.") from error
 
     @app.post("/api/media/items/{identifier}/forget-progress")
-    def forget_progress(identifier: str, body: MediaClient):
-        media.forget_progress(client(body.client_id), identifier)
+    @needs(*WATCH)
+    def forget_progress(identifier: str, body: MediaClient, request: Request):
+        chosen = item(request, body.client_id, identifier)
+        media.forget_progress(chosen, identifier, **who(request))
         return {"ok": True}
 
     @app.post("/api/media/items/{identifier}/watched")
-    def watched(identifier: str, body: Watched):
-        return media.watched(client(body.client_id), identifier, body.watched)
+    @needs(*WATCH)
+    def watched(identifier: str, body: Watched, request: Request):
+        chosen = item(request, body.client_id, identifier)
+        return media.watched(chosen, identifier, body.watched, **who(request))
 
     @app.get("/api/media/playlists")
-    def playlists(client_id: str = ""):
-        return media.playlists(client(client_id))
+    @needs(*WATCH)
+    def playlists(request: Request, client_id: str = ""):
+        chosen, found = target(request, client_id), actor(request)
+        rows = media.playlists(chosen, **who(request))
+        if found.owner:
+            return rows
+        # What became hidden since it was added leaves the Member's playlist.
+        kept = media.visible_ids(chosen, found)
+        return [{**r, "media_ids": [i for i in r["media_ids"] if i in kept]} for r in rows]
 
     @app.post("/api/media/playlists")
-    def save_playlist(body: PlaylistSave):
-        return media.save_playlist(client(body.client_id), body.name, body.media_ids, body.id)
+    @needs(*WATCH)
+    def save_playlist(body: PlaylistSave, request: Request):
+        watchable(request, body.media_ids)
+        return media.save_playlist(
+            target(request, body.client_id), body.name, body.media_ids, body.id, **who(request)
+        )
 
     @app.delete("/api/media/playlists/{identifier}")
-    def delete_playlist(identifier: str, client_id: str = ""):
-        return media.delete_playlist(client(client_id), identifier)
+    @needs(*WATCH)
+    def delete_playlist(identifier: str, request: Request, client_id: str = ""):
+        return media.delete_playlist(target(request, client_id), identifier, **who(request))
 
     @app.post("/api/media/sessions")
-    def open_session(body: SessionOpen):
-        return media.open_session(client(body.client_id), body.platform)
+    @needs(*WATCH)
+    def open_session(body: SessionOpen, request: Request):
+        return media.open_session(target(request, body.client_id), body.platform, **who(request))
 
     @app.post("/api/media/sessions/{identifier}")
-    def session(identifier: str, body: SessionUpdate):
+    @needs(*WATCH)
+    def session(identifier: str, body: SessionUpdate, request: Request):
+        found = actor(request)
+        if not found.owner:
+            try:
+                opened = media.session_record(identifier, body.token)
+            except ValueError as error:
+                raise HTTPException(400, str(error)) from error
+            if (opened["account"], opened["viewer"]) != (found.account, found.viewer):
+                raise HTTPException(400, "Player session unavailable for this instance.")
+            report = body.report or {}
+            watchable(request, [*(body.media_ids or ()), *(report.get("queue") or ())])
+            if report.get("current_id"):
+                watchable(request, [report["current_id"]])
         return media.session(identifier, **body.model_dump(exclude_none=True))
 
     @app.post("/api/media/sessions/{identifier}/chat")

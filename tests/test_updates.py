@@ -48,8 +48,12 @@ def test_web_shell_checks_the_running_server_version_after_login(monkeypatch, tm
                 "url": Release("v0.5.0").url,
             },
         }
-        assert browser.get("/api/shell").json() == expected
-        assert browser.get("/api/shell").json() == expected
+        shell = browser.get("/api/shell").json()
+        assert shell["actor"]["owner"]
+        assert {k: shell[k] for k in expected} == expected
+        assert {k: v for k, v in browser.get("/api/shell").json().items() if k in expected} == (
+            expected
+        )
         assert len(calls) == 1
 
 

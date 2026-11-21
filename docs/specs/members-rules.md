@@ -47,7 +47,11 @@ the path values allowed (`action={...}`). The middleware checks it on `/api/*` a
 A row below is declared by the issue that makes its handler answer for the actor (#131 Media
 with visibility and per-person progress, #133 and #134 Requests, #137 Search, queue and
 torrents, #138 the Assistant); until then the route stays Owner-only. Today the "nothing",
-"signed in" and `/api/members*` rows are declared.
+"signed in", `/api/members*` and Media rows are declared (the Media chat waits for #138). In
+code (#131) a Member's age limit and Library Folders live in `media_limits` in
+`accounts.sqlite` (no row: no limit, every folder); the limit applies to videos, music having
+no Age Rating. Tracker rows are unrated films: a Member sees them with the Films Permission
+and no limit. A Member's shell reads `/api/shell` instead of the Owner's setup snapshot.
 
 | Routes | Needs |
 | --- | --- |

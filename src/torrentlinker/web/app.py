@@ -22,7 +22,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from torrentlinker import documentation
-from torrentlinker.accounts import OWNER, OWNER_ACTOR, SESSION_IDLE, Accounts, Actor
+from torrentlinker.accounts import (
+    OWNER,
+    OWNER_ACTOR,
+    SESSION_IDLE,
+    WATCH,
+    Accounts,
+    Actor,
+    Permission,
+)
 from torrentlinker.clients import connect
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
@@ -990,11 +998,37 @@ def create_app(
 
     @app.get("/api/shell")
     @needs(Audience.SIGNED_IN)
-    def shell_state() -> dict:
+    def shell_state(request: Request) -> dict:
+        actor: Actor = request.state.actor
+        if not actor.owner:
+            # A Member's shell: Médias without the Owner's tools, and the guides. The setup
+            # snapshot is the Owner's; the shell reads only these few values instead.
+            pages = [*(["media"] if any(actor.holds(p) for p in WATCH) else []), "documentation"]
+            return {
+                "version": app_version,
+                "release": None,
+                "actor": {
+                    "owner": False,
+                    "name": accounts.display_name(actor.account),
+                    "permissions": sorted(actor.permissions),
+                },
+                "pages": pages,
+                "setup": {
+                    "configured": True,
+                    "adult_content": service.settings.adult_content
+                    and actor.holds(Permission.ADULT),
+                    "client_id": service.settings.default_client_id,
+                    "default_client_id": service.settings.default_client_id,
+                    "web_auth": "password" if sessions is not None else "proxy",
+                    "clients": [],
+                    "capabilities": {},
+                },
+            }
         release = check_for_update(directory / "release-check.json", current=app_version)
         return {
             "version": app_version,
             "release": {"tag": release.tag, "url": release.url} if release else None,
+            "actor": {"owner": True, "name": "", "permissions": sorted(Permission)},
         }
 
     @app.get("/api/zen/catalogue")

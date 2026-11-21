@@ -37,6 +37,8 @@ function clearAgentToken() {}
 function settingsEnvironment() {}
 function shellEnvironment() {}
 function shellRelease() {}
+function signedInMember() { return false; }
+const shellState = {};
 function shellEnsureBand() {}
 function shellSpecificClient() { return state.setup.default_client_id; }
 function resetLibraryReview() {}

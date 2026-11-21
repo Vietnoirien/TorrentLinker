@@ -11,11 +11,13 @@ URL's fragment (`join#…`), so it never reaches a server log.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from torrentlinker import age_ratings
 from torrentlinker.accounts import OWNER, Accounts, Actor, Caps, Permission
 from torrentlinker.web.permissions import Audience, needs
 
@@ -26,7 +28,17 @@ class MemberCaps(BaseModel):
     pending: int | None = Field(default=None, ge=0, le=10_000)
 
 
-class Member(BaseModel):
+AgeLimit = Literal["TP", "10", "12", "16", "18"] | None
+
+
+class MediaLimits(BaseModel):
+    """What Médias shows: an Age Rating limit and the visible Library Folders (None: all)."""
+
+    age_limit: AgeLimit = None
+    folders: list[str] | None = Field(default=None, max_length=500)
+
+
+class Member(MediaLimits):
     name: str = Field(max_length=100)
     login: str = Field(max_length=100)
     proxy_user: str = Field(default="", max_length=200)
@@ -44,7 +56,7 @@ class NewLink(BaseModel):
     base: str = Field(max_length=500)  # the address the Web UI is opened at, for the link
 
 
-class Invitation(NewLink):
+class Invitation(NewLink, MediaLimits):
     name: str = Field(max_length=100)
     note: str = Field(default="", max_length=500)
     permissions: list[Permission] = Field(default_factory=list, max_length=len(Permission))
@@ -106,6 +118,33 @@ def member_routes(
         if lacking:
             raise PermissionError("You cannot grant or remove a Permission you do not hold.")
 
+    def library_folders() -> list[dict]:
+        return [
+            {"path": str(f.path.absolute()), "name": f.path.name or str(f.path), "kind": f.kind}
+            for f in media.agent.setup.settings.library_folders
+        ]
+
+    def rank(age_limit: str | None) -> int | None:
+        return None if age_limit is None else age_ratings.rank(age_limit)
+
+    def may_limit(editor: Actor, account: str, before: dict, body: MediaLimits) -> None:
+        """A manager never widens what Médias shows past their own limits, nor their own."""
+        folders = None if body.folders is None else sorted(set(body.folders))
+        if editor.owner or (before.get("age_limit"), before.get("folders")) == (
+            body.age_limit,
+            folders,
+        ):
+            return
+        if account == editor.account:
+            raise PermissionError("Ask another manager to change your own Permissions.")
+        limit, wanted = editor.age_limit, rank(body.age_limit)
+        if limit is not None and (wanted is None or wanted > limit):
+            raise PermissionError("You cannot allow a higher Age Rating than your own.")
+        if editor.folders is not None and (
+            body.folders is None or not set(body.folders) <= editor.folders
+        ):
+            raise PermissionError("You cannot show a Library Folder you do not see.")
+
     def caps(body: Member, account: str) -> Caps:
         kept = accounts.caps(account).assistant_per_day
         if Permission.REQUEST not in body.permissions:
@@ -121,6 +160,7 @@ def member_routes(
             "proxy": proxy,
             "you": editor.account,
             "grantable": sorted(p.value for p in Permission if editor.holds(p)),
+            "library_folders": library_folders(),
             **({"owner_proxy_user": accounts.owner_proxy_user()} if editor.owner else {}),
         }
 
@@ -142,10 +182,11 @@ def member_routes(
 
         def work() -> tuple[str, str]:
             may_edit(editor, "", set(), {p.value for p in body.permissions})
+            may_limit(editor, "", {}, body)
             caps = (
                 Caps(**body.caps.model_dump()) if Permission.REQUEST in body.permissions else Caps()
             )
-            return accounts.invite(
+            account, token = accounts.invite(
                 body.name,
                 body.permissions,
                 caps,
@@ -153,6 +194,8 @@ def member_routes(
                 inviter=editor.account,
                 note=body.note,
             )
+            accounts.set_media_limits(account, body.age_limit, body.folders)
+            return account, token
 
         account, token = answer(work)
         found = current(account)
@@ -229,6 +272,7 @@ def member_routes(
 
         def work() -> str:
             may_edit(editor, "", set(), {p.value for p in body.permissions})
+            may_limit(editor, "", {}, body)
             account = accounts.create(
                 body.name,
                 body.login,
@@ -237,6 +281,7 @@ def member_routes(
                 proxy_user=body.proxy_user,
             )
             accounts.set_caps(account, caps(body, account))
+            accounts.set_media_limits(account, body.age_limit, body.folders)
             return account
 
         return current(answer(work))
@@ -252,6 +297,7 @@ def member_routes(
         def work() -> None:
             granted = {p.value for p in body.permissions}
             may_edit(editor, account, set(before["permissions"]), granted)
+            may_limit(editor, account, before, body)
             new_caps = caps(body, account)
             if account == editor.account and not editor.owner and vars(new_caps) != before["caps"]:
                 raise PermissionError("Ask another manager to change your own caps.")
@@ -263,6 +309,7 @@ def member_routes(
                     "Only the Owner can change how a Member with more Permissions signs in."
                 )
             accounts.update(account, body.name, body.login, body.proxy_user)
+            accounts.set_media_limits(account, body.age_limit, body.folders)
             accounts.grant(account, body.permissions)
             accounts.set_caps(account, new_caps)
             if body.password:

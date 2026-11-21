@@ -368,7 +368,10 @@ function table(target, rows, columns, selection, key = "hash", onChange, onRow) 
   t.append(body);
   host.append(t);
 }
+// A Member's shell has no setup snapshot: /api/shell gives the few values it reads.
+const signedInMember = () => state.actor?.owner === false;
 async function refreshSetup() {
+  if (signedInMember()) return;
   const client = state.clientId;
   const setup = await api("setup");
   if (client && client !== state.clientId) return;
@@ -402,9 +405,13 @@ const mediaViewsByKind = {
 const rememberedTabs = {};
 let activeRoute = "";
 function resolveRoute(fragment) {
-  const fallback = state.setup?.configured ? ["torrents"] : ["setup", "connections"];
+  const member = signedInMember();
+  const fallback = member
+    ? state.pages.includes("media") ? ["media", "video"] : ["documentation"]
+    : state.setup?.configured ? ["torrents"] : ["setup", "connections"];
   const parts = fragment.replace(/^#\//, "").split("/");
   const [view, tab, detail] = parts;
+  if (member && !state.pages.includes(view)) return fallback;
   // Incomplete setup selects the landing page; it does not block explicit routes
   // such as configuring the Assistant or reviewing saved Upload drafts.
   if (!fragment.startsWith("#/") || !Object.hasOwn(viewTabs, view)) return fallback;
@@ -586,7 +593,7 @@ async function pollJobs() {
   try { await pollJobsOnce(); } finally { pollingJobs = false; }
 }
 async function pollJobsOnce() {
-  if ($("workspace").hidden) return;
+  if ($("workspace").hidden || signedInMember()) return;
   const rows = await api("jobs");
   const changed = observedJobs.size && rows.some(row => !pendingJob(row) && !locallyTrackedJobs.has(row.id) && !state.jobs.has(row.id) && observedJobs.get(row.id) !== row.status && [state.clientId, "all"].includes(row.client_id) && jobPage(row.kind) === state.view);
   for (const row of rows) if (!pendingJob(row)) locallyTrackedJobs.delete(row.id);
@@ -734,14 +741,22 @@ async function reseedAllMatches() {
   )));
 }
 async function enter() {
-  await refreshSetup();
+  const shell = await api("shell");
+  state.actor = shell.actor;
+  state.pages = shell.pages || null;
+  shellState.release = shell.release;
+  if (shell.setup) {
+    state.setup = shell.setup;
+    state.clientId = shell.setup.client_id;
+    for (const node of document.querySelectorAll("[data-adult]")) node.hidden = !state.setup.adult_content;
+  } else await refreshSetup();
   shellEnvironment();
-  shellRelease();
   $("login-screen").hidden = true;
   $("workspace").hidden = false;
   const parts = resolveRoute(location.hash);
   writeRoute(parts, true);
   await navigate(...parts);
+  if (signedInMember()) return;
   if (state.setup.configured) await job({ kind: "refresh" }, loadTorrents);
   await pollJobs();
 }
@@ -782,6 +797,7 @@ loginMode();
 async function logout() {
   document.dispatchEvent(new Event("tl-logout"));
   await api("logout", {});
+  state.actor = null; state.pages = null; state.clientId = "";
   state.jobs.clear(); observedJobs.clear(); displayedJobs = []; locallyTrackedJobs.clear(); $("page-jobs").replaceChildren(); $("page-jobs").hidden = true; clearAgentToken();
   $("workspace").hidden = true; $("login-screen").hidden = false;
 }
@@ -822,7 +838,6 @@ setInterval(() => {
 }, 15000);
 document.addEventListener("DOMContentLoaded", () => guard(async () => {
   try {
-    await api("setup");
     await enter();
   } catch (error) {
     if (!error.message.includes("Sign in")) toast(error.message);

@@ -48,7 +48,11 @@ window.addEventListener("media-environment",event=>{
 async function applyEnvironment(){
   const env=environment;
   language=env.language||"en";state.clientId=env.client_id||"default";state.view=env.active?"media":"";
-  state.setup={adult_content:!!env.adult_content};
+  // A Member's Médias has none of the Owner's tools: no library refresh, no Assistant (#138
+  // declares its route) and no tracker download (Requests come with #133).
+  state.setup={adult_content:!!env.adult_content,owner:env.owner!==false};
+  for(const id of ["media-toolbar-refresh","media-refresh","media-toolbar-chat"])$(id).hidden=!state.setup.owner;
+  for(const node of document.querySelectorAll("[data-view=setup]"))node.hidden=!state.setup.owner;
   document.documentElement.lang=language;document.documentElement.dataset.theme=env.theme||"dark";
   document.documentElement.style.setProperty("--media-player-clearance",`${Math.max(0,Math.min(innerHeight,Number(env.player_clearance)||0))}px`);
   const center=$("media-center-mode");

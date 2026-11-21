@@ -19,7 +19,7 @@ from xml.etree import ElementTree
 from guessit import guessit
 
 from torrentlinker import media_tracks
-from torrentlinker.accounts import OWNER
+from torrentlinker.accounts import OWNER, OWNER_ACTOR, Actor, Permission
 from torrentlinker.domain import ContentKind
 from torrentlinker.media_ratings import AgeRatings
 from torrentlinker.media_tracker import TrackerRows
@@ -234,6 +234,82 @@ class MediaLibrary(TrackerRows, AgeRatings):
         if row["folder"] not in registered:
             raise ValueError("This media folder is no longer registered.")
         return row
+
+    def visibility(self, client_id, actor: Actor, item=None):
+        """Whether the actor sees a library record (ADR-0022): its Library Folder and Content
+        Kind are allowed, its Age Rating is at or under the limit (an unrated video is hidden
+        under any limit; music has no rating) and adult content needs its Permission. The
+        Owner sees everything. `item` narrows the ratings read to one item."""
+        if actor.owner:
+            return lambda record: True
+        settings = self.setup(client_id).settings
+        adult_folders = {
+            str(folder.path.absolute())
+            for folder in settings.library_folders
+            if folder.kind is ContentKind.ADULT
+        }
+        ranks: dict[str, int] = {}
+        if actor.age_limit is not None:
+            query = "SELECT item, rank FROM media_ratings WHERE client=? AND rank IS NOT NULL"
+            values = [client_id]
+            if item is not None:
+                query, values = query + " AND item=?", [client_id, item]
+            with self.lock:
+                ranks = {r["item"]: r["rank"] for r in self.db.execute(query, values)}
+
+        def sees(record) -> bool:
+            if actor.folders is not None and record["folder"] not in actor.folders:
+                return False
+            if record["folder"] in adult_folders and not (
+                settings.adult_content and actor.holds(Permission.ADULT)
+            ):
+                return False
+            body = json.loads(record["body"])
+            if body.get("kind") == "music":
+                return actor.holds(Permission.MUSIC)
+            kind = (
+                Permission.ANIME
+                if is_anime(body, record["path"])
+                else Permission.SERIES
+                if body.get("series")
+                else Permission.FILMS
+            )
+            if not actor.holds(kind):
+                return False
+            rank = ranks.get(record["id"])
+            return actor.age_limit is None or rank is not None and rank <= actor.age_limit
+
+        return sees
+
+    def visible(self, client_id, identifier, actor: Actor):
+        """The item's record when the actor sees it. KeyError for a hidden item, the same as
+        for a missing one, so a guessed identifier tells nothing."""
+        try:
+            record = self.record(client_id, identifier)
+        except ValueError:
+            raise KeyError(identifier) from None
+        if not self.visibility(client_id, actor, identifier)(record):
+            raise KeyError(identifier)
+        return record
+
+    def visible_ids(self, client_id, actor: Actor) -> set[str]:
+        sees = self.visibility(client_id, actor)
+        with self.lock:
+            records = self.db.execute(
+                "SELECT * FROM media_items WHERE client=?", (client_id,)
+            ).fetchall()
+        return {r["id"] for r in records if sees(r)}
+
+    def holder(self, identifier) -> str | None:
+        """The Torrent Client whose library holds this item, the default client first: a
+        Member never chooses one."""
+        default = self.agent.setup.settings.default_client_id
+        with self.lock:
+            row = self.db.execute(
+                "SELECT client FROM media_items WHERE id=? ORDER BY client<>? LIMIT 1",
+                (identifier, default),
+            ).fetchone()
+        return row["client"] if row else None
 
     def resolve(self, client_id, identifier):
         row = self.record(client_id, identifier)
@@ -1050,6 +1126,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
         adult=False,
         anime=None,
         oav=None,
+        actor=OWNER_ACTOR,
         **unused,
     ):
         self.setup(client_id)
@@ -1070,14 +1147,17 @@ class MediaLibrary(TrackerRows, AgeRatings):
             if folder.kind is ContentKind.ADULT
         }
         adult = bool(adult)
+        sees = self.visibility(client_id, actor)
         records = [
             record
             for record in records
             if record["folder"] in registered
             and (record["folder"] in adult_folders) == adult
             and (settings.adult_content or not adult)
+            and sees(record)
         ]
-        rows = [self.row(r, check=bool(availability)) for r in records]
+        who = {"account": actor.account, "viewer": actor.viewer}
+        rows = [self.row(r, check=bool(availability), **who) for r in records]
         rows = [r for r in rows if (not kind or r["kind"] == kind)]
         filters = {
             name: sorted({str(r.get(name) or "") for r in rows if r.get(name)})
@@ -1144,10 +1224,10 @@ class MediaLibrary(TrackerRows, AgeRatings):
         by_id = {record["id"]: record for record in records}
         page = []
         for row in rows[offset : offset + limit]:
-            checked = self.row(by_id[row["id"]])
+            checked = self.row(by_id[row["id"]], **who)
             if not checked["available"] and row["kind"] == "video" and not availability:
                 for alternative in releases_by_content[row["content_id"]][:200]:
-                    candidate = self.row(by_id[alternative])
+                    candidate = self.row(by_id[alternative], **who)
                     if candidate["available"]:
                         checked = candidate
                         break
@@ -1198,14 +1278,16 @@ class MediaLibrary(TrackerRows, AgeRatings):
         order = {(row["series"], bool(row.get("oav"))): i for i, row in enumerate(rows)}
         return sorted(cards.values(), key=lambda card: order[card["series"], card["oav"]])
 
-    def home_rows(self, client_id, *, kind="video", limit=20, genres=8, scope="home"):
+    def home_rows(
+        self, client_id, *, kind="video", limit=20, genres=8, scope="home", actor=OWNER_ACTOR
+    ):
         """Video browsing as rows. The home: what to continue, what is new, the main genres,
         series, the best rated and what is not watched yet. The Films and Series views: what
         is new and the main genres of that kind. Each row says how to see all of it."""
         rows = []
 
         def add(key, title, **filters):
-            page = self.listing(client_id, kind=kind, limit=limit, **filters)
+            page = self.listing(client_id, kind=kind, limit=limit, actor=actor, **filters)
             if page["rows"]:
                 rows.append(
                     {
@@ -1218,7 +1300,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 )
 
         def genre_rows(view, least=3, **extra):
-            page = self.listing(client_id, kind=kind, view=view, limit=200, **extra)
+            page = self.listing(client_id, kind=kind, view=view, limit=200, actor=actor, **extra)
             counts: dict[str, int] = {}
             while True:
                 for row in page["rows"]:
@@ -1232,6 +1314,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
                     view=view,
                     limit=200,
                     offset=page["next_offset"],
+                    actor=actor,
                     **extra,
                 )
             top = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
@@ -1267,6 +1350,12 @@ class MediaLibrary(TrackerRows, AgeRatings):
             if scope in {"home", "films"} and kind == "video"
             else {}
         )
+        if not actor.owner:
+            # Films not in the library yet: films, with no Age Rating, so hidden under a
+            # limit. Better versions of library films are the Owner's concern.
+            tracker.pop("upgrades", None)
+            if not self.sees_tracker(actor):
+                tracker.pop("tracker", None)
         if "tracker" in tracker:
             rows.append(tracker["tracker"])
         # Libraries hold far fewer series than films.
@@ -1279,13 +1368,29 @@ class MediaLibrary(TrackerRows, AgeRatings):
             rows.append(tracker["upgrades"])
         return {"rows": rows}
 
-    def detail(self, client_id, identifier, *, episodes_offset=0, releases_offset=0, limit=200):
-        item = self.row(self.record(client_id, identifier))
+    @staticmethod
+    def sees_tracker(actor: Actor) -> bool:
+        """Tracker films are unrated films: shown with the Films Permission and no limit."""
+        return actor.owner or actor.holds(Permission.FILMS) and actor.age_limit is None
+
+    def detail(
+        self,
+        client_id,
+        identifier,
+        *,
+        episodes_offset=0,
+        releases_offset=0,
+        limit=200,
+        actor=OWNER_ACTOR,
+    ):
+        who = {"account": actor.account, "viewer": actor.viewer}
+        item = self.row(self.record(client_id, identifier), **who)
+        sees = self.visibility(client_id, actor)
         with self.lock:
             records = self.db.execute(
                 "SELECT * FROM media_items WHERE client=?", (client_id,)
             ).fetchall()
-        others = [self.row(r, check=False) for r in records]
+        others = [self.row(r, check=False, **who) for r in records if sees(r)]
         releases = [r for r in others if r["content_id"] == item["content_id"]]
         episodes = sorted(
             [
@@ -1872,7 +1977,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             raise ValueError("qBittorrent returned an incomplete piece map.")
         return path, size, piece_size, [piece == 2 for piece in pieces]
 
-    def create_preview(self, client_id, identifier):
+    def create_preview(self, client_id, identifier, *, account=OWNER):
         from torrentlinker.paths import PathMapper
 
         setup = self.setup(client_id)
@@ -1896,6 +2001,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             self.previews[preview_id] = {
                 "client": client_id,
                 "item": identifier,
+                "account": account,
                 "hash": torrent_hash,
                 "bytes": verified,
                 "created": time.time(),
@@ -1911,6 +2017,12 @@ class MediaLibrary(TrackerRows, AgeRatings):
             "note": "Fixed verified prefix. Refresh preview as the download progresses. "
             "Formats needing the missing end of the file may not play yet.",
         }
+
+    def preview_owner(self, preview_id) -> tuple[str, str, str] | None:
+        """The client, item and account of an open preview."""
+        with self.lock:
+            preview = self.previews.get(preview_id)
+        return (preview["client"], preview["item"], preview["account"]) if preview else None
 
     def preview_source(self, client_id, preview_id):
         with self.lock:

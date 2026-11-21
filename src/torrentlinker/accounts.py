@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import sqlite3
@@ -15,6 +16,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
+
+from torrentlinker import age_ratings
 
 OWNER = "owner"  # the fixed account of the Owner; never restricted, edited or deleted
 SESSION_IDLE = 30 * 86400  # a Member's session ends after 30 days of disuse
@@ -53,6 +56,10 @@ class Actor:
     account: str
     permissions: frozenset[Permission]
     viewer: str = ""
+    # What Médias shows them (#131): an Age Rating rank at most (None: no limit), and the
+    # Library Folders by path (None: every folder, those added later included).
+    age_limit: int | None = None
+    folders: frozenset[str] | None = None
 
     @property
     def owner(self) -> bool:
@@ -97,6 +104,10 @@ class Accounts:
                     requests_per_week INTEGER, bytes_per_week INTEGER, pending INTEGER,
                     assistant_per_day INTEGER NOT NULL DEFAULT 20
                 );
+                CREATE TABLE IF NOT EXISTS media_limits (
+                    account TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+                    age_limit INTEGER, folders TEXT
+                );
                 CREATE TABLE IF NOT EXISTS sessions (
                     digest TEXT PRIMARY KEY,
                     account TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -130,9 +141,12 @@ class Accounts:
                 "SELECT permission FROM permissions WHERE account=?", (account,)
             ).fetchall()
         known = {p.value for p in Permission}
+        age_limit, folders = self.media_limits(account)
         return Actor(
             account,
             frozenset(Permission(r["permission"]) for r in granted if r["permission"] in known),
+            age_limit=age_limit,
+            folders=None if folders is None else frozenset(folders),
         )
 
     def create(
@@ -242,6 +256,7 @@ class Accounts:
                     if g["account"] == r["id"] and g["permission"] in known
                 ),
                 "caps": vars(self.caps(r["id"])),
+                **self._public_limits(r["id"]),
                 "invited": not r["login"] and not r["password"],
                 "link": (
                     {
@@ -356,9 +371,14 @@ class Accounts:
             self._grant(account, permissions)
 
     def _grant(self, account: str, permissions: Iterable[Permission]) -> None:
+        granted = {Permission(p) for p in permissions}
+        limit = self.db.execute(
+            "SELECT age_limit FROM media_limits WHERE account=?", (account,)
+        ).fetchone()
+        if limit is not None and not adult_allowed(limit["age_limit"]):
+            granted.discard(Permission.ADULT)
         self.db.executemany(
-            "INSERT INTO permissions VALUES (?,?)",
-            [(account, Permission(p).value) for p in set(permissions)],
+            "INSERT INTO permissions VALUES (?,?)", [(account, p.value) for p in granted]
         )
 
     def caps(self, account: str) -> Caps:
@@ -384,6 +404,43 @@ class Accounts:
                 "INSERT OR REPLACE INTO caps VALUES (?,?,?,?,?)",
                 (account, *values, caps.assistant_per_day),
             )
+
+    def media_limits(self, account: str) -> tuple[int | None, list[str] | None]:
+        """The account's Age Rating limit, as a rank, and its visible Library Folders."""
+        with self.lock:
+            row = self.db.execute(
+                "SELECT age_limit, folders FROM media_limits WHERE account=?", (account,)
+            ).fetchone()
+        if row is None:
+            return None, None
+        return row["age_limit"], None if row["folders"] is None else json.loads(row["folders"])
+
+    def _public_limits(self, account: str) -> dict:
+        age_limit, folders = self.media_limits(account)
+        return {
+            "age_limit": None if age_limit is None else age_ratings.SCALE[age_limit],
+            "folders": folders,
+        }
+
+    def set_media_limits(
+        self, account: str, age_limit: str | None, folders: Iterable[str] | None
+    ) -> None:
+        """Limit what Médias shows a Member. Under any limit but −18, adult content goes."""
+        rank = None if age_limit is None else age_ratings.rank(age_limit)
+        if age_limit is not None and rank is None:
+            raise ValueError("Choose Tous publics, −10, −12, −16 or −18.")
+        chosen = None if folders is None else sorted({str(f) for f in folders})
+        with self.lock, self.db:
+            self._member(account)
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_limits VALUES (?,?,?)",
+                (account, rank, None if chosen is None else json.dumps(chosen)),
+            )
+            if not adult_allowed(rank):
+                self.db.execute(
+                    "DELETE FROM permissions WHERE account=? AND permission=?",
+                    (account, Permission.ADULT.value),
+                )
 
     def invite(
         self,
@@ -540,6 +597,11 @@ class Accounts:
             raise PermissionError("The Owner's account cannot be restricted.")
         if not self.db.execute("SELECT 1 FROM accounts WHERE id=?", (account,)).fetchone():
             raise ValueError("This Member no longer exists.")
+
+
+def adult_allowed(age_limit: int | None) -> bool:
+    """Adult content is granted only with no age limit or the −18 one."""
+    return age_limit is None or age_limit >= len(age_ratings.SCALE) - 1
 
 
 def scrypt(password: str, salt: bytes) -> bytes:

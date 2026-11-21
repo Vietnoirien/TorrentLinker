@@ -156,6 +156,22 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/media/items/{identifier}/rating",
         "/api/media/ratings",
         "/api/media/ratings/confirm",
+        # Médias with visibility (#131).
+        "/api/media",
+        "/api/media/home",
+        "/api/media/items/{identifier}",
+        "/api/media/items/{identifier}/stream",
+        "/api/media/items/{identifier}/artwork",
+        "/api/media/items/{identifier}/subtitles/{subtitle_id}",
+        "/api/media/items/{identifier}/watched",
+        "/api/media/items/{identifier}/forget-progress",
+        "/api/media/items/{identifier}/preview",
+        "/api/media/previews/{preview_id}",
+        "/api/media/previews/{preview_id}/stream",
+        "/api/media/playlists",
+        "/api/media/playlists/{identifier}",
+        "/api/media/sessions",
+        "/api/media/sessions/{identifier}",
     }
 
 
