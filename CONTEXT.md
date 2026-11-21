@@ -169,8 +169,12 @@ One thing a Member may see or do, granted per Member: a feature, a Library Folde
 _Avoid_: Role, right, access level
 
 **Viewer**:
-A person's place on a shared screen inside an account, with their own watch progress and playlists, possibly narrower Permissions, and an optional PIN.
-_Avoid_: Profile (Zen Profile and ReleaseScore profiles), home user
+A person who watches under the Owner's or a Member's account without signing in, chosen on a Shared Screen; they have their own watch progress and playlists, only Media Permissions, never broader than the account's, and never make Requests.
+_Avoid_: Profile (Zen Profile and ReleaseScore profiles), home user, sub-account
+
+**Shared Screen**:
+A browser an account holder marked as shared when signing in, named ("Télé du salon") and remembered for 90 days of disuse; it asks who watches, and opening a less restricted Viewer there takes that Viewer's PIN.
+_Avoid_: Device (a browser is all the server can tell apart), TV
 
 **Request**:
 A Member's ask to download a tracker release, waiting for an Approver; once accepted it is sent to the Torrent Client at once.

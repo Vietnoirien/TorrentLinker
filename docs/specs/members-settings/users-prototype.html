@@ -335,6 +335,7 @@ small,
 .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}.preset{text-align:left;display:grid;gap:4px}.preset[aria-pressed=true]{border-color:var(--accent);background:var(--tint)}
 .diff{display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0}
 .settings-check input[type=number]{width:90px}
+.assistant-dialog label.settings-check{display:flex}
 #switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:#0d1216;color:#fff;border:1px solid #ffffff40;border-radius:999px;padding:6px 8px;box-shadow:0 10px 40px #0008;z-index:50;font-size:13px}
 #switcher button{background:#ffffff14;border-color:#ffffff30;color:#fff;border-radius:999px;padding:4px 12px}#switcher b{min-width:200px;text-align:center}
 </style>
@@ -369,7 +370,7 @@ const PRESETS={
 const clone=x=>JSON.parse(JSON.stringify(x));
 const grant=k=>{const v=clone(PRESETS[k]);return {p:v.p,kinds:v.kinds,age:v.age,caps:v.caps,preset:k}};
 let members=[
- {id:"lea",name:"Léa",login:"lea",proxy:"",state:"Active",viewers:["Léa","Hugo (enfant)"],...grant("famille"),folders:["films","series","anime","music"]},
+ {id:"lea",name:"Léa",login:"lea",proxy:"",state:"Active",screens:[{name:"Télé du salon",used:"hier soir"},{name:"Tablette de la cuisine",used:"il y a 12 jours"}],viewers:[{name:"Léa",holder:true,pin:true,age:"",kinds:["film","serie","anime","musique"]},{name:"Hugo",pin:false,age:"10",kinds:["film","anime"]},{name:"Mamie",pin:false,age:"",kinds:["film","serie"]}],...grant("famille"),folders:["films","series","anime","music"]},
  {id:"hugo",name:"Hugo",login:"hugo",proxy:"",state:"Profil de Léa",viewers:[],...grant("enfant"),folders:["films","anime"]},
  {id:"maman",name:"Maman",login:"maman",proxy:"maman@famille",state:"Active",viewers:[],...grant("admin"),folders:["films","series","music"]},
  {id:"karim",name:"Karim",login:"",proxy:"",state:"Invitation envoyée, expire dans 2 j",viewers:[],...grant("spectateur"),folders:["films","series"]},
@@ -399,6 +400,22 @@ function inviteResult(){return `<form method="dialog"><h2>Invitation pour Karim<
   <small>Configurez d'abord l'envoi d'e-mails dans Paramètres → Notifications (SMTP ou MX Plan d'OVHcloud).</small></div>
  <div class="settings-actions"><button value="close">Fermer</button></div></form>`}
 
+/* Viewers: people sharing one account on a shared screen, each never broader than the account. */
+function viewersDialog(){const x=m(editing),ages=AGES.filter(([v])=>v===""||!x.age||+v<=+(x.age||99));
+ const restricted=x.viewers.some(v=>!v.holder&&(v.age||v.kinds.length<x.kinds.length));
+ return `<form method="dialog"><h2>Profils et écrans partagés de ${esc(x.name)}</h2>
+ <p class="muted">Les profils regardent sous le compte de ${esc(x.name)} sans se connecter : Médias seulement, jamais plus large que le compte, et ils ne font pas de demandes. ${esc(x.name)} les gère aussi depuis son compte.</p>
+ ${x.viewers.map((v,i)=>`<section class="client-card" style="display:grid;gap:10px"><div class="member-head"><h3>${esc(v.name)}${v.holder?" <small class=\"muted\">· titulaire du compte</small>":""}</h3>
+  <div class="settings-actions">${v.holder?"":`<button type="button" data-promote="${i}">Inviter comme membre</button><button type="button" data-viewer-remove="${i}" style="color:var(--danger)">Retirer</button>`}</div></div>
+  ${v.holder?`<small class="muted">Voit tout ce que le compte permet.</small>`:`<div class="settings-fields"><label class="settings-field">Nom<input value="${esc(v.name)}" data-viewer="${i}" data-vfield="name"></label>
+  <label class="settings-field">Limite d'âge<select data-viewer="${i}" data-vfield="age">${ages.map(([a,l])=>`<option value="${a}" ${v.age===a?"selected":""}>${l}</option>`).join("")}</select></label></div>
+  <div>${KINDS.filter(([k])=>x.kinds.includes(k)).map(([k,l])=>`<label class="settings-check" style="display:inline-flex;margin-right:14px"><input type="checkbox" data-viewer="${i}" data-vkind="${k}" ${v.kinds.includes(k)?"checked":""}> ${l}</label>`).join("")}</div>`}
+  <label class="settings-check"><input type="checkbox" data-viewer="${i}" data-vfield="pin" ${v.pin||(v.holder&&restricted)?"checked":""} ${v.holder&&restricted?"disabled":""}> Code à 4 chiffres pour ouvrir ce profil${v.holder&&restricted?" (obligatoire : un profil plus restreint existe)":""}</label></section>`).join("")}
+ <div class="settings-actions"><button type="button" data-viewer-add>Ajouter un profil</button></div>
+ <h3 style="margin-top:20px">Écrans partagés</h3><p class="muted">Navigateurs que ${esc(x.name)} a déclarés partagés en se connectant ; on y demande qui regarde. Ils restent connectés 90 jours sans usage.</p>
+ ${(x.screens||[]).map((s,i)=>`<div class="member-head file-access-note" style="align-items:center;margin-bottom:8px"><span><strong>${esc(s.name)}</strong><br><small>Dernier usage : ${s.used}</small></span><button type="button" data-forget="${i}">Oublier cet écran</button></div>`).join("")||`<p class="muted">Aucun écran partagé.</p>`}
+ <div class="settings-actions" style="margin-top:12px"><button class="primary" value="close">Terminé</button></div></form>`}
+
 /* The full editor for one member: fieldsets of Settings checks and fields. */
 function editor(x){const check=(key,label)=>`<label class="settings-check"><input type="checkbox" data-perm="${key}" ${x.p[key]?"checked":""} ${key==="adult"&&!["","18"].includes(x.age)?"disabled":""}> ${label}</label>`;
  const cap=(key,label,unit)=>`<label class="settings-check"><input type="checkbox" data-cap-on="${key}" ${x.caps[key]!=null?"checked":""} ${x.p.request?"":"disabled"}> ${label} <input type="number" min="1" value="${x.caps[key]??""}" data-cap="${key}" ${x.caps[key]!=null&&x.p.request?"":"disabled"}> ${unit}</label>`;
@@ -408,7 +425,7 @@ function editor(x){const check=(key,label)=>`<label class="settings-check"><inpu
   <label class="settings-field">Identifiant de connexion<input value="${esc(x.login)}" placeholder="choisi à l'invitation" data-field="login"></label>
   <label class="settings-field">Nom transmis par le proxy (facultatif)<input value="${esc(x.proxy)}" placeholder="Remote-User, ex. lea@famille" data-field="proxy"></label>
   <label class="settings-field">Partir d'un préréglage<select data-preset>${Object.entries(PRESETS).map(([k,v])=>`<option value="${k}" ${x.preset===k?"selected":""}>${v.label}</option>`).join("")}</select></label>
- </div><div class="settings-actions" style="margin-top:12px"><button data-reset-password>Envoyer un lien de mot de passe</button><button>Profils sur cet écran (${x.viewers.length})</button></div></fieldset>
+ </div><div class="settings-actions" style="margin-top:12px"><button data-reset-password>Envoyer un lien de mot de passe</button><button type="button" data-viewers>Profils et écrans partagés</button></div></fieldset>
  <fieldset><legend>Médias</legend>
   ${check("video","Vidéo")}<div style="padding-left:26px">${KINDS.slice(0,3).map(([k,l])=>`<label class="settings-check" style="display:inline-flex;margin-right:14px"><input type="checkbox" data-kind="${k}" ${x.kinds.includes(k)?"checked":""} ${x.p.video?"":"disabled"}> ${l}</label>`).join("")}</div>
   ${check("music","Musique")}${check("center","Mode Media Center")}
@@ -461,6 +478,7 @@ function C(){const x=m(editing),base=PRESETS[x.preset];
 function render(){document.getElementById("settings-body").innerHTML=({A,B,C})[variant]();document.getElementById("label").textContent=`${variant} — ${variants.find(v=>v[0]===variant)[1]}`}
 function target(el){return m(el.dataset.who||editing)}
 document.addEventListener("change",e=>{const t=e.target,x=target(t),d=t.dataset;if(!x)return;dirty=true;
+ if(d.viewer!==undefined){const v=x.viewers[+d.viewer];if(d.vkind)v.kinds=t.checked?[...v.kinds,d.vkind]:v.kinds.filter(k=>k!==d.vkind);else if(d.vfield==="pin")v.pin=t.checked;else v[d.vfield]=t.value;status("Modifications non enregistrées");render();return}
  if(d.perm){x.p[d.perm]=t.checked?1:0;if(d.perm==="request"&&!t.checked)x.caps={}}
  else if(d.kind){x.kinds=t.checked?[...x.kinds,d.kind]:x.kinds.filter(k=>k!==d.kind)}
  else if(d.folder){x.folders=t.checked?[...x.folders,d.folder]:x.folders.filter(k=>k!==d.folder)}
@@ -484,6 +502,11 @@ document.addEventListener("click",e=>{const t=e.target.closest("button");if(!t)r
   ${"invite" in d?`<label>Validité du lien<select><option>3 jours</option><option>7 jours</option><option>24 heures</option></select></label><p class="muted">Le lien et son QR code s'affichent après création ; la personne choisit son mot de passe.</p>`:`<label>Identifiant<input></label><label>Mot de passe<input type="password"></label>`}
   <div class="settings-actions">${"invite" in d?`<button class="primary" type="button" data-invite-created>Créer le lien</button>`:`<button class="primary" value="ok">Créer le compte</button>`}<button value="cancel">Annuler</button></div></form>`;dlg.showModal()}
  else if("inviteCreated" in d||"inviteShow" in d){const dlg=document.getElementById("invite");dlg.innerHTML=inviteResult();if(!dlg.open)dlg.showModal()}
+ else if("viewers" in d){const dlg=document.getElementById("invite");dlg.innerHTML=viewersDialog();dlg.showModal()}
+ else if("viewerAdd" in d){m(editing).viewers.push({name:"Nouveau profil",pin:false,age:m(editing).age,kinds:[...m(editing).kinds]});document.getElementById("invite").innerHTML=viewersDialog();render()}
+ else if(d.promote!==undefined){const v=m(editing).viewers[+d.promote];status(`Invitation créée pour ${v.name} : son historique la suivra`);m(editing).viewers.splice(+d.promote,1);document.getElementById("invite").innerHTML=viewersDialog();render()}
+ else if(d.forget!==undefined){const s=m(editing).screens.splice(+d.forget,1)[0];status(`${s.name} oublié : il devra se reconnecter`);document.getElementById("invite").innerHTML=viewersDialog()}
+ else if(d.viewerRemove!==undefined){m(editing).viewers.splice(+d.viewerRemove,1);document.getElementById("invite").innerHTML=viewersDialog();render()}
  else if("copy" in d){status("Lien copié");t.textContent="Copié"}
  else if("cancelInvite" in d){const x=m(d.cancelInvite);if(confirm(`Annuler l'invitation de ${x.name} ? Le lien ne fonctionnera plus.`)){members=members.filter(y=>y!==x);editing=members[0]?.id;status("Invitation annulée");render()}}
 });
