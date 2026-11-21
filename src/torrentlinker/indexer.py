@@ -220,6 +220,17 @@ def _category_tree(root: ET.Element) -> tuple[dict[int, str], dict[int, int]]:
     return {cid: " / ".join(texts) for cid, texts in meanings.items()}, parents
 
 
+def parse_caps(xml: str) -> Caps:
+    root = ET.fromstring(xml)
+    modes: dict[SearchMode, set[str]] = {}
+    for el in root.iterfind("searching/*"):
+        mode = _CAPS_MODES.get(el.tag)
+        if mode and el.get("available") == "yes":
+            modes[mode] = {p for p in el.get("supportedParams", "q").split(",") if p}
+    categories, parents = _category_tree(root)
+    return Caps(categories, modes, parents)
+
+
 class Indexer:
     def __init__(
         self,
@@ -279,14 +290,7 @@ class Indexer:
             self._thread.stop = previous_stop
 
     def caps(self) -> Caps:
-        root = ET.fromstring(self._get({"t": "caps"}))
-        modes: dict[SearchMode, set[str]] = {}
-        for el in root.iterfind("searching/*"):
-            mode = _CAPS_MODES.get(el.tag)
-            if mode and el.get("available") == "yes":
-                modes[mode] = {p for p in el.get("supportedParams", "q").split(",") if p}
-        categories, parents = _category_tree(root)
-        return Caps(categories, modes, parents)
+        return parse_caps(self._get({"t": "caps"}))
 
     def supported_modes(self) -> dict[SearchMode, set[str]] | None:
         """Search modes and their parameters from caps, fetched once; None if unknown."""

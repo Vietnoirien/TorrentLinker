@@ -60,6 +60,7 @@ from torrentlinker.web.setup import (
     FolderRemoval,
     FolderSetup,
     IndexerConnection,
+    IndexerEntry,
     PartialNamesRefused,
     ProxySetup,
     Setup,
@@ -844,6 +845,34 @@ def create_app(
             result = service.test_indexer(body, save=True)
             reset_clients()
             return result
+
+    # The Indexers Cross-seed searches. No declaration: the Owner's alone (ADR-0022, 0024).
+    @app.get("/api/indexers")
+    def list_indexers() -> dict:
+        return {"indexers": service.indexer_rows()}
+
+    @app.post("/api/indexers")
+    def add_indexer(body: IndexerEntry) -> dict:
+        with jobs.lock:
+            idle()
+            return service.add_indexer(body)
+
+    @app.post("/api/indexers/{identifier}")
+    def update_indexer(identifier: str, body: IndexerEntry) -> dict:
+        with jobs.lock:
+            idle()
+            return service.update_indexer(identifier, body)
+
+    @app.post("/api/indexers/{identifier}/test")
+    def test_indexer_entry(identifier: str) -> dict:
+        return service.test_indexer_entry(identifier)
+
+    @app.post("/api/indexers/{identifier}/remove")
+    def remove_indexer(identifier: str) -> dict:
+        with jobs.lock:
+            idle()
+            service.remove_indexer(identifier)
+            return {"ok": True}
 
     @app.get("/api/folders")
     def folders(path: str = "") -> dict:

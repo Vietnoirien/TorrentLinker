@@ -87,9 +87,36 @@ class RtorrentSettings:
     username: str = ""
 
 
+C411_ID = "c411"
+C411_URL = "https://c411.org/api/torznab"
+
+
 @dataclass
 class IndexerSettings:
-    url: str = "https://c411.org/api/torznab"
+    """One Indexer. c411 is always the first; the others are added by hand or imported.
+
+    Its API key is a secret (`Settings.indexer_secret`). `modes` is what its caps last
+    listed: search mode -> supported parameters, empty until tested."""
+
+    url: str = C411_URL
+    id: str = C411_ID
+    name: str = "c411"
+    enabled: bool = True
+    modes: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def searchable_ids(self) -> list[str]:
+        """The ids a search by id may carry on this Indexer (imdbid, tmdbid, tvdbid...)."""
+        return sorted({p for params in self.modes.values() for p in params if p.endswith("id")})
+
+
+def indexers_from(data: dict) -> list[IndexerSettings]:
+    """The saved Indexers, c411 first; a file from before many Indexers has only its URL."""
+    found = [IndexerSettings(**i) for i in data.get("indexers", [])]
+    if not any(i.id == C411_ID for i in found):
+        found.insert(0, IndexerSettings(**data.get("indexer", {})))
+    found.sort(key=lambda i: i.id != C411_ID)
+    return found
 
 
 @dataclass
@@ -163,7 +190,7 @@ class Settings:
     transmission: TransmissionSettings = field(default_factory=TransmissionSettings)
     utorrent: UtorrentSettings = field(default_factory=UtorrentSettings)
     rtorrent: RtorrentSettings = field(default_factory=RtorrentSettings)
-    indexer: IndexerSettings = field(default_factory=IndexerSettings)
+    indexers: list[IndexerSettings] = field(default_factory=lambda: [IndexerSettings()])
     proxy: ProxySettings = field(default_factory=ProxySettings)
     announce_hosts: list[str] = field(default_factory=list)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
@@ -285,6 +312,22 @@ class Settings:
     def secret_name(self, name: str) -> str:
         return self.profile().secret_name(name) if name in CLIENT_SECRET_NAMES else name
 
+    @property
+    def indexer(self) -> IndexerSettings:
+        """c411, the Indexer of the Catalogue, uploads and everything but Cross-seed."""
+        return next(i for i in self.indexers if i.id == C411_ID)
+
+    def find_indexer(self, identifier: str) -> IndexerSettings:
+        for indexer in self.indexers:
+            if indexer.id == identifier:
+                return indexer
+        raise ValueError("Unknown Indexer.")
+
+    @staticmethod
+    def indexer_secret(identifier: str) -> str:
+        """Where an Indexer's API key is kept; c411's keeps the name it always had."""
+        return "indexer-api-key" if identifier == C411_ID else f"indexer-key-{identifier}"
+
     def save(self, path: Path) -> None:
         self.capture_client()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -298,7 +341,7 @@ class Settings:
             "transmission": asdict(self.transmission),
             "utorrent": asdict(self.utorrent),
             "rtorrent": asdict(self.rtorrent),
-            "indexer": asdict(self.indexer),
+            "indexers": [asdict(i) for i in self.indexers],
             "proxy": asdict(self.proxy),
             "announce_hosts": self.announce_hosts,
             "matching": asdict(self.matching),
@@ -345,7 +388,7 @@ class Settings:
             transmission=TransmissionSettings(**data.get("transmission", {})),
             utorrent=UtorrentSettings(**data.get("utorrent", {})),
             rtorrent=RtorrentSettings(**data.get("rtorrent", {})),
-            indexer=IndexerSettings(**data.get("indexer", {})),
+            indexers=indexers_from(data),
             proxy=ProxySettings(**data.get("proxy", {})),
             announce_hosts=list(data.get("announce_hosts", [])),
             matching=MatchingSettings(**data.get("matching", {})),

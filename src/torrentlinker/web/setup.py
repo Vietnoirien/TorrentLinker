@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import os
 import threading
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -15,15 +16,16 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from torrentlinker import net
 from torrentlinker.clients import connect
-from torrentlinker.config import ProxySettings, Settings
+from torrentlinker.config import C411_ID, IndexerSettings, ProxySettings, Settings
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, TorrentClient
-from torrentlinker.indexer import Indexer
+from torrentlinker.indexer import Caps, Indexer
 from torrentlinker.library import known_files
 from torrentlinker.paths import PathMapper
 from torrentlinker.profile_history import ProfileHistory
 from torrentlinker.profile_workspace import ProfileWorkspace
 from torrentlinker.qbit import ClientApi
 from torrentlinker.store import Store
+from torrentlinker.torznab import TorznabIndexer
 from torrentlinker.web.security import ServerSecrets
 
 Connector = Callable[..., ClientApi]
@@ -112,6 +114,21 @@ class IndexerConnection(BaseModel):
     _url = field_validator("url")(http_url)
 
 
+class IndexerEntry(BaseModel):
+    """An Indexer added by hand: a Torznab URL and its API key, kept as a secret."""
+
+    name: str = Field(default="", max_length=100)
+    url: str = ""
+    api_key: str | None = Field(default=None, max_length=4096)
+    enabled: bool | None = None
+
+    _url = field_validator("url")(lambda value: http_url(value) if value else value)
+
+
+def mode_names(caps: Caps) -> dict[str, list[str]]:
+    return {mode.value: sorted(params) for mode, params in caps.modes.items()}
+
+
 class ProxySetup(BaseModel):
     address: str = Field(default="", max_length=2048)
     username: str = Field(default="", max_length=256)
@@ -172,6 +189,7 @@ class Setup:
         self.download_guard: Callable[[bytes, str], None] | None = None
         self._client: ClientApi | None = None
         self._indexer: Indexer | None = None
+        self._torznab: dict[str, tuple[tuple[str, str], TorznabIndexer]] = {}
         self.store = Store(directory / "catalogue.sqlite").for_client(
             self.settings.active_client_id
         )
@@ -455,6 +473,7 @@ class Setup:
                 if credentials:
                     self.secrets.update(credentials)
                 self.settings.indexer.url = body.url
+                self.settings.indexer.modes = mode_names(caps)
                 from torrentlinker.downloads import IndexerCategory
 
                 self.settings.indexer_categories = {
@@ -464,6 +483,118 @@ class Setup:
                 indexer.session = (self._root or self)._profile_workspace
                 self._indexer = indexer
             return {"ok": True, "categories": len(caps.categories)}
+
+    def indexer_for(self, identifier: str) -> Indexer | TorznabIndexer:
+        """The Indexer to search: c411's own, or an added one with its pacer kept."""
+        if identifier == C411_ID:
+            return self.indexer()
+        with self.lock:
+            entry = self.settings.find_indexer(identifier)
+            key = self.secrets.get(Settings.indexer_secret(identifier))
+            if not key:
+                raise ValueError(f"Add the API key of {entry.name} first.")
+            held = self._torznab.get(identifier)
+            if held is None or held[0] != (entry.url, key):
+                held = ((entry.url, key), TorznabIndexer(entry.url, key, entry.name))
+                self._torznab[identifier] = held
+            return held[1]
+
+    def indexer_rows(self) -> list[dict[str, Any]]:
+        with self.lock:
+            rows = []
+            for entry in self.settings.indexers:
+                row = {
+                    "id": entry.id,
+                    "name": entry.name,
+                    "url": entry.url,
+                    "enabled": entry.enabled,
+                    "has_key": bool(self.secrets.get(Settings.indexer_secret(entry.id))),
+                    "modes": entry.modes,
+                    "searchable_ids": entry.searchable_ids,
+                    "c411": entry.id == C411_ID,
+                    "next_request_in": 0.0,
+                }
+                held = self._torznab.get(entry.id)
+                if held is not None:
+                    row["next_request_in"] = held[1].next_request_in()
+                elif entry.id == C411_ID and self._indexer is not None:
+                    row["next_request_in"] = self._indexer.next_request_in()
+                rows.append(row)
+            return rows
+
+    def _probe(self, url: str, key: str, name: str) -> Caps:
+        try:
+            return TorznabIndexer(url, key, name).caps()
+        except Exception:
+            raise ValueError(
+                "Indexer test failed. Check its Torznab address and API key."
+            ) from None
+
+    def add_indexer(self, body: IndexerEntry) -> dict[str, Any]:
+        name = body.name.strip()
+        if not name or not body.url or not body.api_key:
+            raise ValueError("Enter the Indexer's name, Torznab URL and API key.")
+        with self.lock:
+            if name.casefold() in {i.name.casefold() for i in self.settings.indexers}:
+                raise ValueError("An Indexer already has this name.")
+            caps = self._probe(body.url, body.api_key, name)
+            entry = IndexerSettings(
+                url=body.url,
+                id=uuid.uuid4().hex[:8],
+                name=name,
+                enabled=body.enabled is not False,
+                modes=mode_names(caps),
+            )
+            self.secrets.update({Settings.indexer_secret(entry.id): body.api_key})
+            self.settings.indexers.append(entry)
+            self.save()
+            return {"ok": True, "id": entry.id, "searchable_ids": entry.searchable_ids}
+
+    def update_indexer(self, identifier: str, body: IndexerEntry) -> dict[str, Any]:
+        with self.lock:
+            entry = self.settings.find_indexer(identifier)
+            if identifier == C411_ID:
+                if body.enabled is not None:
+                    entry.enabled = body.enabled
+                self.save()  # c411's URL and keys are set by the connection
+                return {"ok": True}
+            name = body.name.strip() or entry.name
+            if name.casefold() in {
+                i.name.casefold() for i in self.settings.indexers if i.id != identifier
+            }:
+                raise ValueError("An Indexer already has this name.")
+            url = body.url or entry.url
+            key = body.api_key or self.secrets.get(Settings.indexer_secret(identifier))
+            if (url, key) != (entry.url, self.secrets.get(Settings.indexer_secret(identifier))):
+                entry.modes = mode_names(self._probe(url, key, name))
+                if body.api_key:
+                    self.secrets.update({Settings.indexer_secret(identifier): body.api_key})
+            entry.name, entry.url = name, url
+            if body.enabled is not None:
+                entry.enabled = body.enabled
+            self.save()
+            return {"ok": True, "searchable_ids": entry.searchable_ids}
+
+    def test_indexer_entry(self, identifier: str) -> dict[str, Any]:
+        """Read the Indexer's caps again and keep which id searches it supports."""
+        with self.lock:
+            entry = self.settings.find_indexer(identifier)
+            key = self.secrets.get(Settings.indexer_secret(identifier))
+            if not key:
+                raise ValueError(f"Add the API key of {entry.name} first.")
+            entry.modes = mode_names(self._probe(entry.url, key, entry.name))
+            self.save()
+            return {"ok": True, "modes": entry.modes, "searchable_ids": entry.searchable_ids}
+
+    def remove_indexer(self, identifier: str) -> None:
+        with self.lock:
+            if identifier == C411_ID:
+                raise ValueError("c411 cannot be removed.")
+            entry = self.settings.find_indexer(identifier)
+            self.settings.indexers.remove(entry)
+            self.secrets.update({Settings.indexer_secret(identifier): ""})
+            self._torznab.pop(identifier, None)
+            self.save()
 
     def suggest_mappings(self) -> dict[str, Any]:
         from torrentlinker.paths import detect_mappings
@@ -515,6 +646,7 @@ class Setup:
             net.configure(url, body.torrent_client)
             self._client = None
             self._indexer = None
+            self._torznab.clear()
             return {"ok": True}
 
     def set_adult_content(self, enabled: bool) -> None:

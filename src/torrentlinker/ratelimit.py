@@ -256,3 +256,34 @@ class BudgetQueue(Queue):
                 pass
         self._reported, self._since_report = remaining, 0
         self._reset = self._clock() + max(0.0, reset - self._wall())
+
+
+class Pacer(Queue):
+    """An Indexer's pace: no limit of ours, only what that Indexer asks for.
+
+    Requests go one at a time with no pause until the Indexer refuses one with 429; then
+    the pacer rests as long as `Retry-After` says and keeps to any limit the refusal
+    reports (`x-ratelimit-limit` per `x-ratelimit-window`). A response that reports no
+    request left (`x-ratelimit-remaining: 0`) rests until `x-ratelimit-reset`.
+    """
+
+    def __init__(
+        self,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        super().__init__(0.0, clock, sleep)
+        self._until = 0.0
+
+    def rest(self, seconds: float) -> None:
+        self._until = max(self._until, self._clock() + max(seconds, 0.0))
+
+    def next_in(self) -> float:
+        return max(super().next_in(), self._until - self._clock(), 0.0)
+
+    def observe(self, headers: Mapping[str, str]) -> None:
+        try:
+            if int(headers["x-ratelimit-remaining"]) <= 0:
+                self.rest(float(headers["x-ratelimit-reset"]))
+        except (KeyError, ValueError):
+            pass
