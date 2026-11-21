@@ -189,5 +189,5 @@ The Owner, or a Member holding the Permission to accept or refuse Requests.
 _Avoid_: Admin, moderator
 
 **Age Rating**:
-The minimum viewing age of a film or series, from its metadata or set by the Owner or a Member allowed to edit it; a Member's limit hides what is rated above it.
+The minimum viewing age of a film or series on the French scale (Tous publics, −10, −12, −16, −18), from its metadata or set by the Owner or a Member allowed to edit it; a rating from another country is mapped to this scale. A Member's or Viewer's limit hides what is rated above it, and what has no rating yet.
 _Avoid_: Certification, PEGI, parental rating
