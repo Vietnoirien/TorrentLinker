@@ -30,7 +30,7 @@ const document = {dispatchEvent(){}, querySelectorAll:()=>[],
   querySelector:selector=>selector===".library-nav"?$("library-nav"):null,
   body:{classList:{contains:()=>false,toggle(){}}}};
 const state = {selected:new Set(), queueSelected:new Set(), view:'torrents',
-  setup:{configured:true, indexer_configured:true}};
+  setup:{configured:true, indexer_configured:true, members_enabled:true}};
 const media = {kind:'video', view:'recent'};
 const loaded = []; const reseedUI = {tab:'reseed'};
 function clearAgentToken() {}
@@ -44,6 +44,11 @@ function shellSpecificClient() { return state.setup.default_client_id; }
 function resetLibraryReview() {}
 function step() {}
 async function refreshSetup() {}
+async function refreshNotices() {}
+async function loadNotifications() { loaded.push('notifications'); }
+async function loadRequests() { loaded.push('requests'); }
+async function loadMemberAssistant() { loaded.push('member-assistant'); }
+async function loadMemberWorkspace(view) { loaded.push(view); }
 async function loadAgents() { loaded.push('agents'); }
 async function loadAssistantConnections() {}
 async function loadZenProfile() {}
@@ -129,6 +134,11 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
       assert.equal(location.hash,routeFragment(canonical));
     }
   }
+  state.setup.members_enabled=false;
+  for(const tab of ['users','account','notifications']){
+    assert.deepEqual(resolveRoute('#/setup/'+tab),['torrents']);
+  }
+  state.setup.members_enabled=true;
   for(const [kind,views] of Object.entries(mediaViewsByKind)){
     for(const view of views.filter(value=>value!=='adult')){
       await navigate('media',kind,view);await settle();
