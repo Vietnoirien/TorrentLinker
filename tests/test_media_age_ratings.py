@@ -167,7 +167,12 @@ def test_the_nfo_rating_is_read_from_the_sidecar(tmp_path):
 
 @pytest.fixture
 def server(tmp_path):
-    app = create_app(tmp_path, password="test-password-long", connector=lambda *args: Client())
+    app = create_app(
+        tmp_path,
+        members_enabled=True,
+        password="test-password-long",
+        connector=lambda *args: Client(),
+    )
     with TestClient(app) as browser:
         browser.headers["X-TorrentLinker"] = "1"
         library = app.state.agent_service.media
