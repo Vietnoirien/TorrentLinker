@@ -31,9 +31,12 @@ Decided:
   - Owner-only, shown locked: settings and credentials, Zen and the c411 profile, Upload,
     agent access, the Assistant's providers.
 - **Presets** are starting points only: Spectateur, Famille, Enfant, Administrateur.
+- **Invitations** (page in `../members-invite/`): "Créer le lien" shows the one-time link, its
+  QR code, Copy, the expiry and preset, and email sending once mail is configured. A pending
+  invitation's card offers "Voir le lien" and "Annuler l'invitation".
 
 Review paths:
 - Edit Léa: set the age limit to -12 and see adult content disabled; untick "Demander des
   films" and see the caps disabled.
 - Switch Léa's preset to Enfant: her name stays, her Permissions change.
-- "Inviter quelqu'un" opens the invite dialog.
+- "Inviter quelqu'un" → "Créer le lien" shows the link and QR code; Karim's card can show it again or cancel it.

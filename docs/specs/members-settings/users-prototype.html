@@ -385,6 +385,20 @@ function owner(){return `<section class="client-card locked"><div class="member-
 const intro=`<section class="settings-card"><h3>Partager TorrentLinker</h3><p class="muted" style="margin:0 0 12px">Chaque membre ne voit et ne fait que ce que vous cochez. Il demande ; vous, ou un membre qui en a le droit, acceptez.</p>
  <div class="settings-actions"><button class="primary" data-invite>Inviter quelqu'un</button><button data-create>Créer un compte avec mot de passe</button></div></section>`;
 
+/* A fictional QR code: finder squares and a fixed pattern, enough to judge the layout. */
+function qr(){const n=25,c=[];for(let y=0;y<n;y++)for(let x=0;x<n;x++){const f=(a,b)=>x>=a&&x<a+7&&y>=b&&y<b+7,inner=(a,b)=>x>=a+2&&x<a+5&&y>=b+2&&y<b+5,ring=(a,b)=>f(a,b)&&(x===a||x===a+6||y===b||y===b+6);
+ const on=[[0,0],[18,0],[0,18]].some(([a,b])=>ring(a,b)||inner(a,b))||(![[0,0],[18,0],[0,18]].some(([a,b])=>x>=a-1&&x<a+8&&y>=b-1&&y<b+8)&&((x*7+y*13+x*y)%5<2));if(on)c.push(`<rect x="${x}" y="${y}" width="1" height="1"/>`)}
+ return `<svg viewBox="-2 -2 29 29" width="168" height="168" role="img" aria-label="QR code du lien" style="background:#fff;border-radius:8px"><g fill="#102a2b">${c.join("")}</g></svg>`}
+function inviteResult(){return `<form method="dialog"><h2>Invitation pour Karim</h2>
+ <p class="muted">Envoyez ce lien, ou faites scanner le QR code depuis un téléphone ou une télé. Il ne sert qu'une fois ; Karim y choisit son identifiant et son mot de passe.</p>
+ <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">${qr()}<div style="flex:1;min-width:240px;display:grid;gap:8px">
+  <label>Lien d'invitation<input readonly value="https://torrentlinker.maison.fr/rejoindre/4f7c2a9e81d3"></label>
+  <div class="settings-actions"><button type="button" class="primary" data-copy>Copier le lien</button></div>
+  <small>Valable jusqu'au samedi 23 novembre, 18 h · préréglage Spectateur</small></div></div>
+ <div class="file-access-note"><label>Envoyer par e-mail<input type="email" placeholder="karim@exemple.fr" disabled></label>
+  <small>Configurez d'abord l'envoi d'e-mails dans Paramètres → Notifications (SMTP ou MX Plan d'OVHcloud).</small></div>
+ <div class="settings-actions"><button value="close">Fermer</button></div></form>`}
+
 /* The full editor for one member: fieldsets of Settings checks and fields. */
 function editor(x){const check=(key,label)=>`<label class="settings-check"><input type="checkbox" data-perm="${key}" ${x.p[key]?"checked":""} ${key==="adult"&&!["","18"].includes(x.age)?"disabled":""}> ${label}</label>`;
  const cap=(key,label,unit)=>`<label class="settings-check"><input type="checkbox" data-cap-on="${key}" ${x.caps[key]!=null?"checked":""} ${x.p.request?"":"disabled"}> ${label} <input type="number" min="1" value="${x.caps[key]??""}" data-cap="${key}" ${x.caps[key]!=null&&x.p.request?"":"disabled"}> ${unit}</label>`;
@@ -414,7 +428,7 @@ function editor(x){const check=(key,label)=>`<label class="settings-check"><inpu
 /* A · Fiches: the Clients section's cards, the editor under the chosen one. */
 function A(){return `<div class="settings-form"><h2>Utilisateurs</h2>${intro}${owner()}
  ${members.map(x=>`<section class="client-card"><div class="member-head"><div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.state)} · ${PRESETS[x.preset].label}${x.viewers.length?` · ${x.viewers.length} profils`:""}</p></div>
-  <div class="settings-actions"><button data-edit="${x.id}" ${editing===x.id?'aria-pressed="true" class="primary"':""}>${editing===x.id?"En cours de modification":"Modifier"}</button></div></div>
+  <div class="settings-actions">${x.state.startsWith("Invitation")?`<button data-invite-show>Voir le lien</button><button data-cancel-invite="${x.id}">Annuler l'invitation</button>`:""}<button data-edit="${x.id}" ${editing===x.id?'aria-pressed="true" class="primary"':""}>${editing===x.id?"En cours de modification":"Modifier"}</button></div></div>
   <div style="margin-top:10px">${summary(x)}</div>${editing===x.id?`<div style="margin-top:16px">${editor(x)}</div>`:""}</section>`).join("")}</div>`}
 
 /* B · Tableau: the File access table, permissions down, members across. */
@@ -468,7 +482,10 @@ document.addEventListener("click",e=>{const t=e.target.closest("button");if(!t)r
  else if("invite" in d||"create" in d){const dlg=document.getElementById("invite");dlg.innerHTML=`<form method="dialog"><h2>${"invite" in d?"Inviter quelqu'un":"Créer un compte"}</h2>
   <label>Nom affiché<input placeholder="ex. Karim"></label><label>Préréglage<select>${Object.values(PRESETS).map(v=>`<option>${v.label}</option>`).join("")}</select></label>
   ${"invite" in d?`<label>Validité du lien<select><option>3 jours</option><option>7 jours</option><option>24 heures</option></select></label><p class="muted">Le lien et son QR code s'affichent après création ; la personne choisit son mot de passe.</p>`:`<label>Identifiant<input></label><label>Mot de passe<input type="password"></label>`}
-  <div class="settings-actions"><button class="primary" value="ok">${"invite" in d?"Créer le lien":"Créer le compte"}</button><button value="cancel">Annuler</button></div></form>`;dlg.showModal()}
+  <div class="settings-actions">${"invite" in d?`<button class="primary" type="button" data-invite-created>Créer le lien</button>`:`<button class="primary" value="ok">Créer le compte</button>`}<button value="cancel">Annuler</button></div></form>`;dlg.showModal()}
+ else if("inviteCreated" in d||"inviteShow" in d){const dlg=document.getElementById("invite");dlg.innerHTML=inviteResult();if(!dlg.open)dlg.showModal()}
+ else if("copy" in d){status("Lien copié");t.textContent="Copié"}
+ else if("cancelInvite" in d){const x=m(d.cancelInvite);if(confirm(`Annuler l'invitation de ${x.name} ? Le lien ne fonctionnera plus.`)){members=members.filter(y=>y!==x);editing=members[0]?.id;status("Invitation annulée");render()}}
 });
 function go(step){const i=variants.findIndex(v=>v[0]===variant);variant=variants[(i+step+variants.length)%variants.length][0];const u=new URL(location);u.searchParams.set("variant",variant);history.replaceState(null,"",u);render()}
 document.getElementById("prev").onclick=()=>go(-1);document.getElementById("next").onclick=()=>go(1);
