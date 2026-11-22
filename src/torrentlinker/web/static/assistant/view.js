@@ -352,7 +352,7 @@ async function loadAssistant() {
       }
       throw e;
     } finally { if (send.isConnected) aSetSend(false); }
-  }); };
+  }, false); }; // The send button runs its own busy/stop states: no automatic busy button.
   main.append(form); await aRefreshChat();
 }
 let assistantSearch = "";
