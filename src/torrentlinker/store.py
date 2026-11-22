@@ -20,6 +20,14 @@ CREATE TABLE IF NOT EXISTS reseed_workspace (
     client_id TEXT NOT NULL, item_path TEXT NOT NULL, payload TEXT NOT NULL,
     PRIMARY KEY (client_id, item_path)
 );
+-- Cross-seed (ADR-0024): one row per source and Indexer ('' candidate: its search), and
+-- one per Candidate the search found.
+CREATE TABLE IF NOT EXISTS crossseed (
+    client_id TEXT NOT NULL, source TEXT NOT NULL, indexer_id TEXT NOT NULL,
+    candidate_key TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL,
+    updated REAL NOT NULL,
+    PRIMARY KEY (client_id, source, indexer_id, candidate_key)
+);
 CREATE TABLE IF NOT EXISTS local_draft (
     id TEXT PRIMARY KEY,
     client_id TEXT NOT NULL,
@@ -340,6 +348,93 @@ class Store:
             self._db.execute(
                 "INSERT OR REPLACE INTO reseed_workspace VALUES (?,?,?)",
                 (self.client_id, path, json.dumps(record)),
+            )
+
+    # Cross-seed activity -----------------------------------------------------
+
+    def crossseed_rows(
+        self,
+        state: str | None = None,
+        indexer_id: str | None = None,
+        *,
+        limit: int = -1,
+        newest: bool = False,
+    ) -> list[dict]:
+        query = "SELECT source,indexer_id,candidate_key,state,payload,updated FROM crossseed"
+        query += " WHERE client_id=?"
+        args: list = [self.client_id]
+        if state is not None:
+            query += " AND state=?"
+            args.append(state)
+        if indexer_id is not None:
+            query += " AND indexer_id=?"
+            args.append(indexer_id)
+        with self._lock:
+            rows = self._db.execute(
+                query + f" ORDER BY updated {'DESC' if newest else 'ASC'} LIMIT ?", [*args, limit]
+            ).fetchall()
+        return [
+            {
+                **json.loads(payload),
+                "source": source,
+                "indexer_id": indexer,
+                "candidate_key": key,
+                "state": st,
+                "updated": updated,
+            }
+            for source, indexer, key, st, payload, updated in rows
+        ]
+
+    def crossseed_known(self) -> set[tuple[str, str]]:
+        """Every (source, Indexer) already queued or searched."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT source, indexer_id FROM crossseed WHERE client_id=? AND candidate_key=''",
+                (self.client_id,),
+            ).fetchall()
+        return {(str(a), str(b)) for a, b in rows}
+
+    def crossseed_counts(self) -> dict[str, int]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT state, COUNT(*) FROM crossseed WHERE client_id=? GROUP BY state",
+                (self.client_id,),
+            ).fetchall()
+        return {str(state): int(count) for state, count in rows}
+
+    def queue_crossseed(self, searches: list[tuple[str, str, dict]]) -> None:
+        with self._lock, self._db:
+            self._db.executemany(
+                "INSERT OR IGNORE INTO crossseed VALUES (?,?,?,'','queued',?,?)",
+                [
+                    (self.client_id, source, indexer, json.dumps(payload), time.time())
+                    for source, indexer, payload in searches
+                ],
+            )
+
+    def save_crossseed(
+        self, source: str, indexer_id: str, candidate_key: str, state: str, payload: dict
+    ) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO crossseed VALUES (?,?,?,?,?,?,?)",
+                (
+                    self.client_id,
+                    source,
+                    indexer_id,
+                    candidate_key,
+                    state,
+                    json.dumps(payload),
+                    time.time(),
+                ),
+            )
+
+    def delete_crossseed(self, source: str, indexer_id: str, candidate_key: str) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "DELETE FROM crossseed WHERE client_id=? AND source=? AND indexer_id=?"
+                " AND candidate_key=?",
+                (self.client_id, source, indexer_id, candidate_key),
             )
 
     def reseed_link_layout(self, hash: str) -> dict:
@@ -828,6 +923,13 @@ class Store:
             self._db.execute(
                 "INSERT OR REPLACE INTO rejection VALUES (?, ?, ?)",
                 (str(item_path), candidate_key, reason),
+            )
+
+    def unreject(self, item_path: Path, candidate_key: str) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "DELETE FROM rejection WHERE item_path = ? AND candidate_key = ?",
+                (str(item_path), candidate_key),
             )
 
     def rejections(self, item_path: Path) -> dict[str, str]:

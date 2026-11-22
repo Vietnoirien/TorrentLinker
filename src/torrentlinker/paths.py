@@ -216,6 +216,14 @@ class MappedQbit:
     def add_tags(self, hash: str, tags: list[str]) -> None:
         self._inner.add_tags(hash, tags)
 
+    def set_category(self, hash: str, category: str) -> bool:
+        """Give the torrent a category; False when the client cannot."""
+        manage = getattr(self._inner, "manage_control", None)
+        if manage is None or "category" not in getattr(self._inner, "management_controls", ()):
+            return False
+        manage(hash, "category", {"category": category, "tags": []})
+        return True
+
     def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
         self._inner.add_tags_many(hashes, tags)
 

@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import UTC
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlencode
 
 import httpx
 
@@ -97,13 +98,39 @@ class TorznabIndexer:
     def search(self, query: SearchQuery) -> list[Candidate]:
         return _parse_items(self._get(query.params()))
 
+    def fetch_torrent(self, candidate: Candidate, *, retry: bool = True) -> bytes:
+        """The Candidate's .torrent, through the same pacer as its searches."""
+        url = candidate.download_url
+        if "apikey=" not in url:
+            url += ("&" if "?" in url else "?") + urlencode({"apikey": self.api_key})
+        data = self._send(url, None).content
+        if not data.startswith(b"d"):
+            raise ValueError(f"{self.name or 'The Indexer'} did not return a .torrent file")
+        return data
+
+    def cached_torrent(self, candidate: Candidate) -> bytes | None:
+        return None
+
+    def keep_torrent(self, candidate: Candidate, data: bytes) -> None:
+        pass
+
     def next_request_in(self) -> float:
         return self.pacer.next_in()
 
     def redact(self, text: str) -> str:
         return text.replace(self.api_key, "[secret]") if self.api_key else text
 
+    def unredact(self, text: str) -> str:
+        return text.replace("[secret]", self.api_key) if self.api_key else text
+
+    @property
+    def is_c411(self) -> bool:
+        return False
+
     def _get(self, params: dict[str, str]) -> str:
+        return self._send(self.url, params).text
+
+    def _send(self, url: str, params: dict[str, str] | None) -> httpx.Response:
         background = getattr(self._thread, "background", False)
         stop = getattr(self._thread, "stop", None)
         waits = 0
@@ -112,7 +139,9 @@ class TorznabIndexer:
             if not background and wait > FOREGROUND_PATIENCE:
                 raise RateLimited(wait)
             with self.pacer.turn(background, stop):
-                response = self._http.get(self.url, params={**params, "apikey": self.api_key})
+                response = self._http.get(
+                    url, params={**params, "apikey": self.api_key} if params is not None else None
+                )
                 self.pacer.observe(response.headers)
             if response.status_code == 429:
                 wait = retry_after(response)
@@ -126,7 +155,7 @@ class TorznabIndexer:
             if response.status_code in (401, 403):
                 raise IndexerKeyRefused(self.name, response.status_code)
             try:
-                return response.raise_for_status().text
+                return response.raise_for_status()
             except httpx.HTTPStatusError as e:
                 raise httpx.HTTPStatusError(
                     self.redact(str(e)), request=e.request, response=e.response

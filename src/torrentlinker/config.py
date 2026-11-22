@@ -123,6 +123,15 @@ class IndexerHubSettings:
     last_sync: float = 0.0
 
 
+@dataclass
+class CrossSeedSettings:
+    """Cross-seed rules (ADR-0024): what goes in without a review, and the Owner's pause."""
+
+    auto_add: bool = True  # add safe Matches without a review
+    threshold: float = 0.95  # a Partial Match covering at least this much is safe
+    paused: bool = False
+
+
 def indexers_from(data: dict) -> list[IndexerSettings]:
     """The saved Indexers, c411 first; a file from before many Indexers has only its URL."""
     found = [IndexerSettings(**i) for i in data.get("indexers", [])]
@@ -205,6 +214,7 @@ class Settings:
     rtorrent: RtorrentSettings = field(default_factory=RtorrentSettings)
     indexers: list[IndexerSettings] = field(default_factory=lambda: [IndexerSettings()])
     indexer_hub: IndexerHubSettings = field(default_factory=IndexerHubSettings)
+    cross_seed: CrossSeedSettings = field(default_factory=CrossSeedSettings)
     proxy: ProxySettings = field(default_factory=ProxySettings)
     announce_hosts: list[str] = field(default_factory=list)
     matching: MatchingSettings = field(default_factory=MatchingSettings)
@@ -357,6 +367,7 @@ class Settings:
             "rtorrent": asdict(self.rtorrent),
             "indexers": [asdict(i) for i in self.indexers],
             "indexer_hub": asdict(self.indexer_hub),
+            "cross_seed": asdict(self.cross_seed),
             "proxy": asdict(self.proxy),
             "announce_hosts": self.announce_hosts,
             "matching": asdict(self.matching),
@@ -405,6 +416,7 @@ class Settings:
             rtorrent=RtorrentSettings(**data.get("rtorrent", {})),
             indexers=indexers_from(data),
             indexer_hub=IndexerHubSettings(**data.get("indexer_hub", {})),
+            cross_seed=CrossSeedSettings(**data.get("cross_seed", {})),
             proxy=ProxySettings(**data.get("proxy", {})),
             announce_hosts=list(data.get("announce_hosts", [])),
             matching=MatchingSettings(**data.get("matching", {})),

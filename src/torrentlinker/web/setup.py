@@ -140,6 +140,14 @@ class IndexerHubImport(BaseModel):
     ids: list[str] = Field(max_length=1000)
 
 
+class CrossSeedRules(BaseModel):
+    """What Cross-seed adds without a review, and its pause."""
+
+    auto_add: bool | None = None
+    threshold: float | None = Field(default=None, ge=0.5, le=1.0)
+    paused: bool | None = None
+
+
 def mode_names(caps: Caps) -> dict[str, list[str]]:
     return {mode.value: sorted(params) for mode, params in caps.modes.items()}
 
@@ -513,6 +521,14 @@ class Setup:
                 held = ((entry.url, key), TorznabIndexer(entry.url, key, entry.name))
                 self._torznab[identifier] = held
             return held[1]
+
+    def set_cross_seed(self, body: CrossSeedRules) -> dict[str, Any]:
+        with self.lock:
+            rules = self.settings.cross_seed
+            for name, value in body.model_dump(exclude_none=True).items():
+                setattr(rules, name, value)
+            self.save()
+            return asdict(rules)
 
     def indexer_rows(self) -> list[dict[str, Any]]:
         with self.lock:

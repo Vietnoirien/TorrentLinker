@@ -34,6 +34,8 @@ from torrentlinker.accounts import (
     Permission,
 )
 from torrentlinker.clients import connect
+from torrentlinker.crossseed import STATES as CROSS_SEED_STATES
+from torrentlinker.crossseed import CrossSeed, CrossSeedRunner
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
 from torrentlinker.member_requests import Requests
@@ -57,6 +59,7 @@ from torrentlinker.web.security import (
 from torrentlinker.web.setup import (
     Connection,
     Connector,
+    CrossSeedRules,
     FolderRemoval,
     FolderSetup,
     IndexerConnection,
@@ -236,6 +239,22 @@ def create_app(
 
     shutdown = threading.Event()
     verification_cursor = 0
+    cross_seeds: dict[str, tuple[Any, CrossSeed]] = {}
+
+    def cross_seed(identifier: str = "") -> CrossSeed:
+        """The Cross-seed engine of a Torrent Client profile, rebuilt with its Operations."""
+        target = for_client(identifier)
+        key = target.setup.settings.active_client_id
+        held = cross_seeds.get(key)
+        if held is None or held[0] is not target:
+            held = (target, CrossSeed(target.setup, target.library, service))
+            cross_seeds[key] = held
+        return held[1]
+
+    def cross_seed_engines() -> list[CrossSeed]:
+        if not service.configured:
+            return []
+        return [cross_seed(p.id) for p in service.settings.client_profiles if p.enabled]
 
     def verify_loop() -> None:
         nonlocal verification_cursor
@@ -314,6 +333,7 @@ def create_app(
         threading.Thread(target=history_loop, daemon=True, name="profile-history").start()
         if monitor_verifications:
             threading.Thread(target=catalogue_loop, daemon=True, name="catalogue-refresh").start()
+            CrossSeedRunner(cross_seed_engines, shutdown).start()
         if members_enabled:
             app.state.notifications.start()
         assistant.start_scheduler()
@@ -909,6 +929,43 @@ def create_app(
             idle()
             service.remove_indexer(identifier)
             return {"ok": True}
+
+    # Cross-seed activity, review and rules, for the Reseed board's tab (ADR-0024). The
+    # Owner's alone: it acts on the Owner's tracker accounts.
+    @app.get("/api/cross-seed")
+    def cross_seed_activity(
+        client_id: str = "", state: str = "", limit: int = Query(500, ge=1, le=2000)
+    ) -> dict:
+        if state and state not in CROSS_SEED_STATES:
+            raise HTTPException(400, "Unknown Cross-seed state.")
+        return cross_seed(client_id).activity(state or None, limit)
+
+    @app.post("/api/cross-seed/settings")
+    def cross_seed_settings(body: CrossSeedRules) -> dict:
+        with jobs.lock:
+            idle()
+            return service.set_cross_seed(body)
+
+    @app.post("/api/cross-seed/pause")
+    def cross_seed_pause() -> dict:
+        return service.set_cross_seed(CrossSeedRules(paused=True))
+
+    @app.post("/api/cross-seed/resume")
+    def cross_seed_resume() -> dict:
+        return service.set_cross_seed(CrossSeedRules(paused=False))
+
+    @app.post("/api/cross-seed/{identifier}/{action}")
+    def cross_seed_act(identifier: str, action: str, client_id: str = "") -> dict:
+        engine = cross_seed(client_id)
+        if action == "reject":
+            engine.reject(identifier)
+        elif action in ("accept", "retry"):
+            with jobs.lock:
+                idle()
+                getattr(engine, action)(identifier)
+        else:
+            raise HTTPException(404, "Unknown Cross-seed action.")
+        return {"ok": True}
 
     @app.get("/api/folders")
     def folders(path: str = "") -> dict:
