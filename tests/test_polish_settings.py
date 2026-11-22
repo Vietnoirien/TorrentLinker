@@ -25,6 +25,7 @@ SECTIONS = (
     "paths",
     "matching",
     "release_score",
+    "indexers",
     "zen",
 )
 
@@ -65,7 +66,7 @@ def test_settings_native_keyboard_and_zoom(qtbot, tmp_path, language, theme, zoo
     view.resize(1100, 800)
     view.show()
     view.web.setZoomFactor(zoom)
-    wait_js(qtbot, view, "document.querySelectorAll('#settings-navigation button').length===13")
+    wait_js(qtbot, view, "document.querySelectorAll('#settings-navigation button').length===14")
     for index, section in enumerate(SECTIONS):
         js(
             qtbot,
