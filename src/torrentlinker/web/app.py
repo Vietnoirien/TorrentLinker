@@ -119,7 +119,7 @@ def create_app(
     # Exactly one owner check: the Web UI password, or the reverse proxy's networks.
     if (password is None) == (not trusted_proxies):
         raise ValueError("Set a Web UI password or trusted proxies, not both.")
-    sessions = Sessions(password) if password is not None else None
+    sessions = None if password is None else Sessions(password, directory / "owner-sessions.json")
     accounts = Accounts(directory)
     if not members_enabled:
         accounts.revoke_member_access()

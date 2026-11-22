@@ -274,3 +274,20 @@ def test_deleting_a_member_erases_their_progress_and_playlists(tmp_path):
     assert [r[0] for r in media.db.execute("SELECT account FROM media_progress")] == [OWNER]
     assert media.db.execute("SELECT COUNT(*) FROM media_playlists").fetchone()[0] == 0
     media.db.close()
+
+
+def test_the_owner_stays_signed_in_across_a_restart_until_the_password_changes(tmp_path):
+    from torrentlinker.web.security import Sessions
+
+    path = tmp_path / "owner-sessions.json"
+    token = Sessions("first-password-long", path).login("first-password-long")
+    # Only digests are written down; the cookie's token never reaches the disk.
+    assert token not in path.read_text()
+    assert oct(path.stat().st_mode & 0o777) == "0o600"
+    restarted = Sessions("first-password-long", path)
+    assert restarted.account(token) == OWNER
+    restarted.logout(token)
+    assert Sessions("first-password-long", path).account(token) is None
+    kept = Sessions("first-password-long", path).login("first-password-long")
+    assert Sessions("new-password-long", path).account(kept) is None
+    assert Sessions("first-password-long", path).account(kept) is None

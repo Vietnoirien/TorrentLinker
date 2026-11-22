@@ -88,18 +88,58 @@ class ServerSecrets:
 
 
 class Sessions:
-    """The Owner's browsers, signed in with the startup password; Members' are in Accounts."""
+    """The Owner's browsers, signed in with the startup password; Members' are in Accounts.
 
-    def __init__(self, password: str):
+    With a file, sign-ins survive a restart: it keeps only token digests, and a new startup
+    password discards them."""
+
+    def __init__(self, password: str, path: Path | None = None):
         if len(password) < 12:
             raise ValueError("Set a Web UI password of at least 12 characters.")
+        self.path = path
         self.salt = secrets.token_bytes(16)
-        self.digest = self.hash(password)
         self.tokens: dict[str, tuple[float, str]] = {}
         self.lock = threading.Lock()
+        saved = self._read()
+        if saved and secrets.compare_digest(
+            self._scrypt(password, bytes.fromhex(saved["salt"])), bytes.fromhex(saved["check"])
+        ):
+            self.salt = bytes.fromhex(saved["salt"])
+            now = time.time()
+            self.tokens = {
+                digest: (float(expiry), str(account))
+                for digest, (expiry, account) in saved["tokens"].items()
+                if float(expiry) > now
+            }
+        self.digest = self.hash(password)
+        self._save()
+
+    @staticmethod
+    def _scrypt(password: str, salt: bytes) -> bytes:
+        return hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
+
+    @staticmethod
+    def _key(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    def _read(self) -> dict | None:
+        if self.path is None or not self.path.exists():
+            return None
+        try:
+            saved = json.loads(self.path.read_text(encoding="utf-8"))
+            return saved if {"salt", "check", "tokens"} <= set(saved) else None
+        except (OSError, ValueError):
+            return None
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+        tokens = {digest: [expiry, account] for digest, (expiry, account) in self.tokens.items()}
+        payload = {"salt": self.salt.hex(), "check": self.digest.hex(), "tokens": tokens}
+        atomic_private(self.path, json.dumps(payload).encode())
 
     def hash(self, password: str) -> bytes:
-        return hashlib.scrypt(password.encode(), salt=self.salt, n=16384, r=8, p=1)
+        return self._scrypt(password, self.salt)
 
     def verify(self, password: str) -> bool:
         return secrets.compare_digest(self.hash(password), self.digest)
@@ -111,25 +151,27 @@ class Sessions:
 
     def open(self, account: str) -> str:
         with self.lock:
-            now = time.monotonic()
+            now = time.time()
             self.tokens = {k: v for k, v in self.tokens.items() if v[0] > now}
             if len(self.tokens) >= 32:
                 del self.tokens[next(iter(self.tokens))]
             token = secrets.token_urlsafe(32)
-            self.tokens[token] = (now + 12 * 3600, account)
+            self.tokens[self._key(token)] = (now + 12 * 3600, account)
+            self._save()
             return token
 
     def account(self, token: str) -> str | None:
         with self.lock:
-            expiry, account = self.tokens.get(token, (0.0, ""))
-            return account if expiry > time.monotonic() else None
+            expiry, account = self.tokens.get(self._key(token), (0.0, ""))
+            return account if expiry > time.time() else None
 
     def valid(self, token: str) -> bool:
         return self.account(token) is not None
 
     def logout(self, token: str) -> None:
         with self.lock:
-            self.tokens.pop(token, None)
+            if self.tokens.pop(self._key(token), None):
+                self._save()
 
 
 class Throttle:
