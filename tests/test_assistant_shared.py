@@ -161,8 +161,10 @@ def test_web_shared_discussion_and_history(tmp_path):
             assert len(confirmations) == 1
             panel.locator("#assistant-prompt").fill("Keep this unsent draft")
             shell_navigate(page, "media")
-            page.locator("#media-toolbar-chat").click()
-            compact_prompt = page.locator("#media-chat-content #assistant-prompt")
+            page.frame_locator("#media-frame").locator("#media-toolbar-chat").click()
+            compact_prompt = page.frame_locator("#media-assistant-frame").locator(
+                "#assistant-prompt"
+            )
             expect(compact_prompt).to_be_visible()
             box = compact_prompt.bounding_box()
             assert box is not None and box["y"] + box["height"] <= page.viewport_size["height"]

@@ -54,7 +54,6 @@ def test_the_owner_rates_unrated_films_from_the_media_menu(tmp_path):
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
-            page.get_by_role("button", name="I am the owner").click()
             page.get_by_label("Server password").fill("test-password-long")
             page.locator("#login-form button.primary").click()
             shell_navigate(page, "media")
