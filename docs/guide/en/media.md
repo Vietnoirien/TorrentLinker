@@ -11,6 +11,8 @@ Open **Media** and choose **Video** or **Music**. **Add media folder** registers
 3. Move the pointer over the picture to reveal playback controls. Open the player menu for audio and subtitle choices.
 4. Leave the player and return later through **Continue watching** to resume.
 
+On a phone a video fills the screen. Tap the picture for the controls. **⌄** shrinks it to a bar at the bottom of Media that keeps playing, as does the phone's Back button; tap the bar to return to full screen, or **×** to stop. Leaving Media pauses a video until you come back; music keeps its bar.
+
 To remove a title from **Continue watching**, click the small **×** on its resume card. This clears its saved resume position and removes that card; it does not delete the video file.
 
 ## If playback does not start

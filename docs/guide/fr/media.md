@@ -14,6 +14,8 @@ Choisissez **Mode Media Center** dans Médias pour afficher toute l’applicatio
 
 Les commandes vidéo sont intégrées à l’image. Survolez le lecteur ou donnez le focus à ses commandes pour les afficher. Ouvrez le menu du lecteur, ou faites un clic droit sur la vidéo, pour choisir les pistes audio, les sous-titres et les actions secondaires. La fiche du film en cours (affiche, année, durée, note, repères de fichier et description) s’affiche sous l’image, jamais par-dessus. La musique conserve une barre de lecture compacte et permanente.
 
+Sur un téléphone, une vidéo occupe tout l’écran. Touchez l’image pour afficher les commandes. **⌄**, comme le bouton Retour du téléphone, la réduit en une barre en bas de Médias où la lecture continue ; touchez la barre pour revenir en plein écran, ou **×** pour arrêter. Quitter Médias met une vidéo en pause jusqu’à votre retour ; la musique garde sa barre.
+
 Utilisez **Plein écran** dans le lecteur pour occuper tout l’écran. Appuyez sur **Échap** ou **Quitter le plein écran** pour revenir, sans interrompre la lecture ni les sous-titres. Le bouton web est disponible si le navigateur prend en charge le plein écran.
 
 La vue Vidéo propose les ajouts récents, la reprise de lecture, les films et les séries. Une carte donne accès à la description, aux versions, aux épisodes et aux sous-titres disponibles. Le lecteur intégré mémorise la position. Vous pouvez aussi changer le statut « vu ». Les filtres de genre, d'année et de langue utilisent les métadonnées disponibles. Un champ vide signifie que l'information est inconnue. Des versions portant une même identité vérifiée peuvent partager une carte. Un nom de fichier seul ne suffit pas pour fusionner deux films.

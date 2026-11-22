@@ -694,10 +694,13 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             toolbar_chat.click()
             expect(panel).to_be_visible()
             page.frame_locator("#media-assistant-frame").locator("#media-chat-close").click()
+            # A video belongs to Médias: elsewhere it pauses out of sight, then comes back.
             shell_navigate(page, "library")
-            expect(video).to_be_visible()
+            expect(video).to_be_hidden()
+            assert video.evaluate("node => node.paused")
             assert video.get_attribute("src") == source
             shell_navigate(page, "media")
+            expect(video).to_be_visible()
             video.evaluate("node => { node.pause(); node.currentTime = 5; }")
             page.wait_for_timeout(1300)
             page.reload()
