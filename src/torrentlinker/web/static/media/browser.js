@@ -303,6 +303,15 @@ function mediaRenderHome() {
 }
 // A tracker row shows before its first answer: pulsing cards, or why it is empty.
 function mediaRowPlaceholder(row) {
+  if (row.state === "unavailable") {
+    const why = {
+      key: say("Add your c411 API key in Settings to list the tracker's releases.", "Ajoutez votre clé API c411 dans les paramètres pour lister les releases du tracker."),
+      limit: say("c411 asked to wait; the tracker's releases will load on a later refresh.", "c411 demande d’attendre ; les releases du tracker se chargeront à une prochaine actualisation."),
+      unreachable: say("c411 is not answering; the tracker's releases will load on a later refresh.", "c411 ne répond pas ; les releases du tracker se chargeront à une prochaine actualisation."),
+    }[row.reason] || say("The tracker's releases are not available yet.", "Les releases du tracker ne sont pas encore disponibles.");
+    const note = element("p", why, "media-row-note");
+    return row.reason === "key" ? [note, button(say("Open Settings", "Ouvrir les paramètres"), navigate, "quiet")] : [note];
+  }
   if (row.state === "empty") return [element("p", say(`No release reaches ${row.threshold} with this ReleaseScore profile.`, `Aucune release n’atteint ${row.threshold} avec ce profil ReleaseScore.`), "media-row-note")];
   const note = element("p", row.key === "upgrades" ? say("Comparing your films with the Catalogue…", "Comparaison de vos films avec le Catalogue…") : say("Reading the tracker's latest releases…", "Lecture des dernières releases du tracker…"), "media-row-note");
   const cards = Array.from({length: 6}, () => { const card = element("div", undefined, "media-row-skeleton"); card.setAttribute("aria-hidden", "true"); return card; });

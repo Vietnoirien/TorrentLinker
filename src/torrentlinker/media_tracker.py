@@ -216,6 +216,7 @@ class TrackerRows:
         if saved and time.time() - json.loads(saved[0]) < RUN_INTERVAL:
             return "waiting"
         status = self._refresh_latest(client_id, setup, stop)
+        self._tracker_status_save(client_id, status)
         if stop.is_set():
             return "cancelled"
         # Upgrades: local only, every film whose answer is a day old or missing.
@@ -232,6 +233,21 @@ class TrackerRows:
             )
         return status
 
+    def _tracker_status_save(self, client_id, status: str) -> None:
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                ("tracker-status:" + client_id, json.dumps(status)),
+            )
+
+    def _tracker_status(self, client_id) -> str:
+        """How the last read of c411's listing ended; "" before the first one."""
+        with self.lock:
+            saved = self.db.execute(
+                "SELECT body FROM media_options WHERE key=?", ("tracker-status:" + client_id,)
+            ).fetchone()
+        return json.loads(saved[0]) if saved else ""
+
     def _refresh_latest(self, client_id, setup, stop: threading.Event) -> str:
         """Available: c411's latest film releases, newest first."""
         try:
@@ -242,8 +258,11 @@ class TrackerRows:
             return "off"
         known = self._tracker_cache(client_id, "tracker-new")
         hashes = {r["hash"] for entry in known.values() for r in entry.get("releases") or []}
-        with indexer.background(stop):
-            latest, status = self._latest(setup, indexer, hashes, stop)
+        try:
+            with indexer.background(stop):
+                latest, status = self._latest(setup, indexer, hashes, stop)
+        except Exception:
+            return "unreachable"
         for key, entry in latest.items():
             fresh = {release["hash"] for release in entry["releases"]}
             entry["releases"] += [
@@ -316,15 +335,28 @@ class TrackerRows:
                 item["tracker"].update(own_score=own)
                 upgrades.append(item)
         upgrades.sort(key=lambda item: -item["tracker"]["score"])
+        status = self._tracker_status(client_id)
+        # Why a row has nothing yet: no key, c411 asking to wait, or c411 not answering.
+        reason = (
+            "key"
+            if not setup.secrets.get("indexer-api-key")
+            else {"limit": "limit", "unreachable": "unreachable"}.get(status, "")
+        )
         rows = {}
         for key, items, cached in (("tracker", available, latest), ("upgrades", upgrades, known)):
+            state = "ready" if items else "empty" if cached else "loading"
+            if state == "loading" and reason:
+                state = "unavailable"
+            elif state == "loading" and status in {"complete", "waiting"}:
+                state = "empty"
             rows[key] = {
                 "key": key,
                 "title": "",
                 "filters": {"tracker": key},
                 "total": min(len(items), ROW_LIMIT),
                 "rows": items[:ROW_LIMIT],
-                "state": "ready" if items else "empty" if cached else "loading",
+                "state": state,
+                "reason": reason if state == "unavailable" else "",
                 "threshold": threshold,
             }
         return rows

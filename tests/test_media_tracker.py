@@ -90,7 +90,7 @@ def library(tmp_path):
     return media
 
 
-def setup_with(store=None, threshold=0, folder=None, profile="HDLight 1080p"):
+def setup_with(store=None, threshold=0, folder=None, profile="HDLight 1080p", key="key"):
     from torrentlinker.config import Settings
 
     settings = Settings()
@@ -99,6 +99,7 @@ def setup_with(store=None, threshold=0, folder=None, profile="HDLight 1080p"):
         settings=settings,
         store=store or FakeStore(),
         indexer=FakeIndexer,
+        secrets=SimpleNamespace(get=lambda name: key),
         download_folder=lambda category: folder,
         verified_download_folder=lambda category: folder,
     )
@@ -186,9 +187,26 @@ def test_better_versions_are_found_when_c411_asks_to_wait(library, monkeypatch):
     setup = setup_with(FakeStore(REVENANT_RELEASES))
     assert library.tracker_refresh("default", setup, threading.Event()) == "limit"
     rows = library.tracker_rows("default", setup)
-    # The latest releases are still to come; the row shows that it is loading.
-    assert rows["tracker"]["state"] == "loading" and not rows["tracker"]["rows"]
+    # The latest releases are still to come; the row says c411 asked to wait.
+    assert rows["tracker"]["state"] == "unavailable" and not rows["tracker"]["rows"]
+    assert rows["tracker"]["reason"] == "limit"
     assert rows["upgrades"]["rows"][0]["title"] == "The Revenant"
+
+
+def test_a_row_without_a_key_or_an_answer_says_why_instead_of_loading(library, monkeypatch):
+    rows = library.tracker_rows("default", setup_with(key=""))
+    assert [rows[k]["state"] for k in ("tracker", "upgrades")] == ["unavailable"] * 2
+    assert rows["tracker"]["reason"] == rows["upgrades"]["reason"] == "key"
+    # With a key and no refresh yet, the row really is loading.
+    assert library.tracker_rows("default", setup_with())["tracker"]["state"] == "loading"
+
+    def down(indexer, params, page=1):
+        raise OSError("unreachable")
+
+    monkeypatch.setattr("torrentlinker.torrent_search.native_search", down)
+    assert library.tracker_refresh("default", setup_with(), threading.Event()) == "unreachable"
+    row = library.tracker_rows("default", setup_with())["tracker"]
+    assert row["state"] == "unavailable" and row["reason"] == "unreachable"
 
 
 def test_queueing_a_tracker_film_needs_its_download_folder(library, monkeypatch, tmp_path):
