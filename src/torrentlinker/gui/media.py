@@ -451,6 +451,12 @@ class MediaTab(QWidget):
         self.embedded_caption = ""
         self._player_video_mode = False
 
+        # A playing video belongs to the page (docs/specs/media-watch-page): its picture sits
+        # behind the shared view's transparent slot, where the view says it is.
+        self.watch_layout: dict[str, Any] | None = None
+        self.watch_full = False
+        self.playback_error = ""
+        self.preview_facts: dict[str, int] | None = None
         self.browser: MediaBrowserPanel | None = None
         self.browse_kind = "video"
         self.browse_selection: list[str] = []
@@ -539,6 +545,14 @@ class MediaTab(QWidget):
         player_box.setSpacing(6)
         self.video.setMinimumHeight(300)
         player_box.addWidget(self.video, 1)
+        self.watch_band = QWidget(left)
+        self.watch_band.setObjectName("mediaWatchBand")
+        self.watch_band.setStyleSheet("QWidget#mediaWatchBand { background: black; }")
+        self.watch_band.hide()
+        self.playback_timer = QTimer(self)
+        self.playback_timer.setSingleShot(True)
+        self.playback_timer.setInterval(200)
+        self.playback_timer.timeout.connect(self._publish_playback)
         self.video_overlay_box = QVBoxLayout(self.video.overlay)
         self.video_overlay_box.setContentsMargins(0, 0, 0, 0)
         self.player_back = QToolButton()
@@ -656,6 +670,8 @@ class MediaTab(QWidget):
             self.browser.center_mode = enabled
             self.browser.publish()
         self.center_button.setChecked(enabled)
+        if not enabled and self.watch_full and not self.fullscreen_dialog.isVisible():
+            self.watch_full = False
         self.center_button.setText("↩" if enabled else "⤢")
         label = self.tr("Return to TorrentLinker") if enabled else self.tr("Media Center mode")
         self.center_button.setAccessibleName(label)
@@ -715,73 +731,70 @@ class MediaTab(QWidget):
         self.caption.setFixedHeight(lines.height() + size // 2 + 4)
 
     def _show_video_controls(self) -> None:
-        self.video_controls.show()
-        self.player_back.show()
+        # A film's controls are the shared view's own; this bar is the music bar's.
         if self._player_video_mode:
-            self.video.viewport().unsetCursor()
-            self.controls_timer.start()
+            self.video_controls.hide()
+            self.player_back.hide()
+            return
+        self.video_controls.show()
 
     def _hide_video_controls(self) -> None:
-        if not self._player_video_mode:
-            self.controls_timer.stop()
-            return
-        if (
-            self.player is None
-            or self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
-            or self.video_controls.menu_open
-            or self.video_controls.keyboard_focus
-        ):
-            self.controls_timer.start()
-            return
-        self.video_controls.hide()
-        self.player_back.hide()
-        self.video.viewport().setCursor(Qt.CursorShape.BlankCursor)
+        self.controls_timer.stop()
 
     def _arrange_player(self) -> None:
         active_video = bool(self.last_source) and self.current_row.get("kind") == "video"
         self._player_video_mode = active_video
         if active_video:
-            target = self.player_base_layout
-            if not self.fullscreen_dialog.isVisible() and self.player_home_layout is not target:
-                target.insertWidget(0, self.player_panel)
-                self.player_home_layout = target
-            if self.video_overlay_box.indexOf(self.video_controls) < 0:
-                self.video_overlay_box.addWidget(self.video_controls)
-            if self.player_heading_box.indexOf(self.now_playing) < 0:
-                self.player_heading_box.insertWidget(0, self.now_playing)
-            self.now_playing.hide()  # the details view shows the title
-            self.playing_details.refresh()
+            # The picture leaves the player panel for the page, behind the shared view's slot.
+            if self.video.parentWidget() is not self.media_column:
+                self.video.setParent(self.media_column)
+                self.video.show()
+            self.player_heading.hide()
+            self.player_back.hide()
+            self.video_controls.hide()
+            self.video.setMinimumHeight(0)
+            self.video.setMaximumHeight(16777215)
+            # Subtitles keep above the view's controls, as the Web's do.
+            self.video_overlay_box.setContentsMargins(0, 0, 0, 72)
+            self._place_watch()
         else:
-            if (
-                not self.fullscreen_dialog.isVisible()
-                and self.player_home_layout is not self.player_base_layout
-            ):
-                self.player_base_layout.addWidget(self.player_panel)
-                self.player_home_layout = self.player_base_layout
+            self.video_overlay_box.setContentsMargins(0, 0, 0, 0)
+            self.watch_band.hide()
+            if self.video.parentWidget() is not self.player_panel:
+                self.player_box.insertWidget(0, self.video, 1)
+                self.video.setMinimumHeight(300)
+                self.video.hide()
             if self.music_controls_home.indexOf(self.video_controls) < 0:
                 self.music_controls_home.addWidget(self.video_controls)
             self.now_playing.setStyleSheet("color: #e7eeeb;")
             self.now_playing.show()
-        # Horizon shows the film's details on the picture itself, in its bar and pause screen.
-        horizon = self.media_layout == "horizon"
-        self.player_heading.setVisible(
-            active_video and not horizon and not self.fullscreen_dialog.isVisible()
-        )
-        if active_video and horizon and not self.fullscreen_dialog.isVisible():
-            self.video.setFixedHeight(max(300, self.media_column.height() - 20))
-        elif active_video and not self.fullscreen_dialog.isVisible():
-            # The details never take more than a third of the column: the picture comes first.
-            self.playing_details.max_height = max(150, self.media_column.height() // 3)
-            self.playing_details.setFixedHeight(
-                min(self.playing_details.wanted, self.playing_details.max_height)
-            )
-            self.video.setFixedHeight(
-                min(
-                    max(300, self.media_column.height() - self.playing_details.height() - 40),
-                    max(300, self.media_column.width() * 9 // 16),
-                )
-            )
+            self.player_heading.setVisible(False)
         self._show_video_controls()
+
+    def _place_watch(self) -> None:
+        """Put the black band and the picture where the shared view's slot is."""
+        layout, browser = self.watch_layout, self.browser
+        if not self._player_video_mode or layout is None or browser is None:
+            self.watch_band.hide()
+            if self._player_video_mode:
+                self.video.hide()
+            return
+        origin = browser.geometry().topLeft()
+
+        def rect(box: dict[str, float]) -> QRect:
+            return QRect(
+                origin.x() + round(box["x"]),
+                origin.y() + round(box["y"]),
+                round(box["width"]),
+                round(box["height"]),
+            )
+
+        self.watch_band.setGeometry(rect(layout["band"]))
+        self.video.setGeometry(rect(layout["screen"]))
+        self.watch_band.show()
+        self.video.show()
+        self.watch_band.lower()
+        self.video.stackUnder(browser)
 
     def _embedded_subtitle_text(self, text: str) -> None:
         self.embedded_caption = (
@@ -803,24 +816,29 @@ class MediaTab(QWidget):
         self.caption.setVisible(bool(text) and self._player_video_mode)
 
     def toggle_fullscreen(self) -> None:
-        if self.fullscreen_dialog.isVisible():
-            self.fullscreen_dialog.reject()
-        elif self.last_source:
-            self._player_home_index = self.player_home_layout.indexOf(self.player_panel)
-            self.fullscreen_layout.addWidget(self.player_panel)
-            self.player_box.setContentsMargins(0, 0, 0, 0)
-            self.video.setMinimumHeight(0)
-            self.video.setMaximumHeight(16777215)
-            self.player_heading.hide()
+        """Show the film alone. In Media Center the window is full screen already: the view
+        then fills the app, and leaving it keeps Media Center."""
+        if self.watch_full:
+            if self.fullscreen_dialog.isVisible():
+                self.fullscreen_dialog.reject()
+            else:
+                self.watch_full = False
+                self._publish_playback()
+            return
+        if not self._player_video_mode:
+            return
+        self.watch_full = True
+        if not self.center_button.isChecked():
+            self.fullscreen_layout.addWidget(self.media_column)
             self.fullscreen_dialog.showFullScreen()
-            self.video_controls.focus_fullscreen()
+        self._publish_playback()
 
     def _leave_fullscreen(self) -> None:
-        self.player_box.setContentsMargins(12, 8, 12, 8)
-        self.player_home_layout.insertWidget(self._player_home_index, self.player_panel)
+        self.watch_full = False
+        self.splitter.insertWidget(0, self.media_column)
+        self.media_column.show()
         self._arrange_player()
-        self.player_panel.show()
-        self.video_controls.focus_fullscreen()
+        self._publish_playback()
 
     @staticmethod
     def _time_label(seconds: float) -> str:
@@ -954,6 +972,7 @@ class MediaTab(QWidget):
         """Return to browsing while preserving progress and the saved queue."""
         if self.fullscreen_dialog.isVisible():
             self.fullscreen_dialog.reject()
+        self.watch_full = False
         self._invalidate_preview_request()
         if self.player is not None:
             if self.preview_device is not None:
@@ -1075,17 +1094,19 @@ class MediaTab(QWidget):
         # In Video, a music track keeps its bar only while it plays, so it can be paused.
         background_music = active and not active_video and video
         self.player_panel.setVisible(
-            (active and not background_music)
+            (active and not background_music and not active_video)
             or (background_music and playing)
             or (not video and (bool(self.state["queue"]) or self.queue_open))
         )
-        self.video.setVisible(active_video)
+        self.video.setVisible(active_video and self.watch_layout is not None)
         self._arrange_player()
         self._render_caption()
-        self.video_controls.setVisible(active or bool(self.state["queue"]) or self.queue_open)
+        self.video_controls.setVisible(
+            (active and not active_video) or bool(self.state["queue"]) or self.queue_open
+        )
         self._refresh_player_views()
         if self.browser is not None:
-            self.browser.setVisible(not active_video)
+            self.browser.setVisible(True)  # a film plays above the browsing, not instead of it
 
     def _ensure_browser(self) -> MediaBrowserPanel:
         if self.browser is not None:
@@ -1195,6 +1216,15 @@ class MediaTab(QWidget):
             self.client_requested.emit(str(values.get("client_id") or ""))
         elif action == "settings":
             self.folder_button.click()
+        elif action == "watch-layout":
+            self.watch_layout = values
+            self._place_watch()
+            self.video.setVisible(self._player_video_mode)
+        elif action == "player":
+            try:
+                self._watch_control(values)
+            except (ValueError, KeyError) as error:
+                self._set_notice(str(error))
 
     def selected_ids(self) -> list[str]:
         return self.browse_selection
@@ -1243,6 +1273,10 @@ class MediaTab(QWidget):
             self.pending_seek = None
             self._prepare_track_source()
             self.player.setSourceDevice(self.preview_device, QUrl("verified-preview.mp4"))
+            self.preview_facts = {
+                "verified_bytes": int(preview.get("verified_bytes") or 0),
+                "total_bytes": int(preview.get("total_bytes") or 0),
+            }
             self.now_playing.setText(
                 self.tr("Preview of downloaded portion · {0}% verified").format(
                     round(100 * preview["progress"])
@@ -1442,6 +1476,7 @@ class MediaTab(QWidget):
                     ):
                         return
             self._close_preview()
+            self.playback_error = ""
             self.last_source = identifier
             self.current_row = row
             self.subtitle_cues = []
@@ -1636,7 +1671,7 @@ class MediaTab(QWidget):
             "queue": self.queue_rows,
             "index": self.state["index"],
             "playlists": self.saved_playlists,
-            "fullscreen": self.fullscreen_dialog.isVisible(),
+            "fullscreen": self.watch_full,
             "center": self.center_button.isChecked(),
             "can_expand": False,
             "external_available": bool(self.last_source) and not self.preview_id,
@@ -1652,8 +1687,77 @@ class MediaTab(QWidget):
 
     def _refresh_player_views(self) -> None:
         self.video_controls.refresh()
-        if self._player_video_mode:
-            self.playing_details.refresh()
+        self._publish_playback_soon()
+
+    def _publish_playback_soon(self) -> None:
+        if not self.playback_timer.isActive():
+            self.playback_timer.start()
+
+    def _playback_snapshot(self) -> dict[str, Any] | None:
+        """The playing video's state, for the controls and details the shared view draws."""
+        if not self._player_video_mode or self.player is None:
+            return None
+        row = self.current_row
+        keys: tuple[str, ...] = ("title", "original_title", "year", "duration", "genre")
+        keys += ("rating", "tagline", "description", "director", "actors", "release")
+        keys += ("codec", "watched", "age_rating")
+        queue, index = self.state["queue"], int(self.state["index"])
+        return {
+            "kind": "video",
+            "media_id": self.last_source,
+            "client_id": self.session_client,
+            "source_token": self.track_source_token,
+            "queue_revision": self.queue_revision,
+            "title": self.now_playing.text(),
+            "playing": self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
+            "position": self.player.position() / 1000,
+            "duration": self.player.duration() / 1000,
+            "tracks": self._track_state(),
+            "item": {key: row.get(key) for key in keys},
+            "has_next": index < len(queue) - 1
+            or (self.state["repeat"] == "all" and len(queue) > 1),
+            "preview": self.preview_facts if self.preview_id else None,
+            "full": self.watch_full,
+            "error": self.playback_error,
+            "external_available": bool(self.last_source) and not self.preview_id,
+            "external_url": "",
+        }
+
+    def _publish_playback(self) -> None:
+        if self.browser is None:
+            return
+        snapshot = self._playback_snapshot()
+        if snapshot == self.browser.playback:
+            return
+        self.browser.playback = snapshot
+        self.browser.publish()
+
+    def _watch_control(self, values: dict) -> None:
+        """A command from the view's controls, for the source they were drawn for."""
+        for key, expected in (
+            ("client_id", self.session_client),
+            ("media_id", self.last_source),
+            ("source_token", self.track_source_token),
+        ):
+            if values.get(key) != expected:
+                raise ValueError("Player source changed. Use the current controls.")
+        action, params = values.get("action"), values.get("values") or {}
+        if action not in {
+            "toggle",
+            "seek",
+            "fullscreen",
+            "stop",
+            "next",
+            "select_track",
+            "refresh-preview",
+            "external",
+        } or not isinstance(params, dict):
+            raise ValueError("Unknown player control.")
+        if action == "next":
+            self._advance(1)  # the next film of the queue
+        else:
+            self._player_control(action, params)
+        self._publish_playback()
 
     def _playing_item(self) -> dict[str, Any] | None:
         """The playing video's facts, for its details and Horizon's bar."""
@@ -1755,9 +1859,11 @@ class MediaTab(QWidget):
     def _position_changed(self, position: int) -> None:
         self._render_caption()
         self.video_controls.refresh()
+        self._publish_playback_soon()
 
     def _duration_changed(self, duration: int) -> None:
         self.video_controls.refresh()
+        self._publish_playback_soon()
 
     def _media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         if status in {QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia}:
@@ -2008,6 +2114,11 @@ class MediaTab(QWidget):
 
     def _codec_error(self, *_args: Any) -> None:
         if self.player.error() != QMediaPlayer.Error.NoError:
+            self.playback_error = (
+                self.tr("Playback failed. This format or codec may be unsupported. ")
+                + self.player.errorString()
+            )
+            self._publish_playback_soon()
             self._set_notice(
                 (
                     self.tr(

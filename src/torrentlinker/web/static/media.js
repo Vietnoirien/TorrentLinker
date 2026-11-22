@@ -116,6 +116,7 @@ function mediaTrackRequestFailure(request) {
   const message = element("p", request.error || say("The requested playback tracks are unavailable.", "Les pistes demandées ne sont pas disponibles."), "media-error");
   message.id = "media-track-request-error"; message.setAttribute("role", "alert");
   $("media-track-request-error")?.remove(); $("media-player-shell").append(message);
+  mediaStatus(message.textContent, "bad"); // a video's shell is only its picture
 }
 function mediaSelectTrack(command) {
   let error = "";
@@ -187,15 +188,12 @@ async function mediaPreview(id, refresh = false) {
 async function mediaStop() {
   mediaInvalidatePlayback();
   mediaClosePlayerMenu();
-  if (document.fullscreenElement === $("media-player-shell")) await document.exitFullscreen().catch(() => {});
+  await mediaLeaveFull();
   for (const player of [$("media-video"), $("media-audio")]) { player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; player.removeAttribute("src"); player.load(); }
   media.trackResult = null;
   $("media-track-request-error")?.remove();
   const closing = mediaReleasePreview(); media.queue = []; media.index = 0;
-  $("media-player-shell").hidden = true; mediaQueueRender();
-  // A phone opened the player as a page of its own; leave it so Back is not spent on nothing.
-  media.phoneMini = false; mediaPhoneLayout();
-  if (media.phoneEntry && history.state?.mediaPlayer) { media.phoneEntry = false; history.back(); }
+  $("media-player-shell").hidden = true; media.watchLayout = null; mediaQueueRender();
   await closing; await mediaHeartbeat();
 }
 async function mediaLoad(id, position = null, paused = false, preview = null, request = null, invalidate = true) {
@@ -228,8 +226,8 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   player.volume = old.volume; player.dataset.mediaId = id; player.dataset.sourceToken = request.sourceToken || mediaNewSourceToken(); media.trackResult = null;
   $("media-track-request-error")?.remove();
   player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();
-  $("media-player-shell").hidden = false; $("media-player-shell").scrollIntoView({block: "nearest"});
-  media.phoneMini = false; mediaPhoneLayout(row); $("media-now-playing").textContent = [row.title, row.artist].filter(Boolean).join(" · ");
+  $("media-player-shell").hidden = false;
+  $("media-now-playing").textContent = [row.title, row.artist].filter(Boolean).join(" · ");
   $("media-player-shell").querySelector(".media-playing-art")?.remove();
   if (row.kind === "music") $("media-player-shell").prepend(mediaArt(row, "media-playing-art"));
   $("media-codec-error").hidden = true;
@@ -258,7 +256,7 @@ async function mediaTryPlay(player = mediaPlayer()) {
   try { await player.play(); return true; }
   catch (error) { if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); return false; }
 }
-function mediaCodecError() { $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : "This browser could not play the file. Its codec may be unsupported. Open or download the file for an external player."; }
+function mediaCodecError() { if (typeof mediaEnvironment === "function") queueMicrotask(mediaEnvironment); $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : "This browser could not play the file. Its codec may be unsupported. Open or download the file for an external player."; }
 async function mediaStart(ids, index = 0) {
   const request = {generation: mediaInvalidatePlayback(), client: mediaClient(), selectedClient: state.clientId, session: null};
   ids = await ids;
@@ -435,60 +433,36 @@ const mediaToggleCenter = () => guard(async () => {
     mediaCenterAppearance(true);
   }
 });
-// On a phone a video fills the screen (docs/specs/media-phone-player, layout C). ⌄ or the phone's Back
-// button shrinks it to a bar at the bottom of Médias that keeps playing; a tap on the bar brings it back; × stops.
-const mediaPhonePlayer = () => matchMedia("(max-width: 700px)").matches;
-function mediaPhoneLayout(row = mediaItems.get($("media-video").dataset.mediaId)) {
-  const shell = $("media-player-shell"), phone = mediaPhonePlayer() && shell.dataset.kind === "video" && !shell.hidden;
-  shell.classList.toggle("media-phone-full", phone && !media.phoneMini);
-  shell.classList.toggle("media-phone-mini", phone && !!media.phoneMini);
-  for (const id of ["media-phone-title", "media-phone-mini-title"]) $(id).textContent = row?.title || "";
-  $("media-phone-minimise").setAttribute("aria-label", say("Minimise the player", "Réduire le lecteur"));
-  for (const id of ["media-phone-close", "media-phone-stop"]) $(id).setAttribute("aria-label", say("Close the player", "Fermer le lecteur"));
-  $("media-phone-expand").setAttribute("aria-label", say("Back to full screen", "Revenir en plein écran"));
-  mediaPhoneTime();
-  // The full screen is a page of its own in the history, so Back leaves it.
-  if (phone && !media.phoneMini && !history.state?.mediaPlayer) { history.pushState({...history.state, mediaPlayer: true}, ""); media.phoneEntry = true; }
-}
-function mediaPhoneTime() {
-  const video = $("media-video"), paused = video.paused, seconds = Math.floor(video.currentTime || 0);
-  const clock = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map((n, i) => i ? String(n).padStart(2, "0") : n).join(":");
-  $("media-phone-mini-time").textContent = `${clock} · ${paused ? say("paused", "en pause") : say("playing", "lecture")}`;
-  $("media-phone-toggle").setAttribute("aria-label", paused ? say("Play", "Lecture") : say("Pause", "Pause"));
-  $("media-phone-toggle").firstElementChild.textContent = paused ? "▶" : "❚❚";
-}
-function mediaPhoneMinimise() {
-  media.phoneMini = true;
-  if (media.phoneEntry && history.state?.mediaPlayer) { media.phoneEntry = false; history.back(); }
-  mediaPhoneLayout();
-}
-$("media-phone-minimise").onclick = mediaPhoneMinimise;
-$("media-phone-expand").onclick = () => { media.phoneMini = false; mediaPhoneLayout(); };
-$("media-phone-toggle").onclick = () => { const video = $("media-video"); if (video.paused) guard(() => video.play()); else video.pause(); };
-for (const id of ["media-phone-close", "media-phone-stop"]) $(id).onclick = event => guard(mediaStop, event.currentTarget);
-for (const event of ["timeupdate", "play", "pause"]) $("media-video").addEventListener(event, mediaPhoneTime);
-window.addEventListener("resize", () => mediaPhoneLayout());
-// Only leaving the player's own history entry shrinks it; the app's page links change history too.
-window.addEventListener("popstate", () => {
-  if (media.phoneEntry && !history.state?.mediaPlayer) { media.phoneEntry = false; if (!$("media-player-shell").hidden) { media.phoneMini = true; mediaPhoneLayout(); } }
-});
 // A video belongs to Médias: elsewhere it pauses and its player waits out of sight. Music keeps its bar.
 function mediaPageChanged(onMedia) {
   const shell = $("media-player-shell"), away = !onMedia && shell.dataset.kind === "video";
   if (away && !shell.hidden) $("media-video").pause();
   shell.classList.toggle("media-shell-away", away);
 }
+// Full screen shows the film alone: the Médias view fills the window over the picture. Media Center is full screen
+// already, so there the player only fills the app, and leaving it never ends Media Center.
+const mediaFull = () => document.body.classList.contains("media-player-full");
+async function mediaLeaveFull() {
+  document.body.classList.remove("media-player-full");
+  const owned = media.fullOwned; media.fullOwned = false;
+  if (owned && document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+  if (typeof mediaEnvironment === "function") mediaEnvironment();
+}
 async function mediaToggleFullscreen() {
-  if (document.fullscreenElement === $("media-player-shell")) await document.exitFullscreen();
-  else await $("media-player-shell").requestFullscreen();
+  if (mediaFull()) { await mediaLeaveFull(); return; }
+  document.body.classList.add("media-player-full");
+  if (!document.fullscreenElement && document.fullscreenEnabled) {
+    try { await document.documentElement.requestFullscreen(); media.fullOwned = true; } catch { /* the window fills the page instead */ }
+  }
+  if (typeof mediaEnvironment === "function") mediaEnvironment();
 }
 document.addEventListener("fullscreenchange", () => {
-  if (!document.fullscreenElement) mediaCenterAppearance(false);
+  if (!document.fullscreenElement) { document.body.classList.remove("media-player-full"); media.fullOwned = false; mediaCenterAppearance(false); }
   mediaPlayerEnvironment();
 });
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && document.fullscreenElement === $("media-player-shell")) {
-    guard(() => document.exitFullscreen());
+  if (event.key === "Escape" && mediaFull()) {
+    guard(mediaLeaveFull);
   } else if (event.key === "Escape" && document.body.classList.contains("media-center-mode")) {
     guard(mediaExitCenter);
   }
@@ -503,7 +477,6 @@ window.addEventListener("resize", () => { if (media.chat) mediaChatWidth($("medi
 const mediaShowQueue = () => {
   mediaPlayerMenu(true, true);
   guard(mediaQueueMetadata);
-  $("media-player-shell").scrollIntoView({block: "nearest"});
 };
 $("media-video-stage").oncontextmenu = event => { event.preventDefault(); mediaOpenPlayerMenu(); };
 $("media-video-stage").addEventListener("keydown", event => {

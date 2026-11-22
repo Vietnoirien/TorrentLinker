@@ -82,9 +82,9 @@ async function loadMedia(append = false) {
   }
   const noun = media.kind === "video" ? "video" : media.view === "albums" ? "album" : media.view === "artists" ? "artist" : "track";
   mediaStatus(result.scanning ? say("Scanning Library Folders...", "Analyse des dossiers de bibliothèque…") : `${result.total} ${say(noun, ({video:"vidéo",album:"album",artist:"artiste",track:"piste"})[noun])}${result.total === 1 ? "" : "s"}${result.errors?.length ? say(" · Some folders are unavailable. Previous items were kept.", " · Certains dossiers sont indisponibles. Les médias précédents sont conservés.") : ""}`);
-  const savedScroll=window.scrollY;
+  const scroller=document.querySelector(".media-scroll"),savedScroll=window.scrollY,savedInner=scroller.scrollTop;
   mediaRender();
-  window.scrollTo(0,savedScroll);
+  window.scrollTo(0,savedScroll);scroller.scrollTop=savedInner;
   if(version!==media.request)return;
   if (media.kind === "music") await mediaPlaylists();
 }
@@ -145,11 +145,16 @@ function mediaRenderFeature() {
   const candidates = [...media.rows, ...media.continueRows, ...media.homeRows.flatMap(r => r.rows)];
   const row = candidates.find(item => item.id === media.featureId) || candidates.find(item => item.available !== false && item.artwork_url) || candidates.find(item => item.available !== false) || candidates[0];
   root.hidden = media.kind !== "video" || !row;
+  $("view-media").dataset.feature = root.hidden ? "hidden" : "shown";
   if (root.hidden) {
     if (media.selected?.kind !== media.kind) media.selected = null;
     if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(media.selected);
     return;
   }
+  // Another film fades in behind its title; nothing moves.
+  const changed = media.shownFeature !== undefined && media.shownFeature !== row.id;
+  media.shownFeature = row.id;
+  root.classList.remove("fade"); if (changed) { void root.offsetWidth; root.classList.add("fade"); }
   media.featureId = row.id; media.selected = row;
   if(typeof mediaSelectionChanged === "function")mediaSelectionChanged(row);
   const scroll = root.querySelector(".media-focus-strip")?.scrollLeft || 0;
@@ -199,7 +204,7 @@ function mediaRenderFeature() {
   root.append(copy);
   const strip = element("div", undefined, "media-focus-strip"); strip.id = "media-focus-strip"; strip.setAttribute("aria-label", say("Select a featured title", "Choisir le titre mis en avant"));
   for (const item of media.rows) {
-    const choice = button("", () => mediaSelectFeature(item), "media-focus-choice");
+    const choice = button("", () => mediaPlaysCard(item) ? mediaStart([item.id]) : mediaSelectFeature(item), "media-focus-choice");
     choice.dataset.id = item.id; choice.setAttribute("aria-label", item.title); choice.setAttribute("aria-pressed", String(item.id === row.id));
     choice.ondblclick = () => guard(() => mediaStart([item.id]));
     choice.append(mediaArt(item), element("span", item.title)); strip.append(choice);
@@ -317,8 +322,11 @@ function mediaRowPlaceholder(row) {
   const cards = Array.from({length: 6}, () => { const card = element("div", undefined, "media-row-skeleton"); card.setAttribute("aria-hidden", "true"); return card; });
   return [note, ...cards];
 }
+// While a film plays, a card plays its film instead of selecting it (a tracker film is not in the library).
+const mediaPlaysCard = item => typeof watchPlayback === "function" && !!watchPlayback() && !item.tracker && item.available !== false;
 function mediaRowCard(item, row, track) {
   const card = button("", () => {
+    if (mediaPlaysCard(item)) return mediaStart([item.id]);
     mediaSelectFeature(item);
     for (const other of $("media-home-rows").querySelectorAll(".media-row-card")) other.setAttribute("aria-pressed", String(other.dataset.id === item.id));
     if (media.layout === "horizon") {
@@ -326,8 +334,7 @@ function mediaRowCard(item, row, track) {
       // rest of the category arrives before the end is reached.
       card.scrollIntoView({block: "nearest", inline: "center", behavior: "smooth"});
       if ([...track.children].indexOf(card) >= track.childElementCount - 8) guard(() => mediaRowMore(row, track));
-    } else if (getComputedStyle($("media-feature")).position !== "sticky") $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
-    // (A pinned title is already in view; scrolling to it would move the page.)
+    } else $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
   }, "media-row-card");
   card.dataset.id = item.id;
   card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
@@ -353,24 +360,14 @@ async function mediaRowMore(row, track) {
 let mediaRowObserver = null, mediaPinnedObserver = null;
 function mediaWatchLayout() {
   if (mediaPinnedObserver) return;
-  // Whatever scrolls into view lands below the pinned title; a recalled menu sits right above it.
+  // The top bar sits over the film: the title leaves room for it.
   mediaPinnedObserver = new ResizeObserver(() => {
     const style = document.documentElement.style;
     style.setProperty("--media-topbar-height", `${document.querySelector(".media-topbar").offsetHeight}px`);
-    style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
     style.setProperty("--media-nav-height", `${document.querySelector(".media-browse-nav").offsetHeight}px`);
   });
-  for (const node of [document.querySelector(".media-topbar"), $("media-feature"), document.querySelector(".media-browse-nav")]) mediaPinnedObserver.observe(node);
-  $("media-feature").addEventListener("wheel", mediaFeatureWheel, {passive: false});
-  let lastScroll = scrollY;
-  addEventListener("scroll", () => { if (scrollY > lastScroll) delete $("view-media").dataset.menu; lastScroll = scrollY; }, {passive: true});
+  for (const node of [document.querySelector(".media-topbar"), document.querySelector(".media-browse-nav")]) mediaPinnedObserver.observe(node);
   addEventListener("wheel", mediaHorizonWheel, {passive: false});
-}
-// Scrolled down, one wheel-up on the pinned title brings the menu back above it; scrolling down hides it.
-function mediaFeatureWheel(event) {
-  const view = $("view-media");
-  if (view.dataset.home !== "true" || view.dataset.layout !== "cinematic" || event.ctrlKey || event.deltaY >= 0) return;
-  if (scrollY > 0 && view.dataset.menu !== "shown") { event.preventDefault(); view.dataset.menu = "shown"; }
 }
 // Horizon's Home and Showcase fill one screen, like a living-room interface: the wheel moves
 // the selection along the posters, one title per step, instead of scrolling anything.
@@ -388,8 +385,7 @@ function mediaHorizonWheel(event) {
   const index = cards.findIndex(card => card.dataset.id === media.featureId);
   cards[Math.max(0, Math.min(cards.length - 1, index + step))]?.click();
 }
-// The wheel over a row only ever scrolls that row, even at its ends: the page scrolls from the
-// pinned title instead, so it never moves under the pointer.
+// The wheel over a row only ever scrolls that row, even at its ends.
 function mediaRowWheel(track, event) {
   if (media.layout === "horizon" || event.shiftKey || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
   event.preventDefault();
@@ -418,9 +414,10 @@ async function mediaSeeAll(filters) {
   media.animeFilters = filters.anime ? Object.fromEntries(["view", "oav"].filter(key => key in filters).map(key => [key, filters[key]])) : {};
   media.view = filters.adult ? "adult" : filters.anime ? "anime" : filters.view || "all"; $("media-view").value = media.view;
   await loadMedia();
-  window.scrollTo({top: 0});
+  window.scrollTo({top: 0}); document.querySelector(".media-scroll").scrollTop = 0;
 }
 function mediaRender() {
+  if (typeof watchRender === "function") watchRender();
   $("view-media").dataset.kind = media.kind; $("view-media").dataset.layout = media.layout; $("view-media").dataset.horizon = mediaHorizonScreen(); mediaWatchLayout();
   $("media-layout-switch").value = media.layout; // the saved layout, also when the view loads
   $("media-horizon-control").hidden = media.layout !== "horizon"; $("media-horizon-switch").value = media.horizon;

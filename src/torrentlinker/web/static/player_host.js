@@ -41,7 +41,7 @@ function mediaPlayerSnapshot() {
       playerPlaylistsClient === (media.playerClient || mediaClient())
         ? playerPlaylists
         : [],
-    fullscreen: document.fullscreenElement === shell,
+    fullscreen: mediaFull(),
     center: document.body.classList.contains("media-center-mode"),
     can_expand: shell.dataset.kind === "video",
     expanded: shell.classList.contains("media-player-expanded"),
@@ -57,9 +57,39 @@ function mediaPlayerSnapshot() {
     item: mediaPlayerDetailsSnapshot().item,
   };
 }
+// The Médias view draws a playing video's controls and details over its picture, from this.
+function mediaPlaybackSnapshot() {
+  const player = mediaPlayer(),
+    shell = $("media-player-shell");
+  if (shell.hidden || shell.dataset.kind !== "video" || !player.dataset.mediaId) return null;
+  const snapshot = mediaPlayerSnapshot(),
+    row = mediaItems.get(player.dataset.mediaId);
+  const fields = ["title", "original_title", "year", "duration", "genre", "rating", "tagline", "description", "director", "actors", "release", "codec", "watched", "age_rating"];
+  const error = !$("media-codec-error").hidden ? $("media-codec-message").textContent : "";
+  return {
+    kind: "video",
+    media_id: snapshot.media_id,
+    client_id: snapshot.client_id,
+    source_token: snapshot.source_token,
+    queue_revision: snapshot.queue_revision,
+    title: snapshot.title,
+    playing: snapshot.playing,
+    position: snapshot.position,
+    duration: snapshot.duration,
+    tracks: snapshot.tracks,
+    item: row ? Object.fromEntries(fields.map((key) => [key, row[key] ?? null])) : null,
+    has_next: media.index < media.queue.length - 1 || (media.repeat === "all" && media.queue.length > 1),
+    preview: media.preview ? { verified_bytes: media.preview.verified_bytes, total_bytes: media.preview.total_bytes } : null,
+    full: snapshot.fullscreen,
+    error,
+    external_available: snapshot.external_available,
+    external_url: snapshot.external_url,
+  };
+}
 function mediaPlayerEnvironment() {
   if (typeof mediaPositionCaptions !== "function") return;
   mediaPositionCaptions();
+  if (typeof mediaEnvironment === "function") mediaEnvironment();
   $("player-frame").title = say(
     "Media player controls",
     "Commandes du lecteur multimédia",

@@ -986,7 +986,7 @@ iframe.has-open-dialog { position: relative; z-index: 3; }
 #navigation-toggle { padding:6px 12px; font-size:18px; line-height:1; }
 #work-status { margin-left:auto; }
 .media-center-mode #workspace main > header { display:none; }
-@media(min-width:650px) { .media-view #workspace main > header { display:none; } }
+.media-view #workspace main > header { display:none; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 /* On a phone the same sidebar slides in from the left over a dimmed page. */
 #navigation-backdrop { display:none; }

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi.encoders import jsonable_encoder
 from PySide6.QtCore import Signal, Slot
+from PySide6.QtGui import QColor
 from shiboken6 import isValid
 
 from torrentlinker.config import MEDIA_HORIZON_VIEWS, MEDIA_LAYOUTS
@@ -41,6 +42,9 @@ class MediaBrowserBridge(ViewBridge):
                     "settings",
                     "selection",
                     "context",
+                    "player",
+                    "watch-layout",
+                    "navigation",
                 }:
                     raise ValueError("Unknown Media action")
                 self.panel.hostRequested.emit(action, body.get("values", {}))
@@ -119,11 +123,18 @@ class MediaBrowserPanel(BundledView):
         self.kind, self.view = "video", "recent"
         self.queue: list[str] = []
         self.queue_music = True
+        # A playing video's state, for the controls and details the view draws over its picture.
+        self.playback: dict | None = None
         super().__init__(
             MediaBrowserBridge(self), Path(__file__).parents[1] / "web/static/media", "media"
         )
         if parent:
             self.setParent(parent)
+
+    def _load_view(self):
+        super()._load_view()
+        # The film's picture sits behind the view's transparent slot (docs/specs/media-watch-page).
+        self.web.page().setBackgroundColor(QColor(0, 0, 0, 0))
 
     def show_notice(self, text: str) -> None:
         if self.web and text:
@@ -160,6 +171,7 @@ class MediaBrowserPanel(BundledView):
                 "language": self.language,
                 "theme": "dark" if self.palette().window().color().lightness() < 128 else "light",
                 "adult_content": service.setup.settings.adult_content,
+                "playback": self.playback,
             }
         )
         self.bridge.ready()

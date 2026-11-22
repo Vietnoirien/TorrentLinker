@@ -27,14 +27,12 @@ def player_js(qtbot, tab, script):
 
 
 def player_select(qtbot, tab, kind, identifier):
+    """A video's tracks are chosen from the page's "Audio and subtitles" (layout A)."""
     import json
 
-    player_js(
-        qtbot,
-        tab,
-        f"{{const input=document.getElementById('player-{kind}');"
-        f"input.value={json.dumps(identifier)};input.dispatchEvent(new Event('change'));}}",
-    )
+    video_wait(qtbot, tab, "typeof watchPlayback === 'function' && !!watchPlayback()")
+    values = json.dumps({"kind": kind, "track_id": identifier})
+    video_js(qtbot, tab, f"watchSend('select_track', {values})")
 
 
 def video_details(qtbot, tab, title):
@@ -387,6 +385,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     service.agent.media.scan("default", threading.Event(), lambda _progress: None)
     tab = MediaTab(lambda: service, lambda: "default", lambda: None)
     qtbot.addWidget(tab)
+    tab.resize(760, 560)  # the picture fills the space the page gives it (layout A)
     tab.show()
     tab.activate()
     video_details(qtbot, tab, "Other 0")
@@ -406,47 +405,29 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     tab.command("seek", position=2)
     qtbot.waitUntil(lambda: tab.caption.text() == "A local caption")
     qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=10000)
-    assert tab.video_controls.isVisible()
-    assert tab.video.rect().contains(
-        tab.video_controls.mapTo(tab.video, tab.video_controls.rect().center())
-    )
-    rendered = tab.video.grab().toImage()
-    sample = rendered.pixelColor(rendered.width() // 2, rendered.height() // 3)
-    assert sample.blue() > 150 and sample.red() < 80
-    from PySide6.QtCore import QCoreApplication, QPoint
-    from PySide6.QtGui import QContextMenuEvent
+    # Layout A: the page draws the controls over the picture; the old control bar stays hidden.
+    assert not tab.video_controls.isVisible()
+    video_wait(qtbot, tab, "!!document.getElementById('watch-toggle')")
 
-    tab.video.setFocus()
-    tab.controls_timer.setInterval(120)
-    qtbot.mouseMove(tab.video.viewport(), QPoint(20, 20))
-    qtbot.waitUntil(lambda: tab.video_controls.isHidden(), timeout=2000)
-    assert tab.player_back.isHidden()
-    qtbot.mouseMove(tab.video.viewport(), QPoint(35, 20))
-    qtbot.waitUntil(lambda: tab.video_controls.isVisible())
-    assert tab.player_back.isVisible()
-    qtbot.keyClick(tab.video, Qt.Key_Space)
-    assert tab.video_controls.isVisible()
-    local = QPoint(60, 60)
-    context = QContextMenuEvent(
-        QContextMenuEvent.Reason.Mouse, local, tab.video.viewport().mapToGlobal(local)
-    )
-    QCoreApplication.sendEvent(tab.video.viewport(), context)
-    qtbot.waitUntil(lambda: tab.video_controls.menu_open)
-    tab.player.play()
-    qtbot.wait(180)
-    assert tab.video_controls.isVisible()
+    def blue_picture():
+        rendered = tab.video.grab().toImage()
+        sample = rendered.pixelColor(rendered.width() // 2, rendered.height() // 3)
+        return sample.blue() > 150 and sample.red() < 80
+
+    # The picture behind the page shows the film once a frame is drawn after the seek.
+    qtbot.waitUntil(blue_picture, timeout=5000)
+    from PySide6.QtCore import QPoint
+
     tab.player.pause()
-    player_js(qtbot, tab, "document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))")
-    qtbot.waitUntil(lambda: not tab.video_controls.menu_open)
-    assert tab.player.playbackState() != tab.player.PlaybackState.PlayingState
     source, position = tab.player.source(), tab.player.position()
     original_parent = tab.player_panel.parentWidget()
-    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
+    video_js(qtbot, tab, "watchSend('fullscreen')")
     qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
     assert tab.caption.isVisible()
     assert tab.subtitle_choice == tab.current_row["subtitles"][0]["id"]
     assert tab.video.mapTo(tab.fullscreen_dialog, tab.video.rect().topLeft()).isNull()
-    assert tab.video.size() == tab.fullscreen_dialog.size()
+    # The page measures its full-screen slot again, then the picture follows it.
+    qtbot.waitUntil(lambda: tab.video.size() == tab.fullscreen_dialog.size())
     assert tab.player.source() == source
     assert tab.player.position() == position
     size = max(16, min(56, tab.video.overlay.height() // 20))
@@ -469,8 +450,11 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
         bottom = tab.caption.mapTo(tab.video, tab.caption.rect().bottomLeft())
         assert tab.video.rect().contains(bottom)
     fullscreen_size = tab.caption_size
-    player_js(qtbot, tab, "document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))")
+    fullscreen_height = tab.video.overlay.height()
+    qtbot.keyClick(tab.fullscreen_dialog, Qt.Key.Key_Escape)
     qtbot.waitUntil(lambda: tab.player_panel.parentWidget() is original_parent)
+    # Back in the window, the picture returns to the page's slot once the page measures it.
+    qtbot.waitUntil(lambda: tab.video.overlay.height() < fullscreen_height)
     tab.caption.setText("Viens à moi.")
     tab._fit_caption()
     assert tab.caption_size == max(16, min(56, tab.video.overlay.height() // 20))
@@ -485,12 +469,10 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     qtbot.wait(QApplication.doubleClickInterval() + 50)
     assert tab.player.playbackState() == state
     assert tab.player.position() == position
-    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
-    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
-    assert tab.player_panel.parentWidget() is original_parent
-    player_js(qtbot, tab, "document.getElementById('player-fullscreen').click()")
-    qtbot.mouseClick(tab.player_back, Qt.LeftButton)
-    assert not tab.fullscreen_dialog.isVisible()
+    video_js(qtbot, tab, "watchSend('fullscreen')")
+    qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
+    video_js(qtbot, tab, "watchSend('stop')")
+    qtbot.waitUntil(lambda: not tab.fullscreen_dialog.isVisible())
     assert tab.player_panel.window() is tab
     assert not tab.video.isVisible()
     assert not tab.player_panel.isVisible()
@@ -1022,12 +1004,17 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         assert tab.player.activeAudioTrack() == 1
         assert tab.player.activeSubtitleTrack() == 1
         tab.toggle_fullscreen()
-        tab.video_controls.open_menu()
-        player_js(
-            qtbot, tab, "window.staleAudioChange=document.getElementById('player-audio').onchange"
+        # A choice the page drew for this film, kept to be sent after the film has changed.
+        video_wait(qtbot, tab, "typeof watchPlayback === 'function' && !!watchPlayback()")
+        video_js(
+            qtbot,
+            tab,
+            "window.staleAudioChange=(play=>()=>host('player',{action:'select_track',"
+            "values:{kind:'audio',track_id:'audio:1'},client_id:play.client_id,"
+            "media_id:play.media_id,source_token:play.source_token,"
+            "queue_revision:play.queue_revision}))(watchPlayback())",
         )
         player_select(qtbot, tab, "audio", "audio:0")
-        tab.video_controls.close_menu()
         qtbot.waitUntil(lambda: tab.player.activeAudioTrack() == 0)
         player_select(qtbot, tab, "subtitle", "embedded:0")
         frequencies.clear()
@@ -1050,14 +1037,8 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         assert replacement["source_token"] != "prepared-fixture"
         qtbot.waitUntil(lambda: tab.player.activeAudioTrack() >= 0)
         stale_track = tab.player.activeAudioTrack()
-        player_js(qtbot, tab, "window.staleAudioChange()")
-        from tests.test_community_interfaces import wait_js
-
-        wait_js(
-            qtbot,
-            tab.video_controls,
-            "document.getElementById('player-error').textContent.includes('changed')",
-        )
+        video_js(qtbot, tab, "window.staleAudioChange()")
+        qtbot.waitUntil(lambda: "changed" in tab.notice.text())
         assert tab.player.activeAudioTrack() == stale_track
         deliver("pause")
         stale_resume = deliver("play", media_id=media_id, source_token="prepared-fixture")

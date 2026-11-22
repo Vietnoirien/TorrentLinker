@@ -6,8 +6,8 @@
 .media-view main > header label { margin: 0 0 0 auto; font-size: 10px; }
 .media-view main > header select { padding: 6px 10px; max-width: 200px; font-size: 12px; }
 .media-view main > header #navigation-toggle { padding: 7px 10px; font-size: 11px; }
-/* Media has its own menu; the page header returns only where it holds the navigation button. */
-@media (min-width: 651px) { .media-view main > header { display: none; } }
+/* Media has its own menu, with the navigation button: the page header never shows on it. */
+.media-view main > header { display: none; }
 #view-media { --media-muted: #9da9ad; color: #f2f3ef; background: #101416; min-height: calc(100dvh - 78px); }
 #view-media button, #view-media input, #view-media select, #media-details button { color: inherit; background: #ffffff08; border-color: #ffffff23; }
 /* The media view recolors the shared roles for its dark surface; it keeps their shapes. */
@@ -174,6 +174,9 @@ html[data-theme="light"] #media-details > button:first-of-type { color: white; }
 
 /* Media Center fills the app window while keeping browsing and chat available. */
 .media-center-mode .sidebar, .media-center-mode main > header { display: none; }
+/* Without the sidebar, Media Center uses the whole width, sliding into it. */
+.media-center-mode #workspace main { margin-left: 0; transition: margin-left .25s ease; }
+@media (prefers-reduced-motion: reduce) { .media-center-mode #workspace main { transition: none; } }
 .media-center-mode main { margin-left: 0; padding: 0; }
 .media-center-mode .media-topbar { position: sticky; top: 0; z-index: 6; background: var(--bg); }
 .media-center-mode #media-center-mode { flex-shrink: 0; }
@@ -313,16 +316,10 @@ html[data-theme="light"] .media-view #media-player-shell { box-shadow: 0 8px 30p
 
 /* Video home rows: a title, a count, scroll arrows, "See all", then cards side by side. */
 .media-home-rows { display: grid; gap: 30px; margin-top: 8px; }
-/* The cinematic home keeps the selected title in view while the rows scroll beneath; the menu scrolls away. */
-#view-media[data-home="true"][data-layout="cinematic"] .media-feature { position: sticky; top: 0; z-index: 5; }
 /* A lower title leaves more of the screen to the rows. */
 #view-media[data-layout="cinematic"] .media-feature { min-height: 400px; }
 #view-media[data-layout="cinematic"] .media-feature-copy { padding-top: 56px; padding-bottom: 52px; }
 #view-media[data-layout="cinematic"] .media-feature h2 { font-size: clamp(38px,4.4vw,64px); }
-#view-media[data-home="true"][data-layout="cinematic"] .media-topbar { z-index: 6; } /* its Options panel opens over the title */
-#view-media[data-home="true"][data-layout="cinematic"][data-menu="shown"] .media-topbar { position: sticky; top: 0; background: var(--bg); }
-#view-media[data-home="true"][data-layout="cinematic"][data-menu="shown"] .media-feature { top: var(--media-topbar-height, 0px); }
-html:has(#view-media[data-home="true"][data-layout="cinematic"]) { scroll-padding-top: var(--media-feature-height, 0px); }
 .media-home-row { min-width: 0; }
 .media-home-row-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }
 .media-home-row-header h2 { margin: 0; font-size: 20px; }
@@ -424,22 +421,16 @@ html[data-theme="light"] .media-request small, html[data-theme="light"] .media-r
 html[data-theme="light"] .media-requests-drawer .media-quota.full { color: #8a5a00; }
 .preroll-playback{width:min(90vw,1000px);background:var(--panel,#101827);color:var(--text,#e5edf7);border:1px solid var(--line,#405066);border-radius:16px;padding:24px}.preroll-playback::backdrop{background:#000c}.preroll-playback video,.preroll-playback iframe{width:100%;aspect-ratio:16/9;max-height:70vh;border:0}.preroll-playback button{margin:12px 12px 0 0}
 
-/* On a phone a video plays on a black screen of its own (docs/specs/media-phone-player, layout C): ⌄ and × at the
-   top; ⌄ shrinks it to a bar at the bottom of Médias that keeps playing. */
-.media-phone-top, .media-phone-mini { display: none; }
-.media-view #media-player-shell[data-kind="video"].media-phone-full { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #000; box-shadow: none; z-index: 60; display: flex; flex-direction: column; overflow: hidden; }
-.media-view #media-player-shell[data-kind="video"].media-phone-full #media-video-stage { flex: 1 1 0; min-height: 0; border-radius: 0; }
-.media-view #media-player-shell[data-kind="video"].media-phone-full #media-video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; }
-.media-view #media-player-shell[data-kind="video"].media-phone-full #player-details-frame { display: none; }
-.media-view #media-player-shell[data-kind="video"].media-phone-full .media-phone-top { display: flex; align-items: center; gap: 12px; position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: max(12px, env(safe-area-inset-top)) 12px 24px; color: #fff; background: linear-gradient(#000a, transparent); }
-.media-view #media-player-shell[data-kind="video"].media-phone-full .media-phone-top b { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.media-view #media-player-shell[data-kind="video"].media-phone-full .media-phone-top button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: #0007; color: #fff; font-size: 24px; line-height: 1; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini { position: fixed; left: 8px; right: 8px; bottom: calc(10px + env(safe-area-inset-bottom)); top: auto; width: auto; max-width: none; height: auto; max-height: none; margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: 0 12px 40px #0009; z-index: 60; display: flex; flex-direction: row; align-items: center; gap: 10px; overflow: hidden; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini #media-video-stage { flex: none; width: 112px; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini #media-video { width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: cover; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini #player-frame, .media-view #media-player-shell[data-kind="video"].media-phone-mini #player-details-frame, .media-view #media-player-shell[data-kind="video"].media-phone-mini > p { display: none; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini .media-phone-mini { display: flex; flex: 1; min-width: 0; align-items: center; gap: 4px; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini #media-phone-expand { flex: 1; min-width: 0; display: grid; text-align: left; border: 0; background: transparent; color: var(--text); padding: 0; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini #media-phone-expand b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini #media-phone-expand small { color: var(--muted); font-size: 12px; }
-.media-view #media-player-shell[data-kind="video"].media-phone-mini .media-phone-mini button:not(#media-phone-expand) { width: 40px; height: 40px; border: 0; background: transparent; color: var(--text); font-size: 18px; padding: 0; }
+/* A playing video is the page's own picture (docs/specs/media-watch-page, layout A). Its shell is only the black
+   band behind the Médias view's transparent slot, placed from the view's report; the view draws the controls. */
+.media-view #media-player-shell[data-kind="video"] { position: fixed; z-index: 1; left: var(--watch-x, 0) !important; right: auto !important; top: var(--watch-y, 0) !important; bottom: auto !important; width: var(--watch-width, 0) !important; height: var(--watch-height, 0) !important; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: #000; box-shadow: none; overflow: hidden; display: block; }
+.media-view #media-player-shell[data-kind="video"][hidden], .media-view #media-player-shell[data-kind="video"][data-placed="false"] { display: none !important; }
+.media-view #media-player-shell[data-kind="video"] > :not(#media-video-stage):not(audio) { display: none !important; }
+.media-view #media-player-shell[data-kind="video"] #media-video-stage { position: absolute; left: var(--watch-screen-x, 0); top: var(--watch-screen-y, 0); width: var(--watch-screen-width, 0); height: var(--watch-screen-height, 0); border-radius: 0; }
+.media-view #media-player-shell[data-kind="video"] #media-video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; border-radius: 0; object-fit: contain; }
+.media-view #media-player-shell[data-kind="video"] #player-frame { display: none; }
+#media-frame { position: relative; z-index: 2; }
+/* Full screen shows the film alone: the view fills the window over the picture, whether the window is full screen
+   already (Media Center) or the player asked for it. */
+body.media-player-full #media-frame { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; z-index: 90; }
+body.media-player-full #media-player-shell[data-kind="video"] { z-index: 89; }

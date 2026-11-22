@@ -40,11 +40,30 @@ def open_films_grid(page):
     expect(media_locator(page, "#media-results")).to_be_visible()
 
 
+def watch_control(page, selector):
+    """A control of the playing film's picture, brought back first if it has left."""
+    screen = media_locator(page, "#media-screen")
+    if screen.get_attribute("data-controls") == "off":
+        box = screen.bounding_box()
+        screen.click(position={"x": box["width"] / 2, "y": box["height"] - 6})
+    control = media_locator(page, selector)
+    control.wait_for(state="visible")
+    return control
+
+
 def player_locator(page, selector):
     return page.frame_locator("#player-frame").locator(selector)
 
 
 def player_action(page, identifier):
+    """Music keeps the player frame's bar; a video's controls are the Médias view's own."""
+    video_controls = {"#media-fullscreen": "#watch-full", "#media-stop": "#watch-stop"}
+    if identifier in video_controls:
+        watch_control(page, video_controls[identifier]).click()
+        return
+    if identifier == "#media-chat":
+        media_locator(page, "#media-toolbar-chat").click()
+        return
     identifier = {"#media-player-expand": "#player-expand"}.get(
         identifier, identifier.replace("#media-", "#player-")
     )
@@ -134,11 +153,15 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             )
 
             def choose_layout(value):
+                # The menu sits over the page and leaves on a scroll down: back at the top it shows.
+                media_locator(page, ".media-scroll").evaluate("node => { node.scrollTop = 0; }")
+                media_browse(page).locator("body").evaluate("() => window.scrollTo(0, 0)")
+                page.wait_for_timeout(600)
                 options = media_locator(page, "#media-library-options")
                 if not options.evaluate("node => node.open"):
-                    options.locator("summary").click()
+                    options.locator("summary").evaluate("node => node.click()")
                 media_locator(page, "#media-layout-switch").select_option(value)
-                options.locator("summary").click()
+                options.locator("summary").evaluate("node => node.click()")
 
             reports = []
             report_statuses = []
@@ -233,79 +256,60 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             )
             if control_screenshots:
                 Path(control_screenshots).mkdir(parents=True, exist_ok=True)
+            # A film plays in the page: the Médias view draws its controls and details.
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-watch", "true")
+            expect(page.locator("#player-frame")).to_be_hidden()
             video.evaluate("node => node.pause()")
-            expect(player_locator(page, "#player-options")).to_be_visible()
-            player_locator(page, "#player-options").focus()
-            page.keyboard.press("Enter")
+            expect(media_locator(page, "#watch-toggle")).to_have_attribute("aria-label", "Play")
+            media_browse(page).get_by_role("button", name="Audio and subtitles", exact=True).click()
+            track_dialog = media_locator(page, "#media-watch-tracks")
+            expect(track_dialog).to_be_visible()
+            expect(track_dialog.get_by_role("button", name="Off", exact=True)).to_have_attribute(
+                "aria-pressed", "true"
+            )
+            # A file without audio tracks offers no audio choice.
+            expect(track_dialog.get_by_role("heading", name="Audio", exact=True)).to_have_count(0)
+            expect(track_dialog).to_contain_text("Use an external player if a track is unavailable")
+            expect(media_locator(page, "#media-watch-external")).to_have_attribute(
+                "href", re.compile("/stream")
+            )
+            track_dialog.get_by_role("button", name="Validation.Film.2026.en", exact=True).click()
             expect(
-                page.frame_locator("#player-frame").get_by_role(
-                    "dialog", name="Player options", exact=True
-                )
-            ).to_be_visible()
-            expect(
-                page.frame_locator("#player-frame").get_by_label("Subtitle track", exact=True)
-            ).to_be_visible()
-            expect(
-                page.frame_locator("#player-frame").get_by_label("Audio track", exact=True)
-            ).to_be_disabled()
-            page.frame_locator("#player-frame").get_by_label(
-                "Subtitle track", exact=True
-            ).select_option("subtitle:0")
+                track_dialog.get_by_role("button", name="Validation.Film.2026.en", exact=True)
+            ).to_have_attribute("aria-pressed", "true")
             assert video.evaluate("node => node.textTracks[0].mode") == "showing"
             video.evaluate("node => { node.currentTime = 1; }")
             page.wait_for_function(
                 "() => document.querySelector('#media-video').textTracks[0].activeCues?.length > 0"
             )
             page.keyboard.press("Escape")
-            expect(player_locator(page, "#player-menu")).to_be_hidden()
-            expect(player_locator(page, "#player-options")).to_be_focused()
+            expect(track_dialog).to_be_hidden()
             if control_screenshots:
                 page.screenshot(path=str(Path(control_screenshots) / "player-caption-controls.png"))
+            # Playing, the controls leave after a moment; a tap on the picture brings them back.
             video.evaluate("node => node.play()")
-            media_locator(page, "#media-search").focus()
-            page.mouse.move(20, 20)
-            expect(page.locator("#player-frame")).to_have_css("opacity", "0")
+            screen = media_locator(page, "#media-screen")
+            expect(screen).to_have_attribute("data-controls", "off", timeout=6000)
+            screen_box = screen.bounding_box()
+            screen.click(position={"x": 200, "y": screen_box["height"] - 6})
+            expect(screen).to_have_attribute("data-controls", "on")
             video.evaluate("node => node.pause()")
-            expect(page.locator("#player-frame")).to_have_css("opacity", "1")
-            video.click(button="right", position={"x": 40, "y": 40})
-            expect(player_locator(page, "#player-menu")).to_be_visible()
-            page.keyboard.press("Tab")
-            expect(
-                page.frame_locator("#player-frame").get_by_label("Subtitle track", exact=True)
-            ).to_be_focused()
-            page.frame_locator("#player-frame").get_by_label(
-                "Subtitle track", exact=True
-            ).select_option("off")
-            assert video.evaluate("node => node.textTracks[0].mode") == "disabled"
-            player_locator(page, "#player-queue-details summary").click()
-            queue_remove = player_locator(page, "#player-queue").get_by_role(
-                "button", name="Remove"
+            expect(media_locator(page, "#watch-toggle")).to_have_attribute("aria-label", "Play")
+            watch_control(page, "#watch-toggle").click()
+            page.wait_for_function("() => !document.querySelector('#media-video').paused")
+            media_browse(page).get_by_role("button", name="Audio and subtitles", exact=True).click()
+            track_dialog.get_by_role("button", name="Off", exact=True).click()
+            page.wait_for_function(
+                "() => document.querySelector('#media-video').textTracks[0].mode === 'disabled'"
             )
-            queue_remove.focus()
-            page.wait_for_timeout(1200)
-            expect(queue_remove).to_be_focused()
-            player_locator(page, "#player-queue-details summary").click()
-            if control_screenshots:
-                page.screenshot(path=str(Path(control_screenshots) / "player-context-menu.png"))
-            player_locator(page, "#player-menu-close").click()
-            player_locator(page, "#player-options").tap()
-            expect(player_locator(page, "#player-menu")).to_be_visible()
-            player_locator(page, "#player-menu-close").click()
-            page.locator("#media-video-stage").focus()
-            page.keyboard.press("Shift+F10")
-            expect(player_locator(page, "#player-menu")).to_be_visible()
-            page.keyboard.press("Escape")
+            media_browse(page).get_by_role("button", name="Close", exact=True).click()
+            expect(track_dialog).to_be_hidden()
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
-            details = page.frame_locator("#player-details-frame")
-            expect(details.locator("#title")).to_have_text("Validation Film")
-            expect(details.locator("#meta")).to_contain_text("2026")
+            expect(media_locator(page, "#media-watch h2")).to_have_text("Validation Film")
+            expect(media_locator(page, "#media-watch .media-watch-meta")).to_contain_text("2026")
             assert not page.locator("#media-video-stage").locator("#player-details-frame").count()
             video.evaluate("node => node.play()")
-            expect(player_locator(page, "#player-track-limit")).to_contain_text(
-                "Use an external player if a track is unavailable"
-            )
-            expect(player_locator(page, "#player-external")).to_be_enabled()
             track_report = wait_report(lambda report: report.get("track_state", {}).get("ready"))
             track_state = track_report["track_state"]
             assert track_state["subtitle_supported"]
@@ -378,9 +382,8 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
 
             subtitle_pattern = "**/api/media/items/*/subtitles/*?*"
             page.route(subtitle_pattern, hold_subtitles)
-            player_locator(page, "#player-options").focus()
-            player_locator(page, "#player-options").press("Enter")
-            expect(player_locator(page, "#player-menu")).to_be_visible()
+            media_browse(page).get_by_role("button", name="Audio and subtitles", exact=True).click()
+            expect(track_dialog).to_be_visible()
             load_token = "00000000-0000-4000-8000-000000000001"
             prepared = send_player_command(
                 {
@@ -392,7 +395,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 }
             )
             assert prepared["paused"]
-            expect(player_locator(page, "#player-menu")).to_be_hidden()
+            expect(track_dialog).to_be_hidden()
             assert prepared["track_state"]["source_token"] == load_token
             assert not prepared["track_state"]["ready"]
             assert loading_subtitles
@@ -499,6 +502,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "button", name="Play", exact=True
             ).click()
             page.wait_for_function("() => !document.querySelector('#media-video').paused")
+            # (The grid Play button scrolled the page; the bar returns at the top.)
+            media_locator(page, ".media-scroll").evaluate("node => { node.scrollTop = 0; }")
+            page.wait_for_timeout(600)
             media_locator(page, "#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === document.documentElement")
             expect(page.locator("#app-sidebar")).to_be_hidden()
@@ -528,10 +534,24 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(page.locator("main > header")).to_be_hidden()
             media_locator(page, "#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            # Media Center is full screen already: the player's full screen fills the app
+            # instead, and leaving it keeps Media Center.
             player_action(page, "#media-fullscreen")
-            page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
+            page.wait_for_function("() => document.body.classList.contains('media-player-full')")
+            assert page.evaluate("document.fullscreenElement === document.documentElement")
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-full", "true")
+            page.wait_for_function(
+                "() => { const r = document.querySelector('#media-player-shell')"
+                ".getBoundingClientRect(); return r.x === 0 && r.y === 0 "
+                "&& r.width === innerWidth && r.height === innerHeight; }"
+            )
+            expect(media_locator(page, "#watch-full")).to_have_attribute(
+                "aria-label", "Exit full screen"
+            )
             player_action(page, "#media-fullscreen")
-            page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            page.wait_for_function("() => !document.body.classList.contains('media-player-full')")
+            assert page.evaluate("document.fullscreenElement === document.documentElement")
+            assert page.evaluate("document.body.classList.contains('media-center-mode')")
             expect(media_locator(page, "#media-center-mode")).to_have_attribute(
                 "aria-label", "Return to TorrentLinker"
             )
@@ -539,74 +559,74 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             assert video.get_attribute("src") == source
             media_locator(page, "#media-center-mode").click()
             page.wait_for_function("() => document.fullscreenElement === null")
-            player_action(page, "#media-player-expand")
+            # (Browsing Music paused the film; it plays again.)
+            video.evaluate("node => node.play()")
+            # Outside Media Center the player asks for full screen itself and gives it back.
             player_action(page, "#media-fullscreen")
-            page.wait_for_function("() => document.fullscreenElement?.id === 'media-player-shell'")
-            expect(player_locator(page, "#player-fullscreen")).to_have_attribute(
-                "aria-label", "Exit fullscreen"
+            page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            expect(media_locator(page, "#watch-full")).to_have_attribute(
+                "aria-label", "Exit full screen"
             )
-            video.click(button="right", position={"x": 40, "y": 40})
-            expect(player_locator(page, "#player-menu")).to_be_visible()
-            expect(
-                page.frame_locator("#player-frame").get_by_label("Subtitle track", exact=True)
-            ).to_be_visible()
             page.wait_for_function(
                 "node => { const r = node.getBoundingClientRect(); "
                 "return r.x === 0 && r.y === 0 && r.width === innerWidth "
                 "&& r.height === innerHeight; }",
                 arg=video_element,
             )
-            expect(page.locator("#media-now-playing")).to_be_hidden()
-            expect(page.locator("#player-details-frame")).to_be_hidden()
             if control_screenshots:
-                page.screenshot(path=str(Path(control_screenshots) / "player-fullscreen-menu.png"))
-            player_locator(page, "#player-menu-close").click()
+                page.screenshot(path=str(Path(control_screenshots) / "player-fullscreen.png"))
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
             assert video.evaluate("node => !node.paused && node.currentTime > 0")
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement === null")
-            expect(player_locator(page, "#player-fullscreen")).to_have_attribute(
-                "aria-label", "Fullscreen"
+            expect(media_locator(page, "#watch-full")).to_have_attribute(
+                "aria-label", "Full screen"
             )
-            player_action(page, "#media-player-expand")
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement !== null")
             page.keyboard.press("Escape")
             page.wait_for_function("() => document.fullscreenElement === null", timeout=3000)
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-full", "false")
             for layout in ("focus", "horizon", "cinematic"):
                 choose_layout(layout)
                 expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", layout)
                 player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement !== null")
-                assert page.locator("#media-player-shell").evaluate(
-                    "node => { const r = node.getBoundingClientRect(); "
-                    "return r.x === 0 && r.y === 0 && r.width === innerWidth "
-                    "&& r.height === innerHeight; }"
+                page.wait_for_function(
+                    "() => { const r = document.querySelector('#media-player-shell')"
+                    ".getBoundingClientRect(); return r.x === 0 && r.y === 0 "
+                    "&& r.width === innerWidth && r.height === innerHeight; }"
                 )
                 player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement === null")
-                expect(media_locator(page, "#media-feature")).to_be_visible()
+                # The film takes the cinematic title's place; the others keep their browsing.
+                expect(media_locator(page, "#media-watch")).to_be_visible()
+                if layout == "cinematic":
+                    expect(media_locator(page, "#media-feature")).to_be_hidden()
+                else:
+                    expect(media_locator(page, "#media-feature")).to_be_visible()
                 if layout == "horizon":
-                    # Horizon's player names the film on the picture; no details frame below.
-                    expect(player_locator(page, "body")).to_have_attribute("data-skin", "horizon")
-                    expect(page.locator("#player-details-frame")).to_be_hidden()
                     # The Media options switch Horizon's view.
-                    media_locator(page, "#media-library-options summary").click()
+                    page.wait_for_timeout(600)
+                    media_locator(page, "#media-library-options summary").evaluate(
+                        "node => node.click()"
+                    )
                     media_locator(page, "#media-horizon-switch").select_option("showcase")
                     expect(media_locator(page, "#view-media")).to_have_attribute(
                         "data-horizon", "showcase"
                     )
                     media_locator(page, "#media-horizon-switch").select_option("home")
-                    media_locator(page, "#media-library-options summary").click()
+                    media_locator(page, "#media-library-options summary").evaluate(
+                        "node => node.click()"
+                    )
                 assert video.get_attribute("src") == source
                 if layout == "focus":
+                    # While a film plays, a card plays its film.
                     media_locator(page, "#media-focus-strip").get_by_role(
-                        "button", name="Unsupported Video", exact=True
+                        "button", name="Validation Film", exact=True
                     ).click()
-                    expect(media_locator(page, "#media-feature h2")).to_have_text(
-                        "Unsupported Video"
-                    )
+                    expect(media_locator(page, "#media-watch h2")).to_have_text("Validation Film")
                     assert video.get_attribute("src") == source
                     media_locator(page, "#media-search").fill("No matching local title")
                     expect(media_locator(page, ".media-empty")).to_be_visible()
@@ -903,8 +923,11 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             media_locator(page, ".media-card").filter(has_text="Unsupported Video").get_by_role(
                 "button", name="Play", exact=True
             ).click()
-            expect(page.locator("#media-codec-error")).to_be_visible()
-            expect(page.locator("#media-external")).to_have_attribute("href", re.compile("/stream"))
+            # The picture says it cannot play, and offers the file to another player.
+            expect(media_locator(page, "#media-screen-note")).to_be_visible()
+            expect(media_locator(page, "#media-screen-note a")).to_have_attribute(
+                "href", re.compile("/stream")
+            )
             player_action(page, "#media-fullscreen")
             page.wait_for_function("() => document.fullscreenElement !== null")
             player_action(page, "#media-stop")
@@ -1044,7 +1067,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
 
             start_preview()
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > .1")
-            expect(page.locator("#media-preview-state")).to_contain_text("fixed")
+            expect(media_locator(page, ".media-watch-note")).to_contain_text("fixed")
             screenshots = os.getenv("TL_MEDIA_SCREENSHOT_DIR") or os.getenv("TL_WEB_SCREENSHOTS")
             if screenshots:
                 Path(screenshots).mkdir(parents=True, exist_ok=True)
@@ -1056,7 +1079,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             client.verified += 1
             # The old preview remains fixed even when the Torrent Client downloads more.
             assert len(page.request.get(preview_source).body()) == len(prefix.body())
-            player_action(page, "#media-refresh-preview")
+            media_browse(page).get_by_role("button", name="Refresh preview", exact=True).click()
             page.wait_for_function(
                 "old => document.querySelector('#media-video').src !== "
                 "new URL(old, location.href).href",
@@ -1070,13 +1093,13 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#media-video').src.includes('/items/')"
             )
-            expect(page.locator("#media-preview-state")).to_be_hidden()
+            expect(media_locator(page, ".media-watch-note")).to_have_count(0)
             assert page.request.get(refreshed).status >= 400
             start_preview()
-            expect(page.locator("#media-preview-state")).to_be_visible()
+            expect(media_locator(page, ".media-watch-note")).to_be_visible()
             stopped_source = page.locator("#media-video").evaluate("node => node.src")
             player_action(page, "#media-stop")
-            expect(page.locator("#media-preview-state")).to_be_hidden()
+            expect(media_locator(page, ".media-watch-note")).to_have_count(0)
             assert page.request.get(stopped_source).status >= 400
             assert page.locator("#media-video").get_attribute("src") is None
             # The same cancellation rule applies while ordinary item metadata is delayed.
@@ -1171,7 +1194,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
                     timeout=4000,
                 ):
                     route.fulfill(response=response)
-                expect(page.locator("#media-preview-state")).to_be_hidden()
+                expect(media_locator(page, ".media-watch-note")).to_have_count(0)
                 assert page.locator("#media-video").get_attribute("src") == (
                     None if decision == "stop" else normal_source
                 )
@@ -1182,7 +1205,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
         thread.join(10)
 
 
-def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(tmp_path):
+def test_cinematic_home_has_a_calm_title_and_a_menu_over_it_that_leaves_while_scrolling(tmp_path):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
@@ -1248,10 +1271,23 @@ def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(
             page.mouse.wheel(0, 300)
             page.wait_for_timeout(400)
             assert frame.evaluate("scrollY") > before
-            # Scrolled down, the menu scrolls away and the selected title stays at the top.
+            # The menu sits over the title instead of pushing it, and the title is not pinned:
+            # it scrolls away with the page while the menu leaves.
+            assert frame.evaluate("document.querySelector('.media-topbar').offsetHeight") > 0
+            assert (
+                frame.evaluate("getComputedStyle(document.querySelector('.media-topbar')).position")
+                == "fixed"
+            )
+            assert (
+                frame.evaluate(
+                    "getComputedStyle(document.querySelector('#media-feature')).position"
+                )
+                != "sticky"
+            )
             frame.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(400)
             assert frame.evaluate("scrollY") > 0
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-bar", "hidden")
             assert (
                 frame.evaluate(
                     "document.querySelector('.media-topbar').getBoundingClientRect().bottom"
@@ -1260,37 +1296,69 @@ def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(
             )
             assert (
                 frame.evaluate(
-                    "document.querySelector('#media-feature').getBoundingClientRect().top"
+                    "document.querySelector('#media-feature').getBoundingClientRect().bottom"
+                )
+                <= 0
+            )
+            # Any scroll up brings the menu back over the page; scrolling down hides it again.
+            frame.evaluate("window.scrollBy(0, -50)")
+            expect(media_locator(page, "#view-media")).not_to_have_attribute("data-bar", "hidden")
+            page.wait_for_timeout(500)  # the bar slides in
+            assert (
+                frame.evaluate(
+                    "document.querySelector('.media-topbar').getBoundingClientRect().top"
                 )
                 == 0
             )
-            # One wheel-up on the title brings the menu back above it without moving the page;
-            # scrolling down hides it again.
-            bottom = frame.evaluate("scrollY")
-            # (No hover(): Playwright would scroll the pinned title "into view" first.)
-            box = media_locator(page, "#media-feature").bounding_box()
-            page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-            page.mouse.wheel(0, -100)
+            frame.evaluate("window.scrollBy(0, 80)")
+            expect(media_locator(page, "#view-media")).to_have_attribute("data-bar", "hidden")
+            frame.evaluate("window.scrollTo(0, 0)")
+            expect(media_locator(page, "#view-media")).not_to_have_attribute("data-bar", "hidden")
+            # Choosing another film changes the title with a soft fade; nothing else moves.
+            fade = """() => {
+                const card = document.querySelectorAll('.media-row-card')[3];
+                card.click();
+                const art = document.querySelector('#media-feature .media-feature-art');
+                return [document.querySelector('#media-feature h2').textContent,
+                    getComputedStyle(art).animationName, getComputedStyle(art).animationDuration];
+            }"""
+            title, animation, duration = frame.evaluate(fade)
+            assert title.startswith("Pinned Film")
+            assert (animation, duration) == ("media-fade", "0.35s")
+            # Media Center ("enlarged") mode keeps the same calm title.
+            media_locator(page, "#media-center-mode").click()
+            page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+            frame.evaluate("window.scrollTo(0, 600)")
             page.wait_for_timeout(300)
-            assert frame.evaluate("scrollY") == bottom
-            assert frame.evaluate("""() => {
-                const bar = document.querySelector('.media-topbar').getBoundingClientRect();
-                const title = document.querySelector('#media-feature').getBoundingClientRect();
-                return bar.top === 0 && title.top === bar.bottom;
-            }""")
-            frame.evaluate("window.scrollBy(0, -50)")
-            page.wait_for_timeout(100)
-            frame.evaluate("window.scrollBy(0, 50)")
-            page.wait_for_timeout(200)
-            assert frame.evaluate(
-                "document.querySelector('.media-topbar').getBoundingClientRect().bottom <= 0"
+            assert (
+                frame.evaluate(
+                    "getComputedStyle(document.querySelector('#media-feature')).position"
+                )
+                != "sticky"
             )
-            # Choosing another film keeps the page where it is.
-            scrolled = frame.evaluate("scrollY")
-            # (A script click: Playwright would first scroll the card out from under the banner.)
-            media_locator(page, ".media-row-card").last.evaluate("node => node.click()")
-            page.wait_for_timeout(400)
-            assert frame.evaluate("scrollY") == scrolled
+            assert (
+                frame.evaluate(
+                    "document.querySelector('#media-feature').getBoundingClientRect().bottom"
+                )
+                < 600
+            )
+            frame.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(500)
+            media_locator(page, "#media-center-mode").click()
+            # Reduced motion: the new title appears at once.
+            calm = browser.new_page(
+                viewport={"width": 1280, "height": 900}, locale="en-US", reduced_motion="reduce"
+            )
+            calm.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+            calm.locator("#login-password").fill("test-password-long")
+            calm.locator("#login-form button").click()
+            shell_navigate(calm, "media")
+            expect(media_locator(calm, "#media-home-rows")).to_contain_text("Pinned", timeout=15000)
+            calm_frame = calm.frame(name="media-frame")
+            assert calm_frame is not None
+            media_locator(calm, ".media-row-card").nth(2).wait_for()
+            _, calm_animation, _ = calm_frame.evaluate(fade)
+            assert calm_animation == "none"
             browser.close()
     finally:
         server.should_exit = True
@@ -1389,3 +1457,234 @@ def test_horizon_home_and_showcase_fill_one_screen_and_the_wheel_moves_the_selec
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+
+
+WATCH_SCREENS = {
+    "phone": {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True},
+    "phone-landscape": {
+        "viewport": {"width": 915, "height": 412},
+        "is_mobile": True,
+        "has_touch": True,
+    },
+    "computer": {"viewport": {"width": 1280, "height": 800}},
+    "media-center": {"viewport": {"width": 1280, "height": 800}},
+}
+
+
+@pytest.mark.parametrize("screen_name", list(WATCH_SCREENS))
+def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_name):
+    """Layout A of docs/specs/media-watch-page: the picture pinned on top, the menu over it."""
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.config import Settings
+    from torrentlinker.domain import LibraryFolder
+    from torrentlinker.web.app import create_app
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg is required for a real playable video fixture")
+    root = tmp_path / "media"
+    root.mkdir()
+    for name in ("First.Watch.2026", "Second.Watch.2025"):
+        subprocess.run(
+            [ffmpeg, "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=320x180:r=10"]
+            + ["-t", "60", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+            + [str(root / f"{name}.mp4")],
+            check=True,
+        )
+    config = tmp_path / "config"
+    config.mkdir()
+    settings = Settings(language="en")
+    settings.library_folders = [LibraryFolder(root)]
+    settings.save(config / "settings.json")
+    app = create_app(
+        config, password="test-password-long", roots=(root,), monitor_verifications=False
+    )
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", log_config=None))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            time.sleep(0.02)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+            context = browser.new_context(locale="en-US", **WATCH_SCREENS[screen_name])
+            page = context.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "media")
+            media_locator(page, "#media-toolbar-refresh").click()
+            expect(media_locator(page, "#media-home-rows")).to_contain_text("Watch", timeout=15000)
+            center = screen_name == "media-center"
+            if center:
+                media_locator(page, "#media-center-mode").click()
+                page.wait_for_function(
+                    "() => document.fullscreenElement === document.documentElement"
+                )
+            # Médias has no page heading: not before the film, and not after it either.
+            expect(page.locator("main > header")).to_be_hidden()
+            media_locator(page, ".media-feature-actions .media-primary").click()
+            video = page.locator("#media-video")
+            page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0.2")
+            view = media_locator(page, "#view-media")
+            expect(view).to_have_attribute("data-watch", "true")
+            expect(media_locator(page, "#media-feature")).to_be_hidden()
+            geometry = """() => {
+                const box = node => { const r = node.getBoundingClientRect();
+                    return {x: r.x, y: r.y, width: r.width, height: r.height}; };
+                const frame = document.querySelector('#media-frame');
+                const shell = document.querySelector('#media-player-shell');
+                return {frame: box(frame), shell: box(shell),
+                    picture: box(document.querySelector('#media-video-stage')),
+                    slot: box(frame.contentDocument.querySelector('#media-watch-slot')),
+                    heading: box(frame.contentDocument.querySelector('#media-watch h2'))};
+            }"""
+            page.wait_for_timeout(300)
+            first = page.evaluate(geometry)
+            # No floating box: the picture is a black band across the top of the page, 16:9, capped.
+            assert first["shell"]["y"] == first["frame"]["y"] == 0
+            assert first["shell"]["x"] == first["frame"]["x"]
+            assert abs(first["shell"]["width"] - first["frame"]["width"]) <= 1
+            assert abs(first["picture"]["width"] / first["picture"]["height"] - 16 / 9) < 0.02
+            expected = {"phone-landscape": 356}.get(screen_name)
+            if expected:
+                assert abs(first["picture"]["width"] - expected) <= 1
+            else:
+                cap = min(first["frame"]["width"], 782)
+                assert abs(first["picture"]["width"] - cap) <= 1
+            assert first["heading"]["y"] >= first["slot"]["y"] + first["slot"]["height"] - 1
+            # The controls appear with the film, leave after a moment, and a tap brings them back.
+            screen = media_locator(page, "#media-screen")
+            expect(screen).to_have_attribute("data-controls", "on")
+            expect(screen).to_have_attribute("data-controls", "off", timeout=6000)
+            box = screen.bounding_box()
+            screen.click(position={"x": box["width"] / 2, "y": box["height"] - 6})
+            expect(screen).to_have_attribute("data-controls", "on")
+            # Every control changes the state.
+            media_locator(page, "#watch-toggle").click()
+            expect(media_locator(page, "#watch-toggle")).to_have_attribute("aria-label", "Play")
+            assert video.evaluate("node => node.paused")
+            media_locator(page, "#watch-toggle").click()
+            page.wait_for_function("() => !document.querySelector('#media-video').paused")
+            video.evaluate("node => { node.currentTime = 20; }")
+            page.wait_for_timeout(300)
+            before = video.evaluate("node => node.currentTime")
+            watch_control(page, "#watch-fwd").click()
+            page.wait_for_function(
+                "before => document.querySelector('#media-video').currentTime >= before + 9",
+                arg=before,
+            )
+            after = video.evaluate("node => node.currentTime")
+            watch_control(page, "#watch-rew").click()
+            page.wait_for_function(
+                "after => document.querySelector('#media-video').currentTime <= after - 9",
+                arg=after,
+            )
+            seek = watch_control(page, "#watch-seek")
+            seek_box = seek.bounding_box()
+            seek.click(position={"x": seek_box["width"] / 4, "y": seek_box["height"] / 2})
+            page.wait_for_function(
+                "() => Math.abs(document.querySelector('#media-video').currentTime - 15) < 4"
+            )
+            expect(media_locator(page, "#watch-time")).to_contain_text("/ 1:00")
+            # Under the picture: the film's facts and its three actions, then the rows.
+            details = media_locator(page, "#media-watch")
+            expect(details.locator("h2")).to_contain_text("Watch")
+            for action in ("Audio and subtitles", "Next", "Mark watched"):
+                expect(details.get_by_role("button", name=action, exact=True)).to_be_visible()
+            media_browse(page).get_by_role("button", name="Mark watched", exact=True).click()
+            expect(details.get_by_role("button", name="Mark unwatched", exact=True)).to_be_visible()
+            media_browse(page).get_by_role("button", name="Mark unwatched", exact=True).click()
+            expect(details.get_by_role("button", name="Mark watched", exact=True)).to_be_visible()
+            expect(media_locator(page, "#media-home-rows")).to_be_visible()
+            # Scrolling: the picture stays, the details leave under it, the menu comes and goes.
+            scroller = media_locator(page, ".media-scroll")
+            # On every screen the bar starts over the film; a phone keeps it to one row.
+            expect(view).not_to_have_attribute("data-bar", "hidden")
+            if screen_name not in ("computer", "media-center"):
+                # Its padding lets taps through; its controls must end above the play button.
+                search = media_locator(page, "#media-search").bounding_box()
+                toggle = media_locator(page, "#watch-toggle")
+                toggle.evaluate("node => node.closest('#media-screen').dataset.controls = 'on'")
+                assert search["y"] + search["height"] <= toggle.bounding_box()["y"]
+            scroller.evaluate(
+                "node => { node.style.scrollBehavior = 'auto'; node.scrollTop = 400; }"
+            )
+            expect(view).to_have_attribute("data-bar", "hidden")
+            moved = page.evaluate(geometry)
+            assert moved["shell"] == first["shell"]
+            assert moved["picture"] == first["picture"]
+            assert moved["heading"]["y"] < first["heading"]["y"]
+            assert moved["heading"]["y"] + moved["heading"]["height"] <= moved["slot"]["height"] + 1
+            scroller.evaluate("node => { node.scrollTop = 300; }")
+            expect(view).not_to_have_attribute("data-bar", "hidden")
+            assert page.evaluate(geometry)["shell"] == first["shell"]
+            page.wait_for_timeout(500)  # the bar slides in
+            assert media_locator(page, ".media-topbar").evaluate(
+                "node => node.getBoundingClientRect().top === 0"
+            )
+            scroller.evaluate("node => { node.scrollTop = 0; }")
+            expect(view).not_to_have_attribute("data-bar", "hidden")
+            # While a film plays, a card plays its film.
+            source = video.get_attribute("src")
+            current = video.evaluate("node => node.src")
+            playing = details.locator("h2").inner_text()
+            other = "Second Watch" if "First" in playing else "First Watch"
+            media_locator(page, ".media-row-card").filter(has_text=other).first.evaluate(
+                "node => node.click()"
+            )
+            page.wait_for_function(
+                "old => document.querySelector('#media-video').src !== old "
+                "&& document.querySelector('#media-video').currentTime > 0",
+                arg=current,
+            )
+            assert video.get_attribute("src") != source
+            expect(details.locator("h2")).to_contain_text(other)
+            # Full screen shows the film alone, and never ends Media Center.
+            watch_control(page, "#watch-full").click()
+            page.wait_for_function("() => document.body.classList.contains('media-player-full')")
+            page.wait_for_function(
+                "() => { const r = document.querySelector('#media-player-shell')"
+                ".getBoundingClientRect(); return r.x === 0 && r.y === 0 "
+                "&& r.width === innerWidth && r.height === innerHeight; }"
+            )
+            expect(media_locator(page, ".media-topbar")).to_be_hidden()
+            expect(media_locator(page, "#media-watch")).to_be_hidden()
+            assert page.evaluate("document.fullscreenElement === document.documentElement")
+            watch_control(page, "#watch-full").click()
+            page.wait_for_function("() => !document.body.classList.contains('media-player-full')")
+            if center:
+                assert page.evaluate("document.fullscreenElement === document.documentElement")
+                assert page.evaluate("document.body.classList.contains('media-center-mode')")
+                expect(page.locator("#app-sidebar")).to_be_hidden()
+            else:
+                page.wait_for_function("() => document.fullscreenElement === null")
+            expect(media_locator(page, "#media-watch")).to_be_visible()
+            if screen_name == "phone":
+                # The menu holds the navigation button: the page header never comes back.
+                media_locator(page, "#media-navigation").click()
+                expect(page.locator("#app-sidebar")).to_be_visible()
+                page.locator("#navigation-backdrop").click(position={"x": 370, "y": 400})
+                expect(page.locator("#app-sidebar")).to_be_hidden()
+            # × stops the film and returns to browsing, with no page heading.
+            watch_control(page, "#watch-stop").click()
+            expect(view).to_have_attribute("data-watch", "false")
+            expect(media_locator(page, "#media-feature")).to_be_visible()
+            expect(media_locator(page, "#media-watch")).to_be_hidden()
+            expect(page.locator("main > header")).to_be_hidden()
+            assert video.get_attribute("src") is None
+            expect(page.locator("#media-player-shell")).to_be_hidden()
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(10)
