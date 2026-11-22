@@ -1231,7 +1231,11 @@ def test_cinematic_home_pins_the_selected_title_and_scrolls_rows_with_the_wheel(
             track.hover()
             before = frame.evaluate("scrollY")
             page.mouse.wheel(0, 300)
-            page.wait_for_timeout(400)
+            # The row scrolls smoothly; give it time on a slow machine.
+            for _ in range(30):
+                if track.evaluate("node => node.scrollLeft") > 0:
+                    break
+                page.wait_for_timeout(100)
             assert track.evaluate("node => node.scrollLeft") > 0
             assert frame.evaluate("scrollY") == before
             # At either end the wheel stays with the row; the page scrolls from the title.
