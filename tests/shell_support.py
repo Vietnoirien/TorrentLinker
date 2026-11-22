@@ -25,3 +25,11 @@ def shell_open_navigation(page):
     """The drawer on a phone closes after each choice; the preferences live inside it."""
     if not page.locator("#app-sidebar").is_visible():
         page.locator("#navigation-toggle").click()
+
+
+def shell_close_drawer(page):
+    """A phone's drawer covers the page; a tap on the dimmed page beside it closes it."""
+    backdrop = page.locator("#navigation-backdrop")
+    if backdrop.is_visible():
+        box = backdrop.bounding_box()
+        backdrop.click(position={"x": box["width"] - 8, "y": box["height"] / 2})

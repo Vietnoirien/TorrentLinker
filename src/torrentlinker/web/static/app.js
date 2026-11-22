@@ -464,6 +464,7 @@ async function navigate(view, section, detail) {
   if (typeof mediaCloseChat === "function" && media.chat) mediaCloseChat();
   state.view = view;
   document.body.classList.toggle("media-view", view === "media");
+  if (typeof mediaPageChanged === "function") mediaPageChanged(view === "media");
   document.body.classList.toggle("chat-view", view === "assistant");
   document
     .querySelectorAll(".view")
@@ -915,6 +916,11 @@ function setNavigation(open) {
 }
 $("navigation-toggle").onclick = () =>
   setNavigation(document.body.classList.contains("navigation-collapsed"));
+// The phone drawer closes from its dimmed backdrop or Escape, like the page it covers.
+$("navigation-backdrop").onclick = () => setNavigation(false);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && innerWidth < 650 && !document.body.classList.contains("navigation-collapsed")) setNavigation(false);
+});
 
 async function waitForJob(identifier) {
   while (true) {

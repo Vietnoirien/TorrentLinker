@@ -10,7 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_navigate, shell_open_navigation
+from tests.shell_support import (
+    shell_close_drawer,
+    shell_navigate,
+    shell_open_navigation,
+)
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
@@ -296,10 +300,12 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_close_drawer(page)
             shell_navigate(page, "torrents")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
+            shell_close_drawer(page)
             if screenshot:
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(Path(screenshot) / "torrents-small.png"))
@@ -333,9 +339,11 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(announce).to_have_value("••••••••")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            shell_close_drawer(page)
             expect(settings.get_by_label("Mot de passe", exact=True)).to_have_value("••••••••")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_close_drawer(page)
             settings.get_by_role("button", name="Clients", exact=True).click()
             settings.get_by_label("New client name", exact=True).fill("Unsubmitted client")
             shell_navigate(page, "torrents")
@@ -399,6 +407,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             shell_navigate(page, "setup")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_close_drawer(page)
             settings.get_by_role("button", name="Agent access", exact=True).click()
             expect(settings.locator("#view-agents")).to_be_visible()
             expect(settings.locator("#agents-enabled")).not_to_be_checked()
@@ -428,11 +437,13 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(settings.locator("#agent-connections")).to_contain_text("None")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            shell_close_drawer(page)
             expect(settings.locator("#agent-connections")).to_contain_text(
                 "Propositions uniquement"
             )
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_close_drawer(page)
             settings.locator("[data-agent-tab=new]").click()
             expect(settings.locator("#agent-token")).to_have_value("")
             settings.locator("#agent-name").fill("Upload helper")
@@ -447,6 +458,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             ).to_have_text("Export diagnostics…")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            shell_close_drawer(page)
             expect(
                 settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
             ).to_have_text("Exporter le diagnostic…")
@@ -458,6 +470,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             assert token not in json.dumps(support)
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_close_drawer(page)
             settings.get_by_role("button", name="Agent access", exact=True).click()
             expect(settings.locator("#agent-token")).to_have_value("")
             settings.locator("[data-agent-tab=connections]").click()
@@ -492,10 +505,12 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     "en"
                 )
+                shell_close_drawer(page)
                 shell_open_navigation(page)
                 page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
                     "light"
                 )
+                shell_close_drawer(page)
                 page.screenshot(
                     path=str(Path(screenshot) / "agent-settings-light.png"), full_page=True
                 )
@@ -658,6 +673,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             )
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
+            shell_close_drawer(page)
             expect(upload.locator(".editor")).to_contain_text(
                 "c411 interdit les fichiers de créateurs indépendants"
             )
@@ -665,6 +681,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             expect(upload.locator(".editor")).not_to_contain_text("paid-creators:")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_close_drawer(page)
             # Edit through the same preparation dialog used by desktop.
             upload.locator("[data-step='2']").click()
             upload.locator("[data-action=advanced]").click()
@@ -703,6 +720,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     language
                 )
+                shell_close_drawer(page)
                 expect(upload.locator(".editor pre").first).to_contain_text(
                     "Reviewed cable holder description"
                 )

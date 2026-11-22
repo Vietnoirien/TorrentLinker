@@ -988,12 +988,15 @@ iframe.has-open-dialog { position: relative; z-index: 3; }
 .media-center-mode #workspace main > header { display:none; }
 @media(min-width:651px) { .media-view #workspace main > header { display:none; } }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+/* On a phone the same sidebar slides in from the left over a dimmed page. */
+#navigation-backdrop { display:none; }
 @media(max-width:650px) {
-  #workspace #app-sidebar { position:relative; inset:auto; width:100%; display:block; height:auto; margin-bottom:12px; border:1px solid var(--line); border-radius:12px; }
+  #workspace #app-sidebar { position:fixed; inset:0 auto 0 0; z-index:70; width:min(280px,84vw); height:100dvh; display:block; background:var(--panel); border-right:1px solid var(--line); box-shadow:0 0 40px #0006; }
+  .navigation-collapsed #workspace #app-sidebar { display:none; }
   #workspace main { margin-left:0; }
-  #shell-navigation-frame { height:160px; max-height:70vh; }
+  #shell-navigation-frame { height:100% !important; }
+  body:not(.navigation-collapsed) #navigation-backdrop { display:block; position:fixed; inset:0; z-index:69; background:#0008; }
 }
-@media(max-width:650px) { .navigation-collapsed #workspace #app-sidebar { display:none; } }
 @media(min-width:651px) {
   #app-sidebar { position:fixed; width:190px; border-right:1px solid var(--line); }
   #workspace main { margin-left:190px; }

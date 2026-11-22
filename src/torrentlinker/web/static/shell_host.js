@@ -54,7 +54,8 @@ function shellSnapshot(region) {
     allow_all: state.view === "torrents",
     clients: (state.setup?.clients || []).filter((row) => row.enabled),
     client_busy: shellState.clientBusy,
-    compact: innerWidth < 650,
+    // The phone drawer is as wide as the desktop sidebar, so it shows the same list.
+    compact: false,
     can_logout: state.setup?.web_auth !== "proxy",
     shared_screen: !!state.actor?.screen,
     setup_needed: !signedInMember() && !state.setup?.indexer_configured,

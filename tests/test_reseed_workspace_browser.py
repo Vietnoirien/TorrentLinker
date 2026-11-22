@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_open_navigation
+from tests.shell_support import shell_close_drawer, shell_open_navigation
 from tests.test_reseed_workspace import CheckingClient, workspace
 from torrentlinker.web.app import create_app
 from torrentlinker.web.operations import Operations
@@ -147,6 +147,7 @@ def test_reseed_board_runs_pauses_and_preserves_original_on_small_screen(tmp_pat
             frame.locator(".inspector").get_by_role("button", name="Fermer", exact=True).click()
             shell_open_navigation(page)  # a phone keeps the preferences in its drawer
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
+            shell_close_drawer(page)
             expect(frame.locator("html")).to_have_attribute("data-theme", "light")
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
             expect(frame.locator("html")).to_have_attribute("data-theme", "dark")
