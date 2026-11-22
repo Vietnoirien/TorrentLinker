@@ -38,3 +38,7 @@ Avec une clé c411, les vues Accueil et Films ajoutent deux rangées, pour les f
 Pour un téléchargement qBittorrent à fichier vidéo unique en mode séquentiel, le bouton **Prévisualiser la partie téléchargée** est directement accessible sur la carte, la fiche principale et les choix d’épisodes ou de versions. Il reste disponible dans les détails. Les autres clients ne proposent pas cette action : le téléchargement séquentiel ne suffit pas à garantir une prévisualisation sûre.
 
 Le lecteur vérifie les pièces disponibles avant de lire. Sur le bureau, il attend les nouvelles pièces ; sur le web, utilisez **Actualiser l’aperçu** pour étendre la portion accessible. Une vérification de hash en cours, un début de fichier non téléchargé ou un torrent multifichier peuvent empêcher l’aperçu. Consultez le [tableau des clients](clients.md#compatibilité-des-clients).
+
+## Pré-rolls et Studio
+
+En tant que propriétaire, ouvrez **Médias → Pré-rolls** pour importer des clips MP4 (H.264, jusqu’à 1080p et dix minutes), fixer la classification d’âge de chaque clip et composer des séquences de clips fixes, tirages aléatoires, bandes-annonces et pauses. Les pré-rolls passent avant un nouveau film ou épisode, jamais à la reprise. **Studio** crée de nouveaux clips à partir de pistes de texte, d’image, de vidéo et d’audio, avec des images clés, et exporte en MP4. Il nécessite `ffmpeg` et `ffprobe` (l’image Docker les inclut). Les clips et projets exportés peuvent être partagés par le menu Communauté une fois l’application liée dans **Paramètres → Rejoindre la communauté**.

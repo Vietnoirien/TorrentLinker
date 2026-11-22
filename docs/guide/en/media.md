@@ -69,3 +69,7 @@ On desktop it plays the file while it downloads, like qBittorrent's preview: it 
 Open **Music → Tracks** to choose individual tracks. **Add to queue** builds the playback queue; enter a playlist name and choose **Save playlist** to keep it. This queue is separate from the Download Queue.
 
 ![Music tracks, playback queue and playlist controls](../images/en/media-music-tracks.png)
+
+## Pre-rolls and Studio
+
+As the Owner, open **Media → Pre-rolls** to import MP4 clips (H.264, up to 1080p and ten minutes), set each clip's age rating, and build sequences of fixed clips, random picks, trailers and pauses. Pre-rolls play before a new film or episode, never when you resume. **Studio** makes new clips from text, image, video and audio tracks, with keyframes, and exports MP4. It needs `ffmpeg` and `ffprobe` (the Docker image includes them). Exported clips and projects can be shared through the Community menu once the app is linked in **Settings → Join the community**.

@@ -83,3 +83,7 @@ The **Download queue** count follows the remaining rows. Successfully sent entri
 When c411 explicitly reports that a torrent is unavailable for download, TorrentLinker removes it from the local Catalogue and remembers its hash across restarts. Catalogue refreshes and snapshot imports cannot add it back, so future Plans stop proposing it. Authentication errors, rate limits and server errors do not remove torrents.
 
 [Documentation](../../README.md) · [Français](../fr/recherche.md)
+
+## XXX searches
+
+With **Show XXX content** on, XXX results come through your signed-in c411 session, by way of the browser companion, and through Torznab otherwise. Update the companion extension from **Settings → Companion** (reload it in your browser). Keep a c411 tab open. The first read can take about 30 seconds.

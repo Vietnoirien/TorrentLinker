@@ -12,6 +12,14 @@ Le sélecteur **Client cible** concerne les vérifications et reseeds de la bibl
 
 Dans **Torrents**, cochez **Tous les clients** pour afficher une vue commune. Filtrez par nom et utilisez le menu contextuel sur les lignes sélectionnées pour agir sur les clients correspondants. Retirer un torrent conserve les fichiers ; leur suppression demande une confirmation. L'estimation Zen globale ne compte chaque hash qu'une fois.
 
+## Adresses, secrets et connexions refusées
+
+Une adresse sans `http://`, comme `192.168.0.50:8080`, est acceptée. Une adresse erronée nomme le champ et ce qu’il faut saisir.
+
+Les mots de passe, clés d’API et jetons enregistrés s’affichent sous la forme `••••••••`. L’œil permet d’en révéler un. Les quatre clés d’API c411 supplémentaires se modifient une par une.
+
+Si un client refuse votre connexion, TorrentLinker cesse de s’y reconnecter automatiquement jusqu’à ce que vous modifiiez ses réglages ou appuyiez sur **Tester**. Cela évite un bannissement : qBittorrent bannit une IP après plusieurs échecs de connexion. Quand qBittorrent a banni l’adresse, le message le dit. Une clé d’API ne sert jamais à se connecter.
+
 ## Plans
 
 Ouvrez **Destinations du Plan…**. Sélectionnez un seul client pour lui réserver le Plan, ou plusieurs pour une répartition automatique. Indiquez le budget de chaque client en Gio. La valeur zéro utilise l'espace disponible après votre marge de sécurité.

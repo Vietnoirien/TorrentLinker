@@ -90,3 +90,7 @@ les opérations manuelles. Modifier les messages ou canaux retire les anciens
 créneaux du chat ; changer le modèle actualise les commentaires automatiques non
 envoyés. Une annulation explicite reste respectée. Le mode et les textes choisis
 sont conservés après redémarrage.
+
+## Où se trouvent les commandes de la communauté
+
+Dans Assistant et ReleaseScore, **Partager** et **Parcourir** sont réunis dans un menu **Communauté**. Dans Flux, **Règles communautaires** se trouve sous la liste des règles. Parcourir dit ce qu’il liste, montre les états de chargement, de liste vide et d’indisponibilité, et renvoie vers les Paramètres si l’application n’est pas liée.

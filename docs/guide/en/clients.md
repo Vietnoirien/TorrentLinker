@@ -50,6 +50,14 @@ The **Target client** selector controls Library checks and Reseeds, Upload seedi
 
 In **Torrents**, select **All clients** for a combined view. Filter by name and use the context menu on selected rows to act on the corresponding clients. Removal keeps files; deletion asks before deleting torrent data. Combined Zen estimates count each torrent hash once.
 
+## Addresses, secrets and refused logins
+
+An address without `http://`, such as `192.168.0.50:8080`, is accepted. A wrong address names the field and what to type.
+
+Saved passwords, API keys and tokens show as `••••••••`. Use the eye to reveal one. The extra c411 API keys are edited one by one.
+
+If a client refuses your login, TorrentLinker stops logging in automatically until you change that client's settings or press **Test**. This protects you from a ban: qBittorrent bans an IP after repeated failed logins. When qBittorrent has banned the address, the message says so. An API key never logs in.
+
 ## Plans
 
 Open **Zen → Plan** and expand **Plan limits, categories and destinations**, then **Plan destinations**. Each client has its own card. Check the clients that may receive the Plan and enter their budgets. Read the unit printed beside each input. A budget of zero uses available space after the disk reserve; it does not mean zero downloads.

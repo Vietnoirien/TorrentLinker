@@ -77,3 +77,7 @@ Le compteur **File de téléchargement** correspond aux lignes restantes. Les é
 Lorsque c411 indique explicitement qu’un torrent n’est pas disponible au téléchargement, TorrentLinker le retire du Catalogue local et mémorise son hash. Les actualisations et imports du Catalogue ne le réintroduisent pas, même après redémarrage : les prochains Plans ne le proposent plus. Les erreurs d’authentification, les limites de requêtes et les erreurs du serveur ne retirent aucun torrent.
 
 [Documentation](../../README.md) · [English](../en/search.md)
+
+## Recherches XXX
+
+Avec **Afficher le contenu XXX** activé, les résultats XXX passent par votre session c411 connectée, via l’extension navigateur, et par Torznab sinon. Mettez l’extension à jour depuis **Paramètres → Extension** (rechargez-la dans votre navigateur). Gardez un onglet c411 ouvert. La première lecture peut prendre environ 30 secondes.

@@ -80,3 +80,7 @@ Disabling a type cancels its unsent automatic slots and preserves manual entries
 Changing selected chat messages/channels removes obsolete slots; comment-template
 changes update unsent automatic comments. Explicitly cancelled operations stay
 cancelled. Automatic mode and its selected content survive restart.
+
+## Where the Community controls are
+
+In Assistant and ReleaseScore, **Share** and **Browse** sit under one **Community** menu. In RSS, **Community rules** is under the rule list. Browse says what it lists, shows loading, empty and unavailable states, and points to Settings when the app is not linked.

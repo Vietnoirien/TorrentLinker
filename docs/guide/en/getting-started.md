@@ -112,6 +112,10 @@ In a torrent list, click a sortable column heading to change the order. Use the 
 
 Use **Tab** to move between controls and **Enter** to activate the focused button. In the browser, its zoom controls enlarge the interface. Desktop sizing is under **Settings → General**. Start with a normal zoom level when learning a screen, then adjust it for comfortable reading.
 
+## What the app tells you
+
+Every action answers with a toast, and a button shows it is busy while it works. Known server errors appear as alerts in your language. A header bar holds navigation on a computer, a drawer on a phone. Media tracker rows say why they are empty, and **Activity** describes jobs in plain words.
+
 ## If setup does not work
 
 | What you see | What to check next |
