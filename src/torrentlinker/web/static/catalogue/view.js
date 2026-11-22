@@ -40,7 +40,7 @@ function catalogueRender(){
   for(const tile of [...list.children])if(!keys.includes(tile.dataset.root))tile.remove();
   for(const card of cards){
     let tile=[...list.children].find(t=>t.dataset.root===String(card.root));
-    if(!tile){tile=document.createElement("section");tile.className="panel category";tile.dataset.root=card.root;tile.innerHTML='<div class="card-header"><h2></h2><span class="chip"></span></div><div class="counts"><strong class="number"></strong><span class="site muted"></span><span class="gain"></span></div><progress max="1"></progress><p class="note muted"></p><small class="updated muted"></small><button></button>';tile.querySelector("button").onclick=()=>act("fetch",{root:card.root});list.append(tile)}
+    if(!tile){tile=document.createElement("section");tile.className="panel category";tile.dataset.root=card.root;tile.innerHTML='<div class="card-header"><h2></h2><span class="chip"></span></div><div class="counts"><strong class="number"></strong><span class="site muted"></span><span class="gain"></span></div><progress max="1"></progress><p class="note muted"></p><small class="updated muted"></small><button></button>';tile.querySelector("button").onclick=e=>act("fetch",{root:card.root},e.currentTarget);list.append(tile)}
     tile.dataset.active=String(["running","year","prune"].includes(card.state));
     tile.querySelector("h2").textContent=card.name;tile.querySelector(".chip").textContent=say(...(states[card.state]||states.never));
     tile.querySelector(".number").textContent=number(card.ours);tile.querySelector(".site").textContent=card.site===null||card.site===undefined?"":say(`/ ${number(card.site)} on c411`,`/ ${number(card.site)} sur c411`);
@@ -58,13 +58,13 @@ function catalogueRender(){
   $("catalogue-retry").textContent=say("Retry","Réessayer");
   if(env.error){$("catalogue-error").textContent=TLToast.translate(env.error);$("catalogue-error").hidden=false}
 }
-async function act(action,body={}){
-  if(pending)return;pending=true;retryAction=()=>act(action,body);
+async function act(action,body={},node){
+  if(pending)return;pending=true;const release=TLToast.working(node);retryAction=node=>act(action,body,node);
   $("catalogue-error").hidden=true;$("catalogue-retry").hidden=true;catalogueRender();
   try{await catalogueRequest(action,body);const done={fetch:["Catalogue fetch started.","Récupération du Catalogue lancée."],pause:["Pause requested.","Pause demandée."],"plan-now":["Plan started.","Plan lancé."]}[action];if(done)TLToast.show(say(...done),"ok")}catch(error){TLToast.error(error);$("catalogue-retry").hidden=false}
-  finally{pending=false;catalogueRender()}
+  finally{release();pending=false;catalogueRender()}
 }
 function catalogueInit(){
-  $("catalogue-fetch").onclick=()=>act("fetch");$("catalogue-pause").onclick=()=>act("pause");
-  $("catalogue-plan-now").onclick=()=>act("plan-now");$("catalogue-retry").onclick=()=>retryAction?.();
+  $("catalogue-fetch").onclick=e=>act("fetch",{},e.currentTarget);$("catalogue-pause").onclick=e=>act("pause",{},e.currentTarget);
+  $("catalogue-plan-now").onclick=e=>act("plan-now",{},e.currentTarget);$("catalogue-retry").onclick=e=>retryAction?.(e.currentTarget);
 }

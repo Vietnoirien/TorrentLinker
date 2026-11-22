@@ -128,6 +128,7 @@ const preparation = (() => {
       await fn();
     } catch (e) {
       status = e.message;
+      toast(e.message, "bad");
     } finally {
       busy = false;
       draw();

@@ -28,6 +28,7 @@ function button(text, callback, cls) {
 const toast = (text) => TLToast.show(text, "ok");
 // An action started by a button keeps that button busy until it ends.
 async function guard(fn, node) {
+  node ??= TLToast.trigger();
   if (node) return TLToast.press(node, fn);
   try {
     return await fn();

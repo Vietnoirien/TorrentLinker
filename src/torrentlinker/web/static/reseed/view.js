@@ -419,8 +419,16 @@ async function start(paths, key = "") {
   await perform("run", { paths, key });
   await refresh();
 }
+// Buttons that only switch the view answer at once; every other button is busy while it works
+// and a failure becomes a sticky toast.
+const instant = ["close", "close-inspector", "settings", "add-folder", "add-client", "disk", "combine", "clear-selection", "select"];
 document.addEventListener("click", (e) => {
-  handleClick(e).catch(() => {});
+  const b = e.target.closest("button");
+  const works = b && !b.disabled && !b.closest("form") &&
+    (b.dataset.cancelJob || b.dataset.candidate || b.dataset.confirmRemove || b.dataset.command === "refresh" ||
+      (b.dataset.command && !instant.includes(b.dataset.command) && !b.dataset.command.startsWith("browse")));
+  if (works) TLToast.press(b, () => handleClick(e));
+  else handleClick(e).catch(() => {});
 });
 async function handleClick(e) {
   const b = e.target.closest("button");
@@ -577,7 +585,9 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("submit", (e) => {
   e.preventDefault();
-  submit(e).catch(() => {});
+  const button = e.submitter;
+  if (button && !button.disabled) TLToast.press(button, () => submit(e));
+  else submit(e).catch(() => {});
 });
 async function submit(e) {
   if (busy) return;

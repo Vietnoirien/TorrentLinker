@@ -7,7 +7,7 @@ function element(tag,text,cls){const node=document.createElement(tag);if(text!==
 function button(text,callback,cls){const node=element("button",text,cls);node.type="button";node.onclick=()=>guard(callback,node);return node}
 const toast=(text,kind="ok")=>TLToast.show(text,kind);
 // An action started by a button keeps that button busy until it ends.
-async function guard(fn,node){if(node)return TLToast.press(node,fn);try{return await fn()}catch(error){TLToast.error(error)}}
+async function guard(fn,node){node ??= TLToast.trigger(); if(node)return TLToast.press(node,fn);try{return await fn()}catch(error){TLToast.error(error)}}
 const api=(path,body,method)=>panelRequest(path,{body,method:method||(body===undefined?"GET":"POST")});
 const host=(action,values={})=>panelRequest("host",{action,values});
 const navigate=()=>host("settings");

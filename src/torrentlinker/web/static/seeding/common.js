@@ -28,6 +28,7 @@ function button(text, action) {
 }
 // An action started by a button keeps that button busy until it ends.
 async function guard(work, node) {
+  node ??= TLToast.trigger();
   if (node) return TLToast.press(node, work);
   try {
     return await work();

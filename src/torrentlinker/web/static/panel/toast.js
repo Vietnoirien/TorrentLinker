@@ -128,17 +128,39 @@ const TLToast = (() => {
       : /^(test|tester)/i.test(text)
         ? fr() ? "Test en cours…" : "Testing…"
         : fr() ? "En cours…" : "Working…";
+  // The button whose click (or form submit) is being handled right now, for work started
+  // without naming it. Toggles and tabs are left alone: they have no work to wait for.
+  function trigger() {
+    const event = window.event;
+    const node = event?.submitter || event?.currentTarget;
+    if (!(node instanceof HTMLButtonElement)) return null;
+    if (node.disabled || node.hasAttribute("aria-busy")) return null;
+    return node.matches("[aria-pressed],[aria-expanded],[role=tab],[data-tab]") ? null : node;
+  }
   // One way to run a button's action: the button is disabled and says it is busy; the work's
   // returned sentence becomes a success toast, a thrown error a sticky one. Returns the value.
+  // Marks a button busy and returns the function that releases it. An icon button keeps its
+  // icon; a quick action does not flash the new wording.
+  function working(node) {
+    if (!node) return () => {};
+    const text = node.textContent;
+    let swap = 0,
+      label = "";
+    node.disabled = true;
+    node.setAttribute("aria-busy", "true");
+    if (!node.children.length && text.trim().length > 2)
+      swap = setTimeout(() => (node.textContent = label = busyLabel(text)), 200);
+    return () => {
+      clearTimeout(swap);
+      node.disabled = false;
+      node.removeAttribute("aria-busy");
+      if (label && node.textContent === label) node.textContent = text;
+    };
+  }
   async function busy(node, work, { quiet = false } = {}) {
-    if (node?.disabled) return undefined;
-    const text = node?.textContent;
-    const plain = node && !node.children.length;
-    if (node) {
-      node.disabled = true;
-      node.setAttribute("aria-busy", "true");
-      if (plain) node.textContent = busyLabel(text);
-    }
+    if (node === undefined) node = trigger();
+    else if (node?.disabled) return undefined;
+    const release = working(node);
     try {
       const value = await work();
       if (!quiet && typeof value === "string") show(value, "ok");
@@ -147,11 +169,7 @@ const TLToast = (() => {
       error(problem);
       return undefined;
     } finally {
-      if (node) {
-        node.disabled = false;
-        node.removeAttribute("aria-busy");
-        if (plain) node.textContent = text;
-      }
+      release();
     }
   }
   // A line a panel writes its result to also becomes a toast, and the line is emptied so the
@@ -174,5 +192,5 @@ const TLToast = (() => {
     document.querySelectorAll("[data-toast]").forEach((line) => mirror(line, line.dataset.toast));
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mirrorMarked);
   else mirrorMarked();
-  return { show, error, busy, press, mirror, translate };
+  return { show, error, busy, press, mirror, translate, trigger, working };
 })();

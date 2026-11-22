@@ -211,9 +211,9 @@ document.addEventListener("click", (e) => {
   } else if (b?.dataset.crossUnpack) crossUnpack(b.dataset.crossUnpack).catch(() => {});
   else if (b?.dataset.crossDo) {
     const id = b.dataset.id;
-    perform(`cross-seed-${b.dataset.crossDo}`, { id })
-      .then(refreshCross)
-      .catch(() => {});
+    TLToast.press(b, () =>
+      perform(`cross-seed-${b.dataset.crossDo}`, { id }).then(refreshCross),
+    );
   } else if (!b && e.target.closest("[data-cross]")) {
     crossSelected = e.target.closest("[data-cross]").dataset.cross;
     drawer = true;

@@ -1029,6 +1029,8 @@
     const cmd = b.dataset.command;
     capture();
     b.disabled = true;
+    const quick = ["tab", "select", "filter", "action", "template", "suggestion", "channel", "queue-display", "scale", "agenda", "calendar-today", "calendar-prev", "calendar-next", "period", "history-day", "history-prev", "history-next", "inspect", "settings", "automation", "close"];
+    const release = quick.includes(cmd) ? () => {} : TLToast.working(b);
     try {
       if (cmd === "tab") {
         tab = b.dataset.tab;
@@ -1143,6 +1145,7 @@
       if ($("drawer").open) $("drawer-error").textContent = TLToast.translate(error.message);
       else notify(error.message, "bad");
     } finally {
+      release();
       b.disabled = false;
     }
   });

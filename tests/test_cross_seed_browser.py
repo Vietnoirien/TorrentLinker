@@ -164,6 +164,52 @@ def test_the_cross_seed_tab_filters_inspects_dismisses_and_sends_archives_to_unp
         browser.close()
 
 
+def test_cross_seed_and_board_buttons_are_busy_while_they_run(tmp_path):
+    from playwright.sync_api import expect, sync_playwright
+
+    app, board, _, original, _, _ = reseed_app(tmp_path, monitor_verifications=False)
+    seed_rows(board, original)
+    with Served(app) as url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="fr-FR")
+        page.goto(f"{url}#/library/reseed")
+        page.locator("#login-password").fill("test-password-long")
+        page.locator("#login-form button").click()
+        frame = page.frame_locator("#reseed-frame")
+        expect(frame.locator(".torrent")).to_contain_text(original.name)
+        held = []
+        holding = [False]
+        page.route(
+            "**/api/reseed-workspace*",
+            lambda route: held.append(route) if holding[0] else route.continue_(),
+        )
+        refresh = frame.locator('[data-command="refresh"]')
+        holding[0] = True
+        refresh.click()
+        expect(refresh).to_be_disabled()
+        expect(refresh).to_have_attribute("aria-busy", "true")
+        expect(refresh).to_have_text("En cours…")
+        holding[0] = False
+        for route in held:
+            route.continue_()
+        expect(refresh).to_be_enabled()
+        expect(refresh).to_have_text("Actualiser")
+        frame.get_by_role("button", name="Cross-seed", exact=True).click()
+        frame.locator("[data-cross-filter=review]").click()
+        frame.locator("[data-cross]", has_text="The.Bear.S03").click()
+        held.clear()
+        holding[0] = True
+        dismiss = frame.locator("[data-cross-do=reject]")
+        dismiss.click()
+        expect(dismiss).to_be_disabled()
+        expect(dismiss).to_have_attribute("aria-busy", "true")
+        holding[0] = False
+        for route in held:
+            route.continue_()
+        expect(frame.locator("[data-cross]")).to_have_count(1)
+        browser.close()
+
+
 def test_the_indexers_section_adds_tests_imports_and_sets_the_rules(tmp_path, monkeypatch):
     from playwright.sync_api import expect, sync_playwright
 

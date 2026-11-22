@@ -537,6 +537,7 @@ async function act(action) {
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button"),
     row = e.target.closest("[data-item]");
+  const release = b && !b.disabled && (b.dataset.action || "step" in b.dataset || b.dataset.picker || "browse" in b.dataset) ? TLToast.working(b) : () => {};
   try {
     if (b?.dataset.tab) {
       capture(current());
@@ -611,12 +612,12 @@ document.addEventListener("click", async (e) => {
       return;
     }
     if (b?.dataset.action) {
-      b.disabled = true;
       await act(b.dataset.action);
     }
   } catch (err) {
     toast(err.message, "bad");
   } finally {
+    release();
     if (b?.isConnected) b.disabled = false;
   }
 });

@@ -224,6 +224,7 @@ function toast(text, kind = "ok") {
 }
 // An action started by a button keeps that button busy until it ends.
 async function guard(fn, node) {
+  node ??= TLToast.trigger();
   try {
     if (node) await TLToast.press(node, fn);
     else await fn();

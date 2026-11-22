@@ -170,6 +170,7 @@ function table(
 }
 // An action started by a button keeps that button busy until it ends; any error becomes a toast.
 async function guard(work, node) {
+  node ??= TLToast.trigger();
   if (node) return TLToast.press(node, work);
   try {
     return await work();
