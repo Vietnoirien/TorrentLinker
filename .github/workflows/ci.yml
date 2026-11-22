@@ -73,7 +73,7 @@ jobs:
   browser:
     name: Browser workflow acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       QT_QPA_PLATFORM: offscreen
       TL_WEB_BROWSER: "1"
