@@ -226,6 +226,7 @@ def main() -> int:
     store = Store(data_dir() / "state.db")
     window = MainWindow(settings, settings_path, store)
     window.show()
+    cross_seed = None
     from torrentlinker.gui.stall_watchdog import install as watch_for_stalls
 
     watch_for_stalls(window)
@@ -250,10 +251,22 @@ def main() -> int:
             QTimer.singleShot(1000, window.check_for_updates)
             QTimer.singleShot(0, window.startup)
             QTimer.singleShot(2000, window.start_saved_agent_access)
+            from torrentlinker.crossseed_desktop import DesktopCrossSeed
+
+            cross_seed = DesktopCrossSeed(
+                settings_path,
+                store,
+                # the window is replaced when the settings change
+                lambda: list(getattr(app, "torrentlinker_window", window).library_model.entries),
+            )
+            app.aboutToQuit.connect(cross_seed.stop)
+            cross_seed.start()
         return app.exec()
     finally:
         from torrentlinker.gui.tasks import shutdown
 
+        if cross_seed is not None:
+            cross_seed.stop()
         window.close()
         shutdown()
 
