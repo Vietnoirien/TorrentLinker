@@ -750,7 +750,7 @@ html[data-theme] #view-media[data-watch="true"] {
 .media-scrub::-webkit-slider-runnable-track {
   height:4px;
   border-radius:4px;
-  background:linear-gradient(90deg,var(--accent) var(--progress,0%),#ffffff40 var(--progress,0%))}
+  background:linear-gradient(90deg,var(--accent) var(--progress,0%),transparent var(--progress,0%)),var(--buffered-track,linear-gradient(transparent,transparent)),linear-gradient(#ffffff30,#ffffff30)}
 .media-scrub::-webkit-slider-thumb {
   appearance:none;
   width:12px;
@@ -762,7 +762,7 @@ html[data-theme] #view-media[data-watch="true"] {
 .media-scrub::-moz-range-track {
   height:4px;
   border-radius:4px;
-  background:#ffffff40}
+  background:var(--buffered-track,linear-gradient(transparent,transparent)),linear-gradient(#ffffff30,#ffffff30)}
 .media-scrub::-moz-range-progress {
   height:4px;
   border-radius:4px;
@@ -1011,3 +1011,45 @@ html[data-theme] #view-media[data-watch="true"] .media-topbar > .app-wordmark,
 html[data-theme] #view-media[data-watch="true"] .media-topbar .media-browse-nav button {color:#e4ecef!important}
 html[data-theme] #view-media[data-watch="true"] .media-topbar > .app-wordmark > span,
 html[data-theme] #view-media[data-watch="true"] .media-topbar .media-browse-nav button.active {color:#80bbb5!important}
+
+/* Isolated YouTube-style menu preview. */
+.watch-settings-menu{position:absolute;z-index:20;right:14px;bottom:70px;width:350px;max-width:calc(100% - 28px);max-height:calc(100% - 82px);overflow-y:auto;padding:8px 0;background:#182024b8;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #ffffff12;border-radius:12px;box-shadow:0 8px 32px #0007;cursor:default;color:#fff;scrollbar-width:thin}
+.watch-settings-menu[hidden]{display:none}
+html[data-theme] #view-media .watch-setting-row{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:9px 16px;border:0;border-radius:0;background:transparent;color:#fff;text-align:left;font:13px system-ui;cursor:pointer}
+html[data-theme] #view-media .watch-setting-row:hover,html[data-theme] #view-media .watch-setting-row:focus-visible,.watch-setting-external:hover{background:#ffffff18;outline:none}
+html[data-theme] #view-media .watch-setting-row:active{background:#ffffff2a}
+.watch-setting-icon{width:20px;font-size:20px;text-align:center;flex:none}
+.watch-setting-label{flex:1}.watch-setting-value{color:#c3c9cd;font-size:12px;text-align:right}
+.watch-setting-value:not(:empty)::after{content:' ›';margin-left:8px;font-size:18px}
+[role=menuitemradio] .watch-setting-value::after{content:none}
+html[data-theme] #view-media .watch-settings-back{border-bottom:1px solid #ffffff22;margin-bottom:5px;font-weight:600}
+.watch-setting-note{font:12px/1.5 system-ui;color:#b8c4ca;padding:5px 18px;margin:4px 0}
+.watch-setting-external{display:block;padding:12px 18px;border-top:1px solid #ffffff20;color:#c4e6e1;text-decoration:none;font:12px system-ui}
+#watch-settings[aria-expanded=true]{color:var(--accent)}
+@media(max-width:600px){.watch-settings-menu{right:8px;bottom:55px;max-height:calc(100% - 60px);max-width:calc(100% - 16px)}html[data-theme] #view-media .watch-setting-row{min-height:38px;padding:6px 12px}}
+
+/* Clean playback controls: icons on the picture, without button cards. */
+html[data-theme] #view-media .media-overlay-tools button {
+  background:transparent;border:0;box-shadow:none;color:#fff;border-radius:4px;
+  min-width:36px;min-height:40px;justify-content:center;
+  transition:color .15s,transform .1s;
+}
+html[data-theme] #view-media .media-overlay-tools button:hover:not(:disabled),
+html[data-theme] #view-media .media-overlay-tools #watch-settings[aria-expanded="true"] {color:var(--accent)}
+html[data-theme] #view-media .media-overlay-tools button:active:not(:disabled) {transform:scale(.92)}
+html[data-theme] #view-media .media-overlay-tools button:focus:not(:focus-visible) {outline:none}
+html[data-theme] #view-media .media-overlay-tools button:focus-visible {outline:2px solid var(--accent);outline-offset:2px}
+html[data-theme] #view-media .media-overlay-tools button:disabled {opacity:.35}
+html[data-theme] #view-media .media-scrub,
+html[data-theme] #view-media .media-volume {background:transparent;border:0;box-shadow:none}
+
+/* Keep the button itself as the pointer target while its icon changes. */
+#view-media .media-overlay-tools button svg {pointer-events:none}
+
+.media-timeline {position:relative;display:flex;align-items:center;height:22px}
+.media-timeline-track {position:absolute;left:6px;right:6px;top:9px;height:5px;border-radius:3px;pointer-events:none;
+  background:linear-gradient(90deg,var(--accent) var(--progress,0%),transparent var(--progress,0%)),var(--buffered-track,linear-gradient(transparent,transparent)),linear-gradient(#ffffff30,#ffffff30)}
+#view-media .media-timeline .media-scrub {position:relative;z-index:1;height:22px}
+.media-timeline .media-scrub::-webkit-slider-runnable-track {background:transparent}
+.media-timeline .media-scrub::-moz-range-track,
+.media-timeline .media-scrub::-moz-range-progress {background:transparent}

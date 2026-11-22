@@ -11,6 +11,12 @@ const WATCH_ICONS = {
   next: '<path d="M6 5l9 7-9 7zM18 5v14"/>', check: '<path d="M5 12l5 5 9-10"/>',
 };
 const watchIcon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${WATCH_ICONS[name]}</svg>`;
+function watchSetIcon(id, name) {
+  const button = $(id);
+  if (button.dataset.icon === name) return;
+  button.dataset.icon = name;
+  button.innerHTML = watchIcon(name);
+}
 const WATCH_HIDE_MS = 3000;
 let watchBarHeld = false, watchTimer = 0, watchWasPlaying = false, watchSource = "", watchSignature = "", watchLayoutSent = "", watchLastTop = 0;
 const watchScroller = () => document.querySelector(".media-scroll");
@@ -29,7 +35,7 @@ function watchReveal() {
   const screen = $("media-screen");
   screen.dataset.controls = "on";
   clearTimeout(watchTimer);
-  watchTimer = setTimeout(() => { if (watchPlayback()?.playing) screen.dataset.controls = "off"; }, WATCH_HIDE_MS);
+  watchTimer = setTimeout(() => { if (watchPlayback()?.playing && $("watch-settings-menu").hidden) screen.dataset.controls = "off"; }, WATCH_HIDE_MS);
 }
 function watchTap() { watchReveal(); }
 function watchTracksDialog() {
@@ -95,6 +101,7 @@ function watchRender() {
   $("media-watch-slot").hidden = !play;
   $("media-watch").hidden = !play?.preview;
   if (!play) {
+    watchSettingsClose(false);
     if (was) { clearTimeout(watchTimer); $("media-watch-tracks").open && $("media-watch-tracks").close(); delete view.dataset.bar; watchLayoutSent = ""; watchSignature = ""; $("media-watch").replaceChildren(); watchWasPlaying = false; }
     return;
   }
@@ -107,46 +114,62 @@ function watchRender() {
   // Another film or source closes the track choices drawn for the old one.
   const source = `${play.client_id}/${play.media_id}/${play.source_token}`;
   if (source !== watchSource) {
-    watchSource = source;
+    watchSource = source; watchSettingsClose(false);
     if (play.item) { media.featureId = play.media_id; media.selected = {...play.item, id: play.media_id, kind: "video"}; }
     mediaRenderFeature(); mediaMarkSelected();
     watchScroller().scrollTop = 0; if ($("media-watch-tracks").open) $("media-watch-tracks").close(); }
   const label = (id, en, fr) => { $(id).setAttribute("aria-label", say(en, fr)); $(id).title = say(en, fr); };
-  label("watch-rew", "Back 10 seconds", "Reculer de 10 secondes"); $("watch-rew").innerHTML = watchIcon("rew");
-  label("watch-fwd", "Forward 10 seconds", "Avancer de 10 secondes"); $("watch-fwd").innerHTML = watchIcon("fwd");
-  label("watch-toggle", play.playing ? "Pause" : "Play", play.playing ? "Pause" : "Lecture"); $("watch-toggle").innerHTML = watchIcon(play.playing ? "pause" : "play");
-  label("watch-full", play.full ? "Exit full screen" : "Full screen", play.full ? "Quitter le plein écran" : "Plein écran"); $("watch-full").innerHTML = watchIcon(play.full ? "exit" : "full");
-  label("watch-tracks", "Audio and subtitles", "Audio et sous-titres"); $("watch-tracks").innerHTML = watchIcon("subs");
-  label("watch-next", "Next", "Suivant"); $("watch-next").innerHTML = watchIcon("next"); $("watch-next").disabled = !play.has_next;
-  label("watch-stop", "Close the player", "Fermer le lecteur"); $("watch-stop").innerHTML = watchIcon("close");
+  label("watch-rew", "Back 10 seconds", "Reculer de 10 secondes"); watchSetIcon("watch-rew", "rew");
+  label("watch-fwd", "Forward 10 seconds", "Avancer de 10 secondes"); watchSetIcon("watch-fwd", "fwd");
+  label("watch-toggle", play.playing ? "Pause" : "Play", play.playing ? "Pause" : "Lecture"); watchSetIcon("watch-toggle", play.playing ? "pause" : "play");
+  label("watch-full", play.full ? "Exit full screen" : "Full screen", play.full ? "Quitter le plein écran" : "Plein écran"); watchSetIcon("watch-full", play.full ? "exit" : "full");
+  label("watch-tracks", "Audio and subtitles", "Audio et sous-titres"); watchSetIcon("watch-tracks", "subs");
+  label("watch-next", "Next", "Suivant"); watchSetIcon("watch-next", "next"); $("watch-next").disabled = !play.has_next;
+  label("watch-stop", "Close the player", "Fermer le lecteur"); watchSetIcon("watch-stop", "close");
   label("watch-seek", "Seek", "Position");
   label("watch-volume", "Volume", "Volume");
+  label("watch-settings", "Player settings", "Paramètres du lecteur");
+  $("watch-settings-menu").setAttribute("aria-label", say("Player settings", "Paramètres du lecteur"));
   if (document.activeElement !== $("watch-volume")) $("watch-volume").value = play.volume ?? 1;
   const seek = $("watch-seek");
   if (!seek.dataset.seeking) { seek.max = Math.max(0, play.duration || 0); seek.value = play.position || 0; }
-  seek.style.setProperty("--progress", `${play.duration ? Math.min(100, 100 * (Number(seek.value) / play.duration)) : 0}%`);
+  seek.parentElement.style.setProperty("--progress", `${play.duration ? Math.min(100, 100 * (Number(seek.value) / play.duration)) : 0}%`);
+  const bufferedLayers = (play.buffered || []).flatMap(([start, end]) => {
+    if (!(play.duration > 0) || !Number.isFinite(start) || !Number.isFinite(end)) return [];
+    const left = Math.max(0, Math.min(100, 100 * start / play.duration));
+    const right = Math.max(left, Math.min(100, 100 * end / play.duration));
+    return right > left ? [`linear-gradient(90deg,transparent ${left}%,#b1b7bc ${left}%,#b1b7bc ${right}%,transparent ${right}%)`] : [];
+  });
+  seek.parentElement.style.setProperty("--buffered-track", bufferedLayers.length ? bufferedLayers.join(",") : "linear-gradient(transparent,transparent)");
   seek.disabled = !play.duration;
   $("watch-time").textContent = `${watchClock(play.position)} / ${watchClock(play.duration)}`;
   $("watch-rew").disabled = $("watch-fwd").disabled = $("watch-toggle").disabled = !play.media_id;
   const note = $("media-screen-note");
   note.hidden = !play.error;
-  if (play.error) {
+  const errorSignature = JSON.stringify([play.error, play.source_token, play.qualities, language]);
+  if (play.error && watchErrorSignature !== errorSignature) {
     note.replaceChildren(element("span", play.error));
+    if ((play.qualities || []).length > 1) {
+      const compatible = element("button", say("Choose compatible quality", "Choisir une qualité compatible"));
+      compatible.type = "button"; compatible.onclick = () => watchSettingsOpen("quality"); note.append(" ", compatible);
+    }
     if (play.external_available && play.external_url) { const link = element("a", say("Open / download for an external player", "Ouvrir / télécharger pour un lecteur externe")); link.href = play.external_url; link.target = "_blank"; link.rel = "noopener"; link.download = ""; note.append(" ", link); }
   }
+  watchErrorSignature = errorSignature;
   const signature = JSON.stringify([play.client_id, play.media_id, play.source_token, language, play.item, play.tracks, play.has_next, play.preview, play.queue_revision, play.external_url]);
   if (signature !== watchSignature) { watchSignature = signature; watchDetails(play); watchTracksRefresh(); }
   // Paused, the controls stay; a film that starts playing clears the picture after the usual delay.
   if (!play.playing) { clearTimeout(watchTimer); $("media-screen").dataset.controls = "on"; }
   else if (!watchWasPlaying) watchReveal();
   watchWasPlaying = !!play.playing;
+  watchSettingsRefresh();
   watchReport();
 }
 // The host draws the picture behind the slot: it needs to know where, and that wherever the page moves.
 function watchReport() {
   if (!watchPlayback()) return;
   const rect = node => { const box = node.getBoundingClientRect(); return {x: box.left, y: box.top, width: box.width, height: box.height}; };
-  const value = {band: rect($("media-watch-slot")), screen: rect($("media-screen"))};
+  const value = {band: rect($("media-watch-slot")), screen: rect($("media-screen")), menu: $("watch-settings-menu").hidden ? null : rect($("watch-settings-menu"))};
   const key = JSON.stringify(value);
   if (key === watchLayoutSent) return;
   watchLayoutSent = key;
@@ -179,10 +202,14 @@ function watchSetUp() {
   act("watch-full", "fullscreen");
   act("watch-stop", "stop");
   act("watch-next", "next");
-  $("watch-tracks").onclick = watchTracksDialog;
+  $("watch-tracks").onclick = () => watchSettingsOpen('subtitles');
+  $("watch-settings").innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/><circle cx="12" cy="12" r="3"/></svg>';
+  $("watch-settings").onclick=()=>$("watch-settings-menu").hidden?watchSettingsOpen():watchSettingsClose();
+  document.addEventListener('pointerdown',e=>{if(!e.target.closest('#watch-settings-menu,#watch-settings'))watchSettingsClose(false);});
+  document.addEventListener('keydown',e=>{if(!$("watch-settings-menu").hidden&&e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();watchSettingsClose();}},true);
   $("watch-volume").oninput = () => { watchReveal(); guard(() => watchSend("volume", {volume: Number($("watch-volume").value)})); };
   const seek = $("watch-seek");
-  seek.oninput = () => { seek.dataset.seeking = "1"; watchReveal(); seek.style.setProperty("--progress", `${seek.max > 0 ? 100 * Number(seek.value) / seek.max : 0}%`); };
+  seek.oninput = () => { seek.dataset.seeking = "1"; watchReveal(); seek.parentElement.style.setProperty("--progress", `${seek.max > 0 ? 100 * Number(seek.value) / seek.max : 0}%`); };
   seek.onchange = () => { const position = Number(seek.value); delete seek.dataset.seeking; guard(() => watchSend("seek", {position})); };
   $("media-navigation").onclick = () => guard(() => host("navigation"));
   document.addEventListener("scroll", watchScrolled, true);
@@ -208,3 +235,67 @@ function watchSetUp() {
 }
 window.addEventListener("DOMContentLoaded", watchSetUp);
 window.addEventListener("media-environment", watchRender);
+
+// Shared settings menu: choices come from the active host, never inferred here.
+let watchErrorSignature = "";
+let watchSettingsPage='main', watchSettingsSignature='';
+const watchQualities={'original':['Original',''],'360':['360p','≈ 250 MB/h'],'480':['480p','≈ 450 MB/h'],'720':['720p · HD','≈ 870 MB/h'],'1080':['1080p · Full HD','≈ 1.89 GB/h']};
+function watchSettingsClose(focus=true){
+  const menu=$('watch-settings-menu'); if(!menu||menu.hidden)return;
+  menu.hidden=true;$('watch-settings').setAttribute('aria-expanded','false');
+  if(focus)$('watch-settings').focus();watchReveal();watchReport();
+}
+function watchSettingsOpen(page='main'){
+  watchSettingsPage=page;$('watch-settings-menu').hidden=false;
+  $('watch-settings').setAttribute('aria-expanded','true');watchReveal();watchSettingsDraw();
+  $('watch-settings-menu').querySelector('button,a')?.focus();
+}
+function watchSettingsRefresh(){
+  if($('watch-settings-menu').hidden)return;
+  const p=watchPlayback();const sig=JSON.stringify([p?.quality,p?.rate,p?.repeat,p?.tracks,p?.audio_choice]);
+  if(sig!==watchSettingsSignature){watchSettingsSignature=sig;watchSettingsDraw();}
+}
+function watchSettingsDraw(){
+  const menu=$('watch-settings-menu'),play=watchPlayback();if(!play)return;
+  menu.replaceChildren();
+  const row=(label,value,action,selected=false,icon='')=>{
+    const b=document.createElement('button');b.type='button';b.className='watch-setting-row';b.setAttribute('role',selected?'menuitemradio':'menuitem');
+    if(selected)b.setAttribute('aria-checked','true');
+    const mark=element('span',selected?'✓':icon,'watch-setting-icon'),text=element('span',label,'watch-setting-label'),detail=element('span',value,'watch-setting-value');
+    mark.setAttribute('aria-hidden','true');
+    b.append(mark,text,detail);b.onclick=async()=>{try{await action();}catch(error){const p=element('p',error.message,'watch-setting-note');p.setAttribute('role','alert');menu.append(p);}};menu.append(b);return b;
+  };
+  const choice=(label,value,action,selected)=>{const b=row(label,value,action,selected);b.setAttribute('role','menuitemradio');b.setAttribute('aria-checked',String(selected));};
+  const apply=async(action,values)=>{await watchSend(action,values);watchSettingsClose();};
+  const names={quality:say('Quality','Qualité'),speed:say('Playback speed','Vitesse de lecture'),audio:'Audio',subtitles:say('Subtitles','Sous-titres'),repeat:say('Repeat','Répétition'),queue:say('Playback queue','File de lecture')};
+  if(watchSettingsPage!=='main')row(names[watchSettingsPage],'',()=>watchSettingsOpen(),false,'‹').classList.add('watch-settings-back');
+  if(watchSettingsPage==='main'){
+    row(say('Audio','Audio'),play.audio_choices?.find(t=>t.id===play.audio_choice)?.label||play.tracks?.audio?.find(t=>t.selected)?.label||say('Default','Par défaut'),()=>watchSettingsOpen('audio'),false,'♫');
+    row(say('Subtitles','Sous-titres'),play.tracks?.subtitles?.find(t=>t.selected)?.label||say('Off','Désactivés'),()=>watchSettingsOpen('subtitles'),false,'▤');
+    row(say('Playback speed','Vitesse de lecture'),play.rate===1?say('Normal','Normale'):`${play.rate}×`,()=>watchSettingsOpen('speed'),false,'◷');
+    row(say('Quality','Qualité'),play.quality==='original'?'Original':`${play.quality}p`,()=>watchSettingsOpen('quality'),false,'⚙');
+    row(say('Repeat','Répétition'),play.repeat==='one'?say('This title','Ce titre'):play.repeat==='all'?say('All','Tous'):say('Off','Non'),()=>watchSettingsOpen('repeat'),false,'↻');
+    row(say('Playback queue','File de lecture'),String(play.queue_count||0),()=>watchSettingsOpen('queue'),false,'☷');
+    if(play.external_available&&environment.mode!=='web')row(say('External player','Lecteur externe'),'',()=>apply('external',{}));
+    if(play.external_url){const link=element('a',say('Open / download original','Ouvrir / télécharger l’original'),'watch-setting-external');link.href=play.external_url;link.target='_blank';link.rel='noopener';link.setAttribute('role','menuitem');menu.append(link);}
+  }else if(watchSettingsPage==='quality'){
+    for(const value of play.qualities||['original']){const [label,cost]=watchQualities[value];choice(label,environment.mode==='web'?cost:'',()=>apply('quality',{quality:value}),play.quality===value);}
+    if((play.qualities||[]).length<2)menu.append(element('p',say('Compatible quality requires FFmpeg on the host.','La qualité compatible nécessite FFmpeg sur la machine hôte.'),'watch-setting-note'));
+  }else if(watchSettingsPage==='speed'){
+    for(const rate of [.5,.75,1,1.25,1.5,1.75,2])choice(rate===1?say('Normal','Normale'):`${rate}×`,'',()=>apply('rate',{rate}),play.rate===rate);
+  }else if(watchSettingsPage==='audio'){
+    if(play.audio_choices?.length){for(const track of play.audio_choices)choice(track.label,'',()=>apply('audio',{audio:track.id}),play.audio_choice===track.id);}else{for(const track of play.tracks?.audio||[])choice(track.label||track.language,'',()=>apply('select_track',{kind:'audio',track_id:track.id}),track.selected);}
+
+  }else if(watchSettingsPage==='subtitles'){
+    const tracks=play.tracks?.subtitles||[];
+    choice(say('Off','Désactivés'),'',()=>apply('select_track',{kind:'subtitle',track_id:'off'}),!tracks.some(t=>t.selected));
+    for(const track of tracks)choice(track.label||track.language||'Sous-titre','',()=>apply('select_track',{kind:'subtitle',track_id:track.id}),track.selected);
+    if(!tracks.length)menu.append(element('p',say('No tracks available in this player.','Aucune piste disponible pour ce lecteur.'),'watch-setting-note'));
+  }else if(watchSettingsPage==='queue'){
+    for(const [index,track] of (play.queue||[]).entries())choice(track.title||'Titre',index===play.index?say('Playing','En lecture'):'',()=>apply('queue-play',{index}),index===play.index);
+  }else if(watchSettingsPage==='repeat'){
+    for(const [repeat,label] of [['off',say('Off','Non')],['one',say('This title','Ce titre')],['all',say('Whole queue','Toute la file')]])choice(label,'',()=>apply('repeat',{repeat}),play.repeat===repeat);
+  }
+  watchReport();
+  menu.onkeydown=e=>{const buttons=[...menu.querySelectorAll('button,a')];let index=buttons.indexOf(document.activeElement);if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();e.stopPropagation();buttons[(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus();}};
+}

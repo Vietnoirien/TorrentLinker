@@ -19,11 +19,15 @@ async function mediaSessionClaimed(id) {
 }
 const mediaItems = new Map();
 const mediaAutomaticCues = new WeakSet();
+const mediaCueTimes = new WeakMap();
 function mediaPositionCaptions() {
   const video = $("media-video");
-  if (!video.clientHeight) return;
+  const offset = Number(video.dataset.streamOffset || 0);
   const line = Math.max(10, 100 * (1 - 96 / video.clientHeight));
   for (const track of Array.from(video.textTracks || [])) for (const cue of Array.from(track.cues || [])) {
+    if (!mediaCueTimes.has(cue)) mediaCueTimes.set(cue, [cue.startTime, cue.endTime]);
+    const [start, end] = mediaCueTimes.get(cue);
+    cue.startTime = Math.max(0, start - offset); cue.endTime = Math.max(0, end - offset);
     if (cue.line === "auto") mediaAutomaticCues.add(cue);
     if (mediaAutomaticCues.has(cue) && cue.line !== line) {
       cue.snapToLines = false; cue.lineAlign = "end"; cue.line = line;
@@ -189,7 +193,7 @@ async function mediaStop() {
   mediaInvalidatePlayback();
   mediaClosePlayerMenu();
   await mediaLeaveFull();
-  for (const player of [$("media-video"), $("media-audio")]) { player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; player.removeAttribute("src"); player.load(); }
+  for (const player of [$("media-video"), $("media-audio")]) { await mediaStreamStop(player); player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; player.removeAttribute("src"); player.load(); }
   media.trackResult = null;
   $("media-track-request-error")?.remove();
   const closing = mediaReleasePreview(); media.queue = []; media.index = 0;
@@ -206,7 +210,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   const row = await api(`media/items/${encodeURIComponent(id)}?${new URLSearchParams({client_id: request?.client || media.playerClient})}`);
   if (!mediaRequestCurrent(request)) { if (preview) await mediaClosePreviewHandle(preview, request.client); return false; }
   mediaItems.set(id, row);
-  const old = mediaPlayer(); old.pause();
+  const old = mediaPlayer(); old.pause(); await mediaStreamStop(old);
   await mediaReleasePreview();
   if (!mediaRequestCurrent(request)) { if (preview) await mediaClosePreviewHandle(preview, request.client); return false; }
   if (!preview && !paused && row.kind === "video" && !(position ?? row.position ?? 0)) {
@@ -225,7 +229,16 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   $("media-audio").hidden = row.kind !== "music"; $("media-video").hidden = row.kind === "music";
   player.volume = old.volume; player.dataset.mediaId = id; player.dataset.sourceToken = request.sourceToken || mediaNewSourceToken(); media.trackResult = null;
   $("media-track-request-error")?.remove();
-  player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();
+  delete player.dataset.streamOffset; delete player.dataset.streamQuality;
+  if (row.kind === "video" && !preview) {
+    try {mediaPlaybackFacts.set(id, await api(`media/items/${encodeURIComponent(id)}/playback?${new URLSearchParams({client_id:request.client})}`));}
+    catch {mediaPlaybackFacts.set(id,{qualities:["original"],audio:[]});}
+    if (!mediaRequestCurrent(request)) return false;
+  }
+  mediaAudioChoice=0;
+  const converted=!preview && row.kind==="video" && mediaQuality!=="original" && mediaPlaybackFacts.get(id)?.qualities.includes(mediaQuality);
+  if(converted)mediaStreamLoad(player,id,position ?? row.position ?? 0);
+  else {player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();}
   $("media-player-shell").hidden = false;
   $("media-now-playing").textContent = [row.title, row.artist].filter(Boolean).join(" · ");
   $("media-player-shell").querySelector(".media-playing-art")?.remove();
@@ -247,7 +260,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
     // A prepared paused player must load external cues before reporting its selectable tracks.
     track.track.mode = "hidden";
   }
-  player.onloadedmetadata = () => { const seek = position === null ? row.position || 0 : position; if (seek > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(seek, player.duration); };
+  player.onloadedmetadata = () => { const seek = position === null ? row.position || 0 : position; if (!converted && seek > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(seek, player.duration); };
   if (!paused) await mediaTryPlay(player);
   if (!mediaRequestCurrent(request)) { if (preview) await mediaClosePreviewHandle(preview, request.client); return false; }
   mediaQueueRender(); return true;
@@ -256,7 +269,7 @@ async function mediaTryPlay(player = mediaPlayer()) {
   try { await player.play(); return true; }
   catch (error) { if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); return false; }
 }
-function mediaCodecError() { if (typeof mediaEnvironment === "function") queueMicrotask(mediaEnvironment); $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : "This browser could not play the file. Its codec may be unsupported. Open or download the file for an external player."; }
+function mediaCodecError() { if (typeof mediaEnvironment === "function") queueMicrotask(mediaEnvironment); $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : say("This browser could not play this format. Choose a compatible quality or open the original in an external player.", "Ce navigateur ne peut pas lire ce format. Choisissez une qualité compatible ou ouvrez l’original dans un lecteur externe."); }
 async function mediaStart(ids, index = 0) {
   const request = {generation: mediaInvalidatePlayback(), client: mediaClient(), selectedClient: state.clientId, session: null};
   ids = await ids;
@@ -284,7 +297,7 @@ async function mediaRemoveAt(index) {
   else if (index === previous) {
     mediaPlayer().pause(); media.index = Math.min(index, Math.max(0, media.queue.length - 1));
     if (media.queue.length) await mediaLoad(media.queue[media.index], 0);
-    else { delete mediaPlayer().dataset.mediaId; delete mediaPlayer().dataset.sourceToken; media.trackResult = null; mediaPlayer().removeAttribute("src"); mediaPlayer().load(); await mediaReleasePreview(); }
+    else { await mediaStreamStop(mediaPlayer()); delete mediaPlayer().dataset.mediaId; delete mediaPlayer().dataset.sourceToken; media.trackResult = null; mediaPlayer().removeAttribute("src"); mediaPlayer().load(); await mediaReleasePreview(); }
   }
   mediaQueueRender(); await mediaHeartbeat();
 }
@@ -321,12 +334,12 @@ async function mediaCommands(commands) {
     }
     if (command.action === "select_track") mediaSelectTrack(command);
     if (command.action === "pause") player.pause();
-    if (command.action === "seek") { const seek = () => { player.currentTime = Math.max(0, command.position || 0); }; if (player.readyState) seek(); else player.addEventListener("loadedmetadata", seek, {once: true}); }
+    if (command.action === "seek") { const seek = () => { guard(() => mediaSeek(Math.max(0, command.position || 0))); }; if (player.readyState) seek(); else player.addEventListener("loadedmetadata", seek, {once: true}); }
     if (command.action === "volume") for (const output of [$("media-video"), $("media-audio")]) output.volume = Math.min(1, Math.max(0, command.volume));
     if (command.action === "queue") {
       media.queue = command.media_ids || []; media.index = command.index || 0;
       if (media.queue.length && media.queue[media.index] !== player.dataset.mediaId) await mediaLoad(media.queue[media.index], 0, player.paused);
-      else if (!media.queue.length) { player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; media.trackResult = null; player.removeAttribute("src"); player.load(); await mediaReleasePreview(); }
+      else if (!media.queue.length) { await mediaStreamStop(player); player.pause(); delete player.dataset.mediaId; delete player.dataset.sourceToken; media.trackResult = null; player.removeAttribute("src"); player.load(); await mediaReleasePreview(); }
     }
     if (command.action === "next") await mediaAdvance(1);
     if (command.action === "previous") await mediaAdvance(-1);
@@ -343,7 +356,7 @@ async function mediaHeartbeat(fresh=false) {
   mediaHeartbeatPending=(async()=>{
     const browsing=media.browseContext||{};
     const player = mediaPlayer();
-    const report = {current_id: player.dataset.mediaId || null, queue: media.queue, index: media.index, position: player.currentTime || 0, duration: Number.isFinite(player.duration) ? player.duration : 0, paused: player.paused, volume: player.volume, shuffle: media.shuffle, repeat: media.repeat, command_ack: media.ack, track_state: mediaTrackState(), track_result: media.trackResult || null};
+    const report = {current_id: player.dataset.mediaId || null, queue: media.queue, index: media.index, position: mediaFilmPosition(player), duration: mediaFilmDuration(player), paused: player.paused, volume: player.volume, shuffle: media.shuffle, repeat: media.repeat, command_ack: media.ack, track_state: mediaTrackState(), track_result: media.trackResult || null};
     const response = await api(`media/sessions/${encodeURIComponent(media.session.id)}`, {token: media.session.token, report, context: {preview: media.preview ? {item_id: media.preview.item_id, verified_bytes: media.preview.verified_bytes, total_bytes: media.preview.total_bytes} : null, kind: media.kind, view: browsing.view || media.view, selection: media.selected?.id || null, filters: browsing}});
     mediaTrackRequestFailure(response.state?.track_request);
     await mediaCommands(response.commands || []);
@@ -484,12 +497,12 @@ $("media-video-stage").addEventListener("keydown", event => {
 });
 for (const event of ["pointermove", "pointerdown"]) $("media-video-stage").addEventListener(event, () => mediaRevealControls(false));
 for (const player of [$("media-video"), $("media-audio")]) {
-  for (const event of ["play", "pause", "ended", "emptied", "timeupdate", "durationchange", "volumechange", "loadedmetadata"])
+  for (const event of ["play", "pause", "ended", "emptied", "timeupdate", "progress", "durationchange", "volumechange", "loadedmetadata", "ratechange"])
     player.addEventListener(event, () => {
       $("media-video-stage").dataset.playing = String(!$("media-video").paused && !$("media-video").ended);
       mediaPlayerEnvironment();
     });
 }
-for (const player of [$("media-video"), $("media-audio")]) { player.onerror = mediaCodecError; player.onwaiting = () => { if (media.preview && player.currentTime > 0) mediaStatus(say("The fixed partial preview has no more playable data here. Wait for more download progress, then refresh preview.", "L’aperçu partiel fixe ne contient plus de données lisibles à cet endroit. Attendez la progression du téléchargement, puis actualisez l’aperçu.")); }; player.onended = () => guard(async () => { if (media.preview) { mediaStatus(say("End of fixed partial preview. Wait for more data, then refresh preview.", "Fin de l’aperçu partiel fixe. Attendez davantage de données, puis actualisez l’aperçu.")); } else if (media.repeat === "one") { player.currentTime = 0; await mediaTryPlay(player); } else await mediaAdvance(1); await mediaHeartbeat(); }); }
+for (const player of [$("media-video"), $("media-audio")]) { player.onerror = mediaCodecError; player.onwaiting = () => { if (media.preview && player.currentTime > 0) mediaStatus(say("The fixed partial preview has no more playable data here. Wait for more download progress, then refresh preview.", "L’aperçu partiel fixe ne contient plus de données lisibles à cet endroit. Attendez la progression du téléchargement, puis actualisez l’aperçu.")); }; player.onended = () => guard(async () => { if (media.preview) { mediaStatus(say("End of fixed partial preview. Wait for more data, then refresh preview.", "Fin de l’aperçu partiel fixe. Attendez davantage de données, puis actualisez l’aperçu.")); } else if (media.repeat === "one") { await mediaSeek(0); await mediaTryPlay(player); } else await mediaAdvance(1); await mediaHeartbeat(); }); }
 setInterval(() => { guard(mediaHeartbeat); guard(mediaPollScan); }, 1000);
 setInterval(() => guard(mediaAutoScan), MEDIA_AUTO_REFRESH);

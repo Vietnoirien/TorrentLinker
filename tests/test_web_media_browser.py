@@ -273,22 +273,17 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             video.evaluate("node => node.pause()")
             expect(media_locator(page, "#watch-toggle")).to_have_attribute("aria-label", "Play")
             media_browse(page).get_by_role("button", name="Audio and subtitles", exact=True).click()
-            track_dialog = media_locator(page, "#media-watch-tracks")
+            track_dialog = media_locator(page, "#watch-settings-menu")
             expect(track_dialog).to_be_visible()
-            expect(track_dialog.get_by_role("button", name="Off", exact=True)).to_have_attribute(
-                "aria-pressed", "true"
-            )
-            # A file without audio tracks offers no audio choice.
-            expect(track_dialog.get_by_role("heading", name="Audio", exact=True)).to_have_count(0)
-            expect(track_dialog).to_contain_text("Use an external player if a track is unavailable")
-            expect(media_locator(page, "#media-watch-external")).to_have_attribute(
-                "href", re.compile("/stream")
-            )
-            track_dialog.get_by_role("button", name="Validation.Film.2026.en", exact=True).click()
             expect(
-                track_dialog.get_by_role("button", name="Validation.Film.2026.en", exact=True)
-            ).to_have_attribute("aria-pressed", "true")
-            assert video.evaluate("node => node.textTracks[0].mode") == "showing"
+                track_dialog.get_by_role("menuitemradio", name="Off", exact=True)
+            ).to_have_attribute("aria-checked", "true")
+            track_dialog.get_by_role(
+                "menuitemradio", name="Validation.Film.2026.en", exact=True
+            ).click()
+            page.wait_for_function(
+                "() => document.querySelector('#media-video').textTracks[0].mode === 'showing'"
+            )
             video.evaluate("node => { node.currentTime = 1; }")
             page.wait_for_function(
                 "() => document.querySelector('#media-video').textTracks[0].activeCues?.length > 0"
@@ -309,11 +304,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             watch_control(page, "#watch-toggle").click()
             page.wait_for_function("() => !document.querySelector('#media-video').paused")
             media_browse(page).get_by_role("button", name="Audio and subtitles", exact=True).click()
-            track_dialog.get_by_role("button", name="Off", exact=True).click()
+            track_dialog.get_by_role("menuitemradio", name="Off", exact=True).click()
             page.wait_for_function(
                 "() => document.querySelector('#media-video').textTracks[0].mode === 'disabled'"
             )
-            media_browse(page).get_by_role("button", name="Close", exact=True).click()
             expect(track_dialog).to_be_hidden()
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
@@ -1681,3 +1675,89 @@ def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_na
     finally:
         server.should_exit = True
         thread.join(10)
+
+
+def test_compatible_quality_keeps_film_time_captions_and_clicks(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_media_api import media_app
+    from tests.test_media_conversion import video
+
+    app, root = media_app(tmp_path)
+    video(root / "Compatible.2024.mkv", seconds=30)
+    (root / "Compatible.2024.srt").write_text(
+        "1\n00:00:08,000 --> 00:00:28,000\nCaption at film time\n"
+    )
+    app.state.agent_service.media.scan("default", threading.Event(), lambda _p: None)
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", log_config=None))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+    thread.start()
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+            page = browser.new_page(viewport={"width": 1400, "height": 1000})
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "media")
+            media_locator(page, ".media-row-card").filter(has_text="Compatible").first.click()
+            media_locator(page, ".media-feature-actions .media-primary").click()
+            page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0")
+            toggle = watch_control(page, "#watch-toggle")
+            toggle.click()
+            page.wait_for_function("() => document.querySelector('#media-video').paused")
+            seek = watch_control(page, "#watch-seek")
+            seek.fill("10")
+            seek.dispatch_event("change")
+            page.wait_for_function("() => document.querySelector('#media-video').currentTime >= 10")
+            watch_control(page, "#watch-settings").click()
+            menu = media_locator(page, "#watch-settings-menu")
+            menu.get_by_role("menuitem", name=re.compile("Quality")).click()
+            menu.get_by_role("menuitemradio", name=re.compile("360p")).click()
+            page.wait_for_function("() => document.querySelector('#media-video').readyState >= 2")
+            expect(watch_control(page, "#watch-time")).to_contain_text("0:30")
+            assert page.locator("#media-video").evaluate("p => p.paused")
+            watch_control(page, "#watch-settings").click()
+            menu.get_by_role("menuitem", name=re.compile("Subtitles")).click()
+            expect(menu.get_by_role("menuitemradio")).to_have_count(2)
+            menu.get_by_role("menuitemradio").last.click()
+            watch_control(page, "#watch-toggle").click()
+            page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0.2")
+            # The cue starts at film second 8, even though the new stream starts at 10.
+            page.wait_for_function("""() => [...document.querySelector('#media-video').textTracks]
+                .some(t => t.mode === 'showing' && [...(t.activeCues || [])]
+                .some(c => c.text.includes('Caption at film time')))""")
+            # Holding the pointer across a progress render must not lose the click.
+            for paused in (True, False, True, False, True):
+                button = watch_control(page, "#watch-toggle")
+                button.click(delay=350)
+                page.wait_for_function(
+                    "expected => document.querySelector('#media-video').paused === expected",
+                    arg=paused,
+                )
+            page.wait_for_function(
+                "() => document.querySelector('#media-video').buffered.length > 0"
+            )
+            expect(media_locator(page, ".media-timeline")).to_have_attribute(
+                "style", re.compile("--buffered-track:.*linear-gradient")
+            )
+            watch_control(page, "#watch-settings").click()
+            menu.get_by_role("menuitem", name=re.compile("Playback speed")).click()
+            menu.get_by_role("menuitemradio", name="1.5×", exact=True).click()
+            page.wait_for_function(
+                "() => document.querySelector('#media-video').playbackRate === 1.5"
+            )
+            watch_control(page, "#watch-stop").click()
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+        listener.close()

@@ -32,6 +32,7 @@ from PySide6.QtGui import (
     QDesktopServices,
     QFont,
     QFontMetrics,
+    QPixmap,
     QTextDocumentFragment,
 )
 from PySide6.QtMultimedia import (
@@ -62,6 +63,7 @@ from torrentlinker.config import MEDIA_HORIZON_VIEWS, media_layout
 from torrentlinker.gui.controls import set_role
 from torrentlinker.gui.media_audio import create_audio_output
 from torrentlinker.gui.media_browser import MediaBrowserPanel
+from torrentlinker.gui.media_stream import NativeStream
 from torrentlinker.gui.player_view import PlayerDetailsView, PlayerView
 from torrentlinker.gui.tasks import run_in_background
 
@@ -346,6 +348,14 @@ class VideoSurface(QGraphicsView):
         self.item = QGraphicsVideoItem()
         scene.addItem(self.item)
         self.frames: DisplayFrames | None = None
+        # A transparent WebEngine view cannot blur the native video beneath it.
+        # Sample just the menu rectangle, at low resolution, while that menu is open.
+        self.menu_glass = QLabel(self.viewport())
+        self.menu_glass.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.menu_glass.hide()
+        self.menu_timer = QTimer(self)
+        self.menu_timer.setInterval(100)
+        self.menu_timer.timeout.connect(self.refresh_menu_glass)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setBackgroundBrush(QColor("black"))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -366,6 +376,46 @@ class VideoSurface(QGraphicsView):
         self.overlay.setGeometry(rect)
         self.overlay.raise_()
         self.measure()
+
+    def place_menu_glass(self, area: QRect | None) -> None:
+        if area is None:
+            self.menu_timer.stop()
+            self.menu_glass.hide()
+            return
+        self.menu_glass.setGeometry(area)
+        self.menu_glass.show()
+        self.menu_glass.raise_()
+        self.refresh_menu_glass()
+        self.menu_timer.start()
+
+    def refresh_menu_glass(self) -> None:
+        frame = self.item.videoSink().videoFrame()
+        if not frame.isValid() or not self.menu_glass.isVisible():
+            return
+        image = QPixmap.fromImage(frame.toImage()).scaled(
+            self.viewport().size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        bounds = self.menu_glass.geometry()
+        x = (self.viewport().width() - image.width()) // 2
+        y = (self.viewport().height() - image.height()) // 2
+        crop = image.copy(bounds.translated(-x, -y))
+        if crop.isNull():
+            return
+        small = crop.scaled(
+            max(1, bounds.width() // 14),
+            max(1, bounds.height() // 14),
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.menu_glass.setPixmap(
+            small.scaled(
+                bounds.size(),
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
 
     def measure(self) -> None:
         """Tell the frame preparer how many device pixels the picture covers."""
@@ -456,6 +506,11 @@ class MediaTab(QWidget):
         self.watch_layout: dict[str, Any] | None = None
         self.watch_full = False
         self.playback_error = ""
+        self.playback_quality = "original"
+        self.playback_offset = 0.0
+        self.playback_audio = 0
+        self.playback_facts: dict[str, Any] = {}
+        self.native_stream: NativeStream | None = None
         self.preview_facts: dict[str, int] | None = None
         self.browser: MediaBrowserPanel | None = None
         self.browse_kind = "video"
@@ -680,7 +735,12 @@ class MediaTab(QWidget):
 
     def _transport_step(self, direction: int) -> None:
         if self._player_video_mode:
-            self.command("seek", position=max(0, self.player.position() / 1000 + direction * 10))
+            self.command(
+                "seek",
+                position=max(
+                    0, self.player.position() / 1000 + self.playback_offset + direction * 10
+                ),
+            )
         else:
             self.command("next" if direction > 0 else "previous")
 
@@ -760,6 +820,7 @@ class MediaTab(QWidget):
         else:
             self.video_overlay_box.setContentsMargins(0, 0, 0, 0)
             self.watch_band.hide()
+            self.video.place_menu_glass(None)
             if self.video.parentWidget() is not self.player_panel:
                 self.player_box.insertWidget(0, self.video, 1)
                 self.video.setMinimumHeight(300)
@@ -776,6 +837,7 @@ class MediaTab(QWidget):
         layout, browser = self.watch_layout, self.browser
         if not self._player_video_mode or layout is None or browser is None:
             self.watch_band.hide()
+            self.video.place_menu_glass(None)
             if self._player_video_mode:
                 self.video.hide()
             return
@@ -791,6 +853,9 @@ class MediaTab(QWidget):
 
         self.watch_band.setGeometry(rect(layout["band"]))
         self.video.setGeometry(rect(layout["screen"]))
+        self.video.place_menu_glass(
+            rect(layout["menu"]).translated(-self.video.pos()) if layout.get("menu") else None
+        )
         self.watch_band.show()
         self.video.show()
         self.watch_band.lower()
@@ -804,7 +869,7 @@ class MediaTab(QWidget):
 
     def _render_caption(self) -> None:
         if isinstance(self.subtitle_choice, str):
-            seconds = self.player.position() / 1000
+            seconds = self.player.position() / 1000 + self.playback_offset
             text = "\n".join(
                 caption for start, end, caption in self.subtitle_cues if start <= seconds < end
             )
@@ -937,6 +1002,7 @@ class MediaTab(QWidget):
                 self.player.errorOccurred.connect(self._codec_error)
                 self.player.positionChanged.connect(self._position_changed)
                 self.player.durationChanged.connect(self._duration_changed)
+                self.player.bufferProgressChanged.connect(self._publish_playback_soon)
                 self.player.mediaStatusChanged.connect(self._media_status)
                 self.player.tracksChanged.connect(self._playback_tracks)
                 self.player.sourceChanged.connect(self._track_source_changed)
@@ -969,6 +1035,8 @@ class MediaTab(QWidget):
             self._set_notice(str(error))
 
     def dismiss_video(self) -> None:
+        if self.native_stream:
+            self.native_stream.stop()
         """Return to browsing while preserving progress and the saved queue."""
         if self.fullscreen_dialog.isVisible():
             self.fullscreen_dialog.reject()
@@ -1261,6 +1329,10 @@ class MediaTab(QWidget):
                 library.close_preview(client, preview["preview_id"])
                 return
             self._close_preview()
+            if self.native_stream:
+                self.native_stream.stop()
+            self.playback_quality, self.playback_offset, self.playback_audio = "original", 0.0, 0
+            self.playback_facts = {}
             self.preview_id = preview["preview_id"]
             self.preview_item = identifier
             self.preview_device = DownloadingFileDevice(path, size, piece_size, pieces, self)
@@ -1426,7 +1498,10 @@ class MediaTab(QWidget):
             elif action == "pause":
                 self.player.pause()
             elif action == "seek":
-                self.player.setPosition(int(float(command["position"]) * 1000))
+                if self.playback_quality != "original":
+                    self._set_playback_quality(self.playback_quality, float(command["position"]))
+                else:
+                    self.player.setPosition(int(float(command["position"]) * 1000))
             elif action == "volume":
                 self.audio.setVolume(float(command["volume"]))
             elif action in {"next", "previous"}:
@@ -1442,6 +1517,8 @@ class MediaTab(QWidget):
     def _load_current(self, play: bool, load_token: str = "") -> None:
         queue = self.state["queue"]
         if not queue:
+            if self.native_stream:
+                self.native_stream.stop()
             self._clear_track_source()
             self._close_preview()
             self.player.stop()
@@ -1485,7 +1562,19 @@ class MediaTab(QWidget):
             self.pending_seek = round(float(row.get("position") or 0) * 1000)
             self.now_playing.setText(row["title"])
             self._prepare_track_source(load_token)
+            if self.native_stream:
+                self.native_stream.stop()
+            self.playback_quality, self.playback_offset, self.playback_audio = "original", 0.0, 0
+            self.playback_facts = {}
             self.player.setSource(QUrl.fromLocalFile(str(path)))
+            from torrentlinker.media_conversion import inspect
+
+            def ready(facts):
+                if isValid(self) and self.last_source == identifier and not self.preview_id:
+                    self.playback_facts = facts
+                    self._publish_playback_soon()
+
+            run_in_background(lambda: inspect(path), ready, lambda _error: None, coordinate=False)
             if self.player.mediaStatus() in {
                 QMediaPlayer.MediaStatus.LoadedMedia,
                 QMediaPlayer.MediaStatus.BufferedMedia,
@@ -1593,8 +1682,8 @@ class MediaTab(QWidget):
         # Until the saved resume point is applied, the player reports 0; keep the saved one.
         position = self.player.position() if self.pending_seek is None else self.pending_seek
         self.state.update(
-            position=position / 1000,
-            duration=self.player.duration() / 1000,
+            position=position / 1000 + self.playback_offset,
+            duration=self._film_duration(),
             paused=self.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState,
             volume=self.audio.volume(),
         )
@@ -1662,8 +1751,8 @@ class MediaTab(QWidget):
             "title": self.now_playing.text(),
             "playing": player is not None
             and player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
-            "position": player.position() / 1000 if player else 0,
-            "duration": player.duration() / 1000 if player else 0,
+            "position": player.position() / 1000 + self.playback_offset if player else 0,
+            "duration": self._film_duration() if player else 0,
             "volume": self.audio.volume() if self.audio else self.state["volume"],
             "shuffle": self.state["shuffle"],
             "repeat": self.state["repeat"],
@@ -1710,10 +1799,30 @@ class MediaTab(QWidget):
             "queue_revision": self.queue_revision,
             "title": self.now_playing.text(),
             "playing": self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
-            "position": self.player.position() / 1000,
+            "position": self.player.position() / 1000 + self.playback_offset,
             "volume": self.audio.volume() if self.audio else self.state["volume"],
-            "duration": self.player.duration() / 1000,
+            "duration": self._film_duration(),
             "tracks": self._track_state(),
+            "quality": self.playback_quality,
+            "qualities": ["original"]
+            if self.preview_id
+            else self.playback_facts.get("qualities", ["original"]),
+            "rate": self.player.playbackRate(),
+            "repeat": self.state["repeat"],
+            "queue": self.queue_rows,
+            "queue_count": len(queue),
+            "index": index,
+            "audio_choices": self.playback_facts.get("audio", [])
+            if self.playback_quality != "original"
+            else [],
+            "audio_choice": self.playback_audio,
+            "buffered": [
+                [
+                    self.playback_offset + part.start() / 1000,
+                    self.playback_offset + part.end() / 1000,
+                ]
+                for part in self.player.bufferedTimeRange().intervals()
+            ],
             "item": {key: row.get(key) for key in keys},
             "has_next": index < len(queue) - 1
             or (self.state["repeat"] == "all" and len(queue) > 1),
@@ -1753,8 +1862,15 @@ class MediaTab(QWidget):
             "select_track",
             "refresh-preview",
             "external",
+            "quality",
+            "audio",
+            "rate",
+            "repeat",
+            "queue-play",
         } or not isinstance(params, dict):
             raise ValueError("Unknown player control.")
+        if action == "queue-play" and values.get("queue_revision") != self.queue_revision:
+            raise ValueError("The playback queue changed. Use the current controls.")
         if action == "next":
             self._advance(1)  # the next film of the queue
         else:
@@ -1800,8 +1916,78 @@ class MediaTab(QWidget):
             coordinate=False,
         )
 
+    def _film_duration(self) -> float:
+        if self.playback_quality != "original":
+            return float(
+                self.current_row.get("duration") or self.playback_facts.get("duration") or 0
+            )
+        return (self.player.duration() / 1000 if self.player else 0) or float(
+            self.current_row.get("duration") or self.playback_facts.get("duration") or 0
+        )
+
+    def _set_playback_quality(self, quality: str, position: float | None = None) -> None:
+        from torrentlinker.media_conversion import PlaybackChoice
+
+        if self.preview_id or quality not in self.playback_facts.get("qualities", ["original"]):
+            raise ValueError("Playback quality unavailable.")
+        path = self.library.resolve(self.session_client, self.last_source)
+        start = (
+            self.player.position() / 1000 + self.playback_offset if position is None else position
+        )
+        subtitle = self.subtitle_choice
+        if self.playback_quality == "original":
+            self.playback_audio = max(0, self.player.activeAudioTrack())
+        playing = self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        rate = self.player.playbackRate()
+        self.player.pause()
+        if quality == "original":
+            if self.native_stream:
+                self.native_stream.stop()
+            source = QUrl.fromLocalFile(str(path))
+            self.pending_seek = round(start * 1000)
+            self.playback_offset = 0.0
+        else:
+            if self.native_stream is None:
+                self.native_stream = NativeStream()
+                self.destroyed.connect(self.native_stream.close)
+            source = QUrl(
+                self.native_stream.open(
+                    path, PlaybackChoice(quality, start, self.playback_audio), self.playback_facts
+                )
+            )
+            self.pending_seek = 0
+            self.playback_offset = start
+        self.playback_quality = quality
+        self._prepare_track_source()
+        self.playback_error = ""
+        self.player.setSource(source)
+        self.audio_choice = self.playback_audio if quality == "original" else 0
+        if isinstance(subtitle, str):
+            self._select_subtitle(subtitle)
+        elif quality == "original":
+            self.subtitle_choice = subtitle
+        self.player.setPlaybackRate(rate)
+        if playing:
+            self.player.play()
+        self._publish_playback_soon()
+
     def _player_control(self, action: str, values: dict) -> None:
-        if action == "toggle":
+        if action == "quality":
+            self._set_playback_quality(str(values["quality"]))
+        elif action == "audio":
+            audio = values.get("audio")
+            if type(audio) is not int or not any(
+                t["id"] == audio for t in self.playback_facts.get("audio", [])
+            ):
+                raise ValueError("Audio track unavailable.")
+            self.playback_audio = int(audio)
+            self._set_playback_quality(self.playback_quality)
+        elif action == "rate":
+            rate = values.get("rate")
+            if rate not in {0.5, 0.75, 1, 1.25, 1.5, 1.75, 2}:
+                raise ValueError("Invalid playback speed.")
+            self.player.setPlaybackRate(rate)
+        elif action == "toggle":
             self.toggle_pause()
         elif action in {"seek", "volume", "shuffle", "repeat"}:
             key = "position" if action == "seek" else action
@@ -1881,7 +2067,10 @@ class MediaTab(QWidget):
                 )
                 return
             if self.state["repeat"] == "one":
-                self.player.setPosition(0)
+                if self.playback_quality != "original":
+                    self._set_playback_quality(self.playback_quality, 0)
+                else:
+                    self.player.setPosition(0)
                 self.player.play()
             else:
                 self._advance(1)

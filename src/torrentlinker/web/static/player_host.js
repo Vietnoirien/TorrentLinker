@@ -26,8 +26,8 @@ function mediaPlayerSnapshot() {
     kind: shell.dataset.kind || media.kind,
     title: $("media-now-playing").textContent,
     playing: !player.paused,
-    position: player.currentTime || 0,
-    duration: Number.isFinite(player.duration) ? player.duration : 0,
+    position: mediaFilmPosition(player),
+    duration: mediaFilmDuration(player),
     volume: player.volume,
     shuffle: media.shuffle,
     repeat: media.repeat,
@@ -46,7 +46,7 @@ function mediaPlayerSnapshot() {
     can_expand: shell.dataset.kind === "video",
     expanded: shell.classList.contains("media-player-expanded"),
     external_available: !!player.dataset.mediaId,
-    external_url: player.dataset.mediaId ? player.src : "",
+    external_url: player.dataset.mediaId ? new URL(mediaURL(player.dataset.mediaId),location.href).href : "",
     preview: !!media.preview,
     available_height:
       shell.dataset.kind === "video"
@@ -75,6 +75,14 @@ function mediaPlaybackSnapshot() {
     title: snapshot.title,
     playing: snapshot.playing,
     position: snapshot.position,
+    buffered: Array.from({length:player.buffered.length},(_,i)=>[player.buffered.start(i)+Number(player.dataset.streamOffset||0),player.buffered.end(i)+Number(player.dataset.streamOffset||0)]),
+    quality: player.dataset.streamQuality || "original",
+    qualities: media.preview ? ["original"] : (mediaPlaybackFacts.get(snapshot.media_id)?.qualities || ["original"]),
+    audio_choices: media.preview ? [] : (mediaPlaybackFacts.get(snapshot.media_id)?.audio || []),
+    audio_choice: mediaAudioChoice,
+    rate: player.playbackRate,
+    repeat: media.repeat,
+    queue_count: media.queue.length, queue:snapshot.queue, index:snapshot.index,
     volume: snapshot.volume,
     duration: snapshot.duration,
     tracks: snapshot.tracks,
@@ -84,7 +92,7 @@ function mediaPlaybackSnapshot() {
     full: snapshot.fullscreen,
     error,
     external_available: snapshot.external_available,
-    external_url: snapshot.external_url,
+    external_url: snapshot.media_id ? new URL(mediaURL(snapshot.media_id),location.href).href : "",
   };
 }
 function mediaPlayerEnvironment() {
@@ -158,17 +166,15 @@ async function mediaPlayerControl(body) {
     if (!Number.isFinite(values[key])) throw Error("Invalid player value.");
     return values[key];
   };
-  if (action === "toggle") {
+  if(action === "quality") await mediaChangeQuality({quality:values.quality});
+  else if(action === "audio") await mediaChangeQuality({quality:mediaQuality==="original"?"720":mediaQuality,audio:values.audio});
+  else if(action === "rate") {
+    if(![.5,.75,1,1.25,1.5,1.75,2].includes(values.rate))throw Error("Invalid playback speed.");
+    player.defaultPlaybackRate=values.rate;player.playbackRate=values.rate;
+  } else if (action === "toggle") {
     if (player.paused) await mediaTryPlay(player);
     else player.pause();
-  } else if (action === "seek")
-    player.currentTime = Math.max(
-      0,
-      Math.min(
-        Number.isFinite(player.duration) ? player.duration : 0,
-        numeric("position"),
-      ),
-    );
+  } else if (action === "seek") await mediaSeek(numeric("position"));
   else if (action === "volume")
     for (const output of [$("media-video"), $("media-audio")])
       output.volume = Math.max(0, Math.min(1, numeric("volume")));

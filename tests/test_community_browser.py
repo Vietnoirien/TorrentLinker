@@ -415,6 +415,11 @@ def test_webui_to_real_extension_and_durable_receipt(tmp_path, monkeypatch):
             ui.locator("#community-auto-comment").check()
             ui.locator("#auto-template").fill("Merci pour le partage de {titre}")
             ui.get_by_role("button", name="Apply to calendar", exact=True).click()
+            # A Sunday run can schedule the next available slot in the following week.
+            for _ in range(4):
+                if "Future release" in ui.locator("#community-calendar").inner_text():
+                    break
+                ui.get_by_role("button", name="Next period", exact=True).click()
             expect(ui.locator("#community-calendar")).to_contain_text("Future release")
             expect(ui.locator(".calendar-cell")).to_have_count(7)
             ui.get_by_role("button", name="Month", exact=True).click()

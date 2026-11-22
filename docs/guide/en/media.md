@@ -24,7 +24,9 @@ To remove a title from **Continue watching**, click the small **×** on its resu
 | An audio/subtitle choice is missing | The browser may not expose that embedded track; use an external player |
 | Download is unfinished | Use the explicit partial-preview action only when it is offered |
 
-Desktop uses native playback. Web playback depends on browser support, and TorrentLinker does not convert codecs while playing.
+Desktop uses native playback. **Original** uses the original file and depends on the player’s codecs. With FFmpeg and ffprobe installed on the app/server host, choose **Quality → 360p, 480p, 720p or 1080p** for an H.264/AAC stream. The Docker image includes these tools. A quality or audio change briefly reloads the stream at the current film position and preserves pause state and speed. External subtitle cues follow that position. Embedded subtitles that the selected player cannot expose still need an external player.
+
+The frosted settings menu also contains audio, subtitles, playback speed, repeat and the queue. The grey timeline shows media actually buffered by the player. Lower qualities reduce mobile data use; their hourly estimates are approximate. Conversion uses CPU on the host, keeps the original intact and writes no converted movie to disk. The Web server permits two concurrent conversions, and stopping playback or disconnecting releases its encoder. The native player uses one private loopback stream. Full films are supported; the five-minute limit was only for the prototype.
 
 ## Browse and control the library
 

@@ -27,6 +27,10 @@ function mediaPlaceStage(){
   const frame=mediaFrame.getBoundingClientRect(),set=(name,value)=>shell.style.setProperty(name,`${Math.round(value*100)/100}px`);
   set("--watch-x",frame.left+layout.band.x);set("--watch-y",frame.top+layout.band.y);set("--watch-width",layout.band.width);set("--watch-height",layout.band.height);
   set("--watch-screen-x",layout.screen.x-layout.band.x);set("--watch-screen-y",layout.screen.y-layout.band.y);set("--watch-screen-width",layout.screen.width);set("--watch-screen-height",layout.screen.height);
+  let glass=document.getElementById('media-menu-glass');
+  if(!glass){glass=document.createElement('div');glass.id='media-menu-glass';glass.style.cssText='position:absolute;z-index:1;pointer-events:none;border-radius:12px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)';$('media-video-stage').append(glass);}
+  glass.hidden=!layout.menu;
+  if(layout.menu){Object.assign(glass.style,{left:(layout.menu.x-layout.screen.x)+'px',top:(layout.menu.y-layout.screen.y)+'px',width:layout.menu.width+'px',height:layout.menu.height+'px'});}
   shell.dataset.placed="true";
 }
 addEventListener("scroll",mediaPlaceStage,{passive:true});
@@ -52,7 +56,7 @@ window.addEventListener("message",async event=>{
       else if(action==="queue")mediaShowQueue();
       else if(action==="player"){
         // The view's controls: the same commands as the player's, for the source they were drawn for.
-        if(!["toggle","seek","volume","fullscreen","stop","next","select_track","refresh-preview"].includes(values.action))throw Error("Unknown player control.");
+        if(!["toggle","seek","volume","fullscreen","stop","next","select_track","refresh-preview","quality","audio","rate","repeat","queue-play"].includes(values.action))throw Error("Unknown player control.");
         await mediaPlayerControl(values);
       }
       else if(action==="watch-layout"){media.watchLayout=values;mediaPlaceStage()}

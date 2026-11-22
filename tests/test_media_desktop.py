@@ -1373,3 +1373,63 @@ def test_toolbar_refreshes_the_library_and_reopening_rescans_quietly(qtbot, tmp_
     qtbot.waitUntil(lambda: len(scans) == 4)
     video_wait(qtbot, tab, "document.querySelector('#media-toolbar-refresh').ariaPressed==='false'")
     tab.stop()
+
+
+def test_native_compatible_quality_preserves_time_pause_and_subtitles(qtbot, tmp_path, request):
+    from tests.webengine_support import isolated_webengine_render
+
+    if isolated_webengine_render(request):
+        return
+    import threading
+
+    from PySide6.QtMultimedia import QMediaPlayer
+
+    from tests.test_media_api import media_app
+    from tests.test_media_conversion import video
+    from torrentlinker.gui.media import MediaTab
+
+    app, root = media_app(tmp_path)
+    video(root / "Compatible.2024.mkv", seconds=30)
+    (root / "Compatible.2024.srt").write_text(
+        "1\n00:00:08,000 --> 00:00:28,000\nCaption at film time\n"
+    )
+    service = app.state.assistant
+    service.agent.media.scan("default", threading.Event(), lambda _p: None)
+    tab = MediaTab(lambda: service, lambda: "default", lambda: None)
+    qtbot.addWidget(tab)
+    tab.resize(1000, 800)
+    tab.show()
+    tab.activate()
+    video_details(qtbot, tab, "Compatible")
+    video_action(qtbot, tab, "Play")
+    qtbot.waitUntil(lambda: tab.player.hasVideo(), timeout=15000)
+    video_wait(qtbot, tab, "watchPlayback()?.qualities?.includes('360')")
+    video_js(qtbot, tab, "watchSend('toggle')")
+    qtbot.waitUntil(lambda: tab.player.playbackState() == QMediaPlayer.PlaybackState.PausedState)
+    video_js(qtbot, tab, "watchSend('seek', {position: 10})")
+    qtbot.waitUntil(lambda: tab.player.position() >= 10000)
+    video_wait(qtbot, tab, "watchPlayback()?.tracks?.subtitles?.length === 1")
+    video_js(
+        qtbot,
+        tab,
+        "watchSend('select_track', {kind:'subtitle',"
+        "track_id:watchPlayback().tracks.subtitles[0].id})",
+    )
+    qtbot.waitUntil(lambda: tab.caption.text() == "Caption at film time")
+    video_js(qtbot, tab, "watchSend('quality', {quality:'360'})")
+    video_wait(qtbot, tab, "watchPlayback()?.quality === '360' && watchPlayback().tracks.ready")
+    assert tab.player.playbackState() != QMediaPlayer.PlaybackState.PlayingState
+    assert video_js(qtbot, tab, "watchPlayback().position") >= 10
+    assert 29 < video_js(qtbot, tab, "watchPlayback().duration") < 31
+    assert tab.caption.text() == "Caption at film time"
+    video_js(qtbot, tab, "watchSend('toggle')")
+    video_wait(qtbot, tab, "watchPlayback()?.playing && watchPlayback().position > 10.2")
+    video_js(qtbot, tab, "watchSend('rate', {rate:1.5})")
+    qtbot.waitUntil(lambda: tab.player.playbackRate() == 1.5)
+    video_js(qtbot, tab, "watchSend('seek', {position:15})")
+    video_wait(qtbot, tab, "watchPlayback()?.position >= 15 && watchPlayback().playing")
+    tab.report()
+    assert tab.state["position"] >= 15
+    assert 29 < tab.state["duration"] < 31
+    video_js(qtbot, tab, "watchSend('stop')")
+    qtbot.waitUntil(lambda: tab.player.source().isEmpty())

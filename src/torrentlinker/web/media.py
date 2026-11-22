@@ -67,7 +67,10 @@ class MediaChat(BaseModel):
 
 
 def media_routes(app, agent, assistant):
+    from torrentlinker.media_conversion import Conversions
+
     media = agent.media
+    conversions = app.state.media_conversions = Conversions()
 
     def client(value):
         return value or agent.setup.settings.default_client_id
@@ -346,6 +349,58 @@ def media_routes(app, agent, assistant):
             media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
             headers={"Accept-Ranges": "bytes"},
         )
+
+    @app.get("/api/media/items/{identifier}/playback")
+    @needs(*WATCH)
+    def playback_info(identifier: str, request: Request, client_id: str = ""):
+        from torrentlinker.media_conversion import inspect
+
+        chosen = item(request, client_id, identifier)
+        return inspect(media.resolve(chosen, identifier))
+
+    @app.get("/api/media/items/{identifier}/playback/stream")
+    @needs(*WATCH)
+    async def compatible_stream(
+        identifier: str,
+        request: Request,
+        client_id: str = "",
+        quality: Literal["360", "480", "720", "1080"] = "720",
+        start: float = Query(0, ge=0, le=86400),
+        audio: int = Query(0, ge=0, le=99),
+        playback_id: str = Query(..., pattern=r"^[a-zA-Z0-9_-]{8,80}$"),
+    ):
+        import asyncio
+
+        from torrentlinker.media_conversion import PlaybackChoice, inspect
+
+        chosen = item(request, client_id, identifier)
+        path = await asyncio.to_thread(media.resolve, chosen, identifier)
+        facts = await asyncio.to_thread(inspect, path)
+        found = actor(request)
+        key = (found.account, found.viewer, chosen, identifier, playback_id)
+        try:
+            job = conversions.open(key, path, PlaybackChoice(quality, start, audio), facts)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from None
+
+        async def content():
+            try:
+                while data := await asyncio.to_thread(job.read):
+                    yield data
+            finally:
+                job.close()
+
+        return StreamingResponse(
+            content(), media_type="video/mp4", headers={"Cache-Control": "no-store"}
+        )
+
+    @app.delete("/api/media/items/{identifier}/playback/{playback_id}")
+    @needs(*WATCH)
+    def cancel_playback(identifier: str, playback_id: str, request: Request, client_id: str = ""):
+        found = actor(request)
+        chosen = target(request, client_id, identifier)
+        conversions.cancel((found.account, found.viewer, chosen, identifier, playback_id))
+        return {"ok": True}
 
     @app.post("/api/media/items/{identifier}/preview")
     @needs(*WATCH)

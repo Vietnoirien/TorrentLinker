@@ -58,6 +58,9 @@ class PlayerBridge(ViewBridge):
                         raise ValueError("Player source changed. Use the current controls.")
                 action = body.get("action")
                 if action not in {
+                    "quality",
+                    "audio",
+                    "rate",
                     "toggle",
                     "seek",
                     "volume",

@@ -125,6 +125,8 @@ def test_a_hidden_item_is_missing_to_a_member_even_with_a_guessed_id(server):
         browser.get(f"{item}/artwork"),
         browser.get(item),
         browser.get(f"{item}/subtitles/any"),
+        browser.get(f"{item}/playback"),
+        browser.get(f"{item}/playback/stream?playback_id=test-player"),
         browser.post(f"{item}/watched", json={"watched": True}),
         browser.post(f"{item}/forget-progress", json={}),
         browser.post(f"{item}/preview", json={}),

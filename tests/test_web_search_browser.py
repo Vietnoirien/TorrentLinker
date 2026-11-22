@@ -151,6 +151,7 @@ def test_search_page_pills_filters_sort_pages_and_density(tmp_path, monkeypatch)
             panel.locator("#search-facets summary", has_text="Team").click()
             panel.locator("#search-facets .fdrop[open] input").fill("bouba")
             until(lambda: listing()[-1].get("team") == "bouba")
+            expect(panel.locator("#search-status")).not_to_contain_text("Searching")
             # Selecting a row shows the selection bar.
             expect(panel.locator("#search-selection")).to_be_hidden()
             panel.locator("#search-table .sr-row").first.locator("input[type=checkbox]").check()

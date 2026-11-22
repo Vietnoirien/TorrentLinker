@@ -365,6 +365,7 @@ def create_app(
                 app.state.notifications.close()
             assistant.close()
             jobs.close()
+            app.state.media_conversions.close()
             agent_service.media.close()
             agent_service.torrents_workspace.close()
             accounts.close()
@@ -531,7 +532,8 @@ def create_app(
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; "
             "style-src 'self'; frame-src 'self' https://www.youtube-nocookie.com; "
-            "img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+            "media-src 'self' blob:; img-src 'self' data:; frame-ancestors 'none'; "
+            "base-uri 'self'; form-action 'self'"
         )
         if route in {
             "/static/community/view.html",
