@@ -10,7 +10,21 @@ function settingsReleaseScore(form) {
     render();
   };
   const card = element("section", undefined, "settings-card");
-  card.append(element("h3", "ReleaseScore"));
+  const heading = element("header", undefined, "score-section-heading");
+  heading.append(element("h3", "ReleaseScore"));
+  const community = element("details", undefined, "score-community-menu");
+  const summary = element("summary", say("Community", "Communauté"));
+  const communityActions = element("div", undefined, "score-community-actions");
+  communityActions.append(button(say("Share profile","Partager le profil"),()=>communityShareDialog("release-score",{},data.profiles[editing])),button(say("Community profiles","Profils communautaires"),()=>communityBrowseDialog("release-score",async result=>{let name=result.metadata.title.slice(0,100),suffix=1;while(Object.hasOwn(data.profiles,name))name=`${result.metadata.title.slice(0,95)} ${suffix++}`;data.profiles[name]=result.data;selectEditing(name)})));
+  community.append(summary, communityActions);
+  community.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { community.open = false; summary.focus(); }
+  });
+  communityActions.addEventListener("click", (event) => {
+    if (event.target.closest("button")) community.open = false;
+  });
+  heading.append(community);
+  card.append(heading);
   const fields = element("div", undefined, "settings-fields");
   const profile = field(
     fields,
@@ -49,7 +63,6 @@ function settingsReleaseScore(form) {
   const name = field(fields, say("Profile name", "Nom du profil"), {}, "name");
   name.maxLength = 120;
   const actions = element("div", undefined, "settings-actions");
-  actions.append(button(say("Share profile","Partager le profil"),()=>communityShareDialog("release-score",{},data.profiles[editing])),button(say("Community profiles","Profils communautaires"),()=>communityBrowseDialog("release-score",async result=>{let name=result.metadata.title.slice(0,100),suffix=1;while(Object.hasOwn(data.profiles,name))name=`${result.metadata.title.slice(0,95)} ${suffix++}`;data.profiles[name]=result.data;selectEditing(name)})));
   const builtin = Object.hasOwn(snapshot.score_defaults, editing);
   const validName = () => {
     const n = name.value.trim();

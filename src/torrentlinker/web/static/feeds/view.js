@@ -71,11 +71,12 @@ async function loadFeeds() {
   const head = $("feeds-side-head");
   head.replaceChildren(
     element("span", feedText("Subscriptions", "Abonnements"), "muted"),
-    button(feedText("Community rules","Règles communautaires"),()=>communityBrowseDialog("rss",async result=>{for(const rule of result.data.rules){if(rule.include?.length||rule.exclude?.length)throw Error(feedText("Legacy text filters need manual conversion before import.","Les anciens filtres textuels nécessitent une conversion manuelle."));await feedCall("feeds",{subscription:{name:rule.name.slice(0,100),query:rule.query||"",categories:rule.categories||[],preferences:rule.preferences||{},paused:true,mode:"review_only"}})}await navigate("feeds")})),
     aIconButton("＋", feedText("New subscription", "Nouvel abonnement"), () =>
       editFeed(),
     ),
   );
+  const community = $("feeds-community");
+  community.replaceChildren(button(feedText("Community rules","Règles communautaires"),()=>communityBrowseDialog("rss",async result=>{for(const rule of result.data.rules){if(rule.include?.length||rule.exclude?.length)throw Error(feedText("Legacy text filters need manual conversion before import.","Les anciens filtres textuels nécessitent une conversion manuelle."));await feedCall("feeds",{subscription:{name:rule.name.slice(0,100),query:rule.query||"",categories:rule.categories||[],preferences:rule.preferences||{},paused:true,mode:"review_only"}})}await navigate("feeds")})));
   const sidebar = $("feeds-sidebar");
   const row = (name, detail, unread, id) => {
     const b = button(

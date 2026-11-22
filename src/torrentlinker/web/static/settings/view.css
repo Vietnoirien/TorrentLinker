@@ -347,3 +347,11 @@ small,
   fill: #102a2b;
   border-radius: 8px;
 }
+
+.score-section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.score-section-heading h3{margin:0}.score-community-menu{position:relative;flex-shrink:0}
+.score-community-menu summary{cursor:pointer;border:1px solid var(--line);border-radius:7px;padding:8px 12px;font-size:13px;color:var(--muted)}
+.score-community-menu[open] summary{color:var(--ink);border-color:var(--accent)}
+.score-community-actions{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:220px;display:grid;gap:4px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px #0004}
+.score-community-actions button{text-align:left;white-space:normal}
+.score-section-heading~.settings-actions{margin:14px 0 20px;gap:8px}

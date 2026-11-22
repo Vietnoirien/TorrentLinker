@@ -495,3 +495,7 @@ dialog:has(.feed-editor) {
   margin: 6px 0;
   overflow-wrap: anywhere;
 }
+
+.feed-community{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.feed-community>button{width:100%;text-align:left;background:transparent;color:var(--muted);font-size:13px;padding:9px 10px;line-height:1.5}
+.feed-side-head{min-height:38px;gap:12px}.feed-side-head>.muted{white-space:nowrap}

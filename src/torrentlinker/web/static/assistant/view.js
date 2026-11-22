@@ -308,7 +308,15 @@ async function loadAssistant() {
   }, "quiet assistant-chip");
   modeChip.id = "assistant-mode"; modeChip.title = at("Switch the discussion mode", "Changer le mode de la discussion");
   chips.append(model, modeChip);
-  chips.append(button(at("Share prompt", "Partager le prompt"),()=>communityShareDialog("prompt",{}, {prompt:prompt.value})),button(at("Community prompts", "Prompts communautaires"),()=>communityBrowseDialog("prompt",async result=>{prompt.value=result.data.prompt;assistantDrafts.set(renderedConversation,prompt.value);prompt.focus()})));
+  chips.append(communityMenu(at("Community", "Communauté"), [
+    [at("Share prompt", "Partager le prompt"), () => {
+      if (!prompt.value.trim()) throw Error(at("Write a prompt before sharing it.", "Rédigez un prompt avant de le partager."));
+      return communityShareDialog("prompt", {}, {prompt:prompt.value});
+    }],
+    [at("Community prompts", "Prompts communautaires"), () => communityBrowseDialog("prompt", async result => {
+      prompt.value=result.data.prompt;assistantDrafts.set(renderedConversation,prompt.value);prompt.focus();
+    })],
+  ], "assistant-community-menu"));
 
   form.append(field, chips);
   if (!current) {
