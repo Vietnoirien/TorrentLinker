@@ -591,7 +591,7 @@ function jobStatus(row) {
   if (row.waiting_for) text += say(` · position ${row.queue_position} · waiting for ${jobTitle(row.waiting_for)}`, ` · position ${row.queue_position} · attend ${jobTitle(row.waiting_for)}`);
   const p = row.progress || {};
   if (p.done != null && p.total != null) text += ` · ${p.done}/${p.total}`;
-  else if (p.items != null) text += say(` · ${p.items} items`, ` · ${p.items} éléments`);
+  else if (p.items != null) text += say(` · ${p.items} item${p.items === 1 ? "" : "s"}`, ` · ${p.items} élément${p.items > 1 ? "s" : ""}`);
   const phase = p.phase || p.stage;
   const phases = {
     fetching: ["Fetching", "Récupération"], planning: ["Planning", "Calcul du Plan"],
