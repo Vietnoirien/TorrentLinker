@@ -1048,15 +1048,15 @@ async function loadSearchPage() {
 $("search-form").onsubmit = (event) => {
   event.preventDefault();
   clearTimeout(SS.timer);
-  guard(() => runSearch(1));
+  guard(() => runSearch(1), event.submitter);
 };
 $("search-query").oninput = () => renderSort();
 $("search-category").onchange = () => pickCategory($("search-category").value);
 $("search-density-compact").onclick = () => setDensity("compact");
 $("search-density-comfortable").onclick = () => setDensity("comfortable");
 $("search-posters").onclick = () => setPosters(!SS.posters);
-$("search-queue-link").onclick = () =>
-  guard(() => request("navigate", { page: "queue" }));
+$("search-queue-link").onclick = (event) =>
+  guard(() => request("navigate", { page: "queue" }), event.currentTarget);
 $("search-exclusive").onclick = () => {
   SS.exclusive = !SS.exclusive;
   criteriaChanged();
@@ -1080,8 +1080,8 @@ $("search-clear").onclick = () => {
   renderSort();
   loadSearchOptions(() => guard(() => runSearch(1)));
 };
-$("queue-search").onclick = () =>
-  guard(() => searchEnqueue([...state.searchSelected]));
+$("queue-search").onclick = (event) =>
+  guard(() => searchEnqueue([...state.searchSelected]), event.currentTarget);
 $("search-details").onclick = () => {
   SS.rows
     .filter((r) => state.searchSelected.has(r.hash))

@@ -71,7 +71,7 @@ def test_desktop_shared_search_navigation(qtbot, tmp_path, monkeypatch, request)
         qtbot,
         board,
         "document.querySelectorAll('.sr-row').length===2 || document.query"
-        "Selector('#toast')?.textContent.length > 0",
+        "Selector('.tl-toast')?.textContent.length > 0",
     )
     assert js(qtbot, board, "document.querySelectorAll('.sr-row').length===2"), js(
         qtbot, board, "document.body.innerText"

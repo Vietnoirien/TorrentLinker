@@ -122,29 +122,27 @@ async function queueAction(action, body = {}) {
     await loadQueue();
   }
 }
-$("start-queue").onclick = () => guard(() => queueAction("start"));
-$("start-selected-queue").onclick = () =>
+$("start-queue").onclick = (event) => guard(() => queueAction("start"), event.currentTarget);
+$("start-selected-queue").onclick = (event) =>
   guard(() =>
     queueAction("start", {
       keys: selectedQueue()
         .filter((r) => r.status === "queued")
         .map((r) => r.key),
-    }),
-  );
-$("pause-queue").onclick = () => guard(() => queueAction("pause"));
-$("retry-queue").onclick = () =>
-  guard(() => queueAction("retry", { keys: [...state.queueSelected] }));
-$("remove-queue").onclick = () =>
-  guard(() => queueAction("remove", { keys: [...state.queueSelected] }));
-$("clear-sent-queue").onclick = () => guard(() => queueAction("clear-sent"));
-$("back-results").onclick = () =>
-  guard(() => request("navigate", { page: "search" }));
-$("queue-torrents").onclick = () =>
+    }), event.currentTarget);
+$("pause-queue").onclick = (event) => guard(() => queueAction("pause"), event.currentTarget);
+$("retry-queue").onclick = (event) =>
+  guard(() => queueAction("retry", { keys: [...state.queueSelected] }), event.currentTarget);
+$("remove-queue").onclick = (event) =>
+  guard(() => queueAction("remove", { keys: [...state.queueSelected] }), event.currentTarget);
+$("clear-sent-queue").onclick = (event) => guard(() => queueAction("clear-sent"), event.currentTarget);
+$("back-results").onclick = (event) =>
+  guard(() => request("navigate", { page: "search" }), event.currentTarget);
+$("queue-torrents").onclick = (event) =>
   guard(() =>
-    request("torrents", { hashes: selectedQueue().map((r) => r.hash) }),
-  );
-$("subscribe-search").onclick = () =>
-  guard(() => request("subscribe", { query: searchQuery() }));
+    request("torrents", { hashes: selectedQueue().map((r) => r.hash) }), event.currentTarget);
+$("subscribe-search").onclick = (event) =>
+  guard(() => request("subscribe", { query: searchQuery() }), event.currentTarget);
 function openQueueMenu(key, rect) {
   if (!state.queueSelected.has(key)) {
     state.queueSelected.clear();
@@ -447,4 +445,4 @@ window.addEventListener("message", (event) => {
     guard(() => searchEnqueue([event.data.hash]));
 });
 
-$("queue-refresh").onclick = () => guard(loadQueue);
+$("queue-refresh").onclick = (event) => guard(loadQueue, event.currentTarget);

@@ -17,7 +17,9 @@ async function request(action, body = {}) {
     );
   return result;
 }
-async function guard(fn) {
+// An action started by a button keeps that button busy until it ends.
+async function guard(fn, node) {
+  if (node) return TLToast.press(node, fn);
   try {
     return await fn();
   } catch (e) {
@@ -147,17 +149,20 @@ async function load() {
     data.forEach((r) => rowCache.set(r.id, r));
     if (!focus || !rowCache.has(focus)) focus = data[0]?.id || "";
     scenario = "normal";
+    lastError = "";
     render();
     if (result.client_errors.length)
       notify(
         result.client_errors.map((e) => e.name + ": " + e.message).join(" · "),
       );
   } catch (e) {
+    const repeated = lastError === e.message;
     lastError = e.message;
     if (current === generation) {
       if (!data.length) scenario = "error";
       render();
-      notify(lastError);
+      // The 5 s refresh must not bring a dismissed error back every time.
+      if (!repeated) notify(lastError);
     }
   } finally {
     busy = false;

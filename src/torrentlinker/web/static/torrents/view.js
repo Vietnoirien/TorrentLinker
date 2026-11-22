@@ -90,8 +90,8 @@ function stateText(s) {
     other: t("Autre", "Other"),
   }[s];
 }
-function notify(s) {
-  if ($("notice")) $("notice").textContent = s;
+function notify(s, kind = "bad") {
+  TLToast.show(s, kind);
 }
 
 function paint() {
@@ -122,7 +122,7 @@ function paint() {
             )
             .join("")}</div>`
         : ""
-    }<div class="toolbar"><button id="columns">${t("Colonnes", "Columns")}</button><button id="refresh">${t("Actualiser", "Refresh")}</button><button id="tracker-updates">${t("Trackers c411…", "c411 trackers…")}</button><button id="audit-history">${t("Audit c411", "c411 audit")}</button><button id="transfer-history">${t("Transferts", "Transfers")}</button><button id="trackers">${t("Vue par tracker", "Group by tracker")}</button><span class="muted">${t("Actualisation toutes les 5 s · sélection conservée", "Refresh every 5 s · selection preserved")}</span></div><div id="notice" role="status"></div><div class="workspace"><section class="panel">${TLTorrentFilters.controls({ query, filters, language: lang, options: { state: ["seeding", "downloading", "paused", "checking", "error", "other"], category: snapshot.categories, tracker: snapshot.trackers, tag: snapshot.tags } })}${metricControls()}<div class="status"><span>${selected.size} ${t("sélectionné(s)", "selected")}</span><div class="toolbar"><button data-action="resume" ${selected.size ? "" : "disabled"}>${t("Reprendre", "Resume")}</button><button data-action="pause" ${selected.size ? "" : "disabled"}>${t("Suspendre", "Pause")}</button><button id="transfer-selection" ${selected.size ? "" : "disabled"}>${t("Transférer…", "Transfer…")}</button><button id="more-actions" ${selected.size ? "" : "disabled"}>${t("Plus…", "More…")}</button><button data-action="remove" ${selected.size ? "" : "disabled"}>${t("Retirer…", "Remove…")}</button></div></div>${
+    }<div class="toolbar"><button id="columns">${t("Colonnes", "Columns")}</button><button id="refresh">${t("Actualiser", "Refresh")}</button><button id="tracker-updates">${t("Trackers c411…", "c411 trackers…")}</button><button id="audit-history">${t("Audit c411", "c411 audit")}</button><button id="transfer-history">${t("Transferts", "Transfers")}</button><button id="trackers">${t("Vue par tracker", "Group by tracker")}</button><span class="muted">${t("Actualisation toutes les 5 s · sélection conservée", "Refresh every 5 s · selection preserved")}</span></div><div class="workspace"><section class="panel">${TLTorrentFilters.controls({ query, filters, language: lang, options: { state: ["seeding", "downloading", "paused", "checking", "error", "other"], category: snapshot.categories, tracker: snapshot.trackers, tag: snapshot.tags } })}${metricControls()}<div class="status"><span>${selected.size} ${t("sélectionné(s)", "selected")}</span><div class="toolbar"><button data-action="resume" ${selected.size ? "" : "disabled"}>${t("Reprendre", "Resume")}</button><button data-action="pause" ${selected.size ? "" : "disabled"}>${t("Suspendre", "Pause")}</button><button id="transfer-selection" ${selected.size ? "" : "disabled"}>${t("Transférer…", "Transfer…")}</button><button id="more-actions" ${selected.size ? "" : "disabled"}>${t("Plus…", "More…")}</button><button data-action="remove" ${selected.size ? "" : "disabled"}>${t("Retirer…", "Remove…")}</button></div></div>${
       scenario === "normal"
         ? `<div class="table-scroll"><table class="torrent-list"><thead><tr><th><input type="checkbox" id="select-page" aria-label="${t("Sélectionner la page", "Select page")}" ${slice.length && slice.every((r) => selected.has(r.id)) ? "checked" : ""}></th>${sortHeader("name", t("Torrent / état", "Torrent / state"))}${Object.entries(
             cols,
@@ -145,7 +145,7 @@ function paint() {
                   .join("")}</tr>`,
             )
             .join("")}</tbody></table></div>`
-        : `<div class="empty">${{ empty: t("Aucun torrent pour ces filtres.", "No torrents match these filters."), loading: t("Chargement des torrents…", "Loading torrents…"), error: escape(lastError) }[scenario]}${scenario === "error" ? `<p><button id="retry">${t("Réessayer", "Retry")}</button></p>` : ""}</div>`
+        : `<div class="empty">${{ empty: t("Aucun torrent pour ces filtres.", "No torrents match these filters."), loading: t("Chargement des torrents…", "Loading torrents…"), error: escape(TLToast.translate(lastError)) }[scenario]}${scenario === "error" ? `<p><button id="retry">${t("Réessayer", "Retry")}</button></p>` : ""}</div>`
     }<div class="status"><small>${snapshot.total.toLocaleString()} torrents · ${t("100 lignes par page", "100 rows per page")}</small><div><button id="prev" ${page ? "" : "disabled"}>←</button> ${page + 1} / ${Math.max(1, Math.ceil(snapshot.total / 100))} <button id="next" ${(page + 1) * 100 >= snapshot.total ? "disabled" : ""}>→</button></div></div></section><section class="panel inspector" id="inspector"></section></div>`;
   bind();
   inspect();
@@ -198,10 +198,9 @@ function inspect() {
         : `<p class="muted">${t("Hors c411 : Note, poids et Zen non applicables.", "Non-c411: Note, weight and Zen are not applicable.")}</p>`) +
       `<p class="muted">${t("Client observé", "Client observed")}: ${r.raw.observed_at ? escape(new Date(r.raw.observed_at * 1000).toLocaleString(lang)) : "—"}</p>` +
       `<p class="muted">${escape(r.raw.folder)}</p><button id="focus-toggle">${r.state === "paused" ? t("Reprendre", "Resume") : t("Suspendre", "Pause")}</button>`;
-    $("focus-toggle").onclick = () =>
+    $("focus-toggle").onclick = (event) =>
       guard(() =>
-        confirmAction(r.state === "paused" ? "resume" : "pause", [r]),
-      );
+        confirmAction(r.state === "paused" ? "resume" : "pause", [r]), event.currentTarget);
   } else if (tab === "trackers")
     body.textContent =
       r.raw.trackers.filter(Boolean).join(" · ") ||
@@ -297,9 +296,9 @@ function editAction(action) {
   };
 }
 function bind() {
-  $("refresh").onclick = () => guard(load);
-  $("tracker-updates").onclick = () => guard(openTrackerUpdates);
-  $("audit-history").onclick = () => guard(openAudit);
+  $("refresh").onclick = (event) => guard(load, event.currentTarget);
+  $("tracker-updates").onclick = (event) => guard(openTrackerUpdates, event.currentTarget);
+  $("audit-history").onclick = (event) => guard(openAudit, event.currentTarget);
   document.querySelectorAll("[data-sort]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -339,8 +338,8 @@ function bind() {
     guard(load);
   };
   $("more-actions").onclick = moreActions;
-  $("transfer-selection").onclick = () => guard(openTransfer);
-  $("transfer-history").onclick = () => guard(transferHistory);
+  $("transfer-selection").onclick = (event) => guard(openTransfer, event.currentTarget);
+  $("transfer-history").onclick = (event) => guard(transferHistory, event.currentTarget);
   $("query").oninput = (e) => {
     query = e.target.value;
     page = 0;
@@ -427,7 +426,7 @@ function bind() {
   document
     .querySelectorAll("[data-action]")
     .forEach(
-      (b) => (b.onclick = () => guard(() => confirmAction(b.dataset.action))),
+      (b) => (b.onclick = (event) => guard(() => confirmAction(b.dataset.action), event.currentTarget)),
     );
 }
 async function confirmAction(
@@ -448,7 +447,7 @@ async function confirmAction(
   d.innerHTML = `<h2>${actionLabel(action)}</h2><p>${review.rows.length} torrents</p><div style="max-height:200px;overflow:auto">${review.rows.map((r) => `<p>${escape(r.name)} · ${escape(r.client_name)}<br><small>${escape(r.folder)}</small>${r.files ? `<ul>${r.files.map((f) => `<li>${escape(f.name)} · ${formatBytes(f.size)}</li>`).join("")}</ul>` : ""}</p>`).join("")}</div><p>${action === "delete" ? t("Les fichiers seront définitivement supprimés. D’autres torrents peuvent les utiliser.", "Files will be permanently deleted. Other torrents may use them.") : action === "remove" ? t("Les fichiers seront conservés.", "Files will be kept.") : t("Appliquer aux torrents affichés ci-dessus ?", "Apply to the torrents listed above?")}</p>${action === "remove" ? `<label><input type="checkbox" id="delete-files">${t("Supprimer aussi les fichiers", "Also delete files")}</label>` : ""}${reviewParameters(extra)}<p><button id="cancel">${t("Annuler", "Cancel")}</button> <button id="confirm" class="primary">${t("Confirmer", "Confirm")}</button></p>`;
   d.showModal();
   $("cancel").onclick = () => d.close();
-  $("confirm").onclick = () =>
+  $("confirm").onclick = (event) =>
     guard(async () => {
       if (action === "remove" && $("delete-files").checked) {
         d.close();
@@ -470,12 +469,13 @@ async function confirmAction(
                 `${chosen.find((c) => c.raw.client_id === r.client_id && c.raw.hash === r.hash)?.name || r.hash}: ${{ failed: t("Échec", "Failed"), missing: t("Torrent absent", "Torrent no longer present"), verifying: t("Ignoré : vérification en cours", "Skipped: verification in progress"), sent: t("Envoyé", "Sent") }[r.outcome] || r.outcome}${r.detail ? " · " + r.detail : ""}`,
             )
             .join(" · "),
+          "ok",
         );
       } catch (error) {
         d.close();
         throw error;
       }
-    });
+    }, event.currentTarget);
   $("cancel").focus();
 }
 function reviewParameters(extra) {

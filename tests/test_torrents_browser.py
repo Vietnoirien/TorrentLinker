@@ -236,7 +236,7 @@ window.dispatchEvent(new MessageEvent('message', {
             expect(panel.locator("body")).to_have_attribute("data-audit-request-finished", "true")
             expect(panel.locator("#dialog")).not_to_be_visible()
             page.unroute("**/api/torrents/workspace", delay_audit_report)
-            expect(page.locator("#toast")).not_to_contain_text("is not defined")
+            expect(page.locator(".tl-toast").filter(has_text="is not defined")).to_have_count(0)
             assert not errors, errors
             browser.close()
     finally:

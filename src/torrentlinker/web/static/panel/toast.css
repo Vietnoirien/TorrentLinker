@@ -8,6 +8,14 @@
   gap: 8px;
   max-width: min(420px, calc(100vw - 32px));
   pointer-events: none;
+  /* a popover in the top layer: drop the browser's box */
+  inset: auto 16px 16px auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  overflow: visible;
 }
 .tl-toast {
   display: flex;
@@ -53,4 +61,7 @@
     left: 16px;
     max-width: none;
   }
+}
+.tl-mirrored:empty {
+  display: none;
 }

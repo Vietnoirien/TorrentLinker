@@ -804,17 +804,6 @@ select:focus-visible {
   gap: 8px;
   flex-wrap: wrap;
 }
-#toast {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  max-width: 440px;
-  background: var(--raised);
-  padding: 14px 20px;
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  z-index: 60;
-}
 .chip[aria-pressed="true"] {
   background: var(--tint);
   border-color: var(--accent);

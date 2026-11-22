@@ -190,8 +190,8 @@ async function openTrackerUpdates() {
     }
   };
   changed();
-  $("tracker-preview").onclick = () => guard(() => run(false));
-  $("tracker-apply").onclick = () => guard(() => run(true));
+  $("tracker-preview").onclick = (event) => guard(() => run(false), event.currentTarget);
+  $("tracker-apply").onclick = (event) => guard(() => run(true), event.currentTarget);
 }
 window.addEventListener("DOMContentLoaded", () => {
   $("dialog").addEventListener("close", () => trackerDialogGeneration++);

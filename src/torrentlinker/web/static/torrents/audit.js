@@ -50,9 +50,9 @@ async function openAudit() {
     d.close();
   };
   d.querySelectorAll("[data-audit]").forEach(
-    (b) => (b.onclick = () => guard(() => showAudit(b.dataset.audit))),
+    (b) => (b.onclick = (event) => guard(() => showAudit(b.dataset.audit), event.currentTarget)),
   );
-  $("audit-start").onclick = () =>
+  $("audit-start").onclick = (event) =>
     guard(async () => {
       $("audit-start").disabled = true;
       try {
@@ -64,7 +64,7 @@ async function openAudit() {
       } finally {
         if ($("audit-start")) $("audit-start").disabled = false;
       }
-    });
+    }, event.currentTarget);
 }
 async function showAudit(id, offset = 0) {
   const token = ++auditToken,
@@ -103,20 +103,20 @@ async function showAudit(id, offset = 0) {
     auditToken++;
     d.close();
   };
-  $("audit-back").onclick = () => guard(openAudit);
-  $("audit-refresh").onclick = () => guard(() => showAudit(id, offset));
-  $("audit-prev").onclick = () =>
-    guard(() => showAudit(id, Math.max(0, offset - 100)));
-  $("audit-next").onclick = () => guard(() => showAudit(id, offset + 100));
+  $("audit-back").onclick = (event) => guard(openAudit, event.currentTarget);
+  $("audit-refresh").onclick = (event) => guard(() => showAudit(id, offset), event.currentTarget);
+  $("audit-prev").onclick = (event) =>
+    guard(() => showAudit(id, Math.max(0, offset - 100)), event.currentTarget);
+  $("audit-next").onclick = (event) => guard(() => showAudit(id, offset + 100), event.currentTarget);
   if ($("audit-stop"))
-    $("audit-stop").onclick = () =>
+    $("audit-stop").onclick = (event) =>
       guard(async () => {
         await request("audit-stop", { id });
         if (token === auditToken && d.open) await showAudit(id, offset);
-      });
+      }, event.currentTarget);
   d.querySelectorAll("[data-export]").forEach(
     (button) =>
-      (button.onclick = () =>
+      (button.onclick = (event) =>
         guard(async () => {
           if (environment.mode === "desktop") {
             await request("audit-save-export", {
@@ -142,7 +142,7 @@ async function showAudit(id, offset = 0) {
           link.download = result.filename;
           link.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
-        })),
+        }, event.currentTarget)),
   );
   if (report.status === "running")
     setTimeout(() => {
