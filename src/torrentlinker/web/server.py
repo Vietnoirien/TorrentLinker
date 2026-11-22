@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import logging
 import os
 import sys
 from collections.abc import Mapping
@@ -133,6 +134,8 @@ def main() -> int:
             )
         except (ValueError, OSError) as error:
             parser.error(f"Cannot initialize server: {error}")
+        # httpx logs each request URL at INFO, and Torznab URLs carry the API key.
+        logging.getLogger("httpx").setLevel(logging.WARNING)
         uvicorn.run(
             app,
             host=args.host,
