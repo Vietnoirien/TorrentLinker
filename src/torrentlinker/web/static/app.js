@@ -230,7 +230,6 @@ async function guard(fn, node) {
     else await fn();
   } catch (error) {
     toast(error.message, "bad");
-    if ((error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) && typeof reportBrowserCrash === "function") reportBrowserCrash(error);
   }
 }
 async function api(path, body, method) {
@@ -256,7 +255,6 @@ async function api(path, body, method) {
       $("workspace").hidden = true;
       $("login-screen").hidden = false;
     }
-    if (result.report && typeof offerCrashReport === "function") offerCrashReport(result.report);
     // An `action` tells the page what it may offer, such as fixing a client option.
     throw Object.assign(Error(result.detail || "Request failed"), {action: result.action});
   }
@@ -668,7 +666,6 @@ async function pollJobsOnce() {
       } else {
         if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
         if (pending.failed && (pending.body.client_id === state.clientId || ["configure-download-folder", "catalogue"].includes(pending.body.kind))) await pending.failed(full.error, full.result);
-        if (full.report) offerCrashReport(full.report);
         toast(full.error || say("Job cancelled", "Tâche annulée"), "bad");
       }
     }
@@ -715,7 +712,6 @@ function renderJobs(rows) {
               element("p", jobStatus(r)),
               element("pre", full.error || jobFacts(full.result) || say("Nothing more to report.", "Rien d’autre à signaler.")),
             );
-            if (full.report) $("dialog-content").append(button(say("Report the problem", "Signaler le problème"), () => offerCrashReport(full.report)));
             $("dialog").showModal();
           }),
         );

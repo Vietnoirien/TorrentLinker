@@ -75,20 +75,6 @@ def test_multitrack_studio_autosave_curve_and_render(tmp_path):
                 expect(page.locator(".preroll-playback")).to_contain_text("2 / 2")
                 page.get_by_role("button", name="Skip all · start film", exact=True).click()
                 expect(page.locator(".preroll-playback")).to_have_count(0)
-                page.evaluate(
-                    "reportBrowserCrash(new Error('private /home/person/file token secret'))"
-                )
-                expect(page.locator("#crash-report-preview")).to_be_visible()
-                report = page.get_by_label("Sanitized report").input_value()
-                assert "private /home" not in report and "secret" not in report
-                expect(
-                    page.get_by_role("link", name="Open GitHub draft", exact=True)
-                ).to_have_attribute(
-                    "href",
-                    __import__("re").compile(
-                        r"^https://github.com/Vietnoirien/TorrentLinker/issues/new\?"
-                    ),
-                )
                 assert not errors
                 browser.close()
         finally:

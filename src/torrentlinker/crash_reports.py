@@ -63,19 +63,3 @@ def exception_draft(error: BaseException) -> dict[str, str]:
             label = "[private module]"
         frames.append(f"{label}:{frame.lineno}")
     return _draft(frames, "application")
-
-
-def browser_draft(stack: str) -> dict[str, str]:
-    frames = []
-    static = ROOT / "web" / "static"
-    for line in stack[:20000].splitlines():
-        match = re.search(r"/static/([a-zA-Z0-9_/.-]+\.js):(\d{1,7}):\d{1,7}", line)
-        if not match:
-            continue
-        name, number = match.groups()
-        path = (static / name).resolve()
-        if not path.is_relative_to(static) or not path.is_file():
-            continue
-        label = "[private module]" if "c411" in name.lower() else name
-        frames.append(f"web/static/{label}:{number}")
-    return _draft(frames, "browser")

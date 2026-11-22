@@ -366,19 +366,7 @@ def create_app(
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
     def crash_response(request: Request, error: Exception) -> dict[str, Any]:
-        from torrentlinker.crash_reports import exception_draft, unexpected
-
-        actor = getattr(request.state, "actor", None)
-        body: dict[str, Any] = {"detail": error_message(error), "kind": type(error).__name__}
-        if unexpected(error) and actor is not None and actor.owner:
-            body["report"] = exception_draft(error)
-        return body
-
-    @app.post("/api/crash-report")
-    def browser_crash(body: dict):
-        from torrentlinker.crash_reports import browser_draft
-
-        return browser_draft(str(body.get("stack", ""))[:20000])
+        return {"detail": error_message(error), "kind": type(error).__name__}
 
     from torrentlinker.agent.access import Access
     from torrentlinker.agent.routes import owner_routes
