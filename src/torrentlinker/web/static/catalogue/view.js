@@ -56,12 +56,12 @@ function catalogueRender(){
     if(tile&&env.gain.added>0){tile.querySelector(".gain").textContent="+"+number(env.gain.added);gainTimer=setTimeout(()=>{tile.querySelector(".gain").textContent=""},1500)}
   }
   $("catalogue-retry").textContent=say("Retry","Réessayer");
-  if(env.error){$("catalogue-error").textContent=env.error;$("catalogue-error").hidden=false}
+  if(env.error){$("catalogue-error").textContent=TLToast.translate(env.error);$("catalogue-error").hidden=false}
 }
 async function act(action,body={}){
   if(pending)return;pending=true;retryAction=()=>act(action,body);
   $("catalogue-error").hidden=true;$("catalogue-retry").hidden=true;catalogueRender();
-  try{await catalogueRequest(action,body)}catch(error){$("catalogue-error").textContent=error.message;$("catalogue-error").hidden=false;$("catalogue-retry").hidden=false}
+  try{await catalogueRequest(action,body);const done={fetch:["Catalogue fetch started.","Récupération du Catalogue lancée."],pause:["Pause requested.","Pause demandée."],"plan-now":["Plan started.","Plan lancé."]}[action];if(done)TLToast.show(say(...done),"ok")}catch(error){TLToast.error(error);$("catalogue-retry").hidden=false}
   finally{pending=false;catalogueRender()}
 }
 function catalogueInit(){

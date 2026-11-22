@@ -53,7 +53,7 @@ function renderRequests() {
   members.value = requestReview.member; members.onchange = () => { requestReview.member = members.value; renderRequests(); };
   const history = requestNode("button", requestReview.history ? say("Pending", "En attente") : say("History", "Historique"));
   history.onclick = () => {requestReview.history = !requestReview.history; renderRequests();};
-  const refresh = requestNode("button", say("Refresh", "Actualiser")); refresh.onclick = () => guard(loadRequests);
+  const refresh = requestNode("button", say("Refresh", "Actualiser")); refresh.onclick = (event) => guard(loadRequests, event.currentTarget);
   controls.append(search, members, history, refresh); root.append(controls);
   const layout = requestNode("div", undefined, "request-review-layout"), list = requestNode("div", undefined, "request-list"), inspector = requestNode("section", undefined, "card request-inspector");
   const rows = requestReview.rows.filter(row => ["pending", "send_failed", "accepted"].includes(row.state) !== requestReview.history && (!requestReview.member || row.account === requestReview.member) && `${row.title} ${row.release}`.toLocaleLowerCase().includes(requestReview.query.toLocaleLowerCase()));
@@ -89,12 +89,12 @@ function requestInspector(panel, row) {
   };
   warn(row.size || 0); panel.append(capWarning);
   let releases = [];
-  find.onclick = () => guard(async () => {
+  find.onclick = (event) => guard(async () => {
     releases = (await api(`requests/releases?q=${encodeURIComponent(query.value)}`)).releases;
     choices.replaceChildren(new Option(say("Choose a release", "Choisir une release"), ""));
     for (const release of releases) choices.append(new Option(`${release.name} · ${requestBytes(release.size)} · ReleaseScore ${release.score ?? "?"}`, release.hash));
     choices.value = row.infohash;
-  });
+  }, event.currentTarget);
   choices.onchange = () => {const selected = releases.find(r => r.hash === choices.value); margin.replaceChildren(requestMargin(selected?.size || 0, row.size || 0)); warn(selected?.size || 0);};
   if (row.state === "pending") panel.append(query, find, choices);
   panel.append(margin);

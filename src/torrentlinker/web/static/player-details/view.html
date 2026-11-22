@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Now playing</title>
-    <link rel="stylesheet" href="../panel/base.css" />
+    <link rel="stylesheet" href="../panel/base.css" /><link rel="stylesheet" href="../panel/toast.css" />
     <link rel="stylesheet" href="view.css" />
-    <script defer src="../panel/i18n.js"></script>
+    <script defer src="../panel/i18n.js"></script><script defer src="../panel/toast.js"></script>
     <script defer src="../panel/transport.js"></script>
     <script defer src="../panel/media-flags.js"></script>
     <script defer src="view.js"></script>
@@ -39,7 +39,7 @@
               <h2 id="subtitle-label"></h2>
               <div id="subtitles" class="chips"></div>
             </section>
-            <p id="error" role="alert" hidden></p>
+            <p id="error" role="alert" data-toast="bad" hidden></p>
           </div>
         </div>
       </div>

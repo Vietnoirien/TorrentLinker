@@ -36,10 +36,10 @@ function whoDraw() {
     const card = element("div", undefined, "card");
     const open = element("button", say("Open Media", "Ouvrir Médias"), "primary");
     open.type = "button";
-    open.onclick = () => guard(whoOpen);
+    open.onclick = (event) => guard(whoOpen, event.currentTarget);
     const change = element("button", say("Change profile", "Changer de profil"));
     change.type = "button";
-    change.onclick = () => guard(whoWatches);
+    change.onclick = (event) => guard(whoWatches, event.currentTarget);
     card.append(element("p", say(`Media opens with ${profile.name || say("your", "votre")} progress and playlists.`, `Médias s’ouvre avec la reprise de lecture et les listes de ${profile.name || say("vous", "vous")}.`)), open, change);
     root.append(card);
     open.focus();
@@ -57,14 +57,14 @@ function whoDraw() {
     tile.dataset.index = index;
     tile.append(whoFace(profile, index), element("strong", profile.name || say("Owner", "Propriétaire")), element("span", profile.locked ? say("🔒 PIN", "🔒 Code") : " ", "who-lock"));
     tile.setAttribute("aria-label", `${profile.name || say("Owner", "Propriétaire")}${profile.locked ? say(", PIN needed", ", code demandé") : ""}`);
-    tile.onclick = () => guard(() => profile.locked ? whoPin(profile, index) : whoChoose(profile));
+    tile.onclick = (event) => guard(() => profile.locked ? whoPin(profile, index) : whoChoose(profile), event.currentTarget);
     tile.onfocus = () => { who.focus = index; };
     tiles.append(tile);
   });
   root.append(tiles);
   const out = element("button", say("Sign out", "Se déconnecter"), "linkish");
   out.type = "button";
-  out.onclick = () => guard(async () => { await api("logout", {}); location.reload(); });
+  out.onclick = (event) => guard(async () => { await api("logout", {}); location.reload(); }, event.currentTarget);
   root.append(out);
   tiles.children[who.focus]?.focus();
 }

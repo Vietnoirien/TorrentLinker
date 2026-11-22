@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Plan</title>
-    <link rel="stylesheet" href="../panel/base.css" />
+    <link rel="stylesheet" href="../panel/base.css" /><link rel="stylesheet" href="../panel/toast.css" />
     <link rel="stylesheet" href="view.css" />
     <link rel="stylesheet" href="../panel/torrent-list.css" />
-    <script defer src="../panel/i18n.js"></script>
+    <script defer src="../panel/i18n.js"></script><script defer src="../panel/toast.js"></script>
     <script defer src="../panel/transport.js"></script>
     <script defer src="common.js"></script>
     <script defer src="transport.js"></script>
@@ -352,7 +352,7 @@
         uses another connection.
       </p>
     </details>
-    <div id="plan-error" role="alert" hidden></div>
+    <div id="plan-error" role="alert" data-toast="bad" hidden></div>
     <dialog id="dialog">
       <form method="dialog">
         <button class="close" aria-label="Close">×</button>

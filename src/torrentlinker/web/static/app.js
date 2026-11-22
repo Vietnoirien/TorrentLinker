@@ -215,20 +215,20 @@ function element(tag, text, cls) {
 function button(text, callback, cls) {
   const e = element("button", text, cls);
   e.type = "button";
-  e.onclick = () => guard(callback);
+  e.onclick = () => guard(callback, e);
   return e;
 }
-function toast(text) {
-  $("toast").textContent = text;
-  $("toast").hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => ($("toast").hidden = true), 7000);
+// One toast for the whole app (panel/toast.js): a result fades, an error stays until closed.
+function toast(text, kind = "ok") {
+  TLToast.show(text, kind);
 }
-async function guard(fn) {
+// An action started by a button keeps that button busy until it ends.
+async function guard(fn, node) {
   try {
-    await fn();
+    if (node) await TLToast.press(node, fn);
+    else await fn();
   } catch (error) {
-    toast(error.message);
+    toast(error.message, "bad");
     if ((error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) && typeof reportBrowserCrash === "function") reportBrowserCrash(error);
   }
 }
@@ -595,7 +595,7 @@ async function refreshJobPage() {
   if (state.view === "zen") await Promise.all([loadZenSeeding(), loadCatalogue(), loadZenPlan()]);
 }
 $("work-status").onclick = () => guard(() => navigate("jobs"));
-$("jobs-refresh").onclick = () => guard(loadJobs);
+$("jobs-refresh").onclick = (event) => guard(loadJobs, event.currentTarget);
 async function pollJobs() {
   if (pollingJobs) return;
   pollingJobs = true;
@@ -621,12 +621,12 @@ async function pollJobsOnce() {
       if (["completed", "partial"].includes(full.status)) {
         if (pending.done && (pending.body.client_id === state.clientId || ["enqueue", "configure-download-folder", "catalogue"].includes(pending.body.kind))) await pending.done(full.result);
         if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
-        if (full.status === "partial") toast(say("Scan incomplete. Some paths could not be read; previous items were kept. See job details.", "Analyse incomplète. Certains chemins sont inaccessibles ; les éléments précédents ont été conservés. Consultez les détails de la tâche."));
+        if (full.status === "partial") toast(say("Scan incomplete. Some paths could not be read; previous items were kept. See job details.", "Analyse incomplète. Certains chemins sont inaccessibles ; les éléments précédents ont été conservés. Consultez les détails de la tâche."), "bad");
       } else {
         if (pending.body.kind === "refresh" && pending.body.client_id === state.clientId && state.view === "zen") await loadZenSeeding();
         if (pending.failed && (pending.body.client_id === state.clientId || ["configure-download-folder", "catalogue"].includes(pending.body.kind))) await pending.failed(full.error, full.result);
         if (full.report) offerCrashReport(full.report);
-        toast(full.error || say("Job cancelled", "Tâche annulée"));
+        toast(full.error || say("Job cancelled", "Tâche annulée"), "bad");
       }
     }
   }
@@ -865,7 +865,7 @@ document.addEventListener("DOMContentLoaded", () => guard(async () => {
   try {
     await enter();
   } catch (error) {
-    if (!error.message.includes("Sign in")) toast(error.message);
+    if (!error.message.includes("Sign in")) toast(error.message, "bad");
   }
 }));
 

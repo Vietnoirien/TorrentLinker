@@ -4,9 +4,10 @@ const state = {view:"media", clientId:"default", setup:{}};
 let language="en", panelRequest, environment={}, environmentVersion=0, loadedEnvironment="", pendingEnvironment="";
 const say=(en,fr)=>language==="fr"?fr:en;
 function element(tag,text,cls){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node}
-function button(text,callback,cls){const node=element("button",text,cls);node.type="button";node.onclick=()=>guard(callback);return node}
-function toast(text){$("toast").textContent=text;$("toast").hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$("toast").hidden=true,7000)}
-async function guard(fn){try{return await fn()}catch(error){toast(error.message)}}
+function button(text,callback,cls){const node=element("button",text,cls);node.type="button";node.onclick=()=>guard(callback,node);return node}
+const toast=(text,kind="ok")=>TLToast.show(text,kind);
+// An action started by a button keeps that button busy until it ends.
+async function guard(fn,node){if(node)return TLToast.press(node,fn);try{return await fn()}catch(error){TLToast.error(error)}}
 const api=(path,body,method)=>panelRequest(path,{body,method:method||(body===undefined?"GET":"POST")});
 const host=(action,values={})=>panelRequest("host",{action,values});
 const navigate=()=>host("settings");

@@ -270,7 +270,7 @@ def test_a_member_has_medias_without_the_owners_tools(tmp_path):
                 expect(frame.locator("#media-toolbar-chat")).to_be_hidden()
                 expect(frame.locator("#media-client")).to_be_hidden()
                 other.wait_for_timeout(2500)  # the jobs poll would have run by now
-                expect(other.locator("#toast")).to_be_hidden()
+                expect(other.locator(".tl-toast")).to_be_hidden()
                 assert not errors
                 browser.close()
         finally:

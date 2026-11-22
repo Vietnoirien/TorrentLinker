@@ -6,10 +6,12 @@
     <title>TorrentLinker {{ app_version }}</title>
     <link rel="icon" href="static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="static/panel/base.css" />
+    <link rel="stylesheet" href="static/panel/toast.css" />
     <link rel="stylesheet" href="static/app.css" />
     <link rel="stylesheet" href="static/media.css" />
     <link rel="stylesheet" href="static/library.css" />
     <link rel="stylesheet" href="static/reseed.css" />
+    <script src="static/panel/toast.js" defer></script>
     <script src="static/app.js" defer></script>
     <script src="static/shell_host.js" defer></script>
     <script src="static/who.js" defer></script>
@@ -149,7 +151,6 @@
       </main>
       <aside id="media-chat-panel" aria-label="Media Assistant" hidden><div id="media-chat-resize" role="separator" aria-orientation="vertical" tabindex="0"></div><div id="media-chat-content"></div></aside>
     </div>
-    <div id="toast" role="alert" hidden></div>
     <dialog id="dialog">
       <form method="dialog">
         <button class="close" aria-label="Close">×</button>

@@ -71,7 +71,7 @@ $("media-cancel-scan").onclick=()=>guard(refreshOrCancel);
 setInterval(()=>{if(!media.scan)return;guard(async()=>{
   const job=await api(`jobs/${encodeURIComponent(media.scan)}`);
   if(["queued","running"].includes(job.status))return;
-  media.scan="";$("media-toolbar-refresh").setAttribute("aria-pressed","false");await loadMedia();if(job.error)toast(job.error);
+  media.scan="";$("media-toolbar-refresh").setAttribute("aria-pressed","false");await loadMedia();if(job.error)toast(job.error,"bad");
 })},1000);
 $("media-details").addEventListener("click",event=>{if(event.target!==event.currentTarget)return;const box=event.target.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)event.target.close()});
 document.addEventListener("keydown",event=>{

@@ -52,7 +52,7 @@ async function documentationApplyEnvironment(env){
       navigationRevision=env.navigation_revision;
       await openGuide(env.guide,env.fragment||"");
     }else if(!current() && !pageVersion && guides.length)await openGuide(guides[0].path);
-  }catch(error){retry=()=>documentationApplyEnvironment(documentationEnvironment);status(say("Guides unavailable. ","Guides indisponibles. ")+error.message,true)}
+  }catch(error){retry=()=>documentationApplyEnvironment(documentationEnvironment);status(say("Guides unavailable. ","Guides indisponibles. ")+TLToast.translate(error.message),true)}
 }
 async function imageSource(image,version){
   try{
@@ -89,7 +89,7 @@ async function openGuide(path,fragment="",targetIndex=null){
     if(version!==pageVersion)return;
     if(targetIndex!==null)window.scrollTo(0,current().scroll);
     else if(fragment){let anchor=fragment;try{anchor=decodeURIComponent(fragment)}catch{}document.getElementById(anchor)?.scrollIntoView()}
-  }catch(error){if(version===pageVersion)status(say("Guide unavailable. ","Guide indisponible. ")+error.message,true)}
+  }catch(error){if(version===pageVersion)status(say("Guide unavailable. ","Guide indisponible. ")+TLToast.translate(error.message),true)}
 }
 function documentationInit(){
   $("guide-filter").oninput=filterGuides;
@@ -100,13 +100,13 @@ function documentationInit(){
     const language=$("guide-language").value,index=Math.max(0,guides.findIndex(g=>g.path===current()?.path));
     const version=++pageVersion;
     try{if(await loadIndex(language,version)&&version===pageVersion)await openGuide(guides[index]?.path||guides[0].path)}
-    catch(error){if(version===pageVersion){retry=()=>$("guide-language").onchange();status(error.message,true)}}
+    catch(error){if(version===pageVersion){retry=()=>$("guide-language").onchange();status(TLToast.translate(error.message),true)}}
   };
   document.addEventListener("click",event=>{
     const link=event.target.closest("a");if(!link)return;
     if(link.dataset.guide){event.preventDefault();openGuide(link.dataset.guide,link.hash.slice(1))}
     else if(documentationEnvironment.mode==="desktop"){
-      event.preventDefault();documentationRequest("open-link",{url:link.href}).catch(error=>status(error.message));
+      event.preventDefault();documentationRequest("open-link",{url:link.href}).catch(error=>TLToast.error(error));
     }
   });
   labels();

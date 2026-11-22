@@ -876,10 +876,10 @@ function planInit() {
     state.planOffset += 100;
     renderPlan();
   };
-  $("plan-send").onclick = () => guard(reviewPlan);
-  $("plan-now").onclick = () => guard(() => planRequest("stop-fetch"));
-  $("plan-stop").onclick = () => guard(() => planRequest("stop-send"));
-  $("queue-plan").onclick = () =>
+  $("plan-send").onclick = (event) => guard(reviewPlan, event.currentTarget);
+  $("plan-now").onclick = (event) => guard(() => planRequest("stop-fetch"), event.currentTarget);
+  $("plan-stop").onclick = (event) => guard(() => planRequest("stop-send"), event.currentTarget);
+  $("queue-plan").onclick = (event) =>
     guard(async () => {
       await planRequest("queue", {
         plan_id: state.planId,
@@ -891,8 +891,8 @@ function planInit() {
         "Selected downloads added to the queue.",
         "Téléchargements sélectionnés ajoutés à la file.",
       );
-    });
-  $("plan-folders").onclick = () => guard(() => folderDialog());
+    }, event.currentTarget);
+  $("plan-folders").onclick = (event) => guard(() => folderDialog(), event.currentTarget);
   $("plan-profile-edit").onclick = () => {
     $("plan-preferences").open = true;
     $("plan-preferences").scrollIntoView({ block: "nearest" });
@@ -920,12 +920,11 @@ function planInit() {
       invalidatePlan();
     });
   };
-  $("plan-speed-save").onclick = () =>
+  $("plan-speed-save").onclick = (event) =>
     guard(() =>
       planRequest("preferences", {
         download_speed: (Number($("plan-speed").value) * 1e6) / 8,
-      }),
-    );
-  $("plan-speed-test").onclick = () => guard(() => planRequest("speed-test"));
+      }), event.currentTarget);
+  $("plan-speed-test").onclick = (event) => guard(() => planRequest("speed-test"), event.currentTarget);
   translate();
 }

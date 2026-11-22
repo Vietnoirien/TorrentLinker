@@ -67,3 +67,46 @@ def test_unconfigured_errors_are_alerts_in_the_users_language(tmp_path, locale, 
     finally:
         server.should_exit = True
         thread.join(5)
+
+
+def test_buttons_are_busy_while_they_run_and_errors_stay_until_closed(tmp_path):
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.shell_support import shell_navigate
+
+    server, thread, base = serve(tmp_path)
+    held = []
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(locale="fr-FR")
+            page.goto(base + "/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "search")
+            panel = page.frame_locator("#search-frame")
+            holding = [True]
+            page.route(
+                "**/api/search/workspace/**",
+                lambda route: held.append(route) if holding[0] else route.continue_(),
+            )
+            panel.locator("#search-query").fill("film")
+            button = panel.locator("#search-form .primary")
+            button.click()
+            expect(button).to_be_disabled()
+            expect(button).to_have_attribute("aria-busy", "true")
+            expect(button).to_have_text("En cours…")
+            holding[0] = False
+            for route in held:
+                route.continue_()
+            expect(button).to_be_enabled()
+            toast = panel.locator(".tl-toast.bad")
+            expect(toast).to_be_visible()
+            page.wait_for_timeout(4500)
+            expect(toast).to_be_visible()  # an error stays until it is closed
+            toast.get_by_role("button", name="Fermer").click()
+            expect(toast).to_have_count(0)
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(5)

@@ -32,7 +32,7 @@ function mediaPositionCaptions() {
 }
 const mediaURL = (id, suffix = "stream") => `api/media/items/${encodeURIComponent(id)}/${suffix}?${new URLSearchParams({client_id: media.playerClient || mediaClient()})}`;
 const mediaPlayer = () => $("media-audio").hidden ? $("media-video") : $("media-audio");
-function mediaStatus(text) { if (text) toast(text); }
+function mediaStatus(text, kind = "ok") { if (text) toast(text, kind); }
 function mediaSetLayout(value) {
   media.layout = mediaLayoutValue(value);
   try { localStorage.setItem("tl-media-layout", media.layout); } catch {}
@@ -140,7 +140,7 @@ function mediaSelectTrack(command) {
     } catch (_) { error = "The browser could not switch that track."; }
   }
   if (command.sequence) media.trackResult = {sequence: command.sequence, applied: !error, error};
-  if (error) mediaStatus(error);
+  if (error) mediaStatus(error, "bad");
 }
 function mediaClosePlayerMenu() { mediaPlayerMenu(false); }
 function mediaOpenPlayerMenu() { mediaPlayerMenu(true); }
@@ -308,7 +308,7 @@ async function mediaCommands(commands) {
         await mediaLoad(request.queue[request.index], command.position ?? null, !!command.start_paused, null, request);
       } else if ((command.media_id || command.source_token) && !mediaSourceMatches(command)) {
         const error = "The playback source changed. The prepared player was not resumed.";
-        media.trackResult = {sequence: command.sequence, applied: false, error}; mediaStatus(error);
+        media.trackResult = {sequence: command.sequence, applied: false, error}; mediaStatus(error, "bad");
       } else {
         const played = await mediaTryPlay();
         if (command.source_token) {

@@ -101,37 +101,25 @@ async function guard(work) {
     }
   }
 }
-// What the button says while its request runs.
-const busyLabel = (text) =>
-  /^(save|enregistrer)/i.test(text)
-    ? say("Saving…", "Enregistrement…")
-    : /^(test|tester)/i.test(text)
-      ? say("Testing…", "Test en cours…")
-      : say("Working…", "En cours…");
-// Every action button: disabled with a busy label while it runs; its result is a toast (an
-// action may return the message to show; failures and the status line reach it below).
+// Every action button: busy while it runs (panel/toast.js); its result is a toast (an action
+// may return the message to show; failures and the status line reach it below).
 function button(text, action, className = "") {
   const client = environment.client_id;
   const node = element("button", text, className);
   node.type = "button";
-  node.onclick = async () => {
-    if (node.disabled) return;
-    node.disabled = true;
-    node.textContent = busyLabel(text);
-    const value = await guard(() => {
-      if (client !== environment.client_id || snapshot?.client_id !== client)
-        throw Error(
-          say(
-            "Wait for the selected client's settings.",
-            "Attendez les paramètres du client sélectionné.",
-          ),
-        );
-      return action();
-    });
-    node.disabled = false;
-    node.textContent = text;
-    if (typeof value === "string") TLToast.show(value, "ok");
-  };
+  node.onclick = () =>
+    TLToast.busy(node, () =>
+      guard(() => {
+        if (client !== environment.client_id || snapshot?.client_id !== client)
+          throw Error(
+            say(
+              "Wait for the selected client's settings.",
+              "Attendez les paramètres du client sélectionné.",
+            ),
+          );
+        return action();
+      }),
+    );
   return node;
 }
 // Whatever the panel writes to its status or error line also becomes a toast, so no result

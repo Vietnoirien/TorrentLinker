@@ -94,7 +94,7 @@ async function perform(action, body = {}) {
     return value;
   } catch (e) {
     $("error").textContent = e.message;
-    $("dialog-error").textContent = e.message;
+    $("dialog-error").textContent = TLToast.translate(e.message);
     throw e;
   } finally {
     busy = false;

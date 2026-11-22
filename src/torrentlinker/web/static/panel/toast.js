@@ -89,6 +89,8 @@ const TLToast = (() => {
   }
   function show(message, kind = "ok") {
     if (!message) return null;
+    // A panel that asked before the sign-in finished: the login screen is already the answer.
+    if (message === "Sign in first.") return null;
     message = translate(message);
     const failed = kind === "bad";
     // The same error, such as a client refusing its login on every refresh, shows once.

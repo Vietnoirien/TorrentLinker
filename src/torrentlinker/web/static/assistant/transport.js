@@ -4,9 +4,10 @@ let state = {view: "assistant", language: "en", setup: {clients:[], client_id:""
 const say = (en, fr) => state.language === "fr" ? fr : en;
 let panelRequest;
 function element(tag, text, cls) { const node=document.createElement(tag); if(text!==undefined)node.textContent=text; if(cls)node.className=cls; return node; }
-function button(text, callback, cls) { const node=element("button",text,cls);node.type="button";node.onclick=()=>guard(callback);return node; }
-function toast(text) { $("toast").textContent=text;$("toast").hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$("toast").hidden=true,7000); }
-async function guard(fn) { try { return await fn(); } catch(error) { toast(error.message); } }
+function button(text, callback, cls) { const node=element("button",text,cls);node.type="button";node.onclick=()=>guard(callback,node);return node; }
+const toast = text => TLToast.show(text, "ok");
+// An action started by a button keeps that button busy until it ends.
+async function guard(fn, node) { if(node)return TLToast.press(node,fn); try { return await fn(); } catch(error) { TLToast.error(error); } }
 const api = (path, body, method) => panelRequest(path,{body, method:method || (body === undefined ? "GET" : "POST")});
 const navigate = () => panelRequest("connections",{});
 function bytes(value) {

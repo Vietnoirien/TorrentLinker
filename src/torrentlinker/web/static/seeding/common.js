@@ -23,14 +23,16 @@ function element(tag, text, cls) {
 function button(text, action) {
   const node = element("button", text);
   node.type = "button";
-  node.onclick = () => guard(action);
+  node.onclick = (event) => guard(action, event.currentTarget);
   return node;
 }
-async function guard(work) {
+// An action started by a button keeps that button busy until it ends.
+async function guard(work, node) {
+  if (node) return TLToast.press(node, work);
   try {
     return await work();
   } catch (error) {
-    $("seeding-error").textContent = error.message;
+    TLToast.error(error);
   }
 }
 const labels = {

@@ -12,7 +12,7 @@ async function loadMemberWorkspace(view) {
       if (row.progress != null) { const progress = requestNode("progress"); progress.max = 1; progress.value = row.progress; progress.setAttribute("aria-label", say("Download progress", "Progression du téléchargement")); card.append(progress); }
       if (kind === "search" && state.actor?.permissions?.includes("request")) {
         const request = requestNode("button", say("Request", "Demander"));
-        request.onclick = async () => {request.disabled = true; try {await api("requests", {infohash: row.hash}); request.textContent = say("Requested", "Demandée");} catch (error) {request.disabled = false; toast(error.message);} };
+        request.onclick = async () => {request.disabled = true; try {await api("requests", {infohash: row.hash}); request.textContent = say("Requested", "Demandée");} catch (error) {request.disabled = false; toast(error.message, "bad");} };
         card.append(request);
       }
       results.append(card);
@@ -22,7 +22,7 @@ async function loadMemberWorkspace(view) {
   if (kind === "search") {
     const form = requestNode("form", undefined, "toolbar"), input = requestNode("input"); input.type = "search"; input.maxLength = 200; input.required = true; input.setAttribute("aria-label", say("Film title", "Titre du film"));
     const search = requestNode("button", say("Search", "Rechercher")); search.type = "submit";
-    form.onsubmit = async event => {event.preventDefault(); search.disabled = true; try {await show(input.value);} catch (error) {toast(error.message);} finally {search.disabled = false;} };
+    form.onsubmit = async event => {event.preventDefault(); search.disabled = true; try {await show(input.value);} catch (error) {toast(error.message, "bad");} finally {search.disabled = false;} };
     form.append(input, search); root.append(form);
   } else await show();
   root.append(results);

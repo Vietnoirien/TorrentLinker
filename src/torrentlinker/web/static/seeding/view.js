@@ -420,7 +420,7 @@ async function loadZenSeeding() {
       );
   } catch (error) {
     if (generation === zenSeeding.generation)
-      $("seeding-error").textContent = error.message;
+      TLToast.error(error);
   } finally {
     if (generation === zenSeeding.generation) {
       loading = false;
@@ -450,7 +450,7 @@ function init() {
       });
     guard(() => seedingRequest("expanded", { groups: [] }));
   };
-  $("seeding-refresh").onclick = () =>
+  $("seeding-refresh").onclick = (event) =>
     guard(async () => {
       requestingRefresh = true;
       controls();
@@ -460,7 +460,7 @@ function init() {
         requestingRefresh = false;
         controls();
       }
-    });
+    }, event.currentTarget);
   for (const [id, offset] of [
     ["seeding-first", () => 0],
     ["seeding-prev", () => Math.max(0, zenSeeding.offset - pageSize)],
@@ -485,11 +485,11 @@ function init() {
       ) * pageSize;
     guard(loadZenSeeding);
   };
-  $("seeding-save-uploads").onclick = () =>
+  $("seeding-save-uploads").onclick = (event) =>
     guard(async () => {
       await seedingRequest("uploads", {
         uploads: Number($("seeding-uploads").value),
       });
       await loadZenSeeding();
-    });
+    }, event.currentTarget);
 }

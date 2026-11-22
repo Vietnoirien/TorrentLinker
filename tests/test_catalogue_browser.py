@@ -117,7 +117,7 @@ def test_category_fetch_pause_resume_all_language_and_failure(tmp_path, switch_c
                 ),
             )
             panel.get_by_role("button", name="Fetch only Audio", exact=True).click()
-            expect(panel.locator("#catalogue-error")).to_contain_text("Fixture unavailable")
+            expect(panel.locator(".tl-toast.bad")).to_contain_text("Fixture unavailable")
             page.unroute("**/api/jobs")
             panel.get_by_role("button", name="Retry", exact=True).click()
             expect(panel.locator("#catalogue-fetch")).to_be_enabled(timeout=15000)

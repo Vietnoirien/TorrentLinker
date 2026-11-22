@@ -471,20 +471,6 @@ tbody tr:last-child td {
 .job small {
   color: var(--muted);
 }
-#toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: min(650px, 90vw);
-  background: var(--ink);
-  color: var(--panel);
-  padding: 16px 22px;
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  z-index: 20;
-  white-space: pre-wrap;
-}
 dialog {
   background: var(--panel);
   color: var(--ink);

@@ -565,17 +565,6 @@ dialog select {
   gap: 8px;
   margin-top: 22px;
 }
-.toast {
-  position: fixed;
-  bottom: 80px;
-  right: 25px;
-  background: var(--tint);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 12px 18px;
-  max-width: 380px;
-  z-index: 25;
-}
 .palette {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -730,7 +719,7 @@ aside.sidebar {
   display: none;
 }
 .error {
-  color: #f1a49b;
+  color: var(--danger);
   white-space: pre-wrap;
 }
 .options {

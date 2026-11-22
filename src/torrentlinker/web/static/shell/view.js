@@ -98,7 +98,8 @@ async function send(action, values = {}) {
   try {
     return await request(action, values);
   } catch (error) {
-    $("error").textContent = error.message;
+    // This header frame is too small for a toast; the message stays in its own line.
+    $("error").textContent = TLToast.translate(error.message);
     $("error").hidden = false;
   }
 }

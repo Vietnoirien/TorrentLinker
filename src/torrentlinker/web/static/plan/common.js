@@ -72,7 +72,7 @@ function element(tag, text, cls) {
 function button(text, callback, cls) {
   const el = element("button", text, cls);
   el.type = "button";
-  el.onclick = callback;
+  el.onclick = () => TLToast.press(el, async () => callback());
   return el;
 }
 const english = new Map();
@@ -168,12 +168,13 @@ function table(
   result.append(head, body);
   host.append(result);
 }
-async function guard(work) {
+// An action started by a button keeps that button busy until it ends; any error becomes a toast.
+async function guard(work, node) {
+  if (node) return TLToast.press(node, work);
   try {
     return await work();
   } catch (error) {
-    $("plan-error").hidden = false;
-    $("plan-error").textContent = error.message;
+    TLToast.error(error);
   }
 }
 

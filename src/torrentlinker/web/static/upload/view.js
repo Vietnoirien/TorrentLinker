@@ -51,11 +51,7 @@ function visible() {
       (filter === "all" || i.reason === filter),
   );
 }
-function toast(s) {
-  $("toast").textContent = s;
-  $("toast").hidden = false;
-  setTimeout(() => ($("toast").hidden = true), 4200);
-}
+const toast = (s, kind = "ok") => TLToast.show(s, kind);
 let dialogRenderer = null;
 function dialog(content) {
   dialogRenderer = typeof content === "function" ? content : () => content;
@@ -253,7 +249,7 @@ async function refresh(force = false) {
     if (!current()) selected = visible()[0]?.id || items[0]?.id;
     render();
   } catch (e) {
-    $("error").textContent = e.message;
+    toast(e.message, "bad");
   }
 }
 function adopt(r, previous) {
@@ -619,8 +615,7 @@ document.addEventListener("click", async (e) => {
       await act(b.dataset.action);
     }
   } catch (err) {
-    $("error").textContent = err.message;
-    toast(err.message);
+    toast(err.message, "bad");
   } finally {
     if (b?.isConnected) b.disabled = false;
   }
@@ -657,7 +652,7 @@ document.addEventListener("change", async (e) => {
       i.form.options = i.preview.chosen;
       render();
     } catch (err) {
-      $("error").textContent = err.message;
+      toast(err.message, "bad");
     }
   }
 });
@@ -675,7 +670,7 @@ document.addEventListener("submit", async (e) => {
     $("dialog").close();
     render();
   } catch (err) {
-    toast(err.message);
+    toast(err.message, "bad");
   }
 });
 window.addEventListener("upload-environment", (e) => {
@@ -810,7 +805,7 @@ window.addEventListener("message", (e) => {
       ),
     );
   } catch (error) {
-    toast(error.message);
+    toast(error.message, "bad");
   }
 });
 

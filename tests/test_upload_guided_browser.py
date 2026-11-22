@@ -161,7 +161,9 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
             )
             expect(frame.locator("#image-url")).to_have_value("https://i.postimg.cc/abc/cover.png")
             frame.get_by_role("button", name="Enregistrer", exact=True).click()
-            expect(frame.locator("#toast")).to_have_text("Brouillon enregistré localement.")
+            expect(
+                frame.locator(".tl-toast", has_text="Brouillon enregistré localement.")
+            ).to_be_visible()
             result = page.request.post(
                 base + "/api/upload/workspace/state", data={}, headers={"X-TorrentLinker": "1"}
             ).json()
@@ -221,9 +223,12 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
             frame.locator("#description").fill("Version envoyée pour enregistrement.")
             frame.get_by_role("button", name="Enregistrer", exact=True).click()
             frame.locator("#description").fill("Texte saisi pendant l’enregistrement.")
-            expect(frame.locator("#toast")).to_have_text(
-                "Version enregistrée. Les nouvelles modifications restent à enregistrer."
-            )
+            expect(
+                frame.locator(
+                    ".tl-toast",
+                    has_text="Version enregistrée. Les nouvelles modifications restent",
+                )
+            ).to_be_visible()
             expect(frame.locator("#description")).to_have_value(
                 "Texte saisi pendant l’enregistrement."
             )
@@ -263,7 +268,7 @@ def test_manual_upload_and_postimages_return_preserve_description(tmp_path, host
                 expect(
                     frame.get_by_role("button", name="J’ai vérifié c411, autoriser un nouvel essai")
                 ).to_be_visible()
-                frame.get_by_role("button", name="Fermer", exact=True).click()
+                frame.locator("button[data-action=close]").click()
             page.screenshot(path="/tmp/upload-guided-web.png", full_page=True)
             page.set_viewport_size({"width": 390, "height": 844})
             expect(frame.locator(".track")).to_have_count(1)

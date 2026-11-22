@@ -39,7 +39,7 @@ function preRender(){
 }
 function preImport(root,trailer=false){
  const row=element("div",undefined,"preroll-toolbar"),path=element("input");path.placeholder=say("File or folder on the app host","Fichier ou dossier sur l’hôte de l’application");path.setAttribute("aria-label",path.placeholder);row.append(path);
- row.append(button(say("Import MP4","Importer un MP4"),async()=>{const clip=await preCall("import-file",{path:path.value});if(trailer)await preCall("update",{id:clip.id,value:{category:"trailer"}});await preReload()}),button(say("Import folder","Importer un dossier"),async()=>{const result=await preCall("import-folder",{path:path.value});await preReload();const failed=result.results.filter(x=>x.error);if(failed.length)toast(failed.map(x=>`${x.name}: ${x.error}`).join("\n"))}));root.append(row);
+ row.append(button(say("Import MP4","Importer un MP4"),async()=>{const clip=await preCall("import-file",{path:path.value});if(trailer)await preCall("update",{id:clip.id,value:{category:"trailer"}});await preReload()}),button(say("Import folder","Importer un dossier"),async()=>{const result=await preCall("import-folder",{path:path.value});await preReload();const failed=result.results.filter(x=>x.error);if(failed.length)toast(failed.map(x=>`${x.name}: ${x.error}`).join("\n"),"bad")}));root.append(row);
  root.append(element("p",say("MP4 H.264/AAC, up to 1080p and 2 GB locally. Community sharing is limited to 50 MB. Original files are kept. Set each clip's rating before playback.","MP4 H.264/AAC, jusqu’à 1080p et 2 Go en local. Le partage communautaire est limité à 50 Mo. Les originaux sont conservés. Classez chaque clip avant sa lecture."),"muted"));
 }
 function preLibrary(root){

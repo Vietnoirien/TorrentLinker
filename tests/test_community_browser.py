@@ -303,7 +303,7 @@ def test_webui_to_real_extension_and_durable_receipt(tmp_path, monkeypatch):
             expect(ui.locator("#drawer")).not_to_be_visible()
             ui.locator("#community-content").fill("Merci pour ce partage bien utile  \n")
             ui.get_by_role("button", name="Schedule", exact=True).click()
-            expect(ui.locator("#toast")).to_contain_text("Action scheduled")
+            expect(ui.locator(".tl-toast", has_text="Action scheduled").first).to_be_visible()
             # Fail the first receipt ACK, after the app already committed it.
             original = w.community.receipt
             failures = [1]
@@ -365,7 +365,7 @@ def test_webui_to_real_extension_and_durable_receipt(tmp_path, monkeypatch):
                     ui.locator("[data-kind=vote]").click()
                     ui.locator("#community-vote").select_option("approve")
                 ui.get_by_role("button", name="Schedule", exact=True).click()
-                expect(ui.locator("#toast")).to_contain_text("Action scheduled")
+                expect(ui.locator(".tl-toast", has_text="Action scheduled").first).to_be_visible()
                 worker.evaluate(
                     "chrome.alarms.create('companion-commands', {delayInMinutes: 0.001})"
                 )

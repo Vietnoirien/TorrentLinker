@@ -53,18 +53,17 @@ function element(tag, text, cls) {
 function button(text, callback, cls) {
   const el = element("button", text, cls);
   el.type = "button";
-  el.onclick = () => guard(callback);
+  el.onclick = () => guard(callback, el);
   return el;
 }
-function toast(text) {
-  $("toast").textContent = text;
-  $("toast").hidden = false;
-}
-async function guard(fn) {
+const toast = (text) => TLToast.show(text, "ok");
+// An action started by a button keeps that button busy until it ends.
+async function guard(fn, node) {
+  if (node) return TLToast.press(node, fn);
   try {
     return await fn();
   } catch (error) {
-    toast(error.message);
+    TLToast.error(error);
   }
 }
 function bytes(n) {

@@ -416,7 +416,7 @@ def test_cancel_pending_preview_never_saves_and_repeated_save_is_locked(tmp_path
             page.route("**/api/feeds/workspace", hold_preview)
             editor = panel.locator("#dialog-content")
             editor.get_by_label("Title contains", exact=True).fill("changed")
-            save = editor.get_by_role("button", name="Save", exact=True)
+            save = editor.get_by_role("button", name=re.compile(r"^Sav(e|ing)"))
             save.click()
             expect(save).to_be_disabled()
             editor.get_by_role("button", name="Cancel", exact=True).click()

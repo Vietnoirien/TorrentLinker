@@ -13,9 +13,9 @@ async function loadNotifications() {
   root.replaceChildren(requestNode("h2", "Notifications"));
   const controls = requestNode("div", undefined, "toolbar");
   const seen = requestNode("button", say("Mark as read", "Marquer comme lues"));
-  seen.onclick = () => guard(async () => {await api("notifications/seen", {}); await refreshNotices(); await loadNotifications();});
+  seen.onclick = (event) => guard(async () => {await api("notifications/seen", {}); await refreshNotices(); await loadNotifications();}, event.currentTarget);
   const settings = requestNode("button", say("Notification settings", "Paramètres des notifications"));
-  settings.onclick = () => guard(() => navigate("setup", "notifications"));
+  settings.onclick = (event) => guard(() => navigate("setup", "notifications"), event.currentTarget);
   controls.append(seen, settings); root.append(controls);
   for (const item of data.notices) {
     const card = requestNode("section", undefined, "card");

@@ -54,16 +54,6 @@ button:focus-visible,input:focus-visible,select:focus-visible {
   background:#0009}
 #media-details .muted,.muted {
   color:var(--muted)}
-#toast {
-  position:fixed;
-  bottom:16px;
-  left:16px;
-  right:16px;
-  z-index:100;
-  background:var(--panel);
-  padding:12px;
-  border:1px solid var(--warning);
-  border-radius:8px}
 #view-media .media-feature {
   background:var(--raised)}
 #view-media .media-art-title {

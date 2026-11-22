@@ -33,9 +33,7 @@ function agentTab(name) {
     );
   if (name !== "new") clearAgentToken();
 }
-function toast(message) {
-  $("settings-status").textContent = message;
-}
+const toast = (message, kind = "ok") => TLToast.show(message, kind);
 function agentReviewInUse() {
   return (
     !document.querySelector('[data-agent-panel="new"]').hidden ||

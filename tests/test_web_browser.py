@@ -512,7 +512,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             assert pending
             settings.locator("[data-agent-tab=connections]").click()
             pending[0][0].fulfill(response=pending[0][1])
-            expect(settings.locator("#settings-status")).to_contain_text("token was dismissed")
+            expect(settings.locator(".tl-toast", has_text="token was dismissed")).to_be_visible()
             settings.locator("[data-agent-tab=new]").click()
             expect(settings.locator("#agent-token")).to_have_value("")
             expect(settings.locator("#agent-token-box")).to_be_hidden()

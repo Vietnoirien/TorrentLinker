@@ -10,7 +10,7 @@ async function loadMemberAssistant() {
   discussions.value = memberChat.id;
   discussions.onchange = () => guard(async () => {memberChat.id = discussions.value; memberChat.messages = memberChat.id ? (await api(`member-assistant/${memberChat.id}`)).messages : []; await loadMemberAssistant();});
   const remove = requestNode("button", say("Delete discussion", "Supprimer la discussion")); remove.disabled = !memberChat.id;
-  remove.onclick = () => guard(async () => {await api(`member-assistant/${memberChat.id}`, undefined, "DELETE"); memberChat.id = ""; memberChat.messages = []; await loadMemberAssistant();});
+  remove.onclick = (event) => guard(async () => {await api(`member-assistant/${memberChat.id}`, undefined, "DELETE"); memberChat.id = ""; memberChat.messages = []; await loadMemberAssistant();}, event.currentTarget);
   controls.append(discussions, remove); root.append(controls);
   const transcript = requestNode("div", undefined, "request-list"); transcript.setAttribute("role", "log");
   for (const row of memberChat.messages) {
