@@ -418,3 +418,12 @@ def test_a_library_item_is_a_source_and_a_seeded_one_is_not(tmp_path, monkeypatc
 
     assert new in f.qbit.by_hash and f.rows("verifying")[0]["origin"] == "item"
     assert f.fake.searches[0]["t"] == "tvsearch"
+
+
+def test_the_size_window_reaches_down_to_the_review_floor(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    f.engine.rules.threshold = 0.95
+    floor = f.engine.root.settings.matching.rules().min_partial_coverage
+
+    # A torrent big enough to cover only the floor is fetched (it then waits for review).
+    assert f.engine.search_rules().size_tolerance >= 1 / floor - 1

@@ -289,11 +289,12 @@ class CrossSeed:
         return found
 
     def search_rules(self) -> MatchRules:
-        """The matching rules, with a size window wide enough to hold a Partial Match at the
-        threshold: a torrent larger than the item by what the threshold forgives is worth its
-        .torrent, one that large is not otherwise fetched."""
+        """The matching rules, with a size window wide enough to hold a Partial Match down to
+        the review floor: a torrent larger than the item by what that coverage forgives is
+        worth its .torrent (under the threshold it waits for review), one that large is not
+        otherwise fetched."""
         rules = self.root.settings.matching.rules()
-        window = 1 / max(self.rules.threshold, 0.5) - 1
+        window = 1 / max(min(self.rules.threshold, rules.min_partial_coverage), 0.01) - 1
         return replace(rules, size_tolerance=max(rules.size_tolerance, window))
 
     def _propose(
