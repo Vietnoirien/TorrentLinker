@@ -230,6 +230,8 @@ window.addEventListener("message", async (event) => {
         if (!(state.pages || shellPages).includes(values.view))
           throw Error("Unknown workspace.");
         await navigate(values.view);
+        // On a phone the list is a drawer: it closes once a page is chosen.
+        if (innerWidth < 650) setNavigation(false);
       } else if (action === "client") await shellSelectClient(values.client_id);
       else if (action === "theme") {
         if (!["auto", "light", "dark"].includes(values.value))
@@ -274,11 +276,16 @@ window.addEventListener("message", async (event) => {
     shellEnvironment();
   }
 });
+let shellWasCompact = innerWidth < 650;
 window.addEventListener("DOMContentLoaded", () => {
+  if (shellWasCompact) setNavigation(false);
   shellState.ready = true;
   shellEnvironment();
 });
 window.addEventListener("resize", () => {
+  const compact = innerWidth < 650;
+  if (compact !== shellWasCompact) setNavigation(!compact);
+  shellWasCompact = compact;
   if (innerWidth >= 650) shellFrames.get("navigation").style.height = "100%";
   shellEnvironment();
 });

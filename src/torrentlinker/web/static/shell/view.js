@@ -145,7 +145,6 @@ function render() {
       keys.map((key) => [key, name(key)]),
       state.page,
     );
-    $("compact-navigation").hidden = !state.compact;
     text("navigation-label", "Navigation", "Navigation");
     text("theme-label", "Theme", "Thème");
     text("language-label", "Language", "Langue");
@@ -197,6 +196,8 @@ function render() {
       "Ajoutez votre clé API d’indexeur pour commencer.",
     );
     text("open-settings", "Open settings", "Ouvrir les paramètres");
+    // The key is added on that very page.
+    $("open-settings").hidden = state.page === "setup";
     const problems = {
       "no-key": say(
         "Add your c411 API key in Settings → Connections.",

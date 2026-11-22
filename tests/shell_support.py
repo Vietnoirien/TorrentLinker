@@ -19,3 +19,9 @@ def shell_navigate(page, view):
 def shell_close_navigation(page):
     if page.locator("#app-sidebar").is_visible():
         page.locator("#navigation-toggle").click()
+
+
+def shell_open_navigation(page):
+    """The drawer on a phone closes after each choice; the preferences live inside it."""
+    if not page.locator("#app-sidebar").is_visible():
+        page.locator("#navigation-toggle").click()

@@ -909,10 +909,12 @@ document.addEventListener("DOMContentLoaded", () => guard(async () => {
   }
 }));
 
-$("navigation-toggle").onclick = () => {
-  const collapsed = document.body.classList.toggle("navigation-collapsed");
-  $("navigation-toggle").setAttribute("aria-expanded", String(!collapsed));
-};
+function setNavigation(open) {
+  document.body.classList.toggle("navigation-collapsed", !open);
+  $("navigation-toggle").setAttribute("aria-expanded", String(open));
+}
+$("navigation-toggle").onclick = () =>
+  setNavigation(document.body.classList.contains("navigation-collapsed"));
 
 async function waitForJob(identifier) {
   while (true) {

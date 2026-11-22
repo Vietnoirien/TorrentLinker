@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import shell_navigate, shell_open_navigation
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
@@ -282,17 +282,23 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 assert guide.locator("#guide-content img").first.evaluate("i=>i.naturalWidth>0")
                 page.screenshot(path=str(Path(screenshot) / "documentation-fr.png"))
             page.set_viewport_size({"width": 390, "height": 800})
-            expect(navigation.locator("#page-select")).to_be_visible()
-            expect(navigation.locator("#pages")).to_be_hidden()
+            # A phone keeps one Navigation control: the drawer is closed until its toggle opens it.
+            expect(page.locator("#app-sidebar")).to_be_hidden()
+            page.locator("#navigation-toggle").click()
+            expect(navigation.locator("#pages")).to_be_visible()
+            expect(navigation.locator("#page-select")).to_be_hidden()
+            expect(navigation.locator("#theme")).to_be_visible()
             header = page.frame_locator("#shell-header-frame")
             expect(header.locator("#target-client")).to_be_visible()
             assert header.locator("#target-client").evaluate(
                 "el => el.getBoundingClientRect().right <= innerWidth"
             )
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             shell_navigate(page, "torrents")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("dark")
             if screenshot:
                 page.wait_for_timeout(250)
@@ -325,8 +331,10 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             announce.fill("https://tracker.example/announce/test-secret")
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(announce).to_have_value("••••••••")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(settings.get_by_label("Mot de passe", exact=True)).to_have_value("••••••••")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Clients", exact=True).click()
             settings.get_by_label("New client name", exact=True).fill("Unsubmitted client")
@@ -389,6 +397,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     ).select_option(language)
                     page.screenshot(path=str(Path(screenshot) / f"multi-clients-{language}.png"))
             shell_navigate(page, "setup")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Agent access", exact=True).click()
             expect(settings.locator("#view-agents")).to_be_visible()
@@ -417,10 +426,12 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(settings.locator("#agent-connections")).to_contain_text("Seedbox renamed")
             expect(settings.locator("#agent-connections")).to_contain_text("10 GiB")
             expect(settings.locator("#agent-connections")).to_contain_text("None")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(settings.locator("#agent-connections")).to_contain_text(
                 "Propositions uniquement"
             )
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.locator("[data-agent-tab=new]").click()
             expect(settings.locator("#agent-token")).to_have_value("")
@@ -434,6 +445,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(
                 settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
             ).to_have_text("Export diagnostics…")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(
                 settings.get_by_role("button", name=re.compile("Export.*diagnostic"))
@@ -444,6 +456,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             support = json.loads(Path(diagnostic_download.value.path()).read_text())
             assert support["schema_version"] == 1
             assert token not in json.dumps(support)
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Agent access", exact=True).click()
             expect(settings.locator("#agent-token")).to_have_value("")
@@ -475,9 +488,11 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     page.screenshot(
                         path=str(Path(screenshot) / f"agent-access-{language}.png"), full_page=True
                     )
+                shell_open_navigation(page)
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     "en"
                 )
+                shell_open_navigation(page)
                 page.frame_locator("#shell-navigation-frame").locator("#theme").select_option(
                     "light"
                 )
@@ -641,12 +656,14 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             expect(upload.locator(".editor")).to_contain_text(
                 "c411 forbids files from independent creators who live off them"
             )
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             expect(upload.locator(".editor")).to_contain_text(
                 "c411 interdit les fichiers de créateurs indépendants"
             )
             expect(upload.locator(".editor")).to_contain_text("Remplissez la section")
             expect(upload.locator(".editor")).not_to_contain_text("paid-creators:")
+            shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             # Edit through the same preparation dialog used by desktop.
             upload.locator("[data-step='2']").click()
@@ -682,6 +699,7 @@ def test_local_upload_queue_review_edit_and_explicit_send(tmp_path, monkeypatch,
             page.set_viewport_size({"width": 600, "height": 800})
             assert upload.locator("body").evaluate("el => el.scrollWidth <= innerWidth")
             for language in ("fr", "en"):
+                shell_open_navigation(page)
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     language
                 )

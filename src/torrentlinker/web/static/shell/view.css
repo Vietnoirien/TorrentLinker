@@ -106,8 +106,17 @@ p {
   font-size: 12px;
   color: var(--muted);
 }
+#setup-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+#setup-notice button {
+  flex: none;
+}
 .notice {
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
@@ -156,20 +165,20 @@ dd {
   color: var(--danger);
   padding: 8px;
 }
+/* On a phone the navigation is a drawer: the page list, then the preferences. */
 body[data-compact="true"] #navigation {
   min-height: 0;
-  padding: 8px;
+  padding: 10px;
 }
-body[data-compact="true"] .brand,
-body[data-compact="true"] nav {
+body[data-compact="true"] .brand {
   display: none;
 }
-body[data-compact="true"] #navigation {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+body[data-compact="true"] nav {
+  grid-template-columns: 1fr 1fr;
+  flex: none;
 }
-body[data-compact="true"] #logout {
-  grid-column: 2;
+body[data-compact="true"] .preferences {
+  grid-template-columns: 1fr 1fr;
 }
 @media (max-width: 560px) {
   .heading {
@@ -188,7 +197,3 @@ body[data-compact="true"] #logout {
   }
 }
 
-body[data-compact="true"] .preferences {
-  grid-column: 1/-1;
-  grid-template-columns: 1fr 1fr;
-}
