@@ -58,6 +58,30 @@ function element(tag, text, className) {
   if (className) node.className = className;
   return node;
 }
+// The server's fixed sentences, in the user's language; several lines become one message.
+const settingsMessages = {
+  "Client address: enter for example http://192.168.0.50:8080, without user name, password, query or fragment.":
+    "Adresse du client : saisissez par exemple http://192.168.0.50:8080, sans identifiant, mot de passe, paramètres ni fragment.",
+  "Client address: the port must be between 1 and 65535.":
+    "Adresse du client : le port doit être compris entre 1 et 65535.",
+  "Indexer address: enter a full address such as https://c411.org/api/torznab, without user name, password, query or fragment.":
+    "Adresse de l’indexeur : saisissez une adresse complète comme https://c411.org/api/torznab, sans identifiant, mot de passe, paramètres ni fragment.",
+  "Client address: enter rTorrent's SCGI address as scgi://host:port, for example scgi://192.168.0.50:5000.":
+    "Adresse du client : saisissez l’adresse SCGI de rTorrent sous la forme scgi://hôte:port, par exemple scgi://192.168.0.50:5000.",
+  "Client address: scgi:// is only for rTorrent; use http://host:port.":
+    "Adresse du client : scgi:// est réservé à rTorrent ; utilisez http://hôte:port.",
+};
+function settingsError(message) {
+  return String(message)
+    .split("\n")
+    .map((line) =>
+      language !== "fr"
+        ? line
+        : settingsMessages[line] ||
+          line.replace(/^Invalid value: /, "Valeur invalide : "),
+    )
+    .join(" ");
+}
 async function guard(work) {
   $("settings-error").textContent = "";
   document
@@ -66,7 +90,7 @@ async function guard(work) {
   try {
     return await work();
   } catch (error) {
-    error.message = fileAccessError(error.message);
+    error.message = settingsError(fileAccessError(error.message));
     $("settings-status").textContent = "";
     $("settings-error").textContent = error.message;
     const modal = document.querySelector("dialog[open]");

@@ -13,7 +13,7 @@ from shiboken6 import isValid
 from torrentlinker.gui.community_view import BundledView, ViewBridge
 from torrentlinker.gui.tasks import run_in_background
 from torrentlinker.i18n import pick_language
-from torrentlinker.settings_workspace import SettingsWorkspace
+from torrentlinker.settings_workspace import SettingsWorkspace, explain_validation
 
 
 class SettingsBridge(ViewBridge):
@@ -45,12 +45,7 @@ class SettingsBridge(ViewBridge):
         def failed(error):
             view.pending -= 1
             if isinstance(error, ValidationError):
-                error = ValueError(
-                    "Check Settings fields: "
-                    + ", ".join(
-                        ".".join(str(part) for part in row["loc"]) for row in error.errors()
-                    )
-                )
+                error = ValueError(explain_validation(error))
             if isValid(self):
                 self.response.emit(
                     identifier, json.dumps({"error": workspace.setup.secrets.redact(str(error))})

@@ -16,6 +16,8 @@ from torrentlinker.domain import ContentKind, PathMapping
 from torrentlinker.release_score import PROFILES
 from torrentlinker.release_score.preferences import Preferences as ScorePreferences
 from torrentlinker.web.setup import (
+    CLIENT_ADDRESS,
+    INDEXER_ADDRESS,
     Connection,
     FolderRemoval,
     FolderSetup,
@@ -67,6 +69,25 @@ class Connections(BaseModel):
 
     reseed_link_root: str = Field(default="", max_length=4096)
     reseed_layout: Literal["auto", "client", "links"] = "auto"
+
+
+def explain_validation(error: ValidationError) -> str:
+    """One readable line per refused field. Never echoes an input, which can be a secret."""
+    lines: list[str] = []
+    for row in error.errors():
+        field = [str(part) for part in row["loc"]]
+        if row["type"] == "value_error":
+            # Our own validators raise fixed, secret-free sentences.
+            line = str(row["msg"]).removeprefix("Value error, ")
+        elif field[-1:] == ["host"]:
+            line = CLIENT_ADDRESS
+        elif field[-1:] == ["url"] and field[:1] == ["indexer"]:
+            line = INDEXER_ADDRESS
+        else:
+            line = "Invalid value: " + ".".join(field)
+        if line not in lines:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 class SettingsWorkspace:
@@ -133,8 +154,7 @@ class SettingsWorkspace:
                     ) from None
             raise ValueError("Unknown connection test.")
         except ValidationError as error:
-            fields = [".".join(str(part) for part in row["loc"]) for row in error.errors()]
-            raise ValueError("Check Settings fields: " + ", ".join(fields)) from None
+            raise ValueError(explain_validation(error)) from None
 
     def storage(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
         """Use the existing storage proofs and owner guards for either renderer."""
@@ -382,8 +402,7 @@ class SettingsWorkspace:
             return self._save_connections(group, body)
         except ValidationError as error:
             # Validation errors can otherwise echo newly entered secrets.
-            fields = [".".join(str(part) for part in row["loc"]) for row in error.errors()]
-            raise ValueError("Check Settings fields: " + ", ".join(fields)) from None
+            raise ValueError(explain_validation(error)) from None
 
     def _save_preferences(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
         models: dict[str, type[BaseModel]] = {

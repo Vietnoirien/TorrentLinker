@@ -46,23 +46,53 @@ CLIENT_SETTINGS = {
 }
 
 
+CLIENT_ADDRESS = (
+    "Client address: enter for example http://192.168.0.50:8080, "
+    "without user name, password, query or fragment."
+)
+CLIENT_PORT = "Client address: the port must be between 1 and 65535."
+INDEXER_ADDRESS = (
+    "Indexer address: enter a full address such as https://c411.org/api/torznab, "
+    "without user name, password, query or fragment."
+)
+SCGI_ADDRESS = (
+    "Client address: enter rTorrent's SCGI address as scgi://host:port, "
+    "for example scgi://192.168.0.50:5000."
+)
+SCGI_ONLY_RTORRENT = "Client address: scgi:// is only for rTorrent; use http://host:port."
+
+
 def http_url(value: str) -> str:
-    return _url(value, {"http", "https"})
+    return _url(value, {"http", "https"}, INDEXER_ADDRESS)
 
 
-def _url(value: str, schemes: set[str]) -> str:
-    parsed = urlsplit(value)
+def with_scheme(value: str) -> str:
+    """A client address typed as host, host:port or [ipv6]:port is an http:// one."""
+    value = value.strip()
+    if value and "://" not in value:
+        return "http://" + value
+    return value
+
+
+def _url(value: str, schemes: set[str], hint: str = INDEXER_ADDRESS) -> str:
+    port_hint = CLIENT_PORT if hint == CLIENT_ADDRESS else hint
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+        hostname = parsed.hostname
+    except ValueError:
+        raise ValueError(port_hint) from None
     if (
         parsed.scheme not in schemes
-        or not parsed.hostname
+        or not hostname
         or parsed.username
         or parsed.password
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError("Use an HTTP(S) address without credentials, query or fragment.")
-    if parsed.port is not None and not 1 <= parsed.port <= 65535:
-        raise ValueError("Invalid port.")
+        raise ValueError(hint)
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError(port_hint)
     return value.rstrip("/")
 
 
@@ -81,14 +111,16 @@ class Connection(BaseModel):
     @classmethod
     def valid_host(cls, value: str) -> str:
         # rTorrent's SCGI port is reached over TCP only here, never a socket path.
-        return _url(value, {"http", "https", "scgi"})
+        value = with_scheme(value)
+        hint = SCGI_ADDRESS if value.lower().startswith("scgi:") else CLIENT_ADDRESS
+        return _url(value, {"http", "https", "scgi"}, hint)
 
     @model_validator(mode="after")
     def scgi_for_rtorrent(self) -> Connection:
         if self.host.startswith("scgi:") and self.client is not TorrentClient.RTORRENT:
-            raise ValueError("Use an HTTP(S) address.")
+            raise ValueError(SCGI_ONLY_RTORRENT)
         if self.host.startswith("scgi:") and urlsplit(self.host).port is None:
-            raise ValueError("Enter rTorrent's SCGI address as scgi://host:port")
+            raise ValueError(SCGI_ADDRESS)
         return self
 
 
