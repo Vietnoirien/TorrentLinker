@@ -207,6 +207,13 @@ function render() {
     window.scrollTo(0, scroll);
     return;
   }
+  if (tab === "cross") {
+    renderCross();
+    jobControls();
+    window.scrollTo(0, scroll);
+    if (!crossLoaded) refreshCross();
+    return;
+  }
   const rows = visible(),
     progress = snapshot.progress || {},
     running = snapshot.running,
@@ -603,6 +610,9 @@ window.addEventListener("reseed-environment", (e) => {
     selected = "";
     checked.clear();
     expanded.clear(); localFolder=""; localState="";
+    cross = { rows: [], counts: {}, indexers: [], settings: {} };
+    crossLoaded = false;
+    crossSelected = "";
     $("dialog").close();
   }
   if (value.tab && value.tab !== environment.tab) tab = value.tab;
@@ -615,6 +625,7 @@ window.addEventListener("reseed-environment", (e) => {
   document.querySelector('[data-command="refresh"]').textContent = t("Actualiser", "Refresh");
   for (const [key, label] of Object.entries({
     reseed: "Remise en seed",
+    cross: "Cross-seed",
     folders: "Dossiers",
     activity: "Activité",
   }))

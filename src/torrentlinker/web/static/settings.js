@@ -105,6 +105,10 @@ window.addEventListener("message", async (event) => {
       if (!/^account(?:\/[a-zA-Z0-9_-]+){0,3}$/.test(body.path))
         throw Error("Unknown account operation.");
       value = await api(body.path, body.body, body.method);
+    } else if (message.path === "indexers") {
+      if (!/^(indexers(\/[a-zA-Z0-9_-]+){0,2}|cross-seed\/(settings|pause|resume))$/.test(body.path))
+        throw Error("Unknown Indexers operation.");
+      value = await api(body.path, body.body, body.method);
     } else if (message.path === "community-site") {
       if (!["state", "start", "poll", "check", "disconnect"].includes(body.action) && !/^items-(browse|prepare|download|history|updates|cancel|publish|apply)$/.test(body.action))
         throw Error("Unknown community operation.");

@@ -454,6 +454,15 @@ class CrossSeed:
                 break
         self.accept(identifier)
 
+    def remove(self, identifier: str) -> None:
+        """Remove an orphan from the Torrent Client; its data is whatever is left on disk."""
+        row = self._row(identifier)
+        if row["state"] != "orphan":
+            raise ValueError("Only a Cross-seed whose data disappeared can be removed.")
+        if row.get("hash"):
+            self.library.client().remove(row["hash"], delete_files=False)
+        self.store.delete_crossseed(row["source"], row["indexer_id"], row["candidate_key"])
+
     # Settling -------------------------------------------------------------------
 
     def settle(self) -> None:
@@ -536,6 +545,8 @@ class CrossSeed:
             "coverage": row.get("coverage"),
             "missing": row.get("missing", []),
             "full": row.get("full"),
+            "archive": bool(row.get("archive")),
+            "item_path": row.get("item_path", ""),
             "hash": row.get("hash", ""),
             "started": row.get("started"),
             "found": row.get("found"),

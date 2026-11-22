@@ -205,3 +205,47 @@ def test_owner_imports_jackett_indexers(tmp_path: Path, monkeypatch) -> None:
         row = web.get("/api/indexers").json()["indexers"][1]
         assert row["source"] == "jackett"
         assert row["url"] == "http://jackett.example:9117/api/v2.0/indexers/lyra/results/torznab/"
+
+
+def test_probe_reads_caps_without_saving_and_the_panel_runs_the_same_operations(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from torrentlinker.agent.desktop import DesktopSetup
+    from torrentlinker.indexers_panel import IndexersPanel
+    from torrentlinker.store import Store
+    from torrentlinker.web.security import ServerSecrets
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("apikey") != "good":
+            return httpx.Response(401)
+        return httpx.Response(200, text=CAPS_XML)
+
+    monkeypatch.setattr(
+        net, "client", lambda **kwargs: httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with TestClient(create_app(tmp_path, password="test-password-long")) as web:
+        web.headers["X-TorrentLinker"] = "1"
+        web.post("/api/login", json={"password": "test-password-long"})
+        probe = web.post(
+            "/api/indexers/probe", json={"url": "https://o.example/api", "api_key": "good"}
+        )
+        assert probe.status_code == 200 and "imdbid" in probe.json()["searchable_ids"]
+        refused = web.post(
+            "/api/indexers/probe", json={"url": "https://o.example/api", "api_key": "bad"}
+        )
+        assert refused.status_code == 400
+        assert len(web.get("/api/indexers").json()["indexers"]) == 1  # nothing saved
+        assert web.get("/api/indexers").json()["cross_seed"]["threshold"] == 0.95
+
+    setup = DesktopSetup(Settings(), tmp_path / "settings.json", Store(tmp_path / "t.db"))
+    setup.secrets = ServerSecrets(tmp_path)
+    panel = IndexersPanel(setup)
+    added = panel.request(
+        "indexers", {"name": "Other", "url": "https://o.example/api", "api_key": "good"}, "POST"
+    )
+    assert panel.request(f"indexers/{added['id']}/probe", {})["ok"]
+    assert [r["name"] for r in panel.request("indexers")["indexers"]] == ["c411", "Other"]
+    assert panel.request("cross-seed/pause")["paused"] is True
+    assert panel.request("cross-seed/settings", {"threshold": 0.9})["threshold"] == 0.9
+    panel.request(f"indexers/{added['id']}/remove", {}, "POST")
+    assert len(panel.request("indexers")["indexers"]) == 1

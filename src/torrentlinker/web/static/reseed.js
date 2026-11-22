@@ -137,6 +137,14 @@ async function reseedRequest(action, body) {
     reseedUI.tab = body.tab;
     return {};
   }
+  if (action === "cross-seed" || action.startsWith("cross-seed-")) {
+    const client = `client_id=${encodeURIComponent(state.clientId === "all" ? state.setup?.default_client_id || "" : state.clientId)}`;
+    if (action === "cross-seed") return api(`cross-seed?${client}`);
+    const verb = action.slice("cross-seed-".length);
+    if (!["accept", "reject", "retry", "remove"].includes(verb))
+      throw new Error("Unknown Cross-seed operation.");
+    return api(`cross-seed/${encodeURIComponent(body.id)}/${verb}?${client}`, {});
+  }
   if (action === "preview-folder") return api("setup/preview-folder", body);
   if (action === "remove-folder") return api("setup/remove-folder", body);
   if (action === "run")

@@ -871,7 +871,10 @@ def create_app(
     # The Indexers Cross-seed searches. No declaration: the Owner's alone (ADR-0022, 0024).
     @app.get("/api/indexers")
     def list_indexers() -> dict:
-        return {"indexers": service.indexer_rows()}
+        return {
+            "indexers": service.indexer_rows(),
+            "cross_seed": asdict(service.settings.cross_seed),
+        }
 
     # Prowlarr or Jackett as a source of Indexers; declared before `{identifier}` routes.
     @app.get("/api/indexers/hub")
@@ -907,6 +910,10 @@ def create_app(
             service.disconnect_hub()
             return {"ok": True}
 
+    @app.post("/api/indexers/probe")
+    def probe_new_indexer(body: IndexerEntry) -> dict:
+        return service.probe_indexer(body)
+
     @app.post("/api/indexers")
     def add_indexer(body: IndexerEntry) -> dict:
         with jobs.lock:
@@ -918,6 +925,10 @@ def create_app(
         with jobs.lock:
             idle()
             return service.update_indexer(identifier, body)
+
+    @app.post("/api/indexers/{identifier}/probe")
+    def probe_indexer(identifier: str, body: IndexerEntry) -> dict:
+        return service.probe_indexer(body, identifier)
 
     @app.post("/api/indexers/{identifier}/test")
     def test_indexer_entry(identifier: str) -> dict:
@@ -959,7 +970,7 @@ def create_app(
         engine = cross_seed(client_id)
         if action == "reject":
             engine.reject(identifier)
-        elif action in ("accept", "retry"):
+        elif action in ("accept", "retry", "remove"):
             with jobs.lock:
                 idle()
                 getattr(engine, action)(identifier)

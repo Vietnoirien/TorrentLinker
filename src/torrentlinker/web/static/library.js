@@ -8,7 +8,7 @@ function resetLibraryReview(){
 async function loadLibrary(){resetLibraryReview();await loadReseed();}
 async function libraryTab(tab){
   resetLibraryReview();
-  tab=["folders","activity"].includes(tab)?tab:"reseed";
+  tab=["cross","folders","activity"].includes(tab)?tab:"reseed";
   rememberTab("library",tab);$("library-reseed").hidden=false;
   reseedUI.tab=tab;await loadReseed();
 }

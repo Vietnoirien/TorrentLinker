@@ -40,6 +40,7 @@ const ownerSections = () => ({
   paths: say("Client Paths", "Chemins du client"),
   matching: say("Search & Matching", "Recherche et correspondance"),
   release_score: "ReleaseScore",
+  indexers: say("Indexers", "Indexeurs"),
   zen: "Zen",
   // Members share only a Web or Docker server; the desktop stays the Owner's.
   ...(environment.mode === "web" && environment.members_enabled
@@ -1154,7 +1155,7 @@ function render() {
   );
   if (!snapshot) return;
   const form = element(
-    ["agents", "assistant", "companion", "users", "account", "notifications", "community_site"].includes(section)
+    ["agents", "assistant", "companion", "indexers", "users", "account", "notifications", "community_site"].includes(section)
       ? "section"
       : "form",
     undefined,
@@ -1181,6 +1182,10 @@ function render() {
     form.append(actions);
   } else if (section === "release_score") {
     settingsReleaseScore(form);
+  } else if (section === "indexers") {
+    const root = element("div");
+    form.append(root);
+    queueMicrotask(() => guard(() => settingsIndexers(root)));
   } else if (section === "agents") {
     const root = element("div");
     form.append(root);

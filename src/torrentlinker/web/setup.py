@@ -563,6 +563,19 @@ class Setup:
                 "Indexer test failed. Check its Torznab address and API key."
             ) from None
 
+    def probe_indexer(self, body: IndexerEntry, identifier: str = "") -> dict[str, Any]:
+        """Read an Indexer's caps without saving it: what the add dialog's Test shows."""
+        with self.lock:
+            saved = self.settings.find_indexer(identifier) if identifier else None
+            url = body.url or (saved.url if saved else "")
+            key = body.api_key or (
+                self.secrets.get(Settings.indexer_secret(identifier)) if saved else ""
+            )
+            if not url or not key:
+                raise ValueError("Enter the Indexer's Torznab URL and API key.")
+            entry = IndexerSettings(modes=mode_names(self._probe(url, key, body.name or url)))
+            return {"ok": True, "modes": entry.modes, "searchable_ids": entry.searchable_ids}
+
     def add_indexer(self, body: IndexerEntry) -> dict[str, Any]:
         name = body.name.strip()
         if not name or not body.url or not body.api_key:

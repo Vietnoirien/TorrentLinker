@@ -34,7 +34,7 @@ class SettingsBridge(ViewBridge):
             if not isValid(self):
                 return
             self.response.emit(identifier, json.dumps({"data": value}))
-            if action in {"save", "clients"} or (
+            if action in {"save", "clients", "indexers"} or (
                 action == "storage"
                 and body.get("action")
                 in {"save", "download", "mapping", "remove", "remove-mapping", "categories"}
@@ -152,6 +152,13 @@ class SettingsBridge(ViewBridge):
                         AssistantSettingsService(service).request(
                             body["path"], body.get("body"), body.get("method", "GET")
                         )
+                    )
+            elif action == "indexers":
+                from torrentlinker.indexers_panel import IndexersPanel
+
+                def work():
+                    return IndexersPanel(workspace.setup).request(
+                        body["path"], body.get("body"), body.get("method", "GET")
                     )
             elif action == "snapshot":
                 work = workspace.snapshot

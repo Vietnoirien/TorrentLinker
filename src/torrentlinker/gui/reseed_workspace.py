@@ -18,6 +18,13 @@ from torrentlinker.web.library import Library
 from torrentlinker.web.setup import Connection, FolderSetup
 
 ASSETS = Path(__file__).parents[1] / "web" / "static" / "reseed"
+CROSS_SEED_ACTIONS = {
+    "cross-seed",
+    "cross-seed-accept",
+    "cross-seed-reject",
+    "cross-seed-retry",
+    "cross-seed-remove",
+}
 
 
 class ReseedBridge(ViewBridge):
@@ -88,6 +95,8 @@ class ReseedBridge(ViewBridge):
                     combined,
                     combine_failed,
                 )
+            elif action in CROSS_SEED_ACTIONS:
+                run_in_background(lambda: self.board.cross_seed(action, body), done, failed)
             elif action == "add-client":
                 self.board.add_client(body, done, failed)
             else:
@@ -141,6 +150,21 @@ class ReseedBoard(BundledView):
             self.owner.settings.active_client_id, ({}, {})
         )
         return ReseedWorkspace(library)
+
+    def cross_seed(self, action, body):
+        """The Cross-seed tab's data and decisions, on the client being shown. The searches
+        themselves run on a server; this reads and settles what they left in the Store."""
+        from torrentlinker.crossseed import CrossSeed
+
+        service = self.service()
+        engine = CrossSeed(service.setup, service.library)
+        if action == "cross-seed":
+            return engine.activity(body.get("state") or None)
+        if action == "cross-seed-reject":
+            engine.reject(body["id"])
+        else:
+            getattr(engine, action.removeprefix("cross-seed-"))(body["id"])
+        return {"ok": True}
 
     def refresh_rows(self):
         client = self.owner.settings.active_client_id

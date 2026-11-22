@@ -79,6 +79,7 @@ class DesktopSetup(Setup):
         self._profile_workspace = ProfileWorkspace(path.parent)
         self._client = None
         self._indexer = None
+        self._torznab = {}
         self.download_guard = None
         self.roots = ()
         self.download_folder_changes: list[tuple[str, int | None, str, str]] = []

@@ -13,7 +13,7 @@ from torrentlinker.web.app import create_app
 from torrentlinker.web.operations import Operations
 
 
-def reseed_app(root, client=None):
+def reseed_app(root, client=None, **options):
     board, client, original, links, meta = workspace(root, client)
     board.setup.save()
 
@@ -27,6 +27,7 @@ def reseed_app(root, client=None):
         password="test-password-long",
         service_override=board.setup,
         operation_factory=operations,
+        **options,
     )
     return app, board, client, original, links, meta
 

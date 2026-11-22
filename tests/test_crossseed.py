@@ -427,3 +427,34 @@ def test_the_size_window_reaches_down_to_the_review_floor(tmp_path, monkeypatch)
 
     # A torrent big enough to cover only the floor is fetched (it then waits for review).
     assert f.engine.search_rules().size_tolerance >= 1 / floor - 1
+
+
+def test_a_review_row_tells_if_its_match_is_an_archive_and_for_which_item(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    f.offer()
+    f.engine.rules.auto_add = False
+    f.run()
+
+    (row,) = f.engine.activity("review")["rows"]
+
+    assert row["archive"] is False and row["item_path"] == str(f.folder)
+
+
+def test_an_orphan_is_removed_from_the_client_keeping_its_data(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    new = f.offer()
+    f.run()
+    f.verified(new)
+    f.qbit._set(new, state="missingFiles")
+    f.engine.settle()
+    (orphan,) = f.engine.activity("orphan")["rows"]
+
+    f.engine.remove(orphan["id"])
+
+    assert (new, False) in f.qbit.removed and f.rows("orphan") == []
+    try:
+        f.engine.remove(orphan["id"])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an unknown Cross-seed cannot be removed")
