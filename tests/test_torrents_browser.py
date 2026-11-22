@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_navigate, shell_open_navigation
+from tests.shell_support import shell_close_drawer, shell_navigate, shell_open_navigation
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
@@ -208,10 +208,12 @@ window.dispatchEvent(new MessageEvent('message', {
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             page.set_viewport_size({"width": 390, "height": 844})
             expect(panel.locator("#columns")).to_be_visible()
+            # On a phone the sidebar opens over the page at full height; a tap beside it closes it.
             shell_open_navigation(page)
             expect(page.locator("#shell-navigation-frame")).to_have_css(
-                "height", re.compile(r"(?:[12]\d\d|\d{1,2})(?:\.\d+)?px")
+                "height", re.compile(r"84\d(?:\.\d+)?px")
             )
+            shell_close_drawer(page)
             page.locator("#torrents-frame").scroll_into_view_if_needed()
             if folder := os.getenv("TL_TORRENTS_SCREENSHOTS"):
                 Path(folder).mkdir(parents=True, exist_ok=True)

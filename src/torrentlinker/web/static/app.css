@@ -986,18 +986,19 @@ iframe.has-open-dialog { position: relative; z-index: 3; }
 #navigation-toggle { padding:6px 12px; font-size:18px; line-height:1; }
 #work-status { margin-left:auto; }
 .media-center-mode #workspace main > header { display:none; }
-@media(min-width:651px) { .media-view #workspace main > header { display:none; } }
+@media(min-width:650px) { .media-view #workspace main > header { display:none; } }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 /* On a phone the same sidebar slides in from the left over a dimmed page. */
 #navigation-backdrop { display:none; }
-@media(max-width:650px) {
+/* The script treats widths under 650 px as a phone, so the drawer starts there too. */
+@media(max-width:649.98px) {
   #workspace #app-sidebar { position:fixed; inset:0 auto 0 0; z-index:70; width:min(280px,84vw); height:100dvh; display:block; background:var(--panel); border-right:1px solid var(--line); box-shadow:0 0 40px #0006; }
   .navigation-collapsed #workspace #app-sidebar { display:none; }
   #workspace main { margin-left:0; }
   #shell-navigation-frame { height:100% !important; }
   body:not(.navigation-collapsed) #navigation-backdrop { display:block; position:fixed; inset:0; z-index:69; background:#0008; }
 }
-@media(min-width:651px) {
+@media(min-width:650px) {
   #app-sidebar { position:fixed; width:190px; border-right:1px solid var(--line); }
   #workspace main { margin-left:190px; }
   .navigation-collapsed #workspace main { margin-left:0; }

@@ -214,7 +214,9 @@ def test_shared_search_panel_preserves_results_when_visiting_queue(
                 Path(folder).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(folder) / f"search-web-{locale}-{scheme}.png"))
             panel.locator("#search-queue-link").click()
-            expect(panel.locator("#start-selected-queue")).to_be_visible()
+            # An empty queue offers no queue actions (#161), only the way back.
+            expect(panel.locator("#back-results")).to_be_visible()
+            expect(panel.locator("#start-selected-queue")).to_be_hidden()
             panel.locator("#back-results").click()
             expect(panel.locator("#search-query")).to_have_value("film")
             expect(panel.locator(".sr-row")).to_have_count(2)
