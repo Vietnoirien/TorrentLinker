@@ -99,6 +99,11 @@ def test_real_host_render_has_h264_aac_and_cancel(studio):
     assert studio.job["status"] == "complete", studio.job
     path = studio.root / "exports" / studio.job["file"]
     assert probe(path)["height"] == 720
+    from torrentlinker.achievements import Ledger
+
+    ledger = Ledger(studio.root.parent / "achievements.sqlite")
+    assert [a["code"] for a in ledger.state("owner")["achievements"]] == ["studio-first"]
+    ledger.close()
     studio.cancel.set()
     render(studio, project)
     assert studio.job["status"] == "cancelled"

@@ -334,7 +334,11 @@ def test_native_track_playback_seek_and_browsing_keep_the_same_player(qtbot, tmp
     restored.stop()
 
 
-def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
+def test_native_video_plays_with_local_subtitles(qtbot, tmp_path, request):
+    from tests.webengine_support import isolated_webengine_render
+
+    if isolated_webengine_render(request):
+        return
     import shutil
     import subprocess
     import threading
@@ -791,7 +795,13 @@ def test_player_menu_opens_and_closes_the_queue_and_playlists(qtbot):
     assert not player_js(qtbot, tab, "document.getElementById('player-queue-details').open")
 
 
-def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choices(qtbot, tmp_path):
+def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choices(
+    qtbot, tmp_path, request
+):
+    from tests.webengine_support import isolated_webengine_render
+
+    if isolated_webengine_render(request):
+        return
     import shutil
     import struct
     import subprocess

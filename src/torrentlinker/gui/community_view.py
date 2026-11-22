@@ -175,6 +175,7 @@ class BundledView(QWidget):
                             "account.js",
                             "notifications.js",
                             "community-site.js",
+                            "achievements.js",
                             "prerolls.js",
                             "prerolls.css",
                             "studio.js",

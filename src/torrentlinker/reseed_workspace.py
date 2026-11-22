@@ -432,6 +432,14 @@ class ReseedWorkspace:
                                     record["hash"], ["torrentlinker:link-checking", BOARD_CHECKING]
                                 )
                                 client.start(record["hash"])
+                                if record.get("achievement_verified_at"):
+                                    from torrentlinker.achievements import await_seeding
+
+                                    await_seeding(
+                                        self.setup.path.parent,
+                                        self.setup.store.client_id,
+                                        record["hash"],
+                                    )
                                 record.update(stage="seeding", status="seeding")
                                 result["seeded"] += 1
                             save()
@@ -618,6 +626,7 @@ class ReseedWorkspace:
                     )
                 validate_layout(record)
                 record["status"] = "verified"
+                record["achievement_verified_at"] = time.time()
                 return
             if time.monotonic() - start > 3600:
                 raise ValueError(

@@ -37,6 +37,10 @@ def test_community_link_settings(tmp_path):
 
     # Keep response selection atomic and never contact an external service.
     def response(request):
+        if request.url.path == "/api/device/identity":
+            return httpx.Response(
+                200, json={"accountId": "fixture-account", "installationId": "fixture-installation"}
+            )
         status, body = replies.pop(0)
         return httpx.Response(status, json=body)
 

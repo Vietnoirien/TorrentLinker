@@ -344,6 +344,9 @@ def check_verifications(
     qbit: Qbit, store: Store, now: Callable[[], float] = time.time
 ) -> list[Outcome]:
     """Settle every finished Verification."""
+    from torrentlinker.achievements import observe_seeding
+
+    observe_seeding(store.torrent_dir.parent, store.client_id, qbit)
     with _LOCK:
         _recover_disk_renames(qbit, store)
         outcomes = []
@@ -416,6 +419,10 @@ def _accept(qbit: Qbit, store: Store, hash: str, record: Verification, progress:
     started = complete or _skip_every_file(qbit, hash)
     if started:
         qbit.start(hash)
+        if complete:
+            from torrentlinker.achievements import await_seeding
+
+            await_seeding(store.torrent_dir.parent, store.client_id, hash)
     qbit.remove_tags(hash, [VERIFYING])
     renamed = owns_journal(store.torrent_dir.parent, hash, getattr(qbit, "reseed_client_id", ""))
     if renamed:

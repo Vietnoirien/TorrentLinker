@@ -347,6 +347,11 @@ def create_app(
             app.state.notifications.start()
         assistant.start_scheduler()
         agent_service.feed_control.start()
+        from torrentlinker.achievement_sync import achievement_sync
+        from torrentlinker.community_site import community_site
+
+        achievement_worker = achievement_sync(community_site(service))
+        achievement_worker.start(agent_service)
         try:
             async with mcp_server.session_manager.run():
                 yield
@@ -355,6 +360,7 @@ def create_app(
             if monitor_verifications:
                 monitor.join(timeout=2)
             agent_service.feed_control.close()
+            achievement_worker.close()
             if members_enabled:
                 app.state.notifications.close()
             assistant.close()

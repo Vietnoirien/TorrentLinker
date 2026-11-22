@@ -113,6 +113,11 @@ def test_verified_import_and_tamper_rejection(transfer):
     assert result["data"] == Profile().model_dump()
     assert setup.settings.release_score == before  # matching panel still reviews/saves its draft
     assert site.request("items-history")["items"][0]["version"] == 2
+    from torrentlinker.achievements import Ledger
+
+    ledger = Ledger(setup.path.parent / "achievements.sqlite")
+    assert [a["code"] for a in ledger.state("owner")["achievements"]] == ["community-import-first"]
+    ledger.close()
     replies.extend([httpx.Response(200, json=detail), httpx.Response(200, content=b"modified")])
     with pytest.raises(ValueError, match="mismatch"):
         site.request("items-download", {"id": item})

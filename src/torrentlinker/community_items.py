@@ -433,6 +433,9 @@ class CommunityItems:
             history = json.loads(path.read_text()) if path.exists() else []
             history.append({**meta, "local_id": result.get("id", ""), "imported": time.time()})
             atomic_private(path, json.dumps(history[-2000:]).encode())
+            from torrentlinker.achievements import record_completion
+
+            record_completion(self.setup.path.parent, "community-import", meta["id"])
             self.stages.pop(body["review"], None)
             row["path"].unlink(missing_ok=True)
             return {"kind": kind, "data": result, "metadata": meta}

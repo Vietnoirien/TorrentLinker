@@ -110,7 +110,8 @@ window.addEventListener("message", async (event) => {
         throw Error("Unknown Indexers operation.");
       value = await api(body.path, body.body, body.method);
     } else if (message.path === "community-site") {
-      if (!["state", "start", "poll", "check", "disconnect"].includes(body.action) && !/^items-(browse|prepare|download|history|updates|cancel|publish|apply)$/.test(body.action))
+      if (!["state", "start", "poll", "check", "disconnect"].includes(body.action) && !/^items-(browse|prepare|download|history|updates|cancel|publish|apply)$/.test(body.action)
+          && !/^achievements-(state|enable|disable|share-existing|sync|recover|backup|restore|reset|pair-enable|pair-disable|invitation|pair-inspect|pair-add|pair-remove)$/.test(body.action))
         throw Error("Unknown community operation.");
       value = body.action === "state" ? await api("community-site")
         : await api(`community-site/${body.action}`, body.value || {});

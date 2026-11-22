@@ -112,22 +112,41 @@ class SettingsBridge(ViewBridge):
             elif action == "community-site":
                 from torrentlinker.community_site import SITE_URL, community_site
 
+                if body.get("action") == "save-ledger":
+                    from PySide6.QtWidgets import QFileDialog
+
+                    from torrentlinker.web.security import atomic_private
+
+                    path, _ = QFileDialog.getSaveFileName(
+                        view, "Save private ledger", "torrentlinker-ledger.json", "JSON (*.json)"
+                    )
+                    if path:
+                        document = body.get("value", {}).get("document", {})
+                        atomic_private(Path(path), json.dumps(document).encode("utf-8"))
+                    done(None)
+                    return
                 if body.get("action") == "open":
                     from PySide6.QtCore import QUrl
                     from PySide6.QtGui import QDesktopServices
 
                     page = body.get("value", {}).get("page")
-                    if page not in {"link", "account"}:
+                    if page not in {"link", "account", "achievements"}:
                         raise ValueError("Unknown community page.")
+                    if page in {"account", "achievements"}:
+                        page = f"space/{page}"
                     language = pick_language(workspace.setup.settings.language)
                     QDesktopServices.openUrl(QUrl(f"{SITE_URL}/{language}/{page}"))
                     done(None)
                     return
 
+                site = (
+                    view.community_service()
+                    if view.community_service is not None
+                    else community_site(workspace.setup)
+                )
+
                 def work():
-                    return community_site(workspace.setup).request(
-                        body.get("action", "state"), body.get("value", {})
-                    )
+                    return site.request(body.get("action", "state"), body.get("value", {}))
             elif action == "companion":
                 if view.companion_action is None:
                     raise ValueError("Companion controls are unavailable.")
@@ -230,6 +249,7 @@ class SettingsView(BundledView):
         assistant_service=None,
         companion_action=None,
         agent_service=None,
+        community_service=None,
         agent_endpoint="",
     ):
         self.workspace = workspace
@@ -237,6 +257,7 @@ class SettingsView(BundledView):
         self.assistant_service = assistant_service
         self.companion_action = companion_action
         self.agent_service = agent_service
+        self.community_service = community_service
         self.agent_endpoint = agent_endpoint
         self.agent_approvals: list[str] = []
         self.section = section
@@ -298,6 +319,12 @@ class SettingsPage(QWidget):
             service()
             return owner.agent_runtime.service
 
+        def community():
+            from torrentlinker.community_site import community_site
+
+            owner.assistant_service()
+            return community_site(owner.agent_runtime.setup)
+
         def companion(body):
             action = body.get("action")
             if action == "pair":
@@ -317,6 +344,7 @@ class SettingsPage(QWidget):
             section=section,
             assistant_service=service,
             agent_service=agents,
+            community_service=community,
             companion_action=companion,
         )
         view.diagnostics_requested.connect(lambda: owner._export_diagnostics(page))

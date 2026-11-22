@@ -185,6 +185,15 @@ class CommunitySite:
                 }
             )
             self.pending = {}
+            if hasattr(self, "achievements") and not self.achievements.closed:
+                with self.achievements.lock:
+                    self.achievements._check_link()
+                    try:
+                        self.achievements.identity()
+                    except ValueError:
+                        self.achievements.status = (
+                            "Account identity unavailable; history stays local."
+                        )
             return self.state()
 
     def check(self) -> dict:
@@ -203,10 +212,17 @@ class CommunitySite:
                 self._json(self._request("POST", "/api/device/revoke", authenticated=True, json={}))
             self.setup.secrets.update({LINK_SECRET: ""})
             self.pending = {}
+            if hasattr(self, "achievements") and not self.achievements.closed:
+                with self.achievements.lock:
+                    self.achievements._check_link()
             return self.state()
 
     def request(self, action: str, values: dict | None = None) -> dict:
         values = values or {}
+        if action.startswith("achievements-"):
+            from torrentlinker.achievement_sync import achievement_sync
+
+            return achievement_sync(self).request(action.removeprefix("achievements-"), values)
         if action.startswith("items-"):
             from torrentlinker.community_items import CommunityItems
 

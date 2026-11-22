@@ -322,6 +322,9 @@ def render(studio, project):
                 "bytes": output.stat().st_size,
                 "shareable": output.stat().st_size <= 50_000_000,
             }
+        from torrentlinker.achievements import record_completion
+
+        record_completion(studio.setup.path.parent, "studio", identifier)
     except InterruptedError:
         output.unlink(missing_ok=True)
         with studio.lock:

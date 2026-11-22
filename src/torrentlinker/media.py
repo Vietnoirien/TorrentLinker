@@ -1571,6 +1571,12 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 "(id, client, name, items, account, viewer) VALUES (?,?,?,?,?,?)",
                 (identifier, client_id, name.strip(), json.dumps(media_ids), account, viewer),
             )
+        if media_ids:
+            from torrentlinker.achievements import record_completion
+
+            record_completion(
+                self.agent.setup.path.parent, "playlist", identifier, account=account, viewer=viewer
+            )
         return {"id": identifier, "name": name.strip(), "media_ids": media_ids}
 
     def delete_playlist(self, client_id, identifier, *, account=OWNER, viewer=""):
