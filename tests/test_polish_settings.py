@@ -105,7 +105,7 @@ def test_settings_web_keyboard_and_zoom(tmp_path, language, theme, zoom):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
-    from tests.shell_support import shell_navigate
+    from tests.shell_support import shell_navigate, shell_open_navigation
     from torrentlinker.web.app import create_app
 
     config, setup, _, _ = prepared(tmp_path)
@@ -134,6 +134,7 @@ def test_settings_web_keyboard_and_zoom(tmp_path, language, theme, zoom):
                 page.locator("#login-password").fill("test-password-long")
                 page.locator("#login-form button").click()
                 shell_navigate(page, "setup")
+                shell_open_navigation(page)  # a phone's drawer closes after each page choice
                 nav = page.frame_locator("#shell-navigation-frame")
                 nav.locator("#language").select_option(language)
                 nav.locator("#theme").select_option(theme)
