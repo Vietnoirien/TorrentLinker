@@ -5,6 +5,7 @@ const SS = {
   loading: null,
   searched: false,
   native: false,
+  adultNote: false,
   category: "",
   categories: {},
   colors: {},
@@ -245,6 +246,13 @@ function renderFacets() {
   const host = $("search-facets");
   host.replaceChildren();
   if (!SS.native) return;
+  if (SS.adultNote) {
+    // XXX through Torznab: c411's own filters need the signed-in companion.
+    host.append(
+      element("p", say("Connect the extension for XXX filters", "Connectez l'extension pour les filtres XXX"), "muted"),
+    );
+    return;
+  }
   SS.facetDefs.forEach((def) => host.append(checklist(def)));
   host.append(
     inputFilter("year", say("Year", "Année"), say("Year", "Année"), {
@@ -886,6 +894,7 @@ function loadSearchOptions(then) {
       SS.native = r.backend === "c411-native";
       SS.categories = r.categories || {};
       SS.colors = r.root_colors || {};
+      SS.adultNote = r.adult_filters === "extension";
       const labels = VIDEO_LABELS();
       const defs = [];
       for (const [name, values] of Object.entries(r.video_filters || {}))

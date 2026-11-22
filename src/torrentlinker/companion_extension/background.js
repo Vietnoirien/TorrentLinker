@@ -1,6 +1,7 @@
 import { communityInTab } from "./community.js";
 import { collectProfile } from "./collect.js";
 import { collectDescriptors } from "./descriptor.js";
+import { readPages } from "./read.js";
 
 const PERIOD = 120000;
 const LEDGER_PERIOD = 6 * 3600000; // the Zen ledger changes about once a day
@@ -122,8 +123,32 @@ async function step() {
   if (!tabs.length) return "stop";
   try {
     const reply = await request(connection, "commands", { limit: 25 });
-    const commands = reply.commands || (reply.command ? [reply.command] : []);
-    if (!commands.length) return "idle";
+    const all = reply.commands || (reply.command ? [reply.command] : []);
+    if (!all.length) return "idle";
+    const reads = all.filter((c) => c.path);
+    const commands = all.filter((c) => !c.path);
+    if (reads.length) {
+      // Fixed catalogue pages (adult content the API key cannot see), one at a time.
+      let pages = reads.map((c) => ({ id: c.id, accountId: connection.accountId, status: 0 }));
+      if (reads.every((c) => c.accountId === connection.accountId)) {
+        try {
+          const frames = await chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id }, world: "ISOLATED", func: readPages, args: [reads],
+          });
+          pages = frames[0]?.result || pages;
+        } catch { /* A closed or navigated tab ends this attempt without retrying. */ }
+      }
+      for (const page of pages) {
+        try { await request(connection, "result", page); }
+        catch (error) { if (error.status === 403) throw error; }
+      }
+      const refused = pages.find((r) => r.status === 429);
+      if (refused)
+        await chrome.storage.local.set({
+          downloadRetryAt: Date.now() + Math.max(60, refused.retryAfter || 60) * 1000,
+        });
+      if (!commands.length) return pages.every((r) => r.status === 200) ? "command" : "stop";
+    }
     let results = commands.map((c) => ({ id: c.id, accountId: connection.accountId, status: 0 }));
     if (commands.every((c) => c.accountId === connection.accountId)) {
       // An extension API call every few seconds stops the browser from

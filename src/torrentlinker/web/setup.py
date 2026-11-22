@@ -321,6 +321,7 @@ class Setup:
                     extra_keys=self.extra_indexer_keys(),
                 )
                 self._indexer.session = (self._root or self)._profile_workspace
+                self._indexer.adult_content = lambda: self.settings.adult_content
             return self._indexer
 
     def extra_indexer_keys(self) -> list[str]:
@@ -558,6 +559,7 @@ class Setup:
                 }
                 self.save()
                 indexer.session = (self._root or self)._profile_workspace
+                indexer.adult_content = lambda: self.settings.adult_content
                 self._indexer = indexer
             return {
                 "ok": True,

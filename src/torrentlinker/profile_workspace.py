@@ -501,7 +501,7 @@ class ProfileWorkspace:
                 limit = body.get("limit", 1)
                 if not self.session_downloads:
                     self.downloads.last_poll = self.clock()  # the tab is still there
-                    return {"command": None, "commands": [], "concurrency": 1}
+                    return self.downloads.poll(str(account), 1, reads_only=True)
                 return self.downloads.poll(str(account), limit if type(limit) is int else 1)
             if route == "/api/companion/result":
                 if body.get("accountId") != account:
@@ -618,6 +618,46 @@ class ProfileWorkspace:
         finally:
             with self.lock:
                 self.downloads.take(job["id"])
+
+    @property
+    def can_read(self) -> bool:
+        """The companion is paired and its signed-in c411 tab answered recently."""
+        with self.lock:
+            return bool(self._pair) and self.downloads.state()["available"]
+
+    def read_json(self, path: str, timeout: float = 60.0) -> dict[str, Any]:
+        """One fixed c411 page through the browser session; blocks. Never uses the API key."""
+        with self.lock:
+            if not self._pair:
+                raise SessionFetchError("Connect the companion first.")
+            try:
+                job = self.downloads.submit_read(path)
+            except ValueError as error:
+                raise SessionFetchError(str(error)) from error
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                with self.lock:
+                    job = self.downloads.get(job["id"], "app")
+                    if job["status"] == "complete":
+                        data = self.downloads.take_json(job["id"])
+                        if data is not None:
+                            return data
+                        raise SessionFetchError("The page was not kept.")
+                    if job["status"] == "failed":
+                        raise SessionFetchError(
+                            job.get("error") or "Session read failed.",
+                            int(job.get("http_status") or 0),
+                            int(job.get("retry_after") or 0),
+                        )
+                if time.monotonic() > deadline:
+                    raise SessionFetchError("The browser did not answer in time.")
+                time.sleep(0.1)
+        except ValueError as error:  # the job expired
+            raise SessionFetchError(str(error)) from error
+        finally:
+            with self.lock:
+                self.downloads.take_json(job["id"])
 
     def set_download_concurrency(self, value: int) -> int:
         with self.lock:

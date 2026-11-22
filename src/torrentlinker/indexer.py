@@ -72,6 +72,25 @@ class TorrentUnavailable(Exception):
         )
 
 
+ADULT_NATIVE_ROOT = 8  # c411's XXX; Torznab 6000
+ADULT_TREE_KEEP = 3600.0  # seconds the session's XXX tree and filter options are reused
+ADULT_READ_SPACING = 1.0  # seconds between session reads
+# What Search offers for XXX without a session: Torznab 6000 and its children (caps),
+# marked `torznabOnly` because c411's native filters need the signed-in tab.
+ADULT_TORZNAB_ROOT: dict[str, Any] = {
+    "id": ADULT_NATIVE_ROOT,
+    "name": "XXX",
+    "slug": "xxx",
+    "torznabOnly": True,
+    "subcategories": [
+        {"id": 42, "name": "Ebooks", "slug": "ebooks"},
+        {"id": 43, "name": "Films", "slug": "films"},
+        {"id": 44, "name": "Hentai", "slug": "hentai"},
+        {"id": 45, "name": "Images", "slug": "images"},
+        {"id": 46, "name": "Jeux", "slug": "jeux"},
+        {"id": 56, "name": "VR", "slug": "vr"},
+    ],
+}
 PREFETCH_THREADS = 16  # session requests in flight; the browser runs them in batches
 PREFETCH_AHEAD = 100  # torrents asked for ahead of the one being sent
 MAX_KEYS = 5  # c411's limit per account
@@ -251,6 +270,12 @@ class Indexer:
         self._cache = cache
         self.extra_keys = tuple(extra_keys)
         self.session: Any = None  # a ProfileWorkspace; set by the app, never persisted
+        # Whether Settings allows adult content; set by the app. c411's API hides it from the
+        # key, so XXX is read through the owner's session (or Torznab) only when this is true.
+        self.adult_content: Callable[[], bool] = lambda: False
+        self._adult_cache: dict[str, tuple[float, Any]] = {}
+        self._adult_lock = threading.Lock()
+        self._adult_last = 0.0
         self._pool: ThreadPoolExecutor | None = None
         self._ahead: dict[str, Future[bytes]] = {}
         self._ahead_lock = threading.Lock()
@@ -506,22 +531,78 @@ class Indexer:
             )
         ).json()
 
+    @property
+    def adult_session(self) -> bool:
+        """XXX is on and the signed-in c411 tab can read what the key cannot see."""
+        return bool(self.adult_content() and self.session is not None and self.session.can_read)
+
+    def adult_read(self, path: str, *, keep: float = 0.0) -> dict[str, Any] | None:
+        """One adult page through the session, kept for `keep` seconds; None when the session
+        cannot deliver it (no companion, refused, slow), so the caller falls back to Torznab.
+        Reads are spaced as a person browsing would, and never use the API key."""
+        from torrentlinker.companion_downloads import SessionFetchError
+
+        if not self.adult_session:
+            return None
+        now = self._clock()
+        with self._adult_lock:
+            held = self._adult_cache.get(path)
+            if held is not None and now - held[0] < keep:
+                return held[1]
+            if self._adult_last and now - self._adult_last < ADULT_READ_SPACING:
+                self._sleep(ADULT_READ_SPACING - (now - self._adult_last))
+            try:
+                data = self.session.read_json(path)
+            except SessionFetchError as error:
+                log.warning("c411 session read refused (%s): %s", error.status, error)
+                return None
+            finally:
+                self._adult_last = self._clock()
+            if keep:
+                self._adult_cache[path] = (self._clock(), data)
+            return data
+
     def search_categories(self) -> dict[str, Any]:
-        """c411's native search tree; its IDs differ from Torznab categories."""
+        """c411's native search tree; its IDs differ from Torznab categories.
+
+        With adult content on, XXX (root 8, which the key cannot see) comes from the signed-in
+        session, or else as a Torznab-only entry with its subcategories."""
         if not self.is_c411:
             raise ValueError("Native search categories are only available on c411.org")
-        return self._request(
+        payload = self._request(
             lambda key: (
                 "https://c411.org/api/categories",
                 None,
                 {"Authorization": f"Bearer {key}"},
             )
         ).json()
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not self.adult_content() or not isinstance(data, list):
+            return payload
+        if any(isinstance(r, dict) and r.get("id") == ADULT_NATIVE_ROOT for r in data):
+            return payload
+        tree = self.adult_read("/api/categories", keep=ADULT_TREE_KEEP)
+        root = next(
+            (
+                r
+                for r in (tree or {}).get("data", [])
+                if isinstance(r, dict) and r.get("id") == ADULT_NATIVE_ROOT
+            ),
+            None,
+        )
+        return {**payload, "data": [*data, root or ADULT_TORZNAB_ROOT]}
 
     def search_filter_options(self, category: int) -> dict[str, Any]:
         """Search facets for a root category, distinct from required Upload options."""
         if not self.is_c411:
             raise ValueError("Native search filters are only available on c411.org")
+        if category == ADULT_NATIVE_ROOT:
+            if not self.adult_content():
+                return {"data": []}
+            found = self.adult_read(
+                f"/api/categories/{ADULT_NATIVE_ROOT}/filter-options", keep=ADULT_TREE_KEEP
+            )
+            return found if found is not None else {"data": []}
         return self._request(
             lambda key: (
                 f"https://c411.org/api/categories/{int(category)}/filter-options",
