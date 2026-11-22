@@ -397,6 +397,7 @@ def create_app(
     assistant = Assistant(directory, agent_service, mcp_server, assistant_transport)
     assistant_routes(app, assistant)
     app.state.assistant = assistant
+    app.state.secure_cookie = secure_cookie
     app.state.agent_service = agent_service
     from torrentlinker.web.feeds import feed_routes
 

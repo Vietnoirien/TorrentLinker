@@ -111,3 +111,28 @@ def test_creation_capability_checks_pair_account_and_allowed_operations(tmp_path
             "/api/companion/creation", ORIGIN, auth, {**body, "value": {"kind": "studio"}}
         )
     assert len(calls) == 1
+
+
+def test_extension_behind_an_https_proxy_allows_the_public_https_address(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from torrentlinker.web.app import create_app
+
+    app = create_app(tmp_path, password="test-password-long", secure_cookie=True)
+    with TestClient(app, base_url="http://tl.example") as client:
+        login = client.post(
+            "/api/login",
+            json={"password": "test-password-long"},
+            headers={"X-TorrentLinker": "1"},
+        )
+        # The proxy speaks HTTPS to the browser; the test client sends the Secure cookie itself.
+        cookie = login.headers["set-cookie"].split(";")[0]
+        answer = client.get(
+            "/api/zen/profile/extension", headers={"X-TorrentLinker": "1", "Cookie": cookie}
+        )
+        assert answer.status_code == 200, answer.text
+    with zipfile.ZipFile(io.BytesIO(answer.content)) as bundle:
+        receiver = json.loads(bundle.read("torrentlinker-companion/receiver.json"))
+        manifest = json.loads(bundle.read("torrentlinker-companion/manifest.json"))
+    assert receiver == {"webTarget": "https://tl.example"}
+    assert "https://tl.example/*" in manifest["host_permissions"]
