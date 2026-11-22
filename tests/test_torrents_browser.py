@@ -1,5 +1,6 @@
 """Shared torrent panel acceptance with simulated clients only."""
 
+import json
 import os
 import re
 import socket
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import shell_navigate, shell_open_navigation
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
@@ -176,10 +177,25 @@ window.dispatchEvent(new MessageEvent('message', {
                 panel.locator('[data-export="json"]').click()
             assert "deleted" in Path(download.value.path()).read_text()
             panel.locator("#audit-close").click()
-            expect(page.locator("#page-jobs")).to_contain_text("Refresh client")
-            pending_polls = []
-            page.route("**/api/jobs", lambda route: pending_polls.append(route))
+            # A finished job's card goes away (#159): keep one running across the language change.
+            client = page.evaluate("state.clientId")
+            running = {
+                "id": "refresh-1",
+                "kind": "refresh",
+                "status": "running",
+                "client_id": client,
+                "created": time.time(),
+                "progress": {},
+                "subject": {},
+            }
+            page.route(
+                "**/api/jobs",
+                lambda route: route.fulfill(
+                    status=200, content_type="application/json", body=json.dumps([running])
+                ),
+            )
             try:
+                expect(page.locator("#page-jobs")).to_contain_text("Refresh client")
                 page.frame_locator("#shell-navigation-frame").locator("#language").select_option(
                     "fr"
                 )
@@ -187,13 +203,12 @@ window.dispatchEvent(new MessageEvent('message', {
                 expect(page.locator("#page-jobs")).not_to_contain_text("Refresh client")
             finally:
                 page.unroute("**/api/jobs")
-                for route in pending_polls:
-                    route.continue_()
             expect(panel.locator("#columns")).to_have_text("Colonnes")
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             expect(panel.locator("html")).to_have_attribute("data-theme", "light")
             page.set_viewport_size({"width": 390, "height": 844})
             expect(panel.locator("#columns")).to_be_visible()
+            shell_open_navigation(page)
             expect(page.locator("#shell-navigation-frame")).to_have_css(
                 "height", re.compile(r"(?:[12]\d\d|\d{1,2})(?:\.\d+)?px")
             )
