@@ -19,6 +19,7 @@ import hashlib
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -66,6 +67,7 @@ DONE_AT = {  # the steps a state has finished
 }
 STOPPED = ("stopped", "paused")
 MISSING = "missingFiles"
+CLIENT_ERROR = "error"
 
 
 def row_id(source: str, indexer_id: str, key: str) -> str:
@@ -121,12 +123,31 @@ def torrent_item(torrent: Any) -> LocalItem | None:
 
 
 class CrossSeed:
-    def __init__(self, setup: Setup, library: Library, root: Setup | None = None) -> None:
+    def __init__(
+        self,
+        setup: Setup,
+        library: Library,
+        root: Setup | None = None,
+        notify: Callable[[str, str, str, str, str], None] | None = None,
+    ) -> None:
         self.setup, self.library = setup, library
+        self.notify = notify  # (event, title, state, note, dedup): the Owner's notices
         self.root = root or setup._root or setup
         self.store = setup.store
         self._blocked: dict[str, tuple[float, str]] = {}
+        self._reviews = 0
         self._lock = threading.Lock()
+
+    def tell(self, event: str, row: dict, state: str, note: str = "", dedup: str = "") -> None:
+        """Tell the Owner about a Cross-seed, once per row and event."""
+        if self.notify is None:
+            return
+        identifier = row_id(row["source"], row["indexer_id"], row["candidate_key"])
+        title = row.get("title") or row.get("name") or "Cross-seed"
+        try:
+            self.notify(event, title, state, note, dedup or f"{event}:{identifier}")
+        except Exception:  # noqa: BLE001 - a notice must never stop the engine
+            log.exception("Cross-seed notice failed")
 
     # Settings -------------------------------------------------------------------
 
@@ -279,6 +300,7 @@ class CrossSeed:
             use_catalogue=indexer.is_c411,
         )
         found = 0
+        self._reviews = 0
         for result in checked:
             if result.meta is None or result.match is None:
                 continue
@@ -286,6 +308,20 @@ class CrossSeed:
                 continue
             found += 1
             self._propose(indexer, identifier, source, result)
+        if self._reviews:
+            count = self._reviews
+            self.tell(
+                "cross-review",
+                {
+                    "source": source.key,
+                    "indexer_id": identifier,
+                    "candidate_key": "",
+                    "name": source.name,
+                },
+                f"{count} waiting for review",
+                self.indexer_name(identifier),
+                f"cross-review:{row_id(source.key, identifier, '')}:{time.time_ns()}",
+            )
         return found
 
     def search_rules(self) -> MatchRules:
@@ -327,6 +363,7 @@ class CrossSeed:
             return
         row["reason"] = reason or "Automatic adds are off"
         self.store.save_crossseed(source.key, identifier, key, "review", row)
+        self._reviews += 1
 
     def review_reason(self, checked: CheckedCandidate, client: Any) -> str | None:
         """Why this Match needs a review, or None when it is safe to add alone."""
@@ -370,12 +407,16 @@ class CrossSeed:
             return "gone"
         except Exception as error:  # noqa: BLE001 - shown on the row, retried by the Owner
             log.warning("Cross-seed could not add %s: %s", row.get("title"), error)
+            reason = str(error) or type(error).__name__
             self.store.save_crossseed(
-                source_key,
-                identifier,
-                key,
-                "failed",
-                {**row, "reason": str(error) or type(error).__name__},
+                source_key, identifier, key, "failed", {**row, "reason": reason}
+            )
+            self.tell(
+                "cross-failed",
+                {"source": source_key, "indexer_id": identifier, "candidate_key": key, **row},
+                "Could not be added",
+                reason,
+                f"cross-failed:{row_id(source_key, identifier, key)}:{time.time_ns()}",
             )
             return "failed"
         tags = [TAG, tag_for(self.indexer_name(identifier))]
@@ -494,15 +535,16 @@ class CrossSeed:
                 row["candidate_key"], "The torrent left the Torrent Client"
             )
             self.store.save_crossseed(*fixed, "failed", {**payload, "reason": reason})
+            self.tell("cross-failed", row, "Failed Verification", reason)
             return
         if VERIFYING in torrent.tags:
             return
         stopped = torrent.state.startswith(STOPPED)
-        if torrent.state == MISSING:
+        if lost := self.lost(row, torrent):
+            if row["state"] != "orphan" or row.get("reason") != lost:
+                self.store.save_crossseed(*fixed, "orphan", {**payload, "reason": lost})
             if row["state"] != "orphan":
-                self.store.save_crossseed(
-                    *fixed, "orphan", {**payload, "reason": "Its data is missing from disk"}
-                )
+                self.tell("cross-orphan", row, "Its data disappeared", lost)
             return
         updated = {k: v for k, v in payload.items() if k not in ("data", "reason")}
         updated["started"] = not stopped
@@ -512,6 +554,21 @@ class CrossSeed:
             )
         if row["state"] != "added" or updated != payload:
             self.store.save_crossseed(*fixed, "added", updated)
+        if row["state"] == "verifying":
+            self.tell("cross-added", row, "Added and verified", row.get("reason", ""))
+
+    @staticmethod
+    def lost(row: dict, torrent: Any) -> str:
+        """Why a Cross-seed's data is gone (the client says so, or the files are not on disk), or
+        an empty string. The data is never touched: the Owner decides what to remove."""
+        if torrent.state == MISSING:
+            return "Its data is missing from disk"
+        if torrent.state == CLIENT_ERROR:
+            return "The Torrent Client reports an error on this torrent"
+        path = row.get("item_path")
+        if path and not Path(path).exists():
+            return "Its files are missing from disk"
+        return ""
 
     # Reading --------------------------------------------------------------------
 

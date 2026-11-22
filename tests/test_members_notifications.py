@@ -318,3 +318,13 @@ def test_browser_subscriptions_are_bounded_and_existing_browser_can_refresh(stor
         )
     notices.unsubscribe(lea, subscription["endpoint"])
     notices.subscribe(lea, {**subscription, "endpoint": "https://fcm.googleapis.com/push/extra"})
+
+
+def test_cross_seed_events_are_the_owners_alone(store):
+    accounts, _requests, notices, _vault = store
+    lea = accounts.create("Lea", "lea", {Permission.REQUEST})
+    for event in ("cross-added", "cross-failed", "cross-review", "cross-orphan"):
+        notices.emit(OWNER, event, "Show S01", "x", dedup=event)
+        notices.emit(lea, event, "Show S01", "x", dedup=event)
+    assert len(notices.listing(OWNER)["notices"]) == 4
+    assert notices.listing(lea)["notices"] == []

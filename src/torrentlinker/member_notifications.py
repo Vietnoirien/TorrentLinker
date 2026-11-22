@@ -29,8 +29,21 @@ EVENTS = (
     "invitation",
     "screen",
     "locked",
+    "cross-added",
+    "cross-failed",
+    "cross-review",
+    "cross-orphan",
 )
-OWNER_EVENTS = {"margin", "invitation", "screen", "locked"}
+OWNER_EVENTS = {
+    "margin",
+    "invitation",
+    "screen",
+    "locked",
+    "cross-added",
+    "cross-failed",
+    "cross-review",
+    "cross-orphan",
+}
 APPROVER_EVENTS = {"new-request", "new-wish", "cancelled"}
 
 

@@ -458,3 +458,64 @@ def test_an_orphan_is_removed_from_the_client_keeping_its_data(tmp_path, monkeyp
         pass
     else:
         raise AssertionError("an unknown Cross-seed cannot be removed")
+
+
+def notices_of(f: Fixture) -> list[tuple[str, str, str]]:
+    sent: list[tuple[str, str, str]] = []
+    f.engine.notify = lambda event, title, state, note, dedup: sent.append((event, state, note))
+    return sent
+
+
+def test_the_owner_hears_of_an_added_cross_seed_and_a_failed_verification(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    sent = notices_of(f)
+    new = f.offer()
+    f.run()
+    f.verified(new)
+    f.engine.settle()  # not told twice
+    assert [e for e, *_ in sent] == ["cross-added"]
+
+
+def test_the_owner_hears_of_a_failed_verification(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    sent = notices_of(f)
+    bad = f.offer()
+    f.run()
+    f.qbit.finish_check(bad, 0.4)
+    check_verifications(
+        f.engine.library.client(), f.setup.store, now=lambda: __import__("time").time() + 60
+    )
+    f.engine.settle()
+    assert [e for e, *_ in sent] == ["cross-failed"]
+    assert "Verification failed" in sent[0][2]
+
+
+def test_one_notice_tells_of_the_matches_waiting_for_review(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    sent = notices_of(f)
+    f.offer()
+    f.engine.rules.auto_add = False
+    f.run()
+    assert [(e, s) for e, s, _ in sent] == [("cross-review", "1 waiting for review")]
+
+
+def test_data_that_disappears_is_an_orphan_with_its_reason_and_a_notice(tmp_path, monkeypatch):
+    f = Fixture(tmp_path, monkeypatch, EPISODES)
+    sent = notices_of(f)
+    new = f.offer()
+    f.run()
+    f.verified(new)
+    f.qbit._set(new, state="error")
+    f.engine.settle()
+    f.engine.settle()
+    (row,) = f.rows("orphan")
+    assert "error" in row["reason"]
+    assert [e for e, *_ in sent] == ["cross-added", "cross-orphan"]
+
+    f.qbit._set(new, state="uploading")
+    f.engine.settle()
+    moved = f.folder.rename(f.folder.with_name("moved"))  # the files vanish; nothing is deleted
+    f.engine.settle()
+    (row,) = f.rows("orphan")
+    assert "files are missing" in row["reason"] and (moved / "e1.mkv").exists()
+    assert [e for e, *_ in sent].count("cross-orphan") == 2

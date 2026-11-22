@@ -241,13 +241,18 @@ def create_app(
     verification_cursor = 0
     cross_seeds: dict[str, tuple[Any, CrossSeed]] = {}
 
+    def owner_notice(event: str, title: str, state: str, note: str, dedup: str) -> None:
+        """A Cross-seed event as the Owner's notice (there are none without Members)."""
+        if notices := getattr(app.state, "notifications", None):
+            notices.emit(OWNER, event, title, state, note=note, dedup=dedup)
+
     def cross_seed(identifier: str = "") -> CrossSeed:
         """The Cross-seed engine of a Torrent Client profile, rebuilt with its Operations."""
         target = for_client(identifier)
         key = target.setup.settings.active_client_id
         held = cross_seeds.get(key)
         if held is None or held[0] is not target:
-            held = (target, CrossSeed(target.setup, target.library, service))
+            held = (target, CrossSeed(target.setup, target.library, service, owner_notice))
             cross_seeds[key] = held
         return held[1]
 
