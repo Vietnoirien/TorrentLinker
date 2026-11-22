@@ -38,6 +38,7 @@ from torrentlinker.crossseed import STATES as CROSS_SEED_STATES
 from torrentlinker.crossseed import CrossSeed, CrossSeedRunner
 from torrentlinker.diagnostics import build_report, report_json
 from torrentlinker.domain import Torrent
+from torrentlinker.login_guard import LoginRefused
 from torrentlinker.member_requests import Requests
 from torrentlinker.torrent_management import peer_count_order, tracker_group
 from torrentlinker.updates import check_for_update, installed_version
@@ -189,6 +190,9 @@ def create_app(
     def error_message(error: Exception) -> str:
         if isinstance(error, ValueError):
             return service.secrets.redact(str(error))
+        if isinstance(error, LoginRefused):
+            # One clear sentence, never "Operation failed": the client was not even asked.
+            return error.text(service.settings.language)
         kind = type(error).__name__.lower()
         if "timeout" in kind or "connection" in kind or "connect" in kind:
             return (

@@ -4,6 +4,7 @@ import pytest
 from tests.torrents import make_torrent
 from torrentlinker.client_folders import ClientFolder
 from torrentlinker.domain import LocalItem, PathMapping
+from torrentlinker.login_guard import LoginRefused
 from torrentlinker.matching import Match
 from torrentlinker.paths import MappedQbit, PathMapper
 from torrentlinker.qbit import AlreadyInClient
@@ -157,7 +158,7 @@ def test_authentication_token_cookie_and_expiration(host):
 def test_bad_credentials_and_wrong_edition_are_clear():
     web = WebUI()
     web.bad_password = True
-    with pytest.raises(UtorrentError, match="credentials"):
+    with pytest.raises(LoginRefused, match="refused the login"):
         api_for(web).check()
     http = httpx.Client(
         transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html>Web</html>"))

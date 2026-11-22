@@ -21,6 +21,7 @@ from torrentlinker.config import C411_ID, HUB_SECRET, IndexerSettings, ProxySett
 from torrentlinker.domain import ContentKind, LibraryFolder, PathMapping, TorrentClient
 from torrentlinker.indexer import Caps, Indexer
 from torrentlinker.library import known_files
+from torrentlinker.login_guard import LoginRefused
 from torrentlinker.paths import PathMapper
 from torrentlinker.profile_history import ProfileHistory
 from torrentlinker.profile_workspace import ProfileWorkspace
@@ -432,6 +433,8 @@ class Setup:
                     version = client.check()
             except PartialNamesRefused:
                 raise
+            except LoginRefused as refused:
+                raise ValueError(refused.text(self.settings.language)) from None
             except Exception as error:
                 if any(
                     word in str(error).lower()

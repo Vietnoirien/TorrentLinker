@@ -19,6 +19,7 @@ import qbittorrentapi
 from torrentlinker import net
 from torrentlinker.client_folders import ClientFolder, qbit_folders
 from torrentlinker.domain import Torrent, TorrentFile
+from torrentlinker.login_guard import LoginGuard
 from torrentlinker.torrent_meta import read_torrent
 
 
@@ -115,22 +116,49 @@ def is_api_key(text: str) -> bool:
     return bool(API_KEY_PATTERN.match(text))
 
 
+def _is_ban(error: Exception) -> bool:
+    return "banned" in str(error).lower()
+
+
 class _SharedLogin:
     """qbittorrent-api calls that share one login, safe when several threads start at once.
 
     Left alone, every thread that finds no session logs in by itself, the logins replace
     each other's session cookie and requests in between are refused with 403.
+
+    A refused login (wrong password, or an IP qBittorrent banned for too many of them) is
+    remembered in the LoginGuard: no caller logs in again, each gets LoginRefused, until the
+    credentials change or the user presses Test. With an API key there is no login at all:
+    the key travels with every request, and a refused key is remembered the same way.
     """
 
-    def __init__(self, client: qbittorrentapi.Client) -> None:
+    def __init__(
+        self, client: qbittorrentapi.Client, guard: LoginGuard, api_key: bool = False
+    ) -> None:
         self._client = client
+        self._guard = guard
+        self._api_key = api_key
         self._lock = threading.Lock()
         self._logged_in = False
+        self._session = 0  # counts the logins that succeeded
+
+    def _log_in(self) -> None:
+        """One login attempt, under the lock; a refusal is remembered and ends all attempts."""
+        self._guard.check()
+        try:
+            self._client.auth_log_in()
+        except qbittorrentapi.LoginFailed as error:
+            raise self._guard.refuse(_is_ban(error)) from None
+        except qbittorrentapi.Forbidden403Error as error:
+            raise self._guard.refuse(_is_ban(error)) from None
+        self._logged_in = True
+        self._session += 1
 
     def log_in(self) -> None:
+        """The explicit Test: the user asks, so it tries again even after a refusal."""
         with self._lock:
-            self._client.auth_log_in()
-            self._logged_in = True
+            self._guard.rearm()
+            self._log_in()
 
     def __getattr__(self, name: str) -> Any:
         attribute = getattr(self._client, name)
@@ -138,15 +166,22 @@ class _SharedLogin:
             return attribute
 
         def call(*args: Any, **kwargs: Any) -> Any:
-            if not self._logged_in:
+            self._guard.check()
+            if not self._api_key and not self._logged_in:
                 with self._lock:
                     if not self._logged_in:
-                        self._client.auth_log_in()
-                        self._logged_in = True
+                        self._log_in()
+            session = self._session
             try:
                 return attribute(*args, **kwargs)
-            except qbittorrentapi.Forbidden403Error:
-                self.log_in()  # the session expired or was replaced: once more
+            except (qbittorrentapi.Forbidden403Error, qbittorrentapi.Unauthorized401Error) as error:
+                if _is_ban(error) or self._api_key:
+                    raise self._guard.refuse(_is_ban(error)) from None
+                # The session expired or was replaced: log in once more, and only if no other
+                # thread already did. The first login worked, so this one may; never a loop.
+                with self._lock:
+                    if self._session == session:
+                        self._log_in()
                 return attribute(*args, **kwargs)
 
         return call
@@ -231,15 +266,24 @@ class QbitApi:
             VERIFY_WEBUI_CERTIFICATE=False,
             REQUESTS_ARGS={"timeout": (5, 30), "proxies": net.requests_proxies()},
         )
-        self._client: Any = client if api_key else _SharedLogin(client)
+        self._api_key = bool(api_key)
+        guard = LoginGuard("qbittorrent", host, username, password, api_key)
+        self._client: Any = _SharedLogin(client, guard, bool(api_key))
         self._sync = threading.Lock()
         self._trackers: dict[str, list[str]] = {}
         self._rid = 0
         self._known: dict[str, dict[str, Any]] = {}
 
     def check(self) -> str:
-        """Log in (or validate the API key) and return the qBittorrent version."""
-        self._client.auth_log_in()
+        """Log in (or validate the API key) and return the qBittorrent version.
+
+        The user pressed Test, so a refused login is tried again; an API key only makes
+        the version call carry its bearer token.
+        """
+        if self._api_key:
+            self._client._guard.rearm()
+        else:
+            self._client.log_in()
         return str(self._client.app_version())
 
     def default_save_path(self) -> str:
