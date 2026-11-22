@@ -214,7 +214,9 @@ def test_native_studio_loads_and_saves(qtbot, tmp_path, request):
     wait_js(
         qtbot,
         view,
-        "typeof prerollStudio==='function' && typeof communityBrowseDialog==='function'",
+        # The panel reaches the app only once connected; opening Pré-rolls earlier has no API.
+        "typeof prerollStudio==='function' && typeof communityBrowseDialog==='function'"
+        " && typeof panelRequest==='function'",
     )
     js(qtbot, view, "void preOpen()")
     wait_js(qtbot, view, "!!document.querySelector('#preroll-body')")
