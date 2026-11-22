@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import media_option, shell_navigate
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
 
@@ -29,14 +29,26 @@ def open_films_grid(page):
     from playwright.sync_api import expect
 
     expect(page.locator("#media-frame")).to_be_visible()
-    media_locator(page, '[data-media-view="films"]').click()
+    films = media_locator(page, '[data-media-view="films"]')
+    if films.is_visible():
+        films.click()
+    else:
+        # The phone player keeps browsing filters in Options.
+        media_option(page, "#media-view").select_option("films")
+        media_locator(page, "#media-library-options > summary").click()
     expect(media_locator(page, "#media-home-rows")).to_be_visible(timeout=15000)
     more = media_locator(page, "#media-home-rows .media-home-row").first.get_by_role(
         "button", name="See all", exact=True
     )
-    # The cinematic home pins its title; a playing mini-player may cover the row header below.
-    more.focus()
-    more.press("Enter")
+    if more.is_visible():
+        more.focus()
+        more.press("Enter")
+    else:
+        # A short row needs no See all link. The explicit all-videos view remains available.
+        if media_locator(page, "#media-library-options").get_attribute("open") is None:
+            media_locator(page, "#media-library-options > summary").click()
+        media_locator(page, "#media-view").select_option("all")
+        media_locator(page, "#media-library-options > summary").click()
     expect(media_locator(page, "#media-results")).to_be_visible()
 
 
@@ -62,7 +74,7 @@ def player_action(page, identifier):
         watch_control(page, video_controls[identifier]).click()
         return
     if identifier == "#media-chat":
-        media_locator(page, "#media-toolbar-chat").click()
+        media_option(page, "#media-toolbar-chat").click()
         return
     identifier = {"#media-player-expand": "#player-expand"}.get(
         identifier, identifier.replace("#media-", "#player-")
@@ -207,7 +219,8 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             shell_navigate(page, "media")
             expect(media_locator(page, "#view-media")).to_have_attribute("data-layout", "cinematic")
             # The toolbar ⟳ refreshes the library and shows that a refresh is running.
-            media_locator(page, "#media-toolbar-refresh").click()
+            media_option(page, "#media-refresh").click()
+            media_locator(page, "#media-library-options > summary").click()
             expect(media_locator(page, "#media-toolbar-refresh")).to_have_attribute(
                 "aria-pressed", "true"
             )
@@ -218,9 +231,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(media_locator(page, "#media-home-rows")).to_contain_text(
                 "Validation", timeout=15000
             )
-            media_locator(page, "#media-home-rows .media-home-row").first.get_by_role(
-                "button", name="See all", exact=True
-            ).click()
+            open_films_grid(page)
             expect(media_locator(page, "#media-home-rows")).to_be_hidden()
             expect(media_locator(page, "#media-results")).to_contain_text("Validation")
             open_films_grid(page)
@@ -306,8 +317,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(track_dialog).to_be_hidden()
             assert video_element.evaluate("node => node === document.querySelector('#media-video')")
             assert video.get_attribute("src") == source
-            expect(media_locator(page, "#media-watch h2")).to_have_text("Validation Film")
-            expect(media_locator(page, "#media-watch .media-watch-meta")).to_contain_text("2026")
+            expect(media_locator(page, "#media-feature h2")).to_have_text("Validation Film")
+            expect(media_locator(page, "#media-feature .media-feature-meta")).to_contain_text(
+                "2026"
+            )
             assert not page.locator("#media-video-stage").locator("#player-details-frame").count()
             video.evaluate("node => node.play()")
             track_report = wait_report(lambda report: report.get("track_state", {}).get("ready"))
@@ -513,10 +526,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             expect(media_locator(page, "#media-center-mode")).to_have_attribute(
                 "aria-label", "Return to TorrentLinker"
             )
-            media_locator(page, "#media-music-tab").click()
+            media_option(page, "#media-music-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-results article")).to_have_count(2)
-            media_locator(page, "#media-video-tab").click()
+            media_option(page, "#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             player_action(page, "#media-chat")
             expect(page.locator("#media-chat-panel")).to_be_visible()
@@ -600,12 +613,8 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 )
                 player_action(page, "#media-fullscreen")
                 page.wait_for_function("() => document.fullscreenElement === null")
-                # The film takes the cinematic title's place; the others keep their browsing.
-                expect(media_locator(page, "#media-watch")).to_be_visible()
-                if layout == "cinematic":
-                    expect(media_locator(page, "#media-feature")).to_be_hidden()
-                else:
-                    expect(media_locator(page, "#media-feature")).to_be_visible()
+                # The selected library banner remains available during playback.
+                expect(media_locator(page, "#media-feature")).to_be_visible()
                 if layout == "horizon":
                     # The Media options switch Horizon's view.
                     page.wait_for_timeout(600)
@@ -626,7 +635,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                     media_locator(page, "#media-focus-strip").get_by_role(
                         "button", name="Validation Film", exact=True
                     ).click()
-                    expect(media_locator(page, "#media-watch h2")).to_have_text("Validation Film")
+                    expect(media_locator(page, "#media-feature h2")).to_have_text("Validation Film")
                     assert video.get_attribute("src") == source
                     media_locator(page, "#media-search").fill("No matching local title")
                     expect(media_locator(page, ".media-empty")).to_be_visible()
@@ -708,10 +717,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             # The toolbar's ✦ icon toggles the same panel and shows its state.
             toolbar_chat = media_locator(page, "#media-toolbar-chat")
             expect(toolbar_chat).to_have_attribute("aria-pressed", "true")
-            toolbar_chat.click()
+            media_option(page, "#media-toolbar-chat").click()
             expect(panel).to_be_hidden()
             expect(toolbar_chat).to_have_attribute("aria-pressed", "false")
-            toolbar_chat.click()
+            media_option(page, "#media-toolbar-chat").click()
             expect(panel).to_be_visible()
             page.frame_locator("#media-assistant-frame").locator("#media-chat-close").click()
             # A video belongs to Médias: elsewhere it pauses out of sight, then comes back.
@@ -758,7 +767,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             other.wait_for_function("() => document.querySelector('#media-video').currentTime > 0")
             assert video.evaluate("node => node.paused && node.currentTime >= 4.9")
             other.close()
-            media_locator(page, "#media-music-tab").click()
+            media_option(page, "#media-music-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-results article")).to_have_count(2)
             assert video.get_attribute("src") == source
@@ -842,10 +851,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             assert page.locator("#media-audio").evaluate("node => node.paused") is True
             # Paused music leaves its bar behind when switching to Video, and finds it again.
             expect(page.locator("#media-player-shell")).to_be_visible()
-            media_locator(page, "#media-video-tab").click()
+            media_option(page, "#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(page.locator("#media-player-shell")).to_be_hidden()
-            media_locator(page, "#media-music-tab").click()
+            media_option(page, "#media-music-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(page.locator("#media-player-shell")).to_be_visible()
             music_nav.get_by_role("button", name="Tracks", exact=True).click()
@@ -881,7 +890,7 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
             page.wait_for_timeout(1300)
             page.reload()
             shell_navigate(page, "media")
-            media_locator(page, "#media-music-tab").click()
+            media_option(page, "#media-music-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(media_locator(page, "#media-playlist-list")).to_contain_text("Evening listening")
             expect(media_locator(page, "#media-show-queue")).to_have_text("Playback queue · 3")
@@ -893,9 +902,9 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 "Restored listening"
             )
             # A saved queue belongs to its playback client even while browsing another.
-            media_locator(page, "#media-client").select_option("other")
-            expect(media_locator(page, "#media-music-tab")).to_be_visible()
-            media_locator(page, "#media-music-tab").click()
+            media_option(page, "#media-client").select_option("other")
+            expect(media_option(page, "#media-music-tab")).to_be_visible()
+            media_option(page, "#media-music-tab").click()
             media_locator(page, "#media-playlist-name").fill("Original client queue")
             with page.expect_response(
                 lambda r: "/api/media/playlists" in r.url and r.request.method == "POST"
@@ -914,10 +923,10 @@ def test_media_playback_survives_browsing_and_contextual_chat(tmp_path):
                 ).json()
                 == []
             )
-            media_locator(page, "#media-client").select_option("default")
+            media_option(page, "#media-client").select_option("default")
             page.set_viewport_size({"width": 600, "height": 800})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            media_locator(page, "#media-video-tab").click()
+            media_option(page, "#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             open_films_grid(page)
             media_locator(page, ".media-card").filter(has_text="Unsupported Video").get_by_role(
@@ -1205,7 +1214,7 @@ def test_explicit_fixed_prefix_video_preview_can_refresh_and_stop(tmp_path):
         thread.join(10)
 
 
-def test_cinematic_home_has_a_calm_title_and_a_menu_over_it_that_leaves_while_scrolling(tmp_path):
+def test_cinematic_home_keeps_the_banner_and_menu_pinned_while_rows_scroll(tmp_path):
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
@@ -1238,12 +1247,18 @@ def test_cinematic_home_has_a_calm_title_and_a_menu_over_it_that_leaves_while_sc
             time.sleep(0.02)
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+            page = browser.new_page(viewport={"width": 1280, "height": 650}, locale="en-US")
             page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             shell_navigate(page, "media")
-            media_locator(page, "#media-toolbar-refresh").click()
+            if media_locator(page, "#media-toolbar-refresh").is_visible():
+                media_option(page, "#media-refresh").click()
+                media_locator(page, "#media-library-options > summary").click()
+            else:
+                media_locator(page, "#media-library-options > summary").click()
+                media_locator(page, "#media-refresh").click()
+                media_locator(page, "#media-library-options > summary").click()
             expect(media_locator(page, "#media-home-rows")).to_contain_text("Pinned", timeout=15000)
             frame = page.frame(name="media-frame") or next(
                 f for f in page.frames if f.url.endswith("/media/view.html") or "media" in f.url
@@ -1267,53 +1282,28 @@ def test_cinematic_home_has_a_calm_title_and_a_menu_over_it_that_leaves_while_sc
             page.mouse.wheel(0, 300)
             page.wait_for_timeout(400)
             assert frame.evaluate("scrollY") == before
-            media_locator(page, "#media-feature").hover()
+            assert frame.evaluate("document.documentElement.scrollHeight > innerHeight")
+            media_locator(page, ".media-feature-poster").hover()
             page.mouse.wheel(0, 300)
             page.wait_for_timeout(400)
             assert frame.evaluate("scrollY") > before
-            # The menu sits over the title instead of pushing it, and the title is not pinned:
-            # it scrolls away with the page while the menu leaves.
+            # The menu and selected banner remain fixed together while browsing.
             assert frame.evaluate("document.querySelector('.media-topbar').offsetHeight") > 0
-            assert (
-                frame.evaluate("getComputedStyle(document.querySelector('.media-topbar')).position")
-                == "fixed"
-            )
-            assert (
-                frame.evaluate(
-                    "getComputedStyle(document.querySelector('#media-feature')).position"
-                )
-                != "sticky"
-            )
             frame.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             page.wait_for_timeout(400)
             assert frame.evaluate("scrollY") > 0
-            expect(media_locator(page, "#view-media")).to_have_attribute("data-bar", "hidden")
-            assert (
-                frame.evaluate(
-                    "document.querySelector('.media-topbar').getBoundingClientRect().bottom"
+            view = media_locator(page, "#view-media")
+            expect(view).not_to_have_attribute("data-bar", "hidden")
+            for selector in (".media-topbar", "#media-feature"):
+                assert (
+                    frame.locator(selector).evaluate("node => node.getBoundingClientRect().top")
+                    == 0
                 )
-                <= 0
-            )
-            assert (
-                frame.evaluate(
-                    "document.querySelector('#media-feature').getBoundingClientRect().bottom"
-                )
-                <= 0
-            )
-            # Any scroll up brings the menu back over the page; scrolling down hides it again.
             frame.evaluate("window.scrollBy(0, -50)")
-            expect(media_locator(page, "#view-media")).not_to_have_attribute("data-bar", "hidden")
-            page.wait_for_timeout(500)  # the bar slides in
-            assert (
-                frame.evaluate(
-                    "document.querySelector('.media-topbar').getBoundingClientRect().top"
-                )
-                == 0
-            )
+            expect(view).not_to_have_attribute("data-bar", "hidden")
             frame.evaluate("window.scrollBy(0, 80)")
-            expect(media_locator(page, "#view-media")).to_have_attribute("data-bar", "hidden")
+            expect(view).not_to_have_attribute("data-bar", "hidden")
             frame.evaluate("window.scrollTo(0, 0)")
-            expect(media_locator(page, "#view-media")).not_to_have_attribute("data-bar", "hidden")
             # Choosing another film changes the title with a soft fade; nothing else moves.
             fade = """() => {
                 const card = document.querySelectorAll('.media-row-card')[3];
@@ -1334,7 +1324,7 @@ def test_cinematic_home_has_a_calm_title_and_a_menu_over_it_that_leaves_while_sc
                 frame.evaluate(
                     "getComputedStyle(document.querySelector('#media-feature')).position"
                 )
-                != "sticky"
+                == "sticky"
             )
             assert (
                 frame.evaluate(
@@ -1407,7 +1397,8 @@ def test_horizon_home_and_showcase_fill_one_screen_and_the_wheel_moves_the_selec
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             shell_navigate(page, "media")
-            media_locator(page, "#media-toolbar-refresh").click()
+            media_option(page, "#media-refresh").click()
+            media_locator(page, "#media-library-options > summary").click()
             expect(media_locator(page, ".media-row-card")).to_have_count(20, timeout=15000)
             frame = page.frame(name="media-frame")
 
@@ -1473,7 +1464,7 @@ WATCH_SCREENS = {
 
 @pytest.mark.parametrize("screen_name", list(WATCH_SCREENS))
 def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_name):
-    """Layout A of docs/specs/media-watch-page: the picture pinned on top, the menu over it."""
+    """Approved theatre design: full-width player, pinned selection and independent playback."""
     import uvicorn
     from playwright.sync_api import expect, sync_playwright
 
@@ -1487,12 +1478,24 @@ def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_na
     root = tmp_path / "media"
     root.mkdir()
     for name in ("First.Watch.2026", "Second.Watch.2025"):
+        (root / name).mkdir()
         subprocess.run(
             [ffmpeg, "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=320x180:r=10"]
             + ["-t", "60", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
-            + [str(root / f"{name}.mp4")],
+            + [str(root / name / f"{name}.mp4")],
             check=True,
         )
+    from PIL import Image
+
+    Image.new("RGB", (200, 300), "#447c88").save(root / "First.Watch.2026" / "poster.jpg")
+    synopsis = "A long synopsis that must remain readable without moving the film rows. " * 40
+    (root / "First.Watch.2026" / "movie.nfo").write_text(
+        f"<movie><title>First Watch</title><plot>{synopsis}</plot></movie>"
+    )
+    (root / "Second.Watch.2025" / "movie.nfo").write_text(
+        "<movie><title>Second Watch across the distant horizons "
+        "and the last forgotten islands</title></movie>"
+    )
     config = tmp_path / "config"
     config.mkdir()
     settings = Settings(language="en")
@@ -1522,14 +1525,80 @@ def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_na
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             shell_navigate(page, "media")
-            media_locator(page, "#media-toolbar-refresh").click()
+            if media_locator(page, "#media-toolbar-refresh").is_visible():
+                media_option(page, "#media-refresh").click()
+                media_locator(page, "#media-library-options > summary").click()
+            else:
+                media_locator(page, "#media-library-options > summary").click()
+                media_locator(page, "#media-refresh").click()
+                media_locator(page, "#media-library-options > summary").click()
             expect(media_locator(page, "#media-home-rows")).to_contain_text("Watch", timeout=15000)
+            expect(media_locator(page, "#media-toolbar-refresh")).to_have_attribute(
+                "aria-pressed", "false", timeout=15000
+            )
             center = screen_name == "media-center"
             if center:
                 media_locator(page, "#media-center-mode").click()
                 page.wait_for_function(
                     "() => document.fullscreenElement === document.documentElement"
                 )
+                page.wait_for_function(
+                    "() => document.querySelector('#media-frame')"
+                    ".getBoundingClientRect().left === 0"
+                )
+            # Selection geometry stays fixed with artwork, without artwork and long text.
+            feature = media_locator(page, "#media-feature")
+            first_card = media_locator(page, ".media-row-card").filter(has_text="First Watch").first
+            second_card = (
+                media_locator(page, ".media-row-card").filter(has_text="Second Watch").first
+            )
+            first_card.click()
+            expect(
+                feature.locator(".media-feature-poster > img:not(.media-art-logo)")
+            ).to_be_visible()
+            frame_height = page.locator("#media-frame").bounding_box()["height"]
+            banner_height = 300 if frame_height <= 600 else 380
+            assert feature.bounding_box()["height"] == banner_height
+
+            def geometry():
+                return feature.evaluate("""node => [
+              node.getBoundingClientRect().height,
+              ...['.media-feature-poster', 'h2', '.media-feature-actions'].flatMap(selector => {
+                const r = node.querySelector(selector).getBoundingClientRect();
+                const banner = node.getBoundingClientRect();
+                return [r.x - banner.x, r.y - banner.y, r.width, r.height];
+              })]""")
+
+            before_selection = geometry()
+            description = feature.locator(".media-feature-description")
+            assert description.evaluate("node => node.scrollHeight > node.clientHeight")
+            description.focus()
+            if screen_name.startswith("phone"):
+                description.evaluate("node => { node.scrollTop = node.scrollHeight; }")
+            else:
+                description.press("End")
+            expect(description).to_contain_text(synopsis.strip())
+            expect(description).to_have_js_property(
+                "scrollTop", description.evaluate("node => node.scrollHeight - node.clientHeight")
+            )
+            second_card.click()
+            expect(feature.locator(".media-feature-poster .media-art-logo")).to_be_visible()
+            assert geometry() == before_selection
+            expect(feature.locator(".media-feature-description")).to_contain_text(
+                "No local synopsis"
+            )
+            seen = feature.locator(".media-seen")
+            expect(seen).to_have_attribute("aria-pressed", "false")
+            seen.click()
+            expect(seen).to_have_attribute("aria-pressed", "true")
+            assert seen.evaluate("node => getComputedStyle(node).color") == "rgb(110, 213, 154)"
+            first_card.click()
+            expect(seen).to_have_attribute("aria-pressed", "false")
+            second_card.click()
+            expect(seen).to_have_attribute("aria-pressed", "true")
+            seen.click()
+            expect(seen).to_have_attribute("aria-pressed", "false")
+            assert geometry() == before_selection
             # Médias has no page heading: not before the film, and not after it either.
             expect(page.locator("main > header")).to_be_hidden()
             media_locator(page, ".media-feature-actions .media-primary").click()
@@ -1537,152 +1606,76 @@ def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_na
             page.wait_for_function("() => document.querySelector('#media-video').currentTime > 0.2")
             view = media_locator(page, "#view-media")
             expect(view).to_have_attribute("data-watch", "true")
-            expect(media_locator(page, "#media-feature")).to_be_hidden()
-            geometry = """() => {
-                const box = node => { const r = node.getBoundingClientRect();
-                    return {x: r.x, y: r.y, width: r.width, height: r.height}; };
-                const frame = document.querySelector('#media-frame');
-                const shell = document.querySelector('#media-player-shell');
-                return {frame: box(frame), shell: box(shell),
-                    picture: box(document.querySelector('#media-video-stage')),
-                    slot: box(frame.contentDocument.querySelector('#media-watch-slot')),
-                    heading: box(frame.contentDocument.querySelector('#media-watch h2'))};
-            }"""
-            page.wait_for_timeout(300)
-            first = page.evaluate(geometry)
-            # No floating box: the picture is a black band across the top of the page, 16:9, capped.
-            assert first["shell"]["y"] == first["frame"]["y"] == 0
-            assert first["shell"]["x"] == first["frame"]["x"]
-            assert abs(first["shell"]["width"] - first["frame"]["width"]) <= 1
-            assert abs(first["picture"]["width"] / first["picture"]["height"] - 16 / 9) < 0.02
-            expected = {"phone-landscape": 356}.get(screen_name)
-            if expected:
-                assert abs(first["picture"]["width"] - expected) <= 1
-            else:
-                cap = min(first["frame"]["width"], 782)
-                assert abs(first["picture"]["width"] - cap) <= 1
-            assert first["heading"]["y"] >= first["slot"]["y"] + first["slot"]["height"] - 1
-            # The controls appear with the film, leave after a moment, and a tap brings them back.
+            feature = media_locator(page, "#media-feature")
+            expect(feature).to_be_visible()
+            expect(feature.locator(".media-description-toggle")).to_have_count(0)
+            expect(feature.locator(".media-feature-tag")).to_have_count(4)
+            expect(feature.locator(".media-feature-description")).to_be_visible()
             screen = media_locator(page, "#media-screen")
-            expect(screen).to_have_attribute("data-controls", "on")
-            expect(screen).to_have_attribute("data-controls", "off", timeout=6000)
-            box = screen.bounding_box()
-            screen.click(position={"x": box["width"] / 2, "y": box["height"] - 6})
-            expect(screen).to_have_attribute("data-controls", "on")
-            # Every control changes the state.
-            media_locator(page, "#watch-toggle").click()
-            expect(media_locator(page, "#watch-toggle")).to_have_attribute("aria-label", "Play")
+            frame = page.locator("#media-frame")
+            assert screen.bounding_box()["width"] >= frame.bounding_box()["width"] - 2
+            if screen_name in ("computer", "media-center"):
+                assert screen.bounding_box()["height"] >= 500
+            toggle = watch_control(page, "#watch-toggle")
+            assert (
+                toggle.bounding_box()["y"]
+                > screen.bounding_box()["y"] + screen.bounding_box()["height"] * 0.7
+            )
+            toggle.click()
+            expect(toggle).to_have_attribute("aria-label", "Play")
             assert video.evaluate("node => node.paused")
-            media_locator(page, "#watch-toggle").click()
+            toggle.click()
             page.wait_for_function("() => !document.querySelector('#media-video').paused")
-            video.evaluate("node => { node.currentTime = 20; }")
-            page.wait_for_timeout(300)
-            before = video.evaluate("node => node.currentTime")
-            watch_control(page, "#watch-fwd").click()
-            page.wait_for_function(
-                "before => document.querySelector('#media-video').currentTime >= before + 9",
-                arg=before,
-            )
-            after = video.evaluate("node => node.currentTime")
-            watch_control(page, "#watch-rew").click()
-            page.wait_for_function(
-                "after => document.querySelector('#media-video').currentTime <= after - 9",
-                arg=after,
-            )
-            seek = watch_control(page, "#watch-seek")
-            seek_box = seek.bounding_box()
-            seek.click(position={"x": seek_box["width"] / 4, "y": seek_box["height"] / 2})
-            page.wait_for_function(
-                "() => Math.abs(document.querySelector('#media-video').currentTime - 15) < 4"
-            )
-            expect(media_locator(page, "#watch-time")).to_contain_text("/ 1:00")
-            # Under the picture: the film's facts and its three actions, then the rows.
-            details = media_locator(page, "#media-watch")
-            expect(details.locator("h2")).to_contain_text("Watch")
-            for action in ("Audio and subtitles", "Next", "Mark watched"):
-                expect(details.get_by_role("button", name=action, exact=True)).to_be_visible()
-            media_browse(page).get_by_role("button", name="Mark watched", exact=True).click()
-            expect(details.get_by_role("button", name="Mark unwatched", exact=True)).to_be_visible()
-            media_browse(page).get_by_role("button", name="Mark unwatched", exact=True).click()
-            expect(details.get_by_role("button", name="Mark watched", exact=True)).to_be_visible()
-            expect(media_locator(page, "#media-home-rows")).to_be_visible()
-            # Scrolling: the picture stays, the details leave under it, the menu comes and goes.
+            volume = media_locator(page, "#watch-volume")
+            volume.press("Home")
+            page.wait_for_function("() => document.querySelector('#media-video').volume === 0")
+            volume.press("End")
+            page.wait_for_function("() => document.querySelector('#media-video').volume === 1")
+            # The banner, not the video, pins; the menu never changes its offset.
             scroller = media_locator(page, ".media-scroll")
-            # On every screen the bar starts over the film; a phone keeps it to one row.
-            expect(view).not_to_have_attribute("data-bar", "hidden")
-            if screen_name not in ("computer", "media-center"):
-                # Its padding lets taps through; its controls must end above the play button.
-                search = media_locator(page, "#media-search").bounding_box()
-                toggle = media_locator(page, "#watch-toggle")
-                toggle.evaluate("node => node.closest('#media-screen').dataset.controls = 'on'")
-                assert search["y"] + search["height"] <= toggle.bounding_box()["y"]
-            scroller.evaluate(
-                "node => { node.style.scrollBehavior = 'auto'; node.scrollTop = 400; }"
-            )
+            stage_height = screen.bounding_box()["height"]
+            scroller.evaluate("node => { node.scrollTop = 60; }")
             expect(view).to_have_attribute("data-bar", "hidden")
-            moved = page.evaluate(geometry)
-            assert moved["shell"] == first["shell"]
-            assert moved["picture"] == first["picture"]
-            assert moved["heading"]["y"] < first["heading"]["y"]
-            assert moved["heading"]["y"] + moved["heading"]["height"] <= moved["slot"]["height"] + 1
-            scroller.evaluate("node => { node.scrollTop = 300; }")
+            scroller.evaluate("(node, y) => { node.scrollTop = y; }", stage_height + 120)
             expect(view).not_to_have_attribute("data-bar", "hidden")
-            assert page.evaluate(geometry)["shell"] == first["shell"]
-            page.wait_for_timeout(500)  # the bar slides in
-            assert media_locator(page, ".media-topbar").evaluate(
-                "node => node.getBoundingClientRect().top === 0"
-            )
-            scroller.evaluate("node => { node.scrollTop = 0; }")
+            before = feature.bounding_box()
+            assert abs(before["y"] - frame.bounding_box()["y"]) <= 1
+            scroller.evaluate("node => { node.scrollTop -= 30; }")
             expect(view).not_to_have_attribute("data-bar", "hidden")
-            # While a film plays, a card plays its film.
+            after = feature.bounding_box()
+            assert before["y"] == after["y"]
+            assert before["height"] == after["height"]
+            # A single poster click selects without restarting or replacing playback.
             source = video.get_attribute("src")
-            current = video.evaluate("node => node.src")
-            playing = details.locator("h2").inner_text()
+            playing = feature.locator("h2").inner_text()
             other = "Second Watch" if "First" in playing else "First Watch"
-            media_locator(page, ".media-row-card").filter(has_text=other).first.evaluate(
-                "node => node.click()"
-            )
+            media_locator(page, ".media-row-card").filter(has_text=other).first.click()
+            expect(feature.locator("h2")).to_contain_text(other)
+            assert video.get_attribute("src") == source
+            feature.locator(".media-primary").click()
             page.wait_for_function(
-                "old => document.querySelector('#media-video').src !== old "
-                "&& document.querySelector('#media-video').currentTime > 0",
-                arg=current,
+                "old => document.querySelector('#media-video').getAttribute('src') !== old",
+                arg=source,
             )
-            assert video.get_attribute("src") != source
-            expect(details.locator("h2")).to_contain_text(other)
-            # Full screen shows the film alone, and never ends Media Center.
+            # Full screen preserves Media Center and returns to the theatre view.
+            scroller.evaluate("node => { node.scrollTop = 0; }")
             watch_control(page, "#watch-full").click()
-            page.wait_for_function("() => document.body.classList.contains('media-player-full')")
+            expect(view).to_have_attribute("data-full", "true")
+            expect(feature).to_be_hidden()
             page.wait_for_function(
                 "() => { const r = document.querySelector('#media-player-shell')"
-                ".getBoundingClientRect(); return r.x === 0 && r.y === 0 "
-                "&& r.width === innerWidth && r.height === innerHeight; }"
+                ".getBoundingClientRect(); return r.x === 0 && r.y === 0 && "
+                "r.width === innerWidth && r.height === innerHeight; }"
             )
-            expect(media_locator(page, ".media-topbar")).to_be_hidden()
-            expect(media_locator(page, "#media-watch")).to_be_hidden()
-            assert page.evaluate("document.fullscreenElement === document.documentElement")
             watch_control(page, "#watch-full").click()
-            page.wait_for_function("() => !document.body.classList.contains('media-player-full')")
+            expect(view).to_have_attribute("data-full", "false")
+            expect(feature).to_be_visible()
             if center:
-                assert page.evaluate("document.fullscreenElement === document.documentElement")
                 assert page.evaluate("document.body.classList.contains('media-center-mode')")
-                expect(page.locator("#app-sidebar")).to_be_hidden()
-            else:
-                page.wait_for_function("() => document.fullscreenElement === null")
-            expect(media_locator(page, "#media-watch")).to_be_visible()
-            if screen_name == "phone":
-                # The menu holds the navigation button: the page header never comes back.
-                media_locator(page, "#media-navigation").click()
-                expect(page.locator("#app-sidebar")).to_be_visible()
-                page.locator("#navigation-backdrop").click(position={"x": 370, "y": 400})
-                expect(page.locator("#app-sidebar")).to_be_hidden()
-            # × stops the film and returns to browsing, with no page heading.
             watch_control(page, "#watch-stop").click()
             expect(view).to_have_attribute("data-watch", "false")
-            expect(media_locator(page, "#media-feature")).to_be_visible()
-            expect(media_locator(page, "#media-watch")).to_be_hidden()
-            expect(page.locator("main > header")).to_be_hidden()
+            expect(feature).to_be_visible()
             assert video.get_attribute("src") is None
-            expect(page.locator("#media-player-shell")).to_be_hidden()
             assert not errors, errors
             browser.close()
     finally:

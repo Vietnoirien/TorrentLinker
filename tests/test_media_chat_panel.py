@@ -8,7 +8,7 @@ import threading
 import httpx
 from fastapi.testclient import TestClient
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import media_option, shell_navigate
 from tests.test_assistant import login
 from tests.test_assistant_ui import provider
 from torrentlinker.config import Settings
@@ -268,7 +268,7 @@ def test_media_chat_shared_browser_workflow(tmp_path):
             shell_navigate(page, "media")
             media = page.frame_locator("#media-frame")
             expect(media.locator("#media-feature")).to_contain_text("A Journey")
-            media.locator("#media-toolbar-chat").click()
+            media_option(page, "#media-toolbar-chat").click()
             chat = page.frame_locator("#media-assistant-frame")
             expect(chat.locator("#assistant-prompt")).to_be_visible()
             chat.locator("#assistant-prompt").fill("Help me build a Plan.")
@@ -353,7 +353,7 @@ def test_media_chat_shared_browser_workflow(tmp_path):
             expect(chat.locator("#assistant-prompt")).to_have_value("")
             chat.locator("#assistant-prompt").press("Escape")
             expect(page.locator("#media-chat-panel")).to_be_hidden()
-            media.locator("#media-toolbar-chat").click()
+            media_option(page, "#media-toolbar-chat").click()
             expect(chat.locator("#assistant-prompt")).to_be_visible()
             chat.locator("#media-chat-more").click()
             chat.get_by_role("menuitem", name="Ouvrir dans l’Assistant", exact=True).click()

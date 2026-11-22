@@ -53,6 +53,7 @@ def test_registered_audio_is_playable_without_tracker_or_torrent_client(tmp_path
         assert page.json()["total"] == 1
         item = page.json()["rows"][0]
         assert item["available"] is True
+        assert item["size"] == (root / "track.flac").stat().st_size
         assert str(root) not in page.text
         stream = browser.get(
             f"/api/media/items/{item['id']}/stream?client_id=default",

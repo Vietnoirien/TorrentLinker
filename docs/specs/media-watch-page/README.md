@@ -1,3 +1,23 @@
+# Approved theatre design
+
+Approved by the owner on 2026-11-22 after the theatre preview walkthrough.
+
+- The full-width theatre player scrolls with the page, with controls at the bottom.
+- The large library hero is the pinned selection: backdrop, poster, title, facts and actions.
+- The compact menu contains Home, Films, Series, Resume, search and Media Center; extra controls are grouped under Options. The two-colour wordmark appears in the topbar only in enlarged view, avoiding a duplicate beside the sidebar.
+- The menu remains visible above the pinned banner. It only hides while scrolling over the theatre player.
+- The cover and title align just below the menu; the library eyebrow label is removed.
+- A poster click selects the banner. Play starts that selection.
+- The enlarged poster accompanies the full synopsis, always visible. Compact cards show language, genre, version and file size; playback/download controls sit at the bottom.
+- The banner stays 380 px high, or 300 px on short screens. Its cover slot, title and bottom actions keep the same positions across films. Only the synopsis scrolls when needed. Missing or broken artwork shows the transparent TL mark in the same cover slot.
+- The watched action is an eye icon, green when watched. The info popover contains file details.
+- Rows have no visible horizontal scrollbar. Unboxed arrows follow a small See all link, shown only when the row overflows or more items are available. The grid offers Back to rows.
+- Desktop and Web use the same view. Leaving player fullscreen keeps Media Center active.
+
+The working preview is `theatre-prototype.html`. The earlier variants below were rejected and are retained only as design history.
+
+---
+
 # Médias with the player in the page
 
 Design preview, not decided yet. Médias keeps its Netflix-style browsing, and the player becomes part of the

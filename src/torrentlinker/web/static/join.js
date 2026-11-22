@@ -28,6 +28,7 @@ async function call(path, body) {
   return data;
 }
 function head(title, text) {
+  $("join-title").classList.remove("app-wordmark");
   $("join-title").textContent = title;
   $("join-text").textContent = text;
   document.title = `${title} · TorrentLinker`;

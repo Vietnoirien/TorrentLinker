@@ -92,5 +92,20 @@ document.addEventListener("keydown",event=>{
 
 document.addEventListener("keydown",event=>{if(event.key==="Escape"&&environment.center_mode&&!$("media-details").open)guard(()=>host("center"))});
 
+// Extra navigation stays accessible without filling the theatre bar.
+const mediaOptions = $("media-library-options");
+mediaOptions.addEventListener("click", event => {
+  if (event.target.closest("#media-video-tab,#media-music-tab,[data-media-view],#media-ratings-entry,#media-toolbar-chat,#media-prerolls")) mediaOptions.open = false;
+});
+document.addEventListener("click", event => {
+  if (mediaOptions.open && !mediaOptions.contains(event.target)) mediaOptions.open = false;
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && mediaOptions.open) {
+    mediaOptions.open = false; mediaOptions.querySelector("summary").focus();
+    event.preventDefault(); event.stopImmediatePropagation();
+  }
+}, true);
+
 // Announce readiness only after the browsing state and event handlers exist.
 TLPanel.connect("media",{asynchronous:true}).then(request=>{panelRequest=request;window.mediaReady()});

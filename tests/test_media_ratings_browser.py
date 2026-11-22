@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import media_option, shell_navigate
 from tests.test_web_media_browser import media_locator
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
@@ -57,10 +57,11 @@ def test_the_owner_rates_unrated_films_from_the_media_menu(tmp_path):
             page.get_by_label("Server password").fill("test-password-long")
             page.locator("#login-form button.primary").click()
             shell_navigate(page, "media")
-            media_locator(page, "#media-toolbar-refresh").click()
+            media_option(page, "#media-refresh").click()
+            media_locator(page, "#media-library-options > summary").click()
             entry = media_locator(page, "#media-ratings-entry")
             expect(entry).to_have_text("Unrated (2)", timeout=15000)
-            entry.click()
+            media_option(page, "#media-ratings-entry").click()
             ratings = media_locator(page, "#media-ratings")
             expect(ratings.get_by_role("heading", name="Unrated")).to_be_visible()
             expect(ratings.get_by_text("NFO : R (United States) → −16 ?")).to_be_visible()
@@ -79,6 +80,7 @@ def test_the_owner_rates_unrated_films_from_the_media_menu(tmp_path):
             choice.evaluate("node => node.click()")
             feature = media_locator(page, "#media-feature")
             expect(feature.locator(".media-feature-meta .media-age-rating")).to_have_text("−12")
+            feature.get_by_label("About this selection", exact=True).click()
             expect(feature.get_by_text("Rating −12 · NFO file")).to_be_visible()
             feature.get_by_role("button", name="Edit").click()
             feature.get_by_role("button", name="−16").click()

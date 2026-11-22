@@ -6,7 +6,7 @@ import sys
 
 from fastapi.testclient import TestClient
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import media_option, shell_navigate
 from tests.test_media_api import login, media_app, scan
 
 
@@ -33,10 +33,17 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
     from PIL import Image
 
     Image.new("RGB", (200, 300), "#cc5533").save(root / "poster.png")
+    missing = root / "Missing artwork"
+    missing.mkdir()
+    (missing / "No.Cover.2025.mp4").write_bytes(b"\0" * 64)
     with TestClient(app) as browser:
         login(browser)
         scan(browser)
-        item = browser.get("/api/media?client_id=default&kind=video").json()["rows"][0]
+        item = next(
+            row
+            for row in browser.get("/api/media?client_id=default&kind=video").json()["rows"]
+            if row["title"] == "A Journey"
+        )
         library = app.state.agent_service.media
         session = library.open_session("default", "desktop")
         library.session(
@@ -77,11 +84,74 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
             "document.querySelector('.media-feature-poster').getBoundingClientRect().right < "
             "document.querySelector('#media-feature h2').getBoundingClientRect().left",
         )
+        assert (
+            js(
+                qtbot,
+                panel,
+                "document.querySelector('#media-feature').getBoundingClientRect().height",
+            )
+            == 380
+        )
+        js(
+            qtbot,
+            panel,
+            "[...document.querySelectorAll('.media-row-card')]"
+            ".find(n=>n.getAttribute('aria-label')==='No Cover').click()",
+        )
+        wait_js(qtbot, panel, "!!document.querySelector('.media-feature-poster.missing-art svg')")
+        assert js(
+            qtbot,
+            panel,
+            "document.querySelector('.media-feature-poster svg')"
+            ".getBoundingClientRect().height > 0",
+        )
+        assert (
+            js(
+                qtbot,
+                panel,
+                "document.querySelector('#media-feature').getBoundingClientRect().height",
+            )
+            == 380
+        )
+        js(
+            qtbot,
+            panel,
+            "[...document.querySelectorAll('.media-row-card')]"
+            ".find(n=>n.getAttribute('aria-label')==='A Journey').click()",
+        )
+        wait_js(
+            qtbot, panel, "document.querySelector('#media-feature h2').textContent==='A Journey'"
+        )
+        js(qtbot, panel, "document.querySelector('.media-seen').click()")
+        wait_js(
+            qtbot,
+            panel,
+            "document.querySelector('.media-seen').getAttribute('aria-pressed')==='true'",
+        )
+        assert (
+            js(qtbot, panel, "getComputedStyle(document.querySelector('.media-seen')).color")
+            == "rgb(110, 213, 154)"
+        )
+        assert library.detail("default", item["id"])["watched"]
+        js(qtbot, panel, "document.querySelector('.media-seen').click()")
+        wait_js(
+            qtbot,
+            panel,
+            "document.querySelector('.media-seen').getAttribute('aria-pressed')==='false'",
+        )
+        assert (
+            js(
+                qtbot,
+                panel,
+                "document.querySelector('#media-feature').getBoundingClientRect().height",
+            )
+            == 380
+        )
         js(
             qtbot,
             panel,
             "[...document.querySelectorAll('#media-feature button')]"
-            ".find(b=>b.textContent==='Details').click()",
+            ".find(b=>b.textContent==='File details').click()",
         )
         wait_js(qtbot, panel, "document.querySelector('#media-details')?.open")
         assert "A Journey" in js(qtbot, panel, "document.querySelector('#media-details').innerText")
@@ -172,10 +242,17 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             expect(panel.locator("#media-continue")).to_be_hidden()
             assert library.detail("default", video["id"])["position"] == 0
             assert (root / "A Journey.2024.mp4").exists()
-            panel.get_by_role("button", name="Details", exact=True).first.click()
+            panel.get_by_label("About this selection", exact=True).click()
+            panel.get_by_role("button", name="File details", exact=True).click()
             expect(panel.locator("#media-details")).to_be_visible()
-            panel.get_by_role("button", name="Mark watched", exact=True).click()
-            expect(panel.get_by_role("button", name="Mark unwatched", exact=True)).to_be_visible()
+            panel.locator("#media-details").get_by_role(
+                "button", name="Mark watched", exact=True
+            ).click()
+            expect(
+                panel.locator("#media-details").get_by_role(
+                    "button", name="Mark unwatched", exact=True
+                )
+            ).to_be_visible()
             panel.get_by_role("button", name="Close details", exact=True).click()
             panel.locator('[data-media-view="series"]').click()
             expect(panel.locator("#media-home-rows")).to_contain_text("Show")
@@ -186,15 +263,16 @@ def test_web_video_library_uses_the_shared_panel(tmp_path):
             page.screenshot(path="/tmp/media108-web-dark.png")
             page.frame_locator("#shell-navigation-frame").locator("#theme").select_option("light")
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
-            expect(panel.get_by_role("tab", name="Musique", exact=True)).to_be_visible()
+            expect(media_option(page, "#media-music-tab")).to_have_text("Musique")
+            panel.locator("#media-library-options > summary").click()
             expect(panel.get_by_role("button", name="Lire", exact=True)).to_be_visible()
             expect(panel.get_by_role("button", name="Saison 2", exact=True)).to_be_visible()
             page.screenshot(path="/tmp/media108-web-light-fr.png")
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
-            panel.get_by_role("tab", name="Music", exact=True).click()
+            media_option(page, "#media-music-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(panel.locator("#media-results")).to_contain_text("track")
-            panel.locator("#media-video-tab").click()
+            media_option(page, "#media-video-tab").click()
             expect(page.locator("#media-frame")).to_be_visible()
             expect(panel.locator("#media-home-rows")).to_contain_text("Show")
             # Media navigation uses the same readable size as the shared panels.

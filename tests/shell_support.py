@@ -33,3 +33,12 @@ def shell_close_drawer(page):
     if backdrop.is_visible():
         box = backdrop.bounding_box()
         backdrop.click(position={"x": box["width"] - 8, "y": box["height"] / 2})
+
+
+def media_option(page, selector):
+    """Open the compact media menu before using one of its extra controls."""
+    panel = page.frame_locator("#media-frame")
+    control = panel.locator(selector)
+    if not control.is_visible():
+        panel.locator("#media-library-options > summary").click()
+    return control

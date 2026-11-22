@@ -1711,6 +1711,7 @@ class MediaTab(QWidget):
             "title": self.now_playing.text(),
             "playing": self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState,
             "position": self.player.position() / 1000,
+            "volume": self.audio.volume() if self.audio else self.state["volume"],
             "duration": self.player.duration() / 1000,
             "tracks": self._track_state(),
             "item": {key: row.get(key) for key in keys},
@@ -1745,6 +1746,7 @@ class MediaTab(QWidget):
         if action not in {
             "toggle",
             "seek",
+            "volume",
             "fullscreen",
             "stop",
             "next",

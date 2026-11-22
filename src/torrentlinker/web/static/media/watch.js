@@ -1,6 +1,6 @@
 "use strict";
-/* A playing video belongs to the page (docs/specs/media-watch-page, layout A): its picture at the top, drawn by the
-   host behind the transparent slot below; the controls over it, the film's details under it, then the rows.
+/* Approved theatre preview: the player scrolls with the page; the library banner pins independently.
+   The host draws the picture behind the transparent slot; the shared view draws bottom controls.
    The host owns playback; this view shows what it publishes in environment.playback and sends commands. */
 const WATCH_ICONS = {
   play: '<path d="M8 5l11 7-11 7z" fill="currentColor"/>', pause: '<path d="M8 5v14M16 5v14"/>',
@@ -12,19 +12,13 @@ const WATCH_ICONS = {
 };
 const watchIcon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${WATCH_ICONS[name]}</svg>`;
 const WATCH_HIDE_MS = 3000;
-let watchBarHeld = false, watchTimer = 0, watchWasPlaying = false, watchSource = "", watchSignature = "", watchLayoutSent = "", watchBarTop = 0, watchLastTop = 0, watchWatched = new Map();
+let watchBarHeld = false, watchTimer = 0, watchWasPlaying = false, watchSource = "", watchSignature = "", watchLayoutSent = "", watchLastTop = 0;
 const watchScroller = () => document.querySelector(".media-scroll");
 const watchPlayback = () => media.kind === "video" && environment.playback?.media_id && environment.playback.kind === "video" ? environment.playback : null;
 const watchClock = seconds => {
   const total = Math.max(0, Math.floor(Number(seconds) || 0)), hours = Math.floor(total / 3600), minutes = Math.floor(total / 60) % 60;
   return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : minutes}:${String(total % 60).padStart(2, "0")}`;
 };
-function watchRuntime(seconds) {
-  const minutes = Math.round((Number(seconds) || 0) / 60);
-  if (!minutes) return "";
-  const hours = Math.floor(minutes / 60), rest = String(minutes % 60).padStart(2, "0");
-  return hours ? say(`${hours}h ${rest}m`, `${hours} h ${rest}`) : `${minutes} min`;
-}
 // Commands go to the host with the source they were drawn for, so a stale control never acts on a new film.
 function watchSend(action, values = {}) {
   const play = watchPlayback();
@@ -37,12 +31,7 @@ function watchReveal() {
   clearTimeout(watchTimer);
   watchTimer = setTimeout(() => { if (watchPlayback()?.playing) screen.dataset.controls = "off"; }, WATCH_HIDE_MS);
 }
-function watchTap() {
-  const screen = $("media-screen");
-  // Shown and playing, a tap clears the picture; otherwise it always brings the controls back.
-  if (screen.dataset.controls === "on" && watchPlayback()?.playing) { clearTimeout(watchTimer); screen.dataset.controls = "off"; }
-  else watchReveal();
-}
+function watchTap() { watchReveal(); }
 function watchTracksDialog() {
   const play = watchPlayback(), root = $("media-watch-tracks");
   if (!play) return;
@@ -82,27 +71,8 @@ function watchTracksDialog() {
 // A dialog drawn once would keep its old selection; it follows the host's tracks while it is open.
 function watchTracksRefresh() { if ($("media-watch-tracks").open) watchTracksDialog(); }
 function watchDetails(play) {
-  const root = $("media-watch"), item = play.item || {};
-  const watched = watchWatched.has(play.media_id) ? watchWatched.get(play.media_id) : !!item.watched;
-  const flags = typeof mediaFlags === "function" ? mediaFlags(item).map(([text]) => text) : [];
-  const facts = [item.year, watchRuntime(item.duration), item.genre, Number(item.rating) > 0 ? `★ ${Number(item.rating).toLocaleString(language === "fr" ? "fr-FR" : "en-US", {maximumFractionDigits: 1})}` : "", ...flags].filter(Boolean);
-  const meta = element("p", facts.join(" · "), "media-watch-meta");
-  if (typeof mediaRatingBadge === "function") mediaRatingBadge(item, meta);
-  const tracksButton = button("", () => watchTracksDialog(), "media-secondary");
-  tracksButton.innerHTML = `${watchIcon("subs")}<span>${say("Audio and subtitles", "Audio et sous-titres")}</span>`;
-  const nextButton = button("", () => watchSend("next"), "media-secondary");
-  nextButton.innerHTML = `${watchIcon("next")}<span>${say("Next", "Suivant")}</span>`;
-  nextButton.disabled = !play.has_next;
-  const seenButton = button("", async () => {
-    const next = !watched;
-    await api(`media/items/${encodeURIComponent(play.media_id)}/watched`, {client_id: mediaClient(), watched: next});
-    watchWatched.set(play.media_id, next); watchSignature = ""; watchRender(); await loadMedia();
-  }, "media-secondary");
-  seenButton.innerHTML = `${watchIcon("check")}<span>${watched ? say("Mark unwatched", "Marquer comme non vu") : say("Mark watched", "Marquer comme vu")}</span>`;
-  const actions = element("div", undefined, "media-feature-actions");
-  actions.append(tracksButton, nextButton, seenButton);
-  const parts = [element("h2", item.title || play.title || ""), meta, actions];
-  if (item.description) parts.push(element("p", item.description, "media-watch-synopsis"));
+  const root = $("media-watch"), parts = [];
+  root.hidden = !play.preview;
   if (play.preview) {
     const note = element("p", say(`Partial preview · fixed verified prefix · ${mediaBytes(play.preview.verified_bytes)} / ${mediaBytes(play.preview.total_bytes)}. Refresh explicitly after more data downloads.`, `Aperçu partiel · début vérifié fixe · ${mediaBytes(play.preview.verified_bytes)} / ${mediaBytes(play.preview.total_bytes)}. Actualisez l’aperçu après téléchargement de données supplémentaires.`), "media-watch-note");
     note.append(" ", button(say("Refresh preview", "Actualiser l’aperçu"), () => watchSend("refresh-preview"), "quiet"));
@@ -119,9 +89,11 @@ function watchRender() {
   // The page header is hidden on Médias; on the Web the navigation opens from here.
   $("media-navigation").hidden = environment.mode !== "web" || !!environment.center_mode;
   $("media-navigation").setAttribute("aria-label", say("Navigation", "Navigation")); $("media-navigation").title = say("Navigation", "Navigation");
+  $("media-brand").hidden = !environment.center_mode;
   view.dataset.watch = String(!!play);
   view.dataset.full = String(!!play && !!play.full);
-  $("media-watch-slot").hidden = $("media-watch").hidden = !play;
+  $("media-watch-slot").hidden = !play;
+  $("media-watch").hidden = !play?.preview;
   if (!play) {
     if (was) { clearTimeout(watchTimer); $("media-watch-tracks").open && $("media-watch-tracks").close(); delete view.dataset.bar; watchLayoutSent = ""; watchSignature = ""; $("media-watch").replaceChildren(); watchWasPlaying = false; }
     return;
@@ -134,14 +106,22 @@ function watchRender() {
   if (!watchBarHeld && view.dataset.bar === "hidden" && watchScroller().scrollTop < 40) delete view.dataset.bar;
   // Another film or source closes the track choices drawn for the old one.
   const source = `${play.client_id}/${play.media_id}/${play.source_token}`;
-  if (source !== watchSource) { watchSource = source; if ($("media-watch-tracks").open) $("media-watch-tracks").close(); }
+  if (source !== watchSource) {
+    watchSource = source;
+    if (play.item) { media.featureId = play.media_id; media.selected = {...play.item, id: play.media_id, kind: "video"}; }
+    mediaRenderFeature(); mediaMarkSelected();
+    watchScroller().scrollTop = 0; if ($("media-watch-tracks").open) $("media-watch-tracks").close(); }
   const label = (id, en, fr) => { $(id).setAttribute("aria-label", say(en, fr)); $(id).title = say(en, fr); };
   label("watch-rew", "Back 10 seconds", "Reculer de 10 secondes"); $("watch-rew").innerHTML = watchIcon("rew");
   label("watch-fwd", "Forward 10 seconds", "Avancer de 10 secondes"); $("watch-fwd").innerHTML = watchIcon("fwd");
   label("watch-toggle", play.playing ? "Pause" : "Play", play.playing ? "Pause" : "Lecture"); $("watch-toggle").innerHTML = watchIcon(play.playing ? "pause" : "play");
   label("watch-full", play.full ? "Exit full screen" : "Full screen", play.full ? "Quitter le plein écran" : "Plein écran"); $("watch-full").innerHTML = watchIcon(play.full ? "exit" : "full");
+  label("watch-tracks", "Audio and subtitles", "Audio et sous-titres"); $("watch-tracks").innerHTML = watchIcon("subs");
+  label("watch-next", "Next", "Suivant"); $("watch-next").innerHTML = watchIcon("next"); $("watch-next").disabled = !play.has_next;
   label("watch-stop", "Close the player", "Fermer le lecteur"); $("watch-stop").innerHTML = watchIcon("close");
   label("watch-seek", "Seek", "Position");
+  label("watch-volume", "Volume", "Volume");
+  if (document.activeElement !== $("watch-volume")) $("watch-volume").value = play.volume ?? 1;
   const seek = $("watch-seek");
   if (!seek.dataset.seeking) { seek.max = Math.max(0, play.duration || 0); seek.value = play.position || 0; }
   seek.style.setProperty("--progress", `${play.duration ? Math.min(100, 100 * (Number(seek.value) / play.duration)) : 0}%`);
@@ -154,7 +134,7 @@ function watchRender() {
     note.replaceChildren(element("span", play.error));
     if (play.external_available && play.external_url) { const link = element("a", say("Open / download for an external player", "Ouvrir / télécharger pour un lecteur externe")); link.href = play.external_url; link.target = "_blank"; link.rel = "noopener"; link.download = ""; note.append(" ", link); }
   }
-  const signature = JSON.stringify([play.client_id, play.media_id, play.source_token, language, play.item, play.tracks, play.has_next, play.preview, play.queue_revision, play.external_url, watchWatched.get(play.media_id)]);
+  const signature = JSON.stringify([play.client_id, play.media_id, play.source_token, language, play.item, play.tracks, play.has_next, play.preview, play.queue_revision, play.external_url]);
   if (signature !== watchSignature) { watchSignature = signature; watchDetails(play); watchTracksRefresh(); }
   // Paused, the controls stay; a film that starts playing clears the picture after the usual delay.
   if (!play.playing) { clearTimeout(watchTimer); $("media-screen").dataset.controls = "on"; }
@@ -172,7 +152,7 @@ function watchReport() {
   watchLayoutSent = key;
   host("watch-layout", value).catch(() => { watchLayoutSent = ""; });
 }
-// The top bar leaves while the page scrolls down and returns with any scroll up, and at the top.
+// Keep the menu above the pinned banner; only the theatre picture lets it hide.
 function watchScrolled(event) {
   const view = $("view-media");
   if (view.dataset.kind !== "video") return;
@@ -180,12 +160,17 @@ function watchScrolled(event) {
   if (event.target !== (watching ? scroller : document)) return;
   const top = watching ? scroller.scrollTop : scrollY;
   watchBarHeld = false;
-  if (top > watchLastTop + 6 && top > 40 && view.dataset.bar !== "hidden") view.dataset.bar = "hidden";
+  const aboveBanner = media.layout === "cinematic" && (!watching || $("media-screen").getBoundingClientRect().bottom <= document.querySelector(".media-topbar").offsetHeight);
+  if (aboveBanner) delete view.dataset.bar;
+  else if (top > watchLastTop + 6 && top > 40 && view.dataset.bar !== "hidden") view.dataset.bar = "hidden";
   else if ((top < watchLastTop - 6 || top < 40) && view.dataset.bar === "hidden") delete view.dataset.bar;
   watchLastTop = top;
+  watchReport();
 }
 function watchSetUp() {
   const screen = $("media-screen");
+  screen.addEventListener("pointermove", watchReveal);
+  screen.addEventListener("focusin", watchReveal);
   screen.addEventListener("click", event => { if (event.target.closest("button, input")) return; watchTap(); });
   const act = (id, action, values) => { $(id).onclick = () => { watchReveal(); guard(() => typeof values === "function" ? watchSend(action, values()) : watchSend(action, values)); }; };
   act("watch-toggle", "toggle");
@@ -193,6 +178,9 @@ function watchSetUp() {
   act("watch-fwd", "seek", () => ({position: (watchPlayback()?.position || 0) + 10}));
   act("watch-full", "fullscreen");
   act("watch-stop", "stop");
+  act("watch-next", "next");
+  $("watch-tracks").onclick = watchTracksDialog;
+  $("watch-volume").oninput = () => { watchReveal(); guard(() => watchSend("volume", {volume: Number($("watch-volume").value)})); };
   const seek = $("watch-seek");
   seek.oninput = () => { seek.dataset.seeking = "1"; watchReveal(); seek.style.setProperty("--progress", `${seek.max > 0 ? 100 * Number(seek.value) / seek.max : 0}%`); };
   seek.onchange = () => { const position = Number(seek.value); delete seek.dataset.seeking; guard(() => watchSend("seek", {position})); };
@@ -200,6 +188,11 @@ function watchSetUp() {
   document.addEventListener("scroll", watchScrolled, true);
   const observer = new ResizeObserver(watchReport);
   observer.observe($("media-watch-slot")); observer.observe(screen);
+  const bannerObserver = new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--media-feature-height", `${$("media-feature").offsetHeight}px`);
+    watchReport();
+  });
+  bannerObserver.observe($("media-feature"));
   addEventListener("resize", watchReport);
   document.addEventListener("keydown", event => {
     if (!watchPlayback() || event.target.closest?.("input, select, textarea, dialog, [contenteditable]")) return;

@@ -52,7 +52,7 @@ window.addEventListener("message",async event=>{
       else if(action==="queue")mediaShowQueue();
       else if(action==="player"){
         // The view's controls: the same commands as the player's, for the source they were drawn for.
-        if(!["toggle","seek","fullscreen","stop","next","select_track","refresh-preview"].includes(values.action))throw Error("Unknown player control.");
+        if(!["toggle","seek","volume","fullscreen","stop","next","select_track","refresh-preview"].includes(values.action))throw Error("Unknown player control.");
         await mediaPlayerControl(values);
       }
       else if(action==="watch-layout"){media.watchLayout=values;mediaPlaceStage()}

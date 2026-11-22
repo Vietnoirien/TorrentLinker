@@ -197,3 +197,10 @@ body[data-compact="true"] .preferences {
   }
 }
 
+
+/* Keep navigation text consistent with the two-colour app wordmark. */
+nav button {color:var(--text)}
+nav button:hover {color:var(--text);background:var(--raised)}
+nav button[aria-current="page"] {color:var(--accent);font-weight:600}
+html[data-theme="light"] nav button[aria-current="page"] {color:var(--text)}
+.preferences label > span {color:var(--muted);font-size:12px}

@@ -1063,6 +1063,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             ).fetchone()
         public.update(
             id=record["id"],
+            size=record["size"],
             added=record["added"],
             age_rating=self.age_rating(record["client"], record["id"]),
             anime=is_anime(body, record["path"]),

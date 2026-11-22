@@ -55,6 +55,11 @@ def test_desktop_video_shows_its_details_under_the_picture(qtbot, tmp_path, requ
         check=True,
     )
     Image.new("RGB", (200, 300), "#cc5533").save(root / "poster.png")
+    synopsis = "A full synopsis remains visible. " * 40 + "The final sentence is shown."
+    (root / "movie.nfo").write_text(
+        f"<movie><title>Validation Film</title><plot>{synopsis}</plot>"
+        "<genre>Adventure</genre></movie>"
+    )
     library = app.state.agent_service.media
     library.scan("default", threading.Event(), lambda _: None)
     item = library.listing("default", kind="video")["rows"][0]
@@ -64,36 +69,64 @@ def test_desktop_video_shows_its_details_under_the_picture(qtbot, tmp_path, requ
     tab.show()
     tab.activate()
     tab.command("play", media_ids=[item["id"]], index=0)
-    details = tab.playing_details
-    wait_js(qtbot, details, "document.querySelector('#title')?.textContent==='Validation Film'")
-    assert js(qtbot, details, "document.querySelector('#meta').textContent").startswith("2026")
-    flags = js(
-        qtbot, details, "[...document.querySelectorAll('#flags li')].map(n=>n.textContent).join()"
+    details = tab.browser
+    wait_js(
+        qtbot,
+        details,
+        "document.querySelector('#media-feature h2')?.textContent==='Validation Film'",
     )
-    assert flags.split(",")[0] == "1080p" and "AAC 2.0" in flags and "MULTI" in flags
-    wait_js(qtbot, details, "document.querySelector('#poster img')?.naturalWidth===200")
-    assert not tab.now_playing.isVisible()  # the title is in the details, not above them
-    # The picture leaves room for the details below it.
-    qtbot.waitUntil(lambda: details.height() > 150)
-    qtbot.waitUntil(
-        lambda: tab.video.height() + details.height() <= tab.media_column.height(), timeout=5000
+    wait_js(qtbot, details, "document.querySelector('#view-media').dataset.watch==='true'")
+    assert js(qtbot, details, "document.querySelectorAll('.media-description-toggle').length") == 0
+    flags = js(qtbot, details, "document.querySelector('#media-feature-details').innerText")
+    assert "1080p" in flags and "AAC 2.0" in flags and "MULTI" in flags
+    wait_js(
+        qtbot,
+        details,
+        "document.querySelector('.media-feature-poster img')?.naturalWidth===200",
+    )
+    assert (
+        js(qtbot, details, "document.querySelector('.media-feature-description').textContent")
+        == synopsis
+    )
+    assert js(
+        qtbot,
+        details,
+        "(() => { const p=document.querySelector('.media-feature-description'); "
+        "return p.scrollHeight > p.clientHeight; })()",
+    )
+    assert js(qtbot, details, "document.querySelectorAll('.media-feature-tag').length") == 4
+    assert js(
+        qtbot,
+        details,
+        "document.querySelector('.media-feature-poster').getBoundingClientRect().width === 192",
+    )
+    assert js(
+        qtbot,
+        details,
+        "(() => { const p=document.querySelector('.media-feature-poster').getBoundingClientRect(); "
+        "const a=document.querySelector('.media-feature-actions').getBoundingClientRect(); "
+        "return Math.abs(p.bottom - a.bottom) < 2; })()",
+    )
+    assert not tab.now_playing.isVisible()
+    # The full-width theatre scrolls away; the library banner and menu stay at y=0.
+    wait_js(qtbot, details, "document.querySelector('#media-screen').offsetHeight > 500")
+    js(qtbot, details, "document.querySelector('.media-scroll').scrollTop = 800")
+    wait_js(
+        qtbot, details, "document.querySelector('#media-feature').getBoundingClientRect().top===0"
+    )
+    assert (
+        js(qtbot, details, "document.querySelector('.media-topbar').getBoundingClientRect().top")
+        == 0
     )
     if screenshot := os.getenv("TL_PLAYER_DETAILS_SCREENSHOT"):
         qtbot.wait(300)
         tab.grab().save(screenshot)
-    # Horizon moves the details onto the picture: a bar while playing, a panel on pause.
-    tab.set_media_layout("horizon")
-    assert not tab.player_heading.isVisible()
-    controls = tab.video_controls
-    wait_js(qtbot, controls, "document.body.dataset.skin==='horizon'")
-    wait_js(
-        qtbot, controls, "document.querySelector('#horizon-title').textContent==='Validation Film'"
-    )
-    wait_js(qtbot, controls, "document.querySelector('#horizon-poster img')?.naturalWidth===200")
-    tab.toggle_pause()
-    wait_js(qtbot, controls, "!document.querySelector('#horizon-pause').hidden")
-    assert "MULTI" in js(qtbot, controls, "document.querySelector('#horizon-pause').innerText")
-    tab.set_media_layout("cinematic")
-    assert tab.player_heading.isVisible()
-    wait_js(qtbot, controls, "document.body.dataset.skin===''")
+    source = tab.player.source()
+    for layout in ("horizon", "cinematic"):
+        tab.set_media_layout(layout)
+        wait_js(
+            qtbot, details, f"document.querySelector('#view-media').dataset.layout==='{layout}'"
+        )
+        assert tab.player.source() == source
+        assert not tab.video_controls.isVisible()
     tab.stop()

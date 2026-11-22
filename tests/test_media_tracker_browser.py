@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import media_option, shell_navigate
 from tests.test_web_media_browser import media_locator
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
@@ -72,7 +72,8 @@ def test_tracker_rows_without_a_c411_key_say_so_and_open_settings(
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button.primary").click()
             shell_navigate(page, "media")
-            media_locator(page, "#media-toolbar-refresh").click()
+            media_option(page, "#media-refresh").click()
+            media_locator(page, "#media-library-options > summary").click()
             rows = media_locator(page, "#media-home-rows")
             expect(rows.locator(".media-row-note").first).to_contain_text(reason, timeout=20000)
             expect(rows.locator(".media-row-skeleton")).to_have_count(0)
@@ -102,7 +103,8 @@ def test_a_media_scan_card_stays_off_torrents_and_activity_has_no_raw_json(
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button.primary").click()
             shell_navigate(page, "media")
-            media_locator(page, "#media-toolbar-refresh").click()
+            media_option(page, "#media-refresh").click()
+            media_locator(page, "#media-library-options > summary").click()
             expect(media_locator(page, "#media-home-rows .media-row-note").first).to_be_visible(
                 timeout=20000
             )

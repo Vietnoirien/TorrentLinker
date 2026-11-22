@@ -587,8 +587,6 @@ html:has(#view-media[data-layout="horizon"][data-horizon="wall"][data-kind="vide
     min-height:0;
     padding-top:0;
     padding-bottom:0}
-  #view-media[data-watch="true"] .media-topbar :is(.media-music-nav,.media-library-options,.media-filters,#media-refresh,#media-cancel-scan,#media-toolbar-refresh,#media-requests-bell,#media-center-mode,#media-prerolls) {
-    display:none !important}
   #view-media[data-watch="true"] .media-topbar #media-search {
     flex:1 1 60px;
     min-width:0;
@@ -638,8 +636,7 @@ html[data-theme] #view-media[data-watch="true"] .media-topbar #media-client {
   #view-media[data-kind="video"] .media-topbar {
     transition:none}}
 
-/* A film playing: the picture is the host's, behind this transparent slot (it stays at the top while the rest
-   scrolls under it); the controls are drawn here, over it. */
+/* A single scroll surface holds the theatre player, pinned library banner and rows. */
 html:has(#view-media[data-watch="true"]),html:has(#view-media[data-watch="true"]) body {
   height:100%;
   overflow:hidden;
@@ -658,7 +655,7 @@ html[data-theme] #view-media[data-watch="true"] {
   flex:1;
   min-height:0;
   overflow-y:auto;
-  background:var(--bg);
+  background:transparent;
   scrollbar-width:thin}
 .media-watch-slot {
   flex:none;
@@ -667,30 +664,31 @@ html[data-theme] #view-media[data-watch="true"] {
   background:transparent}
 .media-screen {
   position:relative;
-  width:min(100%,782px,calc(60dvh * 16 / 9));
-  aspect-ratio:16 / 9;
+  width:100%;
+  height:calc(100dvh - 148px);
+  min-height:240px;
   overflow:hidden;
   color:#fff;
   cursor:pointer}
-@media (orientation:landscape) and (max-height:500px) {
+@media (max-width:600px) {
   .media-screen {
-    width:356px}}
+    height:auto;min-height:0;aspect-ratio:16 / 9}}
 .media-overlay {
   position:absolute;
   inset:0;
-  display:grid;
-  grid-template-rows:1fr auto 1fr auto;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
   background:linear-gradient(transparent 55%,#000c);
   transition:opacity .2s}
 .media-screen[data-controls="off"] .media-overlay {
   opacity:0;
   pointer-events:none}
-.media-overlay-centre {
-  grid-row:2;
+.media-overlay-transport {
   display:flex;
   align-items:center;
-  justify-content:center;
-  gap:34px}
+  justify-content:flex-start;
+  gap:4px}
 #view-media .media-round {
   display:grid;
   place-items:center;
@@ -702,8 +700,8 @@ html[data-theme] #view-media[data-watch="true"] {
   background:#0007;
   color:#fff}
 #view-media .media-round.big {
-  width:64px;
-  height:64px}
+  width:40px;
+  height:40px}
 .media-round svg {
   width:22px;
   height:22px}
@@ -790,9 +788,7 @@ html[data-theme] #view-media[data-watch="true"] {
   text-align:center}
 .media-screen-note a {
   color:var(--link)}
-/* The cinematic title gives way to the film; Focus and Horizon keep their own browsing. */
-#view-media[data-watch="true"][data-layout="cinematic"] #media-feature {
-  display:none}
+
 .media-watch {
   padding:14px 18px 4px;
   color:var(--text)}
@@ -833,8 +829,8 @@ html[data-theme="light"] .media-watch-synopsis {
   .media-watch {
     padding:14px 28px 4px}}
 /* Full screen: the film alone. */
-#view-media[data-full="true"] .media-topbar,#view-media[data-full="true"] .media-scroll {
-  display:none}
+#view-media[data-full="true"] .media-topbar,#view-media[data-full="true"] .media-scroll > :not(.media-watch-slot) {
+  display:none!important}
 #view-media[data-full="true"] .media-watch-slot {
   position:fixed;
   inset:0;
@@ -847,3 +843,171 @@ html[data-theme="light"] .media-watch-synopsis {
 .media-watch-tracks .media-detail-choices button[aria-pressed="true"] {
   border-color:var(--accent);
   color:var(--accent)}
+
+/* Approved fixed banner: changing films never moves the rows or the bottom actions. */
+#view-media[data-kind="video"][data-layout="cinematic"] {
+  --media-banner-height:380px;--media-poster-width:192px;
+}
+#view-media[data-kind="video"][data-layout="cinematic"] #media-feature {
+  position:sticky;top:0;z-index:10;isolation:isolate;overflow:visible;padding:0;
+  height:var(--media-banner-height);min-height:var(--media-banner-height);max-height:var(--media-banner-height);
+}
+.media-feature-content {display:contents}
+.media-feature-content > * {grid-column:2}
+#view-media[data-kind="video"][data-layout="cinematic"] .media-feature-copy.has-poster {
+  display:grid;grid-template-columns:var(--media-poster-width) minmax(0,1fr);grid-template-rows:minmax(0,1fr);
+  height:100%;padding:76px 28px 16px;gap:28px;align-items:stretch;max-width:none;
+}
+#view-media[data-layout="cinematic"] .media-feature-copy.has-poster > .media-feature-poster {
+  grid-column:1;grid-row:1;width:100%;height:100%;min-height:0;min-width:0;align-self:stretch;
+  aspect-ratio:2/3;border-radius:8px;box-shadow:none;
+}
+#view-media[data-layout="cinematic"] .media-feature-content {
+  display:grid;grid-column:2;grid-row:1;grid-template-rows:72px 18px minmax(0,1fr) 44px 40px;
+  gap:6px;min-height:0;min-width:0;max-width:1040px;
+}
+#view-media[data-layout="cinematic"] .media-feature-content > * {grid-column:1;min-width:0}
+#view-media[data-layout="cinematic"] .media-feature h2 {
+  grid-row:1;font-size:36px;line-height:1;letter-spacing:-.035em;margin:0;min-height:0;
+  max-width:none;overflow:auto;scrollbar-width:thin;
+}
+#view-media[data-layout="cinematic"] .media-feature-meta {
+  grid-row:2;font-size:12px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+#view-media[data-layout="cinematic"] .media-feature-description {
+  grid-row:3;display:block;-webkit-line-clamp:unset;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-gutter:stable;scrollbar-width:thin;max-width:90ch;margin:0;padding:0 12px 0 0;
+  line-height:1.65;font-size:13px;
+}
+.media-feature-description > p {margin:0}
+.media-feature-tags {display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.media-feature-tag {display:flex;flex-direction:column;justify-content:center;gap:3px;border:1px solid var(--line);border-radius:7px;padding:5px 10px;background:color-mix(in srgb,var(--panel) 80%,transparent)}
+.media-feature-tag dt {font-size:10px;color:var(--muted)}
+.media-feature-tag dd {font-size:12px;font-weight:600;margin:0}
+#view-media[data-layout="cinematic"] .media-feature-tags {
+  grid-row:4;flex-wrap:nowrap;min-width:0;overflow-x:auto;overflow-y:hidden;margin:0;scrollbar-width:none;
+}
+#view-media[data-layout="cinematic"] .media-feature-tag {flex-shrink:0}
+#view-media[data-layout="cinematic"] .media-feature-actions {
+  grid-row:5;display:flex;align-items:stretch;gap:8px;margin:0;padding:0;flex-wrap:nowrap;
+}
+#view-media[data-layout="cinematic"] .media-feature-actions > button {font-size:13px;padding:8px 18px}
+#view-media[data-kind="video"][data-layout="cinematic"] .media-shelves {position:relative;background:var(--bg);padding-left:28px;padding-right:28px}
+#view-media[data-watch="true"] .media-watch-slot {min-height:0}
+#view-media[data-full="true"] .media-scroll {overflow:visible}
+#view-media[data-full="true"] .media-screen {min-height:0}
+/* Keep the navigation in its own fixed-height row above the selected film. */
+#view-media[data-kind="video"][data-layout="cinematic"] .media-topbar {
+  height:64px;min-height:64px;flex-wrap:nowrap;gap:12px;padding:10px 24px;
+}
+#view-media[data-layout="cinematic"] .media-browse-nav {order:0;width:auto;flex:1;min-width:0;white-space:nowrap;scrollbar-width:none}
+#view-media[data-layout="cinematic"] .media-browse-nav button {flex:none}
+#view-media[data-layout="cinematic"] .media-library-options {margin:0}
+#view-media[data-layout="cinematic"] .media-feature .media-eyebrow {display:none}
+/* The same transparent TL mark appears in missing covers and broken artwork. */
+.media-art .media-art-logo {display:none}
+.media-art.missing-art:has(.media-art-logo) {
+  display:flex;align-items:center;justify-content:center;background:linear-gradient(150deg,#23343b,#152026);border:1px solid #ffffff12;
+}
+.media-art.missing-art:has(.media-art-logo) .media-art-title {display:none}
+.media-art.missing-art .media-art-logo {
+  display:block;position:static;width:52%;height:auto;max-width:112px;object-fit:contain;
+}
+html[data-theme] #view-media .media-feature-actions > .media-seen {
+  display:grid;place-items:center;width:40px;padding:8px;color:var(--muted);flex:none;
+}
+.media-seen svg {width:20px;height:20px;display:block}
+html[data-theme] #view-media .media-feature-actions > .media-seen[aria-pressed="true"] {
+  color:#6ed59a;border-color:#6ed59a66;background:#6ed59a14;
+}
+/* Seamless row arrows, with the small See all link before them. */
+html[data-theme] #view-media .media-home-row-header .icon-button {
+  display:grid;place-items:center;width:40px;height:40px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:28px;line-height:1;flex:none;
+}
+html[data-theme] #view-media .media-home-row-header .icon-button:hover {color:var(--accent);background:#ffffff08}
+html[data-theme] #view-media .media-home-row-header .icon-button:active {background:#ffffff10;transform:scale(.94)}
+html[data-theme] #view-media .media-see-all {
+  width:auto;height:36px;padding:6px 4px;border:0;border-radius:0;font-size:12px;white-space:nowrap;background:transparent;color:var(--muted);
+}
+html[data-theme] #view-media .media-see-all:hover {color:var(--accent);text-decoration:underline;text-underline-offset:4px}
+.media-home-row-header {align-items:center}
+.media-row-track,.media-feature-tags {scrollbar-width:none}
+.media-row-track::-webkit-scrollbar,.media-feature-tags::-webkit-scrollbar,.media-browse-nav::-webkit-scrollbar {display:none}
+@media(max-width:800px) {
+  #view-media[data-kind="video"][data-layout="cinematic"] {--media-poster-width:110px}
+  #view-media[data-kind="video"][data-layout="cinematic"] .media-feature-copy.has-poster {padding:76px 12px 16px;gap:16px}
+  #view-media[data-layout="cinematic"] .media-feature-copy.has-poster > .media-feature-poster {display:block;height:165px;align-self:start}
+  #view-media[data-layout="cinematic"] .media-feature-copy.has-poster > .media-feature-poster.missing-art {display:flex}
+  #view-media[data-layout="cinematic"] .media-feature-content {grid-template-rows:56px 18px minmax(0,1fr) 44px 36px}
+  #view-media[data-layout="cinematic"] .media-feature h2 {font-size:25px;line-height:1.1}
+  #view-media[data-layout="cinematic"] .media-feature-description {font-size:12px}
+  #view-media[data-layout="cinematic"] .media-feature-actions {gap:5px}
+  #view-media[data-layout="cinematic"] .media-feature-actions > button {padding:6px 10px}
+  .media-feature-tag {padding:4px 8px}
+  #view-media[data-kind="video"][data-layout="cinematic"] .media-topbar {padding:8px;gap:7px}
+  #view-media[data-layout="cinematic"] .media-topbar :is(#media-search,#media-client,#media-toolbar-refresh,#media-prerolls) {display:none}
+}
+@media(max-height:600px) {
+  #view-media[data-kind="video"][data-layout="cinematic"] {--media-banner-height:300px;--media-poster-width:139px}
+  #view-media[data-layout="cinematic"] .media-feature-content {grid-template-rows:48px 16px minmax(0,1fr) 38px 32px;gap:4px}
+  #view-media[data-layout="cinematic"] .media-feature h2 {font-size:24px}
+  #view-media[data-layout="cinematic"] .media-feature-description {font-size:12px;line-height:1.45}
+  #view-media[data-layout="cinematic"] .media-feature-actions > button {padding:4px 12px}
+  #view-media[data-layout="cinematic"] .media-feature-copy.has-poster > .media-feature-poster {height:100%}
+  .media-feature-tag {padding:3px 8px}
+  .media-feature-tag dd {font-size:11px}
+}
+@media(max-width:600px),(orientation:landscape) and (max-height:500px) {
+  .media-overlay-bottom {padding:0 8px 8px}
+  #view-media .media-round,#view-media .media-round.big {width:30px;height:30px}
+  .media-round svg,.media-round.big svg {width:18px;height:18px}
+  .media-overlay-tools {gap:2px;font-size:11px}
+}
+
+#view-media .media-volume {width:70px;padding:0;accent-color:var(--accent);min-width:32px}
+@media(max-width:600px) {#view-media .media-volume {width:38px}}
+
+/* Keep keyboard focus and browser scroll-into-view below the pinned banner. */
+html:has(#view-media[data-layout="cinematic"][data-kind="video"]) {scroll-padding-top:var(--media-feature-height,0px)}
+#view-media[data-layout="cinematic"][data-kind="video"] .media-scroll {scroll-padding-top:var(--media-feature-height,0px)}
+.media-selection-info {position:relative;align-self:center}
+.media-selection-info summary {cursor:pointer;padding:8px;list-style:none}
+.media-selection-info-body {position:absolute;bottom:100%;right:0;width:min(320px,65vw);padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 25px #0005;z-index:3;font-size:13px;line-height:1.6}
+.media-selection-info-body p {margin:0 0 10px}
+
+/* Compact theatre navigation, matching the approved preview. Extra tools live in Options. */
+html[data-theme] #view-media[data-layout="cinematic"] .media-topbar {
+  height:64px;min-height:64px;gap:14px;padding:10px 24px;flex-wrap:nowrap;
+  background:#11191eec;color:var(--text);border-bottom:1px solid #ffffff08;
+}
+html[data-theme="light"] #view-media[data-layout="cinematic"]:not([data-watch="true"]) .media-topbar {background:#f3f6faee;border-bottom-color:var(--line)}
+.media-brand {font-size:16px;flex:none}
+#view-media .media-topbar > #media-toolbar-refresh {display:none}
+html[data-theme] #view-media[data-layout="cinematic"] .media-browse-nav {gap:6px;flex:1;min-width:0;order:0;width:auto}
+html[data-theme] #view-media[data-layout="cinematic"] .media-browse-nav button {
+  color:var(--text)!important;font-size:16px;padding:9px 14px;border:0;border-radius:7px;background:transparent!important;
+}
+html[data-theme] #view-media[data-layout="cinematic"] .media-browse-nav button.active {
+  color:var(--accent)!important;box-shadow:inset 0 -2px var(--accent);
+}
+#view-media[data-layout="cinematic"] .media-topbar > #media-search {
+  flex:0 1 200px;width:200px;max-width:200px;min-width:100px;height:40px;font-size:14px;padding:9px;
+}
+#view-media[data-layout="cinematic"] :is(#media-navigation,#media-center-mode) {width:44px;height:42px;flex:none;font-size:18px;padding:8px}
+#view-media .media-options-panel {max-height:calc(100dvh - 90px);overflow:auto;scrollbar-width:thin}
+#view-media .media-options-panel .media-tabs {gap:14px;margin-bottom:10px}
+#view-media .media-extra-views,#view-media .media-extra-tools {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+#view-media .media-extra-tools label {display:grid;gap:4px;flex:1;min-width:140px;font-size:12px;color:var(--muted)}
+#view-media .media-extra-tools :is(button,select) {font-size:13px}
+#view-media .media-options-panel :is(#media-toolbar-chat,#media-client,#media-prerolls) {display:revert}
+@media(max-width:800px) {
+  html[data-theme] #view-media[data-layout="cinematic"] .media-topbar {padding:8px;gap:7px}
+  #view-media .media-brand {display:none}
+  html[data-theme] #view-media[data-layout="cinematic"] .media-browse-nav button {font-size:14px;padding:9px}
+  #view-media[data-layout="cinematic"] .media-topbar > #media-search {display:none}
+  #view-media .media-options-panel {position:fixed;top:64px;right:8px;width:min(370px,calc(100vw - 16px))}
+}
+html[data-theme] #view-media[data-watch="true"] .media-topbar > .app-wordmark,
+html[data-theme] #view-media[data-watch="true"] .media-topbar .media-browse-nav button {color:#e4ecef!important}
+html[data-theme] #view-media[data-watch="true"] .media-topbar > .app-wordmark > span,
+html[data-theme] #view-media[data-watch="true"] .media-topbar .media-browse-nav button.active {color:#80bbb5!important}

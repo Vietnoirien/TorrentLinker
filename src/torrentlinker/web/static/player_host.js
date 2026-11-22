@@ -75,6 +75,7 @@ function mediaPlaybackSnapshot() {
     title: snapshot.title,
     playing: snapshot.playing,
     position: snapshot.position,
+    volume: snapshot.volume,
     duration: snapshot.duration,
     tracks: snapshot.tracks,
     item: row ? Object.fromEntries(fields.map((key) => [key, row[key] ?? null])) : null,

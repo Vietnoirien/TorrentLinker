@@ -140,6 +140,13 @@ async function mediaRenderEpisodes(row) {
   root.append(header, list);
   show(seasons.includes(previousSeason) ? previousSeason : seasons.includes(detail.season) ? detail.season : seasons[0]);
 }
+function mediaFileSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0 || value == null) return "";
+  const units = language === "fr" ? ["o", "ko", "Mo", "Go", "To"] : ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log10(bytes || 1) / 3)));
+  return `${new Intl.NumberFormat(language, {maximumFractionDigits: unit ? 1 : 0}).format(bytes / 1000 ** unit)} ${units[unit]}`;
+}
 function mediaRenderFeature() {
   const root = $("media-feature");
   const candidates = [...media.rows, ...media.continueRows, ...media.homeRows.flatMap(r => r.rows)];
@@ -153,6 +160,7 @@ function mediaRenderFeature() {
   }
   // Another film fades in behind its title; nothing moves.
   const changed = media.shownFeature !== undefined && media.shownFeature !== row.id;
+  const synopsisScroll = changed ? 0 : root.querySelector(".media-feature-description")?.scrollTop || 0;
   media.shownFeature = row.id;
   root.classList.remove("fade"); if (changed) { void root.offsetWidth; root.classList.add("fade"); }
   media.featureId = row.id; media.selected = row;
@@ -167,26 +175,38 @@ function mediaRenderFeature() {
   else backdrop.addEventListener("load", () => { if (media.featureId === row.id) page.style.setProperty("--horizon-art", `url("${backdrop.src}")`); }, {once: true});
   const copy = element("div", undefined, "media-feature-copy");
   // The poster sits left of the title and description, over the same artwork backdrop.
-  if (row.artwork_url) { copy.classList.add("has-poster"); copy.append(mediaArt(row, "media-feature-poster")); }
-  copy.append(element("p", row.tracker ? say("On the tracker", "Sur le tracker") : say("In your library", "Dans votre médiathèque"), "media-eyebrow"), element("h2", row.title));
-  const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.genre, row.language, row.rating ? `★ ${row.rating}` : ""].filter(Boolean);
+  copy.classList.add("has-poster"); copy.append(mediaArt(row, "media-feature-poster"));
+  const content = element("div", undefined, "media-feature-content"); copy.append(content);
+  content.append(element("h2", row.title));
+  const facts = [row.year, row.duration > 0 ? mediaTime(row.duration) : "", row.rating ? `★ ${row.rating}` : ""].filter(Boolean);
   const meta = element("p", facts.join(" · "), "media-feature-meta");
   if (typeof mediaRatingBadge === "function") mediaRatingBadge(row, meta);
-  copy.append(meta);
+  content.append(meta);
   if (media.layout === "horizon" && typeof mediaFlags === "function") {
     const flags = element("ul", undefined, "media-feature-flags");
     for (const [text, strong] of mediaFlags(row)) flags.append(element("li", text, strong ? "strong" : ""));
-    if (flags.childElementCount) copy.append(flags);
+    if (flags.childElementCount) content.append(flags);
   }
-  if (row.identity_source === "filename") copy.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
-  copy.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible."), "media-feature-description"));
-  if (typeof mediaRatingEditor === "function") mediaRatingEditor(row, copy);
+  const description = element("div", undefined, "media-feature-description");
+  description.tabIndex = 0; description.setAttribute("aria-label", say("Full synopsis", "Synopsis complet"));
+  description.append(element("p", row.description || say("No local synopsis available.", "Aucun synopsis local disponible.")));
+  content.append(description);
+  // A status refresh must not send someone reading a long synopsis back to its start.
+  requestAnimationFrame(() => { if (description.isConnected) description.scrollTop = synopsisScroll; });
+  const tags = element("dl", undefined, "media-feature-tags"); tags.id = "media-feature-details";
+  const flags = typeof mediaFlags === "function" ? mediaFlags({...row, release: row.tracker?.name || row.release}) : [];
+  const languages = row.language || flags.map(([text]) => text).find(text => ["MULTI", "VF", "VOSTFR"].includes(text));
+  for (const [label, value] of [[say("Languages", "Langues"), languages], [say("Genre", "Genre"), row.genre], [say("Version", "Version"), flags.map(([text]) => text).join(" · ")], [say("File size", "Poids"), mediaFileSize(row.tracker?.size ?? row.size)]]) {
+    const tag = element("div", undefined, "media-feature-tag");
+    tag.append(element("dt", label), element("dd", value || say("Unknown", "Inconnu"))); tags.append(tag);
+  }
+  content.append(tags);
   const actions = element("div", undefined, "media-feature-actions");
   if (row.tracker) {
     // A film on c411, not in the library: its best release, and a way to queue it.
-    copy.append(mediaTrackerRelease(row.tracker));
+    description.append(mediaTrackerRelease(row.tracker));
     // A Member asks instead (requests.js).
-    if (state.setup?.owner === false) { mediaRequestActions(row, copy, actions); root.append(copy); return; }
+    if (state.setup?.owner === false) { mediaRequestActions(row, description, actions); content.append(actions); root.append(copy); return; }
     const queue = button(say("Download", "Télécharger"), () => guard(async () => {
       queue.disabled = true;
       try {
@@ -194,17 +214,38 @@ function mediaRenderFeature() {
         toast(say(`Sending ${row.tracker.name} to the client.`, `Envoi de ${row.tracker.name} au client.`));
       } finally { queue.disabled = false; }
     }), "media-primary");
-    actions.append(queue); copy.append(actions); root.append(copy);
+    actions.append(queue); content.append(actions); root.append(copy);
     return;
   }
   const play = mediaCanPreview(row) ? mediaPreviewAction(row, "media-primary") : button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false && !mediaCanPreview(row);
-  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id), "media-secondary"));
-  copy.append(actions);
-  if (row.available === false) copy.append(element("p", row.reason || say("Unavailable", "Indisponible"), "media-availability-note"));
+  const seen = button("", () => guard(async () => {
+    seen.disabled = true;
+    try {
+      await api(`media/items/${encodeURIComponent(row.id)}/watched`, {client_id: mediaClient(), watched: !row.watched});
+      toast(row.watched ? say("Marked as unwatched", "Marqué comme non vu") : say("Marked as watched", "Marqué comme vu"));
+      await loadMedia();
+    } finally { seen.disabled = false; }
+  }), "media-secondary media-seen");
+  seen.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  seen.title = row.watched ? say("Mark unwatched", "Marquer comme non vu") : say("Mark watched", "Marquer comme vu");
+  seen.setAttribute("aria-label", seen.title);
+  seen.setAttribute("aria-pressed", String(!!row.watched));
+  const info = element("details", undefined, "media-selection-info"), summary = element("summary", "ⓘ");
+  summary.setAttribute("aria-label", say("About this selection", "À propos de la sélection"));
+  const infoBody = element("div", undefined, "media-selection-info-body");
+  infoBody.append(element("p", say("A poster selects this banner. Play starts the selected film. The banner stays pinned while the rows scroll.", "Une affiche change cette bannière. Lire lance le film sélectionné. La bannière reste épinglée pendant le défilement des rangées.")));
+  if (row.identity_source === "filename") infoBody.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-metadata-source"));
+  if (typeof mediaRatingEditor === "function") mediaRatingEditor(row, infoBody);
+  infoBody.append(button(say("File details", "Détails du fichier"), () => mediaDetails(row.id), "media-secondary"));
+  if (row.available === false) infoBody.append(element("p", row.reason || say("Unavailable", "Indisponible"), "media-availability-note"));
+  info.append(summary, infoBody); info.open = !!media.infoOpen;
+  info.ontoggle = () => { if (info.isConnected) media.infoOpen = info.open; };
+  actions.append(play, seen, info);
+  content.append(actions);
   root.append(copy);
   const strip = element("div", undefined, "media-focus-strip"); strip.id = "media-focus-strip"; strip.setAttribute("aria-label", say("Select a featured title", "Choisir le titre mis en avant"));
   for (const item of media.rows) {
-    const choice = button("", () => mediaPlaysCard(item) ? mediaStart([item.id]) : mediaSelectFeature(item), "media-focus-choice");
+    const choice = button("", () => mediaSelectFeature(item), "media-focus-choice");
     choice.dataset.id = item.id; choice.setAttribute("aria-label", item.title); choice.setAttribute("aria-pressed", String(item.id === row.id));
     choice.ondblclick = () => guard(() => mediaStart([item.id]));
     choice.append(mediaArt(item), element("span", item.title)); strip.append(choice);
@@ -281,7 +322,8 @@ function mediaRenderHome() {
     track.addEventListener("wheel", event => mediaRowWheel(track, event), {passive: false});
     const back = button("‹", () => step(-1), "icon-button"), forward = button("›", () => step(1), "icon-button");
     back.setAttribute("aria-label", say("Scroll left", "Défiler à gauche")); forward.setAttribute("aria-label", say("Scroll right", "Défiler à droite"));
-    const all = button(say("See all", "Voir tout"), () => guard(() => mediaSeeAll(row.filters)), "quiet");
+    const all = button(say("See all", "Voir tout"), () => guard(() => mediaSeeAll(row.filters)), "quiet media-see-all");
+    all.dataset.total = String(row.total || row.rows.length);
     let heading = element("h2", title);
     if (horizon && media.homeRows.length > 1) {
       heading = document.createElement("select"); heading.className = "media-row-category"; heading.setAttribute("aria-label", say("Category", "Catégorie"));
@@ -293,9 +335,10 @@ function mediaRenderHome() {
         root.querySelector(".media-row-category")?.focus();
       };
     }
-    header.append(heading, element("span", row.state && row.state !== "ready" ? "" : say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"), back, forward);
+    header.append(heading, element("span", row.state && row.state !== "ready" ? "" : say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"));
     if (!row.filters?.tracker) header.append(all);
     else if (row.key === "tracker" && typeof requestPermission === "function" && requestPermission("wish")) header.append(button(say("Make a wish", "Faire un vœu"), requestWishDialog, "quiet"));
+    header.append(back, forward);
     for (const item of row.rows) track.append(mediaRowCard(item, row, track));
     if (!row.rows.length && row.state) track.append(...mediaRowPlaceholder(row));
     section.append(header, track); root.append(section);
@@ -322,11 +365,8 @@ function mediaRowPlaceholder(row) {
   const cards = Array.from({length: 6}, () => { const card = element("div", undefined, "media-row-skeleton"); card.setAttribute("aria-hidden", "true"); return card; });
   return [note, ...cards];
 }
-// While a film plays, a card plays its film instead of selecting it (a tracker film is not in the library).
-const mediaPlaysCard = item => typeof watchPlayback === "function" && !!watchPlayback() && !item.tracker && item.available !== false;
 function mediaRowCard(item, row, track) {
   const card = button("", () => {
-    if (mediaPlaysCard(item)) return mediaStart([item.id]);
     mediaSelectFeature(item);
     for (const other of $("media-home-rows").querySelectorAll(".media-row-card")) other.setAttribute("aria-pressed", String(other.dataset.id === item.id));
     if (media.layout === "horizon") {
@@ -334,7 +374,7 @@ function mediaRowCard(item, row, track) {
       // rest of the category arrives before the end is reached.
       card.scrollIntoView({block: "nearest", inline: "center", behavior: "smooth"});
       if ([...track.children].indexOf(card) >= track.childElementCount - 8) guard(() => mediaRowMore(row, track));
-    } else $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"});
+    }
   }, "media-row-card");
   card.dataset.id = item.id;
   card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
@@ -401,9 +441,12 @@ function mediaRowArrows() {
   for (const section of document.querySelectorAll(".media-home-row")) {
     const track = section.querySelector(".media-row-track"), overflow = track.scrollWidth > track.clientWidth + 2;
     for (const arrow of section.querySelectorAll(".media-home-row-header .icon-button")) arrow.hidden = !overflow;
+    const all = section.querySelector(".media-see-all");
+    if (all) all.hidden = !overflow && Number(all.dataset.total) <= track.querySelectorAll(".media-row-card").length;
   }
 }
 async function mediaSeeAll(filters) {
+  media.homeReturn = {view: media.view, filters: Object.fromEntries(["genre", "year", "language", "availability"].map(key => [key, $(`media-${key}`).value])), animeFilters: {...media.animeFilters}};
   const genre = $("media-genre");
   if (filters.genre) {
     if (![...genre.options].some(option => option.value === filters.genre)) mediaOption(genre, filters.genre, filters.genre);
@@ -430,6 +473,17 @@ function mediaRender() {
   mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome(); mediaRenderEpisodes(media.selected).catch(() => {});
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries"), anime: say("Anime", "Animés"), adult: "XXX"})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
+  $("media-home-back")?.remove();
+  if (media.kind === "video" && media.gridMode && media.homeReturn) {
+    const back = button(say("Back to rows", "Retour aux rangées"), () => guard(async () => {
+      const previous = media.homeReturn;
+      media.gridMode = false; media.view = previous.view; media.animeFilters = previous.animeFilters;
+      for (const [key, value] of Object.entries(previous.filters)) $(`media-${key}`).value = value;
+      $("media-view").value = media.view;
+      await loadMedia();
+    }), "media-see-all");
+    back.id = "media-home-back"; $("media-shelf-count").after(back);
+  }
   const root = $("media-results"); root.replaceChildren();
   if (!media.rows.length) { root.append(element("p", say("No media found. Add a Library Folder in Library options, then refresh the inventory.", "Aucun média trouvé. Ajoutez un dossier dans les options de bibliothèque, puis actualisez les médias."), "media-empty")); root.append(button(say("Add Library Folder", "Ajouter un dossier de bibliothèque"), () => navigate("setup"))); return; }
   if (media.kind === "music" && media.view === "tracks") { mediaRenderTracks(root); return; }

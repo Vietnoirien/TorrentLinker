@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import socket
 import threading
 import time
@@ -210,8 +209,9 @@ window.dispatchEvent(new MessageEvent('message', {
             expect(panel.locator("#columns")).to_be_visible()
             # On a phone the sidebar opens over the page at full height; a tap beside it closes it.
             shell_open_navigation(page)
-            expect(page.locator("#shell-navigation-frame")).to_have_css(
-                "height", re.compile(r"84\d(?:\.\d+)?px")
+            page.wait_for_function(
+                "Math.abs(document.querySelector('#shell-navigation-frame')"
+                ".getBoundingClientRect().height - innerHeight) < 2"
             )
             shell_close_drawer(page)
             page.locator("#torrents-frame").scroll_into_view_if_needed()

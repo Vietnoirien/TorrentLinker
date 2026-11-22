@@ -56,7 +56,7 @@ def video_details(qtbot, tab, title):
         qtbot,
         tab,
         "[...document.querySelectorAll('#media-feature button')]"
-        ".find(b=>b.textContent==='Details').click()",
+        ".find(b=>b.textContent==='File details').click()",
     )
     video_wait(qtbot, tab, "document.querySelector('#media-details').open")
 
@@ -396,7 +396,9 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     details = video_js(qtbot, tab, "document.querySelector('#media-details').innerText")
     assert "External subtitle files" in details and "Clip" in details
     assert "Filename metadata" in video_js(
-        qtbot, tab, "document.querySelector('#media-feature').innerText"
+        qtbot,
+        tab,
+        "document.querySelector('#media-feature .media-selection-info-body').textContent",
     )
     video_action(qtbot, tab, "Play")
     qtbot.waitUntil(lambda: tab.player.hasVideo(), timeout=15000)
@@ -405,7 +407,7 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
     tab.command("seek", position=2)
     qtbot.waitUntil(lambda: tab.caption.text() == "A local caption")
     qtbot.waitUntil(lambda: tab.player.videoSink().videoFrame().isValid(), timeout=10000)
-    # Layout A: the page draws the controls over the picture; the old control bar stays hidden.
+    # The shared theatre draws controls over the picture; the old control bar stays hidden.
     assert not tab.video_controls.isVisible()
     video_wait(qtbot, tab, "!!document.getElementById('watch-toggle')")
 
@@ -420,6 +422,10 @@ def test_native_video_plays_with_local_subtitles(qtbot, tmp_path):
 
     tab.player.pause()
     source, position = tab.player.source(), tab.player.position()
+    video_js(qtbot, tab, "watchSend('volume', {volume: 0.4})")
+    qtbot.waitUntil(lambda: abs(tab.audio.volume() - 0.4) < 0.01)
+    video_js(qtbot, tab, "watchSend('volume', {volume: 1})")
+    qtbot.waitUntil(lambda: tab.audio.volume() == 1)
     original_parent = tab.player_panel.parentWidget()
     video_js(qtbot, tab, "watchSend('fullscreen')")
     qtbot.waitUntil(lambda: tab.player_panel.window().isFullScreen())
@@ -984,7 +990,12 @@ def test_native_multitrack_switching_decodes_audio_and_subtitles_and_keeps_choic
         )
         qtbot.waitUntil(lambda: "English fixture caption" in tab.caption.text(), timeout=10000)
         assert tab.caption.isVisible()
-        assert tab.video.rect().contains(tab.caption.mapTo(tab.video, tab.caption.rect().center()))
+        qtbot.waitUntil(
+            lambda: tab.video.rect().contains(
+                tab.caption.mapTo(tab.video, tab.caption.rect().center())
+            ),
+            timeout=5000,
+        )
         caption_pixels = tab.caption.grab().toImage()
         white_pixels = sum(
             caption_pixels.pixelColor(x, y).lightness() > 200
