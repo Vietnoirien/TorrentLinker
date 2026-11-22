@@ -24,6 +24,7 @@ class AssistantPanelService:
         body = body or {}
         if parts[0] == "community-site" and len(parts) == 2:
             from torrentlinker.community_site import community_site
+
             return community_site(service.agent.setup).request(parts[1], body)
         if parts == ["assistant", "image"] and method == "GET":
             import base64
