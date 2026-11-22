@@ -176,6 +176,11 @@ window.addEventListener("message", async (event) => {
         document.dispatchEvent(new Event("tl-language-changed"));
       }
       await refreshSetup();
+    } else if (message.path === "reveal") {
+      value = await api("settings/reveal", {
+        client_id: _client,
+        secret: body.secret,
+      });
     } else if (message.path === "test-connection") {
       value = await api(`settings/test/${encodeURIComponent(body.group)}`, {
         client_id: _client,

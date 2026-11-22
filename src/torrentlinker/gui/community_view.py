@@ -158,6 +158,8 @@ class BundledView(QWidget):
                             "release-score.js",
                             "indexers.js",
                             "indexers.css",
+                            "secrets.js",
+                            "secrets.css",
                             "cross-seed.js",
                             "cross-seed.css",
                             "details.js",
@@ -184,6 +186,8 @@ class BundledView(QWidget):
                         assets.parent / "panel" / name
                         for name in (
                             "base.css",
+                            "toast.js",
+                            "toast.css",
                             "community-items.js",
                             "community-items.css",
                             "transport.js",

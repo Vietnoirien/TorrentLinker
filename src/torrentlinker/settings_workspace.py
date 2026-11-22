@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -10,7 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from torrentlinker.client_profiles import pending_work
-from torrentlinker.config import CLIENT_FIELDS, MatchingSettings, ProxySettings
+from torrentlinker.config import CLIENT_FIELDS, HUB_SECRET, MatchingSettings, ProxySettings
 from torrentlinker.domain import ContentKind, PathMapping
 from torrentlinker.release_score import PROFILES
 from torrentlinker.release_score.preferences import Preferences as ScorePreferences
@@ -76,6 +77,39 @@ class SettingsWorkspace:
         from torrentlinker.tracker_updates import announce_hosts
 
         return announce_hosts(self.setup)
+
+    def secret_name(self, reference: str) -> str:
+        """The stored name behind a Settings secret reference, or ValueError."""
+        settings = self.setup.settings
+        fixed = {
+            "indexer-api-key": "indexer-api-key",
+            "tmdb-api-key": "tmdb-api-key",
+            "announce-url": "announce-url",
+            "proxy-password": "proxy-password",
+            "hub-key": HUB_SECRET,
+            "assistant-brave": "assistant:brave",
+        }
+        if reference in fixed:
+            return fixed[reference]
+        if reference == "client-password":
+            return settings.secret_name(CLIENT_FIELDS[settings.client] + "-password")
+        if reference == "client-api-key":
+            return settings.secret_name("qbit-api-key")
+        prefix, _, identifier = reference.partition(":")
+        if prefix == "extra-key" and identifier in {"1", "2", "3", "4"}:
+            return f"indexer-extra-key-{identifier}"
+        if prefix == "indexer" and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identifier):
+            return settings.indexer_secret(identifier)
+        if prefix == "assistant" and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identifier):
+            return "assistant:" + identifier
+        raise ValueError("Unknown secret.")
+
+    def reveal(self, reference: str) -> str:
+        """One saved secret for the Owner's eye button; a deployment-managed one never leaves."""
+        name = self.secret_name(str(reference))
+        if name in self.setup.secrets.files:
+            raise ValueError("This secret is managed by the deployment.")
+        return self.setup.secrets.get(name)
 
     def test_connection(self, group: str, body: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -330,6 +364,9 @@ class SettingsWorkspace:
                         "api_key": bool(setup.secrets.get(settings.secret_name("qbit-api-key"))),
                         "indexer_api_key": bool(setup.secrets.get("indexer-api-key")),
                         "extra_keys": len(setup.extra_indexer_keys()),
+                        "extra_key_slots": [
+                            i for i in range(1, 5) if setup.secrets.get(f"indexer-extra-key-{i}")
+                        ],
                         "tmdb_api_key": bool(setup.secrets.get("tmdb-api-key")),
                         "announce_url": bool(setup.secrets.get("announce-url")),
                         "proxy_password": bool(setup.secrets.get("proxy-password")),
@@ -458,11 +495,10 @@ class SettingsWorkspace:
             if CLIENT_FIELDS[draft.client] == "qbit":
                 values[draft.secret_name("qbit-api-key")] = value.client.api_key
             if value.indexer.extra_keys is not None:
+                extras = setup.resolve_extra_keys(value.indexer.extra_keys)
                 values.update(
                     {
-                        f"indexer-extra-key-{i + 1}": value.indexer.extra_keys[i]
-                        if i < len(value.indexer.extra_keys)
-                        else ""
+                        f"indexer-extra-key-{i + 1}": extras[i] if i < len(extras) else ""
                         for i in range(4)
                     }
                 )

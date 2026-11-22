@@ -163,12 +163,8 @@ async function aConnections(root) {
   );
   const url = aField(form, "SearXNG URL", research.searxng_url || "", "url"),
     key = aField(form, "Brave Search API key", "", "password");
-  key.placeholder = research.has_brave_key
-    ? at(
-        "Saved; leave blank to keep",
-        "Enregistrée ; laisser vide pour conserver",
-      )
-    : "";
+  let braveSaved = Boolean(research.has_brave_key);
+  secretInput(key, "assistant-brave", () => braveSaved);
   form.append(
     button(
       at("Save research settings", "Enregistrer la recherche"),
@@ -177,11 +173,14 @@ async function aConnections(root) {
           "setup/assistant/research",
           {
             searxng_url: url.value,
-            ...(key.value ? { brave_key: key.value } : {}),
+            ...(secretValue(key) ? { brave_key: secretValue(key) } : {}),
           },
           "PUT",
         );
+        braveSaved ||= Boolean(secretValue(key));
         key.value = "";
+        delete key.dataset.masked;
+        key.dispatchEvent(new Event("blur"));
       },
     ),
   );
@@ -267,10 +266,8 @@ function aProvider(existing = null) {
   );
   const key = aField(form, at("API key", "Clé API"), "", "password");
   key.autocomplete = "new-password";
-  key.placeholder = at(
-    "Leave blank to keep the saved key",
-    "Laisser vide pour conserver la clé",
-  );
+  if (existing)
+    secretInput(key, `assistant:${existing.id}`, () => Boolean(existing.has_key));
   form.append(
     element(
       "p",
@@ -294,7 +291,7 @@ function aProvider(existing = null) {
       : temperature.value.trim() === ""
         ? ""
         : +temperature.value,
-    ...(key.value ? { api_key: key.value } : {}),
+    ...(secretValue(key) ? { api_key: secretValue(key) } : {}),
   });
   const checkContext = button(
     at("Check context", "Vérifier le contexte"),
@@ -355,7 +352,7 @@ function aProvider(existing = null) {
         existing &&
         url.value === existing.url &&
         kind.value === existing.kind &&
-        !key.value;
+        !secretValue(key);
       const models = unchanged
         ? await settingsAssistantApi(
             `setup/assistant/providers/${existing.id}/models`,
@@ -365,7 +362,7 @@ function aProvider(existing = null) {
             kind: kind.value,
             url: url.value,
             model: model.value || "discovery",
-            api_key: key.value,
+            api_key: secretValue(key),
           });
       form.querySelector("datalist")?.remove();
       const list = element("datalist");
@@ -395,7 +392,7 @@ function aProvider(existing = null) {
           : temperature.value.trim() === ""
             ? ""
             : +temperature.value,
-        ...(key.value ? { api_key: key.value } : {}),
+        ...(secretValue(key) ? { api_key: secretValue(key) } : {}),
       },
       existing ? "PUT" : "POST",
     );

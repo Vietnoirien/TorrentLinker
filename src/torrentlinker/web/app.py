@@ -694,6 +694,15 @@ def create_app(
 
         return SettingsWorkspace(for_client(client_id).setup).snapshot()
 
+    # One saved secret for the Owner's eye button; declared before `{group}`.
+    @app.post("/api/settings/reveal")
+    def settings_reveal(body: dict, response: Response) -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        response.headers["Cache-Control"] = "no-store"
+        target = for_client(body.get("client_id", "")).setup
+        return {"value": SettingsWorkspace(target).reveal(body.get("secret", ""))}
+
     @app.post("/api/settings/{group}")
     def settings_save(group: str, body: dict) -> dict:
         from torrentlinker.settings_workspace import SettingsWorkspace

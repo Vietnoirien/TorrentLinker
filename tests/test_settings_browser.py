@@ -85,8 +85,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 panel.get_by_role("button", name="Connections", exact=True).click()
                 expect(name).to_have_value("Studio draft")
                 secret = panel.get_by_label("TMDb API key", exact=True)
-                expect(secret).to_have_value("")
-                expect(secret).to_have_attribute("placeholder", "Saved; leave blank to keep")
+                expect(secret).to_have_value("••••••••")
                 secret.fill("replacement-key")
                 page.route(
                     "**/api/settings/connections",
@@ -103,7 +102,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 page.unroute("**/api/settings/connections")
                 panel.get_by_role("button", name="Save", exact=True).click()
                 expect(panel.locator("#settings-status")).to_contain_text("Settings saved")
-                expect(secret).to_have_value("")
+                expect(secret).to_have_value("••••••••")
                 assert setup.configured
                 if not configured:
                     assert setup.marker.read_text() == "connected"
@@ -257,3 +256,126 @@ def test_clear_secrets_before_agent_settings_script_loads():
         page.add_script_tag(path=str(static / "agents.js"))
         assert page.evaluate("agentTokenGeneration") == 1
         browser.close()
+
+
+def test_saved_secrets_show_a_mask_and_the_eye_reveals_them_and_extra_keys_edit_one_by_one(
+    tmp_path,
+):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    config, setup, _, _ = prepared(tmp_path)
+    setup.secrets.update(
+        {
+            "tmdb-api-key": "private-existing-key",
+            "indexer-extra-key-1": "extra-one",
+            "indexer-extra-key-2": "extra-two",
+        }
+    )
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.locator("#login-password").fill("test-password-long")
+                page.locator("#login-form button").click()
+                shell_navigate(page, "setup")
+                panel = page.frame_locator("#settings-frame")
+                tmdb = panel.get_by_label("TMDb API key", exact=True)
+                expect(tmdb).to_have_value("••••••••")
+                expect(tmdb).to_have_attribute("type", "password")
+                assert "private-existing-key" not in panel.locator("body").inner_text()
+                panel.get_by_role("button", name="Show TMDb API key", exact=True).click()
+                expect(tmdb).to_have_value("private-existing-key")
+                expect(tmdb).to_have_attribute("type", "text")
+                panel.get_by_role("button", name="Hide TMDb API key", exact=True).click()
+                expect(tmdb).to_have_value("••••••••")
+                # Typing replaces the mask; emptying the field keeps the saved key.
+                tmdb.click()
+                page.keyboard.type("typed")
+                expect(tmdb).to_have_value("typed")
+                tmdb.fill("")
+                tmdb.blur()
+                expect(tmdb).to_have_value("••••••••")
+                # Each saved additional key is its own field.
+                first = panel.get_by_label("Additional API key 1", exact=True)
+                second = panel.get_by_label("Additional API key 2", exact=True)
+                expect(first).to_have_value("••••••••")
+                expect(second).to_have_value("••••••••")
+                panel.get_by_role("button", name="Show additional API key 2", exact=False).click()
+                expect(second).to_have_value("extra-two")
+                panel.get_by_role("button", name="Remove additional API key 1").click()
+                expect(panel.get_by_label("Additional API key 2", exact=True)).to_have_count(0)
+                panel.get_by_role("button", name="Add an API key", exact=True).click()
+                panel.get_by_label("Additional API key 2", exact=True).fill("extra-new")
+                panel.get_by_role("button", name="Save", exact=True).click()
+                expect(panel.locator("#settings-status")).to_contain_text("Settings saved")
+                assert setup.extra_indexer_keys() == ["extra-two", "extra-new"]
+                assert setup.secrets.get("tmdb-api-key") == "private-existing-key"
+                # Every result is a toast, never reaching the real Indexer.
+                answers = iter(
+                    [
+                        {"body": '{"ok":true,"categories":38,"keys":5}', "status": 200},
+                        {"body": '{"detail":"Indexer test failed."}', "status": 400},
+                    ]
+                )
+                page.route(
+                    "**/api/settings/test/indexer",
+                    lambda route: route.fulfill(content_type="application/json", **next(answers)),
+                )
+                test = panel.get_by_role("button", name="Test Indexer", exact=True)
+                test.scroll_into_view_if_needed()
+                test.click()
+                done = panel.locator(".tl-toast.ok").filter(has_text="c411 answers")
+                expect(done).to_have_text("c411 answers · 38 categories · 5 keys")
+                expect(done).to_be_in_viewport()
+                expect(test).to_be_enabled()
+                test.click()
+                failed = panel.locator(".tl-toast.bad").filter(has_text="Indexer test failed.")
+                expect(failed).to_be_in_viewport()
+                expect(failed).to_have_attribute("role", "alert")
+                expect(failed.get_by_role("button", name="Close")).to_be_visible()
+                failed.get_by_role("button", name="Close").click()
+                expect(failed).to_have_count(0)
+                # Save: busy label, then a toast in view whatever the scroll; a failure keeps edits.
+                name = panel.get_by_label("Client name", exact=True)
+                name.fill("Scrolled")
+                save = panel.get_by_role("button", name="Save", exact=True)
+                page.route(
+                    "**/api/settings/connections",
+                    lambda route: route.fulfill(
+                        status=409,
+                        content_type="application/json",
+                        body='{"detail":"Wait for active jobs."}',
+                    ),
+                )
+                save.click()
+                failure = panel.locator(".tl-toast.bad").filter(has_text="Wait for active jobs.")
+                expect(failure).to_be_in_viewport()
+                expect(name).to_have_value("Scrolled")
+                expect(save).to_be_enabled()
+                expect(save).to_have_text("Save")
+                page.unroute("**/api/settings/connections")
+                save.click()
+                saved = panel.locator(".tl-toast.ok").filter(has_text="Settings saved")
+                expect(saved.first).to_be_in_viewport()
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

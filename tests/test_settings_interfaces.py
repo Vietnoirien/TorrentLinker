@@ -1,5 +1,7 @@
 """The desktop embeds the same owner Settings editor as the browser."""
 
+import json
+
 from tests.test_community_interfaces import js, wait_js
 from tests.test_web_plan_execution import prepared
 from torrentlinker.gui.settings_view import SettingsView
@@ -33,7 +35,14 @@ def test_desktop_connections_keep_drafts_and_save_without_exposing_saved_secrets
         js(qtbot, view, "document.querySelector('[aria-label=\"Client name\"]').value")
         == "Desktop draft"
     )
-    assert js(qtbot, view, "document.querySelector('[aria-label=\"TMDb API key\"]').value") == ""
+    tmdb = "document.querySelector('[aria-label=\"TMDb API key\"]')"
+    assert js(qtbot, view, f"{tmdb}.value") == "••••••••"
+    # The eye asks the desktop bridge for the one saved value, and hides it again.
+    js(qtbot, view, "document.querySelector('[aria-label=\"Show TMDb API key\"]').click()")
+    wait_js(qtbot, view, f"{tmdb}.value==={json.dumps(setup.secrets.get('tmdb-api-key'))}")
+    assert setup.secrets.get("tmdb-api-key")
+    js(qtbot, view, "document.querySelector('[aria-label=\"Hide TMDb API key\"]').click()")
+    wait_js(qtbot, view, f"{tmdb}.value==='••••••••' && {tmdb}.type==='password'")
     js(
         qtbot,
         view,

@@ -98,19 +98,26 @@ class PartialNamesRefused(ValueError):
     action = "turn_off_partial_names"
 
 
+class KeptKey(BaseModel):
+    """An additional API key left as saved: the number of its stored slot, 1 to 4."""
+
+    keep: int = Field(ge=1, le=4)
+
+
 class IndexerConnection(BaseModel):
     url: str = "https://c411.org/api/torznab"
     api_key: str | None = Field(default=None, max_length=4096)
-    extra_keys: list[str] | None = Field(default=None, max_length=4)
+    # Each entry is a key typed in, or a KeptKey standing for a saved one the page never read.
+    extra_keys: list[str | KeptKey] | None = Field(default=None, max_length=4)
 
     @field_validator("extra_keys")
     @classmethod
-    def valid_extra_keys(cls, values: list[str] | None) -> list[str] | None:
+    def valid_extra_keys(cls, values: list[str | KeptKey] | None) -> list[str | KeptKey] | None:
         if values is None:
             return None
-        if any(len(key) > 4096 for key in values):
+        if any(isinstance(key, str) and len(key) > 4096 for key in values):
             raise ValueError("API key too long.")
-        return list(dict.fromkeys(key.strip() for key in values if key.strip()))
+        return [key.strip() if isinstance(key, str) else key for key in values]
 
     _url = field_validator("url")(http_url)
 
@@ -285,6 +292,14 @@ class Setup:
 
     def extra_indexer_keys(self) -> list[str]:
         return [key for i in range(1, 5) if (key := self.secrets.get(f"indexer-extra-key-{i}"))]
+
+    def resolve_extra_keys(self, entries: list[str | KeptKey]) -> list[str]:
+        """The final additional keys: typed and kept ones, without blanks or repeats."""
+        keys = [
+            self.secrets.get(f"indexer-extra-key-{key.keep}") if isinstance(key, KeptKey) else key
+            for key in entries
+        ]
+        return list(dict.fromkeys(key for key in keys if key))
 
     def indexer_key_count(self) -> int:
         return len(
@@ -475,7 +490,11 @@ class Setup:
             key = body.api_key if body.api_key is not None else self.secrets.get("indexer-api-key")
             if not key:
                 raise ValueError("Enter your c411 API key.")
-            extras = self.extra_indexer_keys() if body.extra_keys is None else body.extra_keys
+            extras = (
+                self.extra_indexer_keys()
+                if body.extra_keys is None
+                else self.resolve_extra_keys(body.extra_keys)
+            )
             indexer = Indexer(body.url, key, cache=self.store, extra_keys=extras)
             try:
                 caps = indexer.caps()
@@ -505,7 +524,11 @@ class Setup:
                 self.save()
                 indexer.session = (self._root or self)._profile_workspace
                 self._indexer = indexer
-            return {"ok": True, "categories": len(caps.categories)}
+            return {
+                "ok": True,
+                "categories": len(caps.categories),
+                "keys": len(dict.fromkeys([key, *extras])),
+            }
 
     def indexer_for(self, identifier: str) -> Indexer | TorznabIndexer:
         """The Indexer to search: c411's own, or an added one with its pacer kept."""

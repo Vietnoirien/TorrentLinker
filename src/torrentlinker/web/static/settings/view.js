@@ -11,6 +11,11 @@ let language = "en",
 const drafts = new Map();
 const draftBaselines = new Map();
 const say = (en, fr) => (language === "fr" ? fr : en);
+// Secrets shown by their eye (secrets.js), hidden again when Settings clears secrets.
+const revealedSecrets = new Set();
+function hideRevealedSecrets() {
+  for (const hide of [...revealedSecrets]) hide();
+}
 function clearAgentToken() {
   agentTokenGeneration++;
   if ($("agent-token")) $("agent-token").value = "";
@@ -72,12 +77,24 @@ async function guard(work) {
     }
   }
 }
+// What the button says while its request runs.
+const busyLabel = (text) =>
+  /^(save|enregistrer)/i.test(text)
+    ? say("Saving…", "Enregistrement…")
+    : /^(test|tester)/i.test(text)
+      ? say("Testing…", "Test en cours…")
+      : say("Working…", "En cours…");
+// Every action button: disabled with a busy label while it runs; its result is a toast (an
+// action may return the message to show; failures and the status line reach it below).
 function button(text, action, className = "") {
   const client = environment.client_id;
   const node = element("button", text, className);
   node.type = "button";
-  node.onclick = () =>
-    guard(() => {
+  node.onclick = async () => {
+    if (node.disabled) return;
+    node.disabled = true;
+    node.textContent = busyLabel(text);
+    const value = await guard(() => {
       if (client !== environment.client_id || snapshot?.client_id !== client)
         throw Error(
           say(
@@ -87,7 +104,26 @@ function button(text, action, className = "") {
         );
       return action();
     });
+    node.disabled = false;
+    node.textContent = text;
+    if (typeof value === "string") TLToast.show(value, "ok");
+  };
   return node;
+}
+// Whatever the panel writes to its status or error line also becomes a toast, so no result
+// is ever out of sight; "Unsaved changes" and progress ("Saving…") stay quiet.
+function toastLines() {
+  const watch = (id, kind) => {
+    const line = $(id);
+    if (!line) return;
+    new MutationObserver(() => {
+      const text = line.textContent.trim();
+      if (text && !text.endsWith("…") && !/^(Unsaved changes|Modifications non enregistrées)$/.test(text))
+        TLToast.show(text, kind);
+    }).observe(line, { childList: true, characterData: true, subtree: true });
+  };
+  watch("settings-status", "ok");
+  watch("settings-error", "bad");
 }
 const draftKey = (group) => `${environment.client_id}:${group}`;
 function draft(group) {
@@ -138,12 +174,7 @@ function field(form, label, data, key, type = "text", options = null) {
 function secret(form, label, data, key, saved) {
   const input = field(form, label, data, key, "password");
   input.autocomplete = "new-password";
-  input.placeholder = saved
-    ? say(
-        "Saved; leave blank to keep",
-        "Enregistré ; laisser vide pour conserver",
-      )
-    : say("Not saved", "Non enregistré");
+  input.placeholder = saved ? "" : say("Not saved", "Non enregistré");
   input.oninput = () => {
     if (input.value) data[key] = input.value;
     else delete data[key];
@@ -153,6 +184,19 @@ function secret(form, label, data, key, saved) {
     );
   };
   const connection = draft("connections");
+  let cleared = false;
+  const reference =
+    key === "tmdb_api_key"
+      ? "tmdb-api-key"
+      : key === "announce_url"
+        ? "announce-url"
+        : key === "api_key"
+          ? data === connection.indexer
+            ? "indexer-api-key"
+            : "client-api-key"
+          : data === connection.proxy
+            ? "proxy-password"
+            : "client-password";
   const kind =
     { qbittorrent: "qbit", bittorrent: "utorrent" }[connection.client.client] ||
     connection.client.client;
@@ -173,19 +217,102 @@ function secret(form, label, data, key, saved) {
   if (snapshot.connections.managed_secrets.includes(name)) {
     input.disabled = true;
     input.placeholder = say("Managed by deployment", "Géré par le déploiement");
-  } else if (saved) {
-    input.parentElement.append(
-      button(say("Clear saved value", "Effacer la valeur enregistrée"), () => {
-        data[key] = "";
-        input.value = "";
-        input.placeholder = say(
-          "Will be cleared on Save",
-          "Sera effacé à l’enregistrement",
-        );
-      }),
-    );
+  } else {
+    // The eye also shows a value being typed; only a stored one is fetched.
+    const wrap = secretInput(input, reference, () => saved && !cleared);
+    if (saved)
+      wrap.after(
+        button(say("Clear saved value", "Effacer la valeur enregistrée"), () => {
+          cleared = true;
+          hideRevealedSecrets();
+          data[key] = "";
+          unmaskSecret(input);
+          input.placeholder = say(
+            "Will be cleared on Save",
+            "Sera effacé à l’enregistrement",
+          );
+        }),
+      );
   }
   return input;
+}
+const EXTRA_KEY_LIMIT = 4;
+// Each saved additional API key is its own masked field with an eye and a remove button; the
+// page never holds the saved values, so an untouched one is sent back as `{keep: slot}`.
+function extraKeys(parent, data, slots) {
+  const managed = snapshot.connections.managed_secrets.some((name) =>
+    name.startsWith("indexer-extra-key-"),
+  );
+  const rows = (
+    data.indexer.extra_keys ?? slots.map((slot) => ({ keep: slot }))
+  ).map((entry) =>
+    typeof entry === "string"
+      ? { slot: null, value: entry }
+      : { slot: entry.keep, value: "" },
+  );
+  const changed = () => {
+    data.indexer.extra_keys = rows.map((row) =>
+      row.value || row.slot === null ? row.value : { keep: row.slot },
+    );
+    $("settings-status").textContent = say(
+      "Unsaved changes",
+      "Modifications non enregistrées",
+    );
+  };
+  const card = element("div", undefined, "settings-field");
+  card.append(
+    element("span", say("Additional API keys", "Clés API supplémentaires")),
+  );
+  const list = element("div"),
+    add = button(say("Add an API key", "Ajouter une clé API"), () => {
+      rows.push({ slot: null, value: "" });
+      changed();
+      draw();
+    });
+  const draw = () => {
+    hideRevealedSecrets();
+    list.replaceChildren();
+    rows.forEach((row, index) => {
+      const item = element("div", undefined, "extra-key-row"),
+        input = element("input"),
+        label = `${say("Additional API key", "Clé API supplémentaire")} ${index + 1}`;
+      input.type = "password";
+      input.autocomplete = "new-password";
+      input.setAttribute("aria-label", label);
+      input.value = row.value;
+      input.placeholder = managed
+        ? say("Managed by deployment", "Géré par le déploiement")
+        : "";
+      input.disabled = managed;
+      input.oninput = () => {
+        row.value = input.value;
+        changed();
+      };
+      item.append(input);
+      if (!managed) {
+        item.append(secretInput(
+            input,
+            row.slot === null ? "" : `extra-key:${row.slot}`,
+            () => row.slot !== null && !row.value,
+          ));
+        const remove = button(say("Remove", "Retirer"), () => {
+          rows.splice(index, 1);
+          changed();
+          draw();
+        });
+        remove.setAttribute(
+          "aria-label",
+          `${say("Remove", "Retirer")} ${label.toLowerCase()}`,
+        );
+        item.append(remove);
+      }
+      list.append(item);
+    });
+    add.hidden = managed || rows.length >= EXTRA_KEY_LIMIT;
+  };
+  draw();
+  card.append(list, add);
+  parent.append(card);
 }
 function box(form, title) {
   const box = element("section", undefined, "settings-card"),
@@ -320,16 +447,13 @@ function connections(form) {
       "turn_off_partial_names",
       "checkbox",
     );
-  client.append(
-    button(say("Test connection", "Tester la connexion"), async () => {
-      const result = await request("test-connection", {
-        group: "client",
-        value: structuredClone(data.client),
-      });
-      $("settings-status").textContent =
-        `${say("Connected", "Connecté")} · ${result.version}`;
-    }),
-  );
+  client.append(button(say("Test connection", "Tester la connexion"), async () => {
+    const result = await request("test-connection", {
+      group: "client",
+      value: structuredClone(data.client),
+    });
+    return `${say("Connected", "Connecté")} · ${result.version}`;
+  }));
   fileAccessCard(form);
   const indexer = box(form, say("Indexer", "Indexeur"));
   field(indexer, say("Indexer URL", "URL de l’indexeur"), data.indexer, "url");
@@ -362,56 +486,18 @@ function connections(form) {
   };
   hostsLabel.append(hosts);
   indexer.append(hostsLabel);
-  const extras = element(
-    "label",
-    say(
-      "Replace additional API keys",
-      "Remplacer les clés API supplémentaires",
-    ),
-    "settings-field",
-  );
-  const replace = element("input");
-  replace.type = "checkbox";
-  replace.disabled = snapshot.connections.managed_secrets.some((name) =>
-    name.startsWith("indexer-extra-key-"),
-  );
-  replace.checked = data.indexer.extra_keys !== undefined;
-  const keys = element("textarea");
-  keys.setAttribute(
-    "aria-label",
-    say(
-      "Additional API keys, one per line",
-      "Clés API supplémentaires, une par ligne",
-    ),
-  );
-  keys.value = (data.indexer.extra_keys || []).join("\n");
-  keys.hidden = !replace.checked;
-  replace.onchange = () => {
-    keys.hidden = !replace.checked;
-    if (replace.checked)
-      data.indexer.extra_keys = keys.value.split("\n").filter(Boolean);
-    else delete data.indexer.extra_keys;
-  };
-  keys.oninput = () => {
-    data.indexer.extra_keys = keys.value
-      .split("\n")
-      .map((k) => k.trim())
-      .filter(Boolean);
-  };
-  extras.className = "settings-check";
-  extras.prepend(replace);
-  extras.append(keys);
-  indexer.append(extras);
-  indexer.append(
-    button(say("Test Indexer", "Tester l’indexeur"), async () => {
-      const result = await request("test-connection", {
-        group: "indexer",
-        value: structuredClone(data.indexer),
-      });
-      $("settings-status").textContent =
-        `${result.categories} ${say("categories found", "catégories trouvées")}`;
-    }),
-  );
+  extraKeys(indexer, data, saved.extra_key_slots || []);
+  indexer.append(button(say("Test Indexer", "Tester l’indexeur"), async () => {
+    const result = await request("test-connection", {
+      group: "indexer",
+      value: structuredClone(data.indexer),
+    });
+    return [
+      `c411 ${say("answers", "répond")}`,
+      `${result.categories} ${say("categories", "catégories")}`,
+      `${result.keys} ${say(result.keys === 1 ? "key" : "keys", result.keys === 1 ? "clé" : "clés")}`,
+    ].join(" · ");
+  }));
   const tmdb = box(form, "TMDb");
   secret(
     tmdb,
@@ -452,16 +538,13 @@ function connections(form) {
     "torrent_client",
     "checkbox",
   );
-  proxy.append(
-    button(say("Test proxy", "Tester le proxy"), async () => {
-      const result = await request("test-connection", {
-        group: "proxy",
-        value: structuredClone(data.proxy),
-      });
-      $("settings-status").textContent =
-        `${say("Address seen by c411", "Adresse vue par c411")} : ${result.ip}`;
-    }),
-  );
+  proxy.append(button(say("Test proxy", "Tester le proxy"), async () => {
+    const result = await request("test-connection", {
+      group: "proxy",
+      value: structuredClone(data.proxy),
+    });
+    return `${say("Address seen by c411", "Adresse vue par c411")} : ${result.ip}`;
+  }));
 }
 async function manageClient(action, value) {
   const client = environment.client_id;
@@ -1130,11 +1213,11 @@ async function saveGroup(group, form) {
   snapshot = value;
   if (JSON.stringify(draft(group)) === JSON.stringify(submitted))
     drafts.delete(draftKey(group));
+  render();
   $("settings-status").textContent = say(
     "Settings saved",
     "Paramètres enregistrés",
   );
-  render();
 }
 function render() {
   if (!snapshot || snapshot.client_id !== environment.client_id) return;
@@ -1296,11 +1379,13 @@ window.addEventListener("message", (event) => {
   )
     return;
   clearAgentToken();
+  hideRevealedSecrets();
   document.querySelectorAll("dialog").forEach((dialog) => dialog.close());
 });
 window.addEventListener("DOMContentLoaded", async () => {
   const transport = await TLPanel.connect("settings", { asynchronous: true });
   request = (action, body = {}) =>
     transport(action, { ...body, _client: environment.client_id });
+  toastLines();
   window.settingsReady();
 });

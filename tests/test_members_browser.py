@@ -63,7 +63,9 @@ def test_the_owner_creates_edits_and_disables_a_member_who_signs_in_by_name(tmp_
                 dialog.get_by_label("Sign-in name").fill("lea")
                 dialog.get_by_label("Password").fill("lea-password-long")
                 dialog.get_by_role("button", name="Create the account").click()
-                expect(panel.get_by_text("Léa can now sign in")).to_be_visible()
+                expect(
+                    panel.locator(".tl-toast").get_by_text("Léa can now sign in")
+                ).to_be_visible()
                 card = panel.locator(".client-card", has=panel.get_by_role("heading", name="Léa"))
                 expect(card.get_by_text("Active · Family")).to_be_visible()
                 caps = card.locator(".member-cap input[type=number]")
@@ -75,7 +77,7 @@ def test_the_owner_creates_edits_and_disables_a_member_who_signs_in_by_name(tmp_
                 expect(card.locator(".member-cap input[type=checkbox]").first).to_be_disabled()
                 expect(card.get_by_label("Upload")).to_be_disabled()
                 card.get_by_role("button", name="Save", exact=True).click()
-                expect(panel.get_by_text("Member saved")).to_be_visible()
+                expect(panel.locator(".tl-toast").get_by_text("Member saved")).to_be_visible()
                 expect(card.get_by_text("Active · Custom")).to_be_visible()
                 lea = app.state.accounts.members()[0]
                 assert "request" not in lea["permissions"]
@@ -245,7 +247,7 @@ def test_a_member_has_medias_without_the_owners_tools(tmp_path):
                 card.get_by_label("Age limit").select_option(label="Under 12")
                 expect(card.get_by_label("Adult content (XXX)")).to_be_disabled()
                 card.get_by_role("button", name="Save", exact=True).click()
-                expect(panel.get_by_text("Member saved")).to_be_visible()
+                expect(panel.locator(".tl-toast").get_by_text("Member saved")).to_be_visible()
                 expect(card.get_by_text("Limit Under 12")).to_be_visible()
                 lea = app.state.accounts.members()[0]
                 assert lea["age_limit"] == "12" and "adult" not in lea["permissions"]
@@ -742,7 +744,9 @@ def test_notification_settings_and_private_unread_badge(tmp_path, monkeypatch):
                 panel.get_by_label("Public app address").fill("https://app.example.test")
                 panel.get_by_label("Test recipient").fill("owner@example.test")
                 panel.get_by_role("button", name="Send test email", exact=True).click()
-                expect(panel.get_by_text("Test email sent", exact=True)).to_be_visible()
+                expect(
+                    panel.locator(".tl-toast").get_by_text("Test email sent", exact=True)
+                ).to_be_visible()
                 assert len(deliveries) == 1
                 page.screenshot(path="/tmp/tl-notifications-settings.png", full_page=True)
                 app.state.notifications.emit(lea, "accepted", "Private film", "accepted")

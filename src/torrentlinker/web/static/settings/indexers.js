@@ -103,6 +103,13 @@ function indexerCard(root, entry) {
   card.append(head, element("p", indexerPace(entry), "muted indexer-pace"));
   if (why) card.append(element("p", why, "indexer-error"));
   const actions = element("div", undefined, "settings-actions");
+  const outcome = element("p", undefined, "test-result");
+  outcome.setAttribute("role", "status");
+  const last = indexerChecks.get(entry.id);
+  if (last?.error || last?.message) {
+    outcome.textContent = last.error || last.message;
+    outcome.className = `test-result ${last.error ? "bad" : "ok"}`;
+  }
   const enabled = element("label", undefined, "settings-check");
   const box = element("input");
   box.type = "checkbox";
@@ -118,17 +125,19 @@ function indexerCard(root, entry) {
   if (!entry.c411)
     actions.append(
       button(say("Test", "Tester"), async () => {
+        for (const node of card.querySelectorAll("button")) node.disabled = true;
+        outcome.className = "test-result";
+        outcome.textContent = say("Testing…", "Test en cours…");
         try {
           const result = await indexersApi(`indexers/${entry.id}/test`, {});
-          indexerChecks.set(entry.id, { searchable_ids: result.searchable_ids });
-          setStatus(
-            `${entry.name} · ${say("answers", "répond")} · ${
+          indexerChecks.set(entry.id, {
+            searchable_ids: result.searchable_ids,
+            message: `${entry.name} · ${say("answers", "répond")} · ${
               result.searchable_ids.map(idLabel).join(", ") || say("search by name", "recherche par nom")
             }`,
-          );
+          });
         } catch (error) {
           indexerChecks.set(entry.id, { error: error.message });
-          throw error;
         } finally {
           await reloadIndexers(root);
         }
@@ -158,10 +167,11 @@ function indexerCard(root, entry) {
   else
     actions.append(
       button(say("Test", "Tester"), async () => {
-        setStatus(`c411 · ${say("built in, tested in Connections", "intégré, testé dans Connexions")}`);
+        outcome.className = "test-result ok";
+        outcome.textContent = `c411 · ${say("built in, tested in Connections", "intégré, testé dans Connexions")}`;
       }),
     );
-  card.append(actions);
+  card.append(actions, outcome);
   return card;
 }
 function indexerDialog(root, entry = null) {
@@ -173,11 +183,7 @@ function indexerDialog(root, entry = null) {
   dialog.id = "indexer-dialog";
   const name = inputOf("text", entry?.name || "", "Lyra");
   const url = inputOf("text", entry?.url || "", "https://tracker.example/api/torznab");
-  const key = inputOf(
-    "password",
-    "",
-    entry ? say("Saved; leave blank to keep", "Enregistrée ; laisser vide pour la garder") : "",
-  );
+  const key = inputOf("password");
   const caps = element(
     "p",
     say(
@@ -193,10 +199,11 @@ function indexerDialog(root, entry = null) {
     labelled(say("Torznab URL", "Adresse Torznab"), url),
     labelled(say("API key", "Clé API"), key),
   );
+  secretInput(key, entry ? `indexer:${entry.id}` : "", () => Boolean(entry?.has_key));
   const body = () => ({
     name: name.value.trim(),
     url: url.value.trim(),
-    api_key: key.value || undefined,
+    api_key: secretValue(key) || undefined,
   });
   const found = (result) =>
     `${say("Answers", "Répond")} · ${say("search by", "recherche par")} ${
@@ -205,9 +212,17 @@ function indexerDialog(root, entry = null) {
   const footer = element("div", undefined, "settings-actions");
   footer.append(
     button(say("Test", "Tester"), async () => {
-      caps.textContent = found(
-        await indexersApi(entry ? `indexers/${entry.id}/probe` : "indexers/probe", body()),
-      );
+      caps.className = "test-result";
+      caps.textContent = say("Testing…", "Test en cours…");
+      try {
+        caps.textContent = found(
+          await indexersApi(entry ? `indexers/${entry.id}/probe` : "indexers/probe", body()),
+        );
+        caps.className = "test-result ok";
+      } catch (error) {
+        caps.textContent = error.message;
+        caps.className = "test-result bad";
+      }
     }),
     button(
       entry ? say("Save", "Enregistrer") : say("Add", "Ajouter"),
@@ -239,19 +254,14 @@ function hubCard(root) {
   }
   service.value = hub.service || "prowlarr";
   const url = inputOf("text", hub.url || "", "http://localhost:9696");
-  const key = inputOf(
-    "password",
-    "",
-    hub.has_key
-      ? say("Saved; leave blank to keep", "Enregistrée ; laisser vide pour la garder")
-      : "",
-  );
+  const key = inputOf("password");
   const fields = element("div", undefined, "settings-fields");
   fields.append(
     labelled(say("Service", "Service"), service),
     labelled(say("Address", "Adresse"), url),
     labelled(say("API key", "Clé API"), key),
   );
+  secretInput(key, "hub-key", () => Boolean(hub.has_key));
   card.append(fields);
   const connect = button(
     hub.service ? say("Save and reload", "Enregistrer et recharger") : say("Connect", "Connecter"),
@@ -259,7 +269,7 @@ function hubCard(root) {
       await indexersApi("indexers/hub", {
         service: service.value,
         url: url.value.trim(),
-        api_key: key.value || undefined,
+        api_key: secretValue(key) || undefined,
       });
       await reloadIndexers(root);
     },

@@ -119,7 +119,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             settings.get_by_label("Username", exact=True).fill("reader")
             settings.get_by_label("Password", exact=True).fill("client-password")
             settings.get_by_role("button", name="Test connection", exact=True).click()
-            expect(settings.locator("#settings-status")).to_contain_text("qBittorrent test")
+            expect(settings.locator(".tl-toast.ok")).to_contain_text("qBittorrent test")
             screenshot = os.getenv("TL_WEB_SCREENSHOTS")
             if screenshot:
                 Path(screenshot).mkdir(parents=True, exist_ok=True)
@@ -300,8 +300,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             shell_navigate(page, "setup")
             settings.get_by_role("button", name="Connections", exact=True).click()
             password = settings.get_by_label("Password", exact=True)
-            expect(password).to_have_attribute("placeholder", "Saved; leave blank to keep")
-            expect(password).to_have_value("")
+            expect(password).to_have_value("••••••••")
             pending_proxy = []
 
             def delay_proxy_save(route):
@@ -321,17 +320,13 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(proxy).to_have_value("test-proxy-secret")
             page.unroute("**/api/settings/connections", delay_proxy_save)
             settings.get_by_role("button", name="Save", exact=True).click()
-            expect(proxy).to_have_value("")
-            expect(proxy).to_have_attribute("placeholder", "Saved; leave blank to keep")
+            expect(proxy).to_have_value("••••••••")
             announce = settings.get_by_label("Announce URL", exact=True)
             announce.fill("https://tracker.example/announce/test-secret")
             settings.get_by_role("button", name="Save", exact=True).click()
-            expect(announce).to_have_value("")
-            expect(announce).to_have_attribute("placeholder", "Saved; leave blank to keep")
+            expect(announce).to_have_value("••••••••")
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
-            expect(settings.get_by_label("Mot de passe", exact=True)).to_have_attribute(
-                "placeholder", "Enregistré ; laisser vide pour conserver"
-            )
+            expect(settings.get_by_label("Mot de passe", exact=True)).to_have_value("••••••••")
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             settings.get_by_role("button", name="Clients", exact=True).click()
             settings.get_by_label("New client name", exact=True).fill("Unsubmitted client")

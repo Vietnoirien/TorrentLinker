@@ -1458,12 +1458,13 @@ def test_extra_api_keys_are_saved_and_each_gets_its_own_queues(qtbot, tmp_path):
 
     dialog = settings_page(qtbot, tmp_path)
     edit_field(qtbot, dialog.view, "Indexer API key", "main")
-    js(
-        qtbot,
-        dialog.view,
-        "document.querySelector('label.settings-check input[type=checkbox]').click()",
+    add = (
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Add an API key').click()"
     )
-    edit_field(qtbot, dialog.view, "Additional API keys, one per line", "second\n\nfourth")
+    js(qtbot, dialog.view, add)
+    edit_field(qtbot, dialog.view, "Additional API key 1", "second")
+    js(qtbot, dialog.view, add)
+    edit_field(qtbot, dialog.view, "Additional API key 2", "fourth")
     save_group(qtbot, dialog)
     assert get_secret("indexer-api-key-2") == "second"
     window = MainWindow(

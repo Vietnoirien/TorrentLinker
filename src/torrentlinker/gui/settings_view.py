@@ -185,6 +185,10 @@ class SettingsBridge(ViewBridge):
 
                 def work():
                     return workspace.save(body["group"], body["value"])
+            elif action == "reveal":
+
+                def work():
+                    return {"value": workspace.reveal(body.get("secret", ""))}
             elif action == "test-connection":
 
                 def work():

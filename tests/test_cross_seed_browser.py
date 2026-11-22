@@ -211,7 +211,7 @@ def test_the_indexers_section_adds_tests_imports_and_sets_the_rules(tmp_path, mo
         expect(card).to_contain_text("Désactivé")
 
         panel.locator("#indexer-hub").get_by_label("Adresse").fill("http://prowlarr:9696")
-        panel.locator("#indexer-hub").get_by_label("Clé API").fill("hubkey")
+        panel.locator("#indexer-hub").get_by_label("Clé API", exact=True).fill("hubkey")
         panel.get_by_role("button", name="Connecter").click()
         panel.locator("[data-import='1']").check()
         panel.get_by_role("button", name="Importer la sélection").click()
