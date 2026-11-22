@@ -228,6 +228,8 @@ async function loadAssistant() {
   if (version !== assistantLoadVersion) return;
   const folders = element("div"); folders.id = "assistant-folders";
   aConversationFolders(folders, conversations); side.append(folders); aFilterConversations();
+  // An empty list has nothing to resize: no stray handle.
+  side.classList.toggle("assistant-empty", !conversations.length);
   layout.append(side, main); root.append(layout); rememberSidebar(side);
   const current = conversations.find(c => c.id === assistantConversation);
   if (assistantConversation && !current) { assistantConversation = ""; return loadAssistant(); }

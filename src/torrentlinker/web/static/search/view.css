@@ -919,3 +919,10 @@ html[data-theme="dark"] button.release-score-pill.score-red {
   border-radius: 8px;
   margin-block: 12px;
 }
+
+.queue-table .empty {
+  margin: 0;
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--muted);
+}

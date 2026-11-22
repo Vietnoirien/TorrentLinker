@@ -46,6 +46,8 @@ async function loadQueue() {
       `${rows.length} total · ${count("queued")} waiting · ${count("sent")} sent · ${rows.filter((r) => ["failed", "refused", "uncertain"].includes(r.status)).length} need attention`,
       `${rows.length} au total · ${count("queued")} en attente · ${count("sent")} envoyés · ${rows.filter((r) => ["failed", "refused", "uncertain"].includes(r.status)).length} à vérifier`,
     );
+    // Nothing to start, pause or remove while the queue is empty.
+    document.querySelector(".queue-foot").hidden = !rows.length;
     table(
       "queue-table",
       rows,

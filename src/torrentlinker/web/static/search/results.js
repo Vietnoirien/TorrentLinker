@@ -365,9 +365,26 @@ function renderPills() {
   );
 }
 
+// Nothing to subscribe to without a query, nothing to clear while the filters are untouched.
+function renderActions() {
+  $("subscribe-search").disabled = !searchQuery();
+  $("search-clear").disabled = !(
+    SS.chosen.size ||
+    Object.values(SS.inputs).some(Boolean) ||
+    SS.exclusive ||
+    SS.palliative ||
+    SS.crew ||
+    SS.category ||
+    SS.sort.key !== "createdAt" ||
+    SS.sort.order !== "desc"
+  );
+}
+
 function renderSort() {
   const host = $("search-sort");
   host.hidden = !SS.native;
+  host.closest(".results-sort").hidden = !SS.native;
+  renderActions();
   host.replaceChildren(
     ...SORTS()
       .filter(([key]) => key !== "relevance" || searchQuery())
@@ -884,6 +901,7 @@ function criteriaChanged() {
     .forEach((d) => d.sync && d.sync());
   renderChosen();
   syncToggles();
+  renderActions();
   schedule();
 }
 
@@ -1051,6 +1069,7 @@ $("search-form").onsubmit = (event) => {
   guard(() => runSearch(1), event.submitter);
 };
 $("search-query").oninput = () => renderSort();
+renderSort();
 $("search-category").onchange = () => pickCategory($("search-category").value);
 $("search-density-compact").onclick = () => setDensity("compact");
 $("search-density-comfortable").onclick = () => setDensity("comfortable");

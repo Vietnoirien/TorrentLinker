@@ -202,3 +202,4 @@ select.assistant-chip:hover { background: var(--tint); color: var(--ink); }
 .media-chat-menu button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .media-chat-menu button:hover, .media-chat-menu button:focus-visible { background: var(--tint); }
 .media-chat-menu button[aria-checked="true"]::before { content: "✓ "; }
+.assistant-conversations.assistant-empty { resize: none; }
