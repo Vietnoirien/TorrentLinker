@@ -536,15 +536,54 @@ function jobPage(kind) {
   if (/^(scan|check|reseed|search-library|library-|candidate-inspector|unpack|preview-unpack|refresh-unpack|find-compatible|combine-library|.*repair)/.test(kind)) return "library";
   if (/^(search-)?(enqueue|send-queue|queue-|configure-download)/.test(kind)) return "queue";
   if (/^(plan|catalogue|enqueue-plan)/.test(kind)) return "zen";
-  if (/^upload/.test(kind)) return "upload";
+  if (/^(upload|model-)/.test(kind)) return "upload";
   if (/^feed/.test(kind)) return "feeds";
-  if (/^search/.test(kind)) return "search";
+  if (/^(search|details)/.test(kind)) return "search";
+  if (/^media/.test(kind)) return "media";
+  if (kind === "speed-test") return "zen";
   return "torrents";
 }
+const jobNames = {
+  scan:["Folder scan","Analyse des dossiers"], check:["Find Candidates","Recherche de candidats"], "check-all":["Find all Candidates","Recherche de tous les candidats"],
+  "candidate-inspector":["Candidate review","Examen du candidat"], "check-candidate":["Check Candidate","Vérification du candidat"], "library-review":["Candidate review","Examen du candidat"],
+  "library-reject":["Candidate rejected","Candidat écarté"], "library-evidence":["Evidence","Éléments de preuve"], "import-provenance":["Provenance import","Import de provenance"],
+  "find-compatible":["Find compatible torrents","Recherche de torrents compatibles"], "combine-library":["Combine items","Regroupement des éléments"],
+  "search-library":["Find Candidates","Recherche de candidats"], "preview-unpack":["Unpack preview","Aperçu de l’extraction"], "refresh-unpack":["Unpack check","Vérification de l’extraction"],
+  "unpack-reseed":["Unpack and reseed","Extraction et remise en seed"], "diagnose-repair":["Repair diagnosis","Diagnostic de réparation"], "prepare-repair":["Repair preparation","Préparation de la réparation"],
+  "refresh-repair":["Repair check","Actualisation de la réparation"], "start-repair":["Repair","Réparation"],
+  reseed:["Reseed","Remise en seed"], "reseed-workspace":["Reseed workflow","Parcours de remise en seed"], "reseed-all":["Reseed all","Remise en seed de tous les éléments"],
+  "send-queue":["Send downloads","Envoyer les téléchargements"], "search-send-queue":["Send downloads","Envoyer les téléchargements"], enqueue:["Queue downloads","Ajouter les téléchargements"],
+  "prepare-download-batch":["Prepare downloads","Préparation des téléchargements"], "configure-download-folder":["Download folder","Dossier de téléchargement"],
+  "select-torrents":["Select torrents","Sélection de torrents"], "select-catalogue":["Select from the Catalogue","Sélection dans le Catalogue"], "select-queue":["Select downloads","Sélection de téléchargements"],
+  "refine-selection":["Refine the selection","Affinage de la sélection"], "edit-queue-selection":["Edit the queue","Modification de la file"],
+  plan:["Build Plan","Créer le Plan"], "send-plan":["Send the Plan","Envoyer le Plan"], catalogue:["Refresh Catalogue","Actualiser le Catalogue"], refresh:["Refresh client","Actualiser le client"],
+  search:["Search","Recherche"], "search-options":["Search options","Options de recherche"], details:["Torrent details","Détails du torrent"], "search-details":["Torrent details","Détails du torrent"],
+  "media-scan":["Media scan","Analyse des médias"], manage:["Torrent action","Action sur les torrents"], "tracker-preview":["Tracker preview","Aperçu des trackers"],
+  "tracker-update":["Tracker update","Mise à jour des trackers"], "feed-action":["RSS feed","Flux RSS"], "speed-test":["Speed test","Test de débit"], verify:["Verification","Vérification"],
+  profile:["c411 profile","Profil c411"], "model-inspect":["3D model check","Contrôle du modèle 3D"], "model-render":["3D model render","Rendu du modèle 3D"],
+  "upload-preview":["Upload preview","Aperçu de l’upload"], "upload-draft":["Upload draft","Brouillon d’upload"], "upload-queue":["Upload queue","File d’upload"], "upload-send":["Upload send","Envoi de l’upload"],
+  "upload-remove":["Upload removal","Retrait de l’upload"], "upload-reset":["Upload reset","Réinitialisation de l’upload"], "upload-seed":["Upload seeding","Mise en partage de l’upload"],
+  "upload-model-inspect":["3D model check","Contrôle du modèle 3D"], "upload-model-render":["3D model render","Rendu du modèle 3D"], "upload-model-geometry":["3D model geometry","Géométrie du modèle 3D"],
+  "upload-seed-upload":["Upload seeding","Mise en partage de l’upload"], "upload-archive-preview":["Archive preview","Aperçu de l’archive"], "upload-archive-extract":["Archive extraction","Extraction de l’archive"],
+};
 function jobTitle(row) {
-  const names = {scan:["Folder scan","Analyse des dossiers"], check:["Find Candidates","Recherche de candidats"], "check-all":["Find all Candidates","Recherche de tous les candidats"], "candidate-inspector":["Candidate review","Examen du candidat"], "check-candidate":["Check Candidate","Vérification du candidat"], "library-review":["Candidate review","Examen du candidat"], reseed:["Reseed","Remise en seed"], "reseed-workspace":["Reseed workflow","Parcours de remise en seed"], "reseed-all":["Reseed all","Remise en seed de tous les éléments"], "send-queue":["Send downloads","Envoyer les téléchargements"], enqueue:["Queue downloads","Ajouter les téléchargements"], plan:["Build Plan","Créer le Plan"], catalogue:["Refresh Catalogue","Actualiser le Catalogue"], refresh:["Refresh client","Actualiser le client"], search:["Search","Recherche"], details:["Torrent details","Détails du torrent"]};
-  const kind = row.kind.replace(/^search-/, "");
-  return names[kind] ? say(...names[kind]) : kind.replaceAll("-", " ");
+  const names = jobNames[row.kind];
+  const text = (names ? say(...names) : row.kind.replaceAll("-", " "));
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+// A result or progress object as short readable lines, never raw JSON.
+const factNames = {items:["items","éléments"], count:["items","éléments"], done:["done","faits"], total:["total","total"], errors:["errors","erreurs"], partial:["partial","partiel"], film_details:["film details","détails des films"], added:["added","ajoutés"], removed:["removed","retirés"], skipped:["skipped","ignorés"], queued:["queued","en attente"], sent:["sent","envoyés"], cancelled:["cancelled","annulé"], message:["message","message"]};
+function jobFacts(value, skip = []) {
+  const list = (key, v) => {
+    const [en, fr] = factNames[key] || [key.replaceAll("_", " "), key.replaceAll("_", " ")];
+    if (v == null || v === "" || (Array.isArray(v) && !v.length) || v === false) return "";
+    if (Array.isArray(v)) return `${say(en, fr)} : ${v.length}`;
+    if (typeof v === "object") return Object.entries(v).map(([k, x]) => list(k, x)).filter(Boolean).join(" · ");
+    if (v === true) return say(en, fr);
+    return key === "message" ? String(v) : `${say(en, fr)} : ${v}`;
+  };
+  if (value == null || typeof value !== "object") return value == null ? "" : String(value);
+  return Object.entries(value).filter(([k]) => !skip.includes(k)).map(([k, v]) => list(k, v)).filter(Boolean).join(" · ");
 }
 function jobStatus(row) {
   const states = {queued:say("Queued", "En attente"),running:say("Running", "En cours"),completed:say("Done", "Terminé"),partial:say("Partial", "Partiel"),failed:say("Failed", "Échec"),cancelled:say("Cancelled", "Annulé"),interrupted:say("Interrupted", "Interrompu")};
@@ -576,8 +615,10 @@ function renderPageJobs(rows) {
   displayedJobs = rows;
   const host = $("page-jobs");
   const relevant = rows.filter(r => [state.clientId, "all"].includes(r.client_id) && jobPage(r.kind) === state.view);
-  const shown = [...relevant.filter(pendingJob), ...relevant.filter(r => !pendingJob(r)).slice(0, 1)];
-  host.hidden = !shown.length || ["library", "search"].includes(state.view);
+  // A job card goes away once its work is done; only a problem stays, for ten minutes.
+  const problem = r => ["failed", "partial", "interrupted"].includes(r.status) && Date.now() / 1000 - r.created < 600;
+  const shown = [...relevant.filter(pendingJob), ...relevant.filter(problem).slice(0, 1)];
+  host.hidden = !shown.length || ["library", "search", "media"].includes(state.view);
   if (host.hidden) return;
   host.replaceChildren(...shown.map(row => {
     const item = element("div", undefined, "actions");
@@ -657,7 +698,7 @@ function renderJobs(rows) {
         element("small", r.error || (r.progress?.stage === "client-files"
           ? say(`Reading client files: ${r.progress.done}/${r.progress.total} · up to ${Number(r.progress.requests_per_second).toFixed(2)} requests/s`,
               `Lecture des fichiers du client : ${r.progress.done}/${r.progress.total} · jusqu’à ${Number(r.progress.requests_per_second).toFixed(2)} requêtes/s`)
-          : JSON.stringify(r.progress || {}))),
+          : jobFacts(r.progress, ["done", "total", "items", "phase", "stage", "cancellable", "requests_per_second", "fraction"]))),
       );
       card.append(text);
       if (["queued", "running"].includes(r.status) && r.progress?.cancellable !== false)
@@ -669,11 +710,9 @@ function renderJobs(rows) {
           button(say("Details", "Détails"), async () => {
             const full = await api(`jobs/${r.id}`);
             $("dialog-content").replaceChildren(
-              element("h2", r.kind),
-              element(
-                "pre",
-                JSON.stringify(full.result || full.error, null, 2),
-              ),
+              element("h2", jobTitle(r)),
+              element("p", jobStatus(r)),
+              element("pre", full.error || jobFacts(full.result) || say("Nothing more to report.", "Rien d’autre à signaler.")),
             );
             if (full.report) $("dialog-content").append(button(say("Report the problem", "Signaler le problème"), () => offerCrashReport(full.report)));
             $("dialog").showModal();
