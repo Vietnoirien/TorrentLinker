@@ -73,6 +73,12 @@ def test_desktop_video_browsing_details_and_host_playback(qtbot, tmp_path, reque
         wait_js(
             qtbot, panel, "document.querySelector('.media-feature-poster img')?.naturalWidth===200"
         )
+        # The panel gets the small WebP of its size through the bridge, not the PNG or JPEG.
+        assert js(
+            qtbot,
+            panel,
+            "document.querySelector('.media-feature-poster img').src.startsWith('data:image/webp')",
+        )
         wait_js(qtbot, panel, "document.querySelector('.media-resume-remove')?.textContent==='×'")
         js(qtbot, panel, "document.querySelector('.media-resume-remove').click()")
         wait_js(qtbot, panel, "document.querySelector('#media-continue').hidden")

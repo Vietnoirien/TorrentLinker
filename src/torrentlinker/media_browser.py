@@ -79,14 +79,26 @@ class MediaBrowserService:
                     },
                 )
             if len(parts) == 4 and parts[3] == "artwork" and method == "GET":
-                path = media.artwork(client, identifier)
+                # The panel asks for the small WebP of its size ("grid" or "hero"), a few KB.
+                size = query.get("size")
+                path = (
+                    media.artwork_variant(client, identifier, size)
+                    if size
+                    else media.artwork(client, identifier)
+                )
                 if path is None:
                     raise ValueError("Artwork unavailable")
                 with path.open("rb") as source:
                     data = source.read(8 * 1024 * 1024 + 1)
                 if len(data) > 8 * 1024 * 1024:
                     raise ValueError("Artwork too large")
-                mime = "image/png" if data.startswith(b"\x89PNG") else "image/jpeg"
+                mime = (
+                    "image/png"
+                    if data.startswith(b"\x89PNG")
+                    else "image/webp"
+                    if data[8:12] == b"WEBP"
+                    else "image/jpeg"
+                )
                 return {"data_url": f"data:{mime};base64," + base64.b64encode(data).decode()}
             if len(parts) == 4 and parts[3] == "forget-progress" and method == "POST":
                 media.forget_progress(client, identifier)

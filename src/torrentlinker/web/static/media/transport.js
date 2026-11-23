@@ -38,9 +38,9 @@ const artObserver=new IntersectionObserver(entries=>{
 },{rootMargin:"300px"});
 function pumpArt(){
   while(artActive<4&&artPending.length){const image=artPending.shift();if(!image.isConnected)continue;
-    const key=`${image.dataset.artClient}/${image.dataset.artId}`;
+    const key=`${image.dataset.artClient}/${image.dataset.artId}/${image.dataset.artSize}`;
     artActive++;
-    const request=artCache.get(key)||api(`media/items/${encodeURIComponent(image.dataset.artId)}/artwork?client_id=${encodeURIComponent(image.dataset.artClient)}`);
+    const request=artCache.get(key)||api(`media/items/${encodeURIComponent(image.dataset.artId)}/artwork?client_id=${encodeURIComponent(image.dataset.artClient)}&size=${image.dataset.artSize}`);
     artCache.set(key,request);if(artCache.size>120)artCache.delete(artCache.keys().next().value);
     Promise.resolve(request).then(result=>{if(image.isConnected)image.src=result.data_url}).catch(()=>{artCache.delete(key);image.dispatchEvent(new Event("error"))}).finally(()=>{artActive--;pumpArt()});
   }
