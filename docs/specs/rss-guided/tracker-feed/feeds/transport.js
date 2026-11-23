@@ -199,6 +199,7 @@ window.addEventListener("feeds-environment", (e) =>
     if (!loaded || languageChanged) {
       const options = await api("feed-options");
       state.setup.indexer_categories = options.categories || {};
+      state.setup.genres = options.genres || [];
       await loadFeeds();
       loaded = true;
     }

@@ -18,6 +18,21 @@
     5000: { name: "Séries TV", parent: null }, 5030: { name: "Séries SD", parent: 5000 }, 5040: { name: "Séries HD", parent: 5000 },
     7000: { name: "Livres", parent: null }, 7030: { name: "BD / Comics", parent: 7000 },
   };
+  // TMDb's official genre ids, French names (GET /genre/movie/list and /genre/tv/list, language=fr-FR), merged:
+  // an id both lists share (Action is movie 28, TV 10759) is kept once per list.
+  const GENRES = [
+    { id: 28, name: "Action", kind: "movie" }, { id: 12, name: "Aventure", kind: "movie" }, { id: 16, name: "Animation", kind: "both" },
+    { id: 35, name: "Comédie", kind: "both" }, { id: 80, name: "Crime", kind: "both" }, { id: 99, name: "Documentaire", kind: "both" },
+    { id: 18, name: "Drame", kind: "both" }, { id: 10751, name: "Familial", kind: "both" }, { id: 14, name: "Fantastique", kind: "movie" },
+    { id: 36, name: "Histoire", kind: "movie" }, { id: 27, name: "Horreur", kind: "movie" }, { id: 10402, name: "Musique", kind: "movie" },
+    { id: 9648, name: "Mystère", kind: "both" }, { id: 10749, name: "Romance", kind: "movie" }, { id: 878, name: "Science-Fiction", kind: "movie" },
+    { id: 10770, name: "Téléfilm", kind: "movie" }, { id: 53, name: "Thriller", kind: "movie" }, { id: 10752, name: "Guerre", kind: "movie" },
+    { id: 37, name: "Western", kind: "both" },
+    { id: 10759, name: "Action & Adventure", kind: "tv" }, { id: 10762, name: "Kids", kind: "tv" }, { id: 10763, name: "News", kind: "tv" },
+    { id: 10764, name: "Reality", kind: "tv" }, { id: 10765, name: "Sci-Fi & Fantasy", kind: "tv" }, { id: 10766, name: "Soap", kind: "tv" },
+    { id: 10767, name: "Talk", kind: "tv" }, { id: 10768, name: "War & Politics", kind: "tv" },
+  ];
+  const gid = (...names) => names.map((n) => GENRES.find((g) => g.name === n).id);
   const CLIENTS = [
     { id: "qbit", name: "qBittorrent maison", folders: ["/data/downloads/films", "/data/downloads/musique", "/data/downloads/series"] },
     { id: "seedbox", name: "Seedbox", folders: ["/home/seedbox/watch", "/home/seedbox/films"] },
@@ -50,6 +65,19 @@
     rel({ title: "Radiohead-OK.Computer-1997-FLAC-REMASTER", size: 0.4 * GIB, seeders: 44, cats: [3040], age: 300, meta: { format: "FLAC", bitrate: "16 bit" } }),
     rel({ title: "Persepolis.Integrale.BD.FRENCH.CBZ", size: 180 * MIB, seeders: 12, cats: [7030], age: 400, meta: { format: "CBZ" } }),
   ];
+  // #genre: 4K horror and science-fiction films, with the genres TMDb gives (ids), and one release with no TMDb id.
+  C411.push(
+    rel({ title: "Alien.Romulus.2024.MULTi.2160p.WEB-DL.HDR.HEVC-FRATERNiTY", size: 7.4 * GIB, seeders: 120, cats: [2045], age: 6, meta: m("2160p", "HEVC", ["multi", "fr"], ["fr"], { tmdbid: "945961", genre: gid("Horreur", "Science-Fiction") }) }),
+    rel({ title: "Smile.2.2024.MULTi.2160p.WEB-DL.HDR.HEVC-GLOUPS", size: 6.1 * GIB, seeders: 64, cats: [2045], age: 11, meta: m("2160p", "HEVC", ["multi", "fr"], ["fr"], { tmdbid: "1100782", genre: gid("Horreur", "Mystère") }) }),
+    rel({ title: "Nope.2022.MULTi.2160p.UHD.BluRay.HDR.HEVC-NOTAG", size: 7.8 * GIB, seeders: 39, cats: [2045], age: 33, meta: m("2160p", "HEVC", ["multi", "fr", "en"], ["fr"], { tmdbid: "762504", genre: gid("Horreur", "Mystère", "Science-Fiction") }) }),
+    rel({ title: "Interstellar.2014.MULTi.2160p.UHD.BluRay.HDR.HEVC-FW", size: 7.1 * GIB, seeders: 85, cats: [2045], age: 48, meta: m("2160p", "HEVC", ["multi", "fr"], ["fr"], { tmdbid: "157336", genre: gid("Aventure", "Drame", "Science-Fiction") }) }),
+    rel({ title: "Blade.Runner.2049.2017.MULTi.2160p.UHD.BluRay.HDR.HEVC-SLAYER", size: 9.6 * GIB, seeders: 47, cats: [2045], age: 62, meta: m("2160p", "HEVC", ["multi", "fr"], ["fr"], { tmdbid: "335984", genre: gid("Science-Fiction", "Drame") }) }),
+    rel({ title: "Terrifier.3.2024.MULTi.1080p.WEB.H264-FW", size: 4.6 * GIB, seeders: 52, cats: [2040], age: 15, meta: m("1080p", "H264", ["multi", "fr"], ["fr"], { tmdbid: "1034541", genre: gid("Horreur") }) }),
+    rel({ title: "Film.Sans.Fiche.2024.FRENCH.2160p.WEB.HEVC-INCONNU", size: 5.3 * GIB, seeders: 9, cats: [2045], age: 18, meta: m("2160p", "HEVC", ["fr"], []) }),
+  );
+  // Genres of the older rows (TMDb), so the rows show them; Anatomie d'une chute is left without, as when TMDb knows none.
+  for (const [part, genres] of [["Dune.Part.Two", ["Science-Fiction", "Aventure"]], ["Oppenheimer", ["Drame", "Histoire"]], ["Poor.Things", ["Science-Fiction", "Romance", "Comédie"]], ["Le.Comte.de", ["Aventure", "Drame"]], ["Godzilla", ["Science-Fiction", "Action", "Horreur"]]])
+    for (const r of C411) if (r.title.includes(part)) r.metadata.genre = gid(...genres);
   // Torznab polling of tr4ker: real info hashes, Tracker in metadata.
   const TORZ = [
     rel({ title: "Dune.1984.REMASTERED.MULTi.1080p.BluRay.x264-TR4", size: 9.8 * GIB, seeders: 37, cats: [2040], age: 40, tracker: "tr4ker", url: "https://tr4ker.net/torrent/dune-1984-remastered", meta: { ...m("1080p", "H264", ["multi", "fr"], ["fr"]), tracker: "tr4ker" } }),
@@ -57,9 +85,9 @@
     rel({ title: "Dune.Part.One.2021.MULTi.2160p.UHD.HDR.HEVC-TR4", size: 41 * GIB, seeders: 22, cats: [2045], age: 60, tracker: "tr4ker", url: "https://tr4ker.net/torrent/dune-part-one-2021", meta: { ...m("2160p", "HEVC", ["multi", "fr", "en"], ["fr"]), tracker: "tr4ker" } }),
   ];
   // tr4ker passkey feed (/api/rss): no info hash, rows keyed tr4ker:<guid>.
-  const feedRow = (guid, title, size, seeders, slug, cat, age, freeleech) => ({
+  const feedRow = (guid, title, size, seeders, slug, cat, age, freeleech, extra = {}) => ({
     ...rel({ title, size, seeders, age, infohash: "tr4ker:" + guid, url: "https://tr4ker.net/torrent/" + slug, dl: "https://tr4ker.net/torrent/download/" + slug + ".torrent", cats: [] }),
-    metadata: { tracker: "tr4ker", guid, slug, leechers: Math.max(0, Math.round(seeders / 9)), freeleech, downloadvolumefactor: freeleech ? "0" : "1", feed_category: cat, source: "rss" },
+    metadata: { tracker: "tr4ker", guid, slug, leechers: Math.max(0, Math.round(seeders / 9)), freeleech, downloadvolumefactor: freeleech ? "0" : "1", feed_category: cat, source: "rss", ...extra },
   });
   const FEED = [
     feedRow("a1f", "Furiosa.A.Mad.Max.Saga.2024.MULTi.1080p.WEB.H264-TR4", 7.2 * GIB, 143, "furiosa-2024", "films", 2, true),
@@ -82,8 +110,18 @@
     download_hours: o.hours ?? Array.from({ length: 24 }, (_, i) => i), daily_bytes: o.daily ?? 10 * GIB, daily_torrents: 20, reserve_bytes: 10 * GIB,
     last_attempt: o.ok ? now() - o.ok * 60 : null, last_success: o.ok ? now() - o.ok * 60 : null, error: o.error ?? "", coverage: o.coverage ?? "Limited RSS discovery: c411 returns the newest releases of each source; history and gap-free updates are not guaranteed.",
   });
+  FEED.push(
+    feedRow("d1a", "Smile.2.2024.MULTi.2160p.WEB.HEVC-TR4", 6.4 * GIB, 71, "smile-2-2024", "films-film", 5, false, { quality: "2160p", tmdbid: "1100782", genre: gid("Horreur", "Mystère") }),
+    feedRow("d2b", "Alien.Romulus.2024.MULTi.2160p.WEB.HEVC-TR4", 7.6 * GIB, 133, "alien-romulus-2024", "films-film", 8, false, { quality: "2160p", tmdbid: "945961", genre: gid("Horreur", "Science-Fiction") }),
+    feedRow("d3c", "Interstellar.2014.MULTi.2160p.UHD.HEVC-TR4", 7.2 * GIB, 66, "interstellar-2014", "films-film", 22, true, { quality: "2160p", tmdbid: "157336", genre: gid("Aventure", "Drame", "Science-Fiction") }),
+    feedRow("d4d", "Nosferatu.2024.MULTi.2160p.WEB.HEVC-TR4", 5.2 * GIB, 28, "nosferatu-2024", "films-film", 10, false, { quality: "2160p" }),
+    feedRow("d5e", "Terrifier.3.2024.MULTi.1080p.WEB.H264-TR4", 4.4 * GIB, 40, "terrifier-3-2024", "films-film", 15, false, { quality: "1080p", tmdbid: "1034541", genre: gid("Horreur") }),
+    feedRow("d6f", "Dune.Part.Two.2024.MULTi.2160p.UHD.HEVC-TR4", 52 * GIB, 90, "dune-part-two-uhd", "films-film", 40, false, { quality: "2160p", tmdbid: "693134", genre: gid("Science-Fiction", "Aventure") }),
+  );
   const FEED_COVERAGE = "tr4ker's feed holds its 100 latest items: history and gap-free updates are not guaranteed.";
   const hdPrefs = () => ({ ...prefsDefault(), preferred: { quality: ["1080p", "2160p"], audio: ["multi"] }, required: { audio: ["fr"] }, category_scopes: { quality: [2000, 2040, 2045], audio: [2000, 2040, 2045] }, min_seeders: 5, min_size: 1 * GIB });
+  // #genre: 4 to 8 GiB, 2160p, one genre required (TMDb id as text).
+  const genrePrefs = (genre, scopes) => ({ ...prefsDefault(), required: { quality: ["2160p"], genre: [String(gid(genre)[0])] }, category_scopes: { quality: scopes, genre: scopes }, min_size: 4 * GIB, max_size: 8 * GIB });
   const resetData = () => {
     seq = 1000;
     S.passkeyMissing = S.passkeyMissing ?? false;
@@ -97,6 +135,13 @@
       sub({ id: "f-trseries", name: "tr4ker : séries TV", tracker: "tr4ker", feed_category: "series-tv", ok: 75, error: "tr4ker refused the passkey (HTTP 403): check it in Settings", coverage: FEED_COVERAGE }),
       sub({ id: "f-dune", name: "Dune sur tr4ker (requête)", tracker: "tr4ker", query: "Dune", categories: [2000, 2040], paused: true, ok: 600, coverage: "Limited RSS discovery: tr4ker's Torznab returns the newest releases of each source; history and gap-free updates are not guaranteed." }),
     ];
+    S.subs.push(
+      sub({ id: "g-hor-c", name: "Horreur 4K", categories: [2045], prefs: genrePrefs("Horreur", [2045]), ok: 8 }),
+      sub({ id: "g-hor-t", name: "Horreur 4K", tracker: "tr4ker", feed_category: "films-film", prefs: genrePrefs("Horreur", [2000, 2040, 2045]), ok: 8, coverage: FEED_COVERAGE }),
+      sub({ id: "g-sf-c", name: "Science-fiction 4K", categories: [2045], prefs: genrePrefs("Science-Fiction", [2045]), ok: 8 }),
+      sub({ id: "g-sf-t", name: "Science-fiction 4K", tracker: "tr4ker", feed_category: "films-film", prefs: genrePrefs("Science-Fiction", [2000, 2040, 2045]), ok: 8, coverage: FEED_COVERAGE }),
+      sub({ id: "g-free", name: "tr4ker freeleech", tracker: "tr4ker", freeleech: true, ok: 8, coverage: FEED_COVERAGE }),
+    );
     S.members = {};
     const add = (feed, hash, o = {}) => (S.members[feed] ??= []).push({ hash, unread: o.unread ?? false, saved: o.saved ?? false, dismissed: false, discovered: now() - (o.age ?? 1) * H });
     C411.slice(0, 7).forEach((r, i) => add("f-films", r.infohash, { unread: i < 3, saved: i === 2, age: 2 + i * 6 }));
@@ -105,6 +150,21 @@
     FEED.slice(0, 5).forEach((r, i) => add("f-trfilms", r.infohash, { unread: i < 3, saved: i === 1, age: 1 + i * 3 }));
     FEED.slice(5, 8).forEach((r, i) => add("f-trseries", r.infohash, { unread: i === 0, age: 70 + i }));
     TORZ.forEach((r, i) => add("f-dune", r.infohash, { unread: i === 1, age: 500 + i }));
+    // #genre: what each new subscription found so far, and what its rules say of each release.
+    const verdicts = [];
+    S.previews = new Set();
+    for (const g of S.subs.filter((x) => x.id.startsWith("g-"))) {
+      preview({ ...g, id: "" }).rows.forEach((r, i) => {
+        add(g.id, r.infohash, { unread: i < 3, age: 1 + i * 2 });
+        const e = evaluate(r, g.preferences);
+        verdicts.push({
+          feed: g.id, infohash: r.infohash, work: "", queue_key: "", decided: now() - (1 + i) * H,
+          status: e.excluded.length ? "blocked" : "review",
+          reason: e.excluded.length ? "Not accepted: " + e.excluded.join(", ") + "." : e.unknown.includes("genre") ? "Genre unknown: TMDb gives none for this release (no verified TMDb id). It waits in review." : e.unknown.length ? "Cannot be checked yet: " + e.unknown.join(", ") + "." : "Matches the rules. Review-only: nothing is queued.",
+        });
+      });
+    }
+    S.previews = new Set();
     S.queue = { [C411[1].infohash]: "queued" };
     S.inClients = { [C411[0].infohash]: ["qbit"], [C411[2].infohash]: ["qbit", "seedbox"], [C411[7].infohash]: ["seedbox"] };
     S.clientStates = { [C411[0].infohash]: { qbit: "seeding" }, [C411[2].infohash]: { qbit: "seeding", seedbox: "downloading" }, [C411[7].infohash]: { seedbox: "paused" } };
@@ -115,6 +175,7 @@
       { feed: "f-mus", infohash: C411[11].infohash, work: "daft punk", status: "baseline", reason: "Available before activation; include-current is disabled.", queue_key: "", decided: now() - 90 * H },
       ...FEED.slice(0, 5).map((r) => ({ feed: "f-trfilms", infohash: r.infohash, work: "", status: "blocked", reason: "tr4ker's feed carries no info hash. Review the item in the inbox.", queue_key: "", decided: now() - 3 * H })),
     ];
+    S.decisions.push(...verdicts);
     S.previews = new Set();
     S.selections = [];
     S.refreshed = 0;
@@ -133,7 +194,7 @@
     for (const k of new Set([...Object.keys(p.required), ...Object.keys(p.excluded)])) {
       if (!applicable(k)) continue;
       const v = row.metadata?.[k];
-      if (v == null) { unknown.push(k); continue; }
+      if (v == null || (Array.isArray(v) && !v.length)) { unknown.push(k); continue; }
       const actual = new Set(arr(v).map((x) => String(x).toLowerCase()));
       if (p.required[k] && !p.required[k].some((x) => actual.has(x.toLowerCase()))) blockers.push(`required ${k}`);
       if ((p.excluded[k] || []).some((x) => actual.has(x.toLowerCase()))) blockers.push(`excluded ${k}`);
@@ -244,7 +305,7 @@
     if (parts[0] === "community-items") return community[parts[1]](body);
     // community-items.js picks its route from the page URL; outside the app it takes this one.
     if (parts[0] === "community-site" && parts[1]?.startsWith("items-")) return community[parts[1].slice(6)](body);
-    if (path === "feed-options") return { categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, v]) => [k, v])), clients: structuredClone(CLIENTS) };
+    if (path === "feed-options") return { categories: Object.fromEntries(Object.entries(CATEGORIES).map(([k, v]) => [k, v])), clients: structuredClone(CLIENTS), genres: structuredClone(GENRES) };
     if (parts.join("/") === "feeds") {
       if (method === "GET") return S.subs.map((s) => ({ ...structuredClone(s), unread_count: unreadOf(s.id) }));
       const def = body.subscription;

@@ -9,6 +9,11 @@ const feedState = {
 const feedText = (en, fr) => say(en, fr);
 // #180: every element that is new in this change carries "n180" (outlined when "Show changes" is on).
 const n180 = (el) => (el.classList.add("n180"), el);
+// #genre: the genre filter (outlined and labelled "#genre" when "Show changes" is on).
+const n180g = (el) => (el.classList.add("n180g"), el);
+// TMDb's movie and TV genres, as the shell gives them (id, French name); a genre is held by its id.
+const feedGenres = () => (typeof state !== "undefined" && state.setup?.genres) || [];
+const feedGenreName = (id) => feedGenres().find((g) => String(g.id) === String(id))?.name || String(id);
 // État: a state tag per client (seeding, downloading…), the client's name under it.
 const FEED_STATES = {
   seeding: ["Seeding", "En seed"],
@@ -435,6 +440,14 @@ async function loadFeeds() {
         tags.append(element("span", feedTracker(r), `tracker-badge ${feedTracker(r)}`));
         if (r.metadata?.freeleech)
           tags.append(element("span", "freeleech", "tracker-badge freeleech"));
+        // #genre: up to two genres from TMDb on the same line; "genre ?" when a genre filter cannot judge it.
+        const genres = r.metadata?.genre;
+        const filtering = feedState.feeds.find((f) => f.id === feedState.id)?.preferences;
+        const genreTags = (genres || []).slice(0, 2).map((g) => n180g(element("span", feedGenreName(g), "tracker-badge genre")));
+        if (genres?.length && (genres.length > 2)) genreTags[1].textContent += ` +${genres.length - 2}`;
+        if (!genres?.length && (filtering?.required?.genre?.length || filtering?.excluded?.genre?.length))
+          genreTags.push(n180g(element("span", feedText("genre ?", "genre ?"), "tracker-badge genre unknown")));
+        tags.append(...genreTags);
         cell.append(name, tags);
         return cell;
       },
@@ -583,9 +596,12 @@ const FEED_STARTERS = {
   bitrate: [],
   platform: [],
   license: [],
+  genre: [],
 };
 const FEED_COMMON = ["quality", "codec", "audio", "subtitles"];
 const FEED_MORE = ["format", "bitrate", "platform", "license"];
+// #genre: Required / Excluded only; a genre does not rank a release, so there is no Prefer step.
+const FEED_NEXT_GENRE = { none: "must", must: "avoid", avoid: "none" };
 const FEED_INTERVALS = [15, 30, 60, 120, 360, 720, 1440];
 const FEED_NEXT_CHIP = {
   none: "prefer",
@@ -604,6 +620,7 @@ const feedFieldNames = () => ({
   bitrate: feedText("Bitrate", "Débit"),
   platform: feedText("Platform", "Plateforme"),
   license: feedText("License", "Licence"),
+  genre: feedText("Genres", "Genres"),
   size: feedText("Smaller size", "Taille plus petite"),
   seeders: feedText("More seeders", "Plus de seeders"),
 });
@@ -1033,7 +1050,7 @@ async function editFeed(existing = null, query = "") {
       ...(prefs.preferred[f] || []),
       ...(prefs.required[f] || []),
       ...(prefs.excluded[f] || []),
-      ...FEED_STARTERS[f],
+      ...(f === "genre" ? feedGenres().map((g) => String(g.id)) : FEED_STARTERS[f]),
       ...(ed.suggestions[f] || []),
     ];
     for (const v of all)
@@ -1056,7 +1073,7 @@ async function editFeed(existing = null, query = "") {
   };
   function categoryFields(id) {
     if ((id >= 2000 && id < 3000) || (id >= 5000 && id < 7000))
-      return FEED_COMMON;
+      return [...FEED_COMMON, "genre"];
     if (id >= 3000 && id < 4000) return ["format", "bitrate"];
     if (id >= 7000 && id < 9000) return ["format"];
     if (id >= 1000 && id < 2000) return ["platform"];
@@ -1105,7 +1122,7 @@ async function editFeed(existing = null, query = "") {
           : [],
       ),
     ];
-    const preserved = [...FEED_COMMON, ...FEED_MORE].filter(
+    const preserved = [...FEED_COMMON, "genre", ...FEED_MORE].filter(
       (f) => !relevant.includes(f) &&
         [prefs.required, prefs.preferred, prefs.excluded].some((g) => g[f]?.length),
     );
@@ -1114,7 +1131,7 @@ async function editFeed(existing = null, query = "") {
       const row = element("div", undefined, "feed-preserved-rule");
       const values = ["required", "preferred", "excluded"]
         .filter((kind) => prefs[kind][f]?.length)
-        .map((kind) => `${{required: feedText("Required", "Exigé"), preferred: feedText("Preferred", "Préféré"), excluded: feedText("Avoided", "Évité")}[kind]}: ${prefs[kind][f].join(", ")}`).join(" · ");
+        .map((kind) => `${{required: feedText("Required", "Exigé"), preferred: feedText("Preferred", "Préféré"), excluded: feedText("Avoided", "Évité")}[kind]}: ${prefs[kind][f].map((v) => (f === "genre" ? feedGenreName(v) : v)).join(", ")}`).join(" · ");
       const ids = prefs.category_scopes[f] || [];
       const scopeLabel = ids.length
         ? ids.map((id) => state.setup.indexer_categories[id]?.name || `#${id}`).join(", ")
@@ -1133,6 +1150,7 @@ async function editFeed(existing = null, query = "") {
       host.replaceChildren(
         ...fields.map((f) => {
           const row = element("div", undefined, "feed-chip-row");
+          if (f === "genre") n180g(row);
           const label = element("span", names[f], "feed-chip-label");
           const tags = element("span", undefined, "category-tags");
           const configured = [
@@ -1163,20 +1181,22 @@ async function editFeed(existing = null, query = "") {
           const flow = element("div", undefined, "feed-chip-flow");
           for (const v of chipValues(f)) {
             const s = feedChipState(prefs, f, v);
+            const nextChip = f === "genre" ? FEED_NEXT_GENRE : FEED_NEXT_CHIP;
+            const shown = f === "genre" ? feedGenreName(v) : v;
             const rank =
               s === "prefer" ? (prefs.preferred[f] || []).indexOf(v) + 1 : 0;
             const wrap = element("span", undefined, "assistant-menu-wrap");
             const chip = button(
               ({ prefer: "♡ ", must: "✓ ", avoid: "✕ " }[s] || "") +
                 (rank ? `${rank}. ` : "") +
-                v,
+                shown,
               () => {
                 scope(f);
                 feedSetChip(
                   prefs,
                   f,
                   v,
-                  FEED_NEXT_CHIP[feedChipState(prefs, f, v)],
+                  nextChip[feedChipState(prefs, f, v)],
                 );
                 criteriaChanged();
               },
@@ -1184,7 +1204,7 @@ async function editFeed(existing = null, query = "") {
             );
             chip.title = stateWords(s);
             chip.dataset.criterion = JSON.stringify([f, v]);
-            chip.setAttribute("aria-label", `${v}, ${stateWords(s)}`);
+            chip.setAttribute("aria-label", `${shown}, ${stateWords(s)}`);
             chip.oncontextmenu = (e) => {
               e.preventDefault();
               if (!(prefs.preferred[f] || []).includes(v)) return;
@@ -1213,6 +1233,10 @@ async function editFeed(existing = null, query = "") {
             };
             wrap.append(chip);
             flow.append(wrap);
+          }
+          if (f === "genre") {
+            row.append(flow);
+            return row;
           }
           const add = text("");
           add.placeholder = feedText("Add…", "Ajouter…");
@@ -1249,7 +1273,7 @@ async function editFeed(existing = null, query = "") {
   }
   function renderPriorities() {
     const names = feedFieldNames();
-    const allowed = [...new Set(activeCategories().flatMap(categoryFields)), "size"];
+    const allowed = [...new Set(activeCategories().flatMap(categoryFields))].filter((k) => k !== "genre").concat("size");
     const rows = prefs.priorities.filter((k) => allowed.includes(k)).map((k, i) => {
       const row = element("div", undefined, "feed-priority");
       let label = `${i + 1}. ${names[k] || k}`;
@@ -1506,7 +1530,13 @@ async function editFeed(existing = null, query = "") {
   };
   advanced.addEventListener("toggle", advancedRefresh);
   // #180
-  const activeCategories = () => (usesFeed() ? [] : categories.get());
+  // #genre: a tr4ker feed of films or series has video criteria too (tr4ker's root slug -> film / series root).
+  const activeCategories = () => {
+    if (!usesFeed()) return categories.get();
+    let c = TR4KER_CATEGORIES.find((x) => x.slug === feedCategory.value);
+    while (c?.parent != null) c = TR4KER_CATEGORIES.find((x) => x.id === c.parent);
+    return c?.slug === "films" ? [2000] : c?.slug === "series" ? [5000] : [];
+  };
   function usesFeed() {
     return trackerSelect.value === "tr4ker" && !queryInput.value.trim();
   }
@@ -1640,6 +1670,15 @@ async function editFeed(existing = null, query = "") {
           `${unknown} can't be checked (missing details)`,
           `${unknown} non vérifiables (informations manquantes)`,
         );
+    // #genre: an item whose genre TMDb does not give waits in review; it is never passed or rejected.
+    const noGenre = judged.filter(([, e]) => e.unknown.includes("genre") && !e.excluded.length).length;
+    if (noGenre)
+      message +=
+        " · " +
+        feedText(
+          `${noGenre} wait in review: genre unknown`,
+          `${noGenre} en attente de revue : genre inconnu`,
+        );
     showStrip(
       message,
       matching
@@ -1678,6 +1717,11 @@ async function editFeed(existing = null, query = "") {
     sourceChanged();
   };
   feedCategory.onchange = freeleech.onchange = sourceChanged;
+  // #genre: the film or series root decides whether the criteria (and Genres) apply.
+  feedCategory.addEventListener("change", () => {
+    renderChips();
+    renderPriorities();
+  });
   trackerChanged();
   minSize.onchange(judge);
   maxSize.onchange(judge);

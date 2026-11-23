@@ -5,13 +5,19 @@
 }
 #preview-bar select, #preview-bar button { padding: 3px 8px; font-size: 12px; }
 .pv-switch { display: inline-flex; gap: 4px; align-items: center; }
-.n180 { position: relative; }
+.n180, .n180g { position: relative; }
 html.show-180 .n180 { outline: 1.5px dashed #e0a100; outline-offset: 2px; }
 html.show-180 .n180::after {
   content: "#180"; position: absolute; top: -9px; right: 2px; z-index: 2; padding: 0 4px; border-radius: 3px;
   background: #e0a100; color: #000; font: 700 9px/13px system-ui; pointer-events: none; letter-spacing: .3px;
 }
-html.show-180 th.n180::after { top: -2px; }
+html.show-180 .n180g { outline: 1.5px dashed #2a9d8f; outline-offset: 2px; }
+html.show-180 .n180g::after {
+  content: "#genre"; position: absolute; top: -9px; right: 2px; z-index: 2; padding: 0 4px; border-radius: 3px;
+  background: #2a9d8f; color: #000; font: 700 9px/13px system-ui; pointer-events: none; letter-spacing: .3px;
+}
+html.show-180 .tracker-badge.n180g::after, html.show-180 .tracker-cell .n180g::after { content: none; }
+html.show-180 th.n180 { top: -2px; }
 /* Small inline badges get the outline only: a label would cover the subscription name above. */
 html.show-180 .tracker-badge.n180::after, html.show-180 .tracker-cell.n180::after, html.show-180 .state-cell.n180::after { content: none; }
 @media (max-width: 700px) {
