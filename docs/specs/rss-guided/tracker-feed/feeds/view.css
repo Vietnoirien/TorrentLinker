@@ -528,6 +528,10 @@ dialog:has(.feed-editor) {
 .feed-row-detail .tracker-badge {
   margin-right: 8px;
 }
+/* The badge is taller than the text line: lift the name clear of it. */
+.feed-row-detail:has(.tracker-badge) {
+  margin-top: 4px;
+}
 .feed-titles + .tracker-badge,
 .feed-header .tracker-badge {
   align-self: center;
