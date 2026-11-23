@@ -4,6 +4,21 @@ function loadTorrents() { window.torrentsEnvironment?.(); }
 function loadAssistant() { window.assistantEnvironment?.(); }
 
 "use strict";
+// A page's frame exists from the start but gets its src (and so loads) the first time it is shown;
+// its host replies to the page's ready message with the environment, so a late load is the same as an early one.
+const lazyFrames = new Map();
+function lazyFrame(frame, src) { lazyFrames.set(frame, src); }
+function frameShown() {
+  for (const [frame, src] of lazyFrames) {
+    if (!frame.isConnected || !frame.getClientRects().length) continue;
+    lazyFrames.delete(frame);
+    frame.src = src;
+  }
+}
+let frameShownTimer = 0;
+document.addEventListener("DOMContentLoaded", frameShown);
+new MutationObserver(() => { if (lazyFrames.size) { clearTimeout(frameShownTimer); frameShownTimer = setTimeout(frameShown, 0); } })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ["hidden"], subtree: true });
 // Keyboard focus inside an iframe dialog does not scroll its outer document.
 document.addEventListener("load", event => {
   const frame = event.target;
@@ -449,21 +464,6 @@ async function openFragment() {
   if (activeRoute !== fragment) await navigate(...parts);
 }
 window.addEventListener("hashchange", () => guard(openFragment));
-// A page's frame exists from the start but gets its src (and so loads) the first time it is shown;
-// its host replies to the page's ready message with the environment, so a late load is the same as an early one.
-const lazyFrames = new Map();
-function lazyFrame(frame, src) { lazyFrames.set(frame, src); }
-function frameShown() {
-  for (const [frame, src] of lazyFrames) {
-    if (!frame.isConnected || !frame.getClientRects().length) continue;
-    lazyFrames.delete(frame);
-    frame.src = src;
-  }
-}
-let frameShownTimer = 0;
-document.addEventListener("DOMContentLoaded", frameShown);
-new MutationObserver(() => { if (lazyFrames.size) { clearTimeout(frameShownTimer); frameShownTimer = setTimeout(frameShown, 0); } })
-  .observe(document.documentElement, { attributes: true, attributeFilter: ["hidden"], subtree: true });
 async function navigate(view, section, detail) {
   if (view === "agents") { view = "setup"; section = "agents"; }
   const requested = [view, ...(section ? [section, ...(detail ? [detail] : [])] : rememberedTabs[view] || [])];

@@ -24,6 +24,11 @@ def media_locator(page, selector):
     return media_browse(page).locator(selector)
 
 
+def media_ready(page):
+    """Médias loads on its first visit: wait for its first render before reading what it shows."""
+    media_locator(page, "#view-media[data-feature]").wait_for(state="attached")
+
+
 def open_films_grid(page):
     """Films shows rows; a row's See all opens the card grid these steps use."""
     from playwright.sync_api import expect
@@ -1246,6 +1251,7 @@ def test_cinematic_home_keeps_the_banner_and_menu_pinned_while_rows_scroll(tmp_p
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             shell_navigate(page, "media")
+            media_ready(page)
             if media_locator(page, "#media-toolbar-refresh").is_visible():
                 media_option(page, "#media-refresh").click()
                 media_locator(page, "#media-library-options > summary").click()
@@ -1519,6 +1525,7 @@ def test_a_film_plays_at_the_top_of_the_page_on_every_screen(tmp_path, screen_na
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             shell_navigate(page, "media")
+            media_ready(page)
             if media_locator(page, "#media-toolbar-refresh").is_visible():
                 media_option(page, "#media-refresh").click()
                 media_locator(page, "#media-library-options > summary").click()
