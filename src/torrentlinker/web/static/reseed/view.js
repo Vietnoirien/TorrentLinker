@@ -70,6 +70,19 @@ const reseedPhase = (phase) => ({
   seed: t("Mise en partage", "Start seeding"),
   scan: t("Analyse des dossiers", "Scanning folders"),
 })[phase] || esc(phase);
+function trackerProgress() {
+  const groups = new Map();
+  for (const row of snapshot.rows) {
+    const tracker = trackerFor(row);
+    if (!tracker) continue;
+    if (!groups.has(tracker)) groups.set(tracker, {chosen: 0, verified: 0, seeding: 0});
+    const group = groups.get(tracker);
+    group.chosen++;
+    if (row.status === "verified") group.verified++;
+    if (row.stage === "seeding") group.seeding++;
+  }
+  return groups.size ? `<div class="run-trackers"><strong>${t("Par tracker", "By tracker")}</strong>${[...groups].map(([name, group]) => `<span>${trackerTag(name)} ${group.chosen} ${t("choisis", "chosen")} · ${group.verified} ${t("vérifiés", "verified")} · ${group.seeding} ${t("en partage", "seeding")}</span>`).join("")}</div>` : "";
+}
 function runDetails(progress) {
   if (!snapshot.running) return "";
   const done = Number(progress.done) || 0;
@@ -80,7 +93,7 @@ function runDetails(progress) {
   const [path, item] = items[0] || [];
   const currentTracker = trackerFor(snapshot.rows.find(r => r.path === path) || {});
   const current = path ? `${path.split("/").pop()}${currentTracker ? ` · ${currentTracker}` : ""} · ${reseedPhase(item.phase)}` : t("En attente du prochain élément…", "Waiting for the next item…");
-  return `<div class="run-detail"><span title="${esc(path || "")}">${esc(current)}</span><small>${done} / ${total} · ${verified} ${t("vérifiés", "verified")}${waiting.length ? ` · ${waiting.length} ${t("en attente", "waiting")}` : ""}</small></div><progress class="run-meter" max="${Math.max(total, 1)}" value="${Math.min(done, total)}" aria-label="${t("Progression du parcours", "Reseed progress")}"></progress>${runExpanded ? `<div class="run-expanded"><small>${Number(progress.seeded) || 0} ${t("mis en partage", "seeding")}</small><div class="run-items">${items.map(([name, step]) => `<div class="run-item"><span title="${esc(name)}">${esc(name ? name.split("/").pop() : t("Dossiers", "Folders"))}</span><small>${reseedPhase(step.phase)}${step.fraction == null ? "" : ` · ${Math.round(step.fraction * 100)} %`}</small></div>`).join("") || `<small>${t("Aucun élément actif", "No active item")}</small>`}</div>${waiting.length ? `<div class="run-queue"><strong>${t("Opérations en attente", "Waiting operations")}</strong>${waiting.map(j => `<div class="run-queue-row"><span>${esc(j.title || t(activityKinds[j.kind] || j.kind))}${j.subject?.path ? ` · ${esc(j.subject.path.split("/").pop())}` : ""}</span><button data-cancel-job="${esc(j.id)}">${t("Annuler", "Cancel")}</button></div>`).join("")}</div>` : ""}</div>` : ""}`;
+  return `<div class="run-detail"><span title="${esc(path || "")}">${esc(current)}</span><small>${done} / ${total} · ${verified} ${t("vérifiés", "verified")}${waiting.length ? ` · ${waiting.length} ${t("en attente", "waiting")}` : ""}</small></div><progress class="run-meter" max="${Math.max(total, 1)}" value="${Math.min(done, total)}" aria-label="${t("Progression du parcours", "Reseed progress")}"></progress>${runExpanded ? `<div class="run-expanded"><small>${Number(progress.seeded) || 0} ${t("mis en partage", "seeding")}</small>${trackerProgress()}<div class="run-items">${items.map(([name, step]) => `<div class="run-item"><span title="${esc(name)}">${esc(name ? name.split("/").pop() : t("Dossiers", "Folders"))}</span><small>${reseedPhase(step.phase)}${step.fraction == null ? "" : ` · ${Math.round(step.fraction * 100)} %`}</small></div>`).join("") || `<small>${t("Aucun élément actif", "No active item")}</small>`}</div>${waiting.length ? `<div class="run-queue"><strong>${t("Opérations en attente", "Waiting operations")}</strong>${waiting.map(j => `<div class="run-queue-row"><span>${esc(j.title || t(activityKinds[j.kind] || j.kind))}${j.subject?.path ? ` · ${esc(j.subject.path.split("/").pop())}` : ""}</span><button data-cancel-job="${esc(j.id)}">${t("Annuler", "Cancel")}</button></div>`).join("")}</div>` : ""}</div>` : ""}`;
 }
 const api = async (action, body = {}) =>
   (await window.reseedTransport)(action, {
@@ -125,8 +138,36 @@ async function perform(action, body = {}) {
   }
 }
 const seedStates = {unknown:"Non vérifié",orphan:"Orphelins",seeded:"En partage","partially-seeded":"Partiellement partagé"};
+let episodeCoverageSnapshot, episodeChildren;
+function episodeCoverage(r) {
+  if (r.stage !== "incomplete") return null;
+  if (episodeCoverageSnapshot !== snapshot) {
+    episodeCoverageSnapshot = snapshot;
+    episodeChildren = new Map();
+    for (const child of snapshot.rows) if (child.within) {
+      if (!episodeChildren.has(child.within)) episodeChildren.set(child.within, []);
+      episodeChildren.get(child.within).push(child);
+    }
+  }
+  const children = episodeChildren.get(r.path) || [];
+  if (!children.length || !children.every(child =>
+    !child.error && ["links", "verify", "seeding"].includes(child.stage) &&
+    (child.candidates || []).some(candidate =>
+      candidate.key === child.key && candidate.match === "full" && !candidate.archive)))
+    return null;
+  return {
+    children,
+    total: children.length,
+    verified: children.filter(child => child.status === "verified" || child.stage === "seeding").length,
+    seeded: children.filter(child => child.stage === "seeding").length,
+  };
+}
+function displayStage(r) {
+  const coverage = episodeCoverage(r);
+  return coverage ? (coverage.seeded === coverage.total ? "seeding" : "verify") : r.stage;
+}
 function matches(r) {
-  return (!filter || r.stage === filter) && (!localFolder || r.folder === localFolder) &&
+  return (!filter || displayStage(r) === filter) && (!localFolder || r.folder === localFolder) &&
     (!localState || r.state === localState) && r.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
 }
 function visible() {
@@ -194,6 +235,11 @@ function stateFor(r) {
   const job = itemJob(r.path);
   const p = snapshot.progress?.active?.[r.path];
   if (snapshot.progress?.paused_paths?.includes(r.path)) return t("En pause");
+  const coverage = episodeCoverage(r);
+  if (coverage)
+    return coverage.seeded === coverage.total
+      ? `${coverage.total} ${t("épisodes en partage", "episodes seeding")}`
+      : `${coverage.verified}/${coverage.total} ${t("épisodes vérifiés", "episodes verified")}`;
   if (noMatchingCandidate(r))
     return r.stage === "find"
       ? t("Orphelin · aucun candidat", "Orphan · no candidate found")
@@ -220,10 +266,26 @@ function noMatchingCandidate(r) {
   );
 }
 function needsAttention(r) {
-  return !!r.error && !noMatchingCandidate(r);
+  return !!r.error && !noMatchingCandidate(r) && !episodeCoverage(r);
 }
 function trackerFor(r) {
   return (r.candidates || []).find(c => c.key === r.key)?.tracker || "";
+}
+function trackerTag(tracker) {
+  return tracker ? `<span class="tracker-tag" data-tracker="${esc(tracker)}" aria-label="Tracker ${esc(tracker)}">${esc(tracker)}</span>` : "";
+}
+function trackerOverview(row) {
+  const groups = new Map();
+  for (const candidate of row.candidates || []) {
+    const name = candidate.tracker || "c411";
+    if (!groups.has(name)) groups.set(name, {total: 0, full: 0, partial: 0});
+    const group = groups.get(name);
+    group.total++;
+    if (candidate.match === "full") group.full++;
+    if (candidate.match === "partial") group.partial++;
+  }
+  if (!groups.size) return "";
+  return `<div class="tracker-overview"><b>${t("Résultats par tracker", "Results by tracker")}</b>${[...groups].map(([name, group]) => `<div>${trackerTag(name)} <small>${group.total} ${t("candidats", "candidates")} · ${group.full} ${t("complets", "full")} · ${group.partial} ${t("partiels", "partial")}</small>${name === trackerFor(row) ? ` <small>· ${esc(stateFor(row))}</small>` : ""}</div>`).join("")}</div>`;
 }
 function render() {
   const focusSearch = document.activeElement?.id === "search";
@@ -273,16 +335,17 @@ function render() {
     )
       .map(
         ([key, label]) =>
-          `<button class="stage ${filter === key ? "on" : ""}" data-filter="${key}"><b>${snapshot.rows.filter((r) => r.stage === key).length}</b>${label}<br><small>${snapshot.rows.filter((r) => r.stage === key && progress.active?.[r.path]).length}${t(" en cours")}</small></button>`,
+          `<button class="stage ${filter === key ? "on" : ""}" data-filter="${key}"><b>${snapshot.rows.filter((r) => displayStage(r) === key).length}</b>${label}<br><small>${snapshot.rows.filter((r) => displayStage(r) === key && progress.active?.[r.path]).length}${t(" en cours")}</small></button>`,
       )
       .join(
         "",
-      )}</div><div class="running">${running ? `<button class="run-toggle" data-command="toggle-run" aria-expanded="${runExpanded}" aria-label="${runExpanded ? t("Réduire le parcours", "Collapse run") : t("Développer le parcours", "Expand run")}">${runExpanded ? "▴" : "▾"}</button>` : ""}<span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error && !noMatchingCandidate(r)).length}${t(" décisions attendues", " decisions pending")}</small>${runDetails(progress)}<small class="run-capacity">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
+      )}</div><div class="running">${running ? `<button class="run-toggle" data-command="toggle-run" aria-expanded="${runExpanded}" aria-label="${runExpanded ? t("Réduire le parcours", "Collapse run") : t("Développer le parcours", "Expand run")}">${runExpanded ? "▴" : "▾"}</button>` : ""}<span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter(needsAttention).length}${t(" décisions attendues", " decisions pending")}</small>${runDetails(progress)}<small class="run-capacity">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
       rows
         .slice(0, limit)
         .map((r) => {
-          const p = progress.active?.[r.path], tracker = trackerFor(r);
-          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${r.showEpisodes}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${r.showEpisodes?"▾":"▸"}</button>` : ""}${esc(r.name)}${tracker ? `<span class="tracker-tag">${esc(tracker)}</span>` : ""}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error && !noMatchingCandidate(r) ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
+          const p = progress.active?.[r.path], tracker = trackerFor(r), coverage = episodeCoverage(r);
+          const sources = coverage ? [...new Set([...(r.candidates || []).filter(c => c.match === "partial").map(c => c.tracker), ...coverage.children.map(trackerFor)].filter(Boolean))] : tracker ? [tracker] : [...new Set((r.candidates || []).map(c => c.tracker).filter(Boolean))];
+          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${displayStage(r)}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${r.showEpisodes}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${r.showEpisodes?"▾":"▸"}</button>` : ""}${esc(r.name)}${sources.map(trackerTag).join("")}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${needsAttention(r) ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
         })
         .join("") ||
       `<div class="empty">${t("Aucun élément ici. Ajoutez un dossier ou changez le filtre.")}</div>`
@@ -314,13 +377,19 @@ const observer = new IntersectionObserver(
   },
   { rootMargin: "250px" },
 );
+function episodeSummary(row, coverage) {
+  const episodeTrackers = [...new Set(coverage.children.map(trackerFor).filter(Boolean))];
+  const packTrackers = [...new Set((row.candidates || []).filter(candidate => candidate.match === "partial").map(candidate => candidate.tracker).filter(Boolean))];
+  return `<div class="section"><b>${t("Torrents des épisodes", "Episode torrents")}</b><p class="muted">${coverage.total} ${t("épisodes ont chacun un candidat complet. Leur vérification et leur partage avancent séparément.", "episodes each have a full matching candidate. Verification and seeding proceed separately.")}</p><p class="tracker-source">${t("Épisodes", "Episodes")} : ${episodeTrackers.map(trackerTag).join(" ")}${packTrackers.length ? ` · ${t("Pack partiel", "Partial pack")} : ${packTrackers.map(trackerTag).join(" ")}` : ""}</p>${coverage.children.map(child => `<div class="episode-source"><span>${esc(child.name)}</span><small>${trackerTag(trackerFor(child))} · ${esc(stateFor(child))}</small></div>`).join("")}</div>`;
+}
 function inspector() {
   const r = snapshot.rows.find((r) => r.path === selected);
   if (!r) return "";
   const steps = Object.keys(labels),
-    index = steps.indexOf(r.stage),
-    paused = snapshot.progress?.paused_paths?.includes(r.path);
-  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div>${trackerFor(r) ? `<p class="tracker-source">${t("Tracker du candidat", "Candidate tracker")} : <span class="tracker-tag">${esc(trackerFor(r))}</span></p>` : ""}<span class="badge ${r.error && !noMatchingCandidate(r) ? "warn" : ""}">${esc(stateFor(r))}</span>${r.error?`<p class="${noMatchingCandidate(r) ? "muted" : "error"}">${esc(TLToast.translate(r.error))}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
+    index = steps.indexOf(displayStage(r)),
+    paused = snapshot.progress?.paused_paths?.includes(r.path),
+    coverage = episodeCoverage(r);
+  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div>${trackerFor(r) ? `<p class="tracker-source">${t("Tracker du candidat", "Candidate tracker")} : ${trackerTag(trackerFor(r))}</p>` : ""}<span class="badge ${needsAttention(r) ? "warn" : ""}">${esc(stateFor(r))}</span>${trackerOverview(r)}${!coverage && r.error?`<p class="${noMatchingCandidate(r) ? "muted" : "error"}">${esc(TLToast.translate(r.error))}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${coverage ? episodeSummary(r, coverage) : candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
     (r.events || [])
       .slice()
       .reverse()

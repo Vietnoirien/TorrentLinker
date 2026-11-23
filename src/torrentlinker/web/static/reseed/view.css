@@ -205,7 +205,18 @@ main {
   font-weight: 600;
   vertical-align: baseline;
 }
+.tracker-tag[data-tracker="c411"] { color: #8bd0d8; border-color: #3b737b; background: #19383d; }
+.tracker-tag[data-tracker="tr4ker"] { color: #d8b8ff; border-color: #70518f; background: #32243d; }
 .tracker-source { margin: 10px 0; font-size: 12px; color: var(--muted); }
+.tracker-overview { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+.tracker-overview > b { display: block; margin-bottom: 6px; }
+.tracker-overview > div { padding: 3px 0; }
+.tracker-overview small { color: var(--muted); }
+.run-trackers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0; font-size: 12px; }
+.run-trackers strong { color: var(--muted); font-weight: 500; }
+.episode-source { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.episode-source span { overflow-wrap: anywhere; }
+.episode-source small { flex: 0 0 auto; text-align: right; }
 .warn {
   color: #e4c889;
   background: #493f2c;
