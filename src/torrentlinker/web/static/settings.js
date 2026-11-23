@@ -2,7 +2,7 @@
 const settingsFrame = document.createElement("iframe");
 settingsFrame.id = "settings-frame";
 settingsFrame.title = "Settings";
-settingsFrame.src = "static/settings/view.html";
+lazyFrame(settingsFrame, "static/settings/view.html");
 settingsFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("view-setup").prepend(settingsFrame);

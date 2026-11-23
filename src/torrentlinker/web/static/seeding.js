@@ -2,7 +2,7 @@
 const seedingFrame = document.createElement("iframe");
 seedingFrame.id = "seeding-frame";
 seedingFrame.title = "Seeding";
-seedingFrame.src = "static/seeding/view.html";
+lazyFrame(seedingFrame, "static/seeding/view.html");
 seedingFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("zen-seeding-panel").append(seedingFrame);

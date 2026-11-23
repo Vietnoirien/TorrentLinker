@@ -1,7 +1,7 @@
 "use strict";
 const documentationFrame=document.createElement("iframe");
 documentationFrame.id="documentation-frame";documentationFrame.title="Documentation";
-documentationFrame.src="static/documentation/view.html";
+lazyFrame(documentationFrame,"static/documentation/view.html");
 documentationFrame.style.cssText="width:100%;border:0;display:block";
 $("view-documentation").append(documentationFrame);
 function loadGuides(){documentationEnvironment()}

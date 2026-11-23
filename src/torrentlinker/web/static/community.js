@@ -8,7 +8,7 @@
   const frame = document.createElement("iframe");
   frame.id = "community-frame";
   frame.title = say("Community", "Communauté");
-  frame.src = "static/community/view.html";
+  lazyFrame(frame, "static/community/view.html");
   frame.style.cssText =
     "width:100%;border:0;display:block";
   root.append(frame);

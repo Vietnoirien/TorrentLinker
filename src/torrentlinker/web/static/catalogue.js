@@ -1,7 +1,7 @@
 "use strict";
 const catalogueFrame=document.createElement("iframe");
 catalogueFrame.id="catalogue-frame";catalogueFrame.title="Catalogue";
-catalogueFrame.src="static/catalogue/view.html";
+lazyFrame(catalogueFrame,"static/catalogue/view.html");
 catalogueFrame.style.cssText="width:100%;border:0;display:block";
 $("zen-catalogue-panel").append(catalogueFrame);
 const catalogueUI={value:{cards:[]},job:null,progress:null,stopping:false,plan:false,error:"",refreshing:false,generation:0};

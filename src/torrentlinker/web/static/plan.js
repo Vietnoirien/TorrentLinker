@@ -2,7 +2,7 @@
 const planFrame = document.createElement("iframe");
 planFrame.id = "plan-frame";
 planFrame.title = "Plan";
-planFrame.src = "static/plan/view.html";
+lazyFrame(planFrame, "static/plan/view.html");
 planFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("zen-plan-panel").append(planFrame);

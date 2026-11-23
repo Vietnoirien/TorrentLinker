@@ -2,7 +2,7 @@
 const searchFrame = document.createElement("iframe");
 searchFrame.id = "search-frame";
 searchFrame.title = "Search and download queue";
-searchFrame.src = "static/search/view.html";
+lazyFrame(searchFrame, "static/search/view.html");
 searchFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("view-search").append(searchFrame);
@@ -30,6 +30,12 @@ function searchEnvironment() {
     location.origin,
   );
 }
+// A hand-off to the search page (a Feeds torrent's details) waits for a frame that has not loaded yet.
+let searchLoaded = false, searchPendingDetail = null;
+function searchOpenDetail(row) {
+  if (searchLoaded) searchFrame.contentWindow.postMessage({ type: "search-open-detail", row }, location.origin);
+  else searchPendingDetail = row;
+}
 function loadSearchPage() {
   searchEnvironment();
 }
@@ -44,7 +50,10 @@ window.addEventListener("message", async (e) => {
     return;
   const m = e.data;
   if (m?.type === "search-ready") {
+    searchLoaded = true;
     searchEnvironment();
+    if (searchPendingDetail) searchOpenDetail(searchPendingDetail);
+    searchPendingDetail = null;
     return;
   }
   if (m?.type !== "search-request") return;

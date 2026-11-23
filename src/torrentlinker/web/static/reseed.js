@@ -4,7 +4,7 @@ const reseedUI = { root: "", job: null, tab: "reseed" };
 const reseedFrame = document.createElement("iframe");
 reseedFrame.id = "reseed-frame";
 reseedFrame.title = "Bibliothèque";
-reseedFrame.src = "static/reseed/view.html";
+lazyFrame(reseedFrame, "static/reseed/view.html");
 reseedFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("library-reseed").replaceChildren(reseedFrame);

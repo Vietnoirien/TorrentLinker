@@ -2,7 +2,7 @@
 const feedsFrame = document.createElement("iframe");
 feedsFrame.id = "feeds-frame";
 feedsFrame.title = "RSS";
-feedsFrame.src = "static/feeds/view.html";
+lazyFrame(feedsFrame, "static/feeds/view.html");
 feedsFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("view-feeds").append(feedsFrame);

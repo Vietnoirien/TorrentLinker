@@ -3,7 +3,7 @@ $("view-upload").replaceChildren();
 const uploadFrame = document.createElement("iframe");
 uploadFrame.id = "upload-frame";
 uploadFrame.title = "Upload";
-uploadFrame.src = "static/upload/view.html";
+lazyFrame(uploadFrame, "static/upload/view.html");
 uploadFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("view-upload").append(uploadFrame);

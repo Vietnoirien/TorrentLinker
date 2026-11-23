@@ -70,7 +70,7 @@ setInterval(() => {
 
 const profileFrame = document.createElement("iframe");
 profileFrame.id = "profile-frame";
-profileFrame.src = "static/profile/view.html";
+lazyFrame(profileFrame, "static/profile/view.html");
 profileFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("zen-profile-panel").append(profileFrame);

@@ -2,7 +2,7 @@
 const torrentsFrame = document.createElement("iframe");
 torrentsFrame.id = "torrents-frame";
 torrentsFrame.title = "Torrents";
-torrentsFrame.src = "static/torrents/view.html";
+lazyFrame(torrentsFrame, "static/torrents/view.html");
 torrentsFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("view-torrents").append(torrentsFrame);
