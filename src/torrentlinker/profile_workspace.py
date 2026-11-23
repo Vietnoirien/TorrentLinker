@@ -459,7 +459,7 @@ class ProfileWorkspace:
                     or not hmac.compare_digest(digest, self._pair[0])
                     or body.get("accountId") != account
                 ):
-                    raise PermissionError("Pair again from the Profile tab.")
+                    raise PermissionError("Pair again from Settings → Connections → Companion.")
                 handler = getattr(self, "creation_handler", None)
                 if handler is None:
                     raise ValueError("Open Community linking in TorrentLinker first.")
@@ -505,7 +505,7 @@ class ProfileWorkspace:
                 or origin != self._pair[1]
                 or not hmac.compare_digest(digest, self._pair[0])
             ):
-                raise PermissionError("Pair again from the Profile tab.")
+                raise PermissionError("Pair again from Settings → Connections → Companion.")
             if route == "/api/companion/disconnect":
                 self.disconnect()
                 return {"disconnected": True}

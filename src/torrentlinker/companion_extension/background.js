@@ -57,7 +57,7 @@ async function validateConnection(message, sender) {
   // tr4ker has no account id before its tab is read; c411's comes from the app.
   const tracker = message.tracker === "tr4ker" ? "tr4ker" : "c411";
   if (message.tracker !== undefined && message.tracker !== tracker)
-    throw new Error("Start the connection from TorrentLinker’s Profile tab.");
+    throw new Error("Start the connection from TorrentLinker → Settings → Connections → Companion.");
   if (
     message.action !== "connect" ||
     target.origin !== source.origin ||
@@ -76,7 +76,7 @@ async function validateConnection(message, sender) {
         !message.accountId ||
         message.accountId.length > 160))
   )
-    throw new Error("Start the connection from TorrentLinker’s Profile tab.");
+    throw new Error("Start the connection from TorrentLinker → Settings → Connections → Companion.");
   return {
     target: base,
     code: message.code,
@@ -456,6 +456,11 @@ async function state() {
   };
 }
 chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
+  // Lets the connect page tell an outdated companion apart; older ones answer with an error.
+  if (message?.action === "version") {
+    reply({ version: chrome.runtime.getManifest().version, trackers: ["c411", "tr4ker"] });
+    return false;
+  }
   serial(async () => {
     await connect(await validateConnection(message, sender));
     return { connected: true };

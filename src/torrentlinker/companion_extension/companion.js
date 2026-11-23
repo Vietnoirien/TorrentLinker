@@ -6,7 +6,7 @@ async function update(action = "status", tracker) {
     return;
   }
   $("status").textContent =
-    data.message || "Click Connect companion in TorrentLinker’s Profile tab.";
+    data.message || "Pair it from TorrentLinker → Settings → Connections → Companion.";
   $("destination").textContent = data.connected
     ? `${data.target} · Account ${data.accountId}`
     : "Not connected";
