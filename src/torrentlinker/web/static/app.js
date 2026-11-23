@@ -263,7 +263,10 @@ async function api(path, body, method) {
     headers: { "Content-Type": "application/json", "X-TorrentLinker": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const result = await response.json();
+  // A proxy in front of the app answers its own errors (502, 504) with an HTML page, not JSON.
+  const result = await response.json().catch(() => null);
+  const unreadable = say(`The server did not answer (HTTP ${response.status}). Try again in a moment.`,
+    `Le serveur n’a pas répondu (HTTP ${response.status}). Réessayez dans un instant.`);
   if (!response.ok) {
     if (response.status === 401) {
       clearAgentToken();
@@ -271,8 +274,9 @@ async function api(path, body, method) {
       $("login-screen").hidden = false;
     }
     // An `action` tells the page what it may offer, such as fixing a client option.
-    throw Object.assign(Error(result.detail || "Request failed"), {action: result.action});
+    throw Object.assign(Error(result?.detail || (result ? "Request failed" : unreadable)), {action: result?.action});
   }
+  if (result === null) throw Error(unreadable);
   return result;
 }
 const bytes = (n) => {
