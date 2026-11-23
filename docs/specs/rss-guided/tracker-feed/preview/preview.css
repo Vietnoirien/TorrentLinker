@@ -12,7 +12,8 @@ html.show-180 .n180::after {
   background: #e0a100; color: #000; font: 700 9px/13px system-ui; pointer-events: none; letter-spacing: .3px;
 }
 html.show-180 th.n180::after { top: -2px; }
-html.show-180 .tracker-badge.n180::after { top: -12px; }
+/* Small inline badges get the outline only: a label would cover the subscription name above. */
+html.show-180 .tracker-badge.n180::after, html.show-180 .tracker-cell.n180::after { content: none; }
 @media (max-width: 700px) {
   #preview-bar { margin: -8px -8px 8px -8px; }
 }
