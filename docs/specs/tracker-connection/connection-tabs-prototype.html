@@ -1,0 +1,548 @@
+<!doctype html>
+<!-- PROTOTYPE, throwaway (ADR-0025, issue #175). Paramètres → Connexion with one tab per Tracker and one for
+     search-only Indexers: c411 | tr4ker | Indexeurs. Includes the offer to adopt a tr4ker Indexer already
+     imported from Prowlarr or Jackett. Built from approved components: the shared palette (panel/base.css) and
+     the Settings page's stylesheet (settings/view.css), embedded below. Fictional data; nothing is sent, and
+     no key or passkey is ever shown back. -->
+<html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connexion · aperçu #175</title>
+<style>
+/* Embedded copy of src/torrentlinker/web/static/panel/base.css (approved), so the prototype opens anywhere. */
+/* Shared palette for Qt, the Web shell and bundled panels.
+   Keep these two token blocks literal: gui/theme.py reads their declarations.
+   Approved panel-specific light overrides remain in each panel's view.css. */
+:root {
+  color-scheme: dark;
+  --bg: #161d23;
+  --panel: #202932;
+  --raised: #26323c;
+  --line: #33404b;
+  --text: #e2e9ed;
+  --muted: #98aab7;
+  --accent: #80bdb6;
+  --accent-text: #102a2b;
+  --tint: #263e43;
+  --hover: #263e43;
+  --danger: #ff9c9c;
+  --warning: #edbf73;
+  --success: #4ad394;
+  --link: #64c9c0;
+  --shadow: none;
+  --ink: var(--text);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fa;
+  --panel: #ffffff;
+  --raised: #f7f9fc;
+  --line: #d5dfe9;
+  --text: #203047;
+  --muted: #5c6c80;
+  --accent: #087f76;
+  --accent-text: #ffffff;
+  --tint: #d8eeeb;
+  --hover: #e8f3f2;
+  --danger: #b42332;
+  --warning: #8a5800;
+  --success: #1f9d63;
+  --link: #087f76;
+  --shadow: 0 16px 60px #172b3e12;
+}
+</style><style>
+/* Embedded copy of src/torrentlinker/web/static/settings/view.css (approved), so the prototype opens anywhere. */
+.settings-layout {
+  align-items: start;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 24px;
+}
+#settings-navigation {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+#settings-navigation button {
+  text-align: left;
+  justify-content: flex-start;
+}
+#settings-navigation [aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--tint);
+}
+main,
+.settings-layout > * {
+  min-width: 0;
+}
+.settings-form {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+}
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.settings-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-field input,
+.settings-field select,
+.settings-field textarea {
+  width: 100%;
+}
+.settings-field input[type="checkbox"] {
+  width: auto;
+}
+.settings-form fieldset {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+}
+.settings-form legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.client-card {
+  border: 1px solid var(--line);
+  padding: 18px;
+  border-radius: 10px;
+  background: var(--panel);
+}
+.client-card h3 {
+  margin: 0;
+}
+#settings-error {
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+#settings-error:empty,
+#settings-status:empty {
+  display: none;
+}
+@media (max-width: 720px) {
+  .settings-layout,
+  .settings-fields {
+    grid-template-columns: 1fr;
+  }
+  #settings-navigation {
+    display: flex;
+    overflow: auto;
+    padding: 3px 0 8px;
+  }
+  #settings-navigation button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
+h1 {
+  font-size: 26px;
+  margin: 0 0 22px;
+}
+h2 {
+  font-size: 20px;
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  min-width: 0;
+}
+button {
+  cursor: pointer;
+}
+button:hover {
+  background: var(--raised);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+small,
+.muted {
+  color: var(--muted);
+}
+
+.settings-form h3 {
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+.settings-form .card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  margin: 16px 0;
+  background: var(--panel);
+}
+.assistant-dialog {
+  width: min(720px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px;
+}
+.assistant-dialog form,
+.assistant-dialog label {
+  display: grid;
+  gap: 8px;
+}
+.assistant-dialog form {
+  gap: 16px;
+}
+.assistant-dialog input[type="checkbox"] {
+  justify-self: start;
+}
+.assistant-dialog::backdrop {
+  background: #0008;
+}
+.settings-form .toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  background: var(--panel);
+}
+.settings-card h3 {
+  margin: 0 0 16px;
+}
+.settings-fields > button {
+  align-self: end;
+}
+.settings-check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-check input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+}
+.settings-check textarea {
+  flex-basis: 100%;
+}
+.settings-form > .settings-actions:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+.file-access-status {
+  color: var(--accent);
+  font-weight: 600;
+}
+.file-access-address {
+  overflow-wrap: anywhere;
+}
+.file-access-capabilities {
+  width: 100%;
+  border-collapse: collapse;
+}
+.file-access-capabilities th,
+.file-access-capabilities td {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.file-access-capabilities th {
+  width: 35%;
+  font-weight: 500;
+}
+.file-access-capabilities td {
+  padding-left: 20px;
+}
+.file-access-note {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  padding: 12px;
+}
+.settings-error {
+  color: var(--danger);
+}
+.file-access-confirm {
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  width: min(560px, 90vw);
+  padding: 24px;
+}
+/* Paramètres → Utilisateurs: member cards, their Permission tags and the locked Owner. */
+.member-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.member-head p {
+  margin: 4px 0 0;
+}
+.member-tags {
+  margin-top: 10px;
+}
+.member-tag {
+  display: inline-block;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin: 0 6px 4px 0;
+  color: var(--muted);
+}
+.member-tag.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.member-locked {
+  opacity: 0.7;
+}
+.member-locked input {
+  cursor: not-allowed;
+}
+.member-editor {
+  margin-top: 16px;
+}
+.member-kinds {
+  padding-left: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+.member-cap input[type="number"] {
+  width: 90px;
+}
+.member-danger {
+  color: var(--danger);
+}
+
+/* An invitation or password link: its QR code beside the link to copy. */
+.member-link {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.member-link-side {
+  flex: 1;
+  min-width: 240px;
+  display: grid;
+  gap: 8px;
+}
+.member-qr {
+  width: 168px;
+  height: 168px;
+  background: #fff;
+  fill: #102a2b;
+  border-radius: 8px;
+}
+
+.score-section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.score-section-heading h3{margin:0}.score-community-menu{position:relative;flex-shrink:0}
+.score-community-menu summary{cursor:pointer;border:1px solid var(--line);border-radius:7px;padding:8px 12px;font-size:13px;color:var(--muted)}
+.score-community-menu[open] summary{color:var(--ink);border-color:var(--accent)}
+.score-community-actions{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:220px;display:grid;gap:4px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px #0004}
+.score-community-actions button{text-align:left;white-space:normal}
+.score-section-heading~.settings-actions{margin:14px 0 20px;gap:8px}
+</style>
+<style>
+/* Only what the Settings page has no equivalent for yet. */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 18px;border-bottom:1px solid var(--line)}
+.tabs button{border-radius:8px 8px 0 0;border-bottom:0;margin-bottom:-1px;background:transparent}
+.tabs button[aria-selected=true]{background:var(--panel);border-color:var(--accent);color:var(--accent);font-weight:600}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;margin:0 6px 4px 0;color:var(--muted)}
+.tag.on{color:var(--accent);border-color:var(--accent)}.tag.bad{color:var(--danger);border-color:var(--danger)}.tag.warn{color:var(--warning);border-color:var(--warning)}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.head p{margin:4px 0 0}
+.offer{border-color:var(--accent);background:var(--tint)}
+.matrix th,.matrix td{padding:8px 10px!important;vertical-align:middle!important}
+.secret-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.secret-line input{flex:1;min-width:200px}
+.is-off{opacity:.55}
+.unavailable{color:var(--muted);font-style:italic}
+#switcher{position:fixed;right:14px;top:12px;display:flex;gap:8px;align-items:center;background:#0d1216;color:#fff;border:1px solid #ffffff40;border-radius:22px;padding:6px 8px;box-shadow:0 10px 40px #0008;z-index:50;font-size:13px;max-width:calc(100vw - 32px);flex-wrap:wrap;justify-content:center}
+#switcher button{background:#ffffff14;border-color:#ffffff30;color:#fff;border-radius:999px;padding:4px 12px}
+</style>
+<h1 style="padding-right:340px">Paramètres</h1>
+<div class="settings-layout">
+ <nav id="settings-navigation" aria-label="Sections des paramètres"></nav>
+ <main><p id="settings-status" role="status"></p><div id="settings-body"></div></main>
+</div>
+<dialog class="assistant-dialog" id="dialog"></dialog>
+<div id="switcher"><button id="scenario" title="Change la situation de départ">Situation : <span id="scenario-label"></span></button><button id="theme">Thème</button><button id="reset">Réinitialiser</button></div>
+<script>
+/* Fictional state. Scenario "import": tr4ker was imported from Prowlarr earlier and sits in the Indexers list.
+   Scenario "clean": nothing of tr4ker yet. Switch with the "Situation" button (or ?s=clean). */
+const scenarios={
+ import:()=>({tab:"tr4ker",
+  c411:{key:true,announce:true,companion:"paired",enabled:true},
+  tr4ker:{enabled:false,key:false,passkey:false,companion:"none",adopted:false,history:0},
+  indexers:[
+   {id:"nebula",name:"Nebula",url:"http://prowlarr:9696/3/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TVDB"]},
+   {id:"t4k",name:"tr4ker",url:"http://prowlarr:9696/9/api",host:"tr4ker.net",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TMDb"],history:42,key:true},
+   {id:"vega",name:"Vega",url:"https://vega.example/api/torznab",source:"Ajouté à la main",on:false,state:"error",caps:[],error:"Clé API refusée (401)."}],
+  arr:{kind:"prowlarr",url:"http://prowlarr:9696",synced:"il y a 2 h",available:[["Nebula",true],["tr4ker",true],["Lyra",false],["Altair",false]]}}),
+ clean:()=>({tab:"tr4ker",
+  c411:{key:true,announce:true,companion:"paired",enabled:true},
+  tr4ker:{enabled:false,key:false,passkey:false,companion:"none",adopted:false,history:0},
+  indexers:[{id:"nebula",name:"Nebula",url:"http://prowlarr:9696/3/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TVDB"]}],
+  arr:{kind:"prowlarr",url:"http://prowlarr:9696",synced:"il y a 2 h",available:[["Nebula",true],["tr4ker",false],["Lyra",false]]}})};
+let scenario=new URLSearchParams(location.search).get("s")==="clean"?"clean":"import";
+let S=scenarios[scenario]();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+const status=t=>{document.getElementById("settings-status").textContent=t};
+const nav=()=>["Connexion","Clients","Général","ReleaseScore","Utilisateurs","Notifications"].map(s=>`<button ${s==="Connexion"?'aria-current="page"':""}>${s}</button>`).join("");
+const TABS=[["c411","c411"],["tr4ker","tr4ker"],["indexers","Indexeurs"]];
+const tabs=()=>`<div class="tabs" role="tablist">${TABS.map(([id,label])=>`<button role="tab" data-tab="${id}" aria-selected="${S.tab===id}">${label}${id==="tr4ker"&&S.tr4ker.enabled?' <span class="tag on">actif</span>':""}${id==="indexers"?` <small class="muted">${S.indexers.length}</small>`:""}</button>`).join("")}</div>`;
+const tr4kerIdx=()=>S.indexers.find(i=>i.host==="tr4ker.net");
+const companionTag=c=>c==="paired"?`<span class="tag on">Appairé</span>`:c==="waiting"?`<span class="tag warn">En attente de la session tr4ker</span>`:`<span class="tag">Non appairé</span>`;
+
+/* c411: today's connection settings, unchanged. */
+function c411(){const c=S.c411;return `<div class="settings-form"><h2>c411</h2>
+ <p class="muted">La connexion actuelle à c411, inchangée : la clé API, l'adresse d'annonce et le compagnon du navigateur.</p>
+ <section class="settings-card"><h3>Clé API</h3><div class="secret-line"><input type="password" placeholder="${c.key?"Enregistrée ; laisser vide pour la garder":"Collez la clé API"}" data-c411-key><button data-test-c411>Tester</button></div>
+ <p class="muted" style="margin:8px 0 0">Enregistrée dans le trousseau, jamais renvoyée à l'écran.</p></section>
+ <section class="settings-card"><h3>Adresse d'annonce</h3><div class="secret-line"><input type="password" placeholder="${c.announce?"Enregistrée ; laisser vide pour la garder":"https://…/announce/votre-passkey"}"></div></section>
+ <section class="settings-card"><h3>Compagnon du navigateur</h3><p>${companionTag(c.companion)}</p><div class="settings-actions"><button data-c411-companion>${c.companion==="paired"?"Dissocier":"Appairer"}</button></div></section>
+ <div class="settings-actions"><button class="primary" data-save>Enregistrer</button><button data-discard>Annuler les modifications</button></div></div>`}
+
+/* tr4ker: enable, API key, passkey, companion, capabilities, and the adoption offer. */
+function caps(){const t=S.tr4ker,live=t.enabled&&t.key,ses=t.companion==="paired";
+ const row=(name,state,why)=>`<tr><th>${name}</th><td>${state==="live"?'<span class="tag on">Disponible</span>':state==="needs"?`<span class="tag warn">${why}</span>`:`<span class="tag bad">Indisponible</span> <span class="unavailable">${why}</span>`}</td></tr>`;
+ return `<table class="file-access-capabilities matrix"><tbody>
+ ${row("Recherche, Cross-seed et téléchargements",live?"live":"needs","Clé API requise")}
+ ${row("Flux RSS et adresse d'annonce",t.enabled&&t.passkey?"live":"needs","Passkey requis")}
+ ${row("Profil, détail d'un torrent, publication",live&&ses?"live":"needs","Session tr4ker appairée requise")}
+ ${row("Zen",  "none","tr4ker n'a pas de Zen : ses crédits sont une estimation apprise")}
+ </tbody></table>`}
+function adoptOffer(){const i=tr4kerIdx();if(!i||S.tr4ker.adopted)return "";
+ return `<section class="settings-card offer"><h3>Un indexeur tr4ker existe déjà</h3>
+ <p>« ${esc(i.name)} », importé de ${esc(i.source)}, pointe vers <b>${esc(i.host)}</b>. Vous pouvez le reprendre ici : sa clé API et l'historique de ses cross-seeds (${i.history} enregistrements) passent à tr4ker, et il quitte la liste des indexeurs, pour que tr4ker ne soit jamais cherché deux fois.</p>
+ <div class="settings-actions"><button class="primary" data-adopt>Reprendre cet indexeur</button><button data-keep-separate>Le laisser dans les indexeurs</button></div>
+ <p class="muted" style="margin:8px 0 0">Une nouvelle synchronisation Prowlarr ne le recréera pas.</p></section>`}
+function tr4ker(){const t=S.tr4ker;return `<div class="settings-form"><h2>tr4ker</h2>
+ <p class="muted">tr4ker est un tracker à part entière, comme c411 : un compte, une API et ses propres règles. Ses résultats s'ajoutent à ceux de c411, chaque ligne portant son tracker.</p>
+ ${adoptOffer()}
+ <section class="settings-card"><label class="settings-check"><input type="checkbox" data-t-enable ${t.enabled?"checked":""}> Activer tr4ker</label>${t.adopted?'<p class="muted" style="margin:8px 0 0">Indexeur repris : clé API et historique des cross-seeds conservés.</p>':""}</section>
+ <section class="settings-card ${t.enabled?"":"is-off"}"><h3>Clé API</h3><div class="secret-line"><input type="password" placeholder="${t.key?"Enregistrée ; laisser vide pour la garder":"Collez la clé API de tr4ker"}" data-t-key ${t.enabled?"":"disabled"}><button data-t-test ${t.enabled&&t.key?"":"disabled"}>Tester</button></div>
+ <p class="muted" style="margin:8px 0 0">Recherche, cross-seed et téléchargements des .torrent. Dans le trousseau, jamais renvoyée à l'écran.</p></section>
+ <section class="settings-card ${t.enabled?"":"is-off"}"><h3>Passkey</h3><div class="secret-line"><input type="password" placeholder="${t.passkey?"Enregistré ; laisser vide pour le garder":"Collez votre passkey"}" data-t-pass ${t.enabled?"":"disabled"}></div>
+ <p class="muted" style="margin:8px 0 0">Flux RSS et adresse d'annonce de vos torrents. Distinct de la clé API.</p></section>
+ <section class="settings-card ${t.enabled?"":"is-off"}"><h3>Compagnon du navigateur</h3><p>${companionTag(t.companion)}</p>
+ <p class="muted">Le profil, le détail des torrents et la publication passent par votre session tr4ker dans le navigateur ; aucun cookie ne quitte le navigateur.</p>
+ <div class="settings-actions"><button data-t-companion ${t.enabled?"":"disabled"}>${t.companion==="paired"?"Dissocier":t.companion==="waiting"?"Annuler l'appairage":"Appairer avec un onglet tr4ker"}</button></div></section>
+ <section class="settings-card"><h3>Ce qui fonctionne</h3><div id="caps">${caps()}</div></section>
+ <div class="settings-actions"><button class="primary" data-save>Enregistrer</button><button data-discard>Annuler les modifications</button></div></div>`}
+
+/* Indexers: the search-only list and the Prowlarr or Jackett import, as today. */
+const stateTag=x=>x.state==="ok"?`<span class="tag on">Connecté</span>`:x.state==="limited"?`<span class="tag warn">Limité</span>`:`<span class="tag bad">Erreur</span>`;
+function idxCard(x){return `<section class="client-card"><div class="head"><div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.source)} · ${esc(x.url)}</p></div><div>${stateTag(x)}${x.caps.map(c=>`<span class="tag">${c}</span>`).join("")}</div></div>
+ ${x.error?`<p class="settings-error" style="margin:6px 0 0">${esc(x.error)}</p>`:""}
+ <div class="settings-actions" style="margin-top:10px"><label class="settings-check"><input type="checkbox" data-on="${x.id}" ${x.on?"checked":""}> Chercher sur cet indexeur</label><button data-test="${x.id}">Tester</button><button data-remove="${x.id}">Retirer</button></div></section>`}
+function arrCard(){const a=S.arr;return `<section class="settings-card"><h3>Importer depuis Prowlarr ou Jackett</h3>
+ <div class="settings-fields"><label class="settings-field">Service<select data-arr-kind><option value="prowlarr" ${a.kind==="prowlarr"?"selected":""}>Prowlarr</option><option value="jackett" ${a.kind==="jackett"?"selected":""}>Jackett</option></select></label>
+ <label class="settings-field">Adresse<input value="${esc(a.url)}"></label><label class="settings-field">Clé API<input type="password" placeholder="Enregistrée ; laisser vide pour la garder"></label></div>
+ <div style="margin-top:12px">${a.available.map(([n,imp])=>{const adopted=n==="tr4ker"&&S.tr4ker.adopted;return `<label class="settings-check" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" ${imp||adopted?"checked disabled":""} data-import="${esc(n)}"> ${esc(n)}<small style="margin-left:auto">${adopted?"repris par le tracker tr4ker":imp?"déjà importé":"disponible"}</small></label>`}).join("")}</div>
+ <div class="settings-actions" style="margin-top:12px"><button data-import-go>Importer la sélection</button><button data-sync>Resynchroniser</button><small class="muted">Dernière synchronisation ${a.synced}</small></div></section>`}
+function indexers(){return `<div class="settings-form"><h2>Indexeurs</h2>
+ <p class="muted">Les indexeurs de recherche seule : Prowlarr, Jackett ou ajoutés à la main. c411 et tr4ker sont des trackers, avec leur propre onglet.</p>
+ <div class="settings-actions"><button class="primary" data-add>Ajouter un indexeur Torznab</button></div>
+ ${S.indexers.map(idxCard).join("")||'<p class="muted">Aucun indexeur de recherche seule.</p>'}${arrCard()}
+ <div class="settings-actions"><button class="primary" data-save>Enregistrer</button><button data-discard>Annuler les modifications</button></div></div>`}
+
+function render(){document.getElementById("settings-navigation").innerHTML=nav();
+ document.getElementById("settings-body").innerHTML=`<h2 style="margin-bottom:12px">Connexion</h2>${tabs()}`+({c411,tr4ker,indexers})[S.tab]();
+ document.getElementById("scenario-label").textContent=scenario==="import"?"tr4ker déjà importé":"rien d'importé"}
+function addDialog(){const d=document.getElementById("dialog");d.innerHTML=`<form method="dialog"><h2>Ajouter un indexeur Torznab</h2><div class="settings-fields">
+ <label class="settings-field">Nom<input placeholder="Lyra" data-new-name></label><label class="settings-field">Adresse Torznab<input placeholder="https://tracker.example/api/torznab" data-new-url></label>
+ <label class="settings-field">Clé API<input type="password"></label></div><p class="muted" id="caps-line" style="margin:10px 0 0">« Tester » lit aussi ses capacités.</p>
+ <p class="muted" style="margin:6px 0 0">Une adresse tr4ker.net sera proposée à l'onglet tr4ker plutôt que cherchée deux fois.</p>
+ <div class="settings-actions" style="margin-top:12px"><button type="button" data-dialog-test>Tester</button><button class="primary" value="ok" data-dialog-save>Ajouter</button><button value="cancel">Annuler</button></div></form>`;d.showModal()}
+document.addEventListener("change",e=>{const d=e.target.dataset;if(d.import)return;
+ if(d.on){S.indexers.find(x=>x.id===d.on).on=e.target.checked;status("Modifications non enregistrées")}
+ else if("tEnable" in d){S.tr4ker.enabled=e.target.checked;status(S.tr4ker.enabled?"tr4ker activé : saisissez sa clé API":"tr4ker désactivé");render()}
+ else if("arrKind" in d){S.arr.kind=e.target.value;status("Modifications non enregistrées")}});
+document.addEventListener("input",e=>{const d=e.target.dataset;
+ if("tKey" in d||"tPass" in d){if("tKey" in d)S.tr4ker.key=!!e.target.value||S.tr4ker.key;else S.tr4ker.passkey=!!e.target.value||S.tr4ker.passkey;
+  document.getElementById("caps").innerHTML=caps();document.querySelector("[data-t-test]").disabled=!(S.tr4ker.enabled&&S.tr4ker.key);status("Modifications non enregistrées")}});
+document.addEventListener("click",e=>{const t=e.target.closest("button");if(!t)return;const d=t.dataset;
+ if(t.closest("#switcher")){if(t.id==="theme"){const r=document.documentElement;r.dataset.theme=r.dataset.theme==="light"?"dark":"light"}
+  else if(t.id==="scenario"){scenario=scenario==="import"?"clean":"import";S=scenarios[scenario]();status("");render()}
+  else if(t.id==="reset"){S=scenarios[scenario]();status("Aperçu réinitialisé");render()}return}
+ if(t.closest("#settings-navigation")){status("Cet aperçu ne montre que la section Connexion");return}
+ if(d.tab){S.tab=d.tab;status("");render()}
+ else if("save" in d){const t4=S.tr4ker;status(S.tab==="tr4ker"&&t4.enabled&&!t4.key?"Enregistré. tr4ker est actif mais sans clé API : la recherche reste indisponible.":"Enregistré")}
+ else if("discard" in d){S=scenarios[scenario]();S.tab=t.closest("main").querySelector("[aria-selected=true]").dataset.tab;status("Modifications annulées");render()}
+ else if("testC411" in d){status("c411 répond · clé API acceptée")}
+ else if("c411Companion" in d){S.c411.companion=S.c411.companion==="paired"?"none":"paired";status(S.c411.companion==="paired"?"Compagnon c411 appairé":"Compagnon c411 dissocié");render()}
+ else if("tTest" in d){status("tr4ker répond · recherche par IMDb et TMDb · 5 modes de recherche")}
+ else if("tCompanion" in d){const t4=S.tr4ker;if(t4.companion==="paired")t4.companion="none";else if(t4.companion==="waiting")t4.companion="none";else{t4.companion="waiting";setTimeout(()=>{if(S.tr4ker.companion==="waiting"){S.tr4ker.companion="paired";status("Compagnon appairé avec votre session tr4ker");render()}},1200)}
+  status(t4.companion==="waiting"?"Ouvrez un onglet tr4ker connecté dans le navigateur…":"Appairage annulé ou compagnon dissocié");render()}
+ else if("adopt" in d){const i=tr4kerIdx();S.tr4ker.adopted=true;S.tr4ker.enabled=true;S.tr4ker.key=true;S.tr4ker.history=i.history;S.indexers=S.indexers.filter(x=>x!==i);status(`Indexeur repris : clé API et ${i.history} cross-seeds conservés ; il a quitté la liste des indexeurs`);render()}
+ else if("keepSeparate" in d){S.tr4ker.adopted="declined";status("Indexeur laissé dans la liste. Attention : tr4ker serait cherché deux fois si vous l'activez ici.");render()}
+ else if(d.test){const x=S.indexers.find(i=>i.id===d.test);status(x.state==="error"?`${x.name} : ${x.error}`:`${x.name} répond · recherche par ${x.caps.join(", ")||"nom"}`)}
+ else if(d.remove){const x=S.indexers.find(i=>i.id===d.remove);S.indexers=S.indexers.filter(i=>i!==x);status(`${x.name} retiré ; ses cross-seeds restent dans le client`);render()}
+ else if("add" in d)addDialog();
+ else if("dialogTest" in d)document.getElementById("caps-line").textContent="Répond · recherche par IMDb et TMDb.";
+ else if("dialogSave" in d){const n=document.querySelector("[data-new-name]").value||"Lyra",u=document.querySelector("[data-new-url]").value||"https://tracker.example/api/torznab";
+  if(/tr4ker\.net/.test(u)&&!S.tr4ker.adopted)status("Cette adresse est celle de tr4ker : activez tr4ker à son onglet au lieu de l'ajouter ici.");
+  else if(!S.indexers.some(i=>i.name===n)){S.indexers.push({id:n.toLowerCase(),name:n,url:u,source:"Ajouté à la main",on:true,state:"ok",caps:["IMDb"]});status(n+" ajouté")}
+  setTimeout(render,0)}
+ else if("importGo" in d){const picked=[...document.querySelectorAll("[data-import]:checked:not(:disabled)")].map(i=>i.dataset.import);
+  picked.forEach(n=>{S.arr.available.find(a=>a[0]===n)[1]=true;if(n==="tr4ker"){S.indexers.push({id:"t4k",name:"tr4ker",url:S.arr.url+"/9/api",host:"tr4ker.net",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TMDb"],history:0});S.tr4ker.adopted=false}else S.indexers.push({id:n.toLowerCase(),name:n,url:S.arr.url+"/x/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb"]})});
+  status(picked.length?picked.join(", ")+" importé"+(picked.length>1?"s":""):"Rien de sélectionné");render()}
+ else if("sync" in d){S.arr.synced="à l'instant";const gone=S.tr4ker.adopted===true?" · tr4ker, déjà repris, n'a pas été recréé":"";status("Resynchronisé : rien de nouveau"+gone);render()}});
+render();
+</script>
