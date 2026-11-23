@@ -119,6 +119,7 @@ class JobRequest(BaseModel):
     tracker_target_host: str = Field(default="tk.c411.tw", max_length=253)
     tracker_groups: list[str] = Field(default_factory=list, max_length=1000)
     tracker_preview_id: str = Field(default="", max_length=64)
+    tracker_id: Literal["c411", "tr4ker"] = "c411"  # whose announces a tracker update touches
     action: Literal["pause", "resume", "recheck", "remove", "delete"] = "pause"
     hashes: list[str] = Field(default_factory=list, max_length=1000)
     selection_name: str = Field(default="", max_length=200)
@@ -570,6 +571,7 @@ class Operations:
                     request.tracker_groups,
                     stop,
                     progress,
+                    request.tracker_id,
                 )
             return service.apply(
                 request.tracker_preview_id,
@@ -580,6 +582,7 @@ class Operations:
                 request.tracker_source_host,
                 request.tracker_target_host,
                 request.tracker_groups,
+                request.tracker_id,
             )
         if request.kind == "reseed-workspace":
             return self.reseed_workspace.run(

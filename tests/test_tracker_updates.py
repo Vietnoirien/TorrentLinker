@@ -348,3 +348,150 @@ def test_desktop_tracker_polling_remains_available_during_exclusive_work(tmp_pat
         release.set()
         thread.join(5)
         jobs.close()
+
+
+# -- tr4ker: its own hosts and passkey, never mixed with c411's (ADR-0025) ------------------
+
+TR_OLD = "tr4ker-old-passkey"
+TR_NEW = "tr4ker-new-passkey"
+TR_URL = f"https://tr4ker.net/announce/{TR_OLD}"
+TR_SAVED = f"https://tr4ker.net/announce/{TR_NEW}"
+C_URL = f"https://c411.org/announce/{OLD}"
+
+
+def both_service(tr_saved=TR_SAVED):
+    updates, client = service()
+    secrets = {"announce-url": SAVED, "announce-url-tr4ker": tr_saved}
+    updates.setup.secrets = SimpleNamespace(get=lambda key: secrets.get(key, ""))
+    client.entries = {"c": [Announce(C_URL), OTHER], "t": [Announce(TR_URL)]}
+    client.torrents = lambda **_: [
+        SimpleNamespace(hash="c" * 40, tracker=C_URL, trackers=(C_URL, OTHER.url)),
+        SimpleNamespace(hash="t" * 40, tracker=TR_URL, trackers=(TR_URL,)),
+    ]
+    client.announce_entries = lambda h: list(client.entries[h[0]])
+
+    def write(h, before, after):
+        client.writes.append((h, before, after))
+        client.entries[h[0]] = list(after)
+
+    client.apply_announces = write
+    return updates, client
+
+
+def move(updates, action, which, groups=None):
+    return updates.preview(
+        ["default"],
+        action,
+        "",
+        "tr4ker.net",
+        groups or [],
+        threading.Event(),
+        lambda _: None,
+        which,
+    )
+
+
+def test_a_tr4ker_passkey_change_touches_only_tr4ker_torrents_and_the_reverse():
+    updates, client = both_service()
+    row = move(updates, "update-passkey", "tr4ker", [fingerprint(TR_OLD)])
+    assert row["counts"] == {"update": 1}
+    assert [r["hash"][0] for r in row["rows"]] == ["t"]
+    assert row["settings_group"] == fingerprint(TR_NEW)
+    assert TR_OLD not in json.dumps(row) and TR_NEW not in json.dumps(row)
+    result = updates.apply(
+        row["preview_id"],
+        ["default"],
+        "update-passkey",
+        threading.Event(),
+        lambda _: None,
+        "",
+        "tr4ker.net",
+        [fingerprint(TR_OLD)],
+        "tr4ker",
+    )
+    assert result["rows"][0]["status"] == "updated"
+    assert [w[0][0] for w in client.writes] == ["t"]
+    assert client.entries["t"] == [Announce(TR_SAVED)]
+    assert client.entries["c"] == [Announce(C_URL), OTHER]  # c411 untouched
+    # The reverse: a c411 passkey change leaves the tr4ker torrent alone.
+    client.writes.clear()
+    row = move(updates, "update-passkey", "c411", [fingerprint(OLD)])
+    assert [r["hash"][0] for r in row["rows"]] == ["c"]
+    assert client.entries["t"] == [Announce(TR_SAVED)]
+
+
+def test_a_tr4ker_update_never_adds_another_trackers_announce():
+    updates, _ = both_service()
+    with pytest.raises(ValueError, match="tr4ker host"):
+        updates.preview(
+            ["default"],
+            "add-backup",
+            "",
+            "tk.c411.tw",
+            [],
+            threading.Event(),
+            lambda _: None,
+            "tr4ker",
+        )
+    change = plan_change(
+        [Announce(TR_URL), Announce(C_URL, 1)],
+        "add-backup",
+        configured=["tr4ker.net"],
+        target_host="tr4ker.net",
+        which="tr4ker",
+    )
+    assert change.reason == "already_current"  # c411's entry is neither read nor copied
+    assert (
+        plan_change(
+            [Announce(C_URL)],
+            "update-passkey",
+            configured=["tr4ker.net"],
+            settings_announce=TR_SAVED,
+            groups=[fingerprint(OLD)],
+            which="tr4ker",
+        ).reason
+        == "not_tr4ker"
+    )
+    with pytest.raises(ValueError, match="tr4ker Announce URL"):
+        plan_change([], "update-passkey", configured=[], settings_announce=SAVED, which="tr4ker")
+
+
+def test_a_preview_for_one_tracker_cannot_be_applied_for_the_other():
+    updates, client = both_service()
+    row = move(updates, "update-passkey", "tr4ker", [fingerprint(TR_OLD)])
+    with pytest.raises(ValueError, match="match"):
+        updates.apply(
+            row["preview_id"],
+            ["default"],
+            "update-passkey",
+            threading.Event(),
+            lambda _: None,
+            "",
+            "tr4ker.net",
+            [fingerprint(TR_OLD)],
+            "c411",
+        )
+    assert not client.writes
+
+
+def test_a_tr4ker_announce_keeps_its_info_dictionary_untouched():
+    # The change is only ever a list of announce entries: there is no field for info data.
+    change = plan_change(
+        [Announce(TR_URL)],
+        "update-passkey",
+        configured=["tr4ker.net"],
+        settings_announce=TR_SAVED,
+        groups=[fingerprint(TR_OLD)],
+        which="tr4ker",
+    )
+    assert change.after == (Announce(TR_SAVED),)
+    assert TR_OLD not in repr(change) and TR_NEW not in repr(change)
+
+
+def test_tracker_updates_request_defaults_to_c411():
+    from torrentlinker.web.operations import JobRequest
+
+    assert JobRequest(kind="tracker-preview").tracker_id == "c411"
+    assert JobRequest(kind="tracker-preview", tracker_id="tr4ker").tracker_id == "tr4ker"
+    with pytest.raises(ValueError):
+        JobRequest(kind="tracker-preview", tracker_id="other")

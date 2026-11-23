@@ -1,4 +1,8 @@
-"""Reviewed c411 tracker changes. Private announce URLs stay inside this module."""
+"""Reviewed tracker announce changes, per Tracker. Private announce URLs stay inside this module.
+
+A change touches the announces of one Tracker only (ADR-0025): c411 hosts and passkey stay
+apart from tr4ker's, an info dictionary is never rewritten, and a Tracker's announce is never
+added to another Tracker's torrent (tr4ker requires one torrent per Tracker)."""
 
 from __future__ import annotations
 
@@ -7,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
-from torrentlinker.zen import is_indexer_torrent
+from torrentlinker.trackers import C411, tracker, tracker_of_url
 
 
 @dataclass(frozen=True)
@@ -74,9 +78,17 @@ def replace_host(url: str, host: str) -> str:
     return urlunsplit(parsed._replace(netloc=authority))
 
 
-def c411_host(url: str, configured: list[str]) -> bool:
+def tracker_host(url: str, configured: list[str], which: str = C411) -> bool:
+    """Whether a URL is a host of this Tracker: one of its own, or one saved in Settings."""
     host = (urlsplit(url).hostname or "").lower()
-    return is_indexer_torrent(url, "https://c411.org") or host in configured
+    found = tracker_of_url(url)
+    if found is not None:
+        return found.id == which  # another Tracker's host is never this one's
+    return host in configured
+
+
+def c411_host(url: str, configured: list[str]) -> bool:
+    return tracker_host(url, configured, C411)
 
 
 @dataclass
@@ -101,6 +113,7 @@ def plan_change(
     target_host: str = "",
     groups: list[str] | None = None,
     settings_announce: str = "",
+    which: str = C411,
 ) -> TrackerChange:
     """Pure, all-or-nothing per torrent; retain unrelated trackers and their tiers."""
     if action not in {"replace-host", "add-backup", "update-passkey"}:
@@ -108,8 +121,8 @@ def plan_change(
     configured = [host_name(host) for host in configured]
     if action in {"replace-host", "add-backup"}:
         target_host = host_name(target_host)
-        if not c411_host("https://" + target_host, configured):
-            raise ValueError("Save the new c411 host in Settings before using it.")
+        if not tracker_host("https://" + target_host, configured, which):
+            raise ValueError(f"Save the new {which} host in Settings before using it.")
     if action == "replace-host":
         source_host = host_name(source_host)
     wanted = set(groups or [])
@@ -117,13 +130,13 @@ def plan_change(
         raise ValueError("Choose passkey fingerprints from the preview.")
     saved_key = ""
     if action == "update-passkey":
-        if not c411_host(settings_announce, configured):
-            raise ValueError("Save a c411 Announce URL in Settings first.")
+        if not tracker_host(settings_announce, configured, which):
+            raise ValueError(f"Save a {which} Announce URL in Settings first.")
         saved_key = passkey_part(settings_announce)[0]
     before = tuple(trackers)
-    eligible = [entry for entry in before if c411_host(entry.url, configured)]
+    eligible = [entry for entry in before if tracker_host(entry.url, configured, which)]
     if not eligible:
-        return TrackerChange(before, before, reason="not_c411")
+        return TrackerChange(before, before, reason=f"not_{which}")
     hosts = tuple(sorted({urlsplit(entry.url).hostname or "" for entry in eligible}))
     try:
         keys = {entry.url: passkey_part(entry.url)[0] for entry in eligible}
@@ -164,9 +177,9 @@ def plan_change(
     )
 
 
-def upload_announces(announce: str, hosts: list[str]) -> list[str]:
+def upload_announces(announce: str, hosts: list[str], which: str = C411) -> list[str]:
     """Use the configured hosts in order, retaining the saved URL path and passkey."""
-    if not hosts or not c411_host(announce, hosts):
+    if not hosts or not tracker_host(announce, hosts, which):
         return [announce]
     passkey_part(announce)
     return list(dict.fromkeys([replace_host(announce, host) for host in hosts]))
@@ -182,7 +195,7 @@ class TrackerUpdates:
         self.lock = threading.RLock()
         self.previews: dict[str, tuple] = {}
 
-    def _settings_stamp(self, setup):
+    def _settings_stamp(self, setup, which: str = C411):
         import json
 
         from torrentlinker.config import CLIENT_FIELDS
@@ -193,19 +206,21 @@ class TrackerUpdates:
         credential += setup.secrets.get(setup.settings.secret_name("qbit-api-key"))
         return hashlib.sha256(
             (
-                json.dumps([setup.snapshot(), announce_hosts(setup)], sort_keys=True)
-                + setup.secrets.get("announce-url")
+                json.dumps([setup.snapshot(), announce_hosts(setup, which)], sort_keys=True)
+                + setup.secrets.get(tracker(which).announce_secret)
                 + credential
             ).encode()
         ).hexdigest()
 
-    def preview(self, client_ids, action, source_host, target_host, groups, stop, report):
+    def preview(
+        self, client_ids, action, source_host, target_host, groups, stop, report, which=C411
+    ):
         import time
         import uuid
         from collections import Counter
 
-        hosts = announce_hosts(self.setup)
-        saved = self.setup.secrets.get("announce-url")
+        hosts = announce_hosts(self.setup, which)
+        saved = self.setup.secrets.get(tracker(which).announce_secret)
         # Validate the request even when the selected clients have no torrents.
         plan_change(
             [],
@@ -215,6 +230,7 @@ class TrackerUpdates:
             target_host=target_host,
             groups=groups,
             settings_announce=saved,
+            which=which,
         )
         try:
             saved_group = fingerprint(passkey_part(saved)[0])
@@ -227,7 +243,7 @@ class TrackerUpdates:
             setup = self.setup.for_client(identifier)
             if not setup.settings.profile().enabled:
                 raise ValueError("A selected Torrent Client is disabled.")
-            stamps[identifier] = self._settings_stamp(setup)
+            stamps[identifier] = self._settings_stamp(setup, which)
             client = setup.client()
             supported = all(
                 hasattr(client, name)
@@ -255,7 +271,7 @@ class TrackerUpdates:
                 if stop.is_set():
                     return {"cancelled": True}
                 known = torrent.trackers or (torrent.tracker,)
-                if not any(c411_host(url, hosts) for url in known if url):
+                if not any(tracker_host(url, hosts, which) for url in known if url):
                     continue
                 row = {
                     "client_id": identifier,
@@ -279,6 +295,7 @@ class TrackerUpdates:
                         target_host=target_host,
                         groups=groups,
                         settings_announce=saved,
+                        which=which,
                     )
                     row.update(hosts=list(change.hosts), groups=list(change.groups))
                     if supported:
@@ -302,7 +319,7 @@ class TrackerUpdates:
                 time.monotonic(),
                 stamps,
                 changes,
-                (action, source_host, target_host, sorted(set(groups))),
+                (action, source_host, target_host, sorted(set(groups)), which),
             )
         host_counts, group_counts = {}, {}
         for row in rows:
@@ -328,7 +345,16 @@ class TrackerUpdates:
         }
 
     def apply(
-        self, token, client_ids, action, stop, report, source_host="", target_host="", groups=None
+        self,
+        token,
+        client_ids,
+        action,
+        stop,
+        report,
+        source_host="",
+        target_host="",
+        groups=None,
+        which=C411,
     ):
         import time
 
@@ -339,11 +365,14 @@ class TrackerUpdates:
             _, stamps, changes, expected_action = preview
             if (
                 set(client_ids) != set(stamps)
-                or (action, source_host, target_host, sorted(set(groups or []))) != expected_action
+                or (action, source_host, target_host, sorted(set(groups or [])), which)
+                != expected_action
             ):
                 raise ValueError("Tracker preview does not match this request.")
             targets = {identifier: self.setup.for_client(identifier) for identifier in stamps}
-            if any(self._settings_stamp(targets[key]) != stamp for key, stamp in stamps.items()):
+            if any(
+                self._settings_stamp(targets[key], which) != stamp for key, stamp in stamps.items()
+            ):
                 raise ValueError("Settings changed. Review a new tracker preview.")
             del self.previews[token]
         rows = []
@@ -393,12 +422,13 @@ def tracker_updates(setup):
         return root._tracker_updates
 
 
-def announce_hosts(setup) -> list[str]:
-    configured = setup.settings.announce_hosts
-    if configured:
-        return [host_name(host) for host in configured]
-    saved = setup.secrets.get("announce-url")
-    current = (
-        urlsplit(saved).hostname if is_indexer_torrent(saved, "https://c411.org") else "c411.org"
-    )
-    return list(dict.fromkeys([current or "c411.org", "tk.c411.tw"]))
+def announce_hosts(setup, which: str = C411) -> list[str]:
+    """The hosts a Tracker's torrents announce to. Settings' configured list is c411's."""
+    own = tracker(which)
+    if which == C411:
+        configured = setup.settings.announce_hosts
+        if configured:
+            return [host_name(host) for host in configured]
+    saved = setup.secrets.get(own.announce_secret)
+    saved_host = urlsplit(saved).hostname if tracker_host(saved, [], which) else None
+    return list(dict.fromkeys([saved_host or own.announce_hosts[0], *own.announce_hosts[1:]]))
