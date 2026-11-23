@@ -1,0 +1,794 @@
+<!doctype html>
+<!-- PROTOTYPE, throwaway (ADR-0025, ADR-0027, issue #179). Profil avec un sélecteur de tracker (c411 par défaut) et la vue tr4ker:
+     solde de crédits, ratio brut et bonus séparés, boutique en lecture seule, historique des paiements (état vide et état rempli)
+     et "estimation à partir de vos paiements", indisponible tant que le journal est trop petit. Le Profil de l'application
+     n'est PAS modifié : ceci est l'aperçu à approuver avant. Boîtes, tuiles, tableaux et libellés viennent de
+     profile/view.css et profile/view.js ; panel/base.css et profile/view.css sont intégrés ci-dessous. Données fictives,
+     rien n'est envoyé. -->
+<html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profil · aperçu #179</title>
+<style>
+/* Embedded copy of panel/base.css (approved). */
+/* Shared palette for Qt, the Web shell and bundled panels.
+   Keep these two token blocks literal: gui/theme.py reads their declarations.
+   Approved panel-specific light overrides remain in each panel's view.css. */
+:root {
+  color-scheme: dark;
+  --bg: #161d23;
+  --panel: #202932;
+  --raised: #26323c;
+  --line: #33404b;
+  --text: #e2e9ed;
+  --muted: #98aab7;
+  --accent: #80bdb6;
+  --accent-text: #102a2b;
+  --tint: #263e43;
+  --hover: #263e43;
+  --danger: #ff9c9c;
+  --warning: #edbf73;
+  --success: #4ad394;
+  --link: #64c9c0;
+  --shadow: none;
+  --ink: var(--text);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fa;
+  --panel: #ffffff;
+  --raised: #f7f9fc;
+  --line: #d5dfe9;
+  --text: #203047;
+  --muted: #5c6c80;
+  --accent: #087f76;
+  --accent-text: #ffffff;
+  --tint: #d8eeeb;
+  --hover: #e8f3f2;
+  --danger: #b42332;
+  --warning: #8a5800;
+  --success: #1f9d63;
+  --link: #087f76;
+  --shadow: 0 16px 60px #172b3e12;
+}
+
+/* The wordmark keeps its two colours in the shell, sign-in and Media Center. */
+.app-wordmark {color:var(--text);white-space:nowrap;font-weight:750}
+.app-wordmark > span {color:var(--accent)}
+
+</style><style>
+/* Embedded copy of profile/view.css (approved). */
+* {
+  box-sizing: border-box;
+}
+:root {
+  --ink: var(--text);
+  color-scheme: dark;
+  font:
+    15px/1.5 system-ui,
+    sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fa;
+  --panel: #fff;
+  --text: #1a2535;
+  --muted: #5d6e83;
+  --line: #d6dfe9;
+  --accent: #087f79;
+  --tint: #e2f2ef;
+}
+body {
+  margin: 0;
+  padding: 16px 16px 16px 8px;
+}
+html {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+button {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.muted {
+  color: var(--muted);
+}
+/* Profile: layout and colours follow docs/specs/profile-redesign/mockup.html. */
+#zen-profile-panel {
+  --pf-raised: #f7f9fc;
+  --pf-brand: var(--accent);
+  --pf-up: #1f9d63;
+  --pf-down: #2f6fd0;
+  --pf-zen: #8a5800;
+  --pf-ratio: #b07a12;
+  --pf-ok: #1f9d63;
+  --pf-warn: #8a5800;
+  --pf-err: #b42332;
+  --pf-mono: ui-monospace, "Cascadia Mono", "IBM Plex Mono", monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+:root[data-theme="dark"] #zen-profile-panel {
+  --pf-raised: #26323c;
+  --pf-up: #4ad394;
+  --pf-down: #6fa8ff;
+  --pf-zen: #edbf73;
+  --pf-ratio: #e7c35a;
+  --pf-ok: #4ad394;
+  --pf-warn: #edbf73;
+  --pf-err: #ff9c9c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #zen-profile-panel {
+    --pf-raised: #26323c;
+    --pf-up: #4ad394;
+    --pf-down: #6fa8ff;
+    --pf-zen: #edbf73;
+    --pf-ratio: #e7c35a;
+    --pf-ok: #4ad394;
+    --pf-warn: #edbf73;
+    --pf-err: #ff9c9c;
+  }
+}
+#zen-profile-panel[hidden] {
+  display: none;
+}
+#zen-profile-panel p {
+  max-width: none;
+  margin: 0;
+}
+#profile-notice:empty {
+  display: none;
+}
+.pf-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.pf-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pf-src {
+  font: 500 10px var(--pf-mono);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+.pf-num {
+  font-family: var(--pf-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pf-muted,
+.pf-meta {
+  color: var(--muted);
+}
+.pf-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 18px 0;
+  text-align: center;
+}
+.pf-identity {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pf-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #087f76;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 600;
+  flex: none;
+}
+.pf-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+.pf-who {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.pf-who h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pf-meta {
+  font-size: 13px;
+}
+.pf-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.pf-pill {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.pf-pill.ok {
+  color: var(--pf-ok);
+}
+.pf-pill.warn {
+  color: var(--pf-warn);
+}
+.pf-pill.err {
+  color: var(--pf-err);
+}
+.pf-pill.info {
+  color: var(--pf-brand);
+}
+.pf-pill.off {
+  color: var(--muted);
+}
+.pf-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pf-seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pf-seg button {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+.pf-seg button[aria-pressed="true"] {
+  background: var(--tint);
+  color: var(--pf-brand);
+}
+.pf-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.pf-kpi {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px 6px;
+  min-width: 0;
+}
+.pf-kpi .k {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pf-kpi .v {
+  font: 500 22px var(--pf-mono);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pf-kpi .v small {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 3px;
+}
+.pf-kpi .d {
+  font: 12px var(--pf-mono);
+  color: var(--muted);
+  min-height: 18px;
+}
+.pf-kpi .pos {
+  color: var(--pf-ok);
+}
+.pf-kpi .neg {
+  color: var(--pf-err);
+}
+.pf-kpi svg,
+.pf-kpi .pf-spark-empty {
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin-top: 4px;
+}
+.pf-spark-empty {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pf-charts {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 16px;
+}
+.pf-chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.pf-chart-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.pf-range {
+  color: var(--muted);
+  font: 12px var(--pf-mono);
+}
+.pf-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.pf-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.pf-chart {
+  width: 100%;
+  height: 220px;
+  display: block;
+}
+.pf-chart text {
+  fill: var(--muted);
+  font: 10px var(--pf-mono);
+}
+.pf-foot {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.pf-foot div {
+  background: var(--pf-raised);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pf-foot b {
+  display: block;
+  color: var(--ink);
+  font: 500 14px var(--pf-mono);
+}
+.pf-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.pf-level {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.pf-ring {
+  flex: none;
+}
+.pf-ring text {
+  fill: var(--ink);
+}
+.pf-voies {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+}
+.pf-voie {
+  display: grid;
+  grid-template-columns: 120px 1fr 84px;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.pf-bar {
+  height: 7px;
+  background: var(--pf-raised);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.pf-bar span {
+  display: block;
+  height: 100%;
+  background: var(--pf-brand);
+  border-radius: 4px;
+}
+.pf-stars {
+  color: var(--pf-zen);
+  letter-spacing: 1px;
+  font-size: 12px;
+}
+.pf-grade {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pf-zen);
+  border: 1px solid var(--pf-zen);
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+.pf-split {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 10px 0 6px;
+  background: var(--line);
+}
+.pf-split span {
+  background: var(--pf-zen);
+}
+.pf-rows {
+  display: grid;
+  margin-top: 8px;
+}
+.pf-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.pf-row > span:first-child {
+  color: var(--muted);
+}
+.pf-row > span:last-child {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.pf-acct {
+  display: grid;
+  gap: 12px;
+}
+.pf-acct .lbl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.pf-stack {
+  display: flex;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--pf-raised);
+}
+.pf-stack .credit {
+  opacity: 0.35;
+}
+.pf-stack .hatched {
+  opacity: 0.35;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 3px,
+    var(--panel) 3px 5px
+  ) !important;
+}
+.pf-cal {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 13px);
+  gap: 3px;
+}
+.pf-cal i {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: var(--pf-raised);
+  border: 1px solid var(--line);
+}
+.pf-cal i.ok {
+  background: var(--pf-ok);
+  border-color: transparent;
+  opacity: 0.85;
+}
+.pf-cal i.api {
+  background: var(--pf-warn);
+  border-color: transparent;
+}
+.pf-cal i.failed {
+  background: var(--pf-err);
+  border-color: transparent;
+}
+.pf-calkey {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.pf-calkey i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+#zen-profile-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+#zen-profile-panel th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+#zen-profile-panel td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+}
+#zen-profile-panel td.r,
+#zen-profile-panel th.r {
+  text-align: right;
+}
+.pf-warn {
+  color: var(--pf-warn);
+}
+.pf-ok {
+  color: var(--pf-ok);
+}
+.pf-tablewrap {
+  overflow-x: auto;
+}
+@media (min-width: 1600px) {
+  .pf-grid2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1100px) {
+  .pf-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .pf-charts,
+  .pf-grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 720px) {
+  .pf-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pf-voie {
+    grid-template-columns: 96px 1fr 56px;
+  }
+}
+
+#profile-contribution .pf-contribution-note {
+  margin-top: 20px;
+  font-size: 12px;
+}
+</style><style>
+/* Prototype chrome only: the preview bar and the Tracker picker. Everything else is the real Profile CSS above. */
+body{padding:0}
+#switcher{position:sticky;top:0;z-index:5;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 16px;background:var(--raised);border-bottom:1px dashed var(--line);font-size:13px}
+#switcher b{color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+#switcher button{padding:4px 10px;font-size:12px}
+main{padding:16px;max-width:1280px;margin:0 auto}
+.pf-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pf-picker label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.pf-seg button[aria-pressed="true"]{font-weight:600}
+.pf-tag{font:500 10px var(--pf-mono);padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--muted);margin-left:6px}
+.pf-note{font-size:12px;color:var(--muted);margin-top:8px !important}
+.pf-state{padding:28px 16px;text-align:center}
+.pf-state h3{margin:0 0 6px;font-size:16px}
+.pf-meter{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin:10px 0 6px}
+.pf-meter span{display:block;height:100%;background:var(--pf-brand)}
+.pf-stack .raw{background:var(--pf-up)}
+.pf-stack .bonus{background:var(--pf-zen)}
+.pf-stack .raw.dl{background:var(--pf-down)}
+.pf-bad{color:var(--pf-err)}
+.pf-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pf-wide{grid-column:1/-1}
+.pf-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.pf-head h3{margin:0;font-size:15px}
+td.mono,th.mono{font-family:var(--pf-mono);font-variant-numeric:tabular-nums}
+.pf-buy{white-space:nowrap}
+@media (max-width:1100px){.pf-two{grid-template-columns:1fr}}
+@media (max-width:720px){main{padding:10px}.pf-identity .pf-actions{width:100%}.pf-kpi .v{font-size:19px}}
+</style>
+</head>
+<body>
+<div id="switcher"><b>Aperçu</b>
+ <button id="scenario" type="button" title="Change la situation du compte tr4ker">Situation : <span id="scenario-label"></span></button>
+ <button id="theme" type="button">Thème</button>
+ <button id="reset" type="button">Réinitialiser</button>
+ <span class="muted" id="hint" role="status" aria-live="polite">Données fictives. Rien n’est envoyé.</span></div>
+<main><section id="zen-profile-panel">
+ <section class="pf-panel pf-identity" aria-label="Choix du tracker">
+  <div class="pf-picker"><label id="picker-label">Tracker</label>
+   <div id="tracker" class="pf-seg" role="group" aria-labelledby="picker-label">
+    <button type="button" data-tracker="c411" aria-pressed="true">c411</button><button type="button" data-tracker="tr4ker" aria-pressed="false">tr4ker</button></div></div>
+  <span class="pf-muted" id="picker-note" style="font-size:13px"></span>
+ </section>
+ <div id="view" aria-live="polite"></div>
+ <p class="muted" id="privacy"></p>
+</section></main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const NF=new Intl.NumberFormat("fr-FR"),N1=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:2});
+const fmt=n=>n==null?"—":NF.format(Math.round(n));
+const GB=1e9,bytes=b=>{if(b==null)return"—";if(b>=1e12)return N1.format(b/1e12)+" To";if(b>=1e9)return N1.format(b/1e9)+" Go";if(b>=1e6)return N1.format(b/1e6)+" Mo";return fmt(b)+" o"};
+const dur=s=>s==null?"—":s>=86400?`${N1.format(s/86400)} j`:`${Math.round(s/3600)} h`;
+const NOW=Date.parse("2026-11-23T12:00:00Z"),DAY=864e5,iso=d=>new Date(NOW-d*DAY).toISOString();
+const SHOP=[[1,"+25 Go",400,25*GB],[2,"+50 Go",700,50*GB],[3,"+100 Go",1200,100*GB],[4,"+500 Go",4500,500*GB],[5,"+1024 Go",8000,1024*GB]];
+const MIN=30;
+/* Fictional accounts, shaped like parse_profile() and the payout rows of tr4ker_profile.py. Null means "tr4ker sent nothing". */
+const ACCOUNTS={
+ empty:{label:"compte neuf (rien encore)",paired:true,fresh:true,
+  me:{username:"viet_t4k",role:"member",joined:"2026-11-21",seen:"2026-11-23"},
+  uploaded:0,downloaded:0,raw_up:0,raw_down:0,bonus_up:0,bonus_down:0,money:0,ratio:null,ratio_raw:null,warning:false,freeleech:0,multiplier:null,badges:[],
+  payouts:[]},
+ active:{label:"compte actif (12 paiements)",paired:true,fresh:true,
+  me:{username:"viet_t4k",role:"member",joined:"2026-09-02",seen:"2026-11-23"},
+  uploaded:612*GB,downloaded:241*GB,raw_up:512*GB,raw_down:241*GB,bonus_up:100*GB,bonus_down:0,money:1535,ratio:null,ratio_raw:null,warning:false,freeleech:7,multiplier:10,badges:["Semeur +10 % crédits"],
+  payouts:[[1,38,2,41*GB,21600,"films","les-evades-1994",10],[2,52,5,58*GB,21600,"films","heat-1995",10],[3,14,12,4*GB,25200,"series","andor-s02",10],[5,95,1,122*GB,43200,"films","sunrise-1927",10],[6,29,8,19*GB,21600,"animation","akira-1988",10],[8,61,3,66*GB,28800,"films","stalker-1979",10],[11,17,9,6*GB,21600,"documentaires","planete-bleue",10],[14,44,2,47*GB,21600,"films","brazil-1985",0],[19,31,4,33*GB,22000,"series","chernobyl-s01",0],[23,26,6,21*GB,21600,"films","drive-2011",0],[31,57,2,63*GB,36000,"films","ran-1985",0],[40,12,15,3*GB,21600,"series","the-bear-s01",0]]},
+ warn:{label:"ratio sous 0,5 (téléchargements bloqués)",paired:true,fresh:true,
+  me:{username:"viet_t4k",role:"member",joined:"2026-10-02",seen:"2026-11-23"},
+  uploaded:18*GB,downloaded:90*GB,raw_up:18*GB,raw_down:90*GB,bonus_up:0,bonus_down:0,money:310,ratio:null,ratio_raw:null,warning:true,freeleech:2,multiplier:null,badges:[],
+  payouts:[[3,9,4,12*GB,21600,"films","solaris-1972",null],[9,7,6,8*GB,21600,"series","severance-s01",null]]},
+ none:{label:"tr4ker non appairé",paired:false}};
+for(const a of Object.values(ACCOUNTS)){if(!a.paired)continue;
+ /* The displayed ratio counts the bonus: (uploaded + bonus_upload) / (downloaded + bonus_download), as the backend does. */
+ a.ratio=a.downloaded>0?(a.uploaded+a.bonus_up)/(a.downloaded+a.bonus_down):null;a.ratio_raw=a.raw_down>0?a.raw_up/a.raw_down:null}
+const ui={tracker:"c411",scenario:"active",period:0,theme:null};
+const SCENARIOS=["empty","active","warn","none"];
+
+/* ---- c411: the existing Profile is not touched; this is only a stand-in so the picker has a default. */
+function c411(){return `<section class="pf-panel pf-identity"><div class="pf-avatar" aria-hidden="true">V</div>
+ <div class="pf-who"><h2>viet_c411</h2><div class="pf-meta">Profil c411 actuel, inchangé par cet aperçu</div>
+ <div class="pf-pills"><span class="pf-pill ok">API à jour</span><span class="pf-pill info">Zen</span></div></div></section>
+ <section class="pf-kpis" aria-label="Chiffres clés">${[["Zen","2 140"],["Ratio","3,42"],["Téléversé","1,8 To"],["Téléchargé","520 Go"],["Seeds actifs","236"],["Niveau","12"]].map(([k,v])=>`<div class="pf-kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="d">&nbsp;</div></div>`).join("")}</section>
+ <section class="pf-panel"><p class="pf-empty" style="margin:0">Les graphiques, la progression, le Zen et les transferts de c411 restent ceux du Profil actuel. Choisissez tr4ker pour voir la nouvelle vue.</p></section>`}
+
+/* ---- tr4ker */
+function notPaired(){return `<section class="pf-panel pf-state" id="t4k-unpaired"><h3>tr4ker n’est pas appairé</h3>
+ <p class="pf-muted">Le profil de tr4ker se lit dans votre navigateur, avec votre session. Appairez-le dans Paramètres → Connexions → Compagnon.</p>
+ <p style="margin-top:12px !important"><button type="button" class="primary" data-act="pair">Ouvrir le Compagnon</button></p></section>`}
+function pills(a){const p=[`<span class="pf-pill info">${esc(a.me.role)}</span>`];
+ if(a.multiplier!=null)p.push(`<span class="pf-pill ok">+${a.multiplier} % crédits</span>`);
+ if(a.warning)p.push('<span class="pf-pill err">Ratio sous 0,5 : téléchargements bloqués</span>');
+ for(const b of a.badges)p.push(`<span class="pf-pill off">${esc(b)}</span>`);
+ return p.join("")}
+function identity(a){return `<section class="pf-panel pf-identity"><div class="pf-avatar" aria-hidden="true">${esc(a.me.username[0].toUpperCase())}</div>
+ <div class="pf-who"><h2 id="t4k-username">${esc(a.me.username)}</h2><div class="pf-meta">Membre depuis le ${new Date(a.me.joined).toLocaleDateString("fr-FR")} · dernière connexion le ${new Date(a.me.seen).toLocaleDateString("fr-FR")}</div>
+ <div class="pf-pills">${pills(a)}</div></div>
+ <div class="pf-actions"><button type="button" class="primary" data-act="refresh">Actualiser</button></div></section>`}
+function kpis(a){const paid=a.payouts.reduce((s,p)=>s+p[1],0),
+  ratio=a.ratio==null?"—":N1.format(a.ratio),
+  tiles=[["Crédits",fmt(a.money),"<small>cr</small>",a.payouts.length?`${fmt(paid)} cr reçus en paiements`:"aucun paiement"],
+   ["Ratio",ratio,"",a.ratio==null?"rien téléchargé":`brut ${a.ratio_raw==null?"—":N1.format(a.ratio_raw)}`],
+   ["Téléversé",bytes(a.uploaded),"",`dont bonus ${bytes(a.bonus_up)}`],
+   ["Téléchargé",bytes(a.downloaded),"",a.bonus_down?`dont bonus ${bytes(a.bonus_down)}`:"aucun bonus"],
+   ["Freeleech",fmt(a.freeleech),"<small>torrents</small>","compteur du compte"],
+   ["Paiements",fmt(a.payouts.length),"",`sur ${MIN} pour l’estimation`]];
+ return `<section class="pf-kpis" aria-label="Chiffres clés">${tiles.map(([k,v,s,d])=>`<div class="pf-kpi"><div class="k">${k}</div><div class="v">${v}${s}</div><div class="d">${d}</div></div>`).join("")}</section>`}
+function ratioPanel(a){const upTotal=a.raw_up+a.bonus_up,downTotal=a.raw_down+a.bonus_down,scale=Math.max(upTotal,downTotal,1);
+ const bar=(raw,bonus,cls)=>`<div class="pf-stack" role="img" aria-label="brut ${bytes(raw)}, bonus ${bytes(bonus)}"><span class="raw ${cls}" style="width:${raw/scale*100}%"></span><span class="bonus hatched" style="width:${bonus/scale*100}%"></span></div>`;
+ return `<div class="pf-panel" id="t4k-ratio"><p class="pf-eyebrow">Ratio et compteurs <span class="pf-src">/api/me/stats</span></p>
+ <div class="pf-acct"><div><div class="lbl"><span>Téléversé</span><span class="pf-num">${bytes(a.raw_up)} brut + ${bytes(a.bonus_up)} bonus</span></div>${bar(a.raw_up,a.bonus_up,"")}</div>
+ <div><div class="lbl"><span>Téléchargé</span><span class="pf-num">${bytes(a.raw_down)} brut + ${bytes(a.bonus_down)} bonus</span></div>${bar(a.raw_down,a.bonus_down,"dl")}</div></div>
+ <div class="pf-rows"><div class="pf-row"><span>Ratio affiché (bonus compté)</span><span class="pf-num ${a.warning?"pf-bad":""}">${a.ratio==null?"—":N1.format(a.ratio)}</span></div>
+ <div class="pf-row"><span>Ratio brut</span><span class="pf-num">${a.ratio_raw==null?"—":N1.format(a.ratio_raw)}</span></div>
+ <div class="pf-row"><span>Avertissement de ratio</span><span class="${a.warning?"pf-bad":"pf-ok"}">${a.warning?"oui : en dessous de 0,5":"non"}</span></div></div>
+ <p class="pf-note">Le bonus acheté à la boutique s’ajoute au téléversé affiché. Les compteurs bruts restent séparés. tr4ker n’a pas de Zen : ses crédits sont une estimation apprise.</p></div>`}
+function shop(a){const rows=SHOP.map(([id,name,price,b])=>{const ok=a.money>=price;
+  return `<tr><td>${name}</td><td class="r mono">${fmt(price)} cr</td><td class="r mono">${N1.format(price/(b/GB))} cr/Go</td><td class="r pf-buy ${ok?"pf-ok":"pf-muted"}">${ok?"assez de crédits":`il manque ${fmt(price-a.money)} cr`}</td></tr>`}).join("");
+ return `<div class="pf-panel" id="t4k-shop"><p class="pf-eyebrow">Boutique <span class="pf-src">/api/shop</span><span class="pf-tag">lecture seule</span></p>
+ <div class="pf-tablewrap"><table><thead><tr><th>Volume</th><th class="r">Prix</th><th class="r">Tarif</th><th class="r">Votre solde</th></tr></thead><tbody>${rows}</tbody></table></div>
+ <p class="pf-note">Les achats se font sur tr4ker. TorrentLinker ne dépense jamais de crédits. Liste lue le 23 novembre 2026.</p></div>`}
+function inPeriod(a){return a.payouts.filter(p=>ui.period===0||p[0]<=ui.period)}
+function payouts(a){const all=a.payouts,list=inPeriod(a),total=list.reduce((s,p)=>s+p[1],0);
+ const head=`<div class="pf-head"><p class="pf-eyebrow" style="margin:0 !important">Historique des paiements <span class="pf-src">/api/me/sw-rewards</span></p>
+  <div id="profile-period" class="pf-seg" role="group" aria-label="Période">${[[7,"7 j"],[30,"30 j"],[90,"90 j"],[0,"Tout"]].map(([d,l])=>`<button type="button" data-days="${d}" aria-pressed="${ui.period===d}">${l}</button>`).join("")}</div></div>`;
+ if(!all.length)return `<div class="pf-panel pf-wide" id="t4k-payouts">${head}<div class="pf-state" id="t4k-payouts-empty"><h3>Aucun paiement pour l’instant</h3>
+  <p class="pf-muted">tr4ker paie un torrent après 6 h cumulées de seed depuis son dernier paiement, par vagues plusieurs fois par jour. Un délai de plusieurs heures est normal.</p></div></div>`;
+ const body=list.length?`<div class="pf-tablewrap"><table><thead><tr><th>Date</th><th>Torrent</th><th>Catégorie</th><th class="r">Taille</th><th class="r">Seeders</th><th class="r">Seed</th><th class="r">Bonus</th><th class="r">Crédits</th></tr></thead><tbody>${list.map(p=>`<tr><td class="mono">${new Date(NOW-p[0]*DAY).toLocaleDateString("fr-FR")}</td><td>${esc(p[6])}</td><td>${esc(p[5])}</td><td class="r mono">${bytes(p[3])}</td><td class="r mono">${p[2]}</td><td class="r mono">${dur(p[4])}</td><td class="r mono">${p[7]==null?"—":"+"+p[7]+" %"}</td><td class="r mono">+${p[1]}</td></tr>`).join("")}</tbody></table></div>`
+  :`<p class="pf-empty" id="t4k-payouts-none" style="padding:14px 0">Aucun paiement sur cette période.</p>`;
+ return `<div class="pf-panel pf-wide" id="t4k-payouts">${head}${body}<div class="pf-rows"><div class="pf-row"><span>Sur la période</span><span class="pf-num">${list.length} paiements · ${fmt(total)} cr</span></div><div class="pf-row"><span>Enregistrés sur cet ordinateur</span><span class="pf-num">${all.length}</span></div></div>
+ <p class="pf-note">Chaque paiement est gardé une seule fois, avec la taille, le nombre de seeders, la catégorie et le bonus de badge au moment du paiement.</p></div>`}
+function estimate(a){const n=a.payouts.length,pct=Math.min(100,n/MIN*100);
+ return `<div class="pf-panel pf-wide" id="t4k-estimate"><p class="pf-eyebrow">Estimation à partir de vos paiements <span class="pf-tag">indisponible</span></p>
+ <p>Pas encore assez de données : <b class="pf-num">${n} / ${MIN}</b> paiements.</p>
+ <div class="pf-meter" role="progressbar" aria-valuemin="0" aria-valuemax="${MIN}" aria-valuenow="${n}" aria-label="Paiements pour l’estimation"><span style="width:${pct}%"></span></div>
+ <p class="pf-note">Aucun gain n’est affiché avant. Une fois l’estimation calculée, elle indiquera le nombre de paiements qui l’ont produite : c’est une estimation à partir de vos paiements, jamais une règle de tr4ker. En attendant, les Plans tr4ker classent par seeders, taille et freeleech.</p></div>`}
+function sync(a){return `<div class="pf-panel pf-wide" id="t4k-sync"><p class="pf-eyebrow">Synchronisation</p><div class="pf-rows">
+ <div class="pf-row"><span>Compagnon tr4ker</span><span class="pf-ok">appairé · à jour il y a 1 min</span></div>
+ <div class="pf-row"><span>Ce qui est lu</span><span>compte, ratio, crédits, paiements, boutique</span></div></div>
+ <p class="pf-note">Votre clé API, votre passkey et vos codes de récupération ne quittent jamais le navigateur.</p></div>`}
+function tr4ker(){const a=ACCOUNTS[ui.scenario];if(!a.paired)return notPaired();
+ return `${identity(a)}${kpis(a)}<section class="pf-two">${ratioPanel(a)}${shop(a)}${payouts(a)}${estimate(a)}${sync(a)}</section>`}
+
+function render(){const a=ACCOUNTS[ui.scenario];
+ document.documentElement.dataset.theme=ui.theme||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");
+ $("view").innerHTML=ui.tracker==="c411"?c411():tr4ker();
+ for(const b of document.querySelectorAll("#tracker button"))b.setAttribute("aria-pressed",String(b.dataset.tracker===ui.tracker));
+ $("picker-note").textContent=ui.tracker==="c411"?"c411 reste le tracker par défaut.":"Le compte tr4ker, lu par le Compagnon.";
+ $("scenario-label").textContent=a.label;
+ $("privacy").textContent="Les chiffres viennent de votre session dans le navigateur ; aucun cookie, clé API ni passkey n’est conservé ici.";
+ $("scenario").disabled=ui.tracker==="c411";
+ document.title=ui.tracker==="c411"?"Profil · c411 · aperçu #179":"Profil · tr4ker · aperçu #179"}
+const say=t=>{$("hint").textContent=t};
+document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+ if(b.dataset.tracker){ui.tracker=b.dataset.tracker;render();say(ui.tracker==="tr4ker"?"Vue tr4ker":"Vue c411 (inchangée)");return}
+ if(b.id==="scenario"){ui.scenario=SCENARIOS[(SCENARIOS.indexOf(ui.scenario)+1)%SCENARIOS.length];ui.period=0;render();say("Situation : "+ACCOUNTS[ui.scenario].label);return}
+ if(b.id==="theme"){ui.theme=(document.documentElement.dataset.theme==="light")?"dark":"light";render();return}
+ if(b.id==="reset"){ui.tracker="c411";ui.scenario="active";ui.period=0;ui.theme=null;render();say("Aperçu réinitialisé");return}
+ if(b.dataset.days!==undefined){ui.period=+b.dataset.days;render();return}
+ if(b.dataset.act==="refresh"){say("Actualisation demandée au Compagnon (simulation)");return}
+ if(b.dataset.act==="pair"){say("Ouvrirait Paramètres → Connexions → Compagnon (simulation)");return}});
+render();
+</script>
+</body></html>
