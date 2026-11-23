@@ -169,6 +169,14 @@ class ReseedWorkspace:
         seeded_paths = {r["path"] for r in self.library.rows() if r["state"] == "seeded"}
         futures: dict[Future, tuple[str, str]] = {}
         try:
+            if not self.library.entries:
+                # A container restart clears the in-memory Library. Saved Reseed
+                # records still exist, so rebuild the current Local Items before
+                # rejecting every resumed path as unknown.
+                self.library.scan(stop, emit_scan)
+                seeded_paths = {
+                    r["path"] for r in self.library.rows() if r["state"] == "seeded"
+                }
             with ThreadPoolExecutor(max_workers=3, thread_name_prefix="reseed-step") as pool:
                 while True:
                     with self._control_lock:

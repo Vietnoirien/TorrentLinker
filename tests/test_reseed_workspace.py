@@ -109,6 +109,16 @@ def test_old_generic_review_error_is_explained_from_saved_candidates(tmp_path):
     assert "none match this item's files" in board.rows()[0]["error"]
 
 
+def test_resumed_run_scans_after_library_memory_is_lost(tmp_path):
+    board, client, original, links, meta = workspace(tmp_path)
+    board.library.entries = []
+
+    result = run(board, original, links)
+
+    assert result["seeded"] == 1
+    assert client.torrent(meta.infohash) is not None
+
+
 def test_all_steps_use_links_and_seed_without_renaming_sources(tmp_path):
     board, client, original, links, meta = workspace(tmp_path)
     before = original.read_bytes(), original.stat().st_ino
