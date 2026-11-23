@@ -294,7 +294,7 @@ class ReseedWorkspace:
         if action == "refresh":
             return self.refresh_client()
         # Worker threads do not inherit the caller's Indexer request context.
-        with self.setup.indexer().background(stop):
+        with self.setup.reseed_indexer().background(stop):
             return self._execute_item(paths, action, root, stop, report, key, resources)
 
     def _execute_item(self, paths, action, root, stop, report, key, resources) -> dict:
@@ -508,7 +508,7 @@ class ReseedWorkspace:
 
     def _checked(self, path, record, stop):
         entry = self.library.scan_entry(self.library.entry(path), stop)
-        indexer = self.setup.indexer()
+        indexer = self.setup.reseed_indexer()
         candidates = remembered_candidates(self.setup.store, indexer, entry.path) or []
         rejected = self.setup.store.rejections(entry.path)
         candidate = next(

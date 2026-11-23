@@ -7,13 +7,15 @@ no budget of ours; each obeys its own rate limit and `Retry-After`.
 from __future__ import annotations
 
 import copy
+import hashlib
 import threading
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC
 from email.utils import parsedate_to_datetime
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -136,8 +138,12 @@ class TorznabIndexer:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         tracker: str = "",
+        cache: Any = None,
     ) -> None:
         self.url, self.api_key, self.name = url, api_key, name
+        # A Store keeping fetched .torrent files (private, mode 0600): a Tracker's torrent
+        # embeds the account's passkey, so it is a secret and is fetched at most once.
+        self._cache = cache
         # A Tracker (tr4ker) distinguishes expired keys, bans and maintenance (ADR-0025).
         self.tracker = tracker
         self.discovery_url = trackers.TRACKERS[tracker].discovery_url if tracker else ""
@@ -177,23 +183,35 @@ class TorznabIndexer:
             return self._modes
 
     def search(self, query: SearchQuery) -> list[Candidate]:
-        return _parse_items(self._get(query.params()))
+        found = _parse_items(self._get(query.params()))
+        # A Tracker's Candidates say so; a search-only Indexer's stay unmarked.
+        return [replace(c, tracker=self.tracker) for c in found] if self.tracker else found
 
     def fetch_torrent(self, candidate: Candidate, *, retry: bool = True) -> bytes:
-        """The Candidate's .torrent, through the same pacer as its searches."""
+        """The Candidate's .torrent, through the same pacer as its searches. A cached copy is
+        used first: a download may count against the account."""
+        if (cached := self.cached_torrent(candidate)) is not None:
+            return cached
         url = candidate.download_url
         if "apikey=" not in url:
             url += ("&" if "?" in url else "?") + urlencode({"apikey": self.api_key})
         data = self._send(url, None).content
         if not data.startswith(b"d"):
             raise ValueError(f"{self.name or 'The Indexer'} did not return a .torrent file")
+        self.keep_torrent(candidate, data)
         return data
 
+    def _torrent_key(self, candidate: Candidate) -> str:
+        """The cache name of a torrent: its Tracker (or Indexer) and its address, no key."""
+        scope = self.tracker or self.url
+        return hashlib.sha1(f"{scope}|{self.redact(candidate.download_url)}".encode()).hexdigest()
+
     def cached_torrent(self, candidate: Candidate) -> bytes | None:
-        return None
+        return self._cache.cached_torrent(self._torrent_key(candidate)) if self._cache else None
 
     def keep_torrent(self, candidate: Candidate, data: bytes) -> None:
-        pass
+        if self._cache and self.cached_torrent(candidate) is None:
+            self._cache.cache_torrent(self._torrent_key(candidate), data)
 
     def next_request_in(self) -> float:
         return self.pacer.next_in()

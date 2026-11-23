@@ -325,6 +325,18 @@ class Setup:
                 self._indexer.adult_content = lambda: self.settings.adult_content
             return self._indexer
 
+    def reseed_indexer(self):
+        """What Reseed searches, compares and downloads through: c411's Indexer, with tr4ker's
+        beside it once added with a key (its Candidates carry their Tracker)."""
+        from torrentlinker.reseed_sources import Sources
+        from torrentlinker.trackers import TR4KER
+
+        def others() -> dict[str, Any]:
+            found = self.tr4ker_torznab()
+            return {TR4KER: found} if found is not None else {}
+
+        return Sources(self.indexer(), others)
+
     def tr4ker_session(self):
         """The paired tr4ker companion session that reads native routes, or None."""
         return (self._root or self)._profile_workspace.tr4ker
@@ -597,6 +609,8 @@ class Setup:
                         key,
                         entry.name,
                         tracker=identifier if identifier in TRACKERS else "",
+                        # A Tracker's torrents are kept, privately, to be downloaded once.
+                        cache=self.store if identifier in TRACKERS else None,
                     ),
                 )
                 self._torznab[identifier] = held

@@ -387,17 +387,27 @@ class Library:
 
         entry = self.entry(path)
         item = self.scan_entry(entry, stop)
-        indexer, store = self.setup.indexer(), self.setup.store
+        indexer, store = self.setup.reseed_indexer(), self.setup.store
+        c411 = self.setup.indexer()
 
         def search() -> list[Candidate]:
             if stop.is_set() or not indexer_search:
                 return []
-            return search_candidates(
-                indexer,
+            found = search_candidates(
+                c411,
                 item,
                 entry.folder.kind,
                 self.setup.settings.categories(entry.folder.kind),
-                indexer.supported_modes(),
+                c411.supported_modes(),
+            )
+            # tr4ker's full feed too (it lists torrents without seeders); its categories are
+            # not c411's, so it is searched by name and IDs, as Cross-seed does.
+            return found + indexer.search_others(
+                lambda feed, modes: (
+                    []
+                    if stop.is_set()
+                    else search_candidates(feed, item, entry.folder.kind, (), modes)
+                )
             )
 
         found, checked = find_candidates(
@@ -447,14 +457,15 @@ class Library:
             "archive": checked.unpack is not None,
             "files": files,
             "coverage": comparison.coverage if comparison else None,
-            "website": website_url(c, indexer),
+            "website": website_url(c, getattr(indexer, "of", lambda _c: indexer)(c)),
+            "tracker": c.tracker or "c411",
             "evidence": c.metadata,
         }
 
     def review(self, path: str, stop: threading.Event, *, key: str = "", action: str = "") -> list:
         entry = self.entry(path)
         item = self.scan_entry(entry, stop)
-        indexer, store = self.setup.indexer(), self.setup.store
+        indexer, store = self.setup.reseed_indexer(), self.setup.store
         found = remembered_candidates(store, indexer, item.path) or []
         rejected = store.rejections(item.path)
         found = [c for c in found if candidate_key(c) not in rejected]
@@ -524,7 +535,7 @@ class Library:
         from torrentlinker.domain import ItemState
         from torrentlinker.review import candidate_key
 
-        indexer = self.setup.indexer()
+        indexer = self.setup.reseed_indexer()
         store = self.setup.store
         for entry in list(self.entries):
             if stop.is_set():
@@ -625,7 +636,7 @@ class Library:
     ) -> dict:
         entry = self.entry(path)
         item = self.scan_entry(entry, stop)
-        indexer = self.setup.indexer()
+        indexer = self.setup.reseed_indexer()
         candidates = remembered_candidates(self.setup.store, indexer, item.path) or []
         rejected = self.setup.store.rejections(item.path)
         candidate = next(

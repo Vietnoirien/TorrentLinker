@@ -202,7 +202,9 @@ def remember_candidates(
     store: Store, indexer: Indexer, item_path: Path, candidates: Iterable[Candidate]
 ) -> None:
     """Keep the last search's Candidates, so the Library shows them at the next launch."""
-    rows = [{**asdict(c), "download_url": indexer.redact(c.download_url)} for c in candidates]
+    # Each Candidate is redacted by its own Tracker's Indexer (a Tracker's key is its own).
+    of = getattr(indexer, "of", lambda c: indexer)
+    rows = [{**asdict(c), "download_url": of(c).redact(c.download_url)} for c in candidates]
     store.remember_candidates(item_path, json.dumps(rows))
 
 
@@ -215,7 +217,8 @@ def remembered_candidates(
         return None
     candidates = []
     for row in json.loads(text):
-        row["download_url"] = indexer.unredact(row["download_url"])
+        unredact = getattr(indexer, "unredact_for", lambda _tracker, text: indexer.unredact(text))
+        row["download_url"] = unredact(row.get("tracker", ""), row["download_url"])
         row["categories"] = tuple(row.get("categories", ()))
         candidates.append(Candidate(**row))
     return candidates

@@ -170,6 +170,9 @@ class Candidate:
     categories: tuple[int, ...] = field(default=())
     published_at: float | None = None  # UTC Unix timestamp, when supplied by the Indexer.
     metadata: dict = field(default_factory=dict)  # Verified source attributes only.
+    # The Tracker whose Indexer listed it (ADR-0025); "" is c411, as every Candidate saved
+    # before there were Trackers.
+    tracker: str = ""
 
 
 def publication_time(value: str | None) -> float | None:

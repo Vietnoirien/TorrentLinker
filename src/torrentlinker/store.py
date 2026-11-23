@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -908,10 +909,14 @@ class Store:
             return None
 
     def cache_torrent(self, key: str, data: bytes) -> None:
-        self.torrent_dir.mkdir(parents=True, exist_ok=True)
+        # Private storage: a Tracker's torrent embeds the account's passkey.
+        self.torrent_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.torrent_dir.chmod(0o700)
         temporary = self.torrent_dir / f".{key}.{uuid.uuid4().hex}.tmp"
         try:
-            temporary.write_bytes(data)
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(data)
             temporary.replace(self.torrent_dir / f"{key}.torrent")
         finally:
             temporary.unlink(missing_ok=True)
