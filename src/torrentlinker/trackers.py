@@ -23,6 +23,10 @@ class Tracker:
     announce_hosts: tuple[str, ...]  # every host a torrent of this Tracker announces to
     source: str  # the `info.source` tag its torrents carry
     capabilities: frozenset[str]
+    # Where Cross-seed and Reseed search when it differs from ordinary search: tr4ker's full
+    # feed, which also lists torrents without seeders.
+    discovery_url: str = ""
+    retry_fallback: float = 30.0  # seconds to wait after a 429 that names none
 
     @property
     def indexer_id(self) -> str:
@@ -67,6 +71,8 @@ TRACKERS: dict[str, Tracker] = {
         "TR4KER",
         # No Zen: its credits are a learned estimate, not c411's schedule (ADR-0027).
         frozenset({"search", "catalogue", "profile", "upload", "rss", "community", "crossseed"}),
+        discovery_url="https://tr4ker.net/api/torznab/all",
+        retry_fallback=60.0,  # its own frontend's fallback
     ),
 }
 

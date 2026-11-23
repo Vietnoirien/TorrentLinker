@@ -43,6 +43,7 @@ from torrentlinker.review import (
     search_candidates,
 )
 from torrentlinker.torrent_meta import read_torrent
+from torrentlinker.trackers import tracker_of_url
 
 if TYPE_CHECKING:
     from torrentlinker.config import Settings
@@ -167,6 +168,14 @@ class CrossSeed:
                 found.append(entry)
         return found
 
+    def indexer_tracker(self, identifier: str) -> str:
+        """The Tracker an Indexer belongs to, by its address: "" for a search-only Indexer."""
+        try:
+            found = tracker_of_url(self.root.settings.find_indexer(identifier).url)
+        except ValueError:
+            return ""
+        return found.id if found else ""
+
     def indexer_name(self, identifier: str) -> str:
         try:
             return self.root.settings.find_indexer(identifier).name
@@ -182,17 +191,25 @@ class CrossSeed:
             return 0
         known = self.store.crossseed_known()
         queued: list[tuple[str, str, dict]] = []
-        sources: list[tuple[str, str, str]] = []
+        sources: list[tuple[str, str, str, set[str]]] = []
         for t in self.library.client().torrents(with_files=False):
             if t.progress < 1 or TAG in t.tags or VERIFYING in t.tags or t.state == MISSING:
                 continue
-            sources.append((f"torrent:{t.hash}", t.name, "torrent"))
+            announced = {
+                found.id
+                for url in (t.tracker, *t.trackers)
+                if (found := tracker_of_url(url)) is not None
+            }
+            sources.append((f"torrent:{t.hash}", t.name, "torrent", announced))
         for entry in list(self.library.entries):
             if entry.state.value == "seeded":  # its torrent is a source of its own
                 continue
-            sources.append((f"item:{entry.item.path}", entry.item.path.name, "item"))
-        for key, name, origin in sources:
+            sources.append((f"item:{entry.item.path}", entry.item.path.name, "item", set()))
+        owner = {indexer.id: self.indexer_tracker(indexer.id) for indexer in targets}
+        for key, name, origin, announced in sources:
             for indexer in targets:
+                if owner[indexer.id] in announced:
+                    continue  # it already is a torrent of that Tracker: one torrent per Tracker
                 if (key, indexer.id) not in known:
                     queued.append((key, indexer.id, {"name": name, "origin": origin}))
         if queued:
@@ -252,7 +269,10 @@ class CrossSeed:
         try:
             indexer = self.root.indexer_for(identifier)
             with indexer.background(stop):
-                found = self._search(indexer, identifier, source, stop)
+                # A Tracker may offer a fuller feed for discovery (tr4ker's torznab/all).
+                found = self._search(
+                    getattr(indexer, "discovery", lambda: indexer)(), identifier, source, stop
+                )
         except RateLimited as limited:
             self._blocked[identifier] = (time.time() + limited.retry_after, "Rate limited")
             return False
@@ -357,6 +377,7 @@ class CrossSeed:
             "full": checked.match.is_full,
             "archive": checked.unpack is not None,
             "category": source.category,
+            "tracker": self.indexer_tracker(identifier),
         }
         if reason is None and self.rules.auto_add:
             self._add_row(source.key, identifier, key, row, source, checked)
@@ -596,6 +617,7 @@ class CrossSeed:
             "origin": row.get("origin", ""),
             "indexer_id": row["indexer_id"],
             "indexer": self.indexer_name(row["indexer_id"]),
+            "tracker": row.get("tracker") or self.indexer_tracker(row["indexer_id"]),
             "title": row.get("title", ""),
             "size": row.get("size", 0),
             "reason": row.get("reason", ""),

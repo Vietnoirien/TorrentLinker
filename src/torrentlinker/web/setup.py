@@ -28,7 +28,7 @@ from torrentlinker.profile_workspace import ProfileWorkspace
 from torrentlinker.qbit import ClientApi
 from torrentlinker.store import Store
 from torrentlinker.torznab import TorznabIndexer
-from torrentlinker.trackers import DEFAULT_TRACKER
+from torrentlinker.trackers import DEFAULT_TRACKER, TRACKERS
 from torrentlinker.web.security import ServerSecrets
 
 Connector = Callable[..., ClientApi]
@@ -579,7 +579,15 @@ class Setup:
                 raise ValueError(f"Add the API key of {entry.name} first.")
             held = self._torznab.get(identifier)
             if held is None or held[0] != (entry.url, key):
-                held = ((entry.url, key), TorznabIndexer(entry.url, key, entry.name))
+                held = (
+                    (entry.url, key),
+                    TorznabIndexer(
+                        entry.url,
+                        key,
+                        entry.name,
+                        tracker=identifier if identifier in TRACKERS else "",
+                    ),
+                )
                 self._torznab[identifier] = held
             return held[1]
 
