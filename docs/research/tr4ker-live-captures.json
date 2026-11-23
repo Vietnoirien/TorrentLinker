@@ -1,0 +1,116 @@
+{
+ "observed": "2026-11-23",
+ "note": "Human-step captures. Field types and counts only; no values, keys or passkeys.",
+ "profile": {
+  "/api/me/stats": {
+   "status": 200,
+   "shape": {
+    "freeleech_count": "int",
+    "snapshots": [],
+    "statistics": "NoneType",
+    "summary": {
+     "uploaded": "int",
+     "downloaded": "int",
+     "raw_uploaded": "int",
+     "raw_downloaded": "int",
+     "bonus_upload": "int",
+     "bonus_download": "int",
+     "money": "int",
+     "ratio_warning": "bool"
+    }
+   },
+   "counts": {
+    "snapshots": 0
+   }
+  },
+  "/api/me/downloads?limit=5&filter=all": {
+   "status": 200,
+   "shape": {
+    "items": [],
+    "limit": "int",
+    "page": "int",
+    "total": "int",
+    "total_pages": "int"
+   },
+   "counts": {
+    "items": 0
+   }
+  },
+  "/api/me/sw-rewards": {
+   "status": 200,
+   "shape": {
+    "entries": [],
+    "total": "int"
+   },
+   "counts": {
+    "entries": 0
+   }
+  },
+  "/api/shop/history": {
+   "status": 200,
+   "shape": {
+    "days": []
+   },
+   "counts": {
+    "days": 0
+   }
+  }
+ },
+ "rss": {
+  "status": 200,
+  "content_type": "application/rss+xml; charset=utf-8",
+  "items": 100,
+  "channel_tags": [
+   "description",
+   "item",
+   "language",
+   "lastBuildDate",
+   "link",
+   "title",
+   "{http://www.w3.org/2005/Atom}link"
+  ],
+  "item_tags": [
+   "category",
+   "enclosure",
+   "guid",
+   "link",
+   "pubDate",
+   "title",
+   "{http://torznab.com/schemas/2015/feed}attr",
+   "{https://tr4ker.net/rss}freeleech",
+   "{https://tr4ker.net/rss}leechers",
+   "{https://tr4ker.net/rss}seeders",
+   "{https://tr4ker.net/rss}size"
+  ],
+  "attrs": [
+   "downloadvolumefactor",
+   "peers",
+   "seeders",
+   "size"
+  ],
+  "enclosure": {
+   "origin": "https://tr4ker.net",
+   "path_pattern": "/api/torrents/<slug>/download",
+   "query_keys": [
+    "passkey"
+   ],
+   "type": "application/x-bittorrent"
+  },
+  "link": {
+   "path_prefix": "/torrent",
+   "query_keys": []
+  }
+ },
+ "download": {
+  "route": "enclosure /api/torrents/<slug>/download?apikey=<redacted>",
+  "status": 200,
+  "content_type": "application/x-bittorrent",
+  "private": true,
+  "info_source": "tr4ker",
+  "announce": "https://tk.tr4ker.net/announce/<passkey>",
+  "announce_tiers": 1,
+  "embeds_api_key": false,
+  "embeds_passkey": true
+ },
+ "zero_seeder": "a /api/torznab/all name search returned several items with seeders=0 (e.g. a 2009 DVD remux, a GOG game)"
+}

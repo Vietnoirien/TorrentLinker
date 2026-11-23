@@ -99,3 +99,13 @@ The official [cross-seed guide](https://tr4ker.net/wiki/l-outil-cross-seed) requ
 - Test both providers together for duplicate IDs, same data on different trackers, auth isolation, cookie/token redaction, Settings restoration and unaffected C411 flows.
 
 Application code, installed versions, companion files and running processes were not changed. Only research files and the explicitly requested OS keyring entry were written. No CI/release or publication was requested.
+
+## Human-step results, 23 November 2026 (evening)
+
+Sanitized captures: [tr4ker-live-captures.json](tr4ker-live-captures.json).
+
+- **Download.** A `.torrent` fetched through a Torznab enclosure with the API key returned 200 `application/x-bittorrent`. It is private, `info.source` is lowercase `tr4ker` (the frontend builds uploads with `TR4KER`), and the one-tier announce is `https://tk.tr4ker.net/announce/<passkey>`, so the announce host is `tk.tr4ker.net`, not `tr4ker.net`. The file embeds the passkey and not the API key. Cached torrent bytes are therefore secrets.
+- **Cross-seed.** That torrent was a 2009 DVD remux with 0 seeders on tr4ker, matching a complete local c411 torrent by size. It was added stopped to qBittorrent with the same save path, rechecked to 100 % and started. The info-hashes differ, as expected.
+- **Zero seeders.** `/api/torznab/all` name searches returned several items with `seeders=0`. The wiki's claim holds for these samples, and coverage was not measured.
+- **RSS.** `/api/rss?passkey=…` with no session returned 100 items: title, guid, link (`/torrent/<slug>`), pubDate, category, an enclosure `/api/torrents/<slug>/download?passkey=…`, Torznab attrs (size, seeders, peers, downloadvolumefactor), and `https://tr4ker.net/rss` elements (size, seeders, leechers, freeleech). The feed authenticates downloads by passkey.
+- **Profile.** `/api/me/stats`, `/api/me/downloads`, `/api/me/sw-rewards` and `/api/shop/history` return 200 but are still empty for this account. The cross-seed above should produce payouts after 6 h of seeding.

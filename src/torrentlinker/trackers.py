@@ -67,8 +67,9 @@ TRACKERS: dict[str, Tracker] = {
         "tr4ker",
         "https://tr4ker.net",
         "https://tr4ker.net/api",
-        ("tr4ker.net",),
-        "TR4KER",
+        ("tr4ker.net", "tk.tr4ker.net"),
+        # Read from a downloaded torrent (2026-11-23); its frontend builds uploads with "TR4KER".
+        "tr4ker",
         # No Zen: its credits are a learned estimate, not c411's schedule (ADR-0027).
         frozenset({"search", "catalogue", "profile", "upload", "rss", "community", "crossseed"}),
         discovery_url="https://tr4ker.net/api/torznab/all",

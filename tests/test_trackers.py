@@ -174,7 +174,7 @@ def test_trackers_have_their_own_hosts_tags_and_secret_names() -> None:
     assert tracker_of_url(C411_ALT) is TRACKERS["c411"]
     assert tracker_of_url(TR4KER_ANNOUNCE) is TRACKERS["tr4ker"]
     assert tracker_of_url("https://example.org/announce") is None
-    assert tracker("c411").source == "C411" and tracker("tr4ker").source == "TR4KER"
+    assert tracker("c411").source == "C411" and tracker("tr4ker").source == "tr4ker"
     assert tracker("c411").api_key_secret == "indexer-api-key"  # unchanged
     assert tracker("tr4ker").api_key_secret == Settings.indexer_secret("tr4ker")
     assert tracker("tr4ker").api_key_secret == "indexer-key-tr4ker"
