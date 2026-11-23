@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from tests.test_profile import PROFILE
 from tests.test_web_jobs import login
+from torrentlinker.companion import bundled_version
 from torrentlinker.web.app import create_app
 from torrentlinker.web.security import ServerSecrets
 from torrentlinker.web.setup import Setup
@@ -137,7 +138,8 @@ def test_snapshot_age_replay_credentials_change_and_restart(tmp_path, monkeypatc
         fresh = snapshot()
         fresh["capturedAt"] = datetime.fromtimestamp(now, UTC).isoformat()
         assert restored.receive("/api/companion/snapshot", ORIGIN, "Bearer " + token, fresh) == {
-            "accepted": True
+            "accepted": True,
+            "companion_version": bundled_version(),
         }
         restored.disconnect()
         with pytest.raises(PermissionError):

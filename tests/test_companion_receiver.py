@@ -5,7 +5,7 @@ import zipfile
 import httpx
 
 from tests.test_web_profile import ORIGIN, prepared, snapshot
-from torrentlinker.companion import CompanionReceiver, extension_zip
+from torrentlinker.companion import CompanionReceiver, bundled_version, extension_zip
 
 
 def test_real_loopback_receiver_pairs_and_receives_without_owner_http_controls(
@@ -65,6 +65,7 @@ def test_extension_bundle_is_installable_and_contains_only_packaged_assets():
                 "read.js",
                 "trackers.js",
                 "tr4ker.js",
+                "update.js",
                 "community.js",
                 "companion.js",
                 "companion.html",
@@ -138,3 +139,48 @@ def test_extension_behind_an_https_proxy_allows_the_public_https_address(tmp_pat
         manifest = json.loads(bundle.read("torrentlinker-companion/manifest.json"))
     assert receiver == {"webTarget": "https://tl.example"}
     assert "https://tl.example/*" in manifest["host_permissions"]
+
+
+def test_web_server_manages_the_companion_folder_from_the_owners_https_origin(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from torrentlinker.web.app import create_app
+
+    folder = tmp_path / "ext"
+    app = create_app(
+        tmp_path / "data", password="test-password-long", secure_cookie=True, companion_dir=folder
+    )
+    with TestClient(app, base_url="http://tl.example") as client:
+        login = client.post(
+            "/api/login",
+            json={"password": "test-password-long"},
+            headers={"X-TorrentLinker": "1"},
+        )
+        headers = {"X-TorrentLinker": "1", "Cookie": login.headers["set-cookie"].split(";")[0]}
+        assert not folder.exists()  # the origin is not known yet
+        state = client.get("/api/zen/profile", headers=headers).json()
+        assert state["companion_folder"]["version"] == bundled_version()
+        assert state["companion_folder"]["path"] == str(folder)
+    assert json.loads((folder / "receiver.json").read_text()) == {"webTarget": "https://tl.example"}
+    # A restart knows the recorded origin and keeps the folder current by itself.
+    (folder / "receiver.json").unlink()
+    create_app(
+        tmp_path / "data", password="test-password-long", secure_cookie=True, companion_dir=folder
+    )
+    assert (folder / "receiver.json").exists()
+
+
+def test_web_server_without_a_companion_dir_writes_nothing(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from torrentlinker.web.app import create_app
+
+    app = create_app(tmp_path, password="test-password-long")
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/login",
+            json={"password": "test-password-long"},
+            headers={"X-TorrentLinker": "1"},
+        )
+        headers = {"X-TorrentLinker": "1", "Cookie": login.headers["set-cookie"].split(";")[0]}
+        assert client.get("/api/zen/profile", headers=headers).json()["companion_folder"] is None

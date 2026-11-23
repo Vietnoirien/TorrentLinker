@@ -3,6 +3,7 @@ import { collectProfile } from "./collect.js";
 import { collectDescriptors } from "./descriptor.js";
 import { readPages } from "./read.js";
 import { collectTr4ker } from "./tr4ker.js";
+import { reloadIfNewer } from "./update.js";
 import { TRACKERS, tabPattern, ownsUrl } from "./trackers.js";
 
 const PERIOD = 120000;
@@ -38,6 +39,8 @@ async function request(connection, path, body) {
     error.status = response.status;
     throw error;
   }
+  // Never reload mid-pairing: the caller has not stored the token yet; the next sync does.
+  if (path !== "pair") await reloadIfNewer(data.companion_version);
   return data;
 }
 async function note(message) {

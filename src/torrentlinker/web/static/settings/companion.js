@@ -177,6 +177,26 @@ async function loadSettingsCompanion(root) {
     disconnect,
   );
   extension.append(actions);
+  const folder = data.companion_folder;
+  if (folder?.path)
+    extension.append(
+      element(
+        "p",
+        say(`Managed folder: ${folder.path}`, `Dossier géré : ${folder.path}`) +
+          (folder.version ? ` · ${say("version", "version")} ${folder.version}` : "") +
+          (folder.waiting ? ` · ${say("waiting for the server's HTTPS address (open this page over HTTPS or set TL_PUBLIC_URL)", "en attente de l’adresse HTTPS du serveur (ouvrez cette page en HTTPS ou définissez TL_PUBLIC_URL)")}` : "") +
+          (folder.error ? ` · ${folder.error}` : ""),
+        "muted",
+      ),
+      element(
+        "p",
+        say(
+          "Load unpacked from this folder once; it updates itself afterwards.",
+          "Chargez-la une fois non empaquetée depuis ce dossier ; elle se met ensuite à jour toute seule.",
+        ),
+        "muted",
+      ),
+    );
   const trackers = element("section", undefined, "settings-card");
   trackers.append(element("h3", "Trackers"));
   const all = element("div", undefined, "settings-actions");

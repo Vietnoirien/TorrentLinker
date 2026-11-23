@@ -346,7 +346,10 @@ class SettingsPage(QWidget):
                 owner.account_workspace.set_session_downloads(bool(body["enabled"]))
             elif action != "state":
                 raise ValueError("Unknown Companion operation.")
-            return owner.account_workspace.state()
+            return {
+                **owner.account_workspace.state(),
+                "companion_folder": owner.managed_companion.sync(),
+            }
 
         view = SettingsView(
             SettingsWorkspace(setup),

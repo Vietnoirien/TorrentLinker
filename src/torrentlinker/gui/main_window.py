@@ -167,6 +167,10 @@ class MainWindow(QMainWindow):
             settings_path.parent, history=ProfileHistory(store)
         )
         self.companion_receiver: CompanionReceiver | None = None
+        from torrentlinker.companion_folder import ManagedCompanion
+
+        self.managed_companion = ManagedCompanion(settings_path.parent / "companion")
+        self.managed_companion.sync()  # the folder the browser loads once, then self-updates
         self._profile_refreshing = False
         self._torrent_clients_busy = False
         self._scan_stop = threading.Event()

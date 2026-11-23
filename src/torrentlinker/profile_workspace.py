@@ -438,6 +438,18 @@ class ProfileWorkspace:
     def receive(
         self, route: str, origin: str, authorization: str, body: dict[str, Any]
     ) -> dict[str, Any]:
+        """A paired companion's call; the reply to its sync announces the bundled companion
+        version so an out-of-date extension can reload from its managed folder."""
+        from torrentlinker.companion import bundled_version
+
+        reply = self._receive(route, origin, authorization, body)
+        if route != "/api/companion/snapshot":
+            return reply
+        return {**reply, "companion_version": bundled_version()}
+
+    def _receive(
+        self, route: str, origin: str, authorization: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
         # Each Tracker answers only for itself: a body names its Tracker (c411 when it names
         # none), and a c411 tab can never pair, sync or answer for tr4ker or the reverse.
         which = body.get("tracker", C411)

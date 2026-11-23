@@ -401,7 +401,12 @@ def test_connection_tabs_tr4ker_takes_over_an_indexer_and_the_companion_stays_ho
     setup.secrets.update({Settings.indexer_secret("ab12cd34"): "OLD-KEY"})
     setup.save()
     app = create_app(
-        config, password="test-password-long", service_override=setup, monitor_verifications=False
+        config,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
+        companion_dir=tmp_path / "managed",
+        public_url="https://tl.example",
     )
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -449,6 +454,12 @@ def test_connection_tabs_tr4ker_takes_over_an_indexer_and_the_companion_stays_ho
                 expect(panel.locator(".indexer-card")).to_have_count(1)
                 expect(panel.locator(".indexer-card")).to_contain_text("c411")
                 settings_tab(panel, "Companion").click()
+                expect(panel.locator("#companion-root")).to_contain_text(
+                    f"Managed folder: {tmp_path / 'managed'}"
+                )
+                expect(panel.locator("#companion-root")).to_contain_text(
+                    "Load unpacked from this folder once; it updates itself afterwards."
+                )
                 row = panel.locator(".conn-row[data-tracker=tr4ker]")
                 expect(row).to_contain_text("Not paired")
                 expect(row.get_by_role("button", name="Pair", exact=True)).to_be_enabled()

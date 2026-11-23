@@ -50,6 +50,8 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--secure-cookie", action="store_true", default=os.getenv("TL_SECURE_COOKIE", "0") == "1"
     )
+    parser.add_argument("--companion-dir", type=Path, default=os.getenv("TL_COMPANION_DIR") or None)
+    parser.add_argument("--public-url", default=os.getenv("TL_PUBLIC_URL") or None)
     parser.add_argument("--root-path", default=os.getenv("TL_ROOT_PATH", ""))
     return parser
 
@@ -131,6 +133,8 @@ def main() -> int:
                 secret_files=secret_files,
                 secure_cookie=args.secure_cookie,
                 members_enabled=args.members == "on",
+                companion_dir=args.companion_dir,
+                public_url=args.public_url,
             )
         except (ValueError, OSError) as error:
             parser.error(f"Cannot initialize server: {error}")

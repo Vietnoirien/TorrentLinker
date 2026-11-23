@@ -114,6 +114,8 @@ def create_app(
     monitor_verifications: bool = True,
     assistant_transport=None,
     members_enabled: bool = False,
+    companion_dir: Path | None = None,
+    public_url: str | None = None,
 ) -> FastAPI:
     app_version = escape(installed_version())
     directory.mkdir(parents=True, exist_ok=True)
@@ -431,6 +433,16 @@ def create_app(
     assistant_routes(app, assistant)
     app.state.assistant = assistant
     app.state.secure_cookie = secure_cookie
+    from torrentlinker.companion_folder import ManagedCompanion
+
+    app.state.managed_companion = ManagedCompanion(
+        companion_dir,
+        origin_file=directory / "companion-origin.json",
+        public_url=public_url,
+        needs_origin=True,
+    )
+    if companion_dir:
+        app.state.managed_companion.sync()  # keeps the folder current after an upgrade
     app.state.agent_service = agent_service
     from torrentlinker.web.feeds import feed_routes
 

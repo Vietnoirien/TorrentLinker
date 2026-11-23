@@ -147,9 +147,19 @@ def profile_routes(app: FastAPI, setup: Setup, torrent_clients: TorrentClients) 
         except ValueError as error:
             raise HTTPException(404, str(error)) from error
 
+    def public_origin(request: Request) -> str:
+        origin = str(request.base_url)
+        # Behind an HTTPS reverse proxy this server speaks plain HTTP; a Secure cookie means
+        # browsers reach it over HTTPS, which is the address the extension must allow.
+        if request.app.state.secure_cookie and origin.startswith("http://"):
+            origin = "https://" + origin.removeprefix("http://")
+        return origin
+
     @app.get("/api/zen/profile")
-    def state(days: int = Period):  # type: ignore[no-untyped-def]
-        return with_overview(days)
+    def state(request: Request, days: int = Period):  # type: ignore[no-untyped-def]
+        managed = request.app.state.managed_companion
+        managed.record(public_origin(request))
+        return {**with_overview(days), "companion_folder": managed.sync()}
 
     @app.post("/api/zen/profile/refresh")
     def refresh(days: int = Period):  # type: ignore[no-untyped-def]
@@ -188,11 +198,8 @@ def profile_routes(app: FastAPI, setup: Setup, torrent_clients: TorrentClients) 
     def extension(request: Request) -> Response:
         from torrentlinker.companion import extension_zip
 
-        origin = str(request.base_url)
-        # Behind an HTTPS reverse proxy this server speaks plain HTTP; a Secure cookie means
-        # browsers reach it over HTTPS, which is the address the extension must allow.
-        if request.app.state.secure_cookie and origin.startswith("http://"):
-            origin = "https://" + origin.removeprefix("http://")
+        origin = public_origin(request)
+        request.app.state.managed_companion.record(origin)
         return Response(
             extension_zip(origin),
             media_type="application/zip",

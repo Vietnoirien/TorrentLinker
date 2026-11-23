@@ -15,31 +15,41 @@ from urllib.parse import quote, urlsplit
 from torrentlinker.companion_downloads import MAX_RESULT
 from torrentlinker.profile_workspace import COMPANION_ROUTES, ProfileWorkspace, extension_origin
 
+EXTENSION_DIR = Path(__file__).parent / "companion_extension"
+
+
+def bundled_version() -> str:
+    return str(json.loads((EXTENSION_DIR / "manifest.json").read_text())["version"])
+
+
+def extension_files(web_origin: str | None = None) -> dict[str, bytes]:
+    """The companion's files; receiver.json and the host permissions name only this server."""
+    files: dict[str, bytes] = {}
+    for path in sorted(EXTENSION_DIR.iterdir()):
+        if not path.is_file():
+            continue
+        raw = path.read_bytes()
+        origin = urlsplit(web_origin) if web_origin else None
+        if path.name == "receiver.json" and origin and origin.scheme == "https":
+            raw = json.dumps({"webTarget": (web_origin or "").rstrip("/")}).encode()
+        elif (
+            path.name == "manifest.json" and origin and origin.scheme == "https" and origin.hostname
+        ):
+            manifest = json.loads(raw)
+            host = f"https://{origin.hostname}/*"
+            manifest["host_permissions"].append(host)
+            manifest["externally_connectable"]["matches"].append(host)
+            raw = json.dumps(manifest, indent=2).encode()
+        files[path.name] = raw
+    return files
+
 
 def extension_zip(web_origin: str | None = None) -> bytes:
     """Allow only this WebUI server to initiate a remote connection."""
     result = io.BytesIO()
     with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED) as bundle:
-        for path in sorted((Path(__file__).parent / "companion_extension").iterdir()):
-            if path.is_file():
-                name = f"torrentlinker-companion/{path.name}"
-                if (
-                    path.name == "receiver.json"
-                    and web_origin
-                    and urlsplit(web_origin).scheme == "https"
-                ):
-                    bundle.writestr(name, json.dumps({"webTarget": web_origin.rstrip("/")}))
-                    continue
-                if path.name == "manifest.json" and web_origin:
-                    origin = urlsplit(web_origin)
-                    if origin.scheme == "https" and origin.hostname:
-                        manifest = json.loads(path.read_text())
-                        host = f"https://{origin.hostname}/*"
-                        manifest["host_permissions"].append(host)
-                        manifest["externally_connectable"]["matches"].append(host)
-                        bundle.writestr(name, json.dumps(manifest, indent=2))
-                        continue
-                bundle.write(path, name)
+        for name, raw in extension_files(web_origin).items():
+            bundle.writestr(f"torrentlinker-companion/{name}", raw)
     return result.getvalue()
 
 

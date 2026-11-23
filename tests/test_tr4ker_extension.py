@@ -152,4 +152,4 @@ def test_the_extension_has_no_route_to_the_api_key():
     assert "/api/me/api-key" not in source.replace("Never /api/me/api-key", "")
     manifest = json.loads((MODULE.parent / "manifest.json").read_text())
     assert "https://tr4ker.net/*" in manifest["host_permissions"]
-    assert manifest["version"] == "0.7.0"
+    assert manifest["version"] == "0.7.1"
