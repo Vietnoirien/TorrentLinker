@@ -33,6 +33,7 @@ let snapshot = {
   localFolder = "",
   localState = "",
   expanded = new Set(),
+  collapsedAttention = new Set(),
   selected = "",
   checked = new Set(),
   limit = 100,
@@ -132,16 +133,21 @@ function visible() {
     if (!children.has(r.within)) children.set(r.within, []);
     children.get(r.within).push(r);
   }
-  const result = [];
+  const groups = [];
   for (const r of snapshot.rows) {
     if (r.within && paths.has(r.within)) continue;
     const episodes = children.get(r.path) || [], found = episodes.filter(matches);
     if (matches(r) || found.length) {
-      result.push({...r, episodes:episodes.length, context:!matches(r)});
-      if (expanded.has(r.path) || query || localState || filter) result.push(...found.map(e=>({...e, episode:true})));
+      const attentionEpisodes = found.some(needsAttention);
+      const showEpisodes = !!(expanded.has(r.path) || query || localState || filter || (attentionEpisodes && !collapsedAttention.has(r.path)));
+      const rows = [{...r, episodes:episodes.length, context:!matches(r), showEpisodes}];
+      if (showEpisodes)
+        rows.push(...found.sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a))).map(e=>({...e, episode:true})));
+      groups.push({rows, attention: needsAttention(r) || attentionEpisodes});
     }
   }
-  return result;
+  groups.sort((a, b) => Number(b.attention) - Number(a.attention));
+  return groups.flatMap(group => group.rows);
 }
 function selectionTools() {
   return `<select id="local-folder" aria-label="${t("Dossier de bibliothèque")}"><option value="">${t("Tous les dossiers")}</option>${(snapshot.setup.folders || []).map(f=>`<option value="${esc(f.local)}" ${localFolder===f.local?"selected":""}>${esc(f.local)}</option>`).join("")}</select><select id="local-state" aria-label="${t("État du partage")}"><option value="">${t("Tous les états")}</option>${Object.entries(seedStates).map(([key,label])=>`<option value="${key}" ${localState===key?"selected":""}>${t(label)}</option>`).join("")}</select></div><div class="tools selection-tools"><button data-command="select">${t("Sélectionner la liste")}</button><small>${checked.size} ${t("sélectionné(s)")}</small><button data-command="clear-selection" ${checked.size?"":"disabled"}>${t("Effacer")}</button><button data-command="combine" ${checked.size>=2?"":"disabled"}>${t("Combiner la sélection")}</button>`;
@@ -211,6 +217,9 @@ function noMatchingCandidate(r) {
       r.candidates.every(c => c.match !== "full" && c.match !== "partial"))
   );
 }
+function needsAttention(r) {
+  return !!r.error && !noMatchingCandidate(r);
+}
 function render() {
   const focusSearch = document.activeElement?.id === "search";
   const cursor = focusSearch ? document.activeElement.selectionStart : 0;
@@ -268,7 +277,7 @@ function render() {
         .slice(0, limit)
         .map((r) => {
           const p = progress.active?.[r.path];
-          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${expanded.has(r.path) || !!(query || localState || filter)}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${expanded.has(r.path)?"▾":"▸"}</button>` : ""}${esc(r.name)}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error && !noMatchingCandidate(r) ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
+          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${r.showEpisodes}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${r.showEpisodes?"▾":"▸"}</button>` : ""}${esc(r.name)}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error && !noMatchingCandidate(r) ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
         })
         .join("") ||
       `<div class="empty">${t("Aucun élément ici. Ajoutez un dossier ou changez le filtre.")}</div>`
@@ -489,7 +498,7 @@ async function handleClick(e) {
     render();
     return;
   }
-  if (b?.dataset.pack) { expanded.has(b.dataset.pack) ? expanded.delete(b.dataset.pack) : expanded.add(b.dataset.pack); render(); return; }
+  if (b?.dataset.pack) { const path = b.dataset.pack; if (b.getAttribute("aria-expanded") === "true") { expanded.delete(path); collapsedAttention.add(path); } else { collapsedAttention.delete(path); expanded.add(path); } render(); return; }
   const row = e.target.closest("[data-item]");
   if (row) {
     selected = row.dataset.item;
