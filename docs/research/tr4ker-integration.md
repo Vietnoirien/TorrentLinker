@@ -109,3 +109,7 @@ Sanitized captures: [tr4ker-live-captures.json](tr4ker-live-captures.json).
 - **Zero seeders.** `/api/torznab/all` name searches returned several items with `seeders=0`. The wiki's claim holds for these samples, and coverage was not measured.
 - **RSS.** `/api/rss?passkey=…` with no session returned 100 items: title, guid, link (`/torrent/<slug>`), pubDate, category, an enclosure `/api/torrents/<slug>/download?passkey=…`, Torznab attrs (size, seeders, peers, downloadvolumefactor), and `https://tr4ker.net/rss` elements (size, seeders, leechers, freeleech). The feed authenticates downloads by passkey.
 - **Profile.** `/api/me/stats`, `/api/me/downloads`, `/api/me/sw-rewards` and `/api/shop/history` return 200 but are still empty for this account. The cross-seed above should produce payouts after 6 h of seeding.
+
+## Native search retest, 23 November 2026 (evening)
+
+One parameter at a time, read-only GETs on `/api/torrents?limit=2&…`, each answered the same way on repeat. HTTP 500 with `{"error":"erreur base de données"}`: `sort=seeders`, `sort=title`, `sort=size`, `sort=leechers` (with or without `order`), and `search_in` with any value (`title`, `description`). HTTP 200: plain paging, `q`, `cat`, `page`, `sort=recent`, `sort=completed`, `tmdb_id`, `freeleech=1`, and their combinations. The fault is on tr4ker's side and limited to those sorts and `search_in`; the rest of native search is usable.
