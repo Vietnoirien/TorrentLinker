@@ -154,6 +154,18 @@ function companionSeenText(seen) {
     `Compagnon dans le navigateur : version ${seen.version} · dernier contact ${when}`,
   );
 }
+// Companions before 0.7.2 sync without naming their version and never reload themselves.
+function companionUnseenText(data) {
+  if (data.paired || data.companion || data.tr4ker?.paired)
+    return say(
+      "The companion in the browser is older than 0.7.2: it syncs but cannot update itself. Reload it once on the browser's Extensions page.",
+      "Le compagnon du navigateur est antérieur à 0.7.2 : il synchronise mais ne peut pas se mettre à jour. Rechargez-le une fois depuis la page Extensions du navigateur.",
+    );
+  return say(
+    "No companion has reached TorrentLinker from a browser yet.",
+    "Aucun compagnon n’a encore contacté TorrentLinker depuis un navigateur.",
+  );
+}
 async function loadSettingsCompanion(root) {
   const client = environment.client_id;
   const data = await request("companion", { action: "state" });
@@ -184,7 +196,7 @@ async function loadSettingsCompanion(root) {
     ),
     button(say("Refresh", "Actualiser"), async () => {
       const fresh = await loadSettingsCompanion(root);
-      return companionSeenText(fresh?.companion_seen) || say("Refreshed", "Actualisé");
+      return companionSeenText(fresh?.companion_seen) || companionUnseenText(fresh || {});
     }),
     disconnect,
   );
@@ -193,11 +205,7 @@ async function loadSettingsCompanion(root) {
   extension.append(
     element(
       "p",
-      companionSeenText(seen) ||
-        say(
-          "No companion has reached TorrentLinker from a browser yet.",
-          "Aucun compagnon n’a encore contacté TorrentLinker depuis un navigateur.",
-        ),
+      companionSeenText(seen) || companionUnseenText(data),
       "muted",
     ),
   );
