@@ -186,6 +186,10 @@ function stateFor(r) {
   const job = itemJob(r.path);
   const p = snapshot.progress?.active?.[r.path];
   if (snapshot.progress?.paused_paths?.includes(r.path)) return t("En pause");
+  if (noMatchingCandidate(r))
+    return r.stage === "find"
+      ? t("Orphelin · aucun candidat", "Orphan · no candidate found")
+      : t("Orphelin · aucune correspondance", "Orphan · no matching torrent");
   if (r.error) return t("À examiner");
   if (p)
     return (
@@ -196,6 +200,16 @@ function stateFor(r) {
     );
   const stage = r.stage === "seeding" ? t("En partage") : t("En attente · ") + labels[r.stage];
   return job ? `${stage} · ${job.display || job.status}` : stage;
+}
+function noMatchingCandidate(r) {
+  return !!r.error && (
+    (r.stage === "find" && r.error === "No candidate found. Try another search.") ||
+    (r.stage === "incomplete" &&
+      ["Candidates were found, but none match this item's files.",
+        "Incomplete or archived content needs a separate review."].includes(r.error) &&
+      (r.candidates || []).length > 0 &&
+      r.candidates.every(c => c.match !== "full" && c.match !== "partial"))
+  );
 }
 function render() {
   const focusSearch = document.activeElement?.id === "search";
@@ -249,12 +263,12 @@ function render() {
       )
       .join(
         "",
-      )}</div><div class="running">${running ? `<button class="run-toggle" data-command="toggle-run" aria-expanded="${runExpanded}" aria-label="${runExpanded ? t("Réduire le parcours", "Collapse run") : t("Développer le parcours", "Expand run")}">${runExpanded ? "▴" : "▾"}</button>` : ""}<span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small>${runDetails(progress)}<small class="run-capacity">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
+      )}</div><div class="running">${running ? `<button class="run-toggle" data-command="toggle-run" aria-expanded="${runExpanded}" aria-label="${runExpanded ? t("Réduire le parcours", "Collapse run") : t("Développer le parcours", "Expand run")}">${runExpanded ? "▴" : "▾"}</button>` : ""}<span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error && !noMatchingCandidate(r)).length}${t(" décisions attendues", " decisions pending")}</small>${runDetails(progress)}<small class="run-capacity">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
       rows
         .slice(0, limit)
         .map((r) => {
           const p = progress.active?.[r.path];
-          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${expanded.has(r.path) || !!(query || localState || filter)}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${expanded.has(r.path)?"▾":"▸"}</button>` : ""}${esc(r.name)}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
+          return `<div class="torrent ${r.episode ? "episode" : ""} ${selected === r.path ? "selected" : ""}" data-item="${esc(r.path)}" data-stage="${r.stage}" role="button" tabindex="0"><input type="checkbox" data-check="${esc(r.path)}" aria-label="${t("Sélectionner ")}${esc(r.name)}" ${checked.has(r.path) ? "checked" : ""} ${r.context ? "disabled" : ""}><div class="cover" aria-hidden="true">${esc(r.name.slice(0, 2).toUpperCase())}</div><div><div class="title">${r.episodes ? `<button class="pack-toggle" data-pack="${esc(r.path)}" aria-expanded="${expanded.has(r.path) || !!(query || localState || filter)}" aria-label="${t("Épisodes de ")}${esc(r.name)}">${expanded.has(r.path)?"▾":"▸"}</button>` : ""}${esc(r.name)}${r.episodes ? `<small> · ${r.episodes} ${t("épisodes")}${r.context ? t(" · contexte du résultat") : ""}</small>` : ""}</div><small>${bytes(r.size)} · ${esc(r.folder || "")}</small></div><div><span class="badge ${r.error && !noMatchingCandidate(r) ? "warn" : p ? "blue" : ""}">${esc(stateFor(r))}</span>${p ? `<div class="progress"><i style="width:${p.fraction == null ? 35 : Math.round(p.fraction * 100)}%"></i></div>` : ""}</div></div>`;
         })
         .join("") ||
       `<div class="empty">${t("Aucun élément ici. Ajoutez un dossier ou changez le filtre.")}</div>`
@@ -292,7 +306,7 @@ function inspector() {
   const steps = Object.keys(labels),
     index = steps.indexOf(r.stage),
     paused = snapshot.progress?.paused_paths?.includes(r.path);
-  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span>${r.error?`<p class="error">${esc(TLToast.translate(r.error))}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
+  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error && !noMatchingCandidate(r) ? "warn" : ""}">${esc(stateFor(r))}</span>${r.error?`<p class="${noMatchingCandidate(r) ? "muted" : "error"}">${esc(TLToast.translate(r.error))}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
     (r.events || [])
       .slice()
       .reverse()

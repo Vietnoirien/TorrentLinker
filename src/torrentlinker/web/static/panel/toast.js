@@ -67,6 +67,8 @@ const TLToast = (() => {
       "L’opération a échoué. Vérifiez la connexion, les droits sur les dossiers et l’espace disponible avant de réessayer.",
     "Candidates were found, but none match this item's files.":
       "Des candidats ont été trouvés, mais aucun ne correspond aux fichiers de cet élément.",
+    "No candidate found. Try another search.":
+      "Aucun candidat trouvé. Cet élément reste orphelin ; relancez la recherche plus tard.",
     "Only partial Candidates match this item. Review the missing files.":
       "Seuls des candidats partiels correspondent à cet élément. Vérifiez les fichiers manquants.",
     "A full Candidate matches files inside an archive. Extract and verify it.":
