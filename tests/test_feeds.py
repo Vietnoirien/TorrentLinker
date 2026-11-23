@@ -34,6 +34,8 @@ def test_activation_baselines_existing_rows_and_restart_preserves_unread(tmp_pat
     assert [row["infohash"] for row in service.inbox(unread=True)] == ["b" * 40]
     restarted = FeedService(tmp_path / "feeds.sqlite", lambda: source)
     assert restarted.subscriptions()[0]["unread_count"] == 1
+    assert restarted.subscriptions()[0]["item_count"] >= 1
+    assert restarted.counts()["unread"] == 1
     assert restarted.inbox()[0]["discovered_at"] == 200
 
 

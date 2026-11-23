@@ -189,6 +189,10 @@ pre {
   grid-row: 1 / span 2;
   align-self: center;
   font-weight: 700;
+  color: var(--muted);
+}
+.feed-row-badge.has-unread {
+  color: var(--accent);
 }
 .feed-header {
   display: flex;

@@ -112,7 +112,8 @@ async function loadFeeds() {
   const community = $("feeds-community");
   community.replaceChildren(button(feedText("Community rules","Règles communautaires"),()=>communityBrowseDialog("rss",async result=>{for(const rule of result.data.rules){if(rule.include?.length||rule.exclude?.length)throw Error(feedText("Legacy text filters need manual conversion before import.","Les anciens filtres textuels nécessitent une conversion manuelle."));await feedCall("feeds",{subscription:{name:rule.name.slice(0,100),query:rule.query||"",categories:rule.categories||[],preferences:rule.preferences||{},paused:true,mode:"review_only"}})}await navigate("feeds")})));
   const sidebar = $("feeds-sidebar");
-  const row = (name, detail, unread, id, tracker = "") => {
+  // The badge counts a subscription's items; unread ones make it the accent colour.
+  const row = (name, detail, items, unread, id, tracker = "") => {
     const b = button(
       "",
       () => {
@@ -132,22 +133,38 @@ async function loadFeeds() {
         line.append(detail);
         return line;
       })(),
-      element("span", unread ? String(unread) : "", "feed-row-badge"),
+      (() => {
+        const badge = element("span", items ? String(items) : "", "feed-row-badge");
+        if (unread) {
+          badge.classList.add("has-unread");
+          badge.title = feedText(`${unread} unread`, `${unread} non lu(s)`);
+        }
+        return badge;
+      })(),
     );
     return b;
   };
+  const all = row(feedText("All feeds", "Tous les flux"), "", 0, 0, "");
+  // Each release once across subscriptions; filled in without holding up the rest.
+  api("feeds/counts")
+    .then((counts) => {
+      if (sequence !== loadSequence) return;
+      const badge = all.querySelector(".feed-row-badge");
+      badge.textContent = counts.items ? String(counts.items) : "";
+      badge.classList.toggle("has-unread", counts.unread > 0);
+      badge.title = counts.unread
+        ? feedText(`${counts.unread} unread`, `${counts.unread} non lu(s)`)
+        : "";
+    })
+    .catch(() => {});
   sidebar.replaceChildren(
-    row(
-      feedText("All feeds", "Tous les flux"),
-      "",
-      feeds.reduce((n, f) => n + f.unread_count, 0),
-      "",
-    ),
+    all,
     ...feeds.map((f) =>
       row(
         f.name,
         (f.paused ? feedText("Paused", "En pause") + " · " : "") +
           (FEED_MODES()[f.mode] || f.mode),
+        f.item_count,
         f.unread_count,
         f.id,
         f.tracker || "c411",

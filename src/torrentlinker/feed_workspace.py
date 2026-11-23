@@ -91,6 +91,8 @@ class FeedWorkspace:
             if method == "POST":
                 saved = SaveFeed.model_validate(body)
                 return control.save(saved.subscription, approved=saved.approve_automatic)
+        if parts == ["feeds", "counts"] and method == "GET":
+            return feeds.counts()
         if parts == ["feeds", "preview"] and method == "POST":
             return feeds.preview(Subscription.model_validate(body))
         if parts == ["feeds", "judge"] and method == "POST":

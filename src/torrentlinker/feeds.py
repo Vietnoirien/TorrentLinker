@@ -438,9 +438,23 @@ class FeedService:
                         ),
                         (row["id"],),
                     ).fetchone()[0],
+                    "item_count": self.db.execute(
+                        "SELECT COUNT(*) FROM memberships WHERE feed=? AND dismissed=0",
+                        (row["id"],),
+                    ).fetchone()[0],
                 }
                 for row in self.db.execute("SELECT * FROM subscriptions ORDER BY rowid")
             ]
+
+    def counts(self) -> dict[str, int]:
+        """Items across every subscription, each release once even when several follow it."""
+        with self.lock:
+            total, unread = self.db.execute(
+                "SELECT COUNT(DISTINCT infohash), "
+                "COUNT(DISTINCT CASE WHEN unread=1 THEN infohash END) "
+                "FROM memberships WHERE dismissed=0"
+            ).fetchone()
+            return {"items": total, "unread": unread}
 
     def source(self, subscription: Subscription) -> Any:
         """The Indexer a subscription polls: c411's, or the Tracker's own."""
