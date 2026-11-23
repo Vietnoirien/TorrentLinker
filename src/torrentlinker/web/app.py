@@ -335,6 +335,40 @@ def create_app(
                     parameters={"refresh_newest": True},
                 )
 
+    def tr4ker_catalogue_loop() -> None:
+        """tr4ker's Catalogue, once its Indexer is added with a key: resume the crawl of its
+        full feed, then refresh from the newest. Idle for anyone who does not use tr4ker."""
+        from torrentlinker import tr4ker_catalogue
+        from torrentlinker.torznab import TorznabIndexer
+        from torrentlinker.trackers import TR4KER, tracker
+
+        def torznab() -> TorznabIndexer:
+            found = service.indexer_for(TR4KER)
+            assert isinstance(found, TorznabIndexer)
+            return found
+
+        while not shutdown.wait(900):
+            try:
+                entry = service.settings.tracker_indexer(TR4KER)
+            except ValueError:
+                continue
+            if not (
+                service.configured
+                and entry.enabled
+                and service.secrets.get(tracker(TR4KER).api_key_secret)
+            ):
+                continue
+            with jobs.lock:
+                if jobs.active() or not tr4ker_catalogue.due(service.store):
+                    continue
+                jobs.submit(
+                    "catalogue",
+                    lambda stop, progress: asdict(
+                        tr4ker_catalogue.run(torznab(), service.store, stop, progress)
+                    ),
+                    parameters={"tracker": TR4KER},
+                )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         monitor = threading.Thread(target=verify_loop, daemon=True, name="verification-monitor")
@@ -343,6 +377,9 @@ def create_app(
         threading.Thread(target=history_loop, daemon=True, name="profile-history").start()
         if monitor_verifications:
             threading.Thread(target=catalogue_loop, daemon=True, name="catalogue-refresh").start()
+            threading.Thread(
+                target=tr4ker_catalogue_loop, daemon=True, name="tr4ker-catalogue"
+            ).start()
             CrossSeedRunner(cross_seed_engines, shutdown).start()
         if members_enabled:
             app.state.notifications.start()

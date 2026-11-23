@@ -19,6 +19,7 @@ from typing import Any
 from guessit import guessit
 
 from torrentlinker import media_artwork
+from torrentlinker.trackers import DEFAULT_TRACKER, tracker, valid_order
 
 LATEST_PAGES = 20  # at most this many listing pages per refresh; known releases end it sooner
 RUN_INTERVAL = 600  # seconds between two refreshes of the same client
@@ -170,23 +171,26 @@ class TrackerRows:
         wanted = plain(film["title"])
         words = [w for w in wanted.split() if len(w) > 1][:6]
         releases = []
-        for row in setup.store.catalogue_titled(words, limit=60):
-            if not 2000 <= (row.category or 0) <= 2999:
-                continue
-            if film["year"] and film["year"] not in row.title:
-                continue  # cheap before guessing the name
-            guessed = guessit(row.title, {"type": "movie"})
-            if plain(guessed.get("title") or "") != wanted:
-                continue
-            releases.append(
-                {
+        # Both Trackers' Catalogues (ADR-0025); each release says which one it is on.
+        for site in self._catalogue_trackers(setup):
+            for row in self._site_store(setup, site).catalogue_titled(words, limit=60):
+                if not 2000 <= (row.category or 0) <= 2999:
+                    continue
+                if film["year"] and film["year"] not in row.title:
+                    continue  # cheap before guessing the name
+                guessed = guessit(row.title, {"type": "movie"})
+                if plain(guessed.get("title") or "") != wanted:
+                    continue
+                release = {
                     "hash": row.infohash.lower(),
                     "name": row.title,
                     "size": row.size,
                     "seeders": row.seeders,
                     "category": row.category,
                 }
-            )
+                if site != DEFAULT_TRACKER:  # c411's entries stay as they always were
+                    release.update(tracker=site, download_url=row.download_url)
+                releases.append(release)
         entry.update(
             releases=releases,
             files=[{"name": f["name"], "size": f["size"]} for f in film["files"]],
@@ -281,18 +285,42 @@ class TrackerRows:
 
     # -- Rows -------------------------------------------------------------------------------
 
-    def _best(self, preferences, entry: dict[str, Any]) -> dict[str, Any] | None:
-        """The entry's best release under the current profile, so a new profile applies at once."""
+    @staticmethod
+    def _site_store(setup, site: str):
+        return setup.store if site == DEFAULT_TRACKER else setup.store.for_tracker(site)
+
+    def _catalogue_trackers(self, setup) -> list[str]:
+        """The Trackers whose Catalogue holds something, in the Owner's Tracker order."""
+        if not hasattr(setup.store, "for_tracker"):
+            return [DEFAULT_TRACKER]
+        order = valid_order(getattr(setup.settings, "tracker_order", None))
+        return [
+            t for t in order if t == DEFAULT_TRACKER or self._site_store(setup, t).catalogue_size()
+        ]
+
+    def _best(
+        self, preferences, entry: dict[str, Any], order: list[str] | None = None
+    ) -> dict[str, Any] | None:
+        """The entry's best release under the current profile, so a new profile applies at once.
+
+        ReleaseScore decides first; a tie goes to the Tracker first in the Owner's order, then
+        to the better seeded release (ADR-0025)."""
+        rank = {t: i for i, t in enumerate(valid_order(order))}
+
+        def preference(release: dict[str, Any]) -> tuple[float, int, int]:
+            return (
+                release["score"],
+                -rank.get(release.get("tracker", DEFAULT_TRACKER), len(rank)),
+                release["seeders"],
+            )
+
         best = None
         for release in entry.get("releases") or []:
             result = self._score(preferences, release["name"], release["size"], entry["facts"])
             if result.get("score") is None:
                 continue
             scored = {**release, "score": result["score"], "color": result.get("color", "")}
-            if best is None or (scored["score"], scored["seeders"]) > (
-                best["score"],
-                best["seeders"],
-            ):
+            if best is None or preference(scored) > preference(best):
                 best = scored
         return best
 
@@ -309,20 +337,21 @@ class TrackerRows:
         if urlsplit(setup.settings.indexer.url).hostname != "c411.org":
             return {}
         preferences = setup.settings.release_score
+        order = setup.settings.tracker_order
         threshold = Preferences.model_validate(preferences).threshold
         library = self._library_films(client_id)
         latest = self._tracker_cache(client_id, "tracker-new")
         known = self._tracker_cache(client_id, "tracker-upgrade")
         available = []
         for key, entry in latest.items():
-            best = None if key in library else self._best(preferences, entry)
+            best = None if key in library else self._best(preferences, entry, order)
             if best and best["score"] >= threshold:
                 available.append(self._tracker_item(entry, best))
         # The newest first, as in a "recently added" row.
         available.sort(key=lambda item: -(item["tracker"]["published_at"] or 0))
         upgrades = []
         for key, entry in known.items():
-            best = self._best(preferences, entry) if key in library else None
+            best = self._best(preferences, entry, order) if key in library else None
             if not best or best["score"] < threshold:
                 continue
             own = max(
@@ -378,6 +407,7 @@ class TrackerRows:
             "artwork_url": "tracker" if facts.get("poster_url") or entry.get("library_id") else "",
             "available": True,
             "tracker": {
+                **({"site": best["tracker"]} if best.get("tracker") else {}),
                 "hash": best["hash"],
                 "name": best["name"],
                 "size": best["size"],
@@ -449,17 +479,23 @@ class TrackerRows:
             raise ValueError(
                 "Choose a Download Folder for this category in Settings before queueing."
             )
-        indexer = setup.indexer()
+        site = best.get("tracker", DEFAULT_TRACKER)
+        indexer = setup.indexer() if site == DEFAULT_TRACKER else setup.tracker_indexer(site)
         candidate = Candidate(
             best["name"],
             best["size"],
-            indexer.unredact(download_url(infohash)),
+            indexer.unredact(best.get("download_url") or download_url(infohash)),
             best["seeders"],
             infohash,
-            f"https://c411.org/torrents/{infohash}",
+            f"{tracker(site).origin}/torrents/{infohash}",
             categories=(category,) if category is not None else (),
         )
-        added = enqueue(setup.store, indexer, candidate, setup.verified_download_folder(category))
+        added = enqueue(
+            self._site_store(setup, site),
+            indexer,
+            candidate,
+            setup.verified_download_folder(category),
+        )
         return {"queued": bool(added), "title": best["name"]}
 
     def tracker_download(self, client_id, setup, infohash: str) -> dict[str, Any]:
