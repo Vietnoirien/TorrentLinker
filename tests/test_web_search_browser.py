@@ -1,5 +1,6 @@
 """Opt-in browser coverage of the Search page against a fake c411."""
 
+import dataclasses
 import os
 import re
 import socket
@@ -606,6 +607,55 @@ def test_adult_content_adds_and_removes_the_xxx_pill(tmp_path, monkeypatch):
             expect(pills.get_by_role("button", name="XXX")).to_have_count(0)
             expect(pills.locator("[aria-pressed=true]")).to_contain_text("All")
             assert errors == []
+            browser.close()
+    finally:
+        server.should_exit = True
+
+
+def test_merged_search_badges_each_row_and_switches_trackers(tmp_path, monkeypatch):
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_tr4ker_native import listing, row
+    from torrentlinker import tr4ker_native
+    from torrentlinker.web.operations import Operations
+
+    seen: list = []
+    fake_net(monkeypatch, seen)
+    monkeypatch.setattr(Operations, "searchable_trackers", lambda self: ["c411", "tr4ker"])
+
+    def native(session, fallback, query, **options):
+        page = tr4ker_native.parse_listing(listing(row(1), row(2)))
+        if options["sort"] in tr4ker_native.LOCAL_SORTS:
+            page = dataclasses.replace(
+                page, notes=[f"Sorted by {options['sort']} here: tr4ker cannot sort by it."]
+            )
+        return page
+
+    monkeypatch.setattr(tr4ker_native, "search", native)
+    server, base = serve(tmp_path)
+    try:
+        with sync_playwright() as playwright:
+            browser, page, errors = open_search(playwright, base)
+            panel = page.frame_locator("#search-frame")
+            expect(panel.locator(".sr-row")).to_have_count(4)
+            expect(panel.locator(".sr-row .tag.tracker.tr4ker")).to_have_count(2)
+            expect(panel.locator(".sr-row .tag.tracker.c411")).to_have_count(2)
+            expect(panel.locator(".sr-row", has_text="FREELEECH")).to_have_count(1)
+            expect(panel.locator("#search-summary")).to_have_text("4 results · c411 2 · tr4ker 2")
+            expect(panel.locator("#search-unavailable")).to_contain_text("Not on tr4ker")
+            expect(panel.locator("#search-sort .chip")).to_have_count(6)
+            panel.locator("#search-trackers [data-tracker=c411]").click()
+            expect(panel.locator(".sr-row")).to_have_count(2)
+            expect(panel.locator(".sr-row .tag.tracker.c411")).to_have_count(0)
+            panel.locator("#search-trackers [data-tracker=tr4ker]").click()  # one stays on
+            expect(panel.locator("#search-trackers [data-tracker=tr4ker]")).to_have_attribute(
+                "aria-pressed", "true"
+            )
+            panel.locator("#search-trackers [data-tracker=c411]").click()
+            expect(panel.locator(".sr-row")).to_have_count(4)
+            panel.locator("#search-sort .chip", has_text="Seeders").click()
+            expect(panel.locator("#search-backend-note")).to_contain_text("cannot sort by Seeders")
+            assert not errors
             browser.close()
     finally:
         server.should_exit = True

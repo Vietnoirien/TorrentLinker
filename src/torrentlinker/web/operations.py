@@ -31,6 +31,7 @@ from torrentlinker.torrent_management import (
 )
 from torrentlinker.torrent_search import native_search
 from torrentlinker.torrent_selection import SelectionCriteria, select_rows
+from torrentlinker.tr4ker_native import SLUG
 from torrentlinker.upload_queue import reset_local
 from torrentlinker.web.archives import ArchiveReseeds
 from torrentlinker.web.library import Library
@@ -203,9 +204,14 @@ class JobRequest(BaseModel):
     @field_validator("hashes", "plan_selection")
     @classmethod
     def hashes_valid(cls, hashes: list[str]) -> list[str]:
-        if any(len(h) != 40 or any(c not in "0123456789abcdefABCDEF" for c in h) for h in hashes):
+        def valid(h: str) -> bool:
+            if h.startswith("tr4ker:"):  # a tr4ker row has no info hash: its slug is its key
+                return bool(SLUG.fullmatch(h.removeprefix("tr4ker:")))
+            return len(h) == 40 and all(c in "0123456789abcdefABCDEF" for c in h)
+
+        if not all(valid(h) for h in hashes):
             raise ValueError("Invalid torrent hash.")
-        return list(dict.fromkeys(h.lower() for h in hashes))
+        return list(dict.fromkeys(h if h.startswith("tr4ker:") else h.lower() for h in hashes))
 
     @model_validator(mode="after")
     def valid_plan_range(self) -> JobRequest:
@@ -558,12 +564,22 @@ class Operations:
 
         settings = self.setup.settings
         visible = settings.visible_categories(settings.indexer_categories)
-        return search_options(
+        options = search_options(
             self.setup.indexer(),
             category,
             {str(k): asdict(settings.indexer_categories[k]) for k in visible},
             adult=settings.adult_content,
         )
+        return {**options, "trackers": self.searchable_trackers()}
+
+    def searchable_trackers(self) -> list[str]:
+        """The Trackers Search can read: tr4ker once it is added or its companion is paired."""
+        session = self.setup.tr4ker_session()
+        try:
+            added = self.setup.settings.find_indexer("tr4ker").enabled
+        except ValueError:
+            added = False
+        return ["c411", "tr4ker"] if added or (session is not None and session.paired) else ["c411"]
 
     def run(
         self, request: JobRequest, stop: threading.Event, progress: Callable[[Any], None]
@@ -1078,9 +1094,9 @@ class Operations:
                 self.score_listings.pop(next(iter(self.score_listings)))
             mark_best(result)
             if "tr4ker" in request.trackers:
-                from torrentlinker.merged_search import sort_merged
+                from torrentlinker.merged_search import filter_tracker, sort_merged
 
-                result = sort_merged(result, request.merged_sort)
+                result = sort_merged(filter_tracker(result, request.trackers), request.merged_sort)
                 metadata["trackers"] = request.trackers
                 metadata["tr4ker"] = tr4ker_info
             self.setup.store.save_catalogue(catalogue)

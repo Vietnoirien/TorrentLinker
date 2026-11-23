@@ -926,3 +926,50 @@ html[data-theme="dark"] button.release-score-pill.score-red {
   text-align: center;
   color: var(--muted);
 }
+
+/* Merged Search (ADR-0025): the Tracker badge, the Trackers chips and the notes. */
+.tag.tracker {
+  --tag: #8b5cf6;
+  font-weight: 650;
+}
+.tag.tracker.c411 {
+  --tag: #3b82f6;
+}
+.tag.tracker.tr4ker {
+  --tag: #f97316;
+}
+.tracker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.tracker-row .label {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.tracker-row .chip .dot {
+  margin-right: 7px;
+  background: var(--tag);
+}
+.merged-note {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.merged-note[hidden] {
+  display: none;
+}
+.merged-note.warn {
+  border-color: var(--warning);
+}
+.unavailable {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}

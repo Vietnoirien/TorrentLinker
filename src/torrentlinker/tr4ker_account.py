@@ -168,6 +168,11 @@ class Tr4kerAccount:
     # ---- on-demand reads through the tab's session (native Search, detail) ----
 
     @property
+    def paired(self) -> bool:
+        with self.lock:
+            return bool(self._pair)
+
+    @property
     def can_read(self) -> bool:
         """Paired, and the tr4ker tab asked for work recently."""
         with self.lock:

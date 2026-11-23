@@ -28,7 +28,21 @@ const SS = {
   timer: null,
   density: "comfortable",
   posters: true,
+  available: ["c411"],
+  trackers: ["c411"],
+  tr4ker: {},
 };
+const TRACKER_COLORS = { c411: "#3b82f6", tr4ker: "#f97316" };
+// With both Trackers the sorts are the ones tr4ker's rows can follow; the backend names differ.
+const MERGED_SORTS = {
+  createdAt: "recent",
+  seeders: "seeders",
+  leechers: "leechers",
+  size: "size",
+  completions: "completed",
+  name: "title",
+};
+const merged = () => SS.trackers.includes("tr4ker");
 const FALLBACK_COLORS = [
   "#3b82f6",
   "#f59e0b",
@@ -336,6 +350,71 @@ function syncToggles() {
 }
 
 /* ---- pills, sort, pages ---------------------------------------------------------- */
+function renderTrackers() {
+  const host = $("search-trackers");
+  host.hidden = !SS.available.includes("tr4ker");
+  host.replaceChildren(
+    host.querySelector(".label"),
+    ...Object.keys(TRACKER_COLORS).map((name) => {
+      const b = chipButton(
+        "",
+        SS.trackers.includes(name),
+        () => {
+          const on = SS.trackers.includes(name);
+          if (on && SS.trackers.length === 1) return; // at least one Tracker stays on
+          SS.trackers = Object.keys(TRACKER_COLORS).filter((t) =>
+            t === name ? !on : SS.trackers.includes(t),
+          );
+          if (merged() && !(SS.sort.key in MERGED_SORTS))
+            SS.sort = { key: "createdAt", order: "desc" };
+          renderTrackers();
+          renderSort();
+          return runSearch(1);
+        },
+        "chip",
+      );
+      b.style.setProperty("--tag", TRACKER_COLORS[name]);
+      b.dataset.tracker = name;
+      b.append(element("span", undefined, "dot"), name);
+      return b;
+    }),
+  );
+}
+
+// What the tr4ker side of the last search says: its fallback, its own sort and its failure.
+function renderTrackerNotes() {
+  const info = SS.tr4ker || {};
+  const note = $("search-backend-note");
+  const names = Object.fromEntries(
+    SORTS().map(([key, label]) => [key, label]),
+  );
+  if (!merged() || info.error) note.hidden = true;
+  else if (info.backend === "torznab") {
+    note.hidden = false;
+    note.textContent = say(
+      "The tr4ker companion is not paired: tr4ker rows come from Torznab (no leechers or completions). Pair it in Settings > Connection for native results.",
+      "Le compagnon tr4ker n'est pas associé : les lignes tr4ker viennent de Torznab (sans leechers ni complétés). Associez-le dans Réglages > Connexion pour les résultats natifs.",
+    );
+  } else if (info.notes?.length) {
+    note.hidden = false;
+    note.textContent = say(
+      `tr4ker cannot sort by ${names[SS.sort.key]} itself: its rows are sorted here, within the page it returned.`,
+      "tr4ker ne sait pas trier par ce critère : ses lignes sont triées ici, dans la page reçue.",
+    );
+  } else note.hidden = true;
+  const error = $("search-error-note");
+  error.hidden = !(merged() && info.error);
+  error.textContent = info.error
+    ? say(`tr4ker did not answer: ${info.error}`, `tr4ker n'a pas répondu : ${info.error}`)
+    : "";
+  $("search-unavailable").textContent = merged()
+    ? say(
+        "Not on tr4ker: Zen, trust votes, release team.",
+        "Absent sur tr4ker : Zen, votes de confiance, équipe.",
+      )
+    : "";
+}
+
 function renderPills() {
   const roots = searchRoots();
   const host = $("search-pills");
@@ -382,11 +461,12 @@ function renderActions() {
 
 function renderSort() {
   const host = $("search-sort");
-  host.hidden = !SS.native;
-  host.closest(".results-sort").hidden = !SS.native;
+  host.hidden = !(SS.native || merged());
+  host.closest(".results-sort").hidden = !(SS.native || merged());
   renderActions();
   host.replaceChildren(
     ...SORTS()
+      .filter(([key]) => !merged() || key in MERGED_SORTS)
       .filter(([key]) => key !== "relevance" || searchQuery())
       .map(([key, label]) => {
         const active = SS.sort.key === key;
@@ -505,6 +585,12 @@ function cover(row, info) {
   }
   return box;
 }
+function trackerBadge(row) {
+  const b = element("span", row.tracker, `tag tracker ${row.tracker}`);
+  b.title = say(`Tracker: ${row.tracker}`, `Tracker : ${row.tracker}`);
+  b.dataset.tracker = row.tracker;
+  return b;
+}
 function richRow(row) {
   const info = SS.listing[row.hash];
   const el = element("div", undefined, "sr-row");
@@ -522,6 +608,7 @@ function richRow(row) {
   el.classList.toggle("selected", check.checked);
   const main = element("div", undefined, "sr-main");
   const line1 = element("div", undefined, "sr-line");
+  if (row.tracker) line1.append(trackerBadge(row));
   const badge = (row.native_category_label || "").split(" / ").pop();
   if (badge) {
     const b = element("span", badge, "tag kind");
@@ -535,6 +622,7 @@ function richRow(row) {
   );
   if (!info) title.title = row.title; // with details, the hover card replaces the tooltip
   line1.append(title, releaseScorePill(row));
+  if (row.freeleech) line1.append(element("span", "FREELEECH", "tag tag-zen"));
   if (info?.year) line1.append(element("span", String(info.year), "muted"));
   if (info?.rating)
     line1.append(element("span", `★ ${info.rating.toFixed(1)}`, "tag rating"));
@@ -550,7 +638,7 @@ function richRow(row) {
   }
   main.append(line1, release, tags);
   const stats = element("div", undefined, "sr-stats");
-  const leech = info?.leechers ?? 0;
+  const leech = info?.leechers ?? row.leechers ?? 0;
   const bar = element("div", undefined, "seedbar");
   const total = row.seeders + leech;
   bar.style.setProperty(
@@ -571,6 +659,8 @@ function richRow(row) {
     );
   const when = element("div", undefined, "sr-age");
   when.append(element("span", age(row.published_at)));
+  if (!info && row.completions !== null && row.completions !== undefined)
+    when.append(element("span", `${row.completions} compl.`, "muted"));
   if (info) {
     when.append(
       element(
@@ -599,6 +689,10 @@ function richRow(row) {
   if (row.note !== null && row.note !== undefined) {
     zen.append(element("small", `≈ ${num(row.note)} Note`, "muted"));
   }
+  if (row.tracker === "tr4ker")
+    zen.append(
+      element("small", say("No Zen on tr4ker", "Pas de Zen sur tr4ker"), "muted"),
+    );
   el.append(
     check,
     cover(row, info),
@@ -655,6 +749,7 @@ function compactColumns() {
         const info = SS.listing[r.hash];
         const wrap = element("div", undefined, "compact-name");
         const line = element("div", undefined, "sr-line");
+        if (r.tracker) line.append(trackerBadge(r));
         line.append(
           button(r.title, () => details(r), "link sr-release"),
           releaseScorePill(r),
@@ -693,7 +788,7 @@ function compactColumns() {
     {
       label: say("Done", "Compl."),
       sortKey: "done",
-      render: (r) => num0(SS.listing[r.hash]?.completions, ""),
+      render: (r) => num0(SS.listing[r.hash]?.completions ?? r.completions, ""),
     },
     {
       label: "Seeders",
@@ -703,7 +798,7 @@ function compactColumns() {
     {
       label: "Leechers",
       sortKey: "leech",
-      render: (r) => num0(SS.listing[r.hash]?.leechers, "down"),
+      render: (r) => num0(SS.listing[r.hash]?.leechers ?? r.leechers, "down"),
     },
     { label: "≈ Zen / j", render: (r) => num(r.zen) },
     { label: "≈ Note", render: (r) => num(r.note) },
@@ -824,9 +919,12 @@ function runSearch(page = 1) {
       category: Number(SS.category) || null,
       filters: searchFilters(),
       search_listing: true,
+      trackers: SS.trackers,
+      merged_sort: MERGED_SORTS[SS.sort.key] || "recent",
     },
     (r) => {
       SS.searched = true;
+      SS.tr4ker = r.tr4ker || {};
       SS.page = r.page;
       SS.pages = Math.max(1, r.pages);
       SS.total = r.total;
@@ -846,6 +944,13 @@ function runSearch(page = 1) {
               `${searchNumber(r.total)} torrents`,
             );
       if (SS.totalSize) summary += (summary ? " · " : "") + bytes(SS.totalSize);
+      if (merged())
+        summary =
+          say(`${SS.rows.length} results`, `${SS.rows.length} résultats`) +
+          Object.keys(TRACKER_COLORS)
+            .filter((t) => SS.trackers.includes(t))
+            .map((t) => ` · ${t} ${SS.rows.filter((x) => x.tracker === t).length}`)
+            .join("");
       $("search-summary").textContent = summary;
       $("search-status").textContent = r.window_limited
         ? say(
@@ -856,6 +961,7 @@ function runSearch(page = 1) {
       renderPills();
       syncToggles();
       renderSort();
+      renderTrackerNotes();
       renderResults();
       refreshQueueCount();
     },
@@ -909,6 +1015,13 @@ function loadSearchOptions(then) {
   return job(
     { kind: "search-options", category: Number(SS.category) || null },
     (r) => {
+      const hadTr4ker = SS.available.includes("tr4ker");
+      SS.available = r.trackers || ["c411"];
+      if (!SS.available.includes("tr4ker")) SS.trackers = ["c411"];
+      else if (!hadTr4ker) SS.trackers = [...SS.available]; // both, once tr4ker is there
+      if (merged() && !(SS.sort.key in MERGED_SORTS))
+        SS.sort = { key: "createdAt", order: "desc" };
+      renderTrackers();
       SS.native = r.backend === "c411-native";
       SS.categories = r.categories || {};
       SS.colors = r.root_colors || {};
@@ -1022,6 +1135,8 @@ function searchRetranslate() {
     renderChosen();
     renderSort();
   }
+  renderTrackers();
+  renderTrackerNotes();
   syncToggles();
   renderResults();
   refreshQueueCount();

@@ -90,6 +90,14 @@
           </button>
         </form>
         <div
+          id="search-trackers"
+          class="tracker-row"
+          role="group"
+          aria-label="Trackers"
+        >
+          <span class="label">TRACKERS</span>
+        </div>
+        <div
           id="search-pills"
           class="search-pills"
           role="group"
@@ -121,6 +129,7 @@
           >
             ♡ Soins palliatifs
           </button>
+          <span id="search-unavailable" class="unavailable"></span>
           <span class="spacer"></span>
           <button
             type="button"
@@ -143,6 +152,8 @@
         </div>
         <div id="search-facets" class="search-facets"></div>
         <div id="search-chosen" class="search-facets" hidden></div>
+        <p id="search-backend-note" class="merged-note" role="status" hidden></p>
+        <p id="search-error-note" class="merged-note warn" role="status" hidden></p>
         <div
           id="search-pages-top"
           class="search-pages"

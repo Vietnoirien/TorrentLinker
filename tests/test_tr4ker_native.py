@@ -8,7 +8,7 @@ import pytest
 from torrentlinker import tr4ker_native
 from torrentlinker.companion_downloads import SessionFetchError
 from torrentlinker.indexer import Candidate, SearchQuery
-from torrentlinker.merged_search import sort_merged, tr4ker_row
+from torrentlinker.merged_search import filter_tracker, sort_merged, tr4ker_row
 from torrentlinker.tr4ker_account import Tr4kerAccount
 from torrentlinker.web.operations import JobRequest, Operations
 
@@ -191,6 +191,39 @@ def test_both_trackers_merge_with_a_badge_and_sort_across():
     assert [r["tracker"] for r in sort_merged([c411, badge], "title")] == ["tr4ker", "c411"]
     same = {**c411, "title": badge["title"]}  # the same release on both stays two rows
     assert len(sort_merged([same, badge], "seeders")) == 2
+
+
+def test_a_tracker_switched_off_leaves_its_rows_out():
+    rows = [{"tracker": "c411", "title": "a"}, {"tracker": "tr4ker", "title": "b"}, {"title": "c"}]
+    assert [r["title"] for r in filter_tracker(rows, ["tr4ker"])] == ["b"]
+    assert [r["title"] for r in filter_tracker(rows, ["c411"])] == ["a", "c"]
+
+
+def test_a_tr4ker_key_is_a_valid_selection_but_a_bad_slug_is_not():
+    key = "tr4ker:Film-1_2020"
+    assert JobRequest(kind="search", hashes=[key, "AB" * 20]).hashes == [key, "ab" * 20]
+    with pytest.raises(ValueError, match="Invalid torrent hash"):
+        JobRequest(kind="search", hashes=["tr4ker:../x"])
+
+
+def test_search_offers_tr4ker_once_it_is_added_or_its_companion_is_paired():
+    def stub(entry, paired):
+        def find(identifier):
+            if entry is None:
+                raise ValueError("Unknown Indexer.")
+            return SimpleNamespace(enabled=entry)
+
+        return SimpleNamespace(
+            setup=SimpleNamespace(
+                settings=SimpleNamespace(find_indexer=find),
+                tr4ker_session=lambda: SimpleNamespace(paired=paired),
+            )
+        )
+
+    assert Operations.searchable_trackers(stub(None, False)) == ["c411"]
+    assert Operations.searchable_trackers(stub(False, False)) == ["c411"]
+    assert Operations.searchable_trackers(stub(True, False)) == ["c411", "tr4ker"]
+    assert Operations.searchable_trackers(stub(None, True)) == ["c411", "tr4ker"]
 
 
 def test_operations_adds_tr4ker_rows_and_reports_a_failure():
