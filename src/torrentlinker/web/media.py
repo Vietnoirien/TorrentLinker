@@ -7,6 +7,7 @@ reads the client that holds the item. Progress, playlists and sessions are the a
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Literal
 
 from fastapi import HTTPException, Query, Request, Response
@@ -483,7 +484,13 @@ def media_routes(app, agent, assistant):
 
     @app.get("/api/media/items/{identifier}/artwork")
     @needs(*WATCH)
-    def artwork(identifier: str, request: Request, client_id: str = ""):
+    def artwork(
+        identifier: str,
+        request: Request,
+        client_id: str = "",
+        size: Literal["grid", "hero"] | None = None,
+        v: str = "",
+    ):
         if not identifier.startswith("tracker-"):
             client_id = item(request, client_id, identifier)
         elif not media.sees_tracker(actor(request)):
@@ -491,12 +498,34 @@ def media_routes(app, agent, assistant):
         else:
             client_id = target(request, client_id)
         try:
-            path = media.artwork(client_id, identifier)
+            path = (
+                media.artwork_variant(client_id, identifier, size)
+                if size
+                else media.artwork(client_id, identifier)
+            )
             if path is None:
                 raise ValueError("Artwork unavailable.")
-            return FileResponse(path)
+            info = path.stat()
         except (OSError, ValueError) as error:
             raise HTTPException(404, "Artwork unavailable.") from error
+        etag = (
+            '"'
+            + hashlib.sha256(f"{path}|{info.st_mtime_ns}|{info.st_size}".encode()).hexdigest()[:32]
+            + '"'
+        )
+        # The row's URL carries a version (`v`) that changes with the poster: a browser keeps it;
+        # a bare URL is revalidated by its ETag every time.
+        headers = {
+            "ETag": etag,
+            "Cache-Control": "private, max-age=31536000, immutable" if v else "private, no-cache",
+        }
+        known = {
+            tag.strip().removeprefix("W/")
+            for tag in request.headers.get("if-none-match", "").split(",")
+        }
+        if etag in known or "*" in known:
+            return Response(status_code=304, headers=headers)
+        return FileResponse(path, headers=headers, media_type="image/webp" if size else None)
 
     @app.get("/api/media/items/{identifier}/subtitles/{subtitle_id}")
     @needs(*WATCH)

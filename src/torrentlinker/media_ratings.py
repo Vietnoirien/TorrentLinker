@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from torrentlinker import age_ratings
+from torrentlinker import age_ratings, media_artwork
 from torrentlinker.age_ratings import Found
 
 TMDB_RETRY = 7 * 86400  # a title TMDb did not rate is asked again a week later
@@ -119,11 +119,7 @@ class AgeRatings:
                 "series": bool(body.get("series")),
                 "year": body.get("year") or "",
                 "genre": body.get("genre") or "",
-                "artwork_url": (
-                    f"api/media/items/{row['id']}/artwork?client_id={client_id}"
-                    if body.get("artwork") or body.get("remote_artwork")
-                    else ""
-                ),
+                "artwork_url": media_artwork.link(row["id"], client_id, body),
                 "suggestion": json.loads(row["suggestion"]) if row["suggestion"] else None,
             }
         return list(found.values())

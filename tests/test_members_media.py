@@ -123,6 +123,7 @@ def test_a_hidden_item_is_missing_to_a_member_even_with_a_guessed_id(server):
     for response in (
         browser.get(f"{item}/stream", headers={"Range": "bytes=0-3"}),
         browser.get(f"{item}/artwork"),
+        browser.get(f"{item}/artwork?size=grid&v=x"),
         browser.get(item),
         browser.get(f"{item}/subtitles/any"),
         browser.get(f"{item}/playback"),

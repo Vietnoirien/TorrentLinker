@@ -17,10 +17,19 @@ const prefs=new Map();
 window.mediaHostPreferences={getItem:key=>prefs.get(key),setItem:(key,value)=>{prefs.set(key,value);if(panelRequest)guard(()=>panelRequest("preferences",key==="tl-media-horizon"?{horizon:value}:{layout:value}))}};
 const artCache=new Map();
 const artPending=[];let artActive=0;
-function mediaImage(image,row){
-  // Cache and bound owner-side image requests; observers fetch only visible posters.
+// The Web's posters are plain lazy images of the artwork URL, sized for where they sit; the desktop's
+// page may not load images, so its posters cross the bridge as data URLs, four at a time.
+function mediaImage(image,row,size="grid"){
   image.dataset.artId=row.id;
   image.dataset.artClient=state.clientId;
+  image.dataset.artSize=size;
+  if(environment.mode==="web"){
+    // A library row carries its versioned URL; a tracker suggestion only a flag. Relative to the shell, not this frame.
+    const link=row.artwork_url.startsWith("api/")?row.artwork_url:`api/media/items/${encodeURIComponent(row.id)}/artwork?client_id=${encodeURIComponent(state.clientId)}`;
+    const url=new URL(link,environment.app_base);url.searchParams.set("size",size);
+    image.loading="lazy";image.decoding="async";image.src=url.href;return;
+  }
+  // Cache and bound owner-side image requests; observers fetch only visible posters.
   artObserver.observe(image);
 }
 const artObserver=new IntersectionObserver(entries=>{

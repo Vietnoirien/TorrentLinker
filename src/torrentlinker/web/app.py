@@ -564,14 +564,15 @@ def create_app(
             response.headers["Content-Security-Policy"] = (
                 "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                 + (
-                    "img-src data:; "
+                    "img-src 'self' data:; "  # Médias loads its posters from the artwork URL
+                    if route == "/static/media/view.html"
+                    else "img-src data:; "
                     if route
                     in {
                         "/static/profile/view.html",
                         "/static/upload/view.html",
                         "/static/search/view.html",
                         "/static/assistant/view.html",
-                        "/static/media/view.html",
                         "/static/player-details/view.html",
                     }
                     else "img-src 'self'; "

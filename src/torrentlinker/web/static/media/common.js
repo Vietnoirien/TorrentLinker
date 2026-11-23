@@ -34,7 +34,7 @@ function mediaLogo() {
 function mediaArt(row, className = "") {
   const art = element("div", undefined, `media-art ${className}`);
   if (row.artwork_url) {
-    const image = element("img"); if (typeof mediaImage === "function") mediaImage(image, row); else image.src = row.artwork_url; image.alt = ""; image.loading = "lazy";
+    const image = element("img"); if (typeof mediaImage === "function") mediaImage(image, row, /media-feature-(art|poster)/.test(className) ? "hero" : "grid"); else image.src = row.artwork_url; image.alt = ""; image.loading = "lazy";
     image.onerror = () => { image.remove(); art.classList.add("missing-art"); };
     art.append(image);
   } else art.classList.add("missing-art");

@@ -18,7 +18,7 @@ from xml.etree import ElementTree
 
 from guessit import guessit
 
-from torrentlinker import media_tracks
+from torrentlinker import media_artwork, media_tracks
 from torrentlinker.accounts import OWNER, OWNER_ACTOR, Actor, Permission
 from torrentlinker.domain import ContentKind
 from torrentlinker.media_ratings import AgeRatings
@@ -1070,11 +1070,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             oav=bool(body.get("oav")),
             position=saved["position"] if saved else 0,
             watched=bool(saved["watched"]) if saved else False,
-            artwork_url=(
-                f"api/media/items/{record['id']}/artwork?client_id={record['client']}"
-                if body.get("artwork") or body.get("remote_artwork")
-                else ""
-            ),
+            artwork_url=media_artwork.link(record["id"], record["client"], body),
         )
         if not check:
             public.update(
@@ -1464,18 +1460,28 @@ class MediaLibrary(TrackerRows, AgeRatings):
         self.checked_path(client_id, row["path"], row["folder"])
         if image.startswith("asset:"):
             key = image[6:]
-            import re
-
             if not re.fullmatch(r"[a-f0-9]{64}\.png", key):
                 raise ValueError("Artwork unavailable.")
             path = self.agent.setup.path.parent / "media-artwork" / key
             if path.is_symlink() or not path.is_file():
                 raise ValueError("Artwork unavailable.")
             return path
-        data = self.sidecar(client_id, Path(image), row["folder"], 8 * 1024 * 1024)
-        if not data.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")):
+        # A local poster is checked once and only its first bytes read (a copy is made per size).
+        checked = self.checked_path(client_id, image, row["folder"])
+        if checked.stat().st_size > 8 * 1024 * 1024:
             raise ValueError("Artwork is unavailable.")
-        return self.checked_path(client_id, image, row["folder"])
+        with checked.open("rb") as source:
+            head = source.read(8)
+        if not head.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")):
+            raise ValueError("Artwork is unavailable.")
+        return checked
+
+    def artwork_variant(self, client_id, identifier, size):
+        """The poster as the small WebP of `size` ("grid" or "hero"), or None without a poster."""
+        path = self.artwork(client_id, identifier)
+        if path is None:
+            return None
+        return media_artwork.variant(path, self.agent.setup.path.parent / "media-artwork", size)
 
     def subtitle(self, client_id, identifier, subtitle_id):
         row = self.record(client_id, identifier)
