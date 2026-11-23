@@ -54,6 +54,10 @@ window.addEventListener("message", async (e) => {
     let value;
     if (m.path === "details") value = await details(m.body.row);
     else if (m.path === "api") value = await api("feeds/workspace", m.body);
+    else if (m.path === "torrents") {
+      await openTorrents(m.body.hashes || []);
+      value = null;
+    }
     else throw Error("Unknown RSS operation.");
     feedsFrame.contentWindow.postMessage(
       { type: "feeds-response", id: m.id, value },

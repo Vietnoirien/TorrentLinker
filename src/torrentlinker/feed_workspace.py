@@ -1,9 +1,10 @@
 """Owner RSS operations used by both bundled panel hosts."""
 
+import re
 from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from torrentlinker.feeds import Subscription, candidate, evaluate
 
@@ -33,6 +34,18 @@ class FeedComparison(BaseModel):
     client_ids: list[str] | None = Field(default=None, max_length=32)
 
 
+class FeedClientAction(BaseModel):
+    hashes: list[str] = Field(max_length=1000)
+    action: Literal["pause", "resume"]
+
+    @field_validator("hashes")
+    @classmethod
+    def info_hashes(cls, hashes: list[str]) -> list[str]:
+        if not all(re.fullmatch(r"[0-9a-fA-F]{40}", h) for h in hashes):
+            raise ValueError("Invalid torrent hash.")
+        return hashes
+
+
 class FeedEnqueue(BaseModel):
     client_id: str
     folder: str
@@ -59,6 +72,7 @@ class FeedWorkspace:
                     str(k): {"name": v.name, "parent": v.parent}
                     for k, v in service.setup.settings.indexer_categories.items()
                 },
+                "tr4ker_categories": control.tr4ker_categories.get(service.setup.tr4ker_session()),
                 "clients": [
                     {
                         "id": p.id,
@@ -113,6 +127,9 @@ class FeedWorkspace:
             marked = FeedMark.model_validate(body)
             feeds.mark(**marked.model_dump())
             return {"updated": len(marked.hashes)}
+        if parts == ["feed-inbox", "client"] and method == "POST":
+            acted = FeedClientAction.model_validate(body)
+            return control.client_action(acted.hashes, acted.action)
         if parts == ["feed-inbox", "compare"] and method == "POST":
             return control.inventory(
                 refresh=True, client_ids=FeedComparison.model_validate(body).client_ids

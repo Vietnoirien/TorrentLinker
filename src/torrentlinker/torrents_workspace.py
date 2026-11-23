@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 import threading
 import time
@@ -9,7 +10,7 @@ from contextlib import nullcontext
 from dataclasses import asdict
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from torrentlinker.seeding import indexer_torrents
 from torrentlinker.torrent_management import manage, peer_count_order, safe_error, tracker_group
@@ -52,6 +53,15 @@ class TorrentQuery(BaseModel):
     weight_min: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     seed_max: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     days_min: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    # Only these torrents (RSS opens Torrents on the ones a feed already has in a client).
+    hashes: list[str] = Field(default_factory=list, max_length=1000)
+
+    @field_validator("hashes")
+    @classmethod
+    def info_hashes(cls, hashes: list[str]) -> list[str]:
+        if not all(re.fullmatch(r"[0-9a-fA-F]{40}", h) for h in hashes):
+            raise ValueError("Invalid torrent hash.")
+        return [h.lower() for h in hashes]
 
 
 class TorrentInstance(BaseModel):
@@ -557,6 +567,8 @@ class TorrentWorkspace:
 
         def matches(row):
             if query.q.casefold() not in row["name"].casefold() and query.q.lower() != row["hash"]:
+                return False
+            if query.hashes and row["hash"] not in query.hashes:
                 return False
             if query.state and row["status"] != query.state:
                 return False

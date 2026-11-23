@@ -595,9 +595,9 @@ class MainWindow(QMainWindow):
             lambda error: log.debug("release check unavailable: %s", error),
         )
 
-    def open_torrents(self, hash: str = "") -> None:
+    def open_torrents(self, hash: str = "", hashes: tuple[str, ...] = ()) -> None:
         self.tabs.setCurrentIndex(self.tabs.indexOf(self.feeds_tab) + 1)
-        self.torrents_tab.focus_torrent(hash)
+        self.torrents_tab.focus_torrent(hash, hashes)
 
     def _workspace_changed(self, index: int) -> None:
         if (

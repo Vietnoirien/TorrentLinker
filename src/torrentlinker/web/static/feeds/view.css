@@ -499,3 +499,58 @@ dialog:has(.feed-editor) {
 .feed-community{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
 .feed-community>button{width:100%;text-align:left;background:transparent;color:var(--muted);font-size:13px;padding:9px 10px;line-height:1.5}
 .feed-side-head{min-height:38px;gap:12px}.feed-side-head>.muted{white-space:nowrap}
+
+/* Tracker badges (sidebar, header, items) and the tr4ker feed options in the editor. */
+.tracker-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tracker-badge.tr4ker {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tracker-badge.freeleech {
+  border-color: var(--success);
+  color: var(--success);
+}
+.tracker-cell {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+/* Room between the badge and the subscription's state text after it. */
+.feed-row-detail .tracker-badge {
+  margin-right: 8px;
+}
+/* The badge is taller than the text line: lift the name clear of it. */
+.feed-row-detail:has(.tracker-badge) {
+  margin-top: 4px;
+}
+.feed-titles + .tracker-badge,
+.feed-header .tracker-badge {
+  align-self: center;
+}
+.feed-tracker-box {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+/* État: a state tag per client, with the client's name under it. */
+.state-cell { display: inline-flex; flex-direction: row; gap: 10px; }
+.state-entry { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.state-badge { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; line-height: 18px; white-space: nowrap; color: var(--muted); }
+.state-badge.seeding { border-color: var(--success); color: var(--success); }
+.state-badge.downloading { border-color: var(--accent); color: var(--accent); }
+.client-badge { font-size: 10.5px; color: var(--muted); padding-left: 2px; }
+
+/* Every row two lines high: the name on one line, cut with an ellipsis, its tags under it. */
+.feed-title-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 46ch; }
+.feed-title-cell .link-button { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
+#feeds-body td:not(:nth-child(2)) { white-space: nowrap; }

@@ -195,6 +195,8 @@ window.addEventListener("feeds-environment", (e) =>
     if (!loaded || languageChanged) {
       const options = await api("feed-options");
       state.setup.indexer_categories = options.categories || {};
+      state.setup.tr4ker_categories = options.tr4ker_categories || [];
+      state.setup.clients = options.clients || [];
       await loadFeeds();
       loaded = true;
     }

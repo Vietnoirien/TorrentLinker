@@ -436,3 +436,150 @@ def test_cancel_pending_preview_never_saves_and_repeated_save_is_locked(tmp_path
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+
+
+def test_rss_shows_each_clients_state_and_client_actions_for_torrents_already_in_one(tmp_path):
+    from dataclasses import replace
+    from pathlib import Path
+
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.fake_qbit import FakeQbit
+    from tests.test_feeds import Source, release
+    from torrentlinker.domain import Torrent
+    from torrentlinker.feeds import Subscription
+    from torrentlinker.web.app import create_app
+
+    app = create_app(tmp_path / "config", password="test-password-long")
+    service = app.state.agent_service
+    control = service.feed_control
+    source = Source()
+    source.rows = [release("a", title="Seeded film " + "x" * 120), release("b", title="Fresh film")]
+    control.feeds.indexer = lambda: source
+    settings = service.setup.settings
+    settings.client_profiles.append(replace(settings.profile(), id="nas", name="NAS"))
+    clients = {
+        "default": FakeQbit(
+            by_hash={"a" * 40: Torrent("a" * 40, "Seeded", Path("/d"), state="uploading")}
+        ),
+        "nas": FakeQbit(
+            by_hash={
+                "a" * 40: Torrent("a" * 40, "Seeded", Path("/d"), state="stoppedUP"),
+            }
+        ),
+    }
+    for name, fake in clients.items():
+        target = service.for_client(name)
+        target.setup.client = lambda fake=fake: fake  # type: ignore[method-assign]
+        target.observed = list(fake.by_hash.values())
+        target.connection_error = ""
+        target.feed_observed_at = time.time()
+    definition = Subscription(name="Films", categories=[2030], include_current=True)
+    control.feeds.preview(definition)
+    feed = control.save(definition)
+    control.feeds.refresh(feed["id"])
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1250, "height": 900}, locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "feeds")
+            frame = page.frame_locator("#feeds-frame")
+            frame.locator("#feeds-sidebar").get_by_role("button", name=re.compile("^Films")).click()
+            rows = frame.locator("#feeds-results tbody tr")
+            expect(rows).to_have_count(2)
+            expect(frame.locator("#feeds-sidebar .tracker-badge").first).to_have_text("c411")
+            seeded = rows.filter(has_text="Seeded film")
+            expect(seeded.locator(".tracker-badge")).to_have_text(["c411"])
+            expect(seeded.locator(".state-entry")).to_have_count(2)
+            expect(seeded.locator(".state-badge.seeding + .client-badge")).to_have_text(
+                "qBittorrent"
+            )
+            expect(seeded.locator(".state-badge.paused + .client-badge")).to_have_text("NAS")
+            expect(seeded.locator(".link-button")).to_have_attribute(
+                "title", re.compile("^Seeded film x")
+            )
+            heights = {round(row.bounding_box()["height"]) for row in rows.all()}
+            assert len(heights) == 1
+            seeded.locator("input[type=checkbox]").check()
+            bar = frame.locator("#feeds-actions")
+            for name in ("Show in Torrents", "Pause"):
+                expect(bar.get_by_role("button", name=name, exact=True)).to_be_visible()
+            for name in ("Save", "Save selection", "Add to queue"):
+                expect(bar.get_by_role("button", name=name, exact=True)).to_be_hidden()
+            rows.filter(has_text="Fresh film").locator("input[type=checkbox]").check()
+            for name in ("Save", "Save selection", "Add to queue", "Pause"):
+                expect(bar.get_by_role("button", name=name, exact=True)).to_be_visible()
+            rows.filter(has_text="Fresh film").locator("input[type=checkbox]").uncheck()
+            bar.get_by_role("button", name="Pause", exact=True).click()
+            expect(seeded.locator(".state-badge.paused")).to_have_count(2)
+            expect(bar.get_by_role("button", name="Resume", exact=True)).to_be_visible()
+            assert clients["default"].by_hash["a" * 40].state == "stoppedUP"
+            bar.get_by_role("button", name="Show in Torrents", exact=True).click()
+            torrents = page.frame_locator("#torrents-frame")
+            expect(torrents.locator("table.torrent-list tbody tr")).to_have_count(2)
+            expect(torrents.locator("table.torrent-list tbody tr").first).to_contain_text("Seeded")
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True
+
+
+def test_rss_editor_chooses_a_tracker_and_tr4ker_feed_options_from_the_backend(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.web.app import create_app
+
+    app = create_app(tmp_path / "config", password="test-password-long")
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1250, "height": 900}, locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "feeds")
+            frame = page.frame_locator("#feeds-frame")
+            frame.locator("#feeds-empty").get_by_role("button", name="New subscription").click()
+            editor = frame.locator("#dialog-content")
+            tracker = editor.get_by_label("Tracker", exact=True)
+            expect(tracker).to_have_value("c411")
+            expect(editor.get_by_label("Feed category")).to_be_hidden()
+            tracker.select_option("tr4ker")
+            category = editor.get_by_label("tr4ker feed category")
+            expect(category).to_be_visible()
+            expect(editor.get_by_label("Freeleech only")).to_be_visible()
+            expect(category.locator("option[value=films-animation]")).to_have_count(1)
+            category.select_option("films")
+            editor.get_by_label("Title contains", exact=True).fill("dune")
+            expect(editor.get_by_label("Freeleech only")).to_be_hidden()
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True

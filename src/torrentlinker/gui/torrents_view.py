@@ -137,9 +137,9 @@ class TorrentsTab(BundledView):
     def reset_connection(self):
         self.refresh()
 
-    def focus_torrent(self, hash=""):
+    def focus_torrent(self, hash="", hashes=()):
         self.sequence += 1
-        self.command = {"id": self.sequence, "hash": hash}
+        self.command = {"id": self.sequence, "hash": hash, "hashes": list(hashes)}
         self.refresh()
 
     def focus_tracker(self, tracker):

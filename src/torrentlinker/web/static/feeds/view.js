@@ -7,6 +7,37 @@ const feedState = {
   rows: [],
 };
 const feedText = (en, fr) => say(en, fr);
+// État: a state tag per client (seeding, downloading…), the client's name under it.
+const FEED_STATES = {
+  seeding: ["Seeding", "En seed"],
+  downloading: ["Downloading", "Téléchargement"],
+  paused: ["Paused", "En pause"],
+  checking: ["Checking", "Vérification"],
+  queued: ["Queued", "En file"],
+  unknown: ["Unknown", "Inconnu"],
+};
+function feedStateCell(r) {
+  const entries = r.in_clients.map((client) => [r.client_states?.[client] || "unknown", client]);
+  if (r.queue_status && !entries.length) entries.push(["queued", null]);
+  if (!entries.length) return null;
+  const cell = element("span", undefined, "state-cell");
+  for (const [kind, client] of entries) {
+    const [en, fr] = FEED_STATES[kind] || [kind, kind];
+    const one = element("span", undefined, "state-entry");
+    one.append(element("span", feedText(en, fr), `state-badge ${kind}`));
+    if (client)
+      one.append(
+        element(
+          "span",
+          (state.setup.clients || []).find((c) => c.id === client)?.name || client,
+          "client-badge",
+        ),
+      );
+    cell.append(one);
+  }
+  return cell;
+}
+const feedTracker = (r) => r.tracker;
 const feedCall = (path, body, method = "POST") => api(path, body, method);
 const FEED_MODES = () => ({
   review_only: feedText("Notify me", "Me prévenir"),
@@ -78,7 +109,7 @@ async function loadFeeds() {
   const community = $("feeds-community");
   community.replaceChildren(button(feedText("Community rules","Règles communautaires"),()=>communityBrowseDialog("rss",async result=>{for(const rule of result.data.rules){if(rule.include?.length||rule.exclude?.length)throw Error(feedText("Legacy text filters need manual conversion before import.","Les anciens filtres textuels nécessitent une conversion manuelle."));await feedCall("feeds",{subscription:{name:rule.name.slice(0,100),query:rule.query||"",categories:rule.categories||[],preferences:rule.preferences||{},paused:true,mode:"review_only"}})}await navigate("feeds")})));
   const sidebar = $("feeds-sidebar");
-  const row = (name, detail, unread, id) => {
+  const row = (name, detail, unread, id, tracker = "") => {
     const b = button(
       "",
       () => {
@@ -91,7 +122,13 @@ async function loadFeeds() {
     b.setAttribute("aria-current", String(id === feedState.id));
     b.append(
       element("span", name, "feed-row-name"),
-      element("span", detail, "feed-row-detail muted"),
+      (() => {
+        const line = element("span", undefined, "feed-row-detail muted");
+        // The Tracker leads the detail line.
+        if (tracker) line.append(element("span", tracker, `tracker-badge ${tracker}`), " ");
+        line.append(detail);
+        return line;
+      })(),
       element("span", unread ? String(unread) : "", "feed-row-badge"),
     );
     return b;
@@ -110,6 +147,7 @@ async function loadFeeds() {
           (FEED_MODES()[f.mode] || f.mode),
         f.unread_count,
         f.id,
+        f.tracker || "c411",
       ),
     ),
   );
@@ -213,6 +251,20 @@ async function loadFeeds() {
       "h2",
       active ? active.name : feedText("All feeds", "Tous les flux"),
     ),
+    ...(active
+      ? [
+          element(
+            "span",
+            (active.tracker || "c411") +
+              (active.tracker === "tr4ker" && !active.query
+                ? " · " + feedText("passkey feed", "flux passkey")
+                : active.tracker === "tr4ker"
+                  ? " · Torznab"
+                  : ""),
+            `tracker-badge ${active.tracker || "c411"}`,
+          ),
+        ]
+      : []),
     element("p", status, active?.error ? "danger" : "muted"),
   );
   const info = aIconButton(
@@ -284,24 +336,82 @@ async function loadFeeds() {
   };
   const count = element("span", "", "muted");
   count.id = "feeds-count";
+  // Torrents already in a client get client actions; queueing and saving only make sense for
+  // the others, so a mixed selection queues those and says how many it left out.
+  const picked = () => rows.filter((r) => feedState.selected.has(r.infohash));
+  const inClient = () => picked().filter((r) => r.in_clients.length);
+  const notInClient = () => picked().filter((r) => !r.in_clients.length);
+  const allPaused = () =>
+    inClient().every((r) => r.in_clients.every((c) => r.client_states?.[c] === "paused"));
+  const saveButton = button(feedText("Save", "Enregistrer"), async () => {
+    await feedCall("feed-inbox/mark", {
+      hashes: notInClient().map((r) => r.infohash),
+      feed_id: feedState.id,
+      action: "save",
+    });
+    await loadFeeds();
+  }, "quiet");
+  const selectionButton = button(feedText("Save selection", "Enregistrer la sélection"), async () => {
+    feedReport(
+      await feedCall("feed-selections", { hashes: notInClient().map((r) => r.infohash) }),
+    );
+  });
+  const queueButton = button(
+    feedText("Add to queue", "Ajouter à la file"),
+    async () => {
+      const skipped = inClient().length;
+      await feedEnqueue(notInClient().map((r) => r.infohash));
+      if (skipped)
+        return feedText(
+          `${skipped} already in a client, left out`,
+          `${skipped} déjà dans un client, ignoré(s)`,
+        );
+    },
+    "primary",
+  );
+  const viewButton = button(
+    feedText("Show in Torrents", "Voir dans Torrents"),
+    () => request("torrents", { hashes: inClient().map((r) => r.infohash) }),
+    "quiet",
+  );
+  const pauseButton = button(
+    "",
+    async () => {
+      const resume = allPaused();
+      const result = await feedCall("feed-inbox/client", {
+        hashes: inClient().map((r) => r.infohash),
+        action: resume ? "resume" : "pause",
+      });
+      await loadFeeds();
+      const failed = Object.values(result.clients).filter((c) => c.error || c.failed?.length);
+      if (failed.length)
+        throw Error(
+          failed
+            .map((c) => `${c.name}: ${c.error || c.failed.map((f) => f.detail || f.outcome).join(", ")}`)
+            .join(" · "),
+        );
+      return resume ? feedText("Resumed", "Repris") : feedText("Paused", "Mis en pause");
+    },
+    "quiet",
+  );
   bar.replaceChildren(
     count,
     element("span", undefined, "spacer"),
     button(feedText("Mark read", "Marquer lus"), mark("read"), "quiet"),
-    button(feedText("Save", "Enregistrer"), mark("save"), "quiet"),
+    saveButton,
     button(feedText("Dismiss", "Masquer"), mark("dismiss"), "quiet"),
-    button(feedText("Save selection", "Enregistrer la sélection"), async () => {
-      feedReport(
-        await feedCall("feed-selections", { hashes: [...feedState.selected] }),
-      );
-    }),
-    button(
-      feedText("Add to queue", "Ajouter à la file"),
-      () => feedEnqueue([...feedState.selected]),
-      "primary",
-    ),
+    viewButton,
+    pauseButton,
+    selectionButton,
+    queueButton,
   );
   const selectionChanged = () => {
+    const some = inClient().length, others = notInClient().length;
+    viewButton.hidden = pauseButton.hidden = !some;
+    saveButton.hidden = selectionButton.hidden = queueButton.hidden = !others;
+    pauseButton.textContent = allPaused()
+      ? feedText("Resume", "Reprendre")
+      : feedText("Pause", "Mettre en pause");
     bar.hidden = !feedState.selected.size;
     count.textContent = feedText(
       `${feedState.selected.size} selected`,
@@ -312,8 +422,11 @@ async function loadFeeds() {
   const columns = [
     {
       label: feedText("Title", "Titre"),
-      render: (r) =>
-        button(
+      // One line of name (cut, full name on hover), the Tracker tags under it: every row is
+      // the same two lines high.
+      render: (r) => {
+        const cell = element("div", undefined, "feed-title-cell");
+        const name = button(
           `${r.unread ? "● " : ""}${r.title}`,
           () =>
             details({
@@ -323,7 +436,15 @@ async function loadFeeds() {
               queueSource: "feed",
             }),
           "link-button",
-        ),
+        );
+        name.title = r.title;
+        const tags = element("span", undefined, "tracker-cell");
+        tags.append(element("span", feedTracker(r), `tracker-badge ${feedTracker(r)}`));
+        if (r.metadata?.freeleech)
+          tags.append(element("span", "freeleech", "tracker-badge freeleech"));
+        cell.append(name, tags);
+        return cell;
+      },
     },
     {
       label: feedText("Size", "Taille"),
@@ -344,8 +465,7 @@ async function loadFeeds() {
     {
       label: feedText("State", "État"),
       render: (r) =>
-        r.queue_status ||
-        r.in_clients.join(", ") ||
+        feedStateCell(r) ||
         (r.client_inventory_unknown.length
           ? feedText(
               "Client comparison needed",
@@ -373,6 +493,9 @@ function feedDefinition(raw) {
     "name",
     "query",
     "categories",
+    "tracker",
+    "feed_category",
+    "freeleech",
     "paused",
     "interval_minutes",
     "mode",
@@ -819,6 +942,12 @@ async function editFeed(existing = null, query = "") {
   section(feedText("What to follow", "Ce qu’il faut suivre"));
   const name = text(existing?.name || "RSS");
   field(feedText("Name", "Nom"), name);
+  // the Tracker whose feed this subscription follows (c411 unless chosen).
+  const trackerSelect = element("select");
+  trackerSelect.setAttribute("aria-label", "Tracker");
+  trackerSelect.append(new Option("c411", "c411"), new Option("tr4ker", "tr4ker"));
+  trackerSelect.value = existing?.tracker || "c411";
+  field("Tracker", trackerSelect);
   const queryInput = text(existing?.query ?? query);
   queryInput.placeholder = feedText(
     "Words the title must contain",
@@ -830,7 +959,34 @@ async function editFeed(existing = null, query = "") {
     renderPriorities();
     sourceChanged();
   });
-  field(feedText("Categories", "Catégories"), categories.el, true);
+  const categoriesField = field(feedText("Categories", "Catégories"), categories.el, true);
+  // tr4ker's passkey feed (no query): its category slug and freeleech; a query keeps Torznab polling.
+  const feedBox = element("div", undefined, "feed-tracker-box");
+  const feedCategory = element("select");
+  feedCategory.setAttribute("aria-label", feedText("tr4ker feed category", "Catégorie du flux tr4ker"));
+  feedCategory.append(new Option(feedText("All categories", "Toutes les catégories"), ""));
+  {
+    const tree = state.setup.tr4ker_categories || [];
+    const kids = (parent) =>
+      tree.filter((c) => (c.parent ?? null) === parent).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    for (const top of kids(null)) {
+      feedCategory.append(new Option(top.name, top.slug));
+      for (const sub of kids(top.id)) feedCategory.append(new Option("\u00a0\u00a0\u00a0" + sub.name, sub.slug));
+    }
+    if (existing?.feed_category && !tree.some((c) => c.slug === existing.feed_category))
+      feedCategory.append(new Option(existing.feed_category, existing.feed_category));
+    feedCategory.value = existing?.feed_category || "";
+  }
+  const feedCategoryLabel = element("label", undefined, "feed-field");
+  feedCategoryLabel.append(element("span", feedText("Feed category", "Catégorie du flux")), feedCategory);
+  const freeleechLabel = element("label", undefined, "feed-check");
+  const freeleech = document.createElement("input");
+  freeleech.type = "checkbox";
+  freeleech.checked = Boolean(existing?.freeleech);
+  freeleechLabel.append(freeleech, element("span", feedText("Freeleech only", "Freeleech uniquement")));
+  const feedNote = element("p", undefined, "muted");
+  feedBox.append(feedCategoryLabel, freeleechLabel, feedNote);
+  root.append(feedBox);
   // 2. What you accept
   section(feedText("What you accept", "Ce que vous acceptez"));
   root.append(
@@ -915,7 +1071,7 @@ async function editFeed(existing = null, query = "") {
     return [];
   }
   function owners(f) {
-    return categories.get().filter((id) => categoryFields(id).includes(f));
+    return activeCategories().filter((id) => categoryFields(id).includes(f));
   }
   function scope(f) {
     // Existing global rules stay global. New criteria take the displayed categories.
@@ -951,8 +1107,8 @@ async function editFeed(existing = null, query = "") {
     const names = feedFieldNames();
     const relevant = [
       ...new Set(
-        categories.get().length
-          ? categories.get().flatMap(categoryFields)
+        activeCategories().length
+          ? activeCategories().flatMap(categoryFields)
           : [],
       ),
     ];
@@ -1100,7 +1256,7 @@ async function editFeed(existing = null, query = "") {
   }
   function renderPriorities() {
     const names = feedFieldNames();
-    const allowed = [...new Set(categories.get().flatMap(categoryFields)), "size"];
+    const allowed = [...new Set(activeCategories().flatMap(categoryFields)), "size"];
     const rows = prefs.priorities.filter((k) => allowed.includes(k)).map((k, i) => {
       const row = element("div", undefined, "feed-priority");
       let label = `${i + 1}. ${names[k] || k}`;
@@ -1210,6 +1366,15 @@ async function editFeed(existing = null, query = "") {
     cards.append(card);
   }
   root.append(cards);
+  const feedModeNote = element(
+    "p",
+    feedText(
+      "tr4ker's feed carries no info hash: its items are reviewed in the RSS inbox and never queued automatically.",
+      "Le flux de tr4ker ne fournit pas d’info hash : ses éléments se relisent dans la boîte RSS et ne sont jamais mis en file automatiquement.",
+    ),
+    "muted",
+  );
+  root.append(feedModeNote);
   const where = element("div", undefined, "feed-where");
   const client = element("select"),
     folder = element("select");
@@ -1345,6 +1510,27 @@ async function editFeed(existing = null, query = "") {
     }
   };
   advanced.addEventListener("toggle", advancedRefresh);
+  const activeCategories = () => (usesFeed() ? [] : categories.get());
+  function usesFeed() {
+    return trackerSelect.value === "tr4ker" && !queryInput.value.trim();
+  }
+  function trackerChanged() {
+    const tr4ker = trackerSelect.value === "tr4ker",
+      feed = usesFeed();
+    feedBox.hidden = !tr4ker;
+    feedCategoryLabel.hidden = freeleechLabel.hidden = !feed;
+    categoriesField.hidden = feed;
+    feedModeNote.hidden = !feed;
+    feedNote.textContent = feed
+      ? feedText(
+          "Without a title, this follows tr4ker's feed: its 100 latest items, read with your passkey (never shown or saved in the subscription). Add a title to poll Torznab instead.",
+          "Sans titre, l’abonnement suit le flux de tr4ker : ses 100 derniers éléments, lus avec votre passkey (jamais affichée ni enregistrée dans l’abonnement). Ajoutez un titre pour interroger Torznab à la place.",
+        )
+      : feedText(
+          "With a title, the subscription keeps polling tr4ker through Torznab; the feed category and freeleech do not apply.",
+          "Avec un titre, l’abonnement continue d’interroger tr4ker par Torznab ; la catégorie du flux et freeleech ne s’appliquent pas.",
+        );
+  }
   function definition() {
     const hoursValue = hours.get();
     if (modeValue.value === "automatic_download" && !hoursValue.length)
@@ -1359,7 +1545,11 @@ async function editFeed(existing = null, query = "") {
       id: existing?.id || "",
       name: name.value,
       query: queryInput.value,
-      categories: categories.get(),
+      // a tr4ker subscription without a query follows its passkey feed (cat slug, freeleech).
+      tracker: trackerSelect.value,
+      categories: usesFeed() ? [] : categories.get(),
+      feed_category: usesFeed() ? feedCategory.value : "",
+      freeleech: usesFeed() ? freeleech.checked : false,
       paused: existing?.paused || false,
       mode: modeValue.value,
       client_id: client.value,
@@ -1483,6 +1673,15 @@ async function editFeed(existing = null, query = "") {
     sourceTimer = setTimeout(() => runPreview(), 1200);
   }
   queryInput.addEventListener("input", sourceChanged);
+  queryInput.addEventListener("input", trackerChanged);
+  trackerSelect.onchange = () => {
+    trackerChanged();
+    renderChips();
+    renderPriorities();
+    sourceChanged();
+  };
+  feedCategory.onchange = freeleech.onchange = sourceChanged;
+  trackerChanged();
   minSize.onchange(judge);
   maxSize.onchange(judge);
   minSeeders.addEventListener("input", judge);
@@ -1514,7 +1713,11 @@ async function editFeed(existing = null, query = "") {
             !existing ||
             def.query !== existing.query ||
             JSON.stringify(def.categories) !==
-              JSON.stringify(existing.categories);
+              JSON.stringify(existing.categories) ||
+            // a new Tracker or feed option is a new source, previewed again.
+            def.tracker !== (existing.tracker || "c411") ||
+            def.feed_category !== (existing.feed_category || "") ||
+            def.freeleech !== Boolean(existing.freeleech);
           const fresh =
             ed.previewed === JSON.stringify(def) &&
             Date.now() - ed.previewedAt < 840000;

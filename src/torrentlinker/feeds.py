@@ -506,11 +506,7 @@ class FeedService:
                         infohash=row.infohash.lower(),
                         download_url=indexer.redact(row.download_url),
                         details_url=indexer.redact(row.details_url),
-                        metadata=(
-                            row.metadata
-                            if subscription.tracker == "c411"
-                            else {**row.metadata, "tracker": subscription.tracker}
-                        ),
+                        metadata={**row.metadata, "tracker": subscription.tracker},
                     )
                     rows[clean.infohash] = clean  # type: ignore[index]
             if len(batch) < 100:

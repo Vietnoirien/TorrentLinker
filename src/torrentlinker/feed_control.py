@@ -17,6 +17,8 @@ from torrentlinker.feeds import (
     work_identity,
 )
 from torrentlinker.indexer import Candidate
+from torrentlinker.torrent_management import feed_state
+from torrentlinker.tr4ker_categories import Tr4kerCategories
 from torrentlinker.trackers import tracker
 
 if TYPE_CHECKING:
@@ -34,6 +36,7 @@ class FeedControl:
             # The passkey is read from the secret store when a feed is fetched, never kept.
             lambda tracker_id: setup.secrets.get(tracker(tracker_id).passkey_secret) or "",
         )
+        self.tr4ker_categories = Tr4kerCategories()
         self.stop = threading.Event()
         self.thread: threading.Thread | None = None
 
@@ -144,16 +147,63 @@ class FeedControl:
             for e in entries(self.service.setup.store, all_clients=True)
             if client_ids is None or e.client_id in client_ids
         }
+        states = {
+            client: {
+                t.hash.lower(): feed_state(t) for t in self.service.for_client(client).observed
+            }
+            for client in present
+        }
         result = self.feeds.inbox(**filters)
         for row in result:
             row["in_clients"] = [
                 client for client, hashes in present.items() if row["infohash"] in hashes
             ]
+            row["client_states"] = {
+                client: states[client].get(row["infohash"], "unknown")
+                for client in row["in_clients"]
+            }
+            row["tracker"] = (row.get("metadata") or {}).get("tracker") or "c411"
             row["client_inventory_unknown"] = unavailable
             entry = queued.get(row["infohash"])
             row["queue_status"] = entry.status if entry else ""
             row["queued"] = bool(entry)
         return result
+
+    def client_action(self, hashes: list[str], action: str) -> dict:
+        """Pause or resume these torrents in every Torrent Client that has them. Each client
+        answers for itself: one that cannot be read or refuses is reported, the others go on."""
+        from torrentlinker.torrent_management import manage, safe_error
+
+        if action not in {"pause", "resume"}:
+            raise ValueError("Choose pause or resume.")
+        wanted = list(dict.fromkeys(h.lower() for h in hashes))
+        answers: dict[str, dict] = {}
+        for profile in self.service.setup.settings.client_profiles:
+            if not profile.enabled:
+                continue
+            target = self.service.for_client(profile.id)
+            try:
+                client = target.setup.client()
+                target.observed = client.torrents(with_files=False)
+                target.connection_error = ""
+                target.feed_observed_at = time.time()
+                present = {t.hash.lower() for t in target.observed}
+                mine = [h for h in wanted if h in present]
+                if mine:
+                    results = manage(client, mine, action)
+                    answers[profile.id] = {
+                        "name": profile.name,
+                        "sent": sum(r.outcome == "sent" for r in results),
+                        "failed": [
+                            {"hash": r.hash, "outcome": r.outcome, "detail": r.detail}
+                            for r in results
+                            if r.outcome != "sent"
+                        ],
+                    }
+                    target.observed = client.torrents(with_files=False)
+            except Exception as error:
+                answers[profile.id] = {"name": profile.name, "error": safe_error(error)}
+        return {"action": action, "clients": answers}
 
     def save(self, feed: Subscription, *, approved: bool = False, actor: str = "") -> dict:
         self.service.setup.settings.profile(feed.client_id)

@@ -7,6 +7,13 @@ torrentsFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("view-torrents").append(torrentsFrame);
 let torrentsCommand = null, torrentsSequence = 0;
+// RSS: Torrents opens on these torrents, whichever client has them.
+async function openTorrents(hashes) {
+  await navigate("torrents");
+  await shellSelectClient("all");
+  torrentsCommand = { id: ++torrentsSequence, tracker: "", hash: "", hashes };
+  torrentsEnvironment();
+}
 function torrentsEnvironment() {
   const active = state.view === "torrents" && !$("workspace").hidden;
   torrentsFrame.contentWindow?.postMessage(

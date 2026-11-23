@@ -1510,6 +1510,11 @@ class AgentService:
                 feed_id=feed_id, client_ids=grant.clients, **filters
             ):
                 row["in_clients"] = [value for value in row["in_clients"] if value in grant.clients]
+                row["client_states"] = {
+                    client: state
+                    for client, state in row.get("client_states", {}).items()
+                    if client in grant.clients
+                }
                 row["client_inventory_unknown"] = [
                     value for value in row["client_inventory_unknown"] if value in grant.clients
                 ]

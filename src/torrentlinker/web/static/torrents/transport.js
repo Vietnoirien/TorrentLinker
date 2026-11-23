@@ -99,6 +99,7 @@ async function load() {
     const body = {
       client_id: client,
       q: query,
+      ...(hashes.length ? { hashes } : {}),
       sort: keys[sortKey] || sortKey,
       descending: sortDir < 0,
       offset: page * 100,
@@ -206,6 +207,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (newCommand) {
         commandId = next.command.id;
         query = next.command.hash || "";
+        hashes = next.command.hashes || [];
         if (typeof next.command.tracker === "string") filters.tracker = next.command.tracker;
         focus = "";
         page = 0;

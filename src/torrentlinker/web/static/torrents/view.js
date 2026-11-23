@@ -11,6 +11,7 @@ let lang = "en",
   tab = "summary",
   selected = new Set(),
   query = "",
+  hashes = [], // only these torrents, when RSS opens Torrents on the ones a feed has in a client
   filters = { state: "", category: "", tracker: "", tag: "" },
   client = "all",
   sortKey = "name",
@@ -334,6 +335,7 @@ function bind() {
     Object.keys(metrics).forEach((k) => (metrics[k] = ""));
     Object.keys(filters).forEach((k) => (filters[k] = ""));
     query = "";
+    hashes = [];
     page = 0;
     guard(load);
   };
@@ -342,6 +344,7 @@ function bind() {
   $("transfer-history").onclick = (event) => guard(transferHistory, event.currentTarget);
   $("query").oninput = (e) => {
     query = e.target.value;
+    hashes = [];
     page = 0;
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => guard(load), 200);

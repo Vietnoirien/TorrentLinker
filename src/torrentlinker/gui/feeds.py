@@ -36,6 +36,9 @@ class FeedBridge(ViewBridge):
                     candidate(row), control.feeds.indexer(), "—", "", self.board
                 ).exec()
                 self.response.emit(identifier, json.dumps({"data": {"ok": True}}))
+            elif action == "torrents":
+                self.board.owner.open_torrents(hashes=tuple(body.get("hashes", [])))
+                self.response.emit(identifier, json.dumps({"data": None}))
             elif action == "api":
 
                 def work():

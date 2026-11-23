@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from torrentlinker.feed_workspace import (
+    FeedClientAction,
     FeedComparison,
     FeedEnqueue,
     FeedMark,
@@ -29,6 +30,7 @@ def feed_routes(app: FastAPI, service):
     @app.get("/api/feed-options")
     def options():
         return {
+            "tr4ker_categories": control.tr4ker_categories.get(service.setup.tr4ker_session()),
             "clients": [
                 {
                     "id": p.id,
@@ -37,7 +39,7 @@ def feed_routes(app: FastAPI, service):
                 }
                 for p in service.setup.settings.client_profiles
                 if p.enabled
-            ]
+            ],
         }
 
     @app.get("/api/feeds")
@@ -95,6 +97,10 @@ def feed_routes(app: FastAPI, service):
     def mark(body: FeedMark):
         feeds.mark(**body.model_dump())
         return {"updated": len(body.hashes)}
+
+    @app.post("/api/feed-inbox/client")
+    def client(body: FeedClientAction):
+        return control.client_action(body.hashes, body.action)
 
     @app.post("/api/feed-inbox/compare")
     def compare(body: FeedComparison):

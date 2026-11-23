@@ -94,6 +94,19 @@ def status(torrent: Torrent) -> str:
     return "other"
 
 
+def feed_state(torrent: Torrent) -> str:
+    """A client's torrent as RSS shows it: seeding, downloading, paused, checking or queued.
+    A state none of these names (an error, a state the client did not report) is `unknown`,
+    never one of them by guess."""
+    state = torrent.state.lower()
+    if not state:
+        return "unknown"
+    if state.startswith("queued"):
+        return "queued"
+    found = status(torrent)
+    return found if found in {"seeding", "downloading", "paused", "checking"} else "unknown"
+
+
 def comparison_status(torrent: Torrent | None) -> str:
     """Classify an exact client instance for read-only cross-client comparison."""
     if torrent is None:
