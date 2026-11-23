@@ -58,6 +58,23 @@ const bytes = (n) =>
     : n >= 1048576
       ? (n / 1048576).toFixed(1) + t(" Mo")
       : (n / 1024).toFixed(0) + t(" Ko");
+const reseedPhase = (phase) => ({
+  find: t("Recherche", "Search"),
+  compare: t("Comparaison", "Compare"),
+  prepare: t("Préparation", "Prepare"),
+  verify: t("Vérification", "Verify"),
+  "local-hash": t("Vérification des fichiers", "Checking local files"),
+  "client-hash": t("Vérification dans le client", "Checking in client"),
+  seed: t("Mise en partage", "Start seeding"),
+  scan: t("Analyse des dossiers", "Scanning folders"),
+})[phase] || esc(phase);
+function runDetails(progress) {
+  if (!snapshot.running) return "";
+  const done = Number(progress.done) || 0;
+  const total = Number(progress.total) || 0;
+  const items = Object.entries(progress.active || {});
+  return `<div class="run-detail"><div class="run-count"><span>${done} / ${total} ${t("éléments traités", "items processed")}</span><span>${Number(progress.seeded) || 0} ${t("mis en partage", "seeding")}</span></div><progress max="${Math.max(total, 1)}" value="${Math.min(done, total)}" aria-label="${t("Progression du parcours", "Reseed progress")}"></progress><div class="run-items">${items.map(([path, item]) => `<div class="run-item"><span title="${esc(path)}">${esc(path ? path.split("/").pop() : t("Dossiers", "Folders"))}</span><small>${reseedPhase(item.phase)}${item.fraction == null ? "" : ` · ${Math.round(item.fraction * 100)} %`}</small></div>`).join("") || `<small>${t("En attente du prochain élément…", "Waiting for the next item…")}</small>`}</div></div>`;
+}
 const api = async (action, body = {}) =>
   (await window.reseedTransport)(action, {
     ...body,
@@ -228,7 +245,7 @@ function render() {
       )
       .join(
         "",
-      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small><small style="margin-left:auto">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
+      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small><small style="margin-left:auto">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}${runDetails(progress)}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
       rows
         .slice(0, limit)
         .map((r) => {
