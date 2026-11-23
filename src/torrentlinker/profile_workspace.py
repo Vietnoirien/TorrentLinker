@@ -391,6 +391,7 @@ class ProfileWorkspace:
                 ),
                 "companion": companion,
                 "tr4ker": self.tr4ker.state(),
+                "companion_seen": self.data.get("companion_seen"),
                 "received_at": self.data.get("received_at"),
                 "paired": bool(self._pair),
                 "stale": bool(companion and self.clock() - captured_at(companion) > 300),
@@ -436,13 +437,16 @@ class ProfileWorkspace:
             self._save()
 
     def receive(
-        self, route: str, origin: str, authorization: str, body: dict[str, Any]
+        self, route: str, origin: str, authorization: str, body: dict[str, Any], version: str = ""
     ) -> dict[str, Any]:
         """A paired companion's call; the reply to its sync announces the bundled companion
         version so an out-of-date extension can reload from its managed folder."""
         from torrentlinker.companion import bundled_version
 
         reply = self._receive(route, origin, authorization, body)
+        if re.fullmatch(r"\d{1,4}(\.\d{1,4}){0,3}", version):  # only an accepted call counts
+            with self.lock:
+                self.data["companion_seen"] = {"version": version, "at": self.clock()}
         if route != "/api/companion/snapshot":
             return reply
         return {**reply, "companion_version": bundled_version()}

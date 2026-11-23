@@ -40,6 +40,8 @@ Sans `--build`, Compose utilise l'image publiée indiquée par `TL_IMAGE_TAG` (`
 
 Ouvrez `http://localhost:8787` et saisissez ce mot de passe. Le serveur est accessible uniquement depuis la machine hôte par défaut. Pour un accès sur le réseau local, définissez `TL_BIND_ADDRESS` avec l'adresse LAN de l'hôte. Pour l'accès distant, utilisez un reverse proxy HTTPS et `TL_SECURE_COOKIE=1`, qui peut aussi remplacer ce mot de passe (voir [Connexion par un reverse proxy](#connexion-par-un-reverse-proxy)) ; n'exposez pas directement un port HTTP sur Internet.
 
+Pour que l'extension navigateur se mette à jour seule, montez un dossier de l'hôte et définissez `TL_COMPANION_DIR`, `TL_PUBLIC_URL` et éventuellement `TL_COMPANION_HOST_DIR` : voir [Mises à jour automatiques](companion.md#mises-à-jour-automatiques).
+
 ## Utilisateur du conteneur et permissions
 
 L'image démarre toujours avec l'UID/GID 1000 par défaut. Les déploiements existants avec `cap_drop: [ALL]` ne changent pas. `TL_UID` et `TL_GID` restent disponibles à la construction.

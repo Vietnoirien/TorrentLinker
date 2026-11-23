@@ -32,7 +32,7 @@ async def companion_request(request: Request, route: str, setup: Setup) -> Respo
             headers={
                 **headers,
                 "Access-Control-Allow-Methods": "POST",
-                "Access-Control-Allow-Headers": "content-type, authorization",
+                "Access-Control-Allow-Headers": "content-type, authorization, x-torrentlinker-companion",
             },
         )
     if request.method != "POST":
@@ -47,7 +47,13 @@ async def companion_request(request: Request, route: str, setup: Setup) -> Respo
         if not isinstance(body, dict):
             raise ValueError("Invalid JSON object.")
         workspace = setup.profile_workspace()
-        result = workspace.receive(route, origin, request.headers.get("authorization", ""), body)
+        result = workspace.receive(
+            route,
+            origin,
+            request.headers.get("authorization", ""),
+            body,
+            version=request.headers.get("x-torrentlinker-companion", ""),
+        )
         return JSONResponse(result, headers=headers)
     except PermissionError as error:
         return JSONResponse({"detail": str(error)}, status_code=403, headers=headers)

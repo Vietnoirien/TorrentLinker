@@ -145,6 +145,15 @@ function companionRow(root, tracker, data) {
   row.append(who, actions);
   return row;
 }
+// Which companion last reached the app, and when: the proof a click or a reload did something.
+function companionSeenText(seen) {
+  if (!seen?.version) return "";
+  const when = new Date(seen.at * 1000).toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
+  return say(
+    `Companion in the browser: version ${seen.version} · last contact ${when}`,
+    `Compagnon dans le navigateur : version ${seen.version} · dernier contact ${when}`,
+  );
+}
 async function loadSettingsCompanion(root) {
   const client = environment.client_id;
   const data = await request("companion", { action: "state" });
@@ -173,10 +182,25 @@ async function loadSettingsCompanion(root) {
     button(say("Save extension…", "Enregistrer l’extension…"), () =>
       request("companion", { action: "extension" }),
     ),
-    button(say("Refresh", "Actualiser"), () => loadSettingsCompanion(root)),
+    button(say("Refresh", "Actualiser"), async () => {
+      const fresh = await loadSettingsCompanion(root);
+      return companionSeenText(fresh?.companion_seen) || say("Refreshed", "Actualisé");
+    }),
     disconnect,
   );
   extension.append(actions);
+  const seen = data.companion_seen;
+  extension.append(
+    element(
+      "p",
+      companionSeenText(seen) ||
+        say(
+          "No companion has reached TorrentLinker from a browser yet.",
+          "Aucun compagnon n’a encore contacté TorrentLinker depuis un navigateur.",
+        ),
+      "muted",
+    ),
+  );
   const folder = data.companion_folder;
   if (folder?.path)
     extension.append(
@@ -284,6 +308,7 @@ async function loadSettingsCompanion(root) {
     ),
   );
   root.replaceChildren(extension, trackers, session);
+  return data;
 }
 
 let companionPolling = false;

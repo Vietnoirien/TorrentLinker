@@ -21,6 +21,10 @@ services:
       # TL_ROOT_PATH: /torrentlinker
       # A reverse proxy can sign users in instead of this password: see the Web UI guide;
       # compose.traefik.yaml is a Traefik example.
+      # Self-updating browser companion (guide: companion.md, "Automatic updates"):
+      # TL_COMPANION_DIR: /companion
+      # TL_PUBLIC_URL: https://torrentlinker.example.org
+      # TL_COMPANION_HOST_DIR: /home/me/torrentlinker-companion  # path shown in Settings
       # Optional secret files instead of typing keys in the web UI:
       # TL_INDEXER_API_KEY_FILE: /run/secrets/indexer_api_key
     secrets:
@@ -28,6 +32,7 @@ services:
     volumes:
       - config:/config
       - /srv/media:/data:ro  # the folder your torrent client downloads into
+      # - /home/me/torrentlinker-companion:/companion  # with TL_COMPANION_DIR above
     # Reach a client running on the Docker host as http://host.docker.internal:8080
     extra_hosts:
       - "host.docker.internal:host-gateway"

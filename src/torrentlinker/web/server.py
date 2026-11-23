@@ -52,6 +52,10 @@ def argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--companion-dir", type=Path, default=os.getenv("TL_COMPANION_DIR") or None)
     parser.add_argument("--public-url", default=os.getenv("TL_PUBLIC_URL") or None)
+    # Display only: where the companion folder lives on the host when it is a container mount.
+    parser.add_argument(
+        "--companion-host-dir", default=os.getenv("TL_COMPANION_HOST_DIR") or None
+    )
     parser.add_argument("--root-path", default=os.getenv("TL_ROOT_PATH", ""))
     return parser
 
@@ -135,6 +139,7 @@ def main() -> int:
                 members_enabled=args.members == "on",
                 companion_dir=args.companion_dir,
                 public_url=args.public_url,
+                companion_host_dir=args.companion_host_dir,
             )
         except (ValueError, OSError) as error:
             parser.error(f"Cannot initialize server: {error}")

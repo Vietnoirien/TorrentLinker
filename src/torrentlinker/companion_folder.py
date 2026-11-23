@@ -66,8 +66,11 @@ class ManagedCompanion:
         origin_file: Path | None = None,
         public_url: str | None = None,
         needs_origin: bool = False,
+        shown_path: str | None = None,
     ) -> None:
         self.folder = folder
+        # In a container, the host folder the browser loads (the folder itself is a mount).
+        self.shown_path = shown_path
         self.origin_file = origin_file
         self.needs_origin = needs_origin
         self.fixed = self._https(public_url or "")
@@ -104,7 +107,7 @@ class ManagedCompanion:
         """Bring the folder up to date; None when no folder is managed."""
         if self.folder is None:
             return None
-        info: dict[str, object] = {"path": str(self.folder), "version": None}
+        info: dict[str, object] = {"path": self.shown_path or str(self.folder), "version": None}
         origin = self.origin()
         if self.needs_origin and origin is None:
             info["waiting"] = "origin"

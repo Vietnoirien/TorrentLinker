@@ -40,6 +40,8 @@ Without `--build`, Compose uses the published image named by `TL_IMAGE_TAG` (`la
 
 Open `http://localhost:8787` and sign in. The default port binding is host-only. Set `TL_BIND_ADDRESS` to your host's LAN address for LAN access. For remote access, use an HTTPS reverse proxy and `TL_SECURE_COOKIE=1`; that proxy can also replace this password (see [Sign in through a reverse proxy](#sign-in-through-a-reverse-proxy)). Do not expose the plain HTTP port directly to the Internet.
 
+To keep the browser companion updating itself, mount a host folder and set `TL_COMPANION_DIR`, `TL_PUBLIC_URL` and optionally `TL_COMPANION_HOST_DIR`: see [Automatic updates](companion.md#automatic-updates).
+
 ## Container user and permissions
 
 The image still starts as UID/GID 1000 by default. Existing deployments with `cap_drop: [ALL]` need no change. `TL_UID` and `TL_GID` remain build-time options.

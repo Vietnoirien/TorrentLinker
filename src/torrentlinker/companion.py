@@ -153,6 +153,7 @@ class CompanionReceiver:
                         self.headers.get("Origin", ""),
                         self.headers.get("Authorization", ""),
                         body,
+                        version=self.headers.get("X-TorrentLinker-Companion", ""),
                     )
                     self.respond(200, result)
                 except PermissionError as error:

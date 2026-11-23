@@ -25,6 +25,8 @@ async function request(connection, path, body) {
     signal: AbortSignal.timeout(10000),
     headers: {
       "Content-Type": "application/json",
+      // Lets Settings show which companion this browser runs.
+      "X-TorrentLinker-Companion": chrome.runtime.getManifest().version,
       ...(connection.token
         ? { Authorization: "Bearer " + connection.token }
         : {}),

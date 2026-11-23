@@ -116,6 +116,7 @@ def create_app(
     members_enabled: bool = False,
     companion_dir: Path | None = None,
     public_url: str | None = None,
+    companion_host_dir: str | None = None,
 ) -> FastAPI:
     app_version = escape(installed_version())
     directory.mkdir(parents=True, exist_ok=True)
@@ -440,6 +441,7 @@ def create_app(
         origin_file=directory / "companion-origin.json",
         public_url=public_url,
         needs_origin=True,
+        shown_path=companion_host_dir,
     )
     if companion_dir:
         app.state.managed_companion.sync()  # keeps the folder current after an upgrade

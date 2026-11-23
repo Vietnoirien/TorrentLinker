@@ -63,6 +63,33 @@ def test_replies_announce_the_bundled_version(tmp_path):
     assert reply == {"accepted": True, "companion_version": bundled_version()}
 
 
+def test_the_card_shows_the_host_folder_when_given(tmp_path):
+    managed = ManagedCompanion(
+        tmp_path / "companion", public_url="https://tl.example", shown_path="/home/me/ext"
+    )
+    assert managed.sync()["path"] == "/home/me/ext"
+
+
+def test_an_accepted_call_records_the_browser_companion_version(tmp_path):
+    from torrentlinker.profile_workspace import ProfileWorkspace
+
+    workspace = ProfileWorkspace(tmp_path)
+    workspace.clock = lambda: 1000.0  # type: ignore[method-assign]
+    workspace._receive = lambda *args: {"accepted": True}  # type: ignore[method-assign]
+    workspace.receive("/api/companion/snapshot", "chrome-extension://x", "", {}, version="0.7.1")
+    assert workspace.data["companion_seen"] == {"version": "0.7.1", "at": 1000.0}
+    workspace.receive("/api/companion/snapshot", "chrome-extension://x", "", {}, version="<b>")
+    assert workspace.data["companion_seen"]["version"] == "0.7.1"  # junk is never recorded
+
+    def refused(*args):
+        raise PermissionError("Use the paired browser extension.")
+
+    workspace._receive = refused  # type: ignore[method-assign]
+    with pytest.raises(PermissionError):
+        workspace.receive("/api/companion/snapshot", "https://evil", "", {}, version="9.9.9")
+    assert workspace.data["companion_seen"]["version"] == "0.7.1"
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="needs Node")
 def test_extension_reloads_once_per_announced_version():
     script = f"""

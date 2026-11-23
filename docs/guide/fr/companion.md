@@ -29,9 +29,11 @@ torrent et ne publie pas d'uploads.
 
 ## Installer et connecter
 
-1. Ouvrez **Paramètres → Extension** sur le bureau ou **Réglages → Extension** dans
-   l'interface web. Enregistrez ou téléchargez le ZIP de l'extension, puis
-   extrayez-le dans un dossier que vous conserverez. Pour une installation locale
+1. Ouvrez **Paramètres → Connexions → Compagnon**. Si la carte affiche un **Dossier
+   géré**, utilisez ce dossier à l'étape 2 : TorrentLinker le tient à jour et
+   l'extension se met à jour seule (voir [Mises à jour automatiques](#mises-à-jour-automatiques)).
+   Sinon, enregistrez ou téléchargez le ZIP de l'extension, puis extrayez-le dans un
+   dossier que vous conserverez. Pour une installation locale
    sur le bureau, le fichier `TorrentLinker-companion.zip` des téléchargements de
    la version convient également.
 2. Ouvrez `chrome://extensions`, `brave://extensions` ou `edge://extensions` dans le
@@ -125,11 +127,48 @@ conservation n'est donc pas limitée à la mémoire.
   déjà actifs dans le client.
 - Changer l'adresse de l'Indexeur ou la clé API efface la connexion et le cache du
   compte. Reconnectez l'extension pour le nouveau compte.
-- Pour mettre à jour, téléchargez un nouveau ZIP depuis la même installation de
-  TorrentLinker, remplacez les fichiers du dossier extrait, puis cliquez sur
-  **Actualiser** dans la page Extensions du navigateur. Reconnectez l'extension si
-  nécessaire. Une WebUI distante demande à nouveau son propre ZIP, pas le ZIP
-  générique de la version.
+- Sans dossier géré, mettez à jour en téléchargeant un nouveau ZIP depuis la même
+  installation de TorrentLinker, en remplaçant les fichiers du dossier extrait, puis
+  en cliquant sur **Actualiser** dans la page Extensions du navigateur. Reconnectez
+  l'extension si nécessaire. Une WebUI distante demande à nouveau son propre ZIP,
+  pas le ZIP générique de la version.
+
+### Mises à jour automatiques
+
+TorrentLinker peut conserver l'extension dans un **dossier géré**. Chargez
+l'extension non empaquetée depuis ce dossier une seule fois ; ensuite, chaque fois
+que TorrentLinker apporte un compagnon plus récent, il réécrit le dossier et
+l'extension se recharge d'elle-même à sa prochaine synchronisation (sous deux
+minutes), une fois par version. Les appairages survivent au rechargement. Une
+extension chargée depuis un autre dossier n'est jamais rechargée.
+
+- **Bureau** : le dossier se trouve dans le dossier de données de l'application ;
+  la carte Compagnon affiche son chemin.
+- **Docker ou serveur web** : montez un dossier de l'hôte dans le conteneur et
+  indiquez-le avec `TL_COMPANION_DIR`. Le serveur doit aussi connaître son adresse
+  HTTPS publique, donnée par `TL_PUBLIC_URL` (sinon il attend que vous ouvriez les
+  Paramètres en HTTPS). `TL_COMPANION_HOST_DIR` ne change que le chemin affiché par
+  la carte, pour qu'elle nomme le dossier de l'hôte à charger dans le navigateur
+  plutôt que le chemin du conteneur :
+
+  ```yaml
+  services:
+    torrentlinker:
+      environment:
+        TL_COMPANION_DIR: /companion
+        TL_PUBLIC_URL: https://torrentlinker.example.org
+        TL_COMPANION_HOST_DIR: /home/moi/torrentlinker-companion
+      volumes:
+        - /home/moi/torrentlinker-companion:/companion
+  ```
+
+  Le navigateur qui charge le dossier doit tourner sur la machine qui possède ce
+  dossier, en général l'hôte Docker. Le dossier doit être accessible en écriture
+  à l'utilisateur du conteneur (UID 1000 par défaut).
+
+La ligne « Compagnon dans le navigateur : version … · dernier contact … » de la
+carte Compagnon indique la dernière version qui a contacté TorrentLinker ;
+**Actualiser** la met à jour.
 
 La connexion survit normalement aux redémarrages de l'application et du navigateur.
 Si le navigateur est fermé, si c411 est déconnecté ou si le compte diffère, les

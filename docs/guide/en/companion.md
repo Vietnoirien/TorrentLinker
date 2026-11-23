@@ -27,9 +27,11 @@ files. The companion does not directly manage torrent clients or publish uploads
 
 ## Install and connect
 
-1. Open **Settings → Companion**. Choose **Save extension…** on desktop or
-   **Download extension** in the WebUI, then extract the ZIP to a folder you will
-   keep. For a local desktop installation, you can also use
+1. Open **Settings → Connections → Companion**. When the card shows a **Managed
+   folder**, use that folder in step 2: TorrentLinker keeps it current and the
+   extension updates itself (see [Automatic updates](#automatic-updates)).
+   Otherwise choose **Save extension…** on desktop or **Download extension** in the
+   WebUI, then extract the ZIP to a folder you will keep. For a local desktop installation, you can also use
    `TorrentLinker-companion.zip` from the release downloads.
 2. Open `chrome://extensions`, `brave://extensions` or `edge://extensions` in the
    browser you will use. Enable **Developer mode**, choose **Load unpacked**, and
@@ -113,10 +115,44 @@ not guaranteed to remain only in memory.
   torrent metadata or stop torrents already running in the client.
 - Changing the Indexer address or API key clears the connection and cached account
   data. Connect again for the new account.
-- To update, download a fresh ZIP from the same TorrentLinker installation, replace
-  the files in your extracted extension folder, then click **Reload** on the
-  browser's Extensions page. Reconnect if asked. A remote WebUI needs its own ZIP
-  again, rather than the generic release ZIP.
+- Without a managed folder, update by downloading a fresh ZIP from the same
+  TorrentLinker installation, replacing the files in your extracted extension
+  folder, then clicking **Reload** on the browser's Extensions page. Reconnect if
+  asked. A remote WebUI needs its own ZIP again, rather than the generic release ZIP.
+
+### Automatic updates
+
+TorrentLinker can keep the extension in one **managed folder**. Load the extension
+unpacked from that folder once; after that, whenever TorrentLinker brings a newer
+companion, it rewrites the folder and the extension reloads itself on its next
+sync (within two minutes), once per version. Your pairings survive the reload.
+An extension loaded from another folder is never reloaded.
+
+- **Desktop**: the folder is in the application data folder; the Companion card
+  shows its path.
+- **Docker or Web server**: mount a host folder into the container and point
+  `TL_COMPANION_DIR` at it. The server must also know its public HTTPS address,
+  set with `TL_PUBLIC_URL` (otherwise it waits until you open Settings over HTTPS).
+  `TL_COMPANION_HOST_DIR` only changes the path the card shows, so it names the
+  host folder you load in the browser rather than the container path:
+
+  ```yaml
+  services:
+    torrentlinker:
+      environment:
+        TL_COMPANION_DIR: /companion
+        TL_PUBLIC_URL: https://torrentlinker.example.org
+        TL_COMPANION_HOST_DIR: /home/me/torrentlinker-companion
+      volumes:
+        - /home/me/torrentlinker-companion:/companion
+  ```
+
+  The browser that loads the folder must run on the machine that has this folder,
+  usually the Docker host. The folder must be writable by the container's user
+  (UID 1000 by default).
+
+The Companion card's line "Companion in the browser: version … · last contact …"
+shows which version reached TorrentLinker last; **Refresh** updates it.
 
 The connection normally survives application and browser restarts. If the browser
 is closed, c411 is signed out or the account differs, the last profile statistics
