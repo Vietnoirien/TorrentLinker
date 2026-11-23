@@ -325,6 +325,17 @@ def test_missing_item_does_not_abort_other_items(tmp_path):
     assert client.started == [meta.infohash]
 
 
+def test_progress_reports_only_new_item_errors_in_a_large_run(tmp_path):
+    board, _, _, links, _ = workspace(tmp_path)
+    missing = [str(tmp_path / f"missing-{n}") for n in range(3)]
+    reports = []
+    result = board.run(missing, "all", str(links), JobStop(), reports.append)
+    assert len(result["errors"]) == 3
+    assert len([r for r in reports if r["phase"] == "item-complete"]) == 3
+    assert all(len(r["errors"]) <= 1 for r in reports)
+    assert sum(len(r["errors"]) for r in reports) == 3
+
+
 def test_completed_item_can_rejoin_the_active_run(tmp_path):
     board, _, original, links, _ = workspace(tmp_path)
     reports = []

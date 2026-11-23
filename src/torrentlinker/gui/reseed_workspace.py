@@ -438,7 +438,9 @@ class ReseedBoard(BundledView):
         if value.get("scan_complete") and self.current_service:
             self.owner.library_model.set_entries(list(self.current_service.library.entries))
         self.progress_value = value
-        self.error = "\n".join(e["message"] for e in value.get("errors", []))
+        # Item decisions and failures live on their rows. Replacing the global error
+        # with the cumulative list makes the panel create a new sticky toast at every
+        # step of a large run, each one containing all earlier errors again.
         if "rows" in value:
             self.rows = value["rows"]
 
@@ -448,7 +450,6 @@ class ReseedBoard(BundledView):
     def finished(self, result):
         self.running = False
         self.rows = result["rows"]
-        self.error = "\n".join(e["message"] for e in result.get("errors", []))
         self.progress_value = {"active": {}, "paused_paths": []}
         self.refresh()
 

@@ -1,7 +1,34 @@
+from types import SimpleNamespace
+
 from PySide6.QtWidgets import QMessageBox
 
 from tests.test_library_folders import window_for
 from tests.test_reseed_workspace import workspace
+from torrentlinker.gui.reseed_workspace import ReseedBoard
+
+
+def test_batch_item_errors_stay_on_rows_without_flooding_the_global_toast():
+    """A long run reports decisions per item, without a new toast for every result."""
+    board = SimpleNamespace(
+        error="", progress_value={}, rows=[], running=True, refresh=lambda: None
+    )
+    rows = [{"path": f"item-{n}", "error": "Choose one full Candidate."} for n in range(3)]
+    for count in range(1, 4):
+        ReseedBoard.progress(
+            board,
+            {
+                "errors": [{"path": row["path"], "message": row["error"]} for row in rows[:count]],
+                "rows": rows[:count],
+            },
+        )
+        assert board.error == ""
+        assert len(board.rows) == count
+    ReseedBoard.finished(
+        board,
+        {"errors": [{"path": row["path"], "message": row["error"]} for row in rows], "rows": rows},
+    )
+    assert board.error == ""
+    assert len(board.rows) == 3
 
 
 def test_native_board_runs_the_shared_workflow(qtbot, tmp_path, monkeypatch):

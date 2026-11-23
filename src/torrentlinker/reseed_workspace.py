@@ -127,6 +127,10 @@ class ReseedWorkspace:
                 value = {
                     **progress,
                     **result,
+                    # The final result keeps every error. Progress sends only errors from
+                    # this step, so a long batch does not copy its growing history on
+                    # every UI update.
+                    "errors": progress.get("errors", []),
                     "active": dict(active),
                     "paused_paths": sorted(self.paused_paths()),
                 }
@@ -245,7 +249,14 @@ class ReseedWorkspace:
                             value = {"seeded": 0, "errors": [{"path": path, "message": message}]}
                             if not path:
                                 result["errors"].extend(value["errors"])
-                                emit({"path": "", "phase": "scan-error", "error": message})
+                                emit(
+                                    {
+                                        "path": "",
+                                        "phase": "scan-error",
+                                        "error": message,
+                                        "errors": value["errors"],
+                                    }
+                                )
                         if not path:
                             active.pop("", None)
                             for row in self.library.rows():
@@ -277,7 +288,14 @@ class ReseedWorkspace:
                                 pending.append(path)
                             else:
                                 result["done"] += 1
-                        emit({"path": path, "phase": "item-complete", "rows": self.rows()})
+                        emit(
+                            {
+                                "path": path,
+                                "phase": "item-complete",
+                                "rows": self.rows(),
+                                "errors": value["errors"],
+                            }
+                        )
         finally:
             self._running = False
             self._scan_requested = False
