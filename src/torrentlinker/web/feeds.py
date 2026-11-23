@@ -28,9 +28,10 @@ def feed_routes(app: FastAPI, service):
         )
 
     @app.get("/api/feed-options")
-    def options():
+    def options(language: str = "fr"):
         return {
             "tr4ker_categories": control.tr4ker_categories.get(service.setup.tr4ker_session()),
+            "genres": control.genres.options(language),
             "clients": [
                 {
                     "id": p.id,

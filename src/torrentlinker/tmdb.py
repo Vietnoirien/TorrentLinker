@@ -76,6 +76,17 @@ class Tmdb:
             raw={**data, "media_type": media_type},
         )
 
+    def genre_list(self, media_type: str, language: str) -> list[dict[str, Any]]:
+        """TMDb's genres of films (`movie`) or series (`tv`), as `{id, name}` in a language."""
+        if media_type not in ("movie", "tv"):
+            return []
+        data = self._get(f"/genre/{media_type}/list", {"language": language})
+        return [
+            {"id": int(g["id"]), "name": str(g["name"])}
+            for g in data.get("genres") or []
+            if isinstance(g, dict) and isinstance(g.get("id"), int) and g.get("name")
+        ]
+
     def certifications(self, tmdb_id: str, media_type: str) -> list[tuple[str, str]]:
         """Each country's age certification of a film (release dates) or series (content
         ratings), for Age Ratings."""

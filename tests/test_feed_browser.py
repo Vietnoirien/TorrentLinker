@@ -583,3 +583,82 @@ def test_rss_editor_chooses_a_tracker_and_tr4ker_feed_options_from_the_backend(t
             browser.close()
     finally:
         server.should_exit = True
+
+
+def test_rss_genre_chips_rows_and_review_line(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_feeds import Source, release
+    from torrentlinker.downloads import IndexerCategory
+    from torrentlinker.web.app import create_app
+
+    app = create_app(tmp_path / "config", password="test-password-long")
+    source = Source()
+    source.rows = [
+        release("a", title="Alien.2160p", metadata={"genre": [27, 878, 18]}),
+        release("b", title="Drame.2160p", metadata={"genre": [18]}),
+        release("c", title="Inconnu.2160p"),
+    ]
+    control = app.state.agent_service.feed_control
+    control.feeds.indexer = lambda: source
+    control.service.setup.settings.indexer_categories = {2030: IndexerCategory("Films")}
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    threading.Thread(target=server.run, daemon=True).start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1250, "height": 900}, locale="en-US")
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            shell_navigate(page, "feeds")
+            page.on("console", lambda m: m.type == "error" and errors.append(m.text))
+            frame = page.frame_locator("#feeds-frame")
+            frame.locator("#feeds-empty").get_by_role("button", name="New subscription").click()
+            editor = frame.locator("#dialog-content")
+            editor.get_by_label("Name", exact=True).fill("Horreur")
+            editor.get_by_role("button", name="Films", exact=True).click()
+            editor.get_by_role("button", name="Check again", exact=True).click()
+            expect(editor.locator(".feed-strip")).to_contain_text("Would match now: 3 of 3")
+            chip = editor.locator(".feed-chip").filter(has_text="Horror")
+            expect(chip).to_have_count(1)
+            chip.click()  # none -> Required (there is no Prefer step for a genre)
+            expect(editor.locator(".feed-chip.must")).to_have_text("✓ Horror")
+            expect(editor.locator(".feed-strip")).to_contain_text("Would match now: 1 of 3")
+            expect(editor.locator(".feed-strip")).to_contain_text("1 wait in review: genre unknown")
+            editor.locator(".feed-chip.must").click()  # Required -> Excluded
+            expect(editor.locator(".feed-chip.avoid")).to_have_text("✕ Horror")
+            expect(editor.locator(".feed-strip")).to_contain_text("Would match now: 1 of 3")
+            editor.locator(".feed-chip.avoid").click()  # Excluded -> none
+            expect(editor.locator(".feed-chip.must, .feed-chip.avoid")).to_have_count(0)
+            editor.locator(".feed-chip").filter(has_text="Horror").click()
+            editor.get_by_role("button", name="Save", exact=True).click()
+            frame.locator("#feeds-sidebar").get_by_role(
+                "button", name=re.compile("^Horreur")
+            ).click()
+            frame.locator("#feeds-header").get_by_role("button", name="Refresh now").click()
+            rows = frame.locator("#feeds-results tbody tr")
+            expect(rows).to_have_count(3)
+            alien = rows.filter(has_text="Alien.2160p")
+            expect(alien.locator(".tracker-badge.genre")).to_have_text(
+                ["Horror", "Science Fiction +1"]
+            )
+            expect(
+                rows.filter(has_text="Inconnu").locator(".tracker-badge.genre.unknown")
+            ).to_have_text("genre ?")
+            heights = {round(rows.nth(i).bounding_box()["height"]) for i in range(3)}
+            assert len(heights) == 1
+            assert not errors
+            browser.close()
+    finally:
+        server.should_exit = True

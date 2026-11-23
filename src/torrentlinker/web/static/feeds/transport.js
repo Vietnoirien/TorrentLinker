@@ -193,9 +193,10 @@ window.addEventListener("feeds-environment", (e) =>
     if (languageChanged && $("dialog").open) translateOpenForm(currentLanguage);
     if (!next.active) return;
     if (!loaded || languageChanged) {
-      const options = await api("feed-options");
+      const options = await api(`feed-options?language=${encodeURIComponent(currentLanguage)}`);
       state.setup.indexer_categories = options.categories || {};
       state.setup.tr4ker_categories = options.tr4ker_categories || [];
+      state.setup.genres = options.genres || [];
       state.setup.clients = options.clients || [];
       await loadFeeds();
       loaded = true;

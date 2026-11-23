@@ -8,6 +8,7 @@ import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from torrentlinker.feed_genres import FeedGenres
 from torrentlinker.feeds import (
     FeedService,
     Subscription,
@@ -35,6 +36,13 @@ class FeedControl:
             setup.tracker_indexer,
             # The passkey is read from the secret store when a feed is fetched, never kept.
             lambda tracker_id: setup.secrets.get(tracker(tracker_id).passkey_secret) or "",
+        )
+        # Genres come from TMDb (the app's key) and from the Tracker's own detail.
+        self.genres = self.feeds.genres = FeedGenres(
+            self.feeds.genre_cache,
+            key=lambda: setup.secrets.get("tmdb-api-key") or "",
+            c411=setup.indexer,
+            reader=setup.tr4ker_session,
         )
         self.tr4ker_categories = Tr4kerCategories()
         self.stop = threading.Event()

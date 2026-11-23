@@ -554,3 +554,8 @@ dialog:has(.feed-editor) {
 .feed-title-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 46ch; }
 .feed-title-cell .link-button { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
 #feeds-body td:not(:nth-child(2)) { white-space: nowrap; }
+
+/* Genre badges sit on the Tracker line; the line never wraps, so every row keeps its height. */
+.tracker-cell:has(.genre) { flex-wrap: nowrap; overflow: hidden; max-width: 100%; }
+.tracker-badge.genre { border-color: var(--line); color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.tracker-badge.genre.unknown { border-style: dashed; color: var(--muted); }

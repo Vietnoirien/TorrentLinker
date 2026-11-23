@@ -22,10 +22,13 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from torrentlinker import net
+from torrentlinker.feed_genres import FeedGenres, GenreCache, category_kind
 from torrentlinker.indexer import Candidate, Indexer, SearchQuery
 
+GENRE_LOOKUPS = 40  # releases whose genre one preview or refresh reads from their Tracker
+
 MetadataField = Literal[
-    "quality", "codec", "audio", "subtitles", "format", "bitrate", "platform", "license"
+    "quality", "codec", "audio", "subtitles", "format", "bitrate", "platform", "license", "genre"
 ]
 RankingField = Literal[MetadataField, "size", "seeders"]
 
@@ -41,7 +44,8 @@ class Preferences(BaseModel):
     min_seeders: int = Field(default=0, ge=0)
     required: dict[MetadataField, list[str]] = Field(
         default_factory=dict,
-        description="Hard requirements: reject releases without these verified facts.",
+        description="Hard requirements: reject releases without these verified facts. "
+        "genre lists TMDb genre ids, as text.",
     )
     excluded: dict[MetadataField, list[str]] = Field(default_factory=dict)
     preferred: dict[MetadataField, list[str]] = Field(
@@ -88,8 +92,10 @@ class Preferences(BaseModel):
         }
         if len(set(self.priorities)) != len(self.priorities) or set(self.priorities) - allowed:
             raise ValueError("Choose distinct supported ranking priorities.")
+        if "genre" in self.preferred:
+            raise ValueError("A genre is required or excluded, never preferred.")
         for values in (self.required, self.excluded, self.preferred):
-            if set(values) - (allowed - {"size", "seeders"}):
+            if set(values) - (allowed - {"size", "seeders"} | {"genre"}):
                 raise ValueError("Unsupported release metadata criterion.")
         # Every requested preference must affect ranking, including non-video
         # fields absent from the default priority order.
@@ -242,7 +248,8 @@ def evaluate(row: Candidate, prefs: Preferences) -> dict:
         if not applicable(key):
             continue
         values = row.metadata.get(key)
-        if values is None:
+        # No genre from TMDb is no verified genre: neither Required nor Excluded can judge it.
+        if values is None or (key == "genre" and not values):
             unknown.append(key)
             continue
         actual = {str(v).casefold() for v in (values if isinstance(values, list) else [values])}
@@ -313,6 +320,8 @@ class FeedService:
         self.lock = threading.RLock()
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        # Where a release's genres come from (set by the owner of the service); none, none known.
+        self.genres: FeedGenres | None = None
         with self.db:
             self.db.executescript("""
             CREATE TABLE IF NOT EXISTS subscriptions (
@@ -340,6 +349,7 @@ class FeedService:
                 id TEXT PRIMARY KEY, name TEXT, hashes TEXT, created REAL, payload TEXT DEFAULT ''
             );
             """)
+        self.genre_cache = GenreCache(self.db, self.lock)
 
         with self.db:
             # Subscriptions saved before Trackers existed follow c411: say so in the payload.
@@ -440,6 +450,38 @@ class FeedService:
             raise ValueError("Add the tr4ker Indexer first.")
         return self.tracker_indexer(subscription.tracker)
 
+    def _with_genres(self, feed: Subscription, rows: dict[str, Candidate]) -> dict[str, Candidate]:
+        """Add the genres TMDb gives to video releases when the subscription filters on genre or
+        follows films or series. A release's answer is kept, so each preview reads the next few
+        Tracker details; the others stay unknown meanwhile."""
+        hint = (
+            "movie"
+            if feed.feed_category.startswith("films")
+            else "tv"
+            if feed.feed_category.startswith("series")
+            else ""
+        )
+        prefs = feed.preferences
+        if self.genres is None or not (
+            prefs.required.get("genre")
+            or prefs.excluded.get("genre")
+            or hint
+            or any(category_kind(c) for c in feed.categories)
+        ):
+            return rows
+        budget = GENRE_LOOKUPS
+        for key, row in rows.items():
+            if not self.genres.applies(row, hint) or not self.genres.due(row.metadata):
+                continue
+            found = self.genres.cached(row)
+            if found is None:
+                if budget <= 0:
+                    continue
+                budget -= 1
+                found = self.genres.resolve(row, hint)
+            rows[key] = replace(row, metadata={**row.metadata, **found})
+        return rows
+
     def _feed_preview(self, subscription: Subscription) -> dict:
         """tr4ker's passkey feed: its newest 100 items, once per guid (no paging)."""
         from torrentlinker.tr4ker_rss import fetch_feed
@@ -453,7 +495,10 @@ class FeedService:
         finally:
             if self.http is None:
                 http.close()
-        by_key = {row.infohash: row for row in rows}
+        by_key = self._with_genres(
+            subscription,
+            {row.infohash: row for row in rows},  # type: ignore[misc]
+        )
         with self.lock, self.db:
             self.db.execute(
                 "INSERT OR REPLACE INTO previews VALUES(?,?)",
@@ -512,6 +557,7 @@ class FeedService:
             if len(batch) < 100:
                 reason = "end of accessible response"
                 break
+        rows = self._with_genres(subscription, rows)
         with self.lock, self.db:
             self.db.execute(
                 "INSERT OR REPLACE INTO previews VALUES(?,?)",
@@ -832,6 +878,11 @@ class FeedService:
                     status, reason = (
                         "baseline",
                         "Available before activation; include-current is disabled.",
+                    )
+                elif "genre" in evaluation["unknown"] and not evaluation["excluded"]:
+                    status, reason = (
+                        "review",
+                        "Genre unknown: TMDb gives none for this release. It waits in review.",
                     )
                 elif not re.fullmatch(r"[a-f0-9]{40}", infohash or ""):
                     status, reason = (

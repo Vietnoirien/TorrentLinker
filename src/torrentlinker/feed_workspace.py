@@ -66,13 +66,15 @@ class FeedWorkspace:
             from torrentlinker.community_site import community_site
 
             return community_site(service.setup).request("items-" + parts[1], body)
-        if path == "feed-options" and method == "GET":
+        if parts == ["feed-options"] and method == "GET":
             return {
                 "categories": {
                     str(k): {"name": v.name, "parent": v.parent}
                     for k, v in service.setup.settings.indexer_categories.items()
                 },
                 "tr4ker_categories": control.tr4ker_categories.get(service.setup.tr4ker_session()),
+                # TMDb's genres in the UI language, for the Genres criterion.
+                "genres": control.genres.options(query.get("language", ["fr"])[0]),
                 "clients": [
                     {
                         "id": p.id,
