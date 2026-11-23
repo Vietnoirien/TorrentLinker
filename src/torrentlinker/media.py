@@ -26,6 +26,7 @@ from torrentlinker.media_tracker import TrackerRows
 
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
 AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wma", ".wv"}
+POSTER_BUDGET = 90.0  # seconds a scan may spend downloading posters; the rest wait for the next one
 PARTIAL = (".part", ".partial", ".!qb", ".!ut", ".crdownload", ".tmp")
 
 
@@ -573,6 +574,9 @@ class MediaLibrary(TrackerRows, AgeRatings):
         self.apply_age_ratings(client_id, setup, stop)
         if details not in {"limit", "rejected"}:
             self.tracker_refresh(client_id, setup, stop)
+        self.prefetch_posters(client_id, stop, progress)
+        if stop.is_set():
+            return {"cancelled": True}
         if details in {"limit", "unavailable", "rejected"}:
             # The library is complete; the remaining descriptions come with a later refresh.
             note = {
@@ -1442,21 +1446,9 @@ class MediaLibrary(TrackerRows, AgeRatings):
         row = self.record(client_id, identifier)
         image = json.loads(row["body"]).get("artwork")
         if not image:
-            remote = json.loads(row["body"]).get("remote_artwork")
-            if not remote:
+            image = self.remote_poster(client_id, row)
+            if not image:
                 return None
-            self.checked_path(client_id, row["path"], row["folder"])
-            from torrentlinker.assistant.images import fetch_image
-
-            data, _ = fetch_image(remote)
-            image = self.cache_artwork(data)
-            body = json.loads(row["body"])
-            body["artwork"] = image  # download each poster once
-            with self.lock, self.db:
-                self.db.execute(
-                    "UPDATE media_items SET body=? WHERE client=? AND id=?",
-                    (json.dumps(body), client_id, identifier),
-                )
         self.checked_path(client_id, row["path"], row["folder"])
         if image.startswith("asset:"):
             key = image[6:]
@@ -1475,6 +1467,75 @@ class MediaLibrary(TrackerRows, AgeRatings):
         if not head.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")):
             raise ValueError("Artwork is unavailable.")
         return checked
+
+    def remote_poster(self, client_id, row) -> str:
+        """The cached poster of a row known only remotely, downloaded once ("" without one)."""
+        remote = json.loads(row["body"]).get("remote_artwork")
+        if not remote:
+            return ""
+        self.checked_path(client_id, row["path"], row["folder"])
+        with media_artwork.download_lock(f"{client_id}|{row['id']}"):
+            with self.lock:
+                fresh = self.db.execute(
+                    "SELECT body FROM media_items WHERE client=? AND id=?",
+                    (client_id, row["id"]),
+                ).fetchone()
+            body = json.loads(fresh["body"] if fresh else row["body"])
+            if body.get("artwork"):
+                return body["artwork"]  # a concurrent request or the scan got it first
+            from torrentlinker.assistant.images import fetch_image
+
+            data, _ = fetch_image(remote)
+            body["artwork"] = self.cache_artwork(data)  # download each poster once
+            with self.lock, self.db:
+                self.db.execute(
+                    "UPDATE media_items SET body=? WHERE client=? AND id=?",
+                    (json.dumps(body), client_id, row["id"]),
+                )
+            return body["artwork"]
+
+    def prefetch_posters(self, client_id, stop, progress, limit: float = POSTER_BUDGET) -> int:
+        """Cache the remote posters, and their grid and hero sizes, so Médias opens from disk.
+
+        Bounded by `limit` seconds (the remaining posters come with the next refresh); a
+        poster that fails is skipped, never failing the scan; `stop` ends it at once.
+        """
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT * FROM media_items WHERE client=?", (client_id,)
+            ).fetchall()
+        pending = [r for r in rows if json.loads(r["body"]).get("remote_artwork")]
+        pending += self.tracker_poster_entries(client_id)
+        deadline = time.monotonic() + limit
+        done = 0
+
+        def one(item) -> bool:
+            if stop.is_set() or time.monotonic() > deadline:
+                return False
+            try:
+                if isinstance(item, dict):
+                    path = self.tracker_artwork(client_id, item["hash"])
+                else:
+                    path = self.artwork(client_id, item["id"])
+                if path is not None:
+                    for size in media_artwork.WIDTHS:
+                        if stop.is_set():
+                            return False
+                        media_artwork.variant(
+                            path, self.agent.setup.path.parent / "media-artwork", size
+                        )
+            except Exception:
+                return False  # no poster for now: the placeholder shows, a later scan retries
+            return True
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for ok in pool.map(one, pending):
+                done += ok
+                if ok:
+                    progress({"posters": done})
+        return done
 
     def artwork_variant(self, client_id, identifier, size):
         """The poster as the small WebP of `size` ("grid" or "hero"), or None without a poster."""

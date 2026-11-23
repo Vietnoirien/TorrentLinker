@@ -14,6 +14,12 @@ _locks: dict[str, threading.Lock] = {}
 _guard = threading.Lock()
 
 
+def download_lock(key: str) -> threading.Lock:
+    """One lock per remote poster: two requests for an uncached poster download it once."""
+    with _guard:
+        return _locks.setdefault("download:" + key, threading.Lock())
+
+
 def link(identifier: str, client_id: str, body: dict[str, Any]) -> str:
     """The row's artwork URL; its version changes with the poster, so a browser may keep it."""
     if not (body.get("artwork") or body.get("remote_artwork")):

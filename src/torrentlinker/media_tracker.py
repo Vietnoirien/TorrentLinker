@@ -18,6 +18,8 @@ from typing import Any
 
 from guessit import guessit
 
+from torrentlinker import media_artwork
+
 LATEST_PAGES = 20  # at most this many listing pages per refresh; known releases end it sooner
 RUN_INTERVAL = 600  # seconds between two refreshes of the same client
 LATEST_KEEP = 30 * 86400  # a latest release stays suggested for a month
@@ -394,6 +396,15 @@ class TrackerRows:
                         return {**entry, "release": release}
         raise ValueError("This tracker release is no longer suggested.")
 
+    def tracker_poster_entries(self, client_id) -> list[dict[str, Any]]:
+        """New suggestions with a TMDb poster, as `{"hash": ...}`; the scan caches their posters."""
+        found = []
+        for entry in self._tracker_cache(client_id, "tracker-new").values():
+            poster = (entry.get("facts") or {}).get("poster_url") or ""
+            if entry.get("releases") and poster.startswith("https://image.tmdb.org/"):
+                found.append({"hash": entry["releases"][0]["hash"]})
+        return found
+
     def tracker_artwork(self, client_id, infohash: str):
         """An upgrade shows the library film's poster; a new film its c411 poster, once."""
         entry = self.tracker_entry(client_id, infohash)
@@ -403,16 +414,24 @@ class TrackerRows:
         if not poster.startswith("https://image.tmdb.org/"):
             return None
         if not entry.get("artwork"):
-            from torrentlinker.assistant.images import fetch_image
+            with media_artwork.download_lock(entry["cache_key"]):
+                with self.lock:
+                    saved = self.db.execute(
+                        "SELECT body FROM media_options WHERE key=?", (entry["cache_key"],)
+                    ).fetchone()
+                if saved and json.loads(saved[0]).get("artwork"):
+                    entry["artwork"] = json.loads(saved[0])["artwork"]  # downloaded meanwhile
+                else:
+                    from torrentlinker.assistant.images import fetch_image
 
-            data, _ = fetch_image(poster)
-            entry["artwork"] = self.cache_artwork(data)  # type: ignore[attr-defined]
-            entry.pop("release", None)
-            with self.lock, self.db:
-                self.db.execute(
-                    "INSERT OR REPLACE INTO media_options VALUES (?,?)",
-                    (entry["cache_key"], json.dumps(entry)),
-                )
+                    data, _ = fetch_image(poster)
+                    entry["artwork"] = self.cache_artwork(data)  # type: ignore[attr-defined]
+                    entry.pop("release", None)
+                    with self.lock, self.db:
+                        self.db.execute(
+                            "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                            (entry["cache_key"], json.dumps(entry)),
+                        )
         image = entry["artwork"]
         if not re.fullmatch(r"asset:[a-f0-9]{64}\.png", image):
             return None
