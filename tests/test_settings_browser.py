@@ -436,7 +436,7 @@ def test_connection_tabs_tr4ker_takes_over_an_indexer_and_the_companion_stays_ho
                 assert [i.id for i in setup.settings.indexers] == ["c411", "tr4ker"]
                 assert setup.secrets.get("indexer-key-tr4ker") == "OLD-KEY"
                 works = panel.locator(".file-access-capabilities")
-                expect(works).to_contain_text("soon: tr4ker companion (#179)")
+                expect(works).to_contain_text("Paired tr4ker session needed")
                 expect(works).to_contain_text("tr4ker has no Zen")
                 panel.get_by_label("tr4ker passkey", exact=True).fill("PASS-T4K")
                 panel.get_by_role("button", name="Save", exact=True).click()
@@ -450,9 +450,47 @@ def test_connection_tabs_tr4ker_takes_over_an_indexer_and_the_companion_stays_ho
                 expect(panel.locator(".indexer-card")).to_contain_text("c411")
                 settings_tab(panel, "Companion").click()
                 row = panel.locator(".conn-row[data-tracker=tr4ker]")
-                expect(row).to_contain_text("soon: tr4ker companion (#179)")
-                expect(row.get_by_role("button")).to_have_count(0)
+                expect(row).to_contain_text("Not paired")
+                expect(row.get_by_role("button", name="Pair", exact=True)).to_be_enabled()
                 expect(panel.locator(".conn-row[data-tracker=c411]")).to_contain_text("Not paired")
+                # Pair tr4ker the way the extension does: its tab names the account.
+                from datetime import UTC, datetime
+
+                workspace = setup.profile_workspace()
+                code = workspace.pairing("tr4ker")["code"]
+                origin = "chrome-extension://" + "a" * 32
+                token = workspace.receive(
+                    "/api/companion/pair",
+                    origin,
+                    "",
+                    {"code": code, "accountId": "7", "username": "demo_t4k", "tracker": "tr4ker"},
+                )["token"]
+                workspace.receive(
+                    "/api/companion/snapshot",
+                    origin,
+                    "Bearer " + token,
+                    {
+                        "schema": 1,
+                        "source": "https://tr4ker.net",
+                        "tracker": "tr4ker",
+                        "capturedAt": datetime.now(UTC).isoformat(),
+                        "account": {"id": "7", "username": "demo_t4k"},
+                        "me": {"id": "7", "username": "demo_t4k"},
+                    },
+                )
+                panel.get_by_role("button", name="Refresh", exact=True).click()
+                expect(row).to_contain_text("demo_t4k")
+                expect(row).to_contain_text("Paired")
+                expect(row.get_by_role("button", name="Unpair")).to_be_visible()
+                expect(panel.locator(".conn-row[data-tracker=c411]")).to_contain_text("Not paired")
+                panel.get_by_role("tab", name="tr4ker on").click()
+                expect(
+                    panel.locator(".file-access-capabilities tr", has_text="Profile, torrent")
+                ).to_contain_text("Available")
+                settings_tab(panel, "Companion").click()
+                row.get_by_role("button", name="Unpair").click()
+                expect(row).to_contain_text("Not paired")
+                assert not workspace.state()["tr4ker"]["paired"]
                 assert not errors
                 browser.close()
         finally:

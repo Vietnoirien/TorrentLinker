@@ -63,6 +63,8 @@ def test_extension_bundle_is_installable_and_contains_only_packaged_assets():
                 "collect.js",
                 "descriptor.js",
                 "read.js",
+                "trackers.js",
+                "tr4ker.js",
                 "community.js",
                 "companion.js",
                 "companion.html",

@@ -115,8 +115,12 @@ window.addEventListener("message", async (event) => {
         : await api(`community-site/${body.action}`, body.value || {});
     } else if (message.path === "companion") {
       if (body.action === "state") value = await api("zen/profile");
-      else if (body.action === "disconnect")
-        value = await api("zen/profile/disconnect", {});
+      else if (body.action === "disconnect") {
+        // One Tracker, or both when none is named (Disconnect & clear).
+        for (const each of body.tracker ? [body.tracker] : ["c411", "tr4ker"])
+          value = await api(`zen/profile/disconnect?tracker=${encodeURIComponent(each)}`, {});
+      } else if (body.action === "cancel")
+        value = await api(`zen/profile/pairing/cancel?tracker=${encodeURIComponent(body.tracker)}`, {});
       else if (body.action === "downloads")
         value = await api("zen/profile/session-downloads", {
           enabled: body.enabled,
@@ -128,28 +132,31 @@ window.addEventListener("message", async (event) => {
         link.click();
         value = null;
       } else if (body.action === "pair") {
-        const tab = window.open("about:blank", "torrentlinker-companion");
-        try {
-          const profile = await api("zen/profile/refresh", {});
-          const pairing = await api("zen/profile/pairing", {});
-          const target = new URL(".", document.baseURI).href.replace(/\/$/, "");
-          const url =
-            target +
-            "/companion/connect#" +
-            encodeURIComponent(
-              JSON.stringify({
-                target,
-                code: pairing.code,
-                accountId: profile.api.account_id,
-              }),
-            );
-          if (tab) tab.location.href = url;
-          else window.location.href = url;
-          value = null;
-        } catch (error) {
-          tab?.close();
-          throw error;
+        // One browser tab per Tracker, all opened now while the click still counts.
+        const trackers = body.trackers || [body.tracker || "c411"];
+        const tabs = trackers.map((tracker) => [tracker, window.open("about:blank", `torrentlinker-companion-${tracker}`)]);
+        const target = new URL(".", document.baseURI).href.replace(/\/$/, "");
+        for (const [index, [tracker, tab]] of tabs.entries()) {
+          try {
+            let payload;
+            if (tracker === "tr4ker") {
+              // No API profile behind tr4ker: its signed-in tab names the account.
+              const pairing = await api("zen/profile/pairing?tracker=tr4ker", {});
+              payload = { target, code: pairing.code, tracker };
+            } else {
+              const profile = await api("zen/profile/refresh", {});
+              const pairing = await api("zen/profile/pairing", {});
+              payload = { target, code: pairing.code, accountId: profile.api.account_id };
+            }
+            const url = target + "/companion/connect#" + encodeURIComponent(JSON.stringify(payload));
+            if (tab) tab.location.href = url;
+            else window.location.href = url;
+          } catch (error) {
+            for (const [, open] of tabs.slice(index)) open?.close();
+            throw error;
+          }
         }
+        value = null;
       } else throw Error("Unknown companion operation.");
     } else if (message.path === "assistant") {
       if (!body.path.startsWith("setup/assistant"))

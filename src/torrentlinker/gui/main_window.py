@@ -848,21 +848,26 @@ class MainWindow(QMainWindow):
                 port=self.account_workspace.receiver_port(),
             )
 
-    def pair_companion(self) -> None:
+    def pair_companion(self, tracker: str = "c411") -> None:
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import QDesktopServices
 
         from torrentlinker.companion import connection_url
 
         try:
-            self.show_account_profile()
-            pairing = self.account_workspace.pairing()
+            account_id = ""
+            if tracker == "c411":
+                self.show_account_profile()
+            pairing = self.account_workspace.pairing(tracker)
             self._start_companion_receiver()
             assert self.companion_receiver is not None
             self.account_workspace.remember_receiver(self.companion_receiver.server.server_port)
             address = self.companion_receiver.address
-            account_id = self.account_workspace.state()["api"]["account_id"]
-            QDesktopServices.openUrl(QUrl(connection_url(address, pairing["code"], account_id)))
+            if tracker == "c411":
+                account_id = self.account_workspace.state()["api"]["account_id"]
+            QDesktopServices.openUrl(
+                QUrl(connection_url(address, pairing["code"], account_id, tracker))
+            )
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, self.tr("Browser companion"), str(error))
 
@@ -872,9 +877,12 @@ class MainWindow(QMainWindow):
         except ValueError as error:
             QMessageBox.warning(self, self.tr("Browser companion"), str(error))
 
-    def disconnect_companion(self) -> None:
-        self.account_workspace.disconnect()
-        if self.companion_receiver is not None:
+    def disconnect_companion(self, tracker: str = "c411") -> None:
+        self.account_workspace.disconnect(tracker)
+        state = self.account_workspace.state()
+        if self.companion_receiver is not None and not (
+            state["paired"] or state["tr4ker"]["paired"]
+        ):
             self.companion_receiver.stop()
             self.companion_receiver = None
         self.show_account_profile()

@@ -77,6 +77,7 @@ TRACKERS: dict[str, Tracker] = {
         frozenset({"search", "catalogue", "profile", "upload", "rss", "community", "crossseed"}),
         discovery_url="https://tr4ker.net/api/torznab/all",
         retry_fallback=60.0,  # its own frontend's fallback
+        companion=True,
     ),
 }
 

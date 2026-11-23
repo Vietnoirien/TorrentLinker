@@ -2,6 +2,8 @@ import { communityInTab } from "./community.js";
 import { collectProfile } from "./collect.js";
 import { collectDescriptors } from "./descriptor.js";
 import { readPages } from "./read.js";
+import { collectTr4ker } from "./tr4ker.js";
+import { TRACKERS, tabPattern, ownsUrl } from "./trackers.js";
 
 const PERIOD = 120000;
 const LEDGER_PERIOD = 6 * 3600000; // the Zen ledger changes about once a day
@@ -26,7 +28,9 @@ async function request(connection, path, body) {
         ? { Authorization: "Bearer " + connection.token }
         : {}),
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(
+      connection.tracker ? { ...body, tracker: connection.tracker } : body,
+    ),
   });
   const data = await response.json();
   if (!response.ok) {
@@ -50,6 +54,10 @@ async function validateConnection(message, sender) {
     throw new Error(
       "Install the companion downloaded from this TorrentLinker server.",
     );
+  // tr4ker has no account id before its tab is read; c411's comes from the app.
+  const tracker = message.tracker === "tr4ker" ? "tr4ker" : "c411";
+  if (message.tracker !== undefined && message.tracker !== tracker)
+    throw new Error("Start the connection from TorrentLinker’s Profile tab.");
   if (
     message.action !== "connect" ||
     target.origin !== source.origin ||
@@ -63,14 +71,21 @@ async function validateConnection(message, sender) {
     target.search ||
     target.hash ||
     !/^[A-Za-z0-9_-]{40,100}$/.test(message.code) ||
-    typeof message.accountId !== "string" ||
-    !message.accountId ||
-    message.accountId.length > 160
+    (tracker === "c411" &&
+      (typeof message.accountId !== "string" ||
+        !message.accountId ||
+        message.accountId.length > 160))
   )
     throw new Error("Start the connection from TorrentLinker’s Profile tab.");
-  return { target: base, code: message.code, accountId: message.accountId };
+  return {
+    target: base,
+    code: message.code,
+    accountId: message.accountId,
+    ...(tracker === "tr4ker" ? { tracker } : {}),
+  };
 }
 async function connect(pending) {
+  if (pending.tracker === "tr4ker") return connectTr4ker(pending);
   // Validate the app's one-time capability before reading anything from c411.
   const paired = await request(pending, "pair", {
     code: pending.code,
@@ -96,8 +111,8 @@ async function connect(pending) {
     }
   }
   await ensureAlarm();
-  if (!(await chrome.tabs.query({ url: "https://c411.org/*" })).length)
-    await chrome.tabs.create({ url: "https://c411.org/", active: true });
+  if (!(await chrome.tabs.query({ url: tabPattern("c411") })).length)
+    await chrome.tabs.create({ url: TRACKERS.c411.origin + "/", active: true });
   await sync();
   await commands();
 }
@@ -119,7 +134,7 @@ async function step() {
     "connection", "downloadRetryAt",
   ]);
   if (!connection || connection.paused || Date.now() < downloadRetryAt) return "stop";
-  const tabs = await chrome.tabs.query({ url: "https://c411.org/*", status: "complete" });
+  const tabs = await chrome.tabs.query({ url: tabPattern("c411"), status: "complete" });
   if (!tabs.length) return "stop";
   try {
     const reply = await request(connection, "commands", { limit: 25 });
@@ -214,7 +229,7 @@ async function communityCommands() {
     if (Date.now() < (communityRetry[key] || 0)) return;
     const demand = await request(connection, "actions-demand", {accountId: connection.accountId});
     if (!demand.collect || Date.now() < demand.retry_at * 1000) return;
-    const tabs = await chrome.tabs.query({url: "https://c411.org/*", status: "complete"});
+    const tabs = await chrome.tabs.query({url: tabPattern("c411"), status: "complete"});
     if (!tabs.length) return;
     const run = async (input) => {
       let watchdog;
@@ -266,7 +281,7 @@ async function sync() {
   if (!connection || connection.paused || Date.now() - lastAttempt < PERIOD)
     return;
   const tabs = await chrome.tabs.query({
-    url: "https://c411.org/*",
+    url: tabPattern("c411"),
     status: "complete",
   });
   if (!tabs.length) {
@@ -310,6 +325,105 @@ async function sync() {
       await note(error.message || "Sync unavailable. Retrying automatically.");
   }
 }
+// ---- tr4ker: its own connection, tab, account binding and messages ----
+const T4K = {
+  connection: "connection-tr4ker",
+  attempt: "lastAttempt-tr4ker",
+  sync: "lastSync-tr4ker",
+  shop: "lastShop-tr4ker",
+  deep: "payoutsDone-tr4ker",
+  message: "message-tr4ker",
+};
+const PAYOUT_PAGES = 40; // the first sync reads the whole log, later ones only the newest page
+async function noteTr4ker(message) {
+  await chrome.storage.local.set({ [T4K.message]: message });
+}
+async function tr4kerTab(open) {
+  let tabs = await chrome.tabs.query({ url: tabPattern("tr4ker") });
+  if (!tabs.length && open)
+    tabs = [await chrome.tabs.create({ url: TRACKERS.tr4ker.origin + "/", active: true })];
+  for (let i = 0; i < 60 && tabs[0] && tabs[0].status !== "complete"; i++) {
+    await new Promise((done) => setTimeout(done, 500));
+    tabs = [await chrome.tabs.get(tabs[0].id)];
+  }
+  return tabs[0]?.status === "complete" ? tabs[0] : null;
+}
+async function connectTr4ker(pending) {
+  // The account comes from the signed-in tr4ker tab (id and name only), and the first
+  // pairing binds it. Nothing else is read before the app accepts the code.
+  const tab = await tr4kerTab(true);
+  if (!tab) throw new Error("Open tr4ker.net in this browser, then connect again.");
+  let identity;
+  try {
+    const frames = await chrome.scripting.executeScript({
+      target: { tabId: tab.id }, world: "ISOLATED", func: collectTr4ker,
+      args: [{ identityOnly: true }],
+    });
+    identity = frames[0]?.result?.account;
+  } catch {
+    /* Not signed in, or the tab was closed. */
+  }
+  if (!identity?.id)
+    throw new Error("Sign in to tr4ker in this browser, then click Retry in TorrentLinker.");
+  const paired = await request({ target: pending.target, tracker: "tr4ker" }, "pair", {
+    code: pending.code, accountId: identity.id, username: identity.username,
+  });
+  const connection = {
+    target: pending.target, token: paired.token, accountId: identity.id,
+    tracker: "tr4ker", paused: false,
+  };
+  const { connection: old } = await chrome.storage.local.get(T4K.connection);
+  await chrome.storage.local.set({
+    [T4K.connection]: connection, [T4K.attempt]: 0, [T4K.sync]: null, [T4K.deep]: false,
+  });
+  if (old && old.target !== connection.target) {
+    try { await request(old, "disconnect", {}); } catch { /* Old receiver may be offline. */ }
+  }
+  await ensureAlarm();
+  await syncTr4ker();
+}
+async function syncTr4ker() {
+  const stored = await chrome.storage.local.get(Object.values(T4K));
+  const connection = stored[T4K.connection];
+  if (!connection || connection.paused || Date.now() - (stored[T4K.attempt] || 0) < PERIOD) return;
+  const tabs = await chrome.tabs.query({ url: tabPattern("tr4ker"), status: "complete" });
+  if (!tabs.length) {
+    await noteTr4ker("Waiting for a signed-in tr4ker tab. Updates resume automatically when it opens.");
+    return;
+  }
+  await chrome.storage.local.set({ [T4K.attempt]: Date.now() });
+  try {
+    const result = await chrome.scripting.executeScript({
+      target: { tabId: tabs[0].id }, world: "ISOLATED", func: collectTr4ker,
+      args: [{
+        shop: Date.now() - (stored[T4K.shop] || 0) >= LEDGER_PERIOD,
+        payoutPages: stored[T4K.deep] ? 1 : PAYOUT_PAGES,
+      }],
+    });
+    const { snapshot, payoutPages } = result[0]?.result || {};
+    if (!snapshot?.account?.id)
+      throw new Error("Sign in to tr4ker. Sync will resume automatically.");
+    if (snapshot.account.id !== connection.accountId)
+      throw new Error(
+        "Different tr4ker account. Sign in with the account connected in TorrentLinker.",
+      );
+    await request(connection, "snapshot", snapshot);
+    const done = { [T4K.sync]: Date.now() };
+    if (snapshot.shop) done[T4K.shop] = Date.now();
+    if (payoutPages) {
+      for (const entries of payoutPages)
+        if (entries.length) await request(connection, "payouts", { accountId: connection.accountId, entries });
+      done[T4K.deep] = true;
+    }
+    await chrome.storage.local.set(done);
+    await noteTr4ker("Connected. Profile updates automatically every two minutes.");
+  } catch (error) {
+    if (error.status === 403) {
+      await chrome.storage.local.remove(T4K.connection);
+      await noteTr4ker("Connection revoked. Click Connect in TorrentLinker to reconnect.");
+    } else await noteTr4ker(error.message || "Sync unavailable. Retrying automatically.");
+  }
+}
 async function ensureAlarm() {
   if (!(await chrome.alarms.get("profile-sync")))
     await chrome.alarms.create("profile-sync", { periodInMinutes: 2 });
@@ -322,7 +436,17 @@ async function state() {
     "message",
     "lastSync",
   ]);
+  const t = await chrome.storage.local.get(Object.values(T4K));
+  const tr4ker = {
+    target: t[T4K.connection]?.target,
+    accountId: t[T4K.connection]?.accountId,
+    paused: t[T4K.connection]?.paused,
+    connected: !!t[T4K.connection],
+    message: t[T4K.message],
+    lastSync: t[T4K.sync],
+  };
   return {
+    tr4ker,
     target: connection?.target,
     accountId: connection?.accountId,
     paused: connection?.paused,
@@ -347,11 +471,34 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (!["prepare", "publish", "cancel"].includes(message.operation)) throw new Error("Unknown creation action.");
       return request(connection, "creation", {accountId:connection.accountId,operation:message.operation,value:message.value});
     }
+    if (message.tracker === "tr4ker" && ["disconnect", "pause"].includes(message.action)) {
+      const { [T4K.connection]: connection } = await chrome.storage.local.get(T4K.connection);
+      if (message.action === "disconnect") {
+        await chrome.storage.local.remove(Object.values(T4K));
+        if (connection) {
+          try { await request(connection, "disconnect", {}); }
+          catch {
+            await noteTr4ker("Forgotten in this browser. Use Disconnect & clear in TorrentLinker if it was offline.");
+          }
+        }
+      } else if (connection) {
+        connection.paused = !connection.paused;
+        await chrome.storage.local.set({ [T4K.connection]: connection });
+        await noteTr4ker(connection.paused ? "Companion paused." : "Companion resumed.");
+        if (!connection.paused) await syncTr4ker();
+      }
+      return state();
+    }
     if (message.action === "disconnect") {
       const { connection } = await chrome.storage.local.get("connection");
+      const keep = await chrome.storage.local.get(Object.values(T4K)); // tr4ker stays paired
       const {communityReceipts, communityRetry} = await chrome.storage.local.get(["communityReceipts", "communityRetry"]);
       await chrome.storage.local.clear();
-      await chrome.storage.local.set({communityReceipts: communityReceipts || {}, communityRetry: communityRetry || {}});
+      await chrome.storage.local.set({
+        ...keep,
+        communityReceipts: communityReceipts || {},
+        communityRetry: communityRetry || {},
+      });
       if (connection) {
         try {
           await request(connection, "disconnect", {});
@@ -382,12 +529,16 @@ chrome.action.onClicked.addListener(() =>
   chrome.tabs.create({ url: chrome.runtime.getURL("companion.html") }),
 );
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "profile-sync") serial(sync);
+  if (alarm.name === "profile-sync") {
+    serial(sync);
+    serial(syncTr4ker);
+  }
   if (alarm.name === "companion-commands") serial(commands);
 });
 chrome.tabs.onUpdated.addListener((_id, change, tab) => {
-  if (change.status === "complete" && tab.url?.startsWith("https://c411.org/"))
-    serial(async () => { await sync(); await commands(); });
+  if (change.status !== "complete") return;
+  if (ownsUrl("c411", tab.url)) serial(async () => { await sync(); await commands(); });
+  if (ownsUrl("tr4ker", tab.url)) serial(syncTr4ker);
 });
 // Recreate alarms after browser restart or extension upgrade. Connection state
 // survives service-worker suspension. No cookies or login tokens are exported.
@@ -395,4 +546,5 @@ serial(async () => {
   await ensureAlarm();
   await sync();
   await commands();
+  await syncTr4ker();
 });

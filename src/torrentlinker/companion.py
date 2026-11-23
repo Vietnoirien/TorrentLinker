@@ -43,8 +43,11 @@ def extension_zip(web_origin: str | None = None) -> bytes:
     return result.getvalue()
 
 
-def connection_url(address: str, code: str, account_id: str) -> str:
+def connection_url(address: str, code: str, account_id: str, tracker: str = "c411") -> str:
+    # tr4ker has no API profile: its tab names the account when the extension pairs.
     payload = {"target": address, "code": code, "accountId": account_id}
+    if tracker != "c411":
+        payload = {"target": address, "code": code, "tracker": tracker}
     return address + "/companion/connect#" + quote(json.dumps(payload), safe="")
 
 

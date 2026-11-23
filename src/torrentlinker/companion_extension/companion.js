@@ -1,6 +1,6 @@
 const $ = (id) => document.getElementById(id);
-async function update(action = "status") {
-  const data = await chrome.runtime.sendMessage({ action });
+async function update(action = "status", tracker) {
+  const data = await chrome.runtime.sendMessage({ action, tracker });
   if (data.error) {
     $("status").textContent = data.error;
     return;
@@ -18,9 +18,22 @@ async function update(action = "status") {
     ? "Resume companion"
     : "Pause companion";
   $("forget").disabled = !data.connected;
+  const t = data.tr4ker || {};
+  $("t4k-status").textContent = t.message || "";
+  $("t4k-destination").textContent = t.connected
+    ? `${t.target} · Account ${t.accountId}`
+    : "Not connected";
+  $("t4k-last-sync").textContent = t.lastSync
+    ? `Last update: ${new Date(t.lastSync).toLocaleString()}`
+    : "No update received yet.";
+  $("t4k-pause").disabled = !t.connected;
+  $("t4k-pause").textContent = t.paused ? "Resume tr4ker" : "Pause tr4ker";
+  $("t4k-forget").disabled = !t.connected;
 }
 $("pause").onclick = () => update("pause");
 $("forget").onclick = () => update("disconnect");
+$("t4k-pause").onclick = () => update("pause", "tr4ker");
+$("t4k-forget").onclick = () => update("disconnect", "tr4ker");
 chrome.storage.onChanged.addListener(() => update());
 update();
 

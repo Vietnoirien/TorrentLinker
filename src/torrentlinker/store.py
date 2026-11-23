@@ -194,6 +194,21 @@ CREATE TABLE IF NOT EXISTS profile_history (
     tracker TEXT NOT NULL DEFAULT 'c411',
     PRIMARY KEY (tracker, account, day)
 );
+-- tr4ker's seedtime payouts (/api/me/sw-rewards), one row each, kept for the credits estimate.
+CREATE TABLE IF NOT EXISTS tr4ker_payout (
+    account TEXT NOT NULL,
+    key TEXT NOT NULL,
+    paid_at REAL,
+    amount REAL NOT NULL,
+    seeders INTEGER,
+    size_bytes INTEGER,
+    seedtime_seconds INTEGER,
+    slug TEXT,
+    category TEXT,
+    multiplier REAL,
+    seen_at REAL NOT NULL,
+    PRIMARY KEY (account, key)
+);
 """
 
 
@@ -1560,6 +1575,55 @@ class Store:
                 "INSERT OR REPLACE INTO profile_history (tracker, account, day, payload)"
                 " VALUES (?, ?, ?, ?)",
                 (self.tracker, account, day, json.dumps(payload, allow_nan=False)),
+            )
+
+    def add_tr4ker_payouts(self, account: str, rows: list[dict]) -> int:
+        """Store payouts not seen before and return how many were new; replays are free."""
+        added = 0
+        with self._lock, self._db:
+            for row in rows:
+                cursor = self._db.execute(
+                    "INSERT OR IGNORE INTO tr4ker_payout (account, key, paid_at, amount, seeders,"
+                    " size_bytes, seedtime_seconds, slug, category, multiplier, seen_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        account,
+                        row["key"],
+                        row["paid_at"],
+                        row["amount"],
+                        row["seeders"],
+                        row["size_bytes"],
+                        row["seedtime_seconds"],
+                        row["slug"],
+                        row["category"],
+                        row["multiplier"],
+                        time.time(),
+                    ),
+                )
+                added += cursor.rowcount
+        return added
+
+    def tr4ker_payouts(self, account: str, limit: int = 200) -> list[dict]:
+        """Newest payouts first; undated ones by when they were first seen."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT key, paid_at, amount, seeders, size_bytes, seedtime_seconds, slug,"
+                " category, multiplier FROM tr4ker_payout WHERE account = ?"
+                " ORDER BY COALESCE(paid_at, seen_at) DESC, rowid DESC LIMIT ?",
+                (account, limit),
+            ).fetchall()
+        names = (
+            "key", "paid_at", "amount", "seeders", "size_bytes",
+            "seedtime_seconds", "slug", "category", "multiplier",
+        )  # fmt: skip
+        return [dict(zip(names, row, strict=True)) for row in rows]
+
+    def tr4ker_payout_count(self, account: str) -> int:
+        with self._lock:
+            return int(
+                self._db.execute(
+                    "SELECT COUNT(*) FROM tr4ker_payout WHERE account = ?", (account,)
+                ).fetchone()[0]
             )
 
     def profile_days(self, account: str) -> list[tuple[str, dict]]:

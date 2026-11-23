@@ -31,6 +31,8 @@ from torrentlinker.community import CommunityActions
 from torrentlinker.companion_downloads import CompanionDownloads, SessionFetchError
 from torrentlinker.profile import ProfileClient, ProfileError, ProfileProblem, UserProfile
 from torrentlinker.profile_history import ProfileDay, ProfileHistory
+from torrentlinker.tr4ker_account import Tr4kerAccount
+from torrentlinker.trackers import C411, TR4KER, tracker
 
 COMPANION_ROUTES = {
     f"/api/companion/{name}"
@@ -45,8 +47,10 @@ COMPANION_ROUTES = {
         "actions-observe",
         "actions-claim",
         "actions-receipt",
+        "payouts",
     )
 }
+C411_ORIGIN = tracker(C411).origin
 DETAILS = {
     "actualDownloaded",
     "actualUploaded",
@@ -163,11 +167,7 @@ def valid_snapshot(data: Any, now: float) -> bool:
         return False
     if "zenLedger" in data and ledger_entries(data["zenLedger"]) is None:
         return False
-    if (
-        type(data["schema"]) is not int
-        or data["schema"] != 1
-        or data["source"] != "https://c411.org"
-    ):
+    if type(data["schema"]) is not int or data["schema"] != 1 or data["source"] != C411_ORIGIN:
         return False
     account, profile, details, seeds = (
         data[k] for k in ("account", "profile", "details", "activeSeeds")
@@ -219,6 +219,8 @@ class ProfileWorkspace:
         self.downloads = CompanionDownloads(lambda: self.clock())
         self.community = CommunityActions(directory, lambda: self.clock())
         self.creation_handler: Callable[[str, dict], dict] | None = None
+        # tr4ker pairs a signed-in browser session, with no API profile behind it.
+        self.tr4ker = Tr4kerAccount(directory, history.store if history else None, self.clock)
         self.lock = threading.RLock()
         self.data: dict[str, Any] = {}
         try:
@@ -388,6 +390,7 @@ class ProfileWorkspace:
                     and self.clock() - self.data["api_updated_at"] > 300
                 ),
                 "companion": companion,
+                "tr4ker": self.tr4ker.state(),
                 "received_at": self.data.get("received_at"),
                 "paired": bool(self._pair),
                 "stale": bool(companion and self.clock() - captured_at(companion) > 300),
@@ -395,17 +398,34 @@ class ProfileWorkspace:
                 "avatar": self.avatar_token(),
             }
 
-    def pairing(self) -> dict[str, Any]:
+    def pairing(self, tracker_id: str = C411) -> dict[str, Any]:
+        if tracker_id == TR4KER:
+            return self.tr4ker.pairing()
+        if tracker_id != C411:
+            raise ValueError("Unknown Tracker.")
         with self.lock:
             if not (self.data.get("api") or {}).get("account_id") or self.error:
                 raise ValueError("Refresh the API profile successfully before pairing.")
-            if self.data.get("source") != "https://c411.org":
-                raise ValueError("The companion supports https://c411.org accounts.")
+            if self.data.get("source") != C411_ORIGIN:
+                raise ValueError(f"This pairing is for {C411_ORIGIN} accounts.")
             self._code = secrets.token_urlsafe(32)
             self._code_until = self.clock() + 600
             return {"code": self._code, "expiresIn": 600}
 
-    def disconnect(self) -> None:
+    def cancel_pairing(self, tracker_id: str = C411) -> None:
+        """Drop a pairing code nobody used yet."""
+        if tracker_id == TR4KER:
+            self.tr4ker.cancel()
+        elif tracker_id == C411:
+            with self.lock:
+                self._code = ""
+        else:
+            raise ValueError("Unknown Tracker.")
+
+    def disconnect(self, tracker_id: str = C411) -> None:
+        if tracker_id == TR4KER:
+            self.tr4ker.disconnect()
+            return
         with self.lock:
             self._code, self._pair = "", None
             self.downloads.clear()
@@ -418,6 +438,16 @@ class ProfileWorkspace:
     def receive(
         self, route: str, origin: str, authorization: str, body: dict[str, Any]
     ) -> dict[str, Any]:
+        # Each Tracker answers only for itself: a body names its Tracker (c411 when it names
+        # none), and a c411 tab can never pair, sync or answer for tr4ker or the reverse.
+        which = body.get("tracker", C411)
+        if which == TR4KER:
+            if not extension_origin(origin):
+                raise PermissionError("Use the paired browser extension.")
+            return self.tr4ker.receive(route, origin, authorization, body)
+        if which != C411 or route == "/api/companion/payouts":
+            raise ValueError("Unknown Tracker.")
+        body = {k: v for k, v in body.items() if k != "tracker"}
         if route == "/api/companion/creation":
             with self.lock:
                 digest = hashlib.sha256(authorization.encode()).hexdigest()
@@ -480,10 +510,7 @@ class ProfileWorkspace:
                 self.disconnect()
                 return {"disconnected": True}
             if route.startswith("/api/companion/actions-"):
-                if (
-                    body.get("accountId") != account
-                    or self.data.get("source") != "https://c411.org"
-                ):
+                if body.get("accountId") != account or self.data.get("source") != C411_ORIGIN:
                     raise PermissionError("Different c411 account.")
                 identity = str(account)
                 if route.endswith("actions-demand"):
@@ -526,9 +553,10 @@ class ProfileWorkspace:
             return {"accepted": True}
 
     def community_account(self) -> str:
+        """The c411 account the community works for; another Tracker's is never one."""
         with self.lock:
             account = (self.data.get("api") or {}).get("account_id")
-            if self.data.get("source") != "https://c411.org" or not account:
+            if self.data.get("source") != C411_ORIGIN or not account:
                 raise ValueError("Refresh the c411 profile first.")
             return str(account)
 

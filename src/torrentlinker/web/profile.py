@@ -69,6 +69,7 @@ class SessionDownloads(BaseModel):
 
 
 TorrentClients = Callable[[], list[tuple[str, Callable[[], list[Torrent]]]]]
+TrackerQuery = Query("c411", description="The Tracker whose companion pairing this is.")
 Period = Query(30, description="Days of Profile history: 7, 30, 90 or 0 for all.")
 
 
@@ -164,15 +165,23 @@ def profile_routes(app: FastAPI, setup: Setup, torrent_clients: TorrentClients) 
         return with_overview(days)
 
     @app.post("/api/zen/profile/pairing")
-    def pairing():  # type: ignore[no-untyped-def]
+    def pairing(tracker: str = TrackerQuery):  # type: ignore[no-untyped-def]
         try:
-            return setup.profile_workspace().pairing()
+            return setup.profile_workspace().pairing(tracker)
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
 
+    @app.post("/api/zen/profile/pairing/cancel")
+    def cancel_pairing(tracker: str = TrackerQuery, days: int = Period):  # type: ignore[no-untyped-def]
+        try:
+            setup.profile_workspace().cancel_pairing(tracker)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        return with_overview(days)
+
     @app.post("/api/zen/profile/disconnect")
-    def disconnect(days: int = Period):  # type: ignore[no-untyped-def]
-        setup.profile_workspace().disconnect()
+    def disconnect(tracker: str = TrackerQuery, days: int = Period):  # type: ignore[no-untyped-def]
+        setup.profile_workspace().disconnect(tracker)
         return with_overview(days)
 
     @app.get("/api/zen/profile/extension")

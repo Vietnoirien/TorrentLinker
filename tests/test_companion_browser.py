@@ -208,3 +208,117 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+def test_tr4ker_pairs_from_its_own_tab_and_a_c411_tab_never_answers_for_it(tmp_path, monkeypatch):
+    import json
+    from urllib.parse import quote
+
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.test_tr4ker_companion import ME, SECRETS, STATS
+    from torrentlinker import companion
+
+    (tmp_path / "server").mkdir()
+    app, setup = prepared(tmp_path / "server", monkeypatch)
+    workspace = setup.profile_workspace()
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    extension = Path(companion.__file__).parent / "companion_extension"
+    account = dict(ME)
+    requests = []
+
+    def tr4ker(route):
+        request = route.request
+        requests.append((request.method, request.url))
+        path = request.url.removeprefix("https://tr4ker.net")
+        if path == "/api/me":
+            route.fulfill(json=account)
+        elif path == "/api/me/stats":
+            route.fulfill(json=STATS)
+        elif path == "/api/shop":
+            route.fulfill(
+                json={"items": [{"id": 1, "name": "+25 GB", "price": 400, "bonus_bytes": 1}]}
+            )
+        elif path.startswith("/api/me/sw-rewards"):
+            route.fulfill(
+                json={
+                    "entries": [{"id": 5, "amount": 12, "seeders": 3, "size_bytes": 9}],
+                    "total": 1,
+                }
+            )
+        else:
+            route.fulfill(content_type="text/html", body="<h1>Fake tr4ker</h1>")
+
+    def c411(route):
+        requests.append(("c411", route.request.url))
+        route.fulfill(content_type="text/html", body="<h1>Fake c411</h1>")
+
+    try:
+        with sync_playwright() as pw:
+            context = pw.chromium.launch_persistent_context(
+                str(tmp_path / "browser"),
+                channel="chromium",
+                headless=True,
+                args=[f"--disable-extensions-except={extension}", f"--load-extension={extension}"],
+            )
+            context.route("https://tr4ker.net/**", tr4ker)
+            context.route("https://c411.org/**", c411)
+            context.new_page().goto("https://tr4ker.net/")
+            code = workspace.pairing("tr4ker")["code"]
+            payload = {"target": f"http://127.0.0.1:{port}", "code": code, "tracker": "tr4ker"}
+            handoff = context.new_page()
+            handoff.goto(f"http://127.0.0.1:{port}/companion/connect#{quote(json.dumps(payload))}")
+            for _ in range(150):
+                state = workspace.state()["tr4ker"]
+                if state["available"] and state["payouts"]["count"]:
+                    break
+                handoff.wait_for_timeout(100)
+            state = workspace.state()["tr4ker"]
+            assert state["paired"] and state["account"]["username"] == "demo_t4k"
+            assert state["profile"]["money"] == 250 and state["shop"][0]["price"] == 400
+            assert state["payouts"]["count"] == 1
+            assert not workspace.state()["paired"]  # c411 stays unpaired
+            dump = (tmp_path / "server" / "tr4ker-companion.json").read_text()
+            assert not any(secret in dump + json.dumps(workspace.state()) for secret in SECRETS)
+            # Only fixed GETs reach tr4ker, never the key route, and c411 was never asked.
+            assert {method for method, url in requests if url.startswith("https://tr4ker.net")} <= {
+                "GET"
+            }
+            assert not any("api-key" in url for _, url in requests)
+            assert not any(method == "c411" for method, _ in requests)
+            worker = context.service_workers[0]
+            extension_page = context.new_page()
+            extension_page.goto(worker.url.replace("background.js", "companion.html"))
+            expect(extension_page.locator("#t4k-destination")).to_contain_text("Account 7")
+            # Another signed-in tr4ker account must never overwrite the app.
+            account["id"] = 99
+            last = workspace.state()["tr4ker"]["received_at"]
+            worker.evaluate("""() => {
+                const clock = Date.now;
+                Date.now = () => clock() + 120001;
+                return chrome.alarms.create('profile-sync', {delayInMinutes: 0.001});
+            }""")
+            expect(extension_page.locator("#t4k-status")).to_contain_text(
+                "Different tr4ker account", timeout=15000
+            )
+            assert workspace.state()["tr4ker"]["received_at"] == last
+            extension_page.locator("#t4k-forget").click()
+            for _ in range(50):
+                if not workspace.state()["tr4ker"]["paired"]:
+                    break
+                extension_page.wait_for_timeout(100)
+            assert not workspace.state()["tr4ker"]["paired"]
+            context.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)

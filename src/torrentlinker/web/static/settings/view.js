@@ -635,6 +635,12 @@ function tr4kerTab(form) {
   table.append(body);
   works.append(table);
   form.append(works);
+  // The companion line below reports whether a tr4ker session is paired.
+  let sessionPaired = false;
+  form.addEventListener("companion-state", (event) => {
+    sessionPaired = event.detail.paired;
+    drawCapabilities();
+  });
   const drawCapabilities = () => {
     const has = (name) => registry.capabilities.includes(name);
     const row = (name, state, why) => {
@@ -667,10 +673,10 @@ function tr4kerTab(form) {
     if (has("profile") || has("upload") || has("community"))
       row(
         say("Profile, torrent details, publishing", "Profil, détail d’un torrent, publication"),
-        registry.companion ? "needs" : "none",
+        registry.companion ? (sessionPaired ? "live" : "needs") : "none",
         registry.companion
           ? say("Paired tr4ker session needed", "Session tr4ker appairée requise")
-          : say("soon: tr4ker companion (#179)", "bientôt : compagnon tr4ker (#179)"),
+          : say("Unavailable", "Indisponible"),
       );
     if (!has("zen"))
       row(

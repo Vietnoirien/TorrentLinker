@@ -1,16 +1,48 @@
 "use strict";
 // The browser companion, per Tracker: Settings > Connections > Companion, and the one-line
-// state on each Tracker's own tab. Only c411 can be paired so far (the companion extension
-// has no tr4ker support yet, #179): tr4ker shows as unavailable, never as a fake pairing.
+// state on each Tracker's own tab. c411 pairs through its API profile; tr4ker pairs the account
+// of a signed-in tr4ker tab (#179). Each Tracker's session answers only for itself.
 const companionTrackers = () => {
   const found = ["c411"];
   if (draft("connections").trackers?.tr4ker?.enabled) found.push("tr4ker");
   return found;
 };
 const trackerCanPair = (tracker) => snapshot.tracker_registry?.[tracker]?.companion === true;
-const tr4kerSoon = () => say("soon: tr4ker companion (#179)", "bientôt : compagnon tr4ker (#179)");
+// tr4ker's pairing state as the same shape c411's has.
+function tr4kerState(data) {
+  const t = data.tr4ker || {};
+  if (t.paired && t.available)
+    return {
+      kind: "on",
+      tag: say("Paired", "Appairé"),
+      line: say("Connected. The browser tab is ready.", "Connecté. L’onglet du navigateur est prêt."),
+    };
+  if (t.paired)
+    return {
+      kind: "warn",
+      tag: say("Waiting for the tr4ker session", "En attente de la session tr4ker"),
+      line: say(
+        "Connected. Keep a signed-in tr4ker tab open.",
+        "Connecté. Gardez un onglet tr4ker connecté ouvert.",
+      ),
+    };
+  if (t.pending)
+    return {
+      kind: "warn",
+      tag: say("Waiting for the tr4ker session", "En attente de la session tr4ker"),
+      line: say(
+        "Waiting for the tr4ker session… a signed-in tab is open in the browser.",
+        "En attente de la session tr4ker… un onglet connecté est ouvert dans le navigateur.",
+      ),
+    };
+  return { kind: "", tag: say("Not paired", "Non appairé"), line: say("Not connected.", "Non connecté.") };
+}
+const trackerPaired = (tracker, data) => (tracker === "tr4ker" ? Boolean(data.tr4ker?.paired) : Boolean(data.paired));
+const trackerAccount = (tracker, data) =>
+  tracker === "tr4ker" ? data.tr4ker?.account?.username : data.api?.username;
 // What one paired Tracker's session is doing, from the companion state.
-function companionState(data) {
+function companionState(data, tracker = "c411") {
+  if (tracker === "tr4ker") return tr4kerState(data);
   const downloads = data.downloads || {};
   if (!data.paired)
     return { kind: "", tag: say("Not paired", "Non appairé"), line: say("Not connected.", "Non connecté.") };
@@ -46,7 +78,7 @@ function companionState(data) {
 }
 const companionBadge = (tracker, data) =>
   trackerCanPair(tracker)
-    ? element("span", companionState(data).tag, `conn-tag ${companionState(data).kind}`.trim())
+    ? element("span", companionState(data, tracker).tag, `conn-tag ${companionState(data, tracker).kind}`.trim())
     : element("span", say("Unavailable", "Indisponible"), "conn-tag bad");
 // A Tracker tab's one-line companion state, with a way to the Companion tab.
 async function companionLine(card, tracker) {
@@ -54,10 +86,10 @@ async function companionLine(card, tracker) {
   const data = trackerCanPair(tracker) ? await request("companion", { action: "state" }) : {};
   if (!card.isConnected || client !== environment.client_id) return;
   const line = element("p");
+  line.dataset.paired = String(trackerPaired(tracker, data));
   line.append(`${say("Browser companion", "Compagnon du navigateur")} : `, companionBadge(tracker, data), " ");
-  if (!trackerCanPair(tracker)) line.append(element("span", tr4kerSoon(), "unavailable"), " ");
-  else if (data.paired && data.api?.username)
-    line.append(`${say("account", "compte")} `, element("b", data.api.username), " · ");
+  if (trackerPaired(tracker, data) && trackerAccount(tracker, data))
+    line.append(`${say("account", "compte")} `, element("b", trackerAccount(tracker, data)), " · ");
   const open = element("button", say("Manage in the Companion tab", "Gérer dans l’onglet Compagnon"), "conn-link");
   open.type = "button";
   open.onclick = () => {
@@ -66,36 +98,45 @@ async function companionLine(card, tracker) {
   };
   line.append(open);
   card.querySelector("h3").after(line);
+  card.dispatchEvent(new CustomEvent("companion-state", { bubbles: true, detail: { paired: trackerPaired(tracker, data) } }));
 }
 function companionRow(root, tracker, data) {
   const row = element("div", undefined, "conn-row");
   row.dataset.tracker = tracker;
   const who = element("div", undefined, "who");
   const title = element("b", tracker);
-  const state = trackerCanPair(tracker) ? companionState(data) : null;
+  const state = trackerCanPair(tracker) ? companionState(data, tracker) : null;
   const text = element("p", undefined, "muted");
   if (state) {
-    if (data.paired && data.api?.username)
-      text.append(`${say("Account", "Compte")} `, element("b", data.api.username), " · ");
+    if (trackerPaired(tracker, data) && trackerAccount(tracker, data))
+      text.append(`${say("Account", "Compte")} `, element("b", trackerAccount(tracker, data)), " · ");
     text.append(state.line);
-  } else text.append(element("span", tr4kerSoon(), "unavailable"));
+  } else text.append(element("span", say("Unavailable", "Indisponible"), "unavailable"));
   who.append(title, " ", companionBadge(tracker, data), text);
   const actions = element("div", undefined, "settings-actions");
   if (state) {
-    const unavailable = !data.api?.account_id || Boolean(data.error);
+    // c411 pairs through its API profile; tr4ker needs only a signed-in tab.
+    const unavailable = tracker === "c411" && (!data.api?.account_id || Boolean(data.error));
     const pair = (label) => {
       const node = button(label, async () => {
-        await request("companion", { action: "pair" });
+        await request("companion", { action: "pair", tracker });
         return say("Complete the connection in your browser.", "Terminez la connexion dans votre navigateur.");
       });
       node.disabled = unavailable;
       return node;
     };
-    if (data.paired)
+    if (trackerPaired(tracker, data))
       actions.append(
         pair(say("Connect another browser", "Connecter un autre navigateur")),
         button(say("Unpair", "Dissocier"), async () => {
-          await request("companion", { action: "disconnect" });
+          await request("companion", { action: "disconnect", tracker });
+          await loadSettingsCompanion(root);
+        }),
+      );
+    else if (tracker === "tr4ker" && data.tr4ker?.pending)
+      actions.append(
+        button(say("Cancel pairing", "Annuler l’appairage"), async () => {
+          await request("companion", { action: "cancel", tracker });
           await loadSettingsCompanion(root);
         }),
       );
@@ -127,7 +168,7 @@ async function loadSettingsCompanion(root) {
     await request("companion", { action: "disconnect" });
     await loadSettingsCompanion(root);
   });
-  disconnect.disabled = !data.paired && !data.companion;
+  disconnect.disabled = !data.paired && !data.companion && !data.tr4ker?.paired;
   actions.append(
     button(say("Save extension…", "Enregistrer l’extension…"), () =>
       request("companion", { action: "extension" }),
@@ -142,15 +183,22 @@ async function loadSettingsCompanion(root) {
   const pairAll = button(
     say("Connect all Trackers", "Connecter tous les trackers"),
     async () => {
-      // Every Tracker the companion supports and not yet paired; tr4ker is not one yet.
-      if (data.paired)
+      // Every Tracker the companion supports and not yet paired: one browser tab each.
+      const todo = companionTrackers().filter((tracker) => !trackerPaired(tracker, data));
+      if (!todo.length)
         return say("Every supported Tracker is already paired", "Tous les trackers pris en charge sont déjà appairés");
-      await request("companion", { action: "pair" });
-      return say("Complete the connection in your browser.", "Terminez la connexion dans votre navigateur.");
+      await request("companion", { action: "pair", trackers: todo });
+      return say(
+        `Opening a signed-in tab for ${todo.join(" and ")}…`,
+        `Ouverture d’un onglet connecté pour ${todo.join(" et ")}…`,
+      );
     },
     "primary bigbtn",
   );
-  pairAll.disabled = !data.api?.account_id || Boolean(data.error);
+  // c411 needs its API profile to pair; tr4ker does not.
+  pairAll.disabled = companionTrackers().every(
+    (tracker) => trackerPaired(tracker, data) || (tracker === "c411" && (!data.api?.account_id || Boolean(data.error))),
+  );
   all.append(pairAll);
   trackers.append(
     all,

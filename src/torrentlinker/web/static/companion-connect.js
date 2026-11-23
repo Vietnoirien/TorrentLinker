@@ -19,7 +19,8 @@ async function connect() {
       "The companion connects to a remote TorrentLinker only over HTTPS. Open TorrentLinker through an HTTPS address (for example with tailscale serve or a reverse proxy), download the companion again from Settings at that address, install it, then click Connect companion.";
     return;
   }
-  if (!payload?.code || !payload?.accountId) {
+  // tr4ker names no account: its signed-in tab does when the extension pairs.
+  if (!payload?.code || !(payload?.accountId || payload?.tracker === "tr4ker")) {
     status.textContent =
       "Return to TorrentLinker → Zen → Profile and click Connect companion.";
     return;

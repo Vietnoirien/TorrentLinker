@@ -331,10 +331,15 @@ class SettingsPage(QWidget):
 
         def companion(body):
             action = body.get("action")
+            tracker = body.get("tracker", "c411")
             if action == "pair":
-                owner.pair_companion()
+                for each in body.get("trackers") or [tracker]:
+                    owner.pair_companion(each)
+            elif action == "cancel":
+                owner.account_workspace.cancel_pairing(tracker)
             elif action == "disconnect":
-                owner.disconnect_companion()
+                for each in [body["tracker"]] if "tracker" in body else ["c411", "tr4ker"]:
+                    owner.disconnect_companion(each)
             elif action == "extension":
                 owner.save_companion_extension()
             elif action == "downloads":
