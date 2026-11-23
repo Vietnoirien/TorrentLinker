@@ -42,6 +42,7 @@ from torrentlinker.login_guard import LoginRefused
 from torrentlinker.member_requests import Requests
 from torrentlinker.torrent_management import peer_count_order, tracker_group
 from torrentlinker.updates import check_for_update, installed_version
+from torrentlinker.web.compression import TextGZip
 from torrentlinker.web.confirmations import Confirmations
 from torrentlinker.web.documentation import render
 from torrentlinker.web.jobs import Jobs
@@ -526,7 +527,11 @@ def create_app(
             # A Member's session lasts 30 days of disuse, a Shared Screen 90: each use
             # restarts the cookie's too.
             session_cookie(response, *renewed)
-        response.headers["Cache-Control"] = "no-store"
+        if "cache-control" not in response.headers:
+            # Bundled files revalidate (StaticFiles answers 304 by ETag); the rest is private.
+            response.headers["Cache-Control"] = (
+                "no-cache" if route.startswith("/static/") else "no-store"
+            )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
@@ -574,6 +579,9 @@ def create_app(
                 + "frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
             )
         return response
+
+    # Outermost, so the security headers above are already on what it compresses.
+    app.add_middleware(TextGZip)
 
     @app.exception_handler(RequestValidationError)
     async def invalid(request: Request, error: RequestValidationError) -> JSONResponse:
