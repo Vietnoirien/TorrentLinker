@@ -95,7 +95,14 @@
         <section id="view-setup" class="view" hidden></section>
         <section id="view-torrents" class="view"></section>
         <section id="view-zen" class="view" hidden>
-          <div class="stats" id="zen-overview">
+          <div class="toolbar" role="tablist" aria-label="Zen">
+            <button id="zen-profile-tab" role="tab" aria-selected="true" aria-controls="zen-profile-panel">Profile</button>
+            <button id="zen-seeding-tab" role="tab" aria-selected="true" aria-controls="zen-seeding-panel" data-i18n="seedingTab">Seeding</button>
+            <button id="zen-plan-tab" role="tab" aria-selected="false" aria-controls="zen-plan-panel" tabindex="-1" data-i18n="planTab">Plan</button>
+            <button id="zen-catalogue-tab" role="tab" aria-selected="false" aria-controls="zen-catalogue-panel" tabindex="-1" data-i18n="catalogueTab">Catalogue</button>
+            <button id="zen-community-tab" role="tab" aria-selected="false" aria-controls="zen-community-panel" tabindex="-1">Community</button>
+          </div>
+          <div class="zen-summary" id="zen-overview">
             <div class="card">
               <p data-i18n="dailyZen">Estimated Zen / day</p>
               <strong id="zen-daily">—</strong>
@@ -104,13 +111,6 @@
               <p data-i18n="seeding">Seeding torrents</p>
               <strong id="zen-count">—</strong>
             </div>
-          </div>
-          <div class="toolbar" role="tablist" aria-label="Zen">
-            <button id="zen-profile-tab" role="tab" aria-selected="true" aria-controls="zen-profile-panel">Profile</button>
-            <button id="zen-seeding-tab" role="tab" aria-selected="true" aria-controls="zen-seeding-panel" data-i18n="seedingTab">Seeding</button>
-            <button id="zen-plan-tab" role="tab" aria-selected="false" aria-controls="zen-plan-panel" tabindex="-1" data-i18n="planTab">Plan</button>
-            <button id="zen-catalogue-tab" role="tab" aria-selected="false" aria-controls="zen-catalogue-panel" tabindex="-1" data-i18n="catalogueTab">Catalogue</button>
-            <button id="zen-community-tab" role="tab" aria-selected="false" aria-controls="zen-community-panel" tabindex="-1">Community</button>
           </div>
           <section id="zen-community-panel" role="tabpanel" aria-labelledby="zen-community-tab" hidden></section>
           <section id="zen-profile-panel" role="tabpanel" aria-labelledby="zen-profile-tab"></section>

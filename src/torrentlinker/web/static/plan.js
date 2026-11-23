@@ -4,7 +4,7 @@ planFrame.id = "plan-frame";
 planFrame.title = "Plan";
 planFrame.src = "static/plan/view.html";
 planFrame.style.cssText =
-  "width:100%;height:75vh;min-height:300px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("zen-plan-panel").append(planFrame);
 const planHost = {
   client: "",
@@ -29,8 +29,6 @@ function planEnvironment(force = false) {
     state.view === "zen" &&
     !$("zen-plan-panel").hidden &&
     !$("workspace").hidden;
-  if (active)
-    planFrame.style.height = `${Math.max(300, innerHeight - planFrame.getBoundingClientRect().top - 24)}px`;
   let value = planHost.value;
   if (value?.result) {
     const result = value.result;

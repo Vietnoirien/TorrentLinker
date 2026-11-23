@@ -4,14 +4,12 @@ feedsFrame.id = "feeds-frame";
 feedsFrame.title = "RSS";
 feedsFrame.src = "static/feeds/view.html";
 feedsFrame.style.cssText =
-  "width:100%;height:70vh;min-height:240px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("view-feeds").append(feedsFrame);
 let feedsCommand = null,
   feedsCommandId = 0;
 function feedsEnvironment() {
   const active = state.view === "feeds" && !$("workspace").hidden;
-  if (active)
-    feedsFrame.style.height = `${Math.max(240, innerHeight - feedsFrame.getBoundingClientRect().top - 32)}px`;
   feedsFrame.contentWindow?.postMessage(
     {
       type: "feeds-environment",

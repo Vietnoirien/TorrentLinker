@@ -22,7 +22,6 @@ function restoreMediaAssistant(){assistantEnvironment()}
 function assistantEnvironment() {
   for(const [frame,compact] of [[assistantFrame,false],[mediaAssistantFrame,true]]){
     const active=frame.isConnected&&!$("workspace").hidden&&(compact?state.view==="media"&&media.chat:state.view==="assistant");
-    if(active&&!compact)frame.style.height=`${Math.max(240,innerHeight-frame.getBoundingClientRect().top-20)}px`;
     frame.contentWindow?.postMessage({type:"assistant-environment",value:{mode:"web",active,compact,revision:compact?mediaAssistantRevision:assistantRevision,conversation_id:compact?mediaChatConversation:assistantRequestedConversation,selection_revision:assistantSelectionRevision,language,theme:document.documentElement.dataset.theme||"dark"}},location.origin);
   }
 }

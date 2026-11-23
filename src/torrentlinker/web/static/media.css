@@ -8,7 +8,7 @@
 .media-view main > header #navigation-toggle { padding: 7px 10px; font-size: 11px; }
 /* Media has its own menu, with the navigation button: the page header never shows on it. */
 .media-view main > header { display: none; }
-#view-media { --media-muted: #9da9ad; color: #f2f3ef; background: #101416; min-height: calc(100dvh - 78px); }
+#view-media { --media-muted: #9da9ad; color: #f2f3ef; background: #101416; }
 #view-media button, #view-media input, #view-media select, #media-details button { color: inherit; background: #ffffff08; border-color: #ffffff23; }
 /* The media view recolors the shared roles for its dark surface; it keeps their shapes. */
 #view-media .icon-button, #view-media .quiet, #media-chat-panel .icon-button { background: transparent; border-color: transparent; }

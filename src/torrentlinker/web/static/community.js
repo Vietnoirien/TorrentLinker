@@ -10,7 +10,7 @@
   frame.title = say("Community", "Communauté");
   frame.src = "static/community/view.html";
   frame.style.cssText =
-    "width:100%;height:calc(100vh - 245px);min-height:240px;border:0;display:block";
+    "width:100%;border:0;display:block";
   root.append(frame);
   const allowed = new Set([
     "community",
@@ -20,13 +20,7 @@
     "community/save",
     "community/control",
   ]);
-  const fit = () => {
-    if (!root.hidden && !$("workspace").hidden)
-      frame.style.height = `${Math.max(240, innerHeight - frame.getBoundingClientRect().top - 40)}px`;
-  };
-  window.addEventListener("resize", fit);
   const environment = () => {
-    requestAnimationFrame(fit);
     frame.contentWindow?.postMessage(
       {
         type: "community-environment",

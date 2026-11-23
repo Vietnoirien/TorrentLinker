@@ -2,7 +2,7 @@
 // Media browsing is shared with Qt; the player, its queue and the chat remain host-owned.
 const mediaFrame = document.createElement("iframe");
 mediaFrame.id="media-frame";mediaFrame.title="Media";mediaFrame.src="static/media/view.html";
-mediaFrame.style.cssText="width:100%;min-height:300px;border:0;display:block";
+mediaFrame.style.cssText="width:100%;border:0;display:block";
 // The panel's own colours never fill the picture's slot: the host's video is drawn behind it (media.css).
 mediaFrame.setAttribute("allowtransparency","true");
 let mediaRevision=0;
@@ -14,7 +14,6 @@ async function loadMedia(){
 function mediaRefreshView(){mediaRevision++;mediaEnvironment()}
 function mediaEnvironment(){
   const active=state.view==="media"&&!$("workspace").hidden;
-  if(active)mediaFrame.style.height=`${Math.max(300,innerHeight-mediaFrame.getBoundingClientRect().top-20)}px`;
   mediaPlaceStage();
   // Restored queues can contain uncached tracks; the server validates every saved item.
   const music=media.queue.every(id=>{const row=mediaItems.get(id);return !row||row.kind==="music"});

@@ -4,7 +4,7 @@ seedingFrame.id = "seeding-frame";
 seedingFrame.title = "Seeding";
 seedingFrame.src = "static/seeding/view.html";
 seedingFrame.style.cssText =
-  "width:100%;height:75vh;min-height:300px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("zen-seeding-panel").append(seedingFrame);
 const seedingHost = { revision: 0, generation: 0, busy: new Set(), error: "" };
 const seedingPreferenceKey = (client) =>
@@ -23,8 +23,6 @@ function seedingEnvironment() {
     state.view === "zen" &&
     !$("zen-seeding-panel").hidden &&
     !$("workspace").hidden;
-  if (active)
-    seedingFrame.style.height = `${Math.max(300, innerHeight - seedingFrame.getBoundingClientRect().top - 24)}px`;
   seedingFrame.contentWindow?.postMessage(
     {
       type: "seeding-environment",
@@ -73,7 +71,7 @@ async function loadZenSeeding() {
     else seedingHost.busy.delete(client);
     shellSetSeeding(client, result.summary.daily);
     $("zen-daily").textContent = num(result.summary.daily);
-    $("zen-count").textContent = result.summary.count;
+    $("zen-count").textContent = Number(result.summary.count).toLocaleString("fr-FR");
   } catch (error) {
     if (client !== state.clientId || generation !== seedingHost.generation)
       return;

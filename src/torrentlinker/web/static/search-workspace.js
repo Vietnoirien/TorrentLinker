@@ -4,7 +4,7 @@ searchFrame.id = "search-frame";
 searchFrame.title = "Search and download queue";
 searchFrame.src = "static/search/view.html";
 searchFrame.style.cssText =
-  "width:100%;height:calc(100vh - 160px);min-height:240px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("view-search").append(searchFrame);
 function searchEnvironment() {
   const active =
@@ -12,7 +12,6 @@ function searchEnvironment() {
   if (active) {
     if ($("view-search").hidden) $("view-search").hidden = false;
     if (!$("view-queue").hidden) $("view-queue").hidden = true;
-    searchFrame.style.height = `${Math.max(240, innerHeight - searchFrame.getBoundingClientRect().top - 32)}px`;
   }
   searchFrame.contentWindow?.postMessage(
     {

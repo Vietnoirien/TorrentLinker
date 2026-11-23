@@ -4,12 +4,10 @@ settingsFrame.id = "settings-frame";
 settingsFrame.title = "Settings";
 settingsFrame.src = "static/settings/view.html";
 settingsFrame.style.cssText =
-  "width:100%;height:80vh;min-height:360px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("view-setup").prepend(settingsFrame);
 function settingsEnvironment() {
   const active = state.view === "setup" && !$("workspace").hidden;
-  if (active)
-    settingsFrame.style.height = `${Math.max(360, innerHeight - settingsFrame.getBoundingClientRect().top - 20)}px`;
   settingsFrame.contentWindow?.postMessage(
     {
       type: "settings-environment",
@@ -251,7 +249,3 @@ for (const node of [$("view-setup"), $("workspace")])
     attributes: true,
     attributeFilter: ["hidden"],
   });
-
-const settingsShellResize = new ResizeObserver(settingsEnvironment);
-for (const id of ["shell-header-frame", "shell-navigation-frame"])
-  if ($(id)) settingsShellResize.observe($(id));

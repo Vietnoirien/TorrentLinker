@@ -72,15 +72,13 @@ const profileFrame = document.createElement("iframe");
 profileFrame.id = "profile-frame";
 profileFrame.src = "static/profile/view.html";
 profileFrame.style.cssText =
-  "width:100%;min-height:240px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("zen-profile-panel").append(profileFrame);
 let profileAvatar = "",
   profileAvatarToken = null;
 function profileEnvironment() {
   const root = $("zen-profile-panel");
   profileFrame.title = say("Profile", "Profil");
-  if (!root.hidden)
-    profileFrame.style.height = `${Math.max(240, innerHeight - profileFrame.getBoundingClientRect().top - 40)}px`;
   const token = profileState?.avatar || null;
   if (token !== profileAvatarToken) {
     profileAvatarToken = token;

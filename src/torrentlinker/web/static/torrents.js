@@ -4,13 +4,11 @@ torrentsFrame.id = "torrents-frame";
 torrentsFrame.title = "Torrents";
 torrentsFrame.src = "static/torrents/view.html";
 torrentsFrame.style.cssText =
-  "width:100%;height:70vh;min-height:240px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("view-torrents").append(torrentsFrame);
 let torrentsCommand = null, torrentsSequence = 0;
 function torrentsEnvironment() {
   const active = state.view === "torrents" && !$("workspace").hidden;
-  if (active)
-    torrentsFrame.style.height = `${Math.max(240, innerHeight - Math.max(0, torrentsFrame.getBoundingClientRect().top) - 32)}px`;
   torrentsFrame.contentWindow?.postMessage(
     {
       type: "torrents-environment",
@@ -92,7 +90,3 @@ new MutationObserver(torrentsEnvironment).observe($("view-torrents"), {
   attributes: true,
   attributeFilter: ["hidden"],
 });
-
-const torrentsShellResize = new ResizeObserver(torrentsEnvironment);
-for (const id of ["shell-header-frame", "shell-navigation-frame"])
-  if ($(id)) torrentsShellResize.observe($(id));

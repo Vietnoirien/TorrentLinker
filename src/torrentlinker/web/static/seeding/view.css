@@ -17,6 +17,15 @@ h1 {
 h2 {
   font-size: 18px;
 }
+#seeding-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+}
 .toolbar {
   display: flex;
   gap: 12px;

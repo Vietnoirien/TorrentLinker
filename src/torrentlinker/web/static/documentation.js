@@ -2,12 +2,11 @@
 const documentationFrame=document.createElement("iframe");
 documentationFrame.id="documentation-frame";documentationFrame.title="Documentation";
 documentationFrame.src="static/documentation/view.html";
-documentationFrame.style.cssText="width:100%;height:75vh;min-height:300px;border:0;display:block";
+documentationFrame.style.cssText="width:100%;border:0;display:block";
 $("view-documentation").append(documentationFrame);
 function loadGuides(){documentationEnvironment()}
 function documentationEnvironment(){
   const active=state.view==="documentation"&&!$("workspace").hidden;
-  if(active)documentationFrame.style.height=`${Math.max(300,innerHeight-documentationFrame.getBoundingClientRect().top-24)}px`;
   documentationFrame.contentWindow?.postMessage({type:"documentation-environment",value:{mode:"web",active,language,theme:document.documentElement.dataset.theme||"dark"}},location.origin);
 }
 window.addEventListener("message",async event=>{

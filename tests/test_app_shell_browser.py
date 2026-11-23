@@ -60,6 +60,47 @@ def test_desktop_header_keeps_one_bar_and_no_duplicate_titles(tmp_path):
         thread.join(5)
 
 
+def test_wide_and_short_windows_keep_one_scroll_owner(tmp_path):
+    """#165: the workspace uses the whole width and each panel fills what is left under the
+    header and the Zen band, so the page itself never scrolls next to the panel."""
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.shell_support import shell_navigate
+
+    fits = """frame => {
+      const main = document.querySelector('#workspace main');
+      const band = document.getElementById('shell-band-host');
+      const bottom = band.hidden ? innerHeight - parseFloat(getComputedStyle(main).paddingBottom)
+        : band.getBoundingClientRect().top;
+      const box = frame.getBoundingClientRect();
+      return Math.abs(main.getBoundingClientRect().right - innerWidth) < 1
+        && document.scrollingElement.scrollHeight <= innerHeight
+        && Math.abs(box.bottom - bottom) < 1 && box.height >= 240;
+    }"""
+    server, thread, base = serve(tmp_path)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 2560, "height": 1440}, locale="fr-FR")
+            sign_in(page, base)
+            for width, height in ((2560, 1440), (1280, 560)):
+                page.set_viewport_size({"width": width, "height": height})
+                for view, panel in (
+                    ("setup", "#settings-frame"),
+                    ("documentation", "#documentation-frame"),
+                    ("search", "#search-frame"),
+                    ("torrents", "#torrents-frame"),
+                    ("zen", "#profile-frame"),
+                ):
+                    shell_navigate(page, view)
+                    expect(page.locator(panel)).to_be_visible()
+                    page.wait_for_function(fits, arg=page.locator(panel).element_handle())
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(5)
+
+
 def test_phone_navigation_is_one_closed_drawer_with_the_preferences(tmp_path):
     from playwright.sync_api import expect, sync_playwright
 

@@ -2,7 +2,7 @@
 const catalogueFrame=document.createElement("iframe");
 catalogueFrame.id="catalogue-frame";catalogueFrame.title="Catalogue";
 catalogueFrame.src="static/catalogue/view.html";
-catalogueFrame.style.cssText="width:100%;height:75vh;min-height:300px;border:0;display:block";
+catalogueFrame.style.cssText="width:100%;border:0;display:block";
 $("zen-catalogue-panel").append(catalogueFrame);
 const catalogueUI={value:{cards:[]},job:null,progress:null,stopping:false,plan:false,error:"",refreshing:false,generation:0};
 const catalogueFinished=new Set();
@@ -10,7 +10,6 @@ function showCatalogue(value){if(value){catalogueUI.value=value;catalogueEnviron
 function catalogueEnvironment(){
   shellEnvironment();
   const active=state.view==="zen"&&!$("zen-catalogue-panel").hidden&&!$("workspace").hidden;
-  if(active)catalogueFrame.style.height=`${Math.max(300,innerHeight-catalogueFrame.getBoundingClientRect().top-24)}px`;
   const p=catalogueUI.progress,root=p?.catalogue_root;
   const cards=(catalogueUI.value.cards||[]).map(card=>{
     if(!catalogueUI.job||!root||!card.fetchable)return card;

@@ -54,6 +54,8 @@ const labels = {
 };
 function translate() {
   document.documentElement.lang = language;
+  $("seeding-refresh").setAttribute("aria-label", say("Refresh", "Actualiser"));
+  $("seeding-refresh").title = say("Refresh", "Actualiser");
   for (const node of document.querySelectorAll("[data-i18n]")) {
     const pair = labels[node.dataset.i18n];
     if (pair) node.textContent = say(...pair);

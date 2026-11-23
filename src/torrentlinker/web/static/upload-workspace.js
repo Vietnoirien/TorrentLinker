@@ -5,13 +5,11 @@ uploadFrame.id = "upload-frame";
 uploadFrame.title = "Upload";
 uploadFrame.src = "static/upload/view.html";
 uploadFrame.style.cssText =
-  "width:100%;height:calc(100vh - 160px);min-height:240px;border:0;display:block";
+  "width:100%;border:0;display:block";
 $("view-upload").append(uploadFrame);
 let uploadNavigation = null;
 function uploadEnvironment(section) {
   if (typeof section === "string") uploadNavigation = {tab: section, id: (uploadNavigation?.id || 0) + 1};
-  if (!$("view-upload").hidden)
-    uploadFrame.style.height = `${Math.max(240, innerHeight - uploadFrame.getBoundingClientRect().top - $("shell-band-host").getBoundingClientRect().height - 16)}px`;
   uploadFrame.contentWindow?.postMessage(
     {
       type: "upload-environment",
@@ -83,5 +81,3 @@ new MutationObserver(uploadEnvironment).observe(document.documentElement, {
 });
 
 document.addEventListener("tl-language-changed", uploadEnvironment);
-
-new ResizeObserver(uploadEnvironment).observe($("shell-band-host"));
