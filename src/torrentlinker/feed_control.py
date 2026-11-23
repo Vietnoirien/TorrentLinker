@@ -17,6 +17,7 @@ from torrentlinker.feeds import (
     work_identity,
 )
 from torrentlinker.indexer import Candidate
+from torrentlinker.trackers import tracker
 
 if TYPE_CHECKING:
     from torrentlinker.agent.service import AgentService
@@ -25,7 +26,14 @@ if TYPE_CHECKING:
 class FeedControl:
     def __init__(self, service: AgentService):
         self.service = service
-        self.feeds = FeedService(service.setup.path.parent / "feeds.sqlite", service.setup.indexer)
+        setup = service.setup
+        self.feeds = FeedService(
+            setup.path.parent / "feeds.sqlite",
+            setup.indexer,
+            setup.tracker_indexer,
+            # The passkey is read from the secret store when a feed is fetched, never kept.
+            lambda tracker_id: setup.secrets.get(tracker(tracker_id).passkey_secret) or "",
+        )
         self.stop = threading.Event()
         self.thread: threading.Thread | None = None
 

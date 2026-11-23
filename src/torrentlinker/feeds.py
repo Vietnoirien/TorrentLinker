@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from torrentlinker import net
 from torrentlinker.indexer import Candidate, Indexer, SearchQuery
 
 MetadataField = Literal[
@@ -111,6 +113,15 @@ class Subscription(BaseModel):
             "3010 is music, not books. Do not use native Search or Upload category IDs."
         ),
     )
+    # The Tracker whose feed this follows (ADR-0025). A subscription saved before Trackers
+    # existed has none stored and reads as c411.
+    tracker: Literal["c411", "tr4ker"] = "c411"
+    feed_category: str = Field(
+        default="",
+        max_length=60,
+        description="tr4ker only: a category slug of its passkey feed, such as films.",
+    )
+    freeleech: bool = Field(default=False, description="tr4ker only: its freeleech feed.")
     paused: bool = False
     interval_minutes: int = Field(default=30, ge=15, le=1440)
     mode: Literal["review_only", "app_queue", "automatic_download"] = "review_only"
@@ -131,9 +142,27 @@ class Subscription(BaseModel):
             raise ValueError("Use positive Torznab category IDs, not native Search IDs.")
         if any(hour < 0 or hour > 23 for hour in self.download_hours):
             raise ValueError("Download hours must be UTC hours from 0 to 23.")
+        if self.tracker != "tr4ker" and (self.feed_category or self.freeleech):
+            raise ValueError("A feed category and freeleech belong to a tr4ker subscription.")
+        if (
+            self.tracker == "tr4ker"
+            and (self.query or self.categories)
+            and (self.feed_category or self.freeleech)
+        ):
+            raise ValueError(
+                "A tr4ker subscription follows its feed (category slug, freeleech) "
+                "or polls a query (Torznab), not both."
+            )
+        if self.tracker == "tr4ker" and not self.query and self.categories:
+            raise ValueError("tr4ker's feed filters by category slug; Torznab IDs need a query.")
         if self.mode != "review_only" and not self.folder:
             raise ValueError("Choose a Download Folder for queue rules.")
         return self
+
+    @property
+    def uses_feed(self) -> bool:
+        """A tr4ker subscription without a query reads its passkey feed; a query polls Torznab."""
+        return self.tracker == "tr4ker" and not self.query
 
 
 def candidate(raw: dict) -> Candidate:
@@ -268,9 +297,19 @@ def evaluate(row: Candidate, prefs: Preferences) -> dict:
 
 
 class FeedService:
-    def __init__(self, path: Path, indexer: Callable[[], Indexer]):
+    def __init__(
+        self,
+        path: Path,
+        indexer: Callable[[], Indexer],
+        tracker_indexer: Callable[[str], Any] | None = None,
+        passkey: Callable[[str], str] | None = None,
+        http: httpx.Client | None = None,
+    ):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path, self.indexer = path, indexer
+        # Another Tracker's Indexer (Torznab polling) and its passkey (the feed). The passkey
+        # is read when a feed is fetched and never kept on the service.
+        self.tracker_indexer, self.passkey, self.http = tracker_indexer, passkey, http
         self.lock = threading.RLock()
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
@@ -303,6 +342,14 @@ class FeedService:
             """)
 
         with self.db:
+            # Subscriptions saved before Trackers existed follow c411: say so in the payload.
+            for row in self.db.execute("SELECT id, payload FROM subscriptions").fetchall():
+                saved = json.loads(row["payload"])
+                if "tracker" not in saved:
+                    self.db.execute(
+                        "UPDATE subscriptions SET payload=? WHERE id=?",
+                        (json.dumps({**saved, "tracker": "c411"}), row["id"]),
+                    )
             if "payload" not in {
                 row[1] for row in self.db.execute("PRAGMA table_info(selections)")
             }:
@@ -320,7 +367,13 @@ class FeedService:
                 before = Subscription.model_validate_json(old[0])
                 if before.mode != value.mode and value.mode != "review_only":
                     self.db.execute("UPDATE memberships SET baseline=1 WHERE feed=?", (value.id,))
-                if before.categories != value.categories or before.query != value.query:
+                if (
+                    before.categories != value.categories
+                    or before.query != value.query
+                    or before.tracker != value.tracker
+                    or before.feed_category != value.feed_category
+                    or before.freeleech != value.freeleech
+                ):
                     # A changed source has a new activation baseline.
                     self.db.execute("DELETE FROM memberships WHERE feed=?", (value.id,))
                     self.db.execute(
@@ -379,21 +432,66 @@ class FeedService:
                 for row in self.db.execute("SELECT * FROM subscriptions ORDER BY rowid")
             ]
 
+    def source(self, subscription: Subscription) -> Any:
+        """The Indexer a subscription polls: c411's, or the Tracker's own."""
+        if subscription.tracker == "c411":
+            return self.indexer()
+        if self.tracker_indexer is None:
+            raise ValueError("Add the tr4ker Indexer first.")
+        return self.tracker_indexer(subscription.tracker)
+
+    def _feed_preview(self, subscription: Subscription) -> dict:
+        """tr4ker's passkey feed: its newest 100 items, once per guid (no paging)."""
+        from torrentlinker.tr4ker_rss import fetch_feed
+
+        passkey = self.passkey("tr4ker") if self.passkey else ""
+        if not passkey:
+            raise ValueError("Add the tr4ker passkey in Settings first.")
+        http = self.http or net.client(timeout=30, follow_redirects=False)
+        try:
+            rows = fetch_feed(http, passkey, subscription.feed_category, subscription.freeleech)
+        finally:
+            if self.http is None:
+                http.close()
+        by_key = {row.infohash: row for row in rows}
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO previews VALUES(?,?)",
+                (self.preview_signature(subscription), time.time()),
+            )
+        return {
+            "rows": [asdict(row) for row in by_key.values()],
+            "limited": True,
+            "coverage": (
+                "tr4ker's feed holds its 100 latest items: history and gap-free updates "
+                "are not guaranteed."
+            ),
+            "pages": 1,
+            "evaluations": {
+                h: evaluate(row, subscription.preferences) for h, row in by_key.items()
+            },
+        }
+
     def preview(self, subscription: Subscription, *, pages: int = 3) -> dict:
-        indexer = self.indexer()
+        if subscription.uses_feed:
+            return self._feed_preview(subscription)
+        indexer = self.source(subscription)
         seen_pages = set()
         rows: dict[str, Candidate] = {}
         reason = "page budget reached"
         for page in range(min(10, max(1, pages))):
-            batch = indexer.search(
-                SearchQuery(
-                    q=subscription.query,
-                    categories=tuple(subscription.categories),
-                    offset=page * 100,
-                    limit=100,
-                    extended=True,
-                ),
-                cached=False,
+            search = SearchQuery(
+                q=subscription.query,
+                categories=tuple(subscription.categories),
+                offset=page * 100,
+                limit=100,
+                extended=True,
+            )
+            # Only c411's Indexer caches its searches; another Tracker's has nothing to skip.
+            batch = (
+                indexer.search(search, cached=False)
+                if subscription.tracker == "c411"
+                else indexer.search(search)
             )
             hashes = sorted({row.infohash.lower() for row in batch if row.infohash})
             digest = hashlib.sha256("".join(hashes).encode()).hexdigest()
@@ -408,6 +506,11 @@ class FeedService:
                         infohash=row.infohash.lower(),
                         download_url=indexer.redact(row.download_url),
                         details_url=indexer.redact(row.details_url),
+                        metadata=(
+                            row.metadata
+                            if subscription.tracker == "c411"
+                            else {**row.metadata, "tracker": subscription.tracker}
+                        ),
                     )
                     rows[clean.infohash] = clean  # type: ignore[index]
             if len(batch) < 100:
@@ -441,7 +544,7 @@ class FeedService:
                 with self.db:
                     self.db.execute(
                         "UPDATE subscriptions SET last_attempt=?,error=? WHERE id=?",
-                        (now, self.indexer().redact(str(error)), identifier),
+                        (now, self.redact_error(feed, error), identifier),
                     )
                 raise
             with self.db:
@@ -482,6 +585,18 @@ class FeedService:
                     (now, now, result["coverage"], identifier),
                 )
             return {**result, "status": "refreshed"}
+
+    def redact_error(self, feed: Subscription, error: Exception) -> str:
+        from torrentlinker.tr4ker_rss import redact_passkey
+
+        text = str(error)
+        if feed.tracker == "c411":
+            return self.indexer().redact(text)
+        try:
+            text = self.source(feed).redact(text)
+        except ValueError:
+            pass
+        return redact_passkey(text, self.passkey("tr4ker") if self.passkey else "")
 
     def poll(self, *, now: float | None = None) -> list[dict]:
         now = time.time() if now is None else now
@@ -675,7 +790,7 @@ class FeedService:
             feed = self.get(identifier)
             if feed.paused or feed.mode == "review_only":
                 return []
-            indexer = self.indexer()
+            indexer = self.source(feed)
             queued = entries(store, all_clients=True)
             live_queue_keys = {entry.key for entry in queued}
             queued_hashes = {e.candidate.infohash for e in queued}
@@ -721,6 +836,11 @@ class FeedService:
                     status, reason = (
                         "baseline",
                         "Available before activation; include-current is disabled.",
+                    )
+                elif not re.fullmatch(r"[a-f0-9]{40}", infohash or ""):
+                    status, reason = (
+                        "blocked",
+                        "tr4ker's feed carries no info hash. Review the item in the inbox.",
                     )
                 elif not evaluation["eligible"]:
                     status, reason = (
@@ -984,10 +1104,17 @@ class FeedService:
                 )
             return result
 
+    def source_url(self, feed: Subscription) -> str:
+        if feed.tracker == "c411":
+            return self.indexer().url
+        from torrentlinker.trackers import tracker
+
+        return tracker(feed.tracker).origin + ("/api/rss" if feed.uses_feed else "/api")
+
     def preview_signature(self, feed: Subscription) -> str:
         definition = feed.model_dump(exclude={"id"})
         return hashlib.sha256(
-            (self.indexer().url + json.dumps(definition, sort_keys=True)).encode()
+            (self.source_url(feed) + json.dumps(definition, sort_keys=True)).encode()
         ).hexdigest()
 
     def has_preview(self, feed: Subscription) -> bool:
