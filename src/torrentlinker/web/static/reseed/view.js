@@ -37,6 +37,7 @@ let snapshot = {
   checked = new Set(),
   limit = 100,
   drawer = false,
+  runExpanded = false,
   active = false,
   generation = 0,
   busy = false;
@@ -73,7 +74,10 @@ function runDetails(progress) {
   const done = Number(progress.done) || 0;
   const total = Number(progress.total) || 0;
   const items = Object.entries(progress.active || {});
-  return `<div class="run-detail"><div class="run-count"><span>${done} / ${total} ${t("éléments traités", "items processed")}</span><span>${Number(progress.seeded) || 0} ${t("mis en partage", "seeding")}</span></div><progress max="${Math.max(total, 1)}" value="${Math.min(done, total)}" aria-label="${t("Progression du parcours", "Reseed progress")}"></progress><div class="run-items">${items.map(([path, item]) => `<div class="run-item"><span title="${esc(path)}">${esc(path ? path.split("/").pop() : t("Dossiers", "Folders"))}</span><small>${reseedPhase(item.phase)}${item.fraction == null ? "" : ` · ${Math.round(item.fraction * 100)} %`}</small></div>`).join("") || `<small>${t("En attente du prochain élément…", "Waiting for the next item…")}</small>`}</div></div>`;
+  const waiting = (snapshot.jobs || []).filter(j => j.status === "queued" && j.kind !== "reseed-workspace");
+  const [path, item] = items[0] || [];
+  const current = path ? `${path.split("/").pop()} · ${reseedPhase(item.phase)}` : t("En attente du prochain élément…", "Waiting for the next item…");
+  return `<div class="run-detail"><span title="${esc(path || "")}">${esc(current)}</span><small>${done} / ${total}${waiting.length ? ` · ${waiting.length} ${t("en attente", "waiting")}` : ""}</small></div><progress class="run-meter" max="${Math.max(total, 1)}" value="${Math.min(done, total)}" aria-label="${t("Progression du parcours", "Reseed progress")}"></progress>${runExpanded ? `<div class="run-expanded"><small>${Number(progress.seeded) || 0} ${t("mis en partage", "seeding")}</small><div class="run-items">${items.map(([name, step]) => `<div class="run-item"><span title="${esc(name)}">${esc(name ? name.split("/").pop() : t("Dossiers", "Folders"))}</span><small>${reseedPhase(step.phase)}${step.fraction == null ? "" : ` · ${Math.round(step.fraction * 100)} %`}</small></div>`).join("") || `<small>${t("Aucun élément actif", "No active item")}</small>`}</div>${waiting.length ? `<div class="run-queue"><strong>${t("Opérations en attente", "Waiting operations")}</strong>${waiting.map(j => `<div class="run-queue-row"><span>${esc(j.title || t(activityKinds[j.kind] || j.kind))}${j.subject?.path ? ` · ${esc(j.subject.path.split("/").pop())}` : ""}</span><button data-cancel-job="${esc(j.id)}">${t("Annuler", "Cancel")}</button></div>`).join("")}</div>` : ""}</div>` : ""}`;
 }
 const api = async (action, body = {}) =>
   (await window.reseedTransport)(action, {
@@ -159,7 +163,7 @@ function jobControls() {
   const jobs = snapshot.jobs || [];
   const activeJobs = jobs.filter(j => ["queued", "running"].includes(j.status));
   const shown = [...activeJobs, ...jobs.filter(j => !["queued", "running"].includes(j.status)).slice(0, 1)];
-  $("library-jobs").innerHTML = shown.map(j => `<div class="tools"><b>${esc(j.title || t(activityKinds[j.kind] || j.kind))}</b><span>${esc(j.display || j.status)}</span>${["queued", "running"].includes(j.status) && j.progress?.cancellable !== false ? `<button data-cancel-job="${esc(j.id)}">${t("Annuler", "Cancel")}</button>` : ""}</div>`).join("");
+  $("library-jobs").innerHTML = tab === "activity" ? shown.map(j => `<div class="tools"><b>${esc(j.title || t(activityKinds[j.kind] || j.kind))}</b><span>${esc(j.display || j.status)}</span>${["queued", "running"].includes(j.status) && j.progress?.cancellable !== false ? `<button data-cancel-job="${esc(j.id)}">${t("Annuler", "Cancel")}</button>` : ""}</div>`).join("") : "";
   for (const node of document.querySelectorAll('[data-command="scan"],[data-review-action]')) {
     const action = node.dataset.reviewAction;
     const matches = jobs.filter(j => node.dataset.command === "scan" ? j.kind === "scan" : (j.subject?.path === selected || j.subject?.paths?.includes(selected) || ["check-all", "reseed-all"].includes(j.kind)) && reviewJobAction(j) === action);
@@ -245,7 +249,7 @@ function render() {
       )
       .join(
         "",
-      )}</div><div class="running"><span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small><small style="margin-left:auto">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}${runDetails(progress)}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
+      )}</div><div class="running">${running ? `<button class="run-toggle" data-command="toggle-run" aria-expanded="${runExpanded}" aria-label="${runExpanded ? t("Réduire le parcours", "Collapse run") : t("Développer le parcours", "Expand run")}">${runExpanded ? "▴" : "▾"}</button>` : ""}<span><i class="dot" style="animation-play-state:${running && !snapshot.paused ? "running" : "paused"}"></i>${running ? (snapshot.paused ? t("Parcours suspendu") : t("Parcours actif")) : t("Prêt à commencer")}</span><small>${current.length}${t(" opérations simultanées · ")}${snapshot.rows.filter((r) => r.error).length}${t(" décisions attendues")}</small>${runDetails(progress)}<small class="run-capacity">${t("Vérification : 1 à la fois · Recherche : 2 maximum")}</small>${running ? `<button data-command="stop">${t("Arrêter")}</button>` : ""}</div><div class="workspace"><section class="panel"><div class="tools"><input id="search" placeholder="${t("Rechercher dans mes fichiers…")}" aria-label="${t("Rechercher")}" value="${esc(query)}">${selectionTools()}<button data-command="batch" ${checked.size ? "" : "disabled"}>${t("Enchaîner la sélection")}</button></div>${
       rows
         .slice(0, limit)
         .map((r) => {
@@ -288,7 +292,7 @@ function inspector() {
   const steps = Object.keys(labels),
     index = steps.indexOf(r.stage),
     paused = snapshot.progress?.paused_paths?.includes(r.path);
-  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span>${r.error?`<p class="error">${esc(r.error)}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
+  return `<aside class="panel inspector ${drawer ? "open" : ""}"><button class="close" data-command="close-inspector">${t("Fermer")}</button><div class="eyebrow">${t("L’ÉLÉMENT SÉLECTIONNÉ")}</div><div class="detail-head"><h2>${esc(r.name)}</h2><small>${bytes(r.size)} · ${esc(r.path)}</small></div><span class="badge ${r.error ? "warn" : ""}">${esc(stateFor(r))}</span>${r.error?`<p class="error">${esc(TLToast.translate(r.error))}</p>`:""}${snapshot.running?`<button data-command="pause-item">${paused?t("Reprendre cet élément"):t("Suspendre cet élément")}</button>`:""}${candidateInspector(r)}<div class="section"><b>${t("Son parcours")}</b><ol class="steps">${steps.map((key, i) => `<li class="${index === i ? "current" : ""}">${i < index ? "✓" : i === index ? "●" : "○"}　${labels[key]}${key === "links" ? "<small> · Symlink</small>" : ""}</li>`).join("")}</ol></div>${r.destination ? `<div class="section"><b>${t("Dossier de liens à conserver")}</b><pre>${esc(r.destination)}</pre>${(r.files || []).map((f) => `<pre>${esc(f.source)}<br>↳ ${esc(f.name)}</pre>`).join("")}</div>` : ""}<div class="section"><b>${t("Historique de cet élément")}</b><div class="events">${
     (r.events || [])
       .slice()
       .reverse()
@@ -438,7 +442,7 @@ async function start(paths, key = "") {
 }
 // Buttons that only switch the view answer at once; every other button is busy while it works
 // and a failure becomes a sticky toast.
-const instant = ["close", "close-inspector", "settings", "add-folder", "add-client", "disk", "combine", "clear-selection", "select"];
+const instant = ["close", "close-inspector", "toggle-run", "settings", "add-folder", "add-client", "disk", "combine", "clear-selection", "select"];
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   const works = b && !b.disabled && !b.closest("form") &&
@@ -493,6 +497,10 @@ async function handleClick(e) {
   const cmd = b?.dataset.command;
   if (!cmd) return;
   switch (cmd) {
+    case "toggle-run":
+      runExpanded = !runExpanded;
+      render();
+      break;
     case "close":
       if (browseForm) { restoreBrowse(); break; }
       previewSequence++;

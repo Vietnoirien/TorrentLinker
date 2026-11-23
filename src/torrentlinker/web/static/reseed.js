@@ -1,6 +1,6 @@
 "use strict";
 document.querySelector("#view-library > p").hidden = true;
-const reseedUI = { root: "", job: null, tab: "reseed" };
+const reseedUI = { root: "", job: null, tab: "reseed", notified: new Set() };
 const reseedFrame = document.createElement("iframe");
 reseedFrame.id = "reseed-frame";
 reseedFrame.title = "Bibliothèque";
@@ -72,12 +72,10 @@ async function reseedRequest(action, body) {
       current ||
       jobs.find((j) => j.kind === "reseed-workspace" && j.client_id === client);
     const progress = { ...current?.progress, paused_paths: data.paused_paths };
-    const error = [
-      latest?.error,
-      ...(latest?.progress?.errors || []).map((e) => e.message),
-    ]
-      .filter(Boolean)
-      .join("\n");
+    // Item errors already live on their rows. Notify once for a failed job, not on
+    // every state poll, which would keep recreating the same toast forever.
+    const error = latest?.error && !reseedUI.notified.has(latest.id) ? latest.error : "";
+    if (error) reseedUI.notified.add(latest.id);
     return {
       error,
       jobs: jobs.filter(j => j.client_id === client && jobPage(j.kind) === "library").map(j => ({...j, subject: {...j.subject, path: j.subject?.path || data.repair_sources?.[j.subject?.repair_id]}, display: jobStatus(j), title: jobTitle(j)})),

@@ -108,6 +108,7 @@ def test_mutations_never_overlap_while_read_lane_remains_available(tmp_path):
         )
         assert job_lane("candidate-inspector", {"inspector_action": "import"}) == "batch"
         assert job_lane("candidate-inspector", {"inspector_action": "check"}) == "interactive"
+        assert job_lane("candidate-inspector", {}) == "interactive"
     finally:
         release.set()
         jobs.close()
@@ -176,17 +177,16 @@ def test_concurrent_checks_download_a_torrent_once(tmp_path):
 def test_cache_read_never_observes_a_partial_replacement(tmp_path, monkeypatch):
     store = Store(tmp_path / "state.db")
     store.cache_torrent("a", b"old complete")
-    original = Path.write_bytes
+    original = Path.replace
     entered, release = threading.Event(), threading.Event()
 
-    def slow(path, data):
+    def slow(path, target):
         if path.suffix == ".tmp":
-            original(path, data[:2])
             entered.set()
             assert release.wait(5)
-        return original(path, data)
+        return original(path, target)
 
-    monkeypatch.setattr(Path, "write_bytes", slow)
+    monkeypatch.setattr(Path, "replace", slow)
     with ThreadPoolExecutor(1) as pool:
         future = pool.submit(store.cache_torrent, "a", b"new complete")
         try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import threading
 import time
 from collections import deque
@@ -21,6 +22,7 @@ from torrentlinker.reseed_layout import (
     validate_layout,
 )
 from torrentlinker.review import candidate_key, check_candidate, remembered_candidates
+from torrentlinker.trackers import TRACKERS, tracker_of_url
 
 if TYPE_CHECKING:
     from torrentlinker.web.library import Library
@@ -28,6 +30,7 @@ if TYPE_CHECKING:
 LINK_TAG = "torrentlinker:links"
 _WORKSPACE_LOCK = threading.Lock()
 STAGES = ("find", "candidates", "links", "verify", "incomplete", "seeding")
+log = logging.getLogger(__name__)
 
 
 class RunStopped(Exception):
@@ -40,6 +43,17 @@ def checkpoint(stop: threading.Event) -> None:
         pass
     if stop.is_set():
         raise RunStopped()
+
+
+def candidate_review_error(candidates: list[dict]) -> str:
+    matches = [c for c in candidates if c.get("match") in {"full", "partial"}]
+    if any(c.get("archive") and c.get("match") == "full" for c in matches):
+        return "A full Candidate matches files inside an archive. Extract and verify it."
+    if any(c.get("archive") for c in matches):
+        return "An archive matches some files. Review the missing files before extraction."
+    if matches:
+        return "Only partial Candidates match this item. Review the missing files."
+    return "Candidates were found, but none match this item's files."
 
 
 class ReseedWorkspace:
@@ -57,14 +71,19 @@ class ReseedWorkspace:
 
     def rows(self) -> list[dict]:
         records = self.setup.store.reseed_records()
-        return [
-            {
-                **row,
-                "stage": "seeding" if row["state"] == "seeded" else "find",
-                **records.get(row["path"], {}),
-            }
-            for row in self.library.rows()
-        ]
+        rows = []
+        for row in self.library.rows():
+            record = records.get(row["path"], {})
+            if record.get("error") == "Incomplete or archived content needs a separate review.":
+                record = {**record, "error": candidate_review_error(record.get("candidates", []))}
+            rows.append(
+                {
+                    **row,
+                    "stage": "seeding" if row["state"] == "seeded" else "find",
+                    **record,
+                }
+            )
+        return rows
 
     def control(self, paths: list[str], *, paused: bool) -> None:
         """Pause/resume individual items at operation boundaries."""
@@ -403,8 +422,7 @@ class ReseedWorkspace:
                                         error="Choose one full Candidate."
                                         if eligible
                                         else (
-                                            "Incomplete or archived content "
-                                            "needs a separate review."
+                                            candidate_review_error(candidates)
                                         ),
                                     )
                                     result["errors"].append(
@@ -643,6 +661,19 @@ class ReseedWorkspace:
                         "and client access to the prepared files."
                     )
                 validate_layout(record)
+                source_tracker = checked.candidate.tracker
+                if not source_tracker:
+                    found_tracker = tracker_of_url(checked.candidate.download_url)
+                    source_tracker = found_tracker.id if found_tracker else ""
+                if source_tracker in TRACKERS:
+                    try:
+                        client.add_tags(record["hash"], [source_tracker])
+                    except Exception:
+                        log.warning(
+                            "Could not tag verified Reseed %s with %s",
+                            record["hash"],
+                            source_tracker,
+                        )
                 record["status"] = "verified"
                 record["achievement_verified_at"] = time.time()
                 return

@@ -28,7 +28,7 @@ def job_lane(kind: str, parameters: dict | None = None) -> str:
         return "interactive"
     if (
         kind == "candidate-inspector"
-        and parameters.get("inspector_action") in READ_INSPECTOR_ACTIONS
+        and parameters.get("inspector_action", "review") in READ_INSPECTOR_ACTIONS
     ):
         return "interactive"
     if kind == "search-library" and len(parameters.get("paths", [])) == 1:

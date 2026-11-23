@@ -16,7 +16,7 @@ from torrentlinker.matching import Match, match
 from torrentlinker.paths import PathMapper
 from torrentlinker.reconcile import classify
 from torrentlinker.reseed_links import prepare_links, validate_links
-from torrentlinker.reseed_workspace import ReseedWorkspace
+from torrentlinker.reseed_workspace import ReseedWorkspace, candidate_review_error
 from torrentlinker.review import remember_candidates
 from torrentlinker.scan import scan_item
 from torrentlinker.torrent_meta import read_torrent
@@ -83,6 +83,32 @@ def run(board, original, links, action="all", stop=None, report=lambda _: None):
     return board.run([str(original)], action, str(links), stop or JobStop(), report)
 
 
+@pytest.mark.parametrize(
+    ("candidates", "expected"),
+    [
+        ([{"match": "none", "archive": False}], "none match this item's files"),
+        ([{"match": "partial", "archive": False}], "Only partial Candidates"),
+        ([{"match": "full", "archive": True}], "inside an archive"),
+    ],
+)
+def test_candidate_review_error_describes_the_actual_match(candidates, expected):
+    assert expected in candidate_review_error(candidates)
+
+
+def test_old_generic_review_error_is_explained_from_saved_candidates(tmp_path):
+    board, _client, original, _links, _meta = workspace(tmp_path)
+    board.setup.store.save_reseed_record(
+        str(original),
+        {
+            "stage": "incomplete",
+            "error": "Incomplete or archived content needs a separate review.",
+            "candidates": [{"match": "none", "archive": False}],
+        },
+    )
+
+    assert "none match this item's files" in board.rows()[0]["error"]
+
+
 def test_all_steps_use_links_and_seed_without_renaming_sources(tmp_path):
     board, client, original, links, meta = workspace(tmp_path)
     before = original.read_bytes(), original.stat().st_ino
@@ -97,6 +123,7 @@ def test_all_steps_use_links_and_seed_without_renaming_sources(tmp_path):
     assert (original.read_bytes(), original.stat().st_ino) == before
     assert not any("rename" in c for c in client.calls)
     assert client.started == [meta.infohash]
+    assert "c411" in client.torrent(meta.infohash).tags
     assert {"find", "compare", "prepare", "local-hash", "client-hash", "seed"} <= set(phases)
     assert board.setup.store.for_client("another").reseed_records() == {}
     # The Library recognizes the original as seeded after restart/rescan.

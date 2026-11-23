@@ -1,6 +1,6 @@
 "use strict";
-// One toast for every panel: bottom-right, stacked. A success fades after about 4 s; an error
-// stays with a close button until dismissed. Colours come from base.css.
+// One toast for every panel: bottom-right, stacked. Errors stay long enough to read,
+// then fade; both kinds can also be dismissed. Colours come from base.css.
 const TLToast = (() => {
   let stack;
   function container() {
@@ -65,6 +65,14 @@ const TLToast = (() => {
       "Le test TMDb a échoué. Vérifiez votre connexion et réessayez.",
     "Operation failed. Check the connection, folder permissions and available space before retrying.":
       "L’opération a échoué. Vérifiez la connexion, les droits sur les dossiers et l’espace disponible avant de réessayer.",
+    "Candidates were found, but none match this item's files.":
+      "Des candidats ont été trouvés, mais aucun ne correspond aux fichiers de cet élément.",
+    "Only partial Candidates match this item. Review the missing files.":
+      "Seuls des candidats partiels correspondent à cet élément. Vérifiez les fichiers manquants.",
+    "A full Candidate matches files inside an archive. Extract and verify it.":
+      "Un candidat complet correspond aux fichiers d’une archive. Extrayez-la et vérifiez-la.",
+    "An archive matches some files. Review the missing files before extraction.":
+      "Une archive correspond à certains fichiers. Vérifiez les fichiers manquants avant l’extraction.",
   };
   // Sentences that carry a name or a number.
   const patterns = [
@@ -130,11 +138,12 @@ const TLToast = (() => {
       button.setAttribute("aria-label", document.documentElement.lang === "fr" ? "Fermer" : "Close");
       button.onclick = close;
       node.append(button);
-    } else setTimeout(close, 4000);
+    }
+    setTimeout(close, failed ? 10000 : 4000);
     container().append(node);
     return node;
   }
-  // An error, from a thrown Error or a plain sentence: always sticky and translated.
+  // An error, from a thrown Error or a plain sentence: translated and timed.
   const error = (problem) => show(problem?.message ?? problem, "bad");
   // What a button says while its work runs.
   const busyLabel = (text) =>
