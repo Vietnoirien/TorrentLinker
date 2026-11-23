@@ -19,15 +19,33 @@ from torrentlinker.torrent_details import fetch_image, parse_details, preview_ht
 
 
 class DetailsWorkspace:
-    def __init__(self, indexer: Indexer, *, clock=time.monotonic):
+    def __init__(self, indexer: Indexer, *, clock=time.monotonic, tr4ker=None):
         self.indexer = indexer
+        self.tr4ker = tr4ker  # the companion session reading tr4ker's native routes
         self.clock = clock
         self.lock = threading.RLock()
         self.documents: OrderedDict[str, dict] = OrderedDict()
         self.images: OrderedDict[tuple[str, int], str] = OrderedDict()
         self.host_retry: dict[str, float] = {}
 
+    def _tr4ker(self, key: str) -> dict:
+        """A tr4ker torrent is keyed `tr4ker:<slug>`: native rows carry no info hash."""
+        from torrentlinker.tr4ker_native import read_detail
+
+        if self.tr4ker is None:
+            raise ValueError("Pair the tr4ker companion to read tr4ker details.")
+        with self.lock:
+            result = read_detail(self.tr4ker, key.removeprefix("tr4ker:"))
+            self.documents[key] = result
+            self.documents.move_to_end(key)
+            while len(self.documents) > 24:
+                removed, _ = self.documents.popitem(last=False)
+                self.images = OrderedDict((k, v) for k, v in self.images.items() if k[0] != removed)
+            return result
+
     def load(self, infohash: str) -> dict:
+        if infohash.startswith("tr4ker:"):
+            return self._tr4ker(infohash)
         if not re.fullmatch(r"[0-9a-fA-F]{40}", infohash):
             raise ValueError("Select a torrent with a valid hash.")
         infohash = infohash.lower()
@@ -56,7 +74,7 @@ class DetailsWorkspace:
             return result
 
     def image(self, infohash: str, position: int) -> dict:
-        infohash = infohash.lower()
+        infohash = infohash if infohash.startswith("tr4ker:") else infohash.lower()
         with self.lock:
             document = self.documents.get(infohash)
             if document is None:

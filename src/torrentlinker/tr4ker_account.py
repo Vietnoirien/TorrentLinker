@@ -38,7 +38,16 @@ from torrentlinker.trackers import TR4KER, tracker
 FRESH = 300  # seconds a snapshot keeps the session "ready"
 PAYOUTS_PER_POST = 100
 ESTIMATE_MINIMUM = 30  # payouts before "estimate from your payouts" has anything to fit
-ROUTES = ("pair", "snapshot", "payouts", "disconnect")
+ROUTES = ("pair", "snapshot", "payouts", "disconnect", "commands", "result")
+# The only pages the app may read through the tr4ker tab (native Search, detail, categories).
+READ_ROUTES = (
+    re.compile(r"/api/torrents\?[A-Za-z0-9_=&%.,+~-]{1,1500}"),
+    re.compile(r"/api/torrents/[A-Za-z0-9_-]{1,200}"),
+    re.compile(r"/api/public/categories"),
+)
+MAX_READ = 4 * 1024 * 1024
+MAX_READS = 50
+READ_TIMEOUT = 100  # seconds a queued read may wait for the browser
 SNAPSHOT_KEYS = {"schema", "source", "tracker", "capturedAt", "account", "me", "stats", "shop"}
 
 
@@ -74,6 +83,10 @@ class Tr4kerAccount:
         self._code = ""
         self._code_until = 0.0
         self._pair: tuple[str, str] | None = None
+        self.reads: dict[str, dict[str, Any]] = {}  # in-memory only, never saved
+        self.last_poll = 0.0
+        self.retry_at = 0.0
+        self.blocked = False
         pair = self.data.get("connection")
         if (
             isinstance(pair, list)
@@ -112,6 +125,8 @@ class Tr4kerAccount:
         """Forget the pairing and the snapshot; the payout log is the Owner's history and stays."""
         with self.lock:
             self._code, self._pair = "", None
+            self.reads.clear()
+            self.blocked = False
             for key in ("connection", "profile", "shop", "received_at"):
                 self.data.pop(key, None)
             self._save()
@@ -139,12 +154,124 @@ class Tr4kerAccount:
                 self.disconnect()
                 return {"disconnected": True}
             if body.get("tracker") != TR4KER or (
-                name == "payouts" and body.get("accountId") != self.account_id
+                name in ("payouts", "result") and body.get("accountId") != self.account_id
             ):
                 raise PermissionError("Different tr4ker account.")
+            if name == "commands":
+                return self._poll(body.get("limit"))
+            if name == "result":
+                return self._receive_read(body)
             if name == "payouts":
                 return self._receive_payouts(body)
             return self._receive_snapshot(body)
+
+    # ---- on-demand reads through the tab's session (native Search, detail) ----
+
+    @property
+    def can_read(self) -> bool:
+        """Paired, and the tr4ker tab asked for work recently."""
+        with self.lock:
+            return bool(self._pair) and self.clock() - self.last_poll < 70
+
+    def submit_read(self, path: str) -> str:
+        with self.lock:
+            if not any(route.fullmatch(path) for route in READ_ROUTES):
+                raise ValueError("This page cannot be read through the session.")
+            if not self._pair:
+                raise ValueError("Connect the tr4ker companion first.")
+            if self.blocked:
+                raise ValueError("tr4ker refused the session. Check the account and reconnect.")
+            if self.clock() < self.retry_at:
+                raise ValueError(
+                    f"tr4ker requested a wait. Retry after {int(self.retry_at - self.clock())} s."
+                )
+            now = self.clock()
+            for key, job in list(self.reads.items()):
+                if now > job["expires"] + 60:
+                    del self.reads[key]
+            if sum(j["status"] in ("pending", "running") for j in self.reads.values()) >= MAX_READS:
+                raise ValueError("The tr4ker read queue is full.")
+            identifier = secrets.token_hex(16)
+            self.reads[identifier] = {
+                "path": path,
+                "status": "pending",
+                "expires": now + READ_TIMEOUT,
+            }
+            return identifier
+
+    def _poll(self, limit: Any) -> dict[str, Any]:
+        now = self.clock()
+        self.last_poll = now
+        batch: list[dict[str, str]] = []
+        count = limit if type(limit) is int and 1 <= limit <= 25 else 1
+        if not self.blocked and now >= self.retry_at:
+            for identifier, job in self.reads.items():
+                if job["status"] == "pending" and len(batch) < count and now <= job["expires"]:
+                    job["status"] = "running"
+                    batch.append(
+                        {"id": identifier, "path": job["path"], "accountId": str(self.account_id)}
+                    )
+        return {"commands": batch}
+
+    def _receive_read(self, body: dict[str, Any]) -> dict[str, Any]:
+        identifier = body.get("id")
+        job = self.reads.get(identifier) if isinstance(identifier, str) else None
+        if job is None or job["status"] != "running":
+            raise ValueError("No active read matches this result.")
+        status = body.get("status")
+        if type(status) is not int or not 0 <= status <= 599:
+            raise ValueError("Invalid HTTP status.")
+        job.update(status="failed", http_status=status)
+        if status == 200:
+            try:
+                text = body.get("data")
+                data = json.loads(text) if isinstance(text, str) and len(text) <= MAX_READ else None
+                if not isinstance(data, dict):
+                    raise ValueError()
+                job.update(status="complete", json=data)
+            except (ValueError, TypeError):
+                job["error"] = "Unexpected answer from tr4ker."
+            return {"accepted": True}
+        job["error"] = "The session read was refused or unavailable."
+        if status == 429:
+            wait = body.get("retryAfter", 60)
+            wait = wait if type(wait) is int and 0 <= wait <= 86400 else 60
+            self.retry_at = max(self.retry_at, self.clock() + max(60, wait))
+            job["retry_after"] = max(60, wait)
+        if status in (401, 403):
+            self.blocked = True
+        return {"accepted": True}
+
+    def read_json(self, path: str, timeout: float = 60.0) -> dict[str, Any]:
+        """One fixed tr4ker page through the browser session; blocks. Never uses the API key.
+        Raises SessionFetchError when the session cannot deliver it."""
+        from torrentlinker.companion_downloads import SessionFetchError
+
+        try:
+            identifier = self.submit_read(path)
+        except ValueError as error:
+            raise SessionFetchError(str(error)) from error
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                with self.lock:
+                    job = self.reads[identifier]
+                    if job["status"] == "complete":
+                        return job.pop("json")
+                    if job["status"] == "failed":
+                        raise SessionFetchError(
+                            job.get("error") or "Session read failed.",
+                            int(job.get("http_status") or 0),
+                            int(job.get("retry_after") or 0),
+                        )
+                    if self.clock() > job["expires"]:
+                        raise SessionFetchError("The browser did not answer in time.")
+                if time.monotonic() > deadline:
+                    raise SessionFetchError("The browser did not answer in time.")
+                time.sleep(0.05)
+        finally:
+            with self.lock:
+                self.reads.pop(identifier, None)
 
     def _receive_pair(self, origin: str, body: dict[str, Any]) -> dict[str, Any]:
         code = body.get("code")

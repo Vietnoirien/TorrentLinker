@@ -325,6 +325,17 @@ class Setup:
                 self._indexer.adult_content = lambda: self.settings.adult_content
             return self._indexer
 
+    def tr4ker_session(self):
+        """The paired tr4ker companion session that reads native routes, or None."""
+        return (self._root or self)._profile_workspace.tr4ker
+
+    def tr4ker_torznab(self):
+        """tr4ker's Torznab Indexer when it is added with a key, else None (never raises)."""
+        try:
+            return self.indexer_for("tr4ker")
+        except ValueError:
+            return None
+
     def extra_indexer_keys(self) -> list[str]:
         return [key for i in range(1, 5) if (key := self.secrets.get(f"indexer-extra-key-{i}"))]
 

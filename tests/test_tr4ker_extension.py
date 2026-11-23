@@ -154,3 +154,73 @@ def test_the_extension_has_no_route_to_the_api_key():
     assert "https://tr4ker.net/*" in manifest["host_permissions"]
     # tr4ker needs 0.7.0 or later (the connect page checks the same floor).
     assert tuple(map(int, manifest["version"].split("."))) >= (0, 7, 0)
+
+
+READ_DRIVER = """
+import { readTr4kerPages } from %(module)s;
+const input = JSON.parse(process.env.INPUT);
+const seen = [];
+globalThis.location = { origin: input.origin || "https://tr4ker.net" };
+globalThis.fetch = async (path, init) => {
+  seen.push([path, init]);
+  const status = input.status?.[path] || 200;
+  return {
+    ok: status === 200, status,
+    headers: { get: (name) => (name === "retry-after" ? "5" : null) },
+    text: async () => JSON.stringify({ torrents: [] }),
+  };
+};
+console.log(JSON.stringify({ out: await readTr4kerPages(input.commands), seen }));
+"""
+
+
+def read(commands, **extra):
+    script = READ_DRIVER % {"module": json.dumps(MODULE.as_uri())}
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        env={"INPUT": json.dumps({"commands": commands, **extra}), "PATH": "/usr/bin:/bin"},
+        capture_output=True, text=True, timeout=60, check=True,
+    )  # fmt: skip
+    return json.loads(result.stdout)
+
+
+def command(path, n=1):
+    return {"id": f"j{n}", "path": path, "accountId": "7"}
+
+
+def test_on_demand_reads_are_fixed_get_routes_with_the_tab_session():
+    paths = ["/api/torrents?q=film&sort=recent&page=1&limit=50", "/api/torrents/some-slug"]
+    result = read([command(p, i) for i, p in enumerate(paths)])
+    assert [r["status"] for r in result["out"]] == [200, 200]
+    assert json.loads(result["out"][0]["data"]) == {"torrents": []}
+    for _path, init in result["seen"]:
+        assert init["method"] == "GET" and init["redirect"] == "error"
+        assert init["credentials"] == "same-origin" and "headers" not in init
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/me",
+        "/api/me/api-key",
+        "https://evil.example/api/torrents/x",
+        "/api/torrents?q=a&sort=seeders",
+        "/api/torrents?sort=title&q=a",
+        "/api/torrents?q=a&search_in=title",
+        "/api/torrents?q=a&sort=size&page=2",
+        "/api/torrents?q=a&sort=leechers",
+    ],
+)
+def test_on_demand_reads_refuse_other_routes_and_the_broken_parameters(path):
+    result = read([command(path)])
+    assert result["seen"] == [] and result["out"][0]["status"] == 0
+
+
+def test_a_refusal_stops_the_batch_and_carries_the_wait():
+    result = read(
+        [command("/api/torrents/a"), command("/api/torrents/b", 2)],
+        status={"/api/torrents/a": 429},
+    )
+    assert result["out"][0]["status"] == 429 and result["out"][0]["retryAfter"] == 60
+    assert result["out"][1]["reason"] == "stopped" and len(result["seen"]) == 1
+    assert read([command("/api/torrents/a")], origin="https://c411.org")["seen"] == []

@@ -270,8 +270,9 @@ def test_each_tracker_answers_only_for_itself(tmp_path, monkeypatch):
             json={"code": code, "accountId": "7", "tracker": "tr4ker"},
         )
         assert bad.status_code == 403
-        # tr4ker never takes c411's routes (downloads, community), nor an unknown Tracker.
-        for route in ("commands", "result", "actions-demand", "creation"):
+        # tr4ker never takes c411's routes (community, creation), nor an unknown Tracker. Its
+        # own `commands` and `result` carry the on-demand native reads (issue 177).
+        for route in ("actions-demand", "creation"):
             assert (
                 browser.post(
                     f"/api/companion/{route}", headers=t4k_ext, json={"tracker": "tr4ker"}

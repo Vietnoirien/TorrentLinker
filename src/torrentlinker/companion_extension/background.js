@@ -2,7 +2,7 @@ import { communityInTab } from "./community.js";
 import { collectProfile } from "./collect.js";
 import { collectDescriptors } from "./descriptor.js";
 import { readPages } from "./read.js";
-import { collectTr4ker } from "./tr4ker.js";
+import { collectTr4ker, readTr4kerPages } from "./tr4ker.js";
 import { reloadIfNewer } from "./update.js";
 import { TRACKERS, tabPattern, ownsUrl } from "./trackers.js";
 
@@ -429,6 +429,40 @@ async function syncTr4ker() {
     } else await noteTr4ker(error.message || "Sync unavailable. Retrying automatically.");
   }
 }
+// tr4ker's on-demand reads (native Search, torrent detail): the app queues fixed GET paths,
+// the tr4ker tab runs them with its own session, and only the JSON text goes back.
+async function tr4kerCommands() {
+  for (let idle = 0; idle < 40; ) {
+    const stored = await chrome.storage.local.get(T4K.connection);
+    const connection = stored[T4K.connection];
+    if (!connection || connection.paused) return;
+    const tabs = await chrome.tabs.query({ url: tabPattern("tr4ker"), status: "complete" });
+    if (!tabs.length) return;
+    try {
+      const reply = await request(connection, "commands", { limit: 5 });
+      const all = reply.commands || [];
+      if (!all.length) {
+        idle++;
+        await new Promise((done) => setTimeout(done, 250));
+        continue;
+      }
+      idle = 0;
+      let pages = all.map((c) => ({ id: c.id, accountId: connection.accountId, status: 0 }));
+      if (all.every((c) => c.accountId === connection.accountId)) {
+        try {
+          const frames = await chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id }, world: "ISOLATED", func: readTr4kerPages, args: [all],
+          });
+          pages = frames[0]?.result || pages;
+        } catch { /* A closed or navigated tab ends this attempt without retrying. */ }
+      }
+      for (const page of pages) await request(connection, "result", page);
+    } catch (error) {
+      if (error.status === 403) await chrome.storage.local.remove(T4K.connection);
+      return;
+    }
+  }
+}
 async function ensureAlarm() {
   if (!(await chrome.alarms.get("profile-sync")))
     await chrome.alarms.create("profile-sync", { periodInMinutes: 2 });
@@ -543,12 +577,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     serial(sync);
     serial(syncTr4ker);
   }
-  if (alarm.name === "companion-commands") serial(commands);
+  if (alarm.name === "companion-commands") {
+    serial(commands);
+    serial(tr4kerCommands);
+  }
 });
 chrome.tabs.onUpdated.addListener((_id, change, tab) => {
   if (change.status !== "complete") return;
   if (ownsUrl("c411", tab.url)) serial(async () => { await sync(); await commands(); });
-  if (ownsUrl("tr4ker", tab.url)) serial(syncTr4ker);
+  if (ownsUrl("tr4ker", tab.url)) serial(async () => { await syncTr4ker(); await tr4kerCommands(); });
 });
 // Recreate alarms after browser restart or extension upgrade. Connection state
 // survives service-worker suspension. No cookies or login tokens are exported.
@@ -557,4 +594,5 @@ serial(async () => {
   await sync();
   await commands();
   await syncTr4ker();
+  await tr4kerCommands();
 });

@@ -50,7 +50,7 @@ class SearchWorkspace:
             existing = current.get((candidate.infohash or "").lower())
             row["zen"] = existing.zen if existing else value
             row["note"] = existing.note if existing else note(settings.zen.zen_class, torrent)
-            if urlsplit(origin).hostname != "c411.org":
+            if urlsplit(origin).hostname != "c411.org" or row.get("tracker", "c411") != "c411":
                 row["zen"] = row["note"] = None
         return rows
 
@@ -87,7 +87,7 @@ class SearchWorkspace:
             indexer = self.setup.indexer()
             workspace = getattr(self.operations, "detail_workspace", None)
             if workspace is None or workspace.indexer is not indexer:
-                workspace = DetailsWorkspace(indexer)
+                workspace = DetailsWorkspace(indexer, tr4ker=self.setup.tr4ker_session())
                 self.operations.detail_workspace = workspace
             if action in {"detail", "score-details"}:
                 from torrentlinker.release_score.service import details_score
@@ -191,6 +191,8 @@ class SearchWorkspace:
                     "filters",
                     "indexer_search",
                     "search_listing",
+                    "trackers",
+                    "merged_sort",
                 },
                 "search-options": {"category"},
             }

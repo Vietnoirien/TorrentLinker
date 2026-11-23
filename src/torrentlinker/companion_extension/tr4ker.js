@@ -15,6 +15,7 @@ export async function collectTr4ker(options) {
     /^\/api\/shop$/,
     /^\/api\/shop\/history(?:\?[A-Za-z0-9_=&.-]{0,100})?$/,
     /^\/api\/torrents\/[A-Za-z0-9_-]{1,200}$/,
+    /^\/api\/torrents\?[A-Za-z0-9_=&%.,+~-]{1,1500}$/,
     /^\/api\/public\/categories$/,
     /^\/api\/public\/features$/,
   ];
@@ -194,4 +195,51 @@ export async function collectTr4ker(options) {
     throw fail("Refusing to send an account field that looks secret.");
   snapshot.capturedAt = new Date().toISOString();
   return { snapshot, payoutPages };
+}
+
+// Runs in the tr4ker tab's ISOLATED world for the app's on-demand reads (native Search and
+// torrent detail). Only the three fixed read-only routes below; never sort=seeders|title|size|
+// leechers or search_in (tr4ker answers 500), which the app never asks for and this refuses
+// again. Results go back as the raw JSON text with the status; nothing else leaves the tab.
+export async function readTr4kerPages(commands) {
+  const allowed = [
+    /^\/api\/torrents\?[A-Za-z0-9_=&%.,+~-]{1,1500}$/,
+    /^\/api\/torrents\/[A-Za-z0-9_-]{1,200}$/,
+    /^\/api\/public\/categories$/,
+  ];
+  const broken = /(?:^|[?&])(?:search_in=|sort=(?:seeders|title|size|leechers)(?:&|$))/;
+  const fail = (command, status, extra = {}) => ({
+    id: command.id, accountId: command.accountId, status, ...extra,
+  });
+  const results = [];
+  try {
+    if (
+      location.origin !== "https://tr4ker.net" ||
+      commands.some((c) => !allowed.some((r) => r.test(c.path)) || broken.test(c.path))
+    )
+      return commands.map((c) => fail(c, 0, { reason: "origin" }));
+    for (const command of commands) {
+      const response = await fetch(command.path, {
+        method: "GET", credentials: "same-origin", redirect: "error", cache: "no-store",
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) {
+        const value = response.headers.get("retry-after") || "";
+        const seconds = /^\d+$/.test(value) ? Number(value) : 60;
+        results.push(fail(command, response.status, response.status === 429
+          ? { retryAfter: Math.max(60, seconds) } : {}));
+        if (response.status !== 404) break;
+        continue;
+      }
+      const text = await response.text();
+      results.push(text.length > 4 * 1024 * 1024
+        ? fail(command, 0, { reason: "size" })
+        : { id: command.id, accountId: command.accountId, status: 200, data: text });
+    }
+  } catch (error) {
+    // Never send exception messages, response bodies or URLs.
+    results.push(fail(commands[results.length], 0, { reason: error?.name === "TimeoutError" ? "timeout" : "network" }));
+  }
+  while (results.length < commands.length) results.push(fail(commands[results.length], 0, { reason: "stopped" }));
+  return results;
 }

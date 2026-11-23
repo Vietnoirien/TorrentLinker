@@ -180,6 +180,9 @@ class JobRequest(BaseModel):
     indexer_search: bool = False
     search_exclude_seeded: bool = False
     search_listing: bool = False  # also return the listing's display fields, for the Search page
+    # Merged Search (ADR-0025): the Trackers to read. c411 alone keeps every row as it was.
+    trackers: list[Literal["c411", "tr4ker"]] = Field(default=["c411"], max_length=2)
+    merged_sort: Literal["recent", "seeders", "size", "title", "leechers", "completed"] = "recent"
 
     @field_validator("tracker_source_host", "tracker_target_host")
     @classmethod
@@ -516,6 +519,38 @@ class Operations:
             "known": known,
             "root_counts": {str(k): v for k, v in page.root_counts.items()},
             "total_size": page.total_size,
+        }
+
+    def add_tr4ker_rows(self, request, result, seen_at) -> dict[str, Any]:
+        """Append tr4ker's rows to a Search page, each badged. A tr4ker failure is reported in
+        the page's metadata and never hides c411's rows; it is not retried."""
+        from torrentlinker import tr4ker_native
+        from torrentlinker.merged_search import tr4ker_row
+
+        for row in result:
+            row["tracker"] = "c411"
+        try:
+            page = tr4ker_native.search(
+                self.setup.tr4ker_session(),
+                self.setup.tr4ker_torznab(),
+                request.query,
+                page=request.page,
+                limit=50,
+                sort=request.merged_sort,
+            )
+        except Exception as error:  # noqa: BLE001 - shown to the user, never swallowed silently
+            return {"error": str(error) or type(error).__name__}
+        for candidate in page.rows:
+            if self.setup.settings.hides(candidate.categories):
+                continue
+            key = candidate.infohash or f"tr4ker:{candidate.metadata['slug']}"
+            self.candidates[key] = candidate
+            result.append(tr4ker_row(key, candidate, seen_at))
+        return {
+            "backend": page.backend,
+            "total": page.total,
+            "total_capped": page.capped,
+            "notes": page.notes,
         }
 
     def search_options(self, category=None):
@@ -1021,6 +1056,9 @@ class Operations:
                         time.time(),
                     )
                 )
+            tr4ker_info: dict[str, Any] = {}
+            if "tr4ker" in request.trackers:
+                tr4ker_info = self.add_tr4ker_rows(request, result, metadata["observed_at"])
             from torrentlinker.release_score.estimate import estimate as release_estimate
             from torrentlinker.release_score.service import mark_best, score
 
@@ -1039,6 +1077,12 @@ class Operations:
             while len(self.score_listings) > 2000:
                 self.score_listings.pop(next(iter(self.score_listings)))
             mark_best(result)
+            if "tr4ker" in request.trackers:
+                from torrentlinker.merged_search import sort_merged
+
+                result = sort_merged(result, request.merged_sort)
+                metadata["trackers"] = request.trackers
+                metadata["tr4ker"] = tr4ker_info
             self.setup.store.save_catalogue(catalogue)
             from torrentlinker.queue_selection import snapshot
 
